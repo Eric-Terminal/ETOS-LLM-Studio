@@ -83,12 +83,20 @@ struct ContentView: View {
     @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
+    @State private var nativeNavigationPath: [WatchNativeNavigationDestination] = []
+    @State private var isQuickModelSelectorPresented = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
     private let bottomAnchorID = "inputBubble"
-    
+
+    enum WatchNativeNavigationDestination: Hashable {
+        case chat
+        case settings
+    }
+
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -96,13 +104,19 @@ struct ContentView: View {
             return false
         }
     }
+
+    private var isNativeNavigationEnabled: Bool {
+        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay) == .nativeNavigation
+    }
     
     // MARK: - 视图主体
     
     var body: some View {
         ZStack {
             // 背景图
-            if viewModel.enableBackground, let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
+            if !isNativeNavigationEnabled,
+               viewModel.enableBackground,
+               let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
                 GeometryReader { proxy in
                     let size = proxy.size
                     ZStack {
@@ -124,42 +138,22 @@ struct ContentView: View {
             }
             
             // 主导航
-            NavigationStack {
-                ScrollViewReader { proxy in
-                    ZStack(alignment: .bottom) {
-                        chatList(proxy: proxy)
-
-                        if showScrollToBottomButton {
-                            scrollToBottomButton(proxy: proxy)
+            NavigationStack(path: $nativeNavigationPath) {
+                if isNativeNavigationEnabled {
+                    nativeSessionRootView
+                        .navigationDestination(for: WatchNativeNavigationDestination.self) { destination in
+                            switch destination {
+                            case .chat:
+                                legacyChatRootView
+                            case .settings:
+                                SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
+                            }
                         }
-                    }
-                }
-                .navigationTitle(viewModel.currentSession?.name ?? "新对话")
-                .sheet(isPresented: $isSettingsPresented) {
-                    SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
-                }
-                .sheet(item: $viewModel.activeSheet) { item in
-                    sheetView(for: item)
-                }
-                .sheet(item: Binding(
-                    get: { fullErrorContent.map { FullErrorContentWrapper(content: $0) } },
-                    set: { _ in fullErrorContent = nil }
-                )) { wrapper in
-                    FullErrorContentView(content: wrapper.content)
-                }
-                .sheet(item: $viewModel.activeAskUserInputRequest) { request in
-                    WatchAskUserInputView(
-                        request: request,
-                        onSubmit: { answers in
-                            viewModel.submitAskUserInputAnswers(answers, for: request)
-                        },
-                        onCancel: {
-                            viewModel.cancelAskUserInputRequest(using: request)
+                } else {
+                    legacyChatRootView
+                        .navigationDestination(isPresented: $isSessionListPresented) {
+                            sessionListView
                         }
-                    )
-                }
-                .navigationDestination(isPresented: $isSessionListPresented) {
-                    sessionListView
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
@@ -209,6 +203,14 @@ struct ContentView: View {
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
+        }
+        .onChange(of: chatNavigationModeRawValue) { _, _ in
+            if !isNativeNavigationEnabled {
+                nativeNavigationPath = []
+            } else {
+                isSessionListPresented = false
+                isSettingsPresented = false
+            }
         }
         .onDisappear {
             pendingBottomSnapTask?.cancel()
@@ -263,6 +265,65 @@ struct ContentView: View {
             legacyJSONMigrationManager.refreshStatus()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
+    }
+
+    private var nativeSessionRootView: some View {
+        sessionListView
+            .navigationTitle("历史会话")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        nativeNavigationPath = [.settings]
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        viewModel.createNewSession()
+                        nativeNavigationPath = [.chat]
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+    }
+
+    private var legacyChatRootView: some View {
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottom) {
+                chatList(proxy: proxy)
+
+                if showScrollToBottomButton {
+                    scrollToBottomButton(proxy: proxy)
+                }
+            }
+        }
+        .navigationTitle(viewModel.currentSession?.name ?? "新对话")
+        .sheet(isPresented: $isSettingsPresented) {
+            SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
+        }
+        .sheet(item: $viewModel.activeSheet) { item in
+            sheetView(for: item)
+        }
+        .sheet(item: Binding(
+            get: { fullErrorContent.map { FullErrorContentWrapper(content: $0) } },
+            set: { _ in fullErrorContent = nil }
+        )) { wrapper in
+            FullErrorContentView(content: wrapper.content)
+        }
+        .sheet(item: $viewModel.activeAskUserInputRequest) { request in
+            WatchAskUserInputView(
+                request: request,
+                onSubmit: { answers in
+                    viewModel.submitAskUserInputAnswers(answers, for: request)
+                },
+                onCancel: {
+                    viewModel.cancelAskUserInputRequest(using: request)
+                }
+            )
+        }
     }
     
     // MARK: - 视图组件
@@ -394,11 +455,15 @@ struct ContentView: View {
         .background(Color.clear)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: {
-                    viewModel.activeSheet = nil
-                    isSettingsPresented = true
-                }) {
-                    Image(systemName: "gearshape.fill")
+                Button {
+                    if isNativeNavigationEnabled {
+                        nativeNavigationPath = []
+                    } else {
+                        viewModel.activeSheet = nil
+                        isSettingsPresented = true
+                    }
+                } label: {
+                    Image(systemName: isNativeNavigationEnabled ? "chevron.left" : "gearshape.fill")
                 }
             }
         }
@@ -489,7 +554,11 @@ struct ContentView: View {
                     viewModel.clearPendingMessageJumpTarget()
                 }
                 ChatService.shared.setCurrentSession(selectedSession)
-                isSessionListPresented = false
+                if isNativeNavigationEnabled {
+                    nativeNavigationPath = [.chat]
+                } else {
+                    isSessionListPresented = false
+                }
             },
             updateSessionAction: { session in
                 viewModel.updateSession(session)
@@ -785,7 +854,11 @@ struct ContentView: View {
         viewModel.activeSheet = nil
         isSettingsPresented = false
         settingsDestination = nil
-        isSessionListPresented = true
+        if isNativeNavigationEnabled {
+            nativeNavigationPath = []
+        } else {
+            isSessionListPresented = true
+        }
     }
 
     private func handleInputAction(_ state: WatchChatInputActionState) {
@@ -989,17 +1062,44 @@ struct ContentView: View {
                 }
             }
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                Button {
-                    openSessionHistory()
-                } label: {
-                    Image(systemName: "list.bullet.rectangle")
-                        .etFont(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                        .contentShape(Circle())
+                if isNativeNavigationEnabled {
+                    Button {
+                        isQuickModelSelectorPresented = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .etFont(.system(size: 16, weight: .semibold))
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .contentShape(Circle())
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("切换模型")
+                    .tint(.blue)
+                } else {
+                    Button {
+                        openSessionHistory()
+                    } label: {
+                        Image(systemName: "list.bullet.rectangle")
+                            .etFont(.system(size: 16, weight: .semibold))
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .contentShape(Circle())
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("历史会话")
+                    .tint(.blue)
                 }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel("历史会话")
-                .tint(.blue)
+            }
+            .sheet(isPresented: $isQuickModelSelectorPresented) {
+                NavigationStack {
+                    WatchQuickModelSelectorView(
+                        models: viewModel.activatedModels,
+                        selectedModel: Binding(
+                            get: { viewModel.selectedModel },
+                            set: { newValue in
+                                viewModel.setSelectedModel(newValue)
+                            }
+                        )
+                    )
+                }
             }
             .sheet(isPresented: speechSheetBinding) {
                 SpeechRecorderView(viewModel: viewModel)
@@ -1075,6 +1175,14 @@ struct ContentView: View {
     }
 
     private func openDailyPulse() {
+        if isNativeNavigationEnabled {
+            settingsDestination = nil
+            nativeNavigationPath = [.settings]
+            DispatchQueue.main.async {
+                settingsDestination = .dailyPulse
+            }
+            return
+        }
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
@@ -1095,11 +1203,28 @@ struct ContentView: View {
 
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
+        if isNativeNavigationEnabled {
+            nativeNavigationPath = [.chat]
+            return
+        }
         isSettingsPresented = false
         settingsDestination = nil
     }
 
     private func openFeedback(issueNumber: Int?) {
+        if isNativeNavigationEnabled {
+            settingsDestination = nil
+            nativeNavigationPath = [.settings]
+            DispatchQueue.main.async {
+                if let issueNumber,
+                   FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
+                    settingsDestination = .feedbackIssue(issueNumber: issueNumber)
+                } else {
+                    settingsDestination = .feedbackCenter
+                }
+            }
+            return
+        }
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
@@ -1121,6 +1246,10 @@ struct ContentView: View {
             sessionID: continuation.sessionID,
             prompt: continuation.prompt
         )
+        if isNativeNavigationEnabled {
+            nativeNavigationPath = [.chat]
+            return true
+        }
         isSettingsPresented = false
         settingsDestination = nil
         return true
@@ -1154,6 +1283,47 @@ struct ContentView: View {
         dailyPulsePreparationTask = nil
     }
 
+}
+
+private struct WatchQuickModelSelectorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let models: [RunnableModel]
+    @Binding var selectedModel: RunnableModel?
+
+    var body: some View {
+        List {
+            if models.isEmpty {
+                Text("暂无可用模型，请先在设置中启用模型。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(models, id: \.id) { model in
+                    Button {
+                        selectedModel = model
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.model.displayName)
+                                    .etFont(.subheadline.weight(.semibold))
+                                Text("\(model.provider.name) · \(model.model.modelName)")
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if selectedModel?.id == model.id {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .navigationTitle("切换模型")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }
 
 private struct WatchAskUserInputView: View {

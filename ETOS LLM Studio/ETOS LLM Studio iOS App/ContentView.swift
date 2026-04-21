@@ -30,11 +30,22 @@ struct ContentView: View {
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
+    @State private var nativeNavigationPath: [NativeRootNavigationDestination] = []
     
     enum Tab: Hashable {
         case chat
         case sessions
         case settings
+    }
+
+    enum NativeRootNavigationDestination: Hashable {
+        case chat
+        case settings
+    }
+
+    private var isNativeNavigationEnabled: Bool {
+        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay) == .nativeNavigation
     }
     
     var body: some View {
@@ -54,38 +65,24 @@ struct ContentView: View {
     }
 
     private var baseContent: some View {
-        TabView(selection: $selection) {
-            NavigationStack {
-                ChatView()
+        Group {
+            if isNativeNavigationEnabled {
+                nativeNavigationContent
+            } else {
+                legacyOverlayContent
             }
-            .tabItem {
-                Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
-            }
-            .tag(Tab.chat)
-            
-            NavigationStack {
-                SessionListView()
-            }
-            .tabItem {
-                Label("会话", systemImage: "list.bullet")
-            }
-            .tag(Tab.sessions)
-            
-            NavigationStack {
-                SettingsView(requestedDestination: $settingsDestination)
-            }
-            .tabItem {
-                Label("设置", systemImage: "gearshape.fill")
-            }
-            .tag(Tab.settings)
         }
         .environment(\.font, rootBodyFont)
         .onAppear {
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selection = .chat
+            if isNativeNavigationEnabled {
+                pushNativeChatIfNeeded()
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selection = .chat
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
@@ -95,6 +92,11 @@ struct ContentView: View {
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
+        }
+        .onChange(of: chatNavigationModeRawValue) { _, _ in
+            if !isNativeNavigationEnabled {
+                nativeNavigationPath = []
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
             openDailyPulse()
@@ -130,6 +132,66 @@ struct ContentView: View {
                     }
                 )
             }
+        }
+    }
+
+    private var legacyOverlayContent: some View {
+        TabView(selection: $selection) {
+            NavigationStack {
+                ChatView()
+            }
+            .tabItem {
+                Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
+            }
+            .tag(Tab.chat)
+
+            NavigationStack {
+                SessionListView()
+            }
+            .tabItem {
+                Label("会话", systemImage: "list.bullet")
+            }
+            .tag(Tab.sessions)
+
+            NavigationStack {
+                SettingsView(requestedDestination: $settingsDestination)
+            }
+            .tabItem {
+                Label("设置", systemImage: "gearshape.fill")
+            }
+            .tag(Tab.settings)
+        }
+    }
+
+    private var nativeNavigationContent: some View {
+        NavigationStack(path: $nativeNavigationPath) {
+            SessionListView()
+                .navigationTitle("历史会话")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button {
+                            pushNativeSettings(destination: nil)
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                        }
+
+                        Button {
+                            viewModel.createNewSession()
+                            pushNativeChatIfNeeded()
+                        } label: {
+                            Image(systemName: "plus.message")
+                        }
+                    }
+                }
+                .navigationDestination(for: NativeRootNavigationDestination.self) { destination in
+                    switch destination {
+                    case .chat:
+                        ChatView()
+                    case .settings:
+                        SettingsView(requestedDestination: $settingsDestination)
+                    }
+                }
         }
     }
 
@@ -178,6 +240,10 @@ struct ContentView: View {
     }
 
     private func openDailyPulse() {
+        if isNativeNavigationEnabled {
+            pushNativeSettings(destination: .dailyPulse)
+            return
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             selection = .settings
         }
@@ -218,23 +284,33 @@ struct ContentView: View {
 
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
+        if isNativeNavigationEnabled {
+            pushNativeChatIfNeeded()
+            return
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             selection = .chat
         }
     }
 
     private func openFeedback(issueNumber: Int?) {
+        let destination: SettingsNavigationDestination
+        if let issueNumber,
+           FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
+            destination = .feedbackIssue(issueNumber: issueNumber)
+        } else {
+            destination = .feedbackCenter
+        }
+        if isNativeNavigationEnabled {
+            pushNativeSettings(destination: destination)
+            return
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             selection = .settings
         }
         settingsDestination = nil
         DispatchQueue.main.async {
-            if let issueNumber,
-               FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
-                settingsDestination = .feedbackIssue(issueNumber: issueNumber)
-            } else {
-                settingsDestination = .feedbackCenter
-            }
+            settingsDestination = destination
         }
     }
 
@@ -269,10 +345,31 @@ struct ContentView: View {
             sessionID: continuation.sessionID,
             prompt: continuation.prompt
         )
+        if isNativeNavigationEnabled {
+            pushNativeChatIfNeeded()
+            return true
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             selection = .chat
         }
         return true
+    }
+
+    private func pushNativeSettings(destination: SettingsNavigationDestination?) {
+        settingsDestination = nil
+        nativeNavigationPath = [.settings]
+        if let destination {
+            DispatchQueue.main.async {
+                settingsDestination = destination
+            }
+        }
+    }
+
+    private func pushNativeChatIfNeeded() {
+        if nativeNavigationPath.last == .chat {
+            return
+        }
+        nativeNavigationPath = [.chat]
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {

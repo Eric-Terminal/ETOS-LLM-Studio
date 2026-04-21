@@ -68,6 +68,7 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var ttsManager = TTSManager.shared
     @State private var showScrollToBottom = false
@@ -110,6 +111,7 @@ struct ChatView: View {
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.legacyOverlay.rawValue
     @Namespace private var modelPickerNamespace
     @Namespace private var sessionPickerNamespace
     
@@ -157,6 +159,9 @@ struct ChatView: View {
     }
     private var isOverlayPanelPresented: Bool {
         showModelPickerPanel || showSessionPickerPanel
+    }
+    private var isNativeNavigationEnabled: Bool {
+        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .legacyOverlay) == .nativeNavigation
     }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
@@ -730,7 +735,11 @@ struct ChatView: View {
     @ViewBuilder
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
-            navBarSessionButton
+            if isNativeNavigationEnabled {
+                navBarBackButton
+            } else {
+                navBarSessionButton
+            }
 
             Spacer(minLength: 12)
 
@@ -752,6 +761,20 @@ struct ChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, navBarVerticalPadding)
+    }
+
+    private var navBarBackButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+                .etFont(.system(size: 19, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+                .frame(width: navBarIconSize, height: navBarIconSize, alignment: .leading)
+                .contentShape(Rectangle())
+                .accessibilityLabel("返回历史会话")
+        }
+        .buttonStyle(.plain)
     }
 
     private var navBarSessionButton: some View {

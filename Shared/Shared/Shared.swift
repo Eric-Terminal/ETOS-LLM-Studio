@@ -10,6 +10,15 @@
 import Foundation
 import Combine
 
+public enum ChatNavigationMode: String, CaseIterable, Identifiable {
+    case legacyOverlay = "legacyOverlay"
+    case nativeNavigation = "nativeNavigation"
+
+    public static let storageKey = "ui.chatNavigationMode"
+
+    public var id: String { rawValue }
+}
+
 public enum ToolPermissionDecision: String {
     case deny
     case allowOnce
