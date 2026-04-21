@@ -988,7 +988,7 @@ struct ContentView: View {
                     .accessibilityLabel("清空输入")
                 }
             }
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
                     openSessionHistory()
                 } label: {
