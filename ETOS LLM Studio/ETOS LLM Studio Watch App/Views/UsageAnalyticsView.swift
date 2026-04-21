@@ -161,18 +161,24 @@ struct UsageAnalyticsView: View {
                     viewModel.selectScope(scope)
                 } label: {
                     Text(scopeButtonTitle(scope))
-                        .etFont(.caption2.weight(.semibold))
-                        .foregroundStyle(viewModel.state.selectedScope == scope ? Color.white : Color.primary)
+                        .etFont(.caption2.weight(viewModel.state.selectedScope == scope ? .semibold : .medium))
+                        .foregroundStyle(viewModel.state.selectedScope == scope ? Color.primary : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                         .background(
                             Capsule()
-                                .fill(viewModel.state.selectedScope == scope ? Color.accentColor : Color.gray.opacity(0.18))
+                                .fill(viewModel.state.selectedScope == scope ? Color.white.opacity(0.18) : Color.clear)
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
+        .padding(3)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.14), lineWidth: 0.6)
+        )
     }
 
     private func heatCell(day: UsageAnalyticsCalendarDay, side: CGFloat) -> some View {

@@ -270,24 +270,16 @@ struct UsageAnalyticsView: View {
     }
 
     private var scopeSwitcher: some View {
-        HStack(spacing: 10) {
+        Picker("统计范围", selection: Binding(
+            get: { viewModel.state.selectedScope },
+            set: { viewModel.selectScope($0) }
+        )) {
             ForEach(UsageAnalyticsDetailScope.allCases, id: \.self) { scope in
-                Button {
-                    viewModel.selectScope(scope)
-                } label: {
-                    Text(scopeButtonTitle(scope))
-                        .etFont(.subheadline.weight(.semibold))
-                        .foregroundStyle(viewModel.state.selectedScope == scope ? Color.white : Color.primary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(viewModel.state.selectedScope == scope ? Color.accentColor : Color(.systemBackground))
-                        )
-                }
-                .buttonStyle(.plain)
+                Text(scopeButtonTitle(scope))
+                    .tag(scope)
             }
         }
+        .pickerStyle(.segmented)
     }
 
     private func heatCell(day: UsageAnalyticsCalendarDay, side: CGFloat) -> some View {
