@@ -31,7 +31,7 @@ struct ContentView: View {
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @State private var nativeNavigationPath: [NativeRootNavigationDestination] = []
+    @State private var nativeNavigationPath: [NativeRootNavigationDestination] = [.chat]
     
     enum Tab: Hashable {
         case chat
@@ -96,6 +96,8 @@ struct ContentView: View {
         .onChange(of: chatNavigationModeRawValue) { _, _ in
             if !isNativeNavigationEnabled {
                 nativeNavigationPath = []
+            } else {
+                nativeNavigationPath = [.chat]
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in

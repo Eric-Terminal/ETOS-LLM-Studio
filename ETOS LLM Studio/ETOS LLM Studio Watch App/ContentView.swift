@@ -83,7 +83,7 @@ struct ContentView: View {
     @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
-    @State private var nativeNavigationPath: [WatchNativeNavigationDestination] = []
+    @State private var nativeNavigationPath: [WatchNativeNavigationDestination] = [.chat]
     @State private var isQuickModelSelectorPresented = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
@@ -208,6 +208,7 @@ struct ContentView: View {
             if !isNativeNavigationEnabled {
                 nativeNavigationPath = []
             } else {
+                nativeNavigationPath = [.chat]
                 isSessionListPresented = false
                 isSettingsPresented = false
             }
