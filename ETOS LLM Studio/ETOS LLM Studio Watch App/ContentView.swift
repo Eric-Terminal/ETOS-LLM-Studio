@@ -1044,8 +1044,7 @@ struct ContentView: View {
             get: { viewModel.showSpeechErrorAlert },
             set: { viewModel.showSpeechErrorAlert = $0 }
         )
-        
-        return coreBubble
+        let bubbleWithTrailingSwipe = coreBubble
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 if !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil {
                     Button(role: .destructive) {
@@ -1061,33 +1060,43 @@ struct ContentView: View {
                     .accessibilityLabel("清空输入")
                 }
             }
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                if isNativeNavigationEnabled {
-                    Button {
-                        isQuickModelSelectorPresented = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
+
+        let bubbleWithLeadingSwipe: AnyView
+        if isNativeNavigationEnabled {
+            bubbleWithLeadingSwipe = AnyView(
+                bubbleWithTrailingSwipe
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            isQuickModelSelectorPresented = true
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: inputControlHeight, height: inputControlHeight)
+                        }
+                        .labelStyle(.iconOnly)
+                        .accessibilityLabel("切换模型")
+                        .tint(.blue)
                     }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel("切换模型")
-                    .tint(.blue)
-                } else {
-                    Button {
-                        openSessionHistory()
-                    } label: {
-                        Image(systemName: "list.bullet.rectangle")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
+            )
+        } else {
+            bubbleWithLeadingSwipe = AnyView(
+                bubbleWithTrailingSwipe
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            openSessionHistory()
+                        } label: {
+                            Image(systemName: "list.bullet.rectangle")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: inputControlHeight, height: inputControlHeight)
+                        }
+                        .labelStyle(.iconOnly)
+                        .accessibilityLabel("历史会话")
+                        .tint(.blue)
                     }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel("历史会话")
-                    .tint(.blue)
-                }
-            }
+            )
+        }
+
+        return bubbleWithLeadingSwipe
             .sheet(isPresented: $isQuickModelSelectorPresented) {
                 NavigationStack {
                     WatchQuickModelSelectorView(
@@ -1095,7 +1104,8 @@ struct ContentView: View {
                         selectedModel: Binding(
                             get: { viewModel.selectedModel },
                             set: { newValue in
-                                viewModel.setSelectedModel(newValue)
+                                viewModel.selectedModel = newValue
+                                ChatService.shared.setSelectedModel(newValue)
                             }
                         )
                     )
