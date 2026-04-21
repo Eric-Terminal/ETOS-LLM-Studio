@@ -767,12 +767,7 @@ struct ChatView: View {
         Button {
             dismiss()
         } label: {
-            Image(systemName: "chevron.left")
-                .etFont(.system(size: 19, weight: .semibold))
-                .foregroundColor(TelegramColors.navBarText)
-                .frame(width: navBarIconSize, height: navBarIconSize, alignment: .leading)
-                .contentShape(Rectangle())
-                .accessibilityLabel("返回历史会话")
+            navBarIconLabel(systemName: "chevron.left", accessibilityLabel: "返回历史会话")
         }
         .buttonStyle(.plain)
     }
