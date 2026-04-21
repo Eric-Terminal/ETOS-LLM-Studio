@@ -2359,19 +2359,22 @@ private extension ChatView {
     }
 
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
-        scrollDistanceToBottom = distanceToBottom
-        guard !viewModel.displayMessages.isEmpty else {
-            if showScrollToBottom {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    showScrollToBottom = false
+        let normalizedDistance = max(distanceToBottom, 0)
+        DispatchQueue.main.async {
+            scrollDistanceToBottom = normalizedDistance
+            guard !viewModel.displayMessages.isEmpty else {
+                if showScrollToBottom {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showScrollToBottom = false
+                    }
                 }
+                return
             }
-            return
-        }
-        let shouldShow = distanceToBottom > 48
-        if showScrollToBottom != shouldShow {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                showScrollToBottom = shouldShow
+            let shouldShow = normalizedDistance > 48
+            if showScrollToBottom != shouldShow {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    showScrollToBottom = shouldShow
+                }
             }
         }
     }
