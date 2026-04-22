@@ -67,6 +67,110 @@ fileprivate class MockURLProtocol: URLProtocol {
     }
 }
 
+fileprivate final class RetryStreamingFailureURLProtocol: URLProtocol {
+    fileprivate struct Scenario {
+        let chunks: [Data]
+        let error: Error
+    }
+
+    private static let lock = NSLock()
+    private static var scenarios: [String: Scenario] = [:]
+
+    private let stateLock = NSLock()
+    private var isStopped = false
+
+    static func reset() {
+        lock.lock()
+        scenarios.removeAll()
+        lock.unlock()
+    }
+
+    static func register(marker: String, chunks: [String], errorMessage: String) {
+        lock.lock()
+        scenarios[marker] = Scenario(
+            chunks: chunks.map { Data($0.utf8) },
+            error: NSError(
+                domain: "RetryStreamingFailureURLProtocol",
+                code: -1005,
+                userInfo: [NSLocalizedDescriptionKey: errorMessage]
+            )
+        )
+        lock.unlock()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let requestURL = request.url,
+              let components = URLComponents(url: requestURL, resolvingAgainstBaseURL: false),
+              let marker = components.queryItems?.first(where: { $0.name == "marker" })?.value else {
+            client?.urlProtocol(
+                self,
+                didFailWithError: NSError(
+                    domain: "RetryStreamingFailureURLProtocol",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "缺少 marker 参数"]
+                )
+            )
+            return
+        }
+
+        Self.lock.lock()
+        let scenario = Self.scenarios[marker]
+        Self.lock.unlock()
+
+        guard let scenario else {
+            client?.urlProtocol(
+                self,
+                didFailWithError: NSError(
+                    domain: "RetryStreamingFailureURLProtocol",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "未找到 marker=\(marker) 的场景"]
+                )
+            )
+            return
+        }
+
+        DispatchQueue.global().async {
+            let response = HTTPURLResponse(
+                url: requestURL,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+            )!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+
+            for chunk in scenario.chunks {
+                self.stateLock.lock()
+                let stopped = self.isStopped
+                self.stateLock.unlock()
+                if stopped { return }
+                self.client?.urlProtocol(self, didLoad: chunk)
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+
+            self.stateLock.lock()
+            let stopped = self.isStopped
+            self.stateLock.unlock()
+            if stopped { return }
+
+            self.client?.urlProtocol(self, didFailWithError: scenario.error)
+        }
+    }
+
+    override func stopLoading() {
+        stateLock.lock()
+        isStopped = true
+        stateLock.unlock()
+    }
+}
+
 @Suite("聊天颜色偏好编解码")
 struct ChatAppearanceColorCodecTests {
     @Test("支持解析 6 位十六进制并默认不透明")
@@ -2172,6 +2276,39 @@ fileprivate struct OpenAIResponse: Codable {
     let choices: [Choice]
 }
 
+fileprivate final class RetryStreamingMockAdapter: APIAdapter {
+    func buildChatRequest(
+        for model: RunnableModel,
+        commonPayload: [String : Any],
+        messages: [ChatMessage],
+        tools: [InternalToolDefinition]?,
+        audioAttachments: [UUID : AudioAttachment],
+        imageAttachments: [UUID : [ImageAttachment]],
+        fileAttachments: [UUID : [FileAttachment]]
+    ) -> URLRequest? {
+        let marker = messages.last(where: { $0.role == .user })?.content ?? "unknown"
+        var components = URLComponents(string: "https://fake.url/retry-stream")
+        components?.queryItems = [URLQueryItem(name: "marker", value: marker)]
+        return components?.url.map { URLRequest(url: $0) }
+    }
+
+    func buildModelListRequest(for provider: Provider) -> URLRequest? {
+        URLRequest(url: URL(string: "https://fake.url/models")!)
+    }
+
+    func parseModelListResponse(data: Data) throws -> [Model] {
+        []
+    }
+
+    func parseResponse(data: Data) throws -> ChatMessage {
+        ChatMessage(role: .assistant, content: String(decoding: data, as: UTF8.self))
+    }
+
+    func parseStreamingResponse(line: String) -> ChatMessagePart? {
+        ChatMessagePart(content: line)
+    }
+}
+
 @Suite("ChatService Integration Tests")
 fileprivate struct ChatServiceTests {
     
@@ -2727,6 +2864,122 @@ fileprivate struct ChatServiceTests {
         #expect(errorMessage?.role == .error)
         #expect(errorMessage?.content.contains("重试失败") == true)
         #expect(errorMessage?.content.contains("HTTP 500") == true)
+
+        await cleanup()
+    }
+
+    @Test("重试 assistant 流式出首字后断开会保留半截新版本并追加错误气泡")
+    func testRetryAssistantStreamingFailureAfterFirstTokenKeepsPartialVersion() async {
+        await cleanup()
+
+        RetryStreamingFailureURLProtocol.reset()
+        defer { RetryStreamingFailureURLProtocol.reset() }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RetryStreamingFailureURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let streamingService = ChatService(
+            adapters: ["openai-compatible": RetryStreamingMockAdapter()],
+            memoryManager: memoryManager,
+            urlSession: session
+        )
+        streamingService.setSelectedModel(dummyModel)
+
+        let testSession = streamingService.createSavedSession(name: "重试半路断开测试")
+        defer { streamingService.deleteSessions([testSession]) }
+        streamingService.setCurrentSession(testSession)
+
+        let userMessage = ChatMessage(role: .user, content: "retry-stream-partial")
+        let assistantMessage = ChatMessage(role: .assistant, content: "旧版本回复")
+        streamingService.updateMessages([userMessage, assistantMessage], for: testSession.id)
+
+        RetryStreamingFailureURLProtocol.register(
+            marker: "retry-stream-partial",
+            chunks: ["新版本半截回复\n"],
+            errorMessage: "网络连接已经断开。"
+        )
+
+        await streamingService.retryMessage(
+            assistantMessage,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: true,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let messages = streamingService.messagesForSessionSubject.value
+        #expect(messages.count == 3)
+
+        guard let retriedAssistant = messages.first(where: { $0.id == assistantMessage.id }) else {
+            Issue.record("未找到重试后的 assistant 消息。")
+            await cleanup()
+            return
+        }
+        #expect(retriedAssistant.role == .assistant)
+        #expect(retriedAssistant.content == "新版本半截回复")
+        #expect(retriedAssistant.getAllVersions().count == 2)
+        #expect(retriedAssistant.getAllVersions().contains("旧版本回复"))
+        #expect(retriedAssistant.getAllVersions().contains("新版本半截回复"))
+        #expect(retriedAssistant.getAllVersions().contains(where: { $0.contains("重试失败") }) == false)
+
+        let errorMessage = messages.last
+        #expect(errorMessage?.role == .error)
+        #expect(errorMessage?.content.contains("重试失败") == true)
+        #expect(errorMessage?.content.contains("网络连接已经断开。") == true)
+
+        await cleanup()
+    }
+
+    @Test("重试 error 时会复用同轮 assistant 而不是额外生成新气泡")
+    func testRetryErrorReusesPreviousAssistantMessage() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证 error 重试行为。")
+            await cleanup()
+            return
+        }
+
+        let userMessage = ChatMessage(role: .user, content: "error-retry-anchor")
+        let assistantMessage = ChatMessage(role: .assistant, content: "上一次半截回复")
+        let errorMessage = ChatMessage(role: .error, content: "网络连接已经断开。")
+        chatService.updateMessages([userMessage, assistantMessage, errorMessage], for: sessionID)
+
+        let chatURL = URL(string: "https://fake.url/chat")!
+        let errorResponse = HTTPURLResponse(url: chatURL, statusCode: 500, httpVersion: "HTTP/1.1", headerFields: nil)!
+        MockURLProtocol.mockResponses[chatURL] = .success((errorResponse, Data("Internal Server Error".utf8)))
+
+        await chatService.retryMessage(
+            errorMessage,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.count == 3)
+
+        let assistantMessages = messages.filter { $0.role == .assistant }
+        #expect(assistantMessages.count == 1)
+        #expect(assistantMessages.first?.id == assistantMessage.id)
+        #expect(assistantMessages.first?.content == "上一次半截回复")
+        #expect(assistantMessages.first?.getAllVersions().count == 1)
+
+        let latestError = messages.last
+        #expect(latestError?.role == .error)
+        #expect(latestError?.content.contains("重试失败") == true)
+        #expect(latestError?.content.contains("HTTP 500") == true)
 
         await cleanup()
     }

@@ -951,6 +951,10 @@ public class ChatService {
             } else if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
                 removeMessage(withID: loadingID, in: sessionID)
             }
+            if retryTargetMessageID == loadingID {
+                retryTargetMessageID = nil
+                retryTargetOriginalAssistantMessage = nil
+            }
         }
 
         let cancelledImageContext = activeContext.imageGenerationContext
@@ -1704,7 +1708,15 @@ public class ChatService {
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
             if let targetID = retryTargetMessageID,
                loadingMessage.id == targetID {
-                if let originalAssistant = retryTargetOriginalAssistantMessage {
+                if shouldPreserveLoadingMessage {
+                    messages.insert(
+                        makeErrorMessage(
+                            loadingMessage.requestedAt,
+                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
+                        ),
+                        at: loadingIndex + 1
+                    )
+                } else if let originalAssistant = retryTargetOriginalAssistantMessage {
                     messages[loadingIndex] = originalAssistant
                     messages.insert(
                         makeErrorMessage(
@@ -1730,7 +1742,7 @@ public class ChatService {
                 
                 retryTargetMessageID = nil
                 retryTargetOriginalAssistantMessage = nil
-                logger.error("重试失败，已恢复原消息并追加错误气泡: \(content)")
+                logger.error("重试失败，已根据输出情况保留或恢复 assistant，并追加错误气泡: \(content)")
             } else if shouldPreserveLoadingMessage {
                 messages.insert(makeErrorMessage(loadingMessage.requestedAt), at: loadingIndex + 1)
                 logger.error("流式内容已保留，并追加错误消息: \(content)")
@@ -3346,13 +3358,17 @@ public class ChatService {
         var assistantToUpdate: ChatMessage?
         var assistantUpdateIndex: Int?
         if message.role == .assistant || message.role == .error {
-            // 对于 error 消息，不保留为多版本，直接移除
-            // 只有正常的 assistant 消息才保留多版本历史
             if message.role == .assistant {
                 assistantToUpdate = message
                 assistantUpdateIndex = messageIndex
+            } else if anchorUserIndex + 1 < messageIndex,
+                      let previousAssistantIndex = messages[(anchorUserIndex + 1)..<messageIndex]
+                        .lastIndex(where: { $0.role == .assistant }) {
+                // 点击错误气泡重试时，如果同轮里已有 assistant（包括半截输出），
+                // 就复用那条 assistant 继续生成，保证与直接点 assistant 的行为一致。
+                assistantToUpdate = messages[previousAssistantIndex]
+                assistantUpdateIndex = previousAssistantIndex
             }
-            // error 消息不设置 assistantToUpdate，会被直接移除
         } else {
             // 如果重试 user 消息，找到它后面第一个 assistant（不包括error）
             if anchorUserIndex + 1 < messages.count {
@@ -5034,6 +5050,9 @@ public class ChatService {
         guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else {
             retryTargetMessageID = nil
             retryTargetOriginalAssistantMessage = nil
+            return false
+        }
+        if messageHasDisplayablePayload(messages[index]) {
             return false
         }
         messages[index] = originalAssistant
