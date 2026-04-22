@@ -1083,7 +1083,22 @@ struct ChatView: View {
             .background(
                 Group {
                     if isLiquidGlassEnabled {
-                        glassRoundedBackground(cornerRadius: 14)
+                        if #available(iOS 26.0, *) {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.clear)
+                                .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(navBarGlassOverlayColor)
+                                )
+                        } else {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(navBarGlassOverlayColor)
+                                )
+                        }
                     } else {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(isSelected ? selectedFill : baseFill)
@@ -1328,7 +1343,22 @@ struct ChatView: View {
         .background(
             Group {
                 if isLiquidGlassEnabled {
-                    glassRoundedBackground(cornerRadius: 12)
+                    if #available(iOS 26.0, *) {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.clear)
+                            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(navBarGlassOverlayColor)
+                            )
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(navBarGlassOverlayColor)
+                            )
+                    }
                 } else {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
@@ -1565,7 +1595,22 @@ struct ChatView: View {
                 .background(
                     Group {
                         if isLiquidGlassEnabled {
-                            glassCircleBackground
+                            if #available(iOS 26.0, *) {
+                                Circle()
+                                    .fill(Color.clear)
+                                    .glassEffect(.clear, in: Circle())
+                                    .overlay(
+                                        Circle()
+                                            .fill(navBarGlassOverlayColor)
+                                    )
+                            } else {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .overlay(
+                                        Circle()
+                                            .fill(navBarGlassOverlayColor)
+                                    )
+                            }
                         } else {
                             Circle()
                                 .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
