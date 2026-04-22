@@ -4,17 +4,15 @@ import Testing
 
 @Suite("NetworkProxySettings Tests")
 struct NetworkProxySettingsTests {
-    @Test("统一 URLSession 配置会等待网络恢复并抬高超时下限")
+    @Test("统一 URLSession 配置会等待网络恢复并抬高请求超时下限")
     func networkSessionConfigurationAppliesConnectivityDefaults() {
         let configuration = NetworkSessionConfiguration.makeConfiguration(
             from: .ephemeral,
-            minimumRequestTimeout: 180,
-            minimumResourceTimeout: 900
+            minimumRequestTimeout: 180
         )
 
         #expect(configuration.waitsForConnectivity)
         #expect(configuration.timeoutIntervalForRequest >= 180)
-        #expect(configuration.timeoutIntervalForResource >= 900)
     }
 
 #if os(iOS)
