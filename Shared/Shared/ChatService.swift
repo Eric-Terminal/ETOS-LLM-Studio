@@ -1668,42 +1668,73 @@ public class ChatService {
             return isLastLoadingAssistant ? lastIndex : nil
         }()
 
+        let makeErrorMessage = { (requestedAt: Date?, prefix: String? = nil) in
+            let resolvedContent: String
+            let resolvedFullContent: String?
+            if let prefix, !prefix.isEmpty {
+                resolvedContent = "\(prefix)\n\n\(formattedContent)"
+                if let fullContent {
+                    resolvedFullContent = "\(prefix)\n\n\(fullContent)"
+                } else {
+                    resolvedFullContent = nil
+                }
+            } else {
+                resolvedContent = formattedContent
+                resolvedFullContent = fullContent
+            }
+            ChatMessage(
+                id: UUID(),
+                role: .error,
+                content: resolvedContent,
+                requestedAt: requestedAt,
+                fullErrorContent: resolvedFullContent
+            )
+        }
+
         // 找到正在加载中的消息
         if let loadingIndex {
+            let loadingMessage = messages[loadingIndex]
+            let shouldPreserveLoadingMessage = messageHasDisplayablePayload(loadingMessage)
+
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
             if let targetID = retryTargetMessageID,
-               messages[loadingIndex].id == targetID {
-                // 重试 assistant 时出错：当前版本（loading状态的空版本）更新为错误消息
-                // 注意：loadingIndex 和 targetID 指向同一个消息
-                var targetMessage = messages[loadingIndex]
-                // 直接更新当前版本（空的 loading 版本）为错误消息
-                targetMessage.content = "重试失败\n\n\(formattedContent)"
-                if fullContent != nil {
-                    targetMessage.fullErrorContent = "重试失败\n\n\(content)"
+               loadingMessage.id == targetID {
+                if shouldPreserveLoadingMessage {
+                    messages.insert(
+                        makeErrorMessage(loadingMessage.requestedAt, NSLocalizedString("重试失败", comment: "Retry failed error message prefix")),
+                        at: loadingIndex + 1
+                    )
+                } else {
+                    // 重试 assistant 时出错：当前版本（loading状态的空版本）更新为错误消息
+                    // 注意：loadingIndex 和 targetID 指向同一个消息
+                    var targetMessage = loadingMessage
+                    // 直接更新当前版本（空的 loading 版本）为错误消息
+                    targetMessage.content = "重试失败\n\n\(formattedContent)"
+                    if fullContent != nil {
+                        targetMessage.fullErrorContent = "重试失败\n\n\(content)"
+                    }
+                    messages[loadingIndex] = targetMessage
                 }
-                messages[loadingIndex] = targetMessage
                 
                 retryTargetMessageID = nil
-                logger.error("重试失败，已更新当前消息内容: \(content)")
+                logger.error("重试失败，已记录错误消息: \(content)")
+            } else if shouldPreserveLoadingMessage {
+                messages.insert(makeErrorMessage(loadingMessage.requestedAt), at: loadingIndex + 1)
+                logger.error("流式内容已保留，并追加错误消息: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(
-                    id: messages[loadingIndex].id,
+                    id: loadingMessage.id,
                     role: .error,
                     content: formattedContent,
-                    requestedAt: messages[loadingIndex].requestedAt,
+                    requestedAt: loadingMessage.requestedAt,
                     fullErrorContent: fullContent
                 )
                 logger.error("错误消息已添加: \(content)")
             }
         } else {
             // 没有 loading message，直接添加错误
-            messages.append(ChatMessage(
-                id: UUID(),
-                role: .error,
-                content: formattedContent,
-                fullErrorContent: fullContent
-            ))
+            messages.append(makeErrorMessage(nil))
             logger.error("错误消息已添加: \(content)")
         }
         
@@ -4976,13 +5007,17 @@ public class ChatService {
         guard let message = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else {
             return false
         }
+        return !messageHasDisplayablePayload(message)
+    }
+
+    private func messageHasDisplayablePayload(_ message: ChatMessage) -> Bool {
         let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasToolCalls = !(message.toolCalls ?? []).isEmpty
         let hasImages = !(message.imageFileNames ?? []).isEmpty
         let hasAudio = message.audioFileName != nil
         let hasFiles = !(message.fileFileNames ?? []).isEmpty
-        return !(hasContent || hasReasoning || hasToolCalls || hasImages || hasAudio || hasFiles)
+        return hasContent || hasReasoning || hasToolCalls || hasImages || hasAudio || hasFiles
     }
     
     /// 将最终确定的消息更新到消息列表中
