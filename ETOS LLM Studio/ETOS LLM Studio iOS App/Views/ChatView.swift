@@ -1081,8 +1081,14 @@ struct ChatView: View {
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? selectedFill : baseFill)
+                Group {
+                    if isLiquidGlassEnabled {
+                        glassRoundedBackground(cornerRadius: 14)
+                    } else {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(isSelected ? selectedFill : baseFill)
+                    }
+                }
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1189,15 +1195,10 @@ struct ChatView: View {
                         isSearching: isSessionPickerSearching
                     )
 
-                    if queryActive && isSessionPickerSearching {
-                        sessionPickerSearchingState
-                    } else if queryActive && totalSessionPickerSearchResultCount == 0 {
-                        sessionPickerEmptyState(queryActive: queryActive)
-                    } else if !queryActive && pagedSessionPickerSessions.isEmpty {
-                        sessionPickerEmptyState(queryActive: queryActive)
-                    } else {
-                        sessionPickerList(queryActive: queryActive)
-                    }
+                    sessionPickerList(
+                        queryActive: queryActive,
+                        isSearching: isSessionPickerSearching
+                    )
 
                     sessionPickerFooter(
                         queryActive: queryActive,
@@ -1299,38 +1300,41 @@ struct ChatView: View {
                 }
             }
         }
-        .overlay(alignment: .bottom) {
-            if showSessionPickerSearchInput {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("搜索会话标题或消息", text: $sessionPickerSearchText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($sessionPickerSearchFocused)
-                    if !sessionPickerSearchText.isEmpty {
-                        Button {
-                            sessionPickerSearchText = ""
-                            sessionPickerSearchFocused = true
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
-                )
-                .offset(y: 50)
-            }
-        }
         .padding(.horizontal, 18)
         .padding(.top, 14)
-        .padding(.bottom, showSessionPickerSearchInput ? 52 : 0)
+    }
+
+    private var sessionPickerSearchInput: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("搜索会话标题或消息", text: $sessionPickerSearchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($sessionPickerSearchFocused)
+            if !sessionPickerSearchText.isEmpty {
+                Button {
+                    sessionPickerSearchText = ""
+                    sessionPickerSearchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Group {
+                if isLiquidGlassEnabled {
+                    glassRoundedBackground(cornerRadius: 12)
+                } else {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
+                }
+            }
+        )
     }
 
     private var sessionPickerSearchingState: some View {
@@ -1340,9 +1344,8 @@ struct ChatView: View {
                 .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, 18)
-        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 28)
     }
 
     private func sessionPickerEmptyState(queryActive: Bool) -> some View {
@@ -1354,21 +1357,33 @@ struct ChatView: View {
                 .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, 18)
-        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 28)
     }
 
-    private func sessionPickerList(queryActive: Bool) -> some View {
+    private func sessionPickerList(queryActive: Bool, isSearching: Bool) -> some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                if queryActive {
-                    ForEach(pagedSessionPickerSearchResults) { result in
-                        sessionPickerSearchResultRow(result)
-                    }
+                if showSessionPickerSearchInput {
+                    sessionPickerSearchInput
+                        .id("session-picker-search-input")
+                }
+
+                if queryActive && isSearching {
+                    sessionPickerSearchingState
+                } else if queryActive && totalSessionPickerSearchResultCount == 0 {
+                    sessionPickerEmptyState(queryActive: true)
+                } else if !queryActive && pagedSessionPickerSessions.isEmpty {
+                    sessionPickerEmptyState(queryActive: false)
                 } else {
-                    ForEach(pagedSessionPickerSessions) { session in
-                        sessionPickerRow(session)
+                    if queryActive {
+                        ForEach(pagedSessionPickerSearchResults) { result in
+                            sessionPickerSearchResultRow(result)
+                        }
+                    } else {
+                        ForEach(pagedSessionPickerSessions) { session in
+                            sessionPickerRow(session)
+                        }
                     }
                 }
             }
@@ -1548,8 +1563,14 @@ struct ChatView: View {
                 .foregroundColor(TelegramColors.navBarText)
                 .frame(width: 32, height: 32)
                 .background(
-                    Circle()
-                        .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                    Group {
+                        if isLiquidGlassEnabled {
+                            glassCircleBackground
+                        } else {
+                            Circle()
+                                .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                        }
+                    }
                 )
         }
         .buttonStyle(.plain)
