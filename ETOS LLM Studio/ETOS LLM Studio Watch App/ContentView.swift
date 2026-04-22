@@ -83,7 +83,8 @@ struct ContentView: View {
     @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
-    @State private var nativeNavigationPath: [WatchNativeNavigationDestination] = [.chat]
+    @State private var isNativeChatPresented = true
+    @State private var isNativeSettingsPresented = false
     @State private var isQuickModelSelectorPresented = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
@@ -91,11 +92,6 @@ struct ContentView: View {
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
     private let bottomAnchorID = "inputBubble"
-
-    enum WatchNativeNavigationDestination: Hashable {
-        case chat
-        case settings
-    }
 
     private var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -138,16 +134,14 @@ struct ContentView: View {
             }
             
             // 主导航
-            NavigationStack(path: $nativeNavigationPath) {
+            NavigationStack {
                 if isNativeNavigationEnabled {
                     nativeSessionRootView
-                        .navigationDestination(for: WatchNativeNavigationDestination.self) { destination in
-                            switch destination {
-                            case .chat:
-                                legacyChatRootView
-                            case .settings:
-                                SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
-                            }
+                        .navigationDestination(isPresented: $isNativeChatPresented) {
+                            legacyChatRootView
+                        }
+                        .navigationDestination(isPresented: $isNativeSettingsPresented) {
+                            SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
                         }
                 } else {
                     legacyChatRootView
@@ -206,9 +200,11 @@ struct ContentView: View {
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
             if !isNativeNavigationEnabled {
-                nativeNavigationPath = []
+                isNativeChatPresented = false
+                isNativeSettingsPresented = false
             } else {
-                nativeNavigationPath = [.chat]
+                isNativeSettingsPresented = false
+                isNativeChatPresented = true
                 isSessionListPresented = false
                 isSettingsPresented = false
             }
@@ -275,7 +271,8 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        nativeNavigationPath = [.settings]
+                        isNativeChatPresented = false
+                        isNativeSettingsPresented = true
                     } label: {
                         Image(systemName: "gearshape.fill")
                     }
@@ -283,7 +280,8 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         viewModel.createNewSession()
-                        nativeNavigationPath = [.chat]
+                        isNativeSettingsPresented = false
+                        isNativeChatPresented = true
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -458,7 +456,7 @@ struct ContentView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     if isNativeNavigationEnabled {
-                        nativeNavigationPath = []
+                        isNativeChatPresented = false
                     } else {
                         viewModel.activeSheet = nil
                         isSettingsPresented = true
@@ -556,7 +554,8 @@ struct ContentView: View {
                 }
                 ChatService.shared.setCurrentSession(selectedSession)
                 if isNativeNavigationEnabled {
-                    nativeNavigationPath = [.chat]
+                    isNativeSettingsPresented = false
+                    isNativeChatPresented = true
                 } else {
                     isSessionListPresented = false
                 }
@@ -856,7 +855,7 @@ struct ContentView: View {
         isSettingsPresented = false
         settingsDestination = nil
         if isNativeNavigationEnabled {
-            nativeNavigationPath = []
+            isNativeChatPresented = false
         } else {
             isSessionListPresented = true
         }
@@ -1188,7 +1187,8 @@ struct ContentView: View {
     private func openDailyPulse() {
         if isNativeNavigationEnabled {
             settingsDestination = nil
-            nativeNavigationPath = [.settings]
+            isNativeChatPresented = false
+            isNativeSettingsPresented = true
             DispatchQueue.main.async {
                 settingsDestination = .dailyPulse
             }
@@ -1215,7 +1215,8 @@ struct ContentView: View {
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
         if isNativeNavigationEnabled {
-            nativeNavigationPath = [.chat]
+            isNativeSettingsPresented = false
+            isNativeChatPresented = true
             return
         }
         isSettingsPresented = false
@@ -1225,7 +1226,8 @@ struct ContentView: View {
     private func openFeedback(issueNumber: Int?) {
         if isNativeNavigationEnabled {
             settingsDestination = nil
-            nativeNavigationPath = [.settings]
+            isNativeChatPresented = false
+            isNativeSettingsPresented = true
             DispatchQueue.main.async {
                 if let issueNumber,
                    FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
@@ -1258,7 +1260,8 @@ struct ContentView: View {
             prompt: continuation.prompt
         )
         if isNativeNavigationEnabled {
-            nativeNavigationPath = [.chat]
+            isNativeSettingsPresented = false
+            isNativeChatPresented = true
             return true
         }
         isSettingsPresented = false

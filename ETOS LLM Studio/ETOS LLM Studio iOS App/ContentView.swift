@@ -31,16 +31,12 @@ struct ContentView: View {
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @State private var nativeNavigationPath: [NativeRootNavigationDestination] = [.chat]
+    @State private var isNativeChatPresented: Bool = true
+    @State private var isNativeSettingsPresented: Bool = false
     
     enum Tab: Hashable {
         case chat
         case sessions
-        case settings
-    }
-
-    enum NativeRootNavigationDestination: Hashable {
-        case chat
         case settings
     }
 
@@ -95,9 +91,11 @@ struct ContentView: View {
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
             if !isNativeNavigationEnabled {
-                nativeNavigationPath = []
+                isNativeChatPresented = false
+                isNativeSettingsPresented = false
             } else {
-                nativeNavigationPath = [.chat]
+                isNativeSettingsPresented = false
+                isNativeChatPresented = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
@@ -166,7 +164,7 @@ struct ContentView: View {
     }
 
     private var nativeNavigationContent: some View {
-        NavigationStack(path: $nativeNavigationPath) {
+        NavigationStack {
             SessionListView()
                 .navigationTitle("历史会话")
                 .navigationBarTitleDisplayMode(.inline)
@@ -186,13 +184,11 @@ struct ContentView: View {
                         }
                     }
                 }
-                .navigationDestination(for: NativeRootNavigationDestination.self) { destination in
-                    switch destination {
-                    case .chat:
-                        ChatView()
-                    case .settings:
-                        SettingsView(requestedDestination: $settingsDestination)
-                    }
+                .navigationDestination(isPresented: $isNativeChatPresented) {
+                    ChatView()
+                }
+                .navigationDestination(isPresented: $isNativeSettingsPresented) {
+                    SettingsView(requestedDestination: $settingsDestination)
                 }
         }
     }
@@ -359,7 +355,8 @@ struct ContentView: View {
 
     private func pushNativeSettings(destination: SettingsNavigationDestination?) {
         settingsDestination = nil
-        nativeNavigationPath = [.settings]
+        isNativeChatPresented = false
+        isNativeSettingsPresented = true
         if let destination {
             DispatchQueue.main.async {
                 settingsDestination = destination
@@ -368,10 +365,11 @@ struct ContentView: View {
     }
 
     private func pushNativeChatIfNeeded() {
-        if nativeNavigationPath.last == .chat {
+        if isNativeChatPresented && !isNativeSettingsPresented {
             return
         }
-        nativeNavigationPath = [.chat]
+        isNativeSettingsPresented = false
+        isNativeChatPresented = true
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {
