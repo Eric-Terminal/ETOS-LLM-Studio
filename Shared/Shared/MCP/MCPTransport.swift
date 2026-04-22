@@ -61,7 +61,7 @@ public final class MCPHTTPTransport: MCPTransport, MCPProtocolVersionConfigurabl
 
     public init(
         endpoint: URL,
-        session: URLSession = .shared,
+        session: URLSession = NetworkSessionConfiguration.shared,
         headers: [String: String] = [:],
         protocolVersion: String? = MCPProtocolVersion.current
     ) {
@@ -138,7 +138,7 @@ public final class MCPSSETransport: MCPTransport, MCPProtocolVersionConfigurable
 
     public init(
         endpoint: URL,
-        session: URLSession = .shared,
+        session: URLSession = NetworkSessionConfiguration.shared,
         headers: [String: String] = [:],
         protocolVersion: String? = MCPProtocolVersion.current
     ) {
@@ -271,7 +271,7 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
         redirectURI: String? = nil,
         codeVerifier: String? = nil,
         protocolVersion: String? = MCPProtocolVersion.current,
-        session: URLSession = .shared
+        session: URLSession = NetworkSessionConfiguration.shared
     ) {
         self.endpoint = endpoint
         self.tokenEndpoint = tokenEndpoint
@@ -473,7 +473,7 @@ public final class MCPOAuthStreamableHTTPTransport: MCPTransport, MCPStreamingTr
         authorizationCode: String? = nil,
         redirectURI: String? = nil,
         codeVerifier: String? = nil,
-        session: URLSession = .shared
+        session: URLSession = NetworkSessionConfiguration.shared
     ) {
         let initialProtocolVersion = MCPProtocolVersion.current
         let oauthTransport = MCPOAuthHTTPTransport(

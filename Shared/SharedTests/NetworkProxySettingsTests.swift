@@ -4,6 +4,27 @@ import Testing
 
 @Suite("NetworkProxySettings Tests")
 struct NetworkProxySettingsTests {
+    @Test("统一 URLSession 配置会等待网络恢复并抬高超时下限")
+    func networkSessionConfigurationAppliesConnectivityDefaults() {
+        let configuration = NetworkSessionConfiguration.makeConfiguration(
+            from: .ephemeral,
+            minimumRequestTimeout: 180,
+            minimumResourceTimeout: 900
+        )
+
+        #expect(configuration.waitsForConnectivity)
+        #expect(configuration.timeoutIntervalForRequest >= 180)
+        #expect(configuration.timeoutIntervalForResource >= 900)
+    }
+
+#if os(iOS)
+    @Test("iOS 统一 URLSession 配置启用 handover multipath")
+    func networkSessionConfigurationEnablesHandoverMultipath() {
+        let configuration = NetworkSessionConfiguration.makeConfiguration(from: .ephemeral)
+        #expect(configuration.multipathServiceType == .handover)
+    }
+#endif
+
     @Test("提供商独立代理优先于全局代理")
     func providerOverrideTakesPrecedence() {
         let (defaults, suiteName) = makeDefaults()

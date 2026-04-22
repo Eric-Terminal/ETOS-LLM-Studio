@@ -504,9 +504,7 @@ public class LocalDebugServer: ObservableObject {
         logger.info("开始 HTTP 轮询模式，目标: \(host):\(port)")
         
         // 创建 URLSession，支持大文件传输
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10.0
-        config.timeoutIntervalForResource = 300.0  // 5分钟，支持大文件
+        let config = NetworkSessionConfiguration.makeConfiguration()
         config.httpMaximumConnectionsPerHost = 4  // 增加并发连接数
         httpSession = URLSession(configuration: config)
         

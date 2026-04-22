@@ -57,7 +57,7 @@ public enum SyncPackageUploadService {
         let sender = transport ?? { request, body in
             var req = request
             req.httpBody = body
-            return try await URLSession.shared.data(for: req)
+            return try await NetworkSessionConfiguration.shared.data(for: req)
         }
         let (responseData, response) = try await sender(request, exportData)
 

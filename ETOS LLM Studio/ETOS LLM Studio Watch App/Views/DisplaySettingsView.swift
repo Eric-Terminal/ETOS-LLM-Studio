@@ -706,7 +706,7 @@ private struct WatchFontSettingsView: View {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 45
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
                         importErrorMessage = "下载失败：HTTP \(httpResponse.statusCode)"

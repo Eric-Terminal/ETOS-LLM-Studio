@@ -68,7 +68,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
     private var lastReplayRequest: ReplayRequest?
 
-    public init(urlSession: URLSession = .shared) {
+    public init(urlSession: URLSession = NetworkSessionConfiguration.shared) {
         self.urlSession = urlSession
         super.init()
     }

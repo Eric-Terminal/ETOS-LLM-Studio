@@ -100,7 +100,7 @@ public final class FeedbackService: ObservableObject {
     private var notificationObserver: NSObjectProtocol?
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = NetworkSessionConfiguration.shared,
         config: FeedbackServiceConfig = .default,
         decoder: JSONDecoder = FeedbackDateCodec.makeJSONDecoder(),
         encoder: JSONEncoder = FeedbackDateCodec.makeJSONEncoder()

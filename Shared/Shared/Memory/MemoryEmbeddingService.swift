@@ -80,7 +80,7 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         adapters: [String: APIAdapter] = [
             "openai-compatible": OpenAIAdapter()
         ],
-        urlSession: URLSession = .shared
+        urlSession: URLSession = NetworkSessionConfiguration.shared
     ) {
         self.adapters = adapters
         self.urlSession = urlSession

@@ -67,7 +67,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     public init(
         messageEndpoint: URL,
         sseEndpoint: URL,
-        session: URLSession = .shared,
+        session: URLSession = NetworkSessionConfiguration.shared,
         headers: [String: String] = [:]
     ) {
         self.sseEndpoint = sseEndpoint

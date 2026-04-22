@@ -268,7 +268,7 @@ public class AnnouncementManager: ObservableObject {
         request.timeoutInterval = timeoutInterval
         request.cachePolicy = .reloadIgnoringLocalCacheData
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {

@@ -45,7 +45,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     public init(
         endpoint: URL,
-        session: URLSession = .shared,
+        session: URLSession = NetworkSessionConfiguration.shared,
         headers: [String: String] = [:],
         protocolVersion: String? = MCPProtocolVersion.current,
         dynamicHeadersProvider: (@Sendable () async throws -> [String: String])? = nil
@@ -60,7 +60,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     init(
         endpoint: URL,
-        session: URLSession = .shared,
+        session: URLSession = NetworkSessionConfiguration.shared,
         headers: [String: String] = [:],
         protocolVersion: String? = MCPProtocolVersion.current,
         dynamicHeadersProvider: (@Sendable () async throws -> [String: String])? = nil,

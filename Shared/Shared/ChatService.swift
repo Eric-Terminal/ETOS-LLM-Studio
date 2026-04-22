@@ -524,7 +524,7 @@ public class ChatService {
         worldbookImportService: WorldbookImportService = WorldbookImportService(),
         worldbookExportService: WorldbookExportService = WorldbookExportService(),
         worldbookEngine: WorldbookEngine = WorldbookEngine(),
-        urlSession: URLSession = .shared
+        urlSession: URLSession = NetworkSessionConfiguration.shared
     ) {
         logger.info("ChatService 正在初始化...")
         
@@ -4147,7 +4147,7 @@ public class ChatService {
               let proxyDictionary = NetworkProxySettings.makeConnectionProxyDictionary(from: proxyConfiguration) else {
             return (urlSession, nil)
         }
-        let configuration = URLSessionConfiguration.default
+        let configuration = NetworkSessionConfiguration.makeConfiguration()
         configuration.connectionProxyDictionary = proxyDictionary
         return (URLSession(configuration: configuration), proxyConfiguration)
     }

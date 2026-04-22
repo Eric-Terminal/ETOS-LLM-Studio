@@ -183,7 +183,7 @@ public extension MCPServerConfiguration {
         }
     }
 
-    func makeTransport(urlSession: URLSession = .shared) -> MCPTransport {
+    func makeTransport(urlSession: URLSession = NetworkSessionConfiguration.shared) -> MCPTransport {
         switch transport {
         case .http(let endpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)

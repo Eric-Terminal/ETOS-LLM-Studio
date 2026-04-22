@@ -951,7 +951,7 @@ public final class ShortcutToolManager: ObservableObject {
         do {
             var request = URLRequest(url: recordURL)
             request.timeoutInterval = 20
-            let (recordData, recordResponse) = try await URLSession.shared.data(for: request)
+            let (recordData, recordResponse) = try await NetworkSessionConfiguration.shared.data(for: request)
             guard isSuccessStatusCode(recordResponse) else { return nil }
             if importCancellationRequested {
                 logger.info("导入已取消，停止后续 iCloud 下载解析。")
@@ -1003,7 +1003,7 @@ public final class ShortcutToolManager: ObservableObject {
 
         var request = URLRequest(url: downloadURL)
         request.timeoutInterval = 20
-        let (downloadData, downloadResponse) = try await URLSession.shared.data(for: request)
+        let (downloadData, downloadResponse) = try await NetworkSessionConfiguration.shared.data(for: request)
         return isSuccessStatusCode(downloadResponse) ? downloadData : nil
     }
 
