@@ -2663,6 +2663,74 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("重试 assistant 失败时不会把错误写入版本历史")
+    func testRetryAssistantFailureDoesNotPersistErrorAsVersion() async {
+        await cleanup()
+
+        let chatURL = URL(string: "https://fake.url/chat")!
+        let successResponse = HTTPURLResponse(url: chatURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        MockURLProtocol.mockResponses[chatURL] = .success((successResponse, Data()))
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "第一次成功回复")
+
+        await chatService.sendAndProcessMessage(
+            content: "请先成功一次",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        guard let originalAssistant = chatService.messagesForSessionSubject.value.last(where: { $0.role == .assistant }) else {
+            Issue.record("未找到初始 assistant 消息。")
+            await cleanup()
+            return
+        }
+        #expect(originalAssistant.getAllVersions().count == 1)
+
+        let errorResponse = HTTPURLResponse(url: chatURL, statusCode: 500, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let errorData = Data("Internal Server Error".utf8)
+        MockURLProtocol.mockResponses[chatURL] = .success((errorResponse, errorData))
+
+        await chatService.retryMessage(
+            originalAssistant,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.count == 3)
+
+        guard let restoredAssistant = messages.first(where: { $0.id == originalAssistant.id }) else {
+            Issue.record("重试失败后未恢复原始 assistant 消息。")
+            await cleanup()
+            return
+        }
+        #expect(restoredAssistant.role == .assistant)
+        #expect(restoredAssistant.content == "第一次成功回复")
+        #expect(restoredAssistant.getAllVersions().count == 1)
+        #expect(restoredAssistant.getAllVersions().contains(where: { $0.contains("重试失败") }) == false)
+
+        let errorMessage = messages.last
+        #expect(errorMessage?.role == .error)
+        #expect(errorMessage?.content.contains("重试失败") == true)
+        #expect(errorMessage?.content.contains("HTTP 500") == true)
+
+        await cleanup()
+    }
+
     @Test("Memory prompt is added when memory is enabled")
     func testMemoryPrompt_Enabled() async throws {
         await cleanup()

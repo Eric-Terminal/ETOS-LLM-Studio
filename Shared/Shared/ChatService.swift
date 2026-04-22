@@ -179,6 +179,8 @@ public class ChatService {
     private var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
     /// 重试时要添加新版本的assistant消息ID（如果有）
     private var retryTargetMessageID: UUID?
+    /// 重试 assistant 时保留原始消息快照，便于失败或取消时恢复，避免把错误写入版本历史。
+    private var retryTargetOriginalAssistantMessage: ChatMessage?
     private var providers: [Provider]
     private let startupTemporarySession: ChatSession
     private let adapters: [String: APIAdapter]
@@ -943,9 +945,12 @@ public class ChatService {
             return
         }
 
-        if let loadingID = activeContext.loadingMessageID,
-           shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
-            removeMessage(withID: loadingID, in: sessionID)
+        if let loadingID = activeContext.loadingMessageID {
+            if restoreRetryTargetMessageIfNeeded(loadingMessageID: loadingID, in: sessionID) {
+                logger.info("已恢复被取消重试的原始 assistant 消息: \(loadingID.uuidString)")
+            } else if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
+                removeMessage(withID: loadingID, in: sessionID)
+            }
         }
 
         let cancelledImageContext = activeContext.imageGenerationContext
@@ -1699,25 +1704,33 @@ public class ChatService {
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
             if let targetID = retryTargetMessageID,
                loadingMessage.id == targetID {
-                if shouldPreserveLoadingMessage {
+                if let originalAssistant = retryTargetOriginalAssistantMessage {
+                    messages[loadingIndex] = originalAssistant
+                    messages.insert(
+                        makeErrorMessage(
+                            loadingMessage.requestedAt,
+                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
+                        ),
+                        at: loadingIndex + 1
+                    )
+                } else if shouldPreserveLoadingMessage {
                     messages.insert(
                         makeErrorMessage(loadingMessage.requestedAt, NSLocalizedString("重试失败", comment: "Retry failed error message prefix")),
                         at: loadingIndex + 1
                     )
                 } else {
-                    // 重试 assistant 时出错：当前版本（loading状态的空版本）更新为错误消息
-                    // 注意：loadingIndex 和 targetID 指向同一个消息
-                    var targetMessage = loadingMessage
-                    // 直接更新当前版本（空的 loading 版本）为错误消息
-                    targetMessage.content = "重试失败\n\n\(formattedContent)"
-                    if fullContent != nil {
-                        targetMessage.fullErrorContent = "重试失败\n\n\(content)"
-                    }
-                    messages[loadingIndex] = targetMessage
+                    messages[loadingIndex] = ChatMessage(
+                        id: loadingMessage.id,
+                        role: .error,
+                        content: "重试失败\n\n\(formattedContent)",
+                        requestedAt: loadingMessage.requestedAt,
+                        fullErrorContent: fullContent.map { "重试失败\n\n\($0)" }
+                    )
                 }
                 
                 retryTargetMessageID = nil
-                logger.error("重试失败，已记录错误消息: \(content)")
+                retryTargetOriginalAssistantMessage = nil
+                logger.error("重试失败，已恢复原消息并追加错误气泡: \(content)")
             } else if shouldPreserveLoadingMessage {
                 messages.insert(makeErrorMessage(loadingMessage.requestedAt), at: loadingIndex + 1)
                 logger.error("流式内容已保留，并追加错误消息: \(content)")
@@ -3409,10 +3422,12 @@ public class ChatService {
             persistedMessages.append(loadingAssistant)
             // 记录要添加版本的消息ID
             retryTargetMessageID = existingAssistant.id
+            retryTargetOriginalAssistantMessage = existingAssistant
             // loadingMessageID 使用原消息的 ID
             actualLoadingMessageID = existingAssistant.id
         } else {
             retryTargetMessageID = nil
+            retryTargetOriginalAssistantMessage = nil
             persistedMessages.append(loadingMessage)
             actualLoadingMessageID = loadingMessage.id
         }
@@ -5010,6 +5025,24 @@ public class ChatService {
         return !messageHasDisplayablePayload(message)
     }
 
+    private func restoreRetryTargetMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) -> Bool {
+        guard retryTargetMessageID == loadingMessageID,
+              let originalAssistant = retryTargetOriginalAssistantMessage else {
+            return false
+        }
+        var messages = messagesSnapshot(for: sessionID)
+        guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else {
+            retryTargetMessageID = nil
+            retryTargetOriginalAssistantMessage = nil
+            return false
+        }
+        messages[index] = originalAssistant
+        persistAndPublishMessages(messages, for: sessionID)
+        retryTargetMessageID = nil
+        retryTargetOriginalAssistantMessage = nil
+        return true
+    }
+
     private func messageHasDisplayablePayload(_ message: ChatMessage) -> Bool {
         let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -5065,6 +5098,7 @@ public class ChatService {
             
             // 清除重试标记
             retryTargetMessageID = nil
+            retryTargetOriginalAssistantMessage = nil
             
             persistAndPublishMessages(messages, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
             
