@@ -144,6 +144,34 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(subset.map(\.id) == [newerAssistant.id, newerTool.id])
     }
 
+    @Test("同轮已有 assistant 时 error 不占懒加载权重")
+    func testLazyLoadWeightTreatsErrorWithEarlierAssistantAsZero() {
+        let user = ChatMessage(role: .user, content: "用户问题")
+        let assistant = ChatMessage(role: .assistant, content: "已经输出一半")
+        let error = ChatMessage(role: .error, content: "网络断开")
+
+        let messages = [user, assistant, error]
+
+        #expect(ChatViewModel.lazyLoadWeightedMessageCount(in: messages) == 2)
+        #expect(ChatViewModel.lazyLoadWeight(in: messages, at: 2) == 0)
+
+        let subset = ChatViewModel.suffixMessagesForLazyLoad(messages, weightedLimit: 1)
+        #expect(subset.map(\.id) == [assistant.id, error.id])
+    }
+
+    @Test("独立 error 仍然占用懒加载权重")
+    func testLazyLoadWeightKeepsStandaloneErrorWeighted() {
+        let user = ChatMessage(role: .user, content: "用户问题")
+        let error = ChatMessage(role: .error, content: "网络断开")
+        let messages = [user, error]
+
+        #expect(ChatViewModel.lazyLoadWeightedMessageCount(in: messages) == 2)
+        #expect(ChatViewModel.lazyLoadWeight(in: messages, at: 1) == 1)
+
+        let subset = ChatViewModel.suffixMessagesForLazyLoad(messages, weightedLimit: 1)
+        #expect(subset.map(\.id) == [error.id])
+    }
+
     @Test("Markdown 图片在原始倍率下不会保留拖拽偏移")
     func testMarkdownImageClampResetsOffsetAtBaseScale() {
         let offset = ETWatchMarkdownImageZoomMath.clampedOffset(

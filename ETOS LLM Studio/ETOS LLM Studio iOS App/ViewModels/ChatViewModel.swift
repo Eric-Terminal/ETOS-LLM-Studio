@@ -1754,9 +1754,33 @@ final class ChatViewModel: ObservableObject {
         message.role == .tool ? 0 : 1
     }
 
+    nonisolated static func lazyLoadWeight(in messages: [ChatMessage], at index: Int) -> Int {
+        let message = messages[index]
+        if message.role == .tool {
+            return 0
+        }
+        guard message.role == .error else {
+            return 1
+        }
+
+        var cursor = index
+        while cursor > messages.startIndex {
+            cursor = messages.index(before: cursor)
+            let previousMessage = messages[cursor]
+            if previousMessage.role == .assistant {
+                return 0
+            }
+            if previousMessage.role == .user {
+                return 1
+            }
+        }
+
+        return 1
+    }
+
     nonisolated static func lazyLoadWeightedMessageCount(in messages: [ChatMessage]) -> Int {
-        messages.reduce(0) { partialResult, message in
-            partialResult + lazyLoadWeight(for: message)
+        messages.indices.reduce(0) { partialResult, index in
+            partialResult + lazyLoadWeight(in: messages, at: index)
         }
     }
 
@@ -1769,7 +1793,7 @@ final class ChatViewModel: ObservableObject {
         while startIndex > messages.startIndex {
             guard remaining > 0 else { break }
             let candidateIndex = messages.index(before: startIndex)
-            let weight = lazyLoadWeight(for: messages[candidateIndex])
+            let weight = lazyLoadWeight(in: messages, at: candidateIndex)
             if weight > remaining {
                 break
             }
