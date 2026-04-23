@@ -1677,7 +1677,7 @@ public class ChatService {
             return isLastLoadingAssistant ? lastIndex : nil
         }()
 
-        let makeErrorMessage = { (requestedAt: Date?, prefix: String? = nil) in
+        func makeErrorMessage(_ requestedAt: Date?, _ prefix: String? = nil) -> ChatMessage {
             let resolvedContent: String
             let resolvedFullContent: String?
             if let prefix, !prefix.isEmpty {
@@ -1691,7 +1691,7 @@ public class ChatService {
                 resolvedContent = formattedContent
                 resolvedFullContent = fullContent
             }
-            ChatMessage(
+            return ChatMessage(
                 id: UUID(),
                 role: .error,
                 content: resolvedContent,
