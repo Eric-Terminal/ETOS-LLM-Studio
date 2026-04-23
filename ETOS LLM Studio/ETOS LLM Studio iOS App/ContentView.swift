@@ -70,7 +70,6 @@ struct ContentView: View {
         }
         .environment(\.font, rootBodyFont)
         .onAppear {
-            enforceLegacyOverlayNavigationModeIfNeeded()
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
@@ -402,12 +401,6 @@ struct ContentView: View {
             from: .body,
             sampleText: "The quick brown fox 你好こんにちは"
         )
-    }
-
-    private func enforceLegacyOverlayNavigationModeIfNeeded() {
-        let currentMode = ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode
-        guard currentMode != .legacyOverlay else { return }
-        chatNavigationModeRawValue = ChatNavigationMode.legacyOverlay.rawValue
     }
 
     private var legacyJSONMigrationPromptSheet: some View {
