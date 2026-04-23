@@ -827,7 +827,7 @@ struct ChatBubble: View {
                 let isLast = position == (totalBubbleCount - 1)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast) {
-                    toolCallSummaryRow(for: call)
+                    toolCallBubbleContent(for: call)
                 }
             }
         }
@@ -896,9 +896,18 @@ struct ChatBubble: View {
            !toolCalls.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(toolCalls, id: \.id) { call in
-                    toolCallSummaryRow(for: call)
+                    toolCallBubbleContent(for: call)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func toolCallBubbleContent(for call: InternalToolCall) -> some View {
+        if let payload = showWidgetPayload(for: call) {
+            ToolWidgetRendererCard(payload: payload)
+        } else {
+            toolCallSummaryRow(for: call)
         }
     }
 

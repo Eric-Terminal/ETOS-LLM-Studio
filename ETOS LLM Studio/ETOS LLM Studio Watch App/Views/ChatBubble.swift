@@ -644,7 +644,7 @@ struct ChatBubble: View {
                 let isFirst = position == 0
                 let isLast = position == (totalBubbleCount - 1)
 
-                let content = toolCallSummaryRow(for: call)
+                let content = toolCallBubbleContent(for: call)
                     .padding(assistantContentInsets)
 
                 connectedToolBubbleContainer(isFirst: isFirst, isLast: isLast, isError: false) {
@@ -661,7 +661,7 @@ struct ChatBubble: View {
             let content = VStack(alignment: .leading, spacing: 6) {
                 if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
                     ForEach(toolCalls, id: \.id) { call in
-                        toolCallSummaryRow(for: call)
+                        toolCallBubbleContent(for: call)
                     }
                 } else if let standaloneShowWidgetPayload {
                     widgetInlineSummaryView(payload: standaloneShowWidgetPayload)
@@ -730,9 +730,18 @@ struct ChatBubble: View {
         if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(toolCalls, id: \.id) { call in
-                    toolCallSummaryRow(for: call)
+                    toolCallBubbleContent(for: call)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func toolCallBubbleContent(for call: InternalToolCall) -> some View {
+        if let payload = showWidgetPayload(for: call) {
+            widgetInlineSummaryView(payload: payload)
+        } else {
+            toolCallSummaryRow(for: call)
         }
     }
 
