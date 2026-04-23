@@ -188,6 +188,7 @@ struct ContentView: View {
         }
         .environment(\.font, rootBodyFont)
         .onAppear {
+            enforceLegacyOverlayNavigationModeIfNeeded()
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
@@ -523,6 +524,12 @@ struct ContentView: View {
             from: .body,
             sampleText: "The quick brown fox 你好こんにちは"
         )
+    }
+
+    private func enforceLegacyOverlayNavigationModeIfNeeded() {
+        let currentMode = ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode
+        guard currentMode != .legacyOverlay else { return }
+        chatNavigationModeRawValue = ChatNavigationMode.legacyOverlay.rawValue
     }
 
     private var sessionListView: some View {
