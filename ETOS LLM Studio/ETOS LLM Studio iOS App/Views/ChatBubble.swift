@@ -2410,7 +2410,8 @@ private struct ToolWidgetWebView: UIViewRepresentable {
       margin: 0;
       padding: 0;
       width: 100%;
-      min-height: 100%;
+      height: auto;
+      min-height: 0;
       background: transparent;
       overflow: visible;
     }
@@ -2486,10 +2487,12 @@ private struct ToolWidgetWebView: UIViewRepresentable {
         }
       }
 
-      function visualBoundsHeight() {
-        var minTop = 0;
-        var maxBottom = 0;
-        walkElements(document, function (element) {
+      function visualBoundsHeight(container) {
+        if (!container || typeof container.getBoundingClientRect !== 'function') return 0;
+        var containerRect = container.getBoundingClientRect();
+        var minTop = isFiniteNumber(containerRect.top) ? containerRect.top : 0;
+        var maxBottom = isFiniteNumber(containerRect.bottom) ? containerRect.bottom : minTop;
+        walkElements(container, function (element) {
           if (!element || typeof element.getBoundingClientRect !== 'function') return;
           var rect = element.getBoundingClientRect();
           if (!rect) return;
@@ -2512,22 +2515,28 @@ private struct ToolWidgetWebView: UIViewRepresentable {
 
       function reportHeight() {
         syncSameOriginIframeHeight();
-        var body = document.body;
-        var root = document.documentElement;
         var host = document.getElementById('et-widget-host');
         var widgetRoot = document.getElementById('et-widget-root');
         var flowHeight = Math.max(
-          body ? body.scrollHeight : 0,
-          body ? body.offsetHeight : 0,
-          root ? root.scrollHeight : 0,
-          root ? root.offsetHeight : 0,
           host ? host.scrollHeight : 0,
           host ? host.offsetHeight : 0,
           widgetRoot ? widgetRoot.scrollHeight : 0,
           widgetRoot ? widgetRoot.offsetHeight : 0
         );
-        var visualHeight = visualBoundsHeight();
+        var visualHeight = visualBoundsHeight(widgetRoot || host);
         var height = Math.max(1, flowHeight, visualHeight);
+        var viewportHeight = window.innerHeight || 0;
+        if (
+          lastPostedHeight > 0 &&
+          viewportHeight > 0 &&
+          Math.abs(viewportHeight - lastPostedHeight) < 1 &&
+          height > lastPostedHeight
+        ) {
+          var feedbackGrowth = height - viewportHeight;
+          if (feedbackGrowth > 0 && feedbackGrowth <= 96) {
+            height = lastPostedHeight;
+          }
+        }
         postHeight(height);
       }
       window.__etReportSize = reportHeight;
@@ -2537,17 +2546,18 @@ private struct ToolWidgetWebView: UIViewRepresentable {
         var widgetContainer = document.getElementById('et-widget-root');
         if (hostContainer) observer.observe(hostContainer);
         if (widgetContainer) observer.observe(widgetContainer);
-        if (document.documentElement) observer.observe(document.documentElement);
-        if (document.body) observer.observe(document.body);
       }
-      if (window.MutationObserver && document.documentElement) {
+      if (window.MutationObserver) {
         var mutationObserver = new MutationObserver(reportHeight);
-        mutationObserver.observe(document.documentElement, {
-          attributes: true,
-          characterData: true,
-          childList: true,
-          subtree: true
-        });
+        var mutationTarget = document.getElementById('et-widget-host') || document.documentElement;
+        if (mutationTarget) {
+          mutationObserver.observe(mutationTarget, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true
+          });
+        }
       }
       window.addEventListener('load', reportHeight);
       window.addEventListener('resize', reportHeight);
