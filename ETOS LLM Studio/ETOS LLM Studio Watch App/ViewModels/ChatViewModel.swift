@@ -2435,6 +2435,7 @@ class ChatViewModel: ObservableObject {
 
         let hasReasoning = Self.hasReasoningContent(latestAssistantMessage)
         let hasBodyContent = Self.hasVisibleAssistantBodyContent(latestAssistantMessage)
+        let hasToolCalls = !(latestAssistantMessage.toolCalls ?? []).isEmpty
         let wasAutoExpanded = autoReasoningPreviewMessageIDs.contains(latestAssistantMessage.id)
         let isUserControlled = userControlledReasoningPreviewMessageIDs.contains(latestAssistantMessage.id)
 
@@ -2444,6 +2445,7 @@ class ChatViewModel: ObservableObject {
             isSendingMessage: isSendingMessage,
             hasReasoning: hasReasoning,
             hasBodyContent: hasBodyContent,
+            hasToolCalls: hasToolCalls,
             wasAutoExpanded: wasAutoExpanded
         ) else {
             if !hasReasoning {
@@ -2467,13 +2469,14 @@ class ChatViewModel: ObservableObject {
         isSendingMessage: Bool,
         hasReasoning: Bool,
         hasBodyContent: Bool,
+        hasToolCalls: Bool = false,
         wasAutoExpanded: Bool
     ) -> Bool? {
         guard autoPreviewEnabled, !isUserControlled else { return nil }
-        if isSendingMessage, hasReasoning, !hasBodyContent {
+        if isSendingMessage, hasReasoning, !hasBodyContent, !hasToolCalls {
             return true
         }
-        if hasBodyContent, wasAutoExpanded {
+        if (hasBodyContent || hasToolCalls), wasAutoExpanded {
             return false
         }
         return nil

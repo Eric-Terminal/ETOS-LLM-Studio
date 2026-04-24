@@ -73,6 +73,26 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         )
         #expect(shouldCollapse == false)
 
+        let shouldCollapseForToolCall = ChatViewModel.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: true,
+            isSendingMessage: true,
+            hasReasoning: true,
+            hasBodyContent: false,
+            hasToolCalls: true,
+            wasAutoExpanded: true
+        )
+        #expect(shouldCollapseForToolCall == false)
+
+        let shouldNotExpandAfterToolCall = ChatViewModel.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: true,
+            isSendingMessage: true,
+            hasReasoning: true,
+            hasBodyContent: false,
+            hasToolCalls: true,
+            wasAutoExpanded: false
+        )
+        #expect(shouldNotExpandAfterToolCall == nil)
+
         let shouldKeep = ChatViewModel.autoReasoningDisclosureTargetState(
             autoPreviewEnabled: false,
             isSendingMessage: true,
