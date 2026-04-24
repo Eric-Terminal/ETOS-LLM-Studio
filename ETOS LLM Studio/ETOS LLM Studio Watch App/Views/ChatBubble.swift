@@ -1031,18 +1031,17 @@ struct ChatBubble: View {
                         .foregroundStyle(status.accentColor)
                         .etFont(.system(size: 13, weight: .semibold))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(displayName)
-                            .etFont(.footnote.weight(.semibold))
+                        MarqueeText(
+                            content: displayName,
+                            uiFont: .preferredFont(forTextStyle: .footnote),
+                            font: .footnote.weight(.semibold)
+                        )
                             .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Text(status.title)
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 4)
-                    Button("关闭") {
-                        selectedToolCallDetailSheetItem = nil
-                    }
-                    .buttonStyle(.bordered)
                 }
 
                 toolDetailSection(title: "工具参数") {
