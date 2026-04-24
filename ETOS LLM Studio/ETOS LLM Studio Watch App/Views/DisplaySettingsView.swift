@@ -237,6 +237,10 @@ struct DisplaySettingsView: View {
                 Spacer(minLength: 8)
                 Circle()
                     .fill(ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback))
+                    .overlay(
+                        Circle()
+                            .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                    )
                     .frame(width: 14, height: 14)
             }
         }
@@ -270,9 +274,10 @@ private struct WatchColorEditorView: View {
     @State private var red: Double = 0
     @State private var green: Double = 0
     @State private var blue: Double = 0
+    @State private var alpha: Double = 1
 
     private var previewColor: Color {
-        Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
+        Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
     }
 
     private var previewHex: String {
@@ -290,6 +295,10 @@ private struct WatchColorEditorView: View {
             Section {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(previewColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                    )
                     .frame(height: 36)
                 Text(previewHex)
                     .etFont(.caption2)
@@ -306,6 +315,12 @@ private struct WatchColorEditorView: View {
                 channelSlider(title: "蓝", value: $blue, tint: .blue)
             } header: {
                 Text("RGB")
+            }
+
+            Section {
+                opacitySlider(value: $alpha)
+            } header: {
+                Text("透明度")
             }
 
             Section {
@@ -327,6 +342,9 @@ private struct WatchColorEditorView: View {
         .onChange(of: blue) { _, _ in
             persistColor()
         }
+        .onChange(of: alpha) { _, _ in
+            persistColor()
+        }
     }
 
     @ViewBuilder
@@ -344,6 +362,21 @@ private struct WatchColorEditorView: View {
         }
     }
 
+    @ViewBuilder
+    private func opacitySlider(value: Binding<Double>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("不透明度")
+                Spacer(minLength: 8)
+                Text("\(Int((value.wrappedValue * 100).rounded()))%")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: value, in: 0...1, step: 0.05)
+                .tint(.accentColor)
+        }
+    }
+
     private func loadFromHex() {
         let color = ChatAppearanceColorCodec.color(from: hexValue, fallback: fallback)
         guard let rgba = ChatAppearanceColorCodec.rgbaComponents(from: color) else {
@@ -353,6 +386,7 @@ private struct WatchColorEditorView: View {
         red = rgba.red
         green = rgba.green
         blue = rgba.blue
+        alpha = rgba.alpha
         persistColor()
     }
 
@@ -367,6 +401,7 @@ private struct WatchColorEditorView: View {
             red = rgba.red
             green = rgba.green
             blue = rgba.blue
+            alpha = rgba.alpha
             persistColor()
         }
     }

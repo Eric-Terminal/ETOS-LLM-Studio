@@ -128,11 +128,19 @@ struct DisplaySettingsView: View {
                 Toggle("自定义用户气泡颜色", isOn: $enableCustomUserBubbleColor)
                 if enableCustomUserBubbleColor {
                     ColorPicker("用户气泡颜色", selection: userBubbleColorBinding, supportsOpacity: false)
+                    bubbleOpacitySlider(
+                        title: "用户气泡不透明度",
+                        opacity: colorOpacityBinding(hex: $customUserBubbleColorHex, fallback: defaultUserBubbleColor)
+                    )
                 }
 
                 Toggle("自定义助手气泡颜色（含 Tool）", isOn: $enableCustomAssistantBubbleColor)
                 if enableCustomAssistantBubbleColor {
                     ColorPicker("助手气泡颜色", selection: assistantBubbleColorBinding, supportsOpacity: false)
+                    bubbleOpacitySlider(
+                        title: "助手气泡不透明度",
+                        opacity: colorOpacityBinding(hex: $customAssistantBubbleColorHex, fallback: defaultAssistantBubbleColor)
+                    )
                 }
 
                 Toggle("自定义白天文字颜色", isOn: $enableCustomLightTextColor)
@@ -173,12 +181,20 @@ struct DisplaySettingsView: View {
             || enableCustomDarkTextColor
     }
 
+    private var defaultUserBubbleColor: Color {
+        .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1)
+    }
+
+    private var defaultAssistantBubbleColor: Color {
+        .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
+    }
+
     private var userBubbleColorBinding: Binding<Color> {
-        colorBinding(hex: $customUserBubbleColorHex, fallback: .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1))
+        colorBinding(hex: $customUserBubbleColorHex, fallback: defaultUserBubbleColor)
     }
 
     private var assistantBubbleColorBinding: Binding<Color> {
-        colorBinding(hex: $customAssistantBubbleColorHex, fallback: .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1))
+        colorBinding(hex: $customAssistantBubbleColorHex, fallback: defaultAssistantBubbleColor)
     }
 
     private var lightTextColorBinding: Binding<Color> {
@@ -193,11 +209,45 @@ struct DisplaySettingsView: View {
         Binding(
             get: { ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback) },
             set: { newColor in
-                if let encoded = ChatAppearanceColorCodec.hexRGBA(from: newColor) {
+                let currentAlpha = colorOpacity(hex: hex.wrappedValue, fallback: fallback)
+                let adjustedColor = ChatAppearanceColorCodec.replacingAlpha(of: newColor, with: currentAlpha)
+                if let encoded = ChatAppearanceColorCodec.hexRGBA(from: adjustedColor) {
                     hex.wrappedValue = encoded
                 }
             }
         )
+    }
+
+    private func colorOpacityBinding(hex: Binding<String>, fallback: Color) -> Binding<Double> {
+        Binding(
+            get: { colorOpacity(hex: hex.wrappedValue, fallback: fallback) },
+            set: { newOpacity in
+                let color = ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback)
+                let adjustedColor = ChatAppearanceColorCodec.replacingAlpha(of: color, with: newOpacity)
+                if let encoded = ChatAppearanceColorCodec.hexRGBA(from: adjustedColor) {
+                    hex.wrappedValue = encoded
+                }
+            }
+        )
+    }
+
+    private func colorOpacity(hex: String, fallback: Color) -> Double {
+        let color = ChatAppearanceColorCodec.color(from: hex, fallback: fallback)
+        return ChatAppearanceColorCodec.rgbaComponents(from: color)?.alpha ?? 1
+    }
+
+    @ViewBuilder
+    private func bubbleOpacitySlider(title: String, opacity: Binding<Double>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(LocalizedStringKey(title))
+                Spacer(minLength: 8)
+                Text("\(Int((opacity.wrappedValue * 100).rounded()))%")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: opacity, in: 0...1, step: 0.05)
+        }
     }
 
     private var chatNavigationModeBinding: Binding<ChatNavigationMode> {

@@ -239,6 +239,19 @@ struct ChatAppearanceColorCodecTests {
         #expect(abs((rgba?.blue ?? 0) - 0.15) < 0.01)
         #expect(abs((rgba?.alpha ?? 0) - 0.4) < 0.01)
     }
+
+    @Test("替换透明度时保留 RGB 并钳制 Alpha")
+    func replacingAlphaKeepsRGB() {
+        let original = Color(.sRGB, red: 0.2, green: 0.4, blue: 0.6, opacity: 0.8)
+        let adjusted = ChatAppearanceColorCodec.replacingAlpha(of: original, with: 1.4)
+        let rgba = ChatAppearanceColorCodec.rgbaComponents(from: adjusted)
+
+        #expect(rgba != nil)
+        #expect(abs((rgba?.red ?? 0) - 0.2) < 0.01)
+        #expect(abs((rgba?.green ?? 0) - 0.4) < 0.01)
+        #expect(abs((rgba?.blue ?? 0) - 0.6) < 0.01)
+        #expect(abs((rgba?.alpha ?? 0) - 1.0) < 0.001)
+    }
 }
 
 @Suite("MainstreamModelFamily Tests")

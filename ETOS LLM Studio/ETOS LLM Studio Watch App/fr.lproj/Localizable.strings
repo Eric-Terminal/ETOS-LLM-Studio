@@ -118,6 +118,10 @@
 "特效" = "Effects";
 "状态" = "État";
 "用户" = "Utilisateur";
+"用户气泡不透明度" = "Opacité de la bulle utilisateur";
+"助手气泡不透明度" = "Opacité de la bulle assistant";
+"透明度" = "Opacité";
+"不透明度" = "Opacité";
 "确认删除" = "Confirmer la suppression";
 "确认删除会话" = "Confirm Supprimer Session";
 "确认删除当前版本" = "Confirm Supprimer Actuel Version";

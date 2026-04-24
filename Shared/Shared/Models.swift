@@ -2246,6 +2246,21 @@ public enum ChatAppearanceColorCodec {
         )
     }
 
+    /// 替换颜色透明度并保留 RGB 分量。
+    public static func replacingAlpha(of color: Color, with alpha: Double) -> Color {
+        let adjustedAlpha = min(max(alpha, 0), 1)
+        guard let rgba = rgbaComponents(from: color) else {
+            return color.opacity(adjustedAlpha)
+        }
+        return Color(
+            .sRGB,
+            red: rgba.red,
+            green: rgba.green,
+            blue: rgba.blue,
+            opacity: adjustedAlpha
+        )
+    }
+
     /// 提取颜色 RGBA 分量（sRGB）。
     public static func rgbaComponents(from color: Color) -> (red: Double, green: Double, blue: Double, alpha: Double)? {
         guard let cgColor = color.cgColor else { return nil }

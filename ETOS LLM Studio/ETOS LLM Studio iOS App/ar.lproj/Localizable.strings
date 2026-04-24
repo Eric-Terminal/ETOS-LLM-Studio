@@ -117,6 +117,10 @@
 "特效" = "Effects";
 "状态" = "الحالة";
 "用户" = "المستخدم";
+"用户气泡不透明度" = "تعتيم فقاعة المستخدم";
+"助手气泡不透明度" = "تعتيم فقاعة المساعد";
+"透明度" = "التعتيم";
+"不透明度" = "التعتيم";
 "确认删除" = "تأكيد الحذف";
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API base URL مثال: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API base URL مثال: https://api.anthropic.com/v1";

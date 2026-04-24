@@ -119,6 +119,10 @@
 "特效" = "Effects";
 "状态" = "Status";
 "用户" = "User";
+"用户气泡不透明度" = "User bubble opacity";
+"助手气泡不透明度" = "Assistant bubble opacity";
+"透明度" = "Opacity";
+"不透明度" = "Opacity";
 "确认删除" = "Confirm delete";
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API base URL example: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API base URL example: https://api.anthropic.com/v1";
