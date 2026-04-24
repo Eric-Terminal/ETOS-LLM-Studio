@@ -43,8 +43,8 @@ struct UsageAnalyticsView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             VStack(alignment: .leading, spacing: heatmapCellSpacing) {
                                 HStack(spacing: heatmapCellSpacing) {
-                                    ForEach(visibleHeatmapWeeks) { week in
-                                        heatmapMonthCell(for: week)
+                                    ForEach(heatmapMonthSegments) { segment in
+                                        heatmapMonthSegment(segment)
                                     }
                                 }
 
@@ -184,6 +184,28 @@ struct UsageAnalyticsView: View {
         viewModel.state.heatmapWeeks
     }
 
+    private var heatmapMonthSegments: [HeatmapMonthSegment] {
+        let calendar = Calendar.autoupdatingCurrent
+        return visibleHeatmapWeeks.reduce(into: [HeatmapMonthSegment]()) { segments, week in
+            guard let date = heatmapMonthDate(for: week, calendar: calendar) else { return }
+            let components = calendar.dateComponents([.year, .month], from: date)
+            guard let year = components.year, let month = components.month else { return }
+            let id = "\(year)-\(month)"
+
+            if let lastIndex = segments.indices.last, segments[lastIndex].id == id {
+                segments[lastIndex].weekCount += 1
+            } else {
+                segments.append(
+                    HeatmapMonthSegment(
+                        id: id,
+                        title: heatmapMonthTitle(year: year, month: month),
+                        weekCount: 1
+                    )
+                )
+            }
+        }
+    }
+
     private var calendarGrid: some View {
         VStack(spacing: Self.calendarCellSpacing) {
             HStack(spacing: Self.calendarCellSpacing) {
@@ -294,32 +316,24 @@ struct UsageAnalyticsView: View {
         ["", "一", "", "三", "", "五", ""]
     }
 
-    private func heatmapMonthCell(for week: UsageAnalyticsHeatmapWeek) -> some View {
-        let label = heatmapMonthLabel(for: week)
-
-        return ZStack(alignment: .leading) {
-            Color.clear
-                .frame(width: heatmapCellSide, height: 12)
-
-            if !label.isEmpty {
-                Text(label)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-        }
+    private func heatmapMonthSegment(_ segment: HeatmapMonthSegment) -> some View {
+        Text(segment.title)
+            .etFont(.caption2)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(width: heatmapMonthSegmentWidth(segment.weekCount), height: 12, alignment: .leading)
     }
 
-    private func heatmapMonthLabel(for week: UsageAnalyticsHeatmapWeek) -> String {
-        guard let firstOfMonth = week.days.first(where: {
-            Calendar.autoupdatingCurrent.component(.day, from: $0.date) == 1
-        }) else {
-            return ""
-        }
+    private func heatmapMonthSegmentWidth(_ weekCount: Int) -> CGFloat {
+        heatmapCellSide * CGFloat(weekCount) + heatmapCellSpacing * CGFloat(max(weekCount - 1, 0))
+    }
 
-        let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month], from: firstOfMonth.date)
-        guard let month = components.month else { return "" }
-        if month == 1, let year = components.year {
+    private func heatmapMonthDate(for week: UsageAnalyticsHeatmapWeek, calendar: Calendar) -> Date? {
+        week.days.first(where: { calendar.component(.day, from: $0.date) == 1 })?.date ?? week.days.first?.date
+    }
+
+    private func heatmapMonthTitle(year: Int, month: Int) -> String {
+        if month == 1 {
             return String(String(year).suffix(2))
         }
         return "\(month)月"
@@ -354,4 +368,10 @@ struct UsageAnalyticsView: View {
             return "本月"
         }
     }
+}
+
+private struct HeatmapMonthSegment: Identifiable {
+    var id: String
+    var title: String
+    var weekCount: Int
 }
