@@ -223,11 +223,11 @@ public final class SkillManager: ObservableObject {
             "properties": .dictionary([
                 "name": .dictionary([
                     "type": .string("string"),
-                    "description": .string("要加载的技能名称。")
+                    "description": .string(NSLocalizedString("要加载的技能名称。", comment: "Skill tool name parameter description sent to model"))
                 ]),
                 "path": .dictionary([
                     "type": .string("string"),
-                    "description": .string("技能目录内的相对路径。留空时默认读取 SKILL.md 正文。仅可使用 SKILL.md 中出现过的路径。")
+                    "description": .string(NSLocalizedString("技能目录内的相对路径。留空时默认读取 SKILL.md 正文。仅可使用 SKILL.md 中出现过的路径。", comment: "Skill tool path parameter description sent to model"))
                 ])
             ]),
             "required": .array([.string("name")])
@@ -311,8 +311,8 @@ public final class SkillManager: ObservableObject {
 
     private func makeToolDescription(availableSkills: [SkillMetadata]) -> String {
         var lines: [String] = []
-        lines.append("按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。")
-        lines.append("当前可用技能如下：")
+        lines.append(NSLocalizedString("按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。", comment: "Skill tool description sent to model"))
+        lines.append(NSLocalizedString("当前可用技能如下：", comment: "Available skills header sent to model"))
         lines.append("<available_skills>")
         for skill in availableSkills {
             lines.append("  <skill>")
@@ -321,7 +321,7 @@ public final class SkillManager: ObservableObject {
             lines.append("  </skill>")
         }
         lines.append("</available_skills>")
-        return lines.joined(separator: "\n")
+        return ModelPromptLanguage.appendingToolArgumentInstruction(to: lines.joined(separator: "\n"))
     }
 
     private func pruneMissingEnabledSkills() {

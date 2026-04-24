@@ -2884,7 +2884,7 @@ public final class AppToolManager: ObservableObject {
     private func toolDefinition(for kind: AppToolKind) -> InternalToolDefinition {
         InternalToolDefinition(
             name: kind.toolName,
-            description: kind.toolDescription,
+            description: ModelPromptLanguage.appendingToolArgumentInstruction(to: kind.toolDescription),
             parameters: kind.parameters,
             isBlocking: true
         )

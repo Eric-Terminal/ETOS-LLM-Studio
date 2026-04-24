@@ -1180,13 +1180,17 @@ public final class MCPManager: ObservableObject {
             if let desc = available.tool.description, !desc.isEmpty {
                 description = "[\(available.server.displayName)] \(desc)"
             } else {
-                description = "[\(available.server.displayName)] MCP 工具 \(available.tool.toolId)"
+                let fallback = String(
+                    format: NSLocalizedString("MCP 工具 %@", comment: "MCP tool fallback description sent to model"),
+                    available.tool.toolId
+                )
+                description = "[\(available.server.displayName)] \(fallback)"
             }
             let parameters = available.tool.inputSchema ?? .dictionary([
                 "type": .string("object"),
                 "additionalProperties": .bool(true)
             ])
-            return InternalToolDefinition(name: available.internalName, description: description, parameters: parameters, isBlocking: true)
+            return InternalToolDefinition(name: available.internalName, description: ModelPromptLanguage.appendingToolArgumentInstruction(to: description), parameters: parameters, isBlocking: true)
         }
         return chatTools
     }

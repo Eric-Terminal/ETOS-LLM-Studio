@@ -2538,7 +2538,9 @@ public class ChatService {
         - 第三方隐私信息（他人全名 + 个人细节）。
         """, comment: "System tool description for save_memory.")
         
-        let contentDescription = NSLocalizedString("需要记住的内容，要求：压缩成一句或几句话；进行抽象概括，不要原封不动复制对话；使之可在不同场景下复用。", comment: "System tool content description for save_memory.")
+        let contentDescription = ModelPromptLanguage.appendingToolArgumentInstruction(
+            to: NSLocalizedString("需要记住的内容，要求：压缩成一句或几句话；进行抽象概括，不要原封不动复制对话；使之可在不同场景下复用。", comment: "System tool content description for save_memory.")
+        )
         
         let parameters = JSONValue.dictionary([
             "type": .string("object"),
@@ -2551,7 +2553,7 @@ public class ChatService {
             "required": .array([.string("content")])
         ])
         // 将此工具标记为非阻塞式
-        return InternalToolDefinition(name: "save_memory", description: toolDescription, parameters: parameters, isBlocking: false)
+        return InternalToolDefinition(name: "save_memory", description: ModelPromptLanguage.appendingToolArgumentInstruction(to: toolDescription), parameters: parameters, isBlocking: false)
     }
 
     /// 定义 `search_memory` 工具
@@ -2587,7 +2589,7 @@ public class ChatService {
             "required": .array([.string("mode"), .string("query")])
         ])
 
-        return InternalToolDefinition(name: "search_memory", description: toolDescription, parameters: parameters)
+        return InternalToolDefinition(name: "search_memory", description: ModelPromptLanguage.appendingToolArgumentInstruction(to: toolDescription), parameters: parameters)
     }
 
     private struct ToolCallOutcome {
@@ -5555,6 +5557,12 @@ public class ChatService {
         worldbookOutlet: [WorldbookInjection] = []
     ) -> String {
         var parts: [String] = []
+        parts.append("""
+<app_language>
+\(ModelPromptLanguage.current.outputInstruction)
+\(ModelPromptLanguage.current.toolArgumentInstruction)
+</app_language>
+""")
 
         if let global, !global.isEmpty {
             parts.append("<system_prompt>\n\(global)\n</system_prompt>")
@@ -6035,9 +6043,9 @@ public class ChatService {
         guard let runnableModel = resolvedReasoningSummaryModel() else { return }
 
         let summarySystemPrompt = NSLocalizedString("""
-        你是思考摘要助手。请把思考内容压缩成一个中文短标签。
+        你是思考摘要助手。请把思考内容压缩成一个短标签。
         约束：
-        - 输出 6~18 字；
+        - 中文输出 6~18 字，其他语言输出 2~8 个词；
         - 只写核心动作或结论方向；
         - 不要复述细节，不要写完整解释；
         - 不要出现“思考内容摘要”“总结：”等前缀；
@@ -6145,9 +6153,9 @@ public class ChatService {
         let summaryContext = makeConversationSummaryContext(from: conversationalMessages)
         guard !summaryContext.isEmpty else { return }
         let summarySystemPrompt = NSLocalizedString("""
-        你是会话压缩助手。请基于给定对话生成“跨对话可复用”的中文摘要。
+        你是会话压缩助手。请基于给定对话生成“跨对话可复用”的摘要。
         约束：
-        - 输出 60~140 字；
+        - 中文输出 60~140 字，其他语言输出 50~120 个词；
         - 只保留关键主题、用户意图、明确结论；
         - 不要罗列细节，不要添加免责声明；
         - 仅输出摘要正文。
@@ -6188,9 +6196,9 @@ public class ChatService {
 
         let existingProfileText = ConversationMemoryManager.loadUserProfile()?.content ?? ""
         let profileSystemPrompt = NSLocalizedString("""
-        你是用户画像整理助手。请根据“已有画像”和“最新会话摘要”输出更新后的中文画像。
+        你是用户画像整理助手。请根据“已有画像”和“最新会话摘要”输出更新后的用户画像。
         约束：
-        - 输出 80~220 字；
+        - 中文输出 80~220 字，其他语言输出 70~180 个词；
         - 强调稳定偏好、工作背景、长期关注点；
         - 避免一次性细节与短期噪音；
         - 仅输出画像正文。
@@ -6328,10 +6336,10 @@ public class ChatService {
             : NSLocalizedString("无", comment: "")
 
         let promptTemplate = NSLocalizedString("""
-        你是一个 iOS 自动化分析助手。请根据以下快捷指令信息，生成一段“给 AI 工具调用用”的中文描述。
+        你是一个 iOS 自动化分析助手。请根据以下快捷指令信息，生成一段“给 AI 工具调用用”的描述。
 
         要求：
-        - 40~120 字；
+        - 中文输出 40~120 字，其他语言输出 35~90 个词；
         - 重点说明这个快捷指令能做什么、适合何时调用、输入输出大致是什么；
         - 避免空话，不要出现免责声明；
         - 只返回描述正文。
@@ -6370,6 +6378,7 @@ public class ChatService {
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
+        let promptLanguage = ModelPromptLanguage.current
 
         guard let targetModel = runnableModel ?? selectedModelSubject.value ?? activatedRunnableModels.first else {
             throw DetachedCompletionError.noAvailableModel
@@ -6379,13 +6388,21 @@ public class ChatService {
         }
 
         var requestMessages: [ChatMessage] = []
+        var didAttachLanguageInstruction = false
         if let systemPrompt {
             let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedSystemPrompt.isEmpty {
-                requestMessages.append(ChatMessage(role: .system, content: trimmedSystemPrompt))
+                requestMessages.append(ChatMessage(
+                    role: .system,
+                    content: ModelPromptLanguage.appendingOutputInstruction(to: trimmedSystemPrompt, language: promptLanguage)
+                ))
+                didAttachLanguageInstruction = true
             }
         }
-        requestMessages.append(ChatMessage(role: .user, content: trimmedUserPrompt))
+        let finalUserPrompt = didAttachLanguageInstruction
+            ? trimmedUserPrompt
+            : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt, language: promptLanguage)
+        requestMessages.append(ChatMessage(role: .user, content: finalUserPrompt))
 
         let payload: [String: Any] = [
             "temperature": temperature,

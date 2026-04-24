@@ -199,7 +199,10 @@ public struct ShortcutToolDefinition: Codable, Identifiable, Hashable, Sendable 
         if let generatedDescription, !generatedDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return generatedDescription
         }
-        return "调用快捷指令 \(name) 以执行自动化任务。"
+        return String(
+            format: NSLocalizedString("调用快捷指令 %@ 以执行自动化任务。", comment: "Shortcut effective description fallback sent to model"),
+            name
+        )
     }
 
     public var displayName: String {

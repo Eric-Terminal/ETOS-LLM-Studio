@@ -20,6 +20,24 @@ import Combine
 import SwiftUI
 import SQLite3
 
+@Suite("模型提示词语言适配测试")
+struct ModelPromptLanguageTests {
+    @Test("根据语言标识解析模型提示词目标语言")
+    func resolvesSupportedLanguageIdentifiers() {
+        #expect(ModelPromptLanguage.resolve(identifier: "en-US") == .english)
+        #expect(ModelPromptLanguage.resolve(identifier: "zh-Hant-HK") == .traditionalChinese)
+        #expect(ModelPromptLanguage.resolve(identifier: "ja-JP") == .japanese)
+        #expect(ModelPromptLanguage.resolve(identifier: "ar") == .arabic)
+    }
+
+    @Test("追加模型语言约束时保留原始提示词")
+    func appendsInstructionWithoutDroppingPrompt() {
+        let prompt = ModelPromptLanguage.appendingOutputInstruction(to: "生成标题", language: .english)
+        #expect(prompt.contains("生成标题"))
+        #expect(prompt.contains("Output language: English"))
+    }
+}
+
 // MARK: - Network Mocking Infrastructure
 
 /// 用于拦截和模拟网络请求的 URLProtocol。
@@ -2715,7 +2733,8 @@ fileprivate struct ChatServiceTests {
 
         let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
         #expect(mockAdapter.receivedReasoningSummaryModel?.id == dedicatedSummaryModel.id, "思考摘要应优先使用专用模型。")
-        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("输出 6~18 字") == true, "思考摘要提示词应约束成更短的标签。")
+        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("中文输出 6~18 字") == true, "思考摘要提示词应约束成更短的标签。")
+        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains(ModelPromptLanguage.current.outputInstruction) == true, "思考摘要提示词应携带当前语言约束。")
         #expect(storedMessage?.responseMetrics?.reasoningSummary == "比较成本后选稳妥方案")
 
         await cleanup()
@@ -3160,7 +3179,8 @@ fileprivate struct ChatServiceTests {
         #expect(lastMessage?.role == .system, "Enhanced prompt system message should be appended at the end of messages.")
         #expect(systemContent.contains("<enhanced_prompt>"), "System message should contain enhanced prompt tag.")
         #expect(systemContent.contains(enhancedPrompt), "System message should contain enhanced prompt content.")
-        #expect(systemMessages.count == 1, "无其他系统提示时，增强提示应单独形成唯一的 system message。")
+        #expect(systemMessages.contains(where: { $0.content.contains("<app_language>") }), "系统内置语言约束应独立注入。")
+        #expect(systemMessages.count == 2, "无其他系统提示时，应只有语言约束与增强提示两条 system message。")
         #expect(userContent == userText, "User message should remain unchanged.")
         #expect(!userContent.contains("<user_input>"), "User message should not be wrapped by <user_input>.")
 

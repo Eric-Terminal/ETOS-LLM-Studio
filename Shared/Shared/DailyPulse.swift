@@ -1112,7 +1112,7 @@ public final class DailyPulseManager: ObservableObject {
         if !suggested.isEmpty {
             return suggested
         }
-        return "请继续展开这条每日脉冲，并结合我的现状给出更具体建议。"
+        return ModelPromptLanguage.appendingOutputInstruction(to: NSLocalizedString("请继续展开这条每日脉冲，并结合我的现状给出更具体建议。", comment: "Default Daily Pulse continuation prompt sent to model"))
     }
 
     internal nonisolated static func resolveGenerationModel(

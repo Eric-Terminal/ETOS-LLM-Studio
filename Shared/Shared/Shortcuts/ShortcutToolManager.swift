@@ -372,7 +372,8 @@ public final class ShortcutToolManager: ObservableObject {
             .filter { $0.isEnabled }
             .map { tool in
                 let alias = ShortcutToolNaming.alias(for: tool)
-                let description = "[快捷指令] \(tool.effectiveDescription)"
+                let prefix = NSLocalizedString("[快捷指令]", comment: "Shortcut tool description prefix sent to model")
+                let description = ModelPromptLanguage.appendingToolArgumentInstruction(to: "\(prefix) \(tool.effectiveDescription)")
                 let parameters: JSONValue
                 if let schema = tool.metadata["inputSchema"] {
                     parameters = schema
@@ -1089,20 +1090,25 @@ public final class ShortcutToolManager: ObservableObject {
         var parts: [String] = []
 
         if let type = payload.metadata["category"]?.stringValue, !type.isEmpty {
-            parts.append("分类：\(type)")
+            parts.append(String(format: NSLocalizedString("分类：%@", comment: "Shortcut generated description category sent to model"), type))
         }
         if let capability = payload.metadata["capability"]?.stringValue, !capability.isEmpty {
-            parts.append("能力：\(capability)")
+            parts.append(String(format: NSLocalizedString("能力：%@", comment: "Shortcut generated description capability sent to model"), capability))
         }
         if let source = payload.source?.trimmingCharacters(in: .whitespacesAndNewlines), !source.isEmpty {
             let brief = source.count > 120 ? String(source.prefix(120)) + "..." : source
-            parts.append("流程摘要：\(brief)")
+            parts.append(String(format: NSLocalizedString("流程摘要：%@", comment: "Shortcut generated description source sent to model"), brief))
         }
 
         if parts.isEmpty {
-            return "执行快捷指令 \(payload.name)，用于完成自动化任务。"
+            return String(format: NSLocalizedString("执行快捷指令 %@，用于完成自动化任务。", comment: "Shortcut generated description fallback sent to model"), payload.name)
         }
-        return "执行快捷指令 \(payload.name)。\(parts.joined(separator: "；"))"
+        let separator = NSLocalizedString("；", comment: "Shortcut generated description separator sent to model")
+        return String(
+            format: NSLocalizedString("执行快捷指令 %@。%@", comment: "Shortcut generated description sent to model"),
+            payload.name,
+            parts.joined(separator: separator)
+        )
     }
 
     private func makeGeneratedDescription(for tool: ShortcutToolDefinition) -> String {
