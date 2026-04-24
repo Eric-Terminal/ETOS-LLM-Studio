@@ -6035,17 +6035,17 @@ public class ChatService {
         guard let runnableModel = resolvedReasoningSummaryModel() else { return }
 
         let summarySystemPrompt = NSLocalizedString("""
-        你是思考摘要助手。请基于给定思考内容生成一句简洁中文摘要。
+        你是思考摘要助手。请把思考内容压缩成一个中文短标签。
         约束：
-        - 输出 18~48 字；
-        - 只保留思路主线与结论方向；
-        - 不要复述细节，不要添加免责声明；
+        - 输出 6~18 字；
+        - 只写核心动作或结论方向；
+        - 不要复述细节，不要写完整解释；
         - 不要出现“思考内容摘要”“总结：”等前缀；
-        - 仅输出摘要正文。
+        - 不要句号，仅输出短标签正文。
         """, comment: "Reasoning summary system prompt")
         let summaryUserPrompt = String(
             format: NSLocalizedString("""
-            请为以下思考内容生成一句摘要：
+            思考内容：
             %@
             """, comment: "Reasoning summary user prompt"),
             reasoning
@@ -6068,7 +6068,7 @@ public class ChatService {
         }
     }
 
-    private func sanitizeReasoningSummaryText(_ rawSummary: String, maxLength: Int = 72) -> String {
+    private func sanitizeReasoningSummaryText(_ rawSummary: String, maxLength: Int = 24) -> String {
         let normalized = normalizeEscapedNewlinesIfNeeded(rawSummary)
         let singleLine = normalized
             .replacingOccurrences(of: "\r\n", with: "\n")

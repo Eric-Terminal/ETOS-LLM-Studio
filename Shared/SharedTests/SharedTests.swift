@@ -2690,7 +2690,7 @@ fileprivate struct ChatServiceTests {
         chatService.updateMessages([loadingMessage], for: sessionID)
         UserDefaults.standard.set(true, forKey: "enableReasoningSummary")
         UserDefaults.standard.set(dedicatedSummaryModel.id, forKey: "reasoningSummaryModelIdentifier")
-        setupMockReasoningSummaryResponse(summary: "先比较方案成本，再选择更稳妥的实现路径。")
+        setupMockReasoningSummaryResponse(summary: "比较成本后选稳妥方案")
 
         await chatService.processResponseMessage(
             responseMessage: ChatMessage(
@@ -2715,7 +2715,8 @@ fileprivate struct ChatServiceTests {
 
         let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
         #expect(mockAdapter.receivedReasoningSummaryModel?.id == dedicatedSummaryModel.id, "思考摘要应优先使用专用模型。")
-        #expect(storedMessage?.responseMetrics?.reasoningSummary == "先比较方案成本，再选择更稳妥的实现路径。")
+        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("输出 6~18 字") == true, "思考摘要提示词应约束成更短的标签。")
+        #expect(storedMessage?.responseMetrics?.reasoningSummary == "比较成本后选稳妥方案")
 
         await cleanup()
     }
