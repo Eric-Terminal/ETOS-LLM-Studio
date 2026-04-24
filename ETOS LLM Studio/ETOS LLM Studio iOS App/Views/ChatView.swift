@@ -4788,6 +4788,7 @@ private struct MessageInfoSheet: View {
                 if let metrics = payload.message.responseMetrics,
                    metrics.timeToFirstToken != nil
                     || metrics.totalResponseDuration != nil
+                    || metrics.reasoningDuration != nil
                     || metrics.completionTokensForSpeed != nil
                     || metrics.tokenPerSecond != nil {
                     Section(NSLocalizedString("响应测速", comment: "Response speed metrics section title")) {
@@ -4799,6 +4800,11 @@ private struct MessageInfoSheet: View {
                         if let totalDuration = metrics.totalResponseDuration {
                             LabeledContent(NSLocalizedString("总回复时间", comment: "Total response time")) {
                                 Text(formatDuration(totalDuration))
+                            }
+                        }
+                        if let reasoningDuration = metrics.reasoningDuration {
+                            LabeledContent(NSLocalizedString("思考耗时", comment: "Reasoning duration")) {
+                                Text(formatDuration(reasoningDuration))
                             }
                         }
                         if let completionTokens = metrics.completionTokensForSpeed {
