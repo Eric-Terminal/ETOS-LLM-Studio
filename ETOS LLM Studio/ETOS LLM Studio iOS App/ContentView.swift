@@ -165,7 +165,12 @@ struct ContentView: View {
 
     private var nativeNavigationContent: some View {
         NavigationStack {
-            SessionListView()
+            SessionListView(
+                createConversationAction: {
+                    viewModel.createNewSession()
+                    pushNativeChatIfNeeded()
+                }
+            )
                 .navigationTitle("历史会话")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -174,15 +179,6 @@ struct ContentView: View {
                             pushNativeSettings(destination: nil)
                         } label: {
                             Image(systemName: "gearshape.fill")
-                        }
-                    }
-
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            viewModel.createNewSession()
-                            pushNativeChatIfNeeded()
-                        } label: {
-                            Image(systemName: "plus.message")
                         }
                     }
                 }

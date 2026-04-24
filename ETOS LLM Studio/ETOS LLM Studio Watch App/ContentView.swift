@@ -277,15 +277,6 @@ struct ContentView: View {
                         Image(systemName: "gearshape.fill")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        viewModel.createNewSession()
-                        isNativeSettingsPresented = false
-                        isNativeChatPresented = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
             }
     }
 
@@ -578,7 +569,12 @@ struct ContentView: View {
             },
             moveSessionToFolderAction: { session, folderID in
                 viewModel.moveSession(session, toFolderID: folderID)
-            }
+            },
+            createConversationAction: isNativeNavigationEnabled ? {
+                viewModel.createNewSession()
+                isNativeSettingsPresented = false
+                isNativeChatPresented = true
+            } : nil
         )
     }
 

@@ -12,8 +12,18 @@ import Shared
 import SwiftUI
 
 struct SessionListView: View {
+    let createConversationAction: (() -> Void)?
+
+    init(createConversationAction: (() -> Void)? = nil) {
+        self.createConversationAction = createConversationAction
+    }
+
     var body: some View {
-        SessionFolderBrowserView(folderID: nil, isRoot: true)
+        SessionFolderBrowserView(
+            folderID: nil,
+            isRoot: true,
+            createConversationAction: createConversationAction
+        )
     }
 }
 
@@ -24,6 +34,7 @@ private struct SessionFolderBrowserView: View {
 
     let folderID: UUID?
     let isRoot: Bool
+    let createConversationAction: (() -> Void)?
 
     @State private var editingSessionID: UUID?
     @State private var draftSessionName: String = ""
@@ -283,19 +294,8 @@ private struct SessionFolderBrowserView: View {
         }
         .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    presentCreateFolder(parentID: folderID)
-                } label: {
-                    Image(systemName: "plus")
-                }
-
-                Button {
-                    toggleBatchMode()
-                } label: {
-                    Image(systemName: isBatchSelecting ? "checkmark.circle.fill" : "pencil")
-                }
-                .disabled(isSearchActive)
+            ToolbarItem(placement: .topBarTrailing) {
+                sessionListActionsMenu
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -649,7 +649,11 @@ private struct SessionFolderBrowserView: View {
             folderLabel(for: folder)
         } else {
             NavigationLink {
-                SessionFolderBrowserView(folderID: folder.id, isRoot: false)
+                SessionFolderBrowserView(
+                    folderID: folder.id,
+                    isRoot: false,
+                    createConversationAction: createConversationAction
+                )
             } label: {
                 folderLabel(for: folder)
             }
@@ -666,6 +670,36 @@ private struct SessionFolderBrowserView: View {
                     Label("删除文件夹", systemImage: "trash")
                 }
             }
+        }
+    }
+
+    private var sessionListActionsMenu: some View {
+        Menu {
+            if let createConversationAction {
+                Button {
+                    createConversationAction()
+                } label: {
+                    Label("新建对话", systemImage: "plus.message")
+                }
+            }
+
+            Button {
+                presentCreateFolder(parentID: folderID)
+            } label: {
+                Label(folderID == nil ? "新建文件夹" : "新建子文件夹", systemImage: "folder.badge.plus")
+            }
+
+            Button {
+                toggleBatchMode()
+            } label: {
+                Label(
+                    isBatchSelecting ? "结束批量选择" : "批量选择",
+                    systemImage: isBatchSelecting ? "checkmark.circle.fill" : "pencil"
+                )
+            }
+            .disabled(isSearchActive)
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
     }
 

@@ -35,6 +35,7 @@ struct SessionListView: View {
     let renameFolderAction: (SessionFolder, String) -> Void
     let deleteFolderAction: (SessionFolder) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
+    var createConversationAction: (() -> Void)? = nil
 
     var body: some View {
         SessionFolderBrowserView(
@@ -53,6 +54,7 @@ struct SessionListView: View {
             renameFolderAction: renameFolderAction,
             deleteFolderAction: deleteFolderAction,
             moveSessionToFolderAction: moveSessionToFolderAction,
+            createConversationAction: createConversationAction,
             isRoot: true
         )
     }
@@ -77,6 +79,7 @@ private struct SessionFolderBrowserView: View {
     let renameFolderAction: (SessionFolder, String) -> Void
     let deleteFolderAction: (SessionFolder) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
+    let createConversationAction: (() -> Void)?
     let isRoot: Bool
 
     @Environment(\.dismiss) private var dismiss
@@ -387,6 +390,12 @@ private struct SessionFolderBrowserView: View {
                 }
             }
             .confirmationDialog("会话列表操作", isPresented: $showMoreActions, titleVisibility: .visible) {
+                if let createConversationAction {
+                    Button("新建对话") {
+                        createConversationAction()
+                    }
+                }
+
                 Button("搜索会话") {
                     DispatchQueue.main.async {
                         showSessionSearch = true
@@ -524,6 +533,7 @@ private struct SessionFolderBrowserView: View {
                     renameFolderAction: renameFolderAction,
                     deleteFolderAction: deleteFolderAction,
                     moveSessionToFolderAction: moveSessionToFolderAction,
+                    createConversationAction: createConversationAction,
                     isRoot: false
                 )
             } label: {
