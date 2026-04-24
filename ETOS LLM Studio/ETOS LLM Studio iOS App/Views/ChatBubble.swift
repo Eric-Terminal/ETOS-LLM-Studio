@@ -987,6 +987,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func timelineToolCallRow(for call: InternalToolCall, status: ToolCallBubbleStatus) -> some View {
+        // show_widget 必须绕过普通工具摘要，否则时间线会吞掉 HTML 卡片的专用渲染。
         if let payload = showWidgetPayload(for: call) {
             ToolWidgetRendererCard(payload: payload)
         } else {

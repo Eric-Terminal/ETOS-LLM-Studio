@@ -822,6 +822,7 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func timelineToolCallRow(for call: InternalToolCall, status: ToolCallBubbleStatus) -> some View {
+        // watchOS 不直接渲染 HTML，但也要保留 show_widget 的专用轻量提示。
         if let payload = showWidgetPayload(for: call) {
             widgetInlineSummaryView(payload: payload)
         } else {
