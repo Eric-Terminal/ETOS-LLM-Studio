@@ -296,6 +296,30 @@ struct EnumConstraintMigrationTests {
 
         #expect(invalidInsertRejected)
     }
+
+    @Test("聊天库初始化会自动补齐缺失的非关键字段")
+    func testChatStoreRepairsMissingOptionalColumnsOnStartup() throws {
+        let chatsDirectory = try makeTempChatsDirectory()
+        defer { try? FileManager.default.removeItem(at: chatsDirectory) }
+
+        let databaseURL = chatsDirectory.appendingPathComponent("chat-store.sqlite")
+        try prepareChatDatabaseWithMissingColumns(at: databaseURL)
+
+        _ = try PersistenceGRDBStore(chatsDirectory: chatsDirectory)
+
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        let repaired = try queue.read { db -> (Bool, Bool, Bool) in
+            (
+                try tableHasColumn(db, tableName: "messages", columnName: "response_metrics_json"),
+                try tableHasColumn(db, tableName: "messages", columnName: "file_file_names_json"),
+                try tableHasColumn(db, tableName: "session_folders", columnName: "parent_id")
+            )
+        }
+
+        #expect(repaired.0)
+        #expect(repaired.1)
+        #expect(repaired.2)
+    }
 }
 
 private func makeTempConfigDatabaseURL() throws -> URL {
@@ -419,5 +443,68 @@ private func prepareChatDatabaseBeforeV2(at databaseURL: URL) throws {
                 "", Data("[]".utf8), "legacy-placement", Data("{}".utf8), "", Data("[]".utf8), Data("[]".utf8), "", Data("{}".utf8), 0, Date().timeIntervalSince1970
             ]
         )
+    }
+}
+
+private func prepareChatDatabaseWithMissingColumns(at databaseURL: URL) throws {
+    let queue = try DatabaseQueue(path: databaseURL.path)
+    try queue.write { db in
+        try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
+        for migration in ["v1_create_core_tables", "v2_enforce_message_enum_constraints", "v3_usage_analytics_tables"] {
+            try db.execute(
+                sql: "INSERT OR IGNORE INTO grdb_migrations(identifier) VALUES (?)",
+                arguments: [migration]
+            )
+        }
+
+        try db.execute(sql: """
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                lorebook_ids_json BLOB NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY NOT NULL,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_versions_json BLOB NOT NULL,
+                current_version_index INTEGER NOT NULL DEFAULT 0,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE session_folders (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE request_logs (
+                id TEXT PRIMARY KEY NOT NULL,
+                request_id TEXT NOT NULL,
+                provider_name TEXT NOT NULL,
+                model_id TEXT NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE json_blobs (
+                key TEXT PRIMARY KEY NOT NULL,
+                json_data BLOB NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+    }
+}
+
+private func tableHasColumn(_ db: Database, tableName: String, columnName: String) throws -> Bool {
+    let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+    return rows.contains { row in
+        let name: String? = row["name"]
+        return name == columnName
     }
 }

@@ -1636,6 +1636,197 @@ final class PersistenceGRDBStore {
         }
 
         try migrator.migrate(dbPool)
+        try repairCoreSchemaIfNeeded()
+    }
+
+    private func repairCoreSchemaIfNeeded() throws {
+        try dbPool.write { db in
+            try createCoreTablesIfMissing(db)
+            try requireColumns(db, table: "sessions", columns: ["id", "name"])
+            try requireColumns(db, table: "messages", columns: ["id", "session_id", "role", "content"])
+            try requireColumns(db, table: "request_logs", columns: ["id", "request_id", "provider_name", "model_id"])
+            try requireColumns(db, table: "session_folders", columns: ["id", "name"])
+
+            try ensureColumn(db, table: "sessions", column: "topic_prompt", definition: "topic_prompt TEXT")
+            try ensureColumn(db, table: "sessions", column: "enhanced_prompt", definition: "enhanced_prompt TEXT")
+            try ensureColumn(db, table: "sessions", column: "folder_id", definition: "folder_id TEXT")
+            try ensureColumn(db, table: "sessions", column: "lorebook_ids_json", definition: "lorebook_ids_json BLOB NOT NULL DEFAULT X'5B5D'")
+            try ensureColumn(db, table: "sessions", column: "worldbook_context_isolation_enabled", definition: "worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "sessions", column: "is_temporary", definition: "is_temporary INTEGER NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "sessions", column: "sort_index", definition: "sort_index INTEGER NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "sessions", column: "updated_at", definition: "updated_at REAL NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "sessions", column: "conversation_summary", definition: "conversation_summary TEXT")
+            try ensureColumn(db, table: "sessions", column: "conversation_summary_updated_at", definition: "conversation_summary_updated_at REAL")
+
+            try ensureColumn(db, table: "messages", column: "requested_at", definition: "requested_at REAL")
+            try ensureColumn(db, table: "messages", column: "content_versions_json", definition: "content_versions_json BLOB NOT NULL DEFAULT X'5B5D'")
+            try ensureColumn(db, table: "messages", column: "current_version_index", definition: "current_version_index INTEGER NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "messages", column: "reasoning_content", definition: "reasoning_content TEXT")
+            try ensureColumn(db, table: "messages", column: "tool_calls_json", definition: "tool_calls_json BLOB")
+            try ensureColumn(db, table: "messages", column: "tool_calls_placement", definition: "tool_calls_placement TEXT CHECK(tool_calls_placement IN ('afterReasoning', 'afterContent'))")
+            try ensureColumn(db, table: "messages", column: "token_usage_json", definition: "token_usage_json BLOB")
+            try ensureColumn(db, table: "messages", column: "audio_file_name", definition: "audio_file_name TEXT")
+            try ensureColumn(db, table: "messages", column: "image_file_names_json", definition: "image_file_names_json BLOB")
+            try ensureColumn(db, table: "messages", column: "file_file_names_json", definition: "file_file_names_json BLOB")
+            try ensureColumn(db, table: "messages", column: "full_error_content", definition: "full_error_content TEXT")
+            try ensureColumn(db, table: "messages", column: "response_metrics_json", definition: "response_metrics_json BLOB")
+            try ensureColumn(db, table: "messages", column: "position", definition: "position INTEGER NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "messages", column: "created_at", definition: "created_at REAL NOT NULL DEFAULT 0")
+
+            try ensureColumn(db, table: "request_logs", column: "session_id", definition: "session_id TEXT")
+            try ensureColumn(db, table: "request_logs", column: "provider_id", definition: "provider_id TEXT")
+            try ensureColumn(db, table: "request_logs", column: "requested_at", definition: "requested_at REAL NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "request_logs", column: "finished_at", definition: "finished_at REAL NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "request_logs", column: "is_streaming", definition: "is_streaming INTEGER NOT NULL DEFAULT 0")
+            try ensureColumn(db, table: "request_logs", column: "status", definition: "status TEXT NOT NULL DEFAULT 'failed'")
+            try ensureColumn(db, table: "request_logs", column: "token_usage_json", definition: "token_usage_json BLOB")
+
+            try ensureColumn(db, table: "session_folders", column: "parent_id", definition: "parent_id TEXT")
+            try ensureColumn(db, table: "session_folders", column: "updated_at", definition: "updated_at REAL NOT NULL DEFAULT 0")
+
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_sessions_sort ON sessions(sort_index ASC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_session_position ON messages(session_id, position ASC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_session_requested ON messages(session_id, requested_at DESC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_requested_at ON request_logs(requested_at DESC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_session_id ON request_logs(session_id, requested_at DESC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_model ON request_logs(provider_name, model_id, requested_at DESC)")
+            try ensureMessagesFTSObjects(db)
+        }
+    }
+
+    private func createCoreTablesIfMissing(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                topic_prompt TEXT,
+                enhanced_prompt TEXT,
+                folder_id TEXT,
+                lorebook_ids_json BLOB NOT NULL DEFAULT X'5B5D',
+                worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0,
+                is_temporary INTEGER NOT NULL DEFAULT 0,
+                sort_index INTEGER NOT NULL DEFAULT 0,
+                updated_at REAL NOT NULL DEFAULT 0,
+                conversation_summary TEXT,
+                conversation_summary_updated_at REAL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY NOT NULL,
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant', 'tool', 'error')),
+                requested_at REAL,
+                content TEXT NOT NULL,
+                content_versions_json BLOB NOT NULL DEFAULT X'5B5D',
+                current_version_index INTEGER NOT NULL DEFAULT 0,
+                reasoning_content TEXT,
+                tool_calls_json BLOB,
+                tool_calls_placement TEXT CHECK(tool_calls_placement IN ('afterReasoning', 'afterContent')),
+                token_usage_json BLOB,
+                audio_file_name TEXT,
+                image_file_names_json BLOB,
+                file_file_names_json BLOB,
+                full_error_content TEXT,
+                response_metrics_json BLOB,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL DEFAULT 0
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS session_folders (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                parent_id TEXT,
+                updated_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS request_logs (
+                id TEXT PRIMARY KEY NOT NULL,
+                request_id TEXT NOT NULL,
+                session_id TEXT,
+                provider_id TEXT,
+                provider_name TEXT NOT NULL,
+                model_id TEXT NOT NULL,
+                requested_at REAL NOT NULL DEFAULT 0,
+                finished_at REAL NOT NULL DEFAULT 0,
+                is_streaming INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'failed',
+                token_usage_json BLOB
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS json_blobs (
+                key TEXT PRIMARY KEY NOT NULL,
+                json_data BLOB NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+    }
+
+    private func ensureMessagesFTSObjects(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
+            USING fts5(
+                message_id UNINDEXED,
+                session_id UNINDEXED,
+                content,
+                tokenize = 'unicode61'
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages
+            BEGIN
+                INSERT INTO messages_fts(message_id, session_id, content)
+                VALUES (new.id, new.session_id, new.content);
+            END
+        """)
+        try db.execute(sql: """
+            CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages
+            BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.id;
+            END
+        """)
+        try db.execute(sql: """
+            CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages
+            BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.id;
+                INSERT INTO messages_fts(message_id, session_id, content)
+                VALUES (new.id, new.session_id, new.content);
+            END
+        """)
+    }
+
+    private func requireColumns(_ db: Database, table: String, columns: [String]) throws {
+        let existing = try columnNames(db, table: table)
+        for column in columns where !existing.contains(column) {
+            throw NSError(domain: "PersistenceGRDBStore.SchemaRepair", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "数据库表 \(table) 缺少关键字段 \(column)，需要自动重建。"
+            ])
+        }
+    }
+
+    private func ensureColumn(_ db: Database, table: String, column: String, definition: String) throws {
+        guard !(try columnNames(db, table: table).contains(column)) else { return }
+        try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(definition)")
+        logger.info("已自动补齐数据库字段 \(table).\(column)。")
+    }
+
+    private func columnNames(_ db: Database, table: String) throws -> Set<String> {
+        let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
+        return Set(rows.compactMap { row in
+            let name: String? = row["name"]
+            return name
+        })
     }
 
     private func scheduleDatabaseMaintenanceIfNeeded() {

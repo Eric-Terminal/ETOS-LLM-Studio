@@ -366,6 +366,17 @@ public enum Persistence {
             logger.info("GRDB 持久化已启用。")
             return store
         } catch {
+            if quarantineDatabaseAfterInitializationFailure(kind: .chat, error: error) {
+                do {
+                    let store = try PersistenceGRDBStore(chatsDirectory: getChatsDirectory())
+                    cachedGRDBStore = store
+                    lastGRDBStoreInitializationFailedAt = nil
+                    logger.info("聊天数据库已自动重建，GRDB 持久化继续启用。")
+                    return store
+                } catch {
+                    logger.error("聊天数据库自动重建后仍初始化失败: \(String(describing: error))")
+                }
+            }
             lastGRDBStoreInitializationFailedAt = Date()
             logger.error("GRDB 持久化初始化失败，已自动回退到 JSON: \(String(describing: error))")
             return nil
@@ -415,6 +426,22 @@ public enum Persistence {
             lastAuxiliaryStoreInitializationFailedAt[kind] = nil
             return store
         } catch {
+            let launchKind: LaunchDatabaseKind = kind == .config ? .config : .memory
+            if quarantineDatabaseAfterInitializationFailure(kind: launchKind, error: error) {
+                do {
+                    let databaseURL = auxiliaryStoreDatabaseURL(for: kind)
+                    let store = try PersistenceAuxiliaryGRDBStore(
+                        databaseURL: databaseURL,
+                        loggerCategory: kind.loggerCategory
+                    )
+                    cachedAuxiliaryStores[kind] = store
+                    lastAuxiliaryStoreInitializationFailedAt[kind] = nil
+                    logger.info("辅助数据库已自动重建(\(kind.rawValue))。")
+                    return store
+                } catch {
+                    logger.error("辅助数据库自动重建后仍初始化失败(\(kind.rawValue)): \(String(describing: error))")
+                }
+            }
             lastAuxiliaryStoreInitializationFailedAt[kind] = Date()
             logger.error("辅助存储初始化失败(\(kind.rawValue)): \(String(describing: error))")
             return nil
@@ -830,6 +857,43 @@ public enum Persistence {
         } catch {
             logger.error("数据库按启动备份重建失败(\(kind.displayName)): \(error.localizedDescription)")
             return .failed
+        }
+    }
+
+    private static func quarantineDatabaseAfterInitializationFailure(kind: LaunchDatabaseKind, error: Error) -> Bool {
+        let sourceURL = databaseURL(for: kind)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: sourceURL.path) else { return false }
+
+        let timestamp = ISO8601DateFormatter()
+            .string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let quarantineDirectory = sourceURL.deletingLastPathComponent()
+            .appendingPathComponent("DatabaseQuarantine", isDirectory: true)
+        let baseName = sourceURL.deletingPathExtension().lastPathComponent
+        let destinationURL = quarantineDirectory
+            .appendingPathComponent("\(baseName)-\(timestamp).sqlite", isDirectory: false)
+
+        do {
+            try ensureDirectoryExists(quarantineDirectory)
+            try moveItemIfExists(from: sourceURL, to: destinationURL)
+            try moveItemIfExists(
+                from: URL(fileURLWithPath: sourceURL.path + "-wal"),
+                to: URL(fileURLWithPath: destinationURL.path + "-wal")
+            )
+            try moveItemIfExists(
+                from: URL(fileURLWithPath: sourceURL.path + "-shm"),
+                to: URL(fileURLWithPath: destinationURL.path + "-shm")
+            )
+            UserDefaults.standard.set(
+                "检测到\(kind.displayName)无法打开或迁移，已隔离损坏文件并自动重建。",
+                forKey: launchRecoveryNoticeUserDefaultsKey
+            )
+            logger.error("数据库初始化失败，已隔离后自动重建(\(kind.displayName)): \(error.localizedDescription)")
+            return true
+        } catch {
+            logger.error("数据库隔离失败(\(kind.displayName)): \(error.localizedDescription)")
+            return false
         }
     }
 
