@@ -504,6 +504,8 @@ struct ChatView: View {
                     SessionListView()
                 case .settings:
                     SettingsView()
+                case .preferenceSettings:
+                    preferenceSettingsView
                 }
             }
             .sheet(item: $editingMessage) { message in
@@ -757,7 +759,7 @@ struct ChatView: View {
             Spacer(minLength: 12)
 
             Button {
-                navigationDestination = .settings
+                navigationDestination = isNativeNavigationEnabled ? .preferenceSettings : .settings
             } label: {
                 navBarIconLabel(systemName: "gearshape", accessibilityLabel: "设置")
             }
@@ -774,6 +776,31 @@ struct ChatView: View {
             navBarIconLabel(systemName: "chevron.left", accessibilityLabel: "返回历史会话")
         }
         .buttonStyle(.plain)
+    }
+
+    private var preferenceSettingsView: some View {
+        ModelAdvancedSettingsView(
+            aiTemperature: $viewModel.aiTemperature,
+            aiTopP: $viewModel.aiTopP,
+            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
+            maxChatHistory: $viewModel.maxChatHistory,
+            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
+            enableStreaming: $viewModel.enableStreaming,
+            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
+            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
+            enableReasoningSummary: $viewModel.enableReasoningSummary,
+            currentSession: $viewModel.currentSession,
+            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
+            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
+        )
     }
 
     private var navBarSessionButton: some View {

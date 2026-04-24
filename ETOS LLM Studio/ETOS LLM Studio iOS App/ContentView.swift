@@ -478,6 +478,7 @@ struct ContentView: View {
 enum ChatNavigationDestination: Hashable {
     case sessions
     case settings
+    case preferenceSettings
 }
 
 extension Notification.Name {
