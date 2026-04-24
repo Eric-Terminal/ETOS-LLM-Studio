@@ -1152,16 +1152,18 @@ struct ChatBubble: View {
                 }
             }) {
                 HStack(alignment: .top, spacing: 6) {
-                    if shouldShimmerReasoningHeader {
-                        reasoningHeaderTitleView(
-                            baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
-                            highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
-                        )
-                    } else {
-                        reasoningHeaderTitleView(
-                            baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8),
-                            highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
-                        )
+                    Group {
+                        if shouldShimmerReasoningHeader {
+                            reasoningHeaderTitleView(
+                                baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
+                                highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
+                            )
+                        } else {
+                            reasoningHeaderTitleView(
+                                baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8),
+                                highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
+                            )
+                        }
                     }
                     .layoutPriority(1)
                     Spacer(minLength: 4)
