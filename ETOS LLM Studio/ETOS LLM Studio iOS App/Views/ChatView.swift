@@ -801,6 +801,16 @@ struct ChatView: View {
             updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
             deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
         )
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    navigationDestination = nil
+                } label: {
+                    Label("返回对话", systemImage: "chevron.left")
+                }
+            }
+        }
     }
 
     private var navBarSessionButton: some View {
