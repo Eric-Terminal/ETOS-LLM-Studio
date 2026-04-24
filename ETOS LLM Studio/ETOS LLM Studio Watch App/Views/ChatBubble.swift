@@ -871,7 +871,6 @@ struct ChatBubble: View {
                 statusTitle: status.title,
                 statusIconName: status.iconName,
                 statusColor: status.accentColor,
-                summary: toolCallTimelineSummary(for: call),
                 showPendingGuidance: shouldShowPendingGuidance(for: call),
                 customTextColor: customTextColorOverride
             )
@@ -884,21 +883,6 @@ struct ChatBubble: View {
         // watchOS 不直接渲染 HTML，但 show_widget 也不能放进时间线 step，避免轻量提示被连线压缩。
         widgetInlineSummaryView(payload: payload)
             .padding(.vertical, 3)
-    }
-
-    private func toolCallTimelineSummary(for call: InternalToolCall) -> String? {
-        let result = resolvedToolResultText(for: call)
-        if !result.isEmpty {
-            return MCPToolResultFormatter.displayModel(from: result).summaryText
-        }
-
-        let argumentText = prettyPrintedJSONOrRaw(call.arguments)
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard argumentText != "{}", !argumentText.isEmpty else {
-            return nil
-        }
-        return String(argumentText.prefix(64))
     }
 
     @ViewBuilder
@@ -2111,7 +2095,6 @@ private struct WatchTimelineToolCallStepContent: View {
     let statusTitle: String
     let statusIconName: String
     let statusColor: Color
-    let summary: String?
     let showPendingGuidance: Bool
     let customTextColor: Color?
 
@@ -2146,14 +2129,6 @@ private struct WatchTimelineToolCallStepContent: View {
                     .lineLimit(1)
             }
 
-            if let summary,
-               !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(summary)
-                    .etFont(.caption2)
-                    .foregroundStyle(secondaryColor)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
         }
         .contentShape(Rectangle())
     }

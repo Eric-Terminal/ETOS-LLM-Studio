@@ -1036,7 +1036,6 @@ struct ChatBubble: View {
                 statusTitle: status.title,
                 statusIconName: status.iconName,
                 statusColor: status.accentColor,
-                summary: toolCallTimelineSummary(for: call),
                 showPendingGuidance: shouldShowPendingGuidance(for: call),
                 customTextColor: customTextColorOverride
             )
@@ -1049,21 +1048,6 @@ struct ChatBubble: View {
         // show_widget 必须保持整列宽度，不能放进时间线 step，否则左侧连线会压缩 HTML 卡片。
         ToolWidgetRendererCard(payload: payload)
             .padding(.vertical, 4)
-    }
-
-    private func toolCallTimelineSummary(for call: InternalToolCall) -> String? {
-        let result = resolvedToolResultText(for: call)
-        if !result.isEmpty {
-            return MCPToolResultFormatter.displayModel(from: result).summaryText
-        }
-
-        let argumentText = prettyPrintedJSONOrRaw(call.arguments)
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard argumentText != "{}", !argumentText.isEmpty else {
-            return nil
-        }
-        return String(argumentText.prefix(96))
     }
 
     @ViewBuilder
@@ -1946,7 +1930,6 @@ private struct TimelineToolCallStepContent: View {
     let statusTitle: String
     let statusIconName: String
     let statusColor: Color
-    let summary: String?
     let showPendingGuidance: Bool
     let customTextColor: Color?
 
@@ -1981,14 +1964,6 @@ private struct TimelineToolCallStepContent: View {
                     .lineLimit(1)
             }
 
-            if let summary,
-               !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(summary)
-                    .etFont(.caption)
-                    .foregroundStyle(secondaryColor)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
         }
         .contentShape(Rectangle())
     }
