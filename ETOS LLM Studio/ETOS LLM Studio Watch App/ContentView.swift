@@ -412,10 +412,14 @@ struct ContentView: View {
                 let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                 let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
+                let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                 messageRow(
                     for: state,
                     mergeWithPrevious: mergeWithPrevious,
-                    mergeWithNext: mergeWithNext
+                    mergeWithNext: mergeWithNext,
+                    connectsTimelineFromPrevious: connectsTimelineFromPrevious,
+                    connectsTimelineToNext: connectsTimelineToNext
                 )
             }
 
@@ -634,7 +638,13 @@ struct ContentView: View {
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
     @ViewBuilder
-    private func messageRow(for state: ChatMessageRenderState, mergeWithPrevious: Bool, mergeWithNext: Bool) -> some View {
+    private func messageRow(
+        for state: ChatMessageRenderState,
+        mergeWithPrevious: Bool,
+        mergeWithNext: Bool,
+        connectsTimelineFromPrevious: Bool,
+        connectsTimelineToNext: Bool
+    ) -> some View {
         let message = state.message
         let preparedPayload = viewModel.preparedMarkdownByMessageID[message.id]
         let isReasoningExpandedBinding = Binding<Bool>(
@@ -664,6 +674,8 @@ struct ContentView: View {
             showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext,
+            connectsTimelineFromPrevious: connectsTimelineFromPrevious,
+            connectsTimelineToNext: connectsTimelineToNext,
             hasAutoOpenedPendingToolCall: { toolCallID in
                 viewModel.hasAutoOpenedPendingToolCall(toolCallID)
             },
@@ -790,6 +802,20 @@ struct ContentView: View {
     private func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    private func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard shouldMergeTurnMessages(message, with: nextMessage) else { return false }
+        return hasTimelineLineContent(message) && hasTimelineLineContent(nextMessage)
+    }
+
+    private func hasTimelineLineContent(_ message: ChatMessage?) -> Bool {
+        guard let message, isAssistantTurnMessage(message) else { return false }
+        let hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasNonWidgetToolCall = (message.toolCalls ?? []).contains { call in
+            call.toolName != AppToolKind.showWidget.toolName
+        }
+        return hasReasoning || hasNonWidgetToolCall
     }
 
     private func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {

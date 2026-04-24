@@ -102,6 +102,8 @@ struct ChatBubble: View {
     let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let connectsTimelineFromPrevious: Bool
+    let connectsTimelineToNext: Bool
     let hasAutoOpenedPendingToolCall: (String) -> Bool
     let markPendingToolCallAutoOpened: (String) -> Void
     let onSwitchToPreviousVersion: () -> Void
@@ -138,6 +140,8 @@ struct ChatBubble: View {
         showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
         mergeWithNext: Bool,
+        connectsTimelineFromPrevious: Bool = false,
+        connectsTimelineToNext: Bool = false,
         hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
         markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
         onSwitchToPreviousVersion: @escaping () -> Void,
@@ -157,6 +161,8 @@ struct ChatBubble: View {
         self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
+        self.connectsTimelineFromPrevious = connectsTimelineFromPrevious
+        self.connectsTimelineToNext = connectsTimelineToNext
         self.hasAutoOpenedPendingToolCall = hasAutoOpenedPendingToolCall
         self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
@@ -944,8 +950,8 @@ struct ChatBubble: View {
                         iconName: "lightbulb",
                         iconColor: timelineAccentColor,
                         lineColor: timelineLineColor,
-                        isFirst: true,
-                        isLast: stepCount == 1
+                        isFirst: !connectsTimelineFromPrevious,
+                        isLast: stepCount == 1 && !connectsTimelineToNext
                     ) {
                         TimelineReasoningStepView(
                             reasoning: trimmedReasoning,
@@ -969,8 +975,8 @@ struct ChatBubble: View {
                             iconName: "wrench.and.screwdriver",
                             iconColor: status.accentColor,
                             lineColor: timelineLineColor,
-                            isFirst: stepIndex == 0,
-                            isLast: stepIndex == stepCount - 1
+                            isFirst: stepIndex == 0 && !connectsTimelineFromPrevious,
+                            isLast: stepIndex == stepCount - 1 && !connectsTimelineToNext
                         ) {
                             timelineToolCallRow(for: presentation.call, status: status)
                         }
@@ -1812,7 +1818,7 @@ private struct AssistantTimelineLineShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let x = rect.midX
-        let rowOverlap: CGFloat = 1
+        let rowOverlap: CGFloat = 14
         let iconTopY: CGFloat = 8
         let iconBottomY: CGFloat = 28
         if !isFirst {

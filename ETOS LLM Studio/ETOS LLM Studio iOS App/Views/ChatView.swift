@@ -306,6 +306,8 @@ struct ChatView: View {
                                     let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                                     let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                                     let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                                    let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
+                                    let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                     let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                     ChatBubble(
                                         messageState: state,
@@ -328,6 +330,8 @@ struct ChatView: View {
                                         showsStreamingIndicators: showsStreamingIndicators,
                                         mergeWithPrevious: mergeWithPrevious,
                                         mergeWithNext: mergeWithNext,
+                                        connectsTimelineFromPrevious: connectsTimelineFromPrevious,
+                                        connectsTimelineToNext: connectsTimelineToNext,
                                         hasAutoOpenedPendingToolCall: { toolCallID in
                                             viewModel.hasAutoOpenedPendingToolCall(toolCallID)
                                         },
@@ -2348,6 +2352,20 @@ private extension ChatView {
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+    }
+
+    func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard shouldMergeTurnMessages(message, with: nextMessage) else { return false }
+        return hasTimelineLineContent(message) && hasTimelineLineContent(nextMessage)
+    }
+
+    func hasTimelineLineContent(_ message: ChatMessage?) -> Bool {
+        guard let message, isAssistantTurnMessage(message) else { return false }
+        let hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasNonWidgetToolCall = (message.toolCalls ?? []).contains { call in
+            call.toolName != AppToolKind.showWidget.toolName
+        }
+        return hasReasoning || hasNonWidgetToolCall
     }
 
     func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
