@@ -589,13 +589,6 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         return max(0, completedAt.timeIntervalSince(reasoningStartedAt))
     }
 
-    public var hasResponseSpeedData: Bool {
-        timeToFirstToken != nil
-            || totalResponseDuration != nil
-            || completionTokensForSpeed != nil
-            || tokenPerSecond != nil
-    }
-
     public init(
         schemaVersion: Int = MessageResponseMetrics.currentSchemaVersion,
         requestStartedAt: Date? = nil,
