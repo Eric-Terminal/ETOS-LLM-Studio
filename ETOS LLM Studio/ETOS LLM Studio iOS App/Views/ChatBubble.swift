@@ -987,26 +987,30 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func timelineToolCallRow(for call: InternalToolCall, status: ToolCallBubbleStatus) -> some View {
-        let label = toolDisplayLabel(for: call.toolName)
-        Button {
-            showRawToolResultInDetailSheet = false
-            selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
-                messageID: message.id,
-                toolCallID: call.id,
-                fallbackToolCall: call
-            )
-        } label: {
-            TimelineToolCallStepContent(
-                label: label,
-                statusTitle: status.title,
-                statusIconName: status.iconName,
-                statusColor: status.accentColor,
-                summary: toolCallTimelineSummary(for: call),
-                showPendingGuidance: shouldShowPendingGuidance(for: call),
-                customTextColor: customTextColorOverride
-            )
+        if let payload = showWidgetPayload(for: call) {
+            ToolWidgetRendererCard(payload: payload)
+        } else {
+            let label = toolDisplayLabel(for: call.toolName)
+            Button {
+                showRawToolResultInDetailSheet = false
+                selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
+                    messageID: message.id,
+                    toolCallID: call.id,
+                    fallbackToolCall: call
+                )
+            } label: {
+                TimelineToolCallStepContent(
+                    label: label,
+                    statusTitle: status.title,
+                    statusIconName: status.iconName,
+                    statusColor: status.accentColor,
+                    summary: toolCallTimelineSummary(for: call),
+                    showPendingGuidance: shouldShowPendingGuidance(for: call),
+                    customTextColor: customTextColorOverride
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     private func toolCallTimelineSummary(for call: InternalToolCall) -> String? {
