@@ -3,7 +3,9 @@ import Shared
 
 struct UsageAnalyticsView: View {
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
-    private let calendarColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    private static let calendarCellSide: CGFloat = 24
+    private static let calendarHeaderHeight: CGFloat = 14
+    private static let calendarCellSpacing: CGFloat = 4
     private let heatmapCellSide: CGFloat = 10
     private let heatmapCellSpacing: CGFloat = 3
 
@@ -126,34 +128,7 @@ struct UsageAnalyticsView: View {
                     .buttonStyle(.plain)
                 }
 
-                LazyVGrid(columns: calendarColumns, spacing: 4) {
-                    ForEach(viewModel.state.weekdaySymbols, id: \.self) { symbol in
-                        Text(symbol)
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                    }
-
-                    ForEach(Array(viewModel.state.monthDays.enumerated()), id: \.offset) { _, day in
-                        if let day {
-                            Button {
-                                viewModel.selectDay(dayKey: day.dayKey)
-                            } label: {
-                                Text(day.dayNumberText)
-                                    .etFont(.caption2.weight(.semibold))
-                                    .frame(maxWidth: .infinity, minHeight: 24)
-                                    .padding(.vertical, 4)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(day.dayKey == viewModel.state.selectedDayKey ? Color.accentColor.opacity(0.16) : heatColor(level: day.intensity))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            Color.clear.frame(height: 24)
-                        }
-                    }
-                }
+                calendarGrid
             }
 
             Section("详情") {
@@ -207,6 +182,70 @@ struct UsageAnalyticsView: View {
 
     private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {
         Array(viewModel.state.heatmapWeeks.suffix(12))
+    }
+
+    private var calendarGrid: some View {
+        VStack(spacing: Self.calendarCellSpacing) {
+            HStack(spacing: Self.calendarCellSpacing) {
+                ForEach(Array(viewModel.state.weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: Self.calendarCellSide, height: Self.calendarHeaderHeight)
+                }
+            }
+
+            ForEach(0..<calendarRowCount, id: \.self) { rowIndex in
+                HStack(spacing: Self.calendarCellSpacing) {
+                    ForEach(0..<7, id: \.self) { columnIndex in
+                        let dayIndex = rowIndex * 7 + columnIndex
+                        if let day = calendarDay(at: dayIndex) {
+                            calendarDayButton(day)
+                        } else {
+                            Color.clear
+                                .frame(width: Self.calendarCellSide, height: Self.calendarCellSide)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: calendarGridWidth, height: calendarGridHeight, alignment: .top)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var calendarRowCount: Int {
+        max((viewModel.state.monthDays.count + 6) / 7, 1)
+    }
+
+    private var calendarGridWidth: CGFloat {
+        Self.calendarCellSide * 7 + Self.calendarCellSpacing * 6
+    }
+
+    private var calendarGridHeight: CGFloat {
+        Self.calendarHeaderHeight
+            + Self.calendarCellSpacing
+            + Self.calendarCellSide * CGFloat(calendarRowCount)
+            + Self.calendarCellSpacing * CGFloat(max(calendarRowCount - 1, 0))
+    }
+
+    private func calendarDay(at index: Int) -> UsageAnalyticsCalendarDay? {
+        guard viewModel.state.monthDays.indices.contains(index) else { return nil }
+        return viewModel.state.monthDays[index]
+    }
+
+    private func calendarDayButton(_ day: UsageAnalyticsCalendarDay) -> some View {
+        Button {
+            viewModel.selectDay(dayKey: day.dayKey)
+        } label: {
+            Text(day.dayNumberText)
+                .etFont(.caption2.weight(.semibold))
+                .frame(width: Self.calendarCellSide, height: Self.calendarCellSide)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(day.dayKey == viewModel.state.selectedDayKey ? Color.accentColor.opacity(0.16) : heatColor(level: day.intensity))
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var scopeSwitcher: some View {
