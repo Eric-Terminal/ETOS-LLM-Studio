@@ -1011,7 +1011,7 @@ struct ChatBubble: View {
     }
 
     private var timelineLineColor: Color {
-        customTextColorOverride?.opacity(0.24) ?? Color.secondary.opacity(0.28)
+        customTextColorOverride?.opacity(0.28) ?? Color.secondary.opacity(0.34)
     }
 
     @ViewBuilder
@@ -1798,7 +1798,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         }
         .background(alignment: .leading) {
             AssistantTimelineLineShape(isFirst: isFirst, isLast: isLast)
-                .stroke(lineColor, lineWidth: 1)
+                .stroke(lineColor, style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
                 .frame(width: 24)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1812,13 +1812,16 @@ private struct AssistantTimelineLineShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let x = rect.midX
+        let rowOverlap: CGFloat = 1
+        let iconTopY: CGFloat = 8
+        let iconBottomY: CGFloat = 28
         if !isFirst {
-            path.move(to: CGPoint(x: x, y: rect.minY))
-            path.addLine(to: CGPoint(x: x, y: rect.minY + 7))
+            path.move(to: CGPoint(x: x, y: rect.minY - rowOverlap))
+            path.addLine(to: CGPoint(x: x, y: rect.minY + iconTopY))
         }
         if !isLast {
-            path.move(to: CGPoint(x: x, y: rect.minY + 29))
-            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+            path.move(to: CGPoint(x: x, y: rect.minY + iconBottomY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY + rowOverlap))
         }
         return path
     }
