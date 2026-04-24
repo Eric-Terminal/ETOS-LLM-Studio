@@ -250,6 +250,8 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
+        let rowChromeWidth = rowHorizontalPadding * 2 + (usesNoBubbleStyle ? 0 : rowSideSpacerMinLength)
+        let availableBubbleWidth = max(1, baseWidth - rowChromeWidth)
         let widthRatio: CGFloat
         if usesNoBubbleStyle {
             widthRatio = 0.92
@@ -258,7 +260,7 @@ struct ChatBubble: View {
         } else {
             widthRatio = 0.94
         }
-        return baseWidth * widthRatio
+        return min(baseWidth * widthRatio, availableBubbleWidth)
     }
 
     private var shouldForceMergedWidth: Bool {
@@ -270,6 +272,10 @@ struct ChatBubble: View {
 
     private var rowSideSpacerMinLength: CGFloat {
         usesNoBubbleStyle ? 0 : 20
+    }
+
+    private var rowHorizontalPadding: CGFloat {
+        8
     }
 
     private var rowVerticalPadding: CGFloat {
@@ -509,7 +515,7 @@ struct ChatBubble: View {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, rowHorizontalPadding)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .background(
