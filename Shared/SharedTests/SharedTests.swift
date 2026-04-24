@@ -20,6 +20,14 @@ import Combine
 import SwiftUI
 import SQLite3
 
+@Suite("聊天界面架构默认值测试")
+struct ChatNavigationModeTests {
+    @Test("默认使用沉浸浮层界面")
+    func defaultModeUsesLegacyOverlay() {
+        #expect(ChatNavigationMode.defaultMode == .legacyOverlay)
+    }
+}
+
 @Suite("模型提示词语言适配测试")
 struct ModelPromptLanguageTests {
     @Test("根据语言标识解析模型提示词目标语言")
