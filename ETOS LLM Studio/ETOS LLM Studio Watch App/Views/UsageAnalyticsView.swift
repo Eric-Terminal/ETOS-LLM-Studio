@@ -23,7 +23,7 @@ struct UsageAnalyticsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("请求热力图")
                         .etFont(.footnote.weight(.semibold))
-                    Text("最近 12 周")
+                    Text("最近 52 周")
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -181,7 +181,7 @@ struct UsageAnalyticsView: View {
     }
 
     private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {
-        Array(viewModel.state.heatmapWeeks.suffix(12))
+        viewModel.state.heatmapWeeks
     }
 
     private var calendarGrid: some View {
