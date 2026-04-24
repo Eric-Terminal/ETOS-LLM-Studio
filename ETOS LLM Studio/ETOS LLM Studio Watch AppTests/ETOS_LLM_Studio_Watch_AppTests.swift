@@ -81,6 +81,16 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             wasAutoExpanded: false
         )
         #expect(shouldKeep == nil)
+
+        let shouldRespectUserControl = ChatViewModel.autoReasoningDisclosureTargetState(
+            autoPreviewEnabled: true,
+            isUserControlled: true,
+            isSendingMessage: true,
+            hasReasoning: true,
+            hasBodyContent: false,
+            wasAutoExpanded: true
+        )
+        #expect(shouldRespectUserControl == nil)
     }
 
     @Test("App 层可调用文本分片函数")

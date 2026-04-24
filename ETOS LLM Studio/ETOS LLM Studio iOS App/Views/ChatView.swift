@@ -314,7 +314,7 @@ struct ChatView: View {
                                         preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
                                         isReasoningExpanded: Binding(
                                             get: { viewModel.reasoningExpandedState[message.id, default: false] },
-                                            set: { viewModel.reasoningExpandedState[message.id] = $0 }
+                                            set: { viewModel.setReasoningExpanded($0, for: message.id) }
                                         ),
                                         isToolCallsExpanded: Binding(
                                             get: { viewModel.toolCallsExpandedState[message.id, default: false] },

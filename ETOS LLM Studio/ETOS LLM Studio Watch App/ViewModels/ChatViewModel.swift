@@ -114,6 +114,7 @@ class ChatViewModel: ObservableObject {
         didSet {
             if !enableAutoReasoningPreview {
                 autoReasoningPreviewMessageIDs.removeAll()
+                userControlledReasoningPreviewMessageIDs.removeAll()
             }
         }
     }
@@ -259,6 +260,7 @@ class ChatViewModel: ObservableObject {
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
     private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     private var autoReasoningPreviewMessageIDs: Set<UUID> = []
+    private var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
     private var isPersistingGlobalSystemPrompts = false
     private var lastAutoPlayedAssistantMessageID: UUID?
     private var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
@@ -2398,6 +2400,12 @@ class ChatViewModel: ObservableObject {
         autoOpenedPendingToolCallIDs.contains(toolCallID)
     }
 
+    func setReasoningExpanded(_ isExpanded: Bool, for messageID: UUID) {
+        reasoningExpandedState[messageID] = isExpanded
+        userControlledReasoningPreviewMessageIDs.insert(messageID)
+        autoReasoningPreviewMessageIDs.remove(messageID)
+    }
+
     func markPendingToolCallAutoOpened(_ toolCallID: String) {
         guard !toolCallID.isEmpty else { return }
         autoOpenedPendingToolCallIDs.insert(toolCallID)
@@ -2419,16 +2427,20 @@ class ChatViewModel: ObservableObject {
     private func updateAutoReasoningPreviewState(with messages: [ChatMessage]) {
         guard let latestAssistantMessage = messages.last(where: { $0.role == .assistant }) else {
             autoReasoningPreviewMessageIDs.removeAll()
+            userControlledReasoningPreviewMessageIDs.removeAll()
             return
         }
         autoReasoningPreviewMessageIDs.formIntersection([latestAssistantMessage.id])
+        userControlledReasoningPreviewMessageIDs.formIntersection([latestAssistantMessage.id])
 
         let hasReasoning = Self.hasReasoningContent(latestAssistantMessage)
         let hasBodyContent = Self.hasVisibleAssistantBodyContent(latestAssistantMessage)
         let wasAutoExpanded = autoReasoningPreviewMessageIDs.contains(latestAssistantMessage.id)
+        let isUserControlled = userControlledReasoningPreviewMessageIDs.contains(latestAssistantMessage.id)
 
         guard let targetExpandedState = Self.autoReasoningDisclosureTargetState(
             autoPreviewEnabled: enableAutoReasoningPreview,
+            isUserControlled: isUserControlled,
             isSendingMessage: isSendingMessage,
             hasReasoning: hasReasoning,
             hasBodyContent: hasBodyContent,
@@ -2436,6 +2448,7 @@ class ChatViewModel: ObservableObject {
         ) else {
             if !hasReasoning {
                 autoReasoningPreviewMessageIDs.remove(latestAssistantMessage.id)
+                userControlledReasoningPreviewMessageIDs.remove(latestAssistantMessage.id)
             }
             return
         }
@@ -2450,12 +2463,13 @@ class ChatViewModel: ObservableObject {
 
     nonisolated static func autoReasoningDisclosureTargetState(
         autoPreviewEnabled: Bool,
+        isUserControlled: Bool = false,
         isSendingMessage: Bool,
         hasReasoning: Bool,
         hasBodyContent: Bool,
         wasAutoExpanded: Bool
     ) -> Bool? {
-        guard autoPreviewEnabled else { return nil }
+        guard autoPreviewEnabled, !isUserControlled else { return nil }
         if isSendingMessage, hasReasoning, !hasBodyContent {
             return true
         }

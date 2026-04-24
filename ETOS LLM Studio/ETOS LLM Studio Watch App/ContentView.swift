@@ -649,7 +649,7 @@ struct ContentView: View {
         let preparedPayload = viewModel.preparedMarkdownByMessageID[message.id]
         let isReasoningExpandedBinding = Binding<Bool>(
             get: { viewModel.reasoningExpandedState[message.id, default: false] },
-            set: { viewModel.reasoningExpandedState[message.id] = $0 }
+            set: { viewModel.setReasoningExpanded($0, for: message.id) }
         )
         
         let isToolCallsExpandedBinding = Binding<Bool>(
