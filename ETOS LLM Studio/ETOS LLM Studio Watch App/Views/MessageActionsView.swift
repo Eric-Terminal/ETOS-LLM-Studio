@@ -84,6 +84,7 @@ struct MessageActionsView: View {
     @State private var showDeleteConfirm = false
     @State private var showDeleteVersionConfirm = false
     @State private var showBranchOptions = false
+    @State private var pendingRetryMessage: ChatMessage?
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
     @ObservedObject private var ttsManager = TTSManager.shared
@@ -107,7 +108,7 @@ struct MessageActionsView: View {
 
                 if canRetry {
                     Button {
-                        onRetry(message)
+                        pendingRetryMessage = message
                         dismiss()
                     } label: {
                         Label("重试", systemImage: "arrow.clockwise")
@@ -364,6 +365,9 @@ struct MessageActionsView: View {
                 Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
             }
         }
+        .onDisappear {
+            performPendingRetryIfNeeded()
+        }
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -404,6 +408,15 @@ struct MessageActionsView: View {
 
         jumpError = nil
         dismiss()
+    }
+
+    private func performPendingRetryIfNeeded() {
+        guard let message = pendingRetryMessage else { return }
+        pendingRetryMessage = nil
+        Task { @MainActor in
+            await Task.yield()
+            onRetry(message)
+        }
     }
 }
 
