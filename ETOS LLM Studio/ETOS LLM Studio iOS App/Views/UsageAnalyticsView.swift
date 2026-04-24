@@ -23,8 +23,9 @@ struct UsageAnalyticsView: View {
                         )
                 }
                 heatmapSection
-                overviewSection
                 calendarSection
+                scopeSection
+                overviewSection
                 detailSection
             }
             .padding(16)
@@ -43,7 +44,6 @@ struct UsageAnalyticsView: View {
                     .etFont(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            scopeSwitcher
             if let card = viewModel.state.activeOverviewCard {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top) {
@@ -246,14 +246,25 @@ struct UsageAnalyticsView: View {
         }
     }
 
+    private var scopeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionHeader("统计范围")
+                Spacer()
+                Text(scopeButtonTitle(viewModel.state.selectedScope))
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            scopeSwitcher
+        }
+    }
+
     private var detailSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 sectionHeader("详情")
                 Spacer()
             }
-
-            scopeSwitcher
 
             VStack(alignment: .leading, spacing: 12) {
                 Text(viewModel.state.detail.title)

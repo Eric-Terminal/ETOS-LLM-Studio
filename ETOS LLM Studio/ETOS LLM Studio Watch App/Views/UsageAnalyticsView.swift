@@ -78,34 +78,6 @@ struct UsageAnalyticsView: View {
                 }
             }
 
-            Section("概览") {
-                scopeSwitcher
-
-                if let card = viewModel.state.activeOverviewCard {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(card.title)
-                            .etFont(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        HStack(alignment: .lastTextBaseline, spacing: 6) {
-                            Text("\(card.requestCount)")
-                                .etFont(.title2.monospaced().weight(.bold))
-                            Text("次请求")
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text("Token \(card.totalTokens) · 错误 \(card.errorCount)")
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text("常用模型：\(card.topModelName)")
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-
             Section("当前月") {
                 HStack {
                     Button {
@@ -131,9 +103,37 @@ struct UsageAnalyticsView: View {
                 calendarGrid
             }
 
-            Section("详情") {
+            Section("统计范围") {
                 scopeSwitcher
+            }
 
+            Section("概览") {
+                if let card = viewModel.state.activeOverviewCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(card.title)
+                            .etFont(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        HStack(alignment: .lastTextBaseline, spacing: 6) {
+                            Text("\(card.requestCount)")
+                                .etFont(.title2.monospaced().weight(.bold))
+                            Text("次请求")
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text("Token \(card.totalTokens) · 错误 \(card.errorCount)")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("常用模型：\(card.topModelName)")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Section("详情") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(viewModel.state.detail.title)
                         .etFont(.headline)
