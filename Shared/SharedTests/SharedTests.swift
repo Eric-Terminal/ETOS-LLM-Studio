@@ -30,6 +30,13 @@ struct ModelPromptLanguageTests {
         #expect(ModelPromptLanguage.resolve(identifier: "ar") == .arabic)
     }
 
+    @Test("不支持的语言标识会按英语策略处理")
+    func treatsUnsupportedLanguageIdentifiersAsEnglish() {
+        let identifiers = ["de-DE", "ko-KR", "pt-BR"]
+        let language = ModelPromptLanguage.resolve(identifiers: identifiers)
+        #expect(language == .english)
+    }
+
     @Test("追加模型语言约束时保留原始提示词")
     func appendsInstructionWithoutDroppingPrompt() {
         let prompt = ModelPromptLanguage.appendingOutputInstruction(to: "生成标题", language: .english)

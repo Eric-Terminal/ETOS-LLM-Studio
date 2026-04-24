@@ -272,7 +272,11 @@ public enum ModelPromptLanguage: Equatable, Sendable {
 
     public static var current: ModelPromptLanguage {
         let identifiers = Bundle.main.preferredLocalizations + Locale.preferredLanguages
-        return identifiers.lazy.compactMap { resolve(identifier: $0) }.first ?? .simplifiedChinese
+        return resolve(identifiers: identifiers)
+    }
+
+    public static func resolve(identifiers: [String]) -> ModelPromptLanguage {
+        identifiers.lazy.compactMap { resolve(identifier: $0) }.first ?? .english
     }
 
     public static func resolve(identifier: String) -> ModelPromptLanguage? {
