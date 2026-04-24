@@ -169,13 +169,15 @@ struct ContentView: View {
                 .navigationTitle("历史会话")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarLeading) {
                         Button {
                             pushNativeSettings(destination: nil)
                         } label: {
                             Image(systemName: "gearshape.fill")
                         }
+                    }
 
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             viewModel.createNewSession()
                             pushNativeChatIfNeeded()
