@@ -934,9 +934,10 @@ struct ChatBubble: View {
     private func reasoningToolTimeline(reasoning: String?, toolCalls: [InternalToolCall]) -> some View {
         let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReasoning = !(trimmedReasoning ?? "").isEmpty
-        let stepCount = (hasReasoning ? 1 : 0) + toolCalls.count
+        let toolPresentations = timelineToolCallPresentations(for: toolCalls, hasReasoning: hasReasoning)
+        let stepCount = (hasReasoning ? 1 : 0) + toolPresentations.filter { $0.stepIndex != nil }.count
 
-        if stepCount > 0 {
+        if stepCount > 0 || !toolPresentations.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 if let trimmedReasoning, hasReasoning {
                     AssistantTimelineStepShell(
@@ -959,21 +960,49 @@ struct ChatBubble: View {
                     }
                 }
 
-                ForEach(Array(toolCalls.enumerated()), id: \.element.id) { offset, call in
-                    let stepIndex = (hasReasoning ? 1 : 0) + offset
-                    let status = toolCallStatus(for: call)
-                    AssistantTimelineStepShell(
-                        iconName: "wrench.and.screwdriver",
-                        iconColor: status.accentColor,
-                        lineColor: timelineLineColor,
-                        isFirst: stepIndex == 0,
-                        isLast: stepIndex == stepCount - 1
-                    ) {
-                        timelineToolCallRow(for: call, status: status)
+                ForEach(toolPresentations) { presentation in
+                    if let payload = presentation.widgetPayload {
+                        timelineWidgetContent(payload: payload)
+                    } else if let stepIndex = presentation.stepIndex {
+                        let status = toolCallStatus(for: presentation.call)
+                        AssistantTimelineStepShell(
+                            iconName: "wrench.and.screwdriver",
+                            iconColor: status.accentColor,
+                            lineColor: timelineLineColor,
+                            isFirst: stepIndex == 0,
+                            isLast: stepIndex == stepCount - 1
+                        ) {
+                            timelineToolCallRow(for: presentation.call, status: status)
+                        }
                     }
                 }
             }
             .padding(.vertical, 2)
+        }
+    }
+
+    private struct TimelineToolCallPresentation: Identifiable {
+        let call: InternalToolCall
+        let widgetPayload: ToolWidgetPayload?
+        let stepIndex: Int?
+
+        var id: String {
+            call.id
+        }
+    }
+
+    private func timelineToolCallPresentations(
+        for toolCalls: [InternalToolCall],
+        hasReasoning: Bool
+    ) -> [TimelineToolCallPresentation] {
+        var nextStepIndex = hasReasoning ? 1 : 0
+        return toolCalls.map { call in
+            if let payload = showWidgetPayload(for: call) {
+                return TimelineToolCallPresentation(call: call, widgetPayload: payload, stepIndex: nil)
+            }
+            let stepIndex = nextStepIndex
+            nextStepIndex += 1
+            return TimelineToolCallPresentation(call: call, widgetPayload: nil, stepIndex: stepIndex)
         }
     }
 
@@ -987,31 +1016,33 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func timelineToolCallRow(for call: InternalToolCall, status: ToolCallBubbleStatus) -> some View {
-        // show_widget 必须绕过普通工具摘要，否则时间线会吞掉 HTML 卡片的专用渲染。
-        if let payload = showWidgetPayload(for: call) {
-            ToolWidgetRendererCard(payload: payload)
-        } else {
-            let label = toolDisplayLabel(for: call.toolName)
-            Button {
-                showRawToolResultInDetailSheet = false
-                selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
-                    messageID: message.id,
-                    toolCallID: call.id,
-                    fallbackToolCall: call
-                )
-            } label: {
-                TimelineToolCallStepContent(
-                    label: label,
-                    statusTitle: status.title,
-                    statusIconName: status.iconName,
-                    statusColor: status.accentColor,
-                    summary: toolCallTimelineSummary(for: call),
-                    showPendingGuidance: shouldShowPendingGuidance(for: call),
-                    customTextColor: customTextColorOverride
-                )
-            }
-            .buttonStyle(.plain)
+        let label = toolDisplayLabel(for: call.toolName)
+        Button {
+            showRawToolResultInDetailSheet = false
+            selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
+                messageID: message.id,
+                toolCallID: call.id,
+                fallbackToolCall: call
+            )
+        } label: {
+            TimelineToolCallStepContent(
+                label: label,
+                statusTitle: status.title,
+                statusIconName: status.iconName,
+                statusColor: status.accentColor,
+                summary: toolCallTimelineSummary(for: call),
+                showPendingGuidance: shouldShowPendingGuidance(for: call),
+                customTextColor: customTextColorOverride
+            )
         }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func timelineWidgetContent(payload: ToolWidgetPayload) -> some View {
+        // show_widget 必须保持整列宽度，不能放进时间线 step，否则左侧连线会压缩 HTML 卡片。
+        ToolWidgetRendererCard(payload: payload)
+            .padding(.vertical, 4)
     }
 
     private func toolCallTimelineSummary(for call: InternalToolCall) -> String? {

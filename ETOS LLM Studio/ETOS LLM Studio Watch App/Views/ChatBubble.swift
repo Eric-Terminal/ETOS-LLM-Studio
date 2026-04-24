@@ -770,9 +770,10 @@ struct ChatBubble: View {
     private func reasoningToolTimeline(reasoning: String?, toolCalls: [InternalToolCall]) -> some View {
         let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReasoning = !(trimmedReasoning ?? "").isEmpty
-        let stepCount = (hasReasoning ? 1 : 0) + toolCalls.count
+        let toolPresentations = timelineToolCallPresentations(for: toolCalls, hasReasoning: hasReasoning)
+        let stepCount = (hasReasoning ? 1 : 0) + toolPresentations.filter { $0.stepIndex != nil }.count
 
-        if stepCount > 0 {
+        if stepCount > 0 || !toolPresentations.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 if let trimmedReasoning, hasReasoning {
                     WatchAssistantTimelineStepShell(
@@ -794,21 +795,49 @@ struct ChatBubble: View {
                     }
                 }
 
-                ForEach(Array(toolCalls.enumerated()), id: \.element.id) { offset, call in
-                    let stepIndex = (hasReasoning ? 1 : 0) + offset
-                    let status = toolCallStatus(for: call)
-                    WatchAssistantTimelineStepShell(
-                        iconName: "wrench.and.screwdriver",
-                        iconColor: status.accentColor,
-                        lineColor: timelineLineColor,
-                        isFirst: stepIndex == 0,
-                        isLast: stepIndex == stepCount - 1
-                    ) {
-                        timelineToolCallRow(for: call, status: status)
+                ForEach(toolPresentations) { presentation in
+                    if let payload = presentation.widgetPayload {
+                        timelineWidgetContent(payload: payload)
+                    } else if let stepIndex = presentation.stepIndex {
+                        let status = toolCallStatus(for: presentation.call)
+                        WatchAssistantTimelineStepShell(
+                            iconName: "wrench.and.screwdriver",
+                            iconColor: status.accentColor,
+                            lineColor: timelineLineColor,
+                            isFirst: stepIndex == 0,
+                            isLast: stepIndex == stepCount - 1
+                        ) {
+                            timelineToolCallRow(for: presentation.call, status: status)
+                        }
                     }
                 }
             }
             .padding(.vertical, 1)
+        }
+    }
+
+    private struct TimelineToolCallPresentation: Identifiable {
+        let call: InternalToolCall
+        let widgetPayload: ToolWidgetPayload?
+        let stepIndex: Int?
+
+        var id: String {
+            call.id
+        }
+    }
+
+    private func timelineToolCallPresentations(
+        for toolCalls: [InternalToolCall],
+        hasReasoning: Bool
+    ) -> [TimelineToolCallPresentation] {
+        var nextStepIndex = hasReasoning ? 1 : 0
+        return toolCalls.map { call in
+            if let payload = showWidgetPayload(for: call) {
+                return TimelineToolCallPresentation(call: call, widgetPayload: payload, stepIndex: nil)
+            }
+            let stepIndex = nextStepIndex
+            nextStepIndex += 1
+            return TimelineToolCallPresentation(call: call, widgetPayload: nil, stepIndex: stepIndex)
         }
     }
 
@@ -822,31 +851,33 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func timelineToolCallRow(for call: InternalToolCall, status: ToolCallBubbleStatus) -> some View {
-        // watchOS 不直接渲染 HTML，但也要保留 show_widget 的专用轻量提示。
-        if let payload = showWidgetPayload(for: call) {
-            widgetInlineSummaryView(payload: payload)
-        } else {
-            let label = toolDisplayLabel(for: call.toolName)
-            Button {
-                showRawToolResultInDetailSheet = false
-                selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
-                    messageID: message.id,
-                    toolCallID: call.id,
-                    fallbackToolCall: call
-                )
-            } label: {
-                WatchTimelineToolCallStepContent(
-                    label: label,
-                    statusTitle: status.title,
-                    statusIconName: status.iconName,
-                    statusColor: status.accentColor,
-                    summary: toolCallTimelineSummary(for: call),
-                    showPendingGuidance: shouldShowPendingGuidance(for: call),
-                    customTextColor: customTextColorOverride
-                )
-            }
-            .buttonStyle(.plain)
+        let label = toolDisplayLabel(for: call.toolName)
+        Button {
+            showRawToolResultInDetailSheet = false
+            selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
+                messageID: message.id,
+                toolCallID: call.id,
+                fallbackToolCall: call
+            )
+        } label: {
+            WatchTimelineToolCallStepContent(
+                label: label,
+                statusTitle: status.title,
+                statusIconName: status.iconName,
+                statusColor: status.accentColor,
+                summary: toolCallTimelineSummary(for: call),
+                showPendingGuidance: shouldShowPendingGuidance(for: call),
+                customTextColor: customTextColorOverride
+            )
         }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func timelineWidgetContent(payload: ToolWidgetPayload) -> some View {
+        // watchOS 不直接渲染 HTML，但 show_widget 也不能放进时间线 step，避免轻量提示被连线压缩。
+        widgetInlineSummaryView(payload: payload)
+            .padding(.vertical, 3)
     }
 
     private func toolCallTimelineSummary(for call: InternalToolCall) -> String? {
