@@ -1898,7 +1898,7 @@ struct ChatView: View {
         
         if viewModel.canRetry(message: message) {
             Button {
-                viewModel.retryMessage(message)
+                performDeferredRetry(message)
             } label: {
                 Label("重试", systemImage: "arrow.clockwise")
             }
@@ -2086,6 +2086,13 @@ struct ChatView: View {
             } label: {
                 Label("查看消息信息", systemImage: "info.circle")
             }
+        }
+    }
+
+    private func performDeferredRetry(_ message: ChatMessage) {
+        Task { @MainActor in
+            await Task.yield()
+            viewModel.retryMessage(message)
         }
     }
 
