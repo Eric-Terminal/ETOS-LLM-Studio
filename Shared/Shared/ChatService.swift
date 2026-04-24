@@ -4749,6 +4749,7 @@ public class ChatService {
             var reasoningCompletedAt: Date?
             var receivedDedicatedReasoning = false
             var isInsideInlineReasoning = false
+            var inlineReasoningMayStartAtContentStart = true
             var inlineReasoningDetectionTail = ""
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
             var messages = messagesSnapshot(for: currentSessionID)
@@ -4778,6 +4779,7 @@ public class ChatService {
                                 reasoningLastDeltaAt: &reasoningLastDeltaAt,
                                 reasoningCompletedAt: &reasoningCompletedAt,
                                 isInsideInlineReasoning: &isInsideInlineReasoning,
+                                mayStartAtContentStart: &inlineReasoningMayStartAtContentStart,
                                 detectionTail: &inlineReasoningDetectionTail
                             )
                             if receivedDedicatedReasoning && reasoningCompletedAt == nil {
@@ -5356,33 +5358,42 @@ public class ChatService {
         return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
-    /// 从字符串中解析并移除 <thought> 标签内容
+    /// 仅当思考标签位于回复开头时，才解析并移除其中内容。
     private func parseThoughtTags(from text: String) -> (content: String, reasoning: String) {
-        var finalContent = ""
-        var finalReasoning = ""
-        let startTagRegex: NSRegularExpression
-        do {
-            startTagRegex = try NSRegularExpression(pattern: "<(thought|thinking|think)>(.*?)</\\1>", options: [.dotMatchesLineSeparators])
-        } catch {
-            logger.error("无法解析 thought 标签正则: \(error.localizedDescription)")
+        var scanIndex = text.startIndex
+        var reasoningSegments: [String] = []
+
+        while let block = leadingThoughtBlock(in: text, from: scanIndex) {
+            reasoningSegments.append(block.reasoning)
+            scanIndex = block.upperBound
+        }
+
+        guard !reasoningSegments.isEmpty else {
             return (text.trimmingCharacters(in: .whitespacesAndNewlines), "")
         }
-        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-        var lastMatchEnd = text.startIndex
+        let remainingContent = String(text[scanIndex...])
+        return (remainingContent.trimmingCharacters(in: .whitespacesAndNewlines), reasoningSegments.joined(separator: "\n\n"))
+    }
 
-        startTagRegex.enumerateMatches(in: text, options: [], range: nsRange) { (match, _, _) in
-            guard let match = match else { return }
-            guard let fullMatchRange = Range(match.range(at: 0), in: text) else { return }
-            let contentBeforeMatch = String(text[lastMatchEnd..<fullMatchRange.lowerBound])
-            finalContent += contentBeforeMatch
-            if let reasoningRange = Range(match.range(at: 2), in: text) {
-                finalReasoning += (finalReasoning.isEmpty ? "" : "\n\n") + String(text[reasoningRange])
-            }
-            lastMatchEnd = fullMatchRange.upperBound
+    private func leadingThoughtBlock(in text: String, from startIndex: String.Index) -> (reasoning: String, upperBound: String.Index)? {
+        let tagNames = ["thought", "thinking", "think"]
+        var tagStart = startIndex
+        while tagStart < text.endIndex, text[tagStart].isWhitespace {
+            tagStart = text.index(after: tagStart)
         }
-        let remainingContent = String(text[lastMatchEnd...])
-        finalContent += remainingContent
-        return (finalContent.trimmingCharacters(in: .whitespacesAndNewlines), finalReasoning)
+        guard tagStart < text.endIndex else { return nil }
+
+        for tagName in tagNames {
+            let startTag = "<\(tagName)>"
+            guard text[tagStart...].hasPrefix(startTag) else { continue }
+            let bodyStart = text.index(tagStart, offsetBy: startTag.count)
+            let endTag = "</\(tagName)>"
+            guard let endRange = text.range(of: endTag, range: bodyStart..<text.endIndex) else {
+                return nil
+            }
+            return (String(text[bodyStart..<endRange.lowerBound]), endRange.upperBound)
+        }
+        return nil
     }
 
     private func updateReasoningTimingFromInlineThoughtTags(
@@ -5392,6 +5403,7 @@ public class ChatService {
         reasoningLastDeltaAt: inout Date?,
         reasoningCompletedAt: inout Date?,
         isInsideInlineReasoning: inout Bool,
+        mayStartAtContentStart: inout Bool,
         detectionTail: inout String
     ) {
         guard !contentPart.isEmpty else { return }
@@ -5413,16 +5425,25 @@ public class ChatService {
                 isInsideInlineReasoning = false
                 searchIndex = endRange.upperBound
             } else {
-                guard let startRange = earliestTagRange(in: scanText, tags: startTags, from: searchIndex) else {
+                guard mayStartAtContentStart else { break }
+                guard let firstContentIndex = firstNonWhitespaceIndex(in: scanText, from: searchIndex) else {
                     break
                 }
+                let remainingText = scanText[firstContentIndex...]
+                guard let startTag = startTags.first(where: { remainingText.hasPrefix($0) }) else {
+                    if !startTags.contains(where: { $0.hasPrefix(String(remainingText)) }) {
+                        mayStartAtContentStart = false
+                    }
+                    break
+                }
+                let startTagEnd = scanText.index(firstContentIndex, offsetBy: startTag.count)
                 if reasoningStartedAt == nil {
                     reasoningStartedAt = receivedAt
                 }
                 reasoningCompletedAt = nil
                 isInsideInlineReasoning = true
                 touchedReasoning = true
-                searchIndex = startRange.upperBound
+                searchIndex = startTagEnd
             }
         }
 
@@ -5446,6 +5467,17 @@ public class ChatService {
             }
         }
         return earliest
+    }
+
+    private func firstNonWhitespaceIndex(in text: String, from startIndex: String.Index) -> String.Index? {
+        var index = startIndex
+        while index < text.endIndex {
+            if !text[index].isWhitespace {
+                return index
+            }
+            index = text.index(after: index)
+        }
+        return nil
     }
 
     private func inferredToolCallsPlacement(from content: String) -> ToolCallsPlacement {

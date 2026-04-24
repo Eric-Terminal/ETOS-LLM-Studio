@@ -2758,6 +2758,79 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("回复开头的 think 标签会提取为思考内容")
+    func testLeadingThinkTagExtractsReasoning() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+
+        chatService.updateMessages([loadingMessage], for: sessionID)
+        UserDefaults.standard.set(false, forKey: "enableReasoningSummary")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(
+                role: .assistant,
+                content: "<think>先确认用户意图。</think>\n最终答案"
+            ),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let storedMessage = try #require(chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id })
+        #expect(storedMessage.content == "最终答案")
+        #expect(storedMessage.reasoningContent == "先确认用户意图。")
+
+        await cleanup()
+    }
+
+    @Test("正文中提到 think 标签时不应提取为思考内容")
+    func testInlineThinkMentionKeepsContent() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+        let content = "如果你在正文里看到 <think> 这个标签，它只是普通文本。"
+
+        chatService.updateMessages([loadingMessage], for: sessionID)
+        UserDefaults.standard.set(false, forKey: "enableReasoningSummary")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(
+                role: .assistant,
+                content: content
+            ),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let storedMessage = try #require(chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id })
+        #expect(storedMessage.content == content)
+        #expect(storedMessage.reasoningContent == nil)
+
+        await cleanup()
+    }
+
     @Test("Network error correctly generates an error message")
     func testNetworkError_HandlesCorrectly() async {
         await cleanup()
