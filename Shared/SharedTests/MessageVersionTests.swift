@@ -307,6 +307,8 @@ final class MessageVersionTests: XCTestCase {
             responseCompletedAt: Date(timeIntervalSince1970: 1002),
             totalResponseDuration: 2.0,
             timeToFirstToken: 0.45,
+            reasoningStartedAt: Date(timeIntervalSince1970: 1000.5),
+            reasoningCompletedAt: Date(timeIntervalSince1970: 1001.75),
             completionTokensForSpeed: 120,
             tokenPerSecond: 60.0,
             isTokenPerSecondEstimated: false,
@@ -333,6 +335,9 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedMetrics.schemaVersion, MessageResponseMetrics.currentSchemaVersion)
         XCTAssertEqual(try XCTUnwrap(decodedMetrics.totalResponseDuration), 2.0, accuracy: 0.0001)
         XCTAssertEqual(try XCTUnwrap(decodedMetrics.timeToFirstToken), 0.45, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(decodedMetrics.reasoningDuration), 1.25, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(decodedMetrics.reasoningStartedAt).timeIntervalSince1970, 1000.5, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(decodedMetrics.reasoningCompletedAt).timeIntervalSince1970, 1001.75, accuracy: 0.0001)
         XCTAssertEqual(decodedMetrics.completionTokensForSpeed, 120)
         XCTAssertEqual(try XCTUnwrap(decodedMetrics.tokenPerSecond), 60.0, accuracy: 0.0001)
         XCTAssertEqual(decodedMetrics.isTokenPerSecondEstimated, false)

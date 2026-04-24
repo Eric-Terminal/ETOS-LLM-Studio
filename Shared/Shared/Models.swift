@@ -567,18 +567,34 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         }
     }
 
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var requestStartedAt: Date?
     public var responseCompletedAt: Date?
     public var totalResponseDuration: TimeInterval?
     public var timeToFirstToken: TimeInterval?
+    public var reasoningStartedAt: Date?
+    public var reasoningCompletedAt: Date?
     public var completionTokensForSpeed: Int?
     public var tokenPerSecond: Double?
     public var isTokenPerSecondEstimated: Bool
     public var reasoningSummary: String?
     public var speedSamples: [SpeedSample]?
+
+    public var reasoningDuration: TimeInterval? {
+        guard let reasoningStartedAt else { return nil }
+        let completedAt = reasoningCompletedAt ?? responseCompletedAt
+        guard let completedAt else { return nil }
+        return max(0, completedAt.timeIntervalSince(reasoningStartedAt))
+    }
+
+    public var hasResponseSpeedData: Bool {
+        timeToFirstToken != nil
+            || totalResponseDuration != nil
+            || completionTokensForSpeed != nil
+            || tokenPerSecond != nil
+    }
 
     public init(
         schemaVersion: Int = MessageResponseMetrics.currentSchemaVersion,
@@ -586,6 +602,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         responseCompletedAt: Date? = nil,
         totalResponseDuration: TimeInterval? = nil,
         timeToFirstToken: TimeInterval? = nil,
+        reasoningStartedAt: Date? = nil,
+        reasoningCompletedAt: Date? = nil,
         completionTokensForSpeed: Int? = nil,
         tokenPerSecond: Double? = nil,
         isTokenPerSecondEstimated: Bool = false,
@@ -597,6 +615,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.responseCompletedAt = responseCompletedAt
         self.totalResponseDuration = totalResponseDuration
         self.timeToFirstToken = timeToFirstToken
+        self.reasoningStartedAt = reasoningStartedAt
+        self.reasoningCompletedAt = reasoningCompletedAt
         self.completionTokensForSpeed = completionTokensForSpeed
         self.tokenPerSecond = tokenPerSecond
         self.isTokenPerSecondEstimated = isTokenPerSecondEstimated
@@ -610,6 +630,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         case responseCompletedAt
         case totalResponseDuration
         case timeToFirstToken
+        case reasoningStartedAt
+        case reasoningCompletedAt
         case completionTokensForSpeed
         case tokenPerSecond
         case isTokenPerSecondEstimated
@@ -624,6 +646,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         self.responseCompletedAt = try container.decodeIfPresent(Date.self, forKey: .responseCompletedAt)
         self.totalResponseDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .totalResponseDuration)
         self.timeToFirstToken = try container.decodeIfPresent(TimeInterval.self, forKey: .timeToFirstToken)
+        self.reasoningStartedAt = try container.decodeIfPresent(Date.self, forKey: .reasoningStartedAt)
+        self.reasoningCompletedAt = try container.decodeIfPresent(Date.self, forKey: .reasoningCompletedAt)
         self.completionTokensForSpeed = try container.decodeIfPresent(Int.self, forKey: .completionTokensForSpeed)
         self.tokenPerSecond = try container.decodeIfPresent(Double.self, forKey: .tokenPerSecond)
         self.isTokenPerSecondEstimated = try container.decodeIfPresent(Bool.self, forKey: .isTokenPerSecondEstimated) ?? false
@@ -639,6 +663,8 @@ public struct MessageResponseMetrics: Codable, Hashable, Sendable {
         try container.encodeIfPresent(responseCompletedAt, forKey: .responseCompletedAt)
         try container.encodeIfPresent(totalResponseDuration, forKey: .totalResponseDuration)
         try container.encodeIfPresent(timeToFirstToken, forKey: .timeToFirstToken)
+        try container.encodeIfPresent(reasoningStartedAt, forKey: .reasoningStartedAt)
+        try container.encodeIfPresent(reasoningCompletedAt, forKey: .reasoningCompletedAt)
         try container.encodeIfPresent(completionTokensForSpeed, forKey: .completionTokensForSpeed)
         try container.encodeIfPresent(tokenPerSecond, forKey: .tokenPerSecond)
         try container.encode(isTokenPerSecondEstimated, forKey: .isTokenPerSecondEstimated)

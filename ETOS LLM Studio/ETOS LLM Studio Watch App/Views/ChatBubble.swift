@@ -255,12 +255,12 @@ struct ChatBubble: View {
         return true
     }
 
-    private var reasoningRequestStartedAt: Date? {
-        message.requestedAt ?? message.responseMetrics?.requestStartedAt
+    private var reasoningStartedAt: Date? {
+        message.responseMetrics?.reasoningStartedAt
     }
 
     private var reasoningCompletedAt: Date? {
-        message.responseMetrics?.responseCompletedAt
+        message.responseMetrics?.reasoningCompletedAt
     }
 
     private var reasoningSummaryText: String? {
@@ -1190,8 +1190,8 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func reasoningHeaderTitleView(baseColor: Color, highlightColor: Color) -> some View {
-        if let requestStartedAt = reasoningRequestStartedAt, reasoningCompletedAt == nil {
-            TimelineView(.periodic(from: requestStartedAt, by: 1)) { context in
+        if let reasoningStartedAt, reasoningCompletedAt == nil {
+            TimelineView(.periodic(from: reasoningStartedAt, by: 1)) { context in
                 reasoningHeaderTitleLabel(
                     title: reasoningHeaderTitle(referenceDate: context.date),
                     baseColor: baseColor,
@@ -1244,9 +1244,9 @@ struct ChatBubble: View {
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
-        guard let requestStartedAt = reasoningRequestStartedAt else { return nil }
+        guard let reasoningStartedAt else { return nil }
         let finishedAt = reasoningCompletedAt ?? referenceDate
-        let elapsed = max(0, finishedAt.timeIntervalSince(requestStartedAt))
+        let elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
         if elapsed == 0 {
             return 0
         }

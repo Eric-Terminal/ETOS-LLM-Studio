@@ -4093,6 +4093,8 @@ public class ChatService {
         responseCompletedAt: Date?,
         totalResponseDuration: TimeInterval?,
         timeToFirstToken: TimeInterval?,
+        reasoningStartedAt: Date? = nil,
+        reasoningCompletedAt: Date? = nil,
         completionTokensForSpeed: Int?,
         tokenPerSecond: Double?,
         isEstimated: Bool,
@@ -4103,6 +4105,8 @@ public class ChatService {
             responseCompletedAt: responseCompletedAt,
             totalResponseDuration: totalResponseDuration,
             timeToFirstToken: timeToFirstToken,
+            reasoningStartedAt: reasoningStartedAt,
+            reasoningCompletedAt: reasoningCompletedAt,
             completionTokensForSpeed: completionTokensForSpeed,
             tokenPerSecond: tokenPerSecond,
             isTokenPerSecondEstimated: isEstimated,
@@ -4740,12 +4744,19 @@ public class ChatService {
             var latestOfficialCompletionTokens: Int?
             var accumulatedOutputText = ""
             var firstTokenAt: Date?
+            var reasoningStartedAt: Date?
+            var reasoningLastDeltaAt: Date?
+            var reasoningCompletedAt: Date?
+            var receivedDedicatedReasoning = false
+            var isInsideInlineReasoning = false
+            var inlineReasoningDetectionTail = ""
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
             var messages = messagesSnapshot(for: currentSessionID)
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    let partReceivedAt = Date()
                     if let usage = part.tokenUsage {
                         let mergedUsage = mergeTokenUsage(existing: latestTokenUsage, incoming: usage)
                         latestTokenUsage = mergedUsage
@@ -4760,6 +4771,18 @@ public class ChatService {
                         if !contentPart.isEmpty {
                             accumulatedOutputText += contentPart
                             didReceiveTextDelta = true
+                            updateReasoningTimingFromInlineThoughtTags(
+                                in: contentPart,
+                                receivedAt: partReceivedAt,
+                                reasoningStartedAt: &reasoningStartedAt,
+                                reasoningLastDeltaAt: &reasoningLastDeltaAt,
+                                reasoningCompletedAt: &reasoningCompletedAt,
+                                isInsideInlineReasoning: &isInsideInlineReasoning,
+                                detectionTail: &inlineReasoningDetectionTail
+                            )
+                            if receivedDedicatedReasoning && reasoningCompletedAt == nil {
+                                reasoningCompletedAt = reasoningLastDeltaAt
+                            }
                         }
                         if messages[index].role == .tool {
                             let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4774,6 +4797,12 @@ public class ChatService {
                         if !reasoningPart.isEmpty {
                             accumulatedOutputText += reasoningPart
                             didReceiveTextDelta = true
+                            receivedDedicatedReasoning = true
+                            if reasoningStartedAt == nil {
+                                reasoningStartedAt = partReceivedAt
+                            }
+                            reasoningLastDeltaAt = partReceivedAt
+                            reasoningCompletedAt = nil
                         }
                         if messages[index].role == .tool {
                             let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -4828,35 +4857,44 @@ public class ChatService {
                                 messages[index].toolCallsPlacement = inferredToolCallsPlacement(from: messages[index].content)
                             }
                             messages[index].toolCalls = partialToolCalls
+                            if receivedDedicatedReasoning && reasoningCompletedAt == nil {
+                                reasoningCompletedAt = reasoningLastDeltaAt
+                            }
                         }
                     }
-                    if enableResponseSpeedMetrics {
-                        let now = Date()
+                    if enableResponseSpeedMetrics || reasoningStartedAt != nil {
                         if didReceiveTextDelta, firstTokenAt == nil {
-                            firstTokenAt = now
+                            firstTokenAt = partReceivedAt
                         }
                         let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                         let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
-                        let speed = streamingTokenPerSecond(
-                            tokens: completionTokensForSpeed,
-                            requestStartedAt: requestStartedAt,
-                            firstTokenAt: firstTokenAt,
-                            snapshotAt: now
-                        )
-                        appendSpeedSample(
-                            to: &speedSamples,
-                            elapsed: max(0, now.timeIntervalSince(requestStartedAt)),
-                            speed: speed
-                        )
+                        let speed: Double?
+                        if enableResponseSpeedMetrics {
+                            speed = streamingTokenPerSecond(
+                                tokens: completionTokensForSpeed,
+                                requestStartedAt: requestStartedAt,
+                                firstTokenAt: firstTokenAt,
+                                snapshotAt: partReceivedAt
+                            )
+                            appendSpeedSample(
+                                to: &speedSamples,
+                                elapsed: max(0, partReceivedAt.timeIntervalSince(requestStartedAt)),
+                                speed: speed
+                            )
+                        } else {
+                            speed = nil
+                        }
                         messages[index].responseMetrics = makeResponseMetrics(
                             requestStartedAt: requestStartedAt,
                             responseCompletedAt: nil,
                             totalResponseDuration: nil,
-                            timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
-                            completionTokensForSpeed: completionTokensForSpeed,
+                            timeToFirstToken: enableResponseSpeedMetrics ? firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) } : nil,
+                            reasoningStartedAt: reasoningStartedAt,
+                            reasoningCompletedAt: reasoningCompletedAt,
+                            completionTokensForSpeed: enableResponseSpeedMetrics ? completionTokensForSpeed : nil,
                             tokenPerSecond: speed,
-                            isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
-                            speedSamples: speedSamples.isEmpty ? nil : speedSamples
+                            isEstimated: enableResponseSpeedMetrics && latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
+                            speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                         )
                     }
                     publishMessagesIfCurrentSession(messages, for: currentSessionID, keepingSpeedSamplesFor: loadingMessageID)
@@ -4899,31 +4937,41 @@ public class ChatService {
                         latestOfficialCompletionTokens = completionTokens
                     }
                 }
-                if enableResponseSpeedMetrics {
+                if reasoningStartedAt != nil && reasoningCompletedAt == nil {
+                    reasoningCompletedAt = reasoningLastDeltaAt ?? Date()
+                }
+                if enableResponseSpeedMetrics || reasoningStartedAt != nil {
                     let responseCompletedAt = Date()
                     let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                     let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                     let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
-                    let finalSpeed = streamingTokenPerSecond(
-                        tokens: completionTokensForSpeed,
-                        requestStartedAt: requestStartedAt,
-                        firstTokenAt: firstTokenAt,
-                        snapshotAt: responseCompletedAt
-                    )
-                    appendSpeedSample(
-                        to: &speedSamples,
-                        elapsed: totalDuration,
-                        speed: finalSpeed
-                    )
+                    let finalSpeed: Double?
+                    if enableResponseSpeedMetrics {
+                        finalSpeed = streamingTokenPerSecond(
+                            tokens: completionTokensForSpeed,
+                            requestStartedAt: requestStartedAt,
+                            firstTokenAt: firstTokenAt,
+                            snapshotAt: responseCompletedAt
+                        )
+                        appendSpeedSample(
+                            to: &speedSamples,
+                            elapsed: totalDuration,
+                            speed: finalSpeed
+                        )
+                    } else {
+                        finalSpeed = nil
+                    }
                     messages[index].responseMetrics = makeResponseMetrics(
                         requestStartedAt: requestStartedAt,
-                        responseCompletedAt: responseCompletedAt,
-                        totalResponseDuration: totalDuration,
-                        timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
-                        completionTokensForSpeed: completionTokensForSpeed,
+                        responseCompletedAt: enableResponseSpeedMetrics ? responseCompletedAt : nil,
+                        totalResponseDuration: enableResponseSpeedMetrics ? totalDuration : nil,
+                        timeToFirstToken: enableResponseSpeedMetrics ? firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) } : nil,
+                        reasoningStartedAt: reasoningStartedAt,
+                        reasoningCompletedAt: reasoningCompletedAt,
+                        completionTokensForSpeed: enableResponseSpeedMetrics ? completionTokensForSpeed : nil,
                         tokenPerSecond: finalSpeed,
-                        isEstimated: latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
-                        speedSamples: speedSamples.isEmpty ? nil : speedSamples
+                        isEstimated: enableResponseSpeedMetrics && latestOfficialCompletionTokens == nil && completionTokensForSpeed != nil,
+                        speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                     )
                 }
                 finalAssistantMessage = messages[index]
@@ -5335,6 +5383,69 @@ public class ChatService {
         let remainingContent = String(text[lastMatchEnd...])
         finalContent += remainingContent
         return (finalContent.trimmingCharacters(in: .whitespacesAndNewlines), finalReasoning)
+    }
+
+    private func updateReasoningTimingFromInlineThoughtTags(
+        in contentPart: String,
+        receivedAt: Date,
+        reasoningStartedAt: inout Date?,
+        reasoningLastDeltaAt: inout Date?,
+        reasoningCompletedAt: inout Date?,
+        isInsideInlineReasoning: inout Bool,
+        detectionTail: inout String
+    ) {
+        guard !contentPart.isEmpty else { return }
+
+        let scanText = (detectionTail + contentPart).lowercased()
+        let startTags = ["<thought>", "<thinking>", "<think>"]
+        let endTags = ["</thought>", "</thinking>", "</think>"]
+        var searchIndex = scanText.startIndex
+        var touchedReasoning = false
+
+        while searchIndex < scanText.endIndex {
+            if isInsideInlineReasoning {
+                touchedReasoning = true
+                guard let endRange = earliestTagRange(in: scanText, tags: endTags, from: searchIndex) else {
+                    break
+                }
+                reasoningLastDeltaAt = receivedAt
+                reasoningCompletedAt = receivedAt
+                isInsideInlineReasoning = false
+                searchIndex = endRange.upperBound
+            } else {
+                guard let startRange = earliestTagRange(in: scanText, tags: startTags, from: searchIndex) else {
+                    break
+                }
+                if reasoningStartedAt == nil {
+                    reasoningStartedAt = receivedAt
+                }
+                reasoningCompletedAt = nil
+                isInsideInlineReasoning = true
+                touchedReasoning = true
+                searchIndex = startRange.upperBound
+            }
+        }
+
+        if touchedReasoning && isInsideInlineReasoning {
+            reasoningLastDeltaAt = receivedAt
+        }
+        detectionTail = String(scanText.suffix(10))
+    }
+
+    private func earliestTagRange(in text: String, tags: [String], from startIndex: String.Index) -> Range<String.Index>? {
+        var earliest: Range<String.Index>?
+        let searchRange = startIndex..<text.endIndex
+        for tag in tags {
+            guard let range = text.range(of: tag, range: searchRange) else { continue }
+            if let current = earliest {
+                if range.lowerBound < current.lowerBound {
+                    earliest = range
+                }
+            } else {
+                earliest = range
+            }
+        }
+        return earliest
     }
 
     private func inferredToolCallsPlacement(from content: String) -> ToolCallsPlacement {

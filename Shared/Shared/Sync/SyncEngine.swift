@@ -2395,6 +2395,8 @@ public enum SyncEngine {
                 responseCompletedAt: maxOptional(lhs.responseCompletedAt, rhs.responseCompletedAt),
                 totalResponseDuration: maxOptional(lhs.totalResponseDuration, rhs.totalResponseDuration),
                 timeToFirstToken: minOptional(lhs.timeToFirstToken, rhs.timeToFirstToken),
+                reasoningStartedAt: minOptional(lhs.reasoningStartedAt, rhs.reasoningStartedAt),
+                reasoningCompletedAt: maxOptional(lhs.reasoningCompletedAt, rhs.reasoningCompletedAt),
                 completionTokensForSpeed: maxOptional(lhs.completionTokensForSpeed, rhs.completionTokensForSpeed),
                 tokenPerSecond: maxOptional(lhs.tokenPerSecond, rhs.tokenPerSecond),
                 isTokenPerSecondEstimated: lhs.isTokenPerSecondEstimated && rhs.isTokenPerSecondEstimated,
@@ -2538,6 +2540,8 @@ public enum SyncEngine {
         hasher.combine(message.responseMetrics?.responseCompletedAt?.timeIntervalSince1970 ?? -1)
         hasher.combine(message.responseMetrics?.totalResponseDuration ?? -1)
         hasher.combine(message.responseMetrics?.timeToFirstToken ?? -1)
+        hasher.combine(message.responseMetrics?.reasoningStartedAt?.timeIntervalSince1970 ?? -1)
+        hasher.combine(message.responseMetrics?.reasoningCompletedAt?.timeIntervalSince1970 ?? -1)
         hasher.combine(message.responseMetrics?.completionTokensForSpeed ?? -1)
         hasher.combine(message.responseMetrics?.tokenPerSecond ?? -1)
         hasher.combine(message.responseMetrics?.isTokenPerSecondEstimated ?? false)

@@ -4785,7 +4785,7 @@ private struct MessageInfoSheet: View {
                     }
                 }
 
-                if let metrics = payload.message.responseMetrics {
+                if let metrics = payload.message.responseMetrics, metrics.hasResponseSpeedData {
                     Section(NSLocalizedString("响应测速", comment: "Response speed metrics section title")) {
                         if let firstToken = metrics.timeToFirstToken {
                             LabeledContent(NSLocalizedString("首字时间", comment: "Time to first token")) {

@@ -373,12 +373,12 @@ struct ChatBubble: View {
         return true
     }
 
-    private var reasoningRequestStartedAt: Date? {
-        message.requestedAt ?? message.responseMetrics?.requestStartedAt
+    private var reasoningStartedAt: Date? {
+        message.responseMetrics?.reasoningStartedAt
     }
 
     private var reasoningCompletedAt: Date? {
-        message.responseMetrics?.responseCompletedAt
+        message.responseMetrics?.reasoningCompletedAt
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
@@ -853,8 +853,8 @@ struct ChatBubble: View {
                 usesNoBubbleStyle: usesNoBubbleStyle,
                 isShimmering: shouldShimmerReasoningHeader,
                 customTextColor: customTextColorOverride,
-                requestStartedAt: reasoningRequestStartedAt,
-                responseCompletedAt: reasoningCompletedAt,
+                reasoningStartedAt: reasoningStartedAt,
+                reasoningCompletedAt: reasoningCompletedAt,
                 reasoningSummary: message.responseMetrics?.reasoningSummary
             )
         }
@@ -1606,8 +1606,8 @@ struct ReasoningDisclosureView: View, Equatable {
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     let customTextColor: Color?
-    let requestStartedAt: Date?
-    let responseCompletedAt: Date?
+    let reasoningStartedAt: Date?
+    let reasoningCompletedAt: Date?
     let reasoningSummary: String?
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
@@ -1617,8 +1617,8 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
             && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
-            && lhs.requestStartedAt == rhs.requestStartedAt
-            && lhs.responseCompletedAt == rhs.responseCompletedAt
+            && lhs.reasoningStartedAt == rhs.reasoningStartedAt
+            && lhs.reasoningCompletedAt == rhs.reasoningCompletedAt
             && lhs.reasoningSummary == rhs.reasoningSummary
     }
     
@@ -1697,8 +1697,8 @@ struct ReasoningDisclosureView: View, Equatable {
 
     @ViewBuilder
     private func headerTitleView(baseColor: Color, highlightColor: Color) -> some View {
-        if let requestStartedAt, responseCompletedAt == nil {
-            TimelineView(.periodic(from: requestStartedAt, by: 1)) { context in
+        if let reasoningStartedAt, reasoningCompletedAt == nil {
+            TimelineView(.periodic(from: reasoningStartedAt, by: 1)) { context in
                 headerTitleLabel(
                     title: reasoningHeaderTitle(referenceDate: context.date),
                     baseColor: baseColor,
@@ -1707,7 +1707,7 @@ struct ReasoningDisclosureView: View, Equatable {
             }
         } else {
             headerTitleLabel(
-                title: reasoningHeaderTitle(referenceDate: responseCompletedAt ?? Date()),
+                title: reasoningHeaderTitle(referenceDate: reasoningCompletedAt ?? Date()),
                 baseColor: baseColor,
                 highlightColor: highlightColor
             )
@@ -1754,9 +1754,9 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
-        guard let requestStartedAt else { return nil }
-        let finishedAt = responseCompletedAt ?? referenceDate
-        let elapsed = max(0, finishedAt.timeIntervalSince(requestStartedAt))
+        guard let reasoningStartedAt else { return nil }
+        let finishedAt = reasoningCompletedAt ?? referenceDate
+        let elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
         if elapsed == 0 {
             return 0
         }
