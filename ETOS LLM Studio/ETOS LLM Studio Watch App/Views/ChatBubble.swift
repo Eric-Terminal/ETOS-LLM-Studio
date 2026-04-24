@@ -352,7 +352,8 @@ struct ChatBubble: View {
             return max(screenWidth - noBubbleRowHorizontalPadding * 2, 1)
         }
         let rowWidth = availableWidth > 0 ? availableWidth : screenWidth
-        return rowWidth * 0.86
+        let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.94
+        return rowWidth * widthRatio
     }
 
     private var shouldForceMergedWidth: Bool {
@@ -566,6 +567,7 @@ struct ChatBubble: View {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
             }
         }
+        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
     }
 
     @ViewBuilder
@@ -1141,7 +1143,7 @@ struct ChatBubble: View {
                     isReasoningExpanded.toggle()
                 }
             }) {
-                HStack {
+                HStack(alignment: .top, spacing: 6) {
                     if shouldShimmerReasoningHeader {
                         reasoningHeaderTitleView(
                             baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75),
@@ -1153,11 +1155,14 @@ struct ChatBubble: View {
                             highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
                         )
                     }
-                    Spacer()
+                    .layoutPriority(1)
+                    Spacer(minLength: 4)
                     Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
                         .etFont(.caption)
                         .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                        .padding(.top, 2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
 
@@ -1165,8 +1170,11 @@ struct ChatBubble: View {
                 Text(reasoning)
                     .etFont(.footnote, sampleText: reasoning)
                     .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, isReasoningExpanded ? 5 : 0)
     }
 
@@ -1198,12 +1206,18 @@ struct ChatBubble: View {
                 baseColor: baseColor,
                 highlightColor: highlightColor
             )
-            .lineLimit(1)
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(title)
                 .etFont(.footnote)
                 .foregroundColor(baseColor)
-                .lineLimit(1)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

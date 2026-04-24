@@ -250,7 +250,14 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
-        let widthRatio = usesNoBubbleStyle ? 0.96 : 0.88
+        let widthRatio: CGFloat
+        if usesNoBubbleStyle {
+            widthRatio = 0.96
+        } else if isOutgoing {
+            widthRatio = 0.88
+        } else {
+            widthRatio = 0.94
+        }
         return baseWidth * widthRatio
     }
 
@@ -1634,17 +1641,21 @@ struct ReasoningDisclosureView: View, Equatable {
             Button {
                 isExpanded.toggle()
             } label: {
-                HStack(spacing: 6) {
+                HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "brain.head.profile")
                         .etFont(.system(size: 12))
                         .foregroundStyle(baseColor)
+                        .padding(.top, 2)
                     headerTitleView(baseColor: baseColor, highlightColor: highlightColor)
-                    Spacer()
+                        .layoutPriority(1)
+                    Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .etFont(.system(size: 12, weight: .semibold))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .foregroundStyle(baseColor)
+                        .padding(.top, 2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1668,6 +1679,7 @@ struct ReasoningDisclosureView: View, Equatable {
                     .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
 
@@ -1710,12 +1722,18 @@ struct ReasoningDisclosureView: View, Equatable {
                 baseColor: baseColor,
                 highlightColor: highlightColor
             )
-            .lineLimit(1)
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(title)
                 .etFont(.subheadline.weight(.medium))
                 .foregroundStyle(baseColor)
-                .lineLimit(1)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
