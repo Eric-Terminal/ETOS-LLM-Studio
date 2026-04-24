@@ -252,7 +252,7 @@ struct ChatBubble: View {
         let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
         let widthRatio: CGFloat
         if usesNoBubbleStyle {
-            widthRatio = 0.96
+            widthRatio = 0.92
         } else if isOutgoing {
             widthRatio = 0.88
         } else {
@@ -451,8 +451,8 @@ struct ChatBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            // 用户消息靠右：左边放 Spacer
-            if isOutgoing {
+            // 用户消息靠右；无气泡助手消息用左右 Spacer 居中阅读列。
+            if isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
             
@@ -494,10 +494,11 @@ struct ChatBubble: View {
                     imageAttachmentsView(fileNames: imageFileNames)
                 }
             }
-            .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+            .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
+            .frame(maxWidth: usesNoBubbleStyle ? nil : bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
             
-            // AI 消息靠左：右边放 Spacer
-            if !isOutgoing {
+            // AI 普通气泡靠左；无气泡助手消息保留对称右侧 Spacer。
+            if !isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
         }

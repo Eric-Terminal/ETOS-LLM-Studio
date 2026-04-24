@@ -349,7 +349,7 @@ struct ChatBubble: View {
     private var bubbleMaxWidth: CGFloat {
         let screenWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
         if usesNoBubbleStyle {
-            return max(screenWidth - noBubbleRowHorizontalPadding * 2, 1)
+            return max(screenWidth * 0.92, 1)
         }
         let rowWidth = availableWidth > 0 ? availableWidth : screenWidth
         let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.94
@@ -400,8 +400,15 @@ struct ChatBubble: View {
                 errorBubble
                 Spacer()
             case .assistant, .system, .tool: // system 和 tool 也使用 assistant 样式
+                if usesNoBubbleStyle {
+                    Spacer(minLength: 0)
+                }
                 assistantBubble
-                Spacer()
+                if usesNoBubbleStyle {
+                    Spacer(minLength: 0)
+                } else {
+                    Spacer()
+                }
             @unknown default:
                 // 为未来可能增加的 role 类型提供一个默认的回退，防止编译错误
                 Spacer()
@@ -567,7 +574,8 @@ struct ChatBubble: View {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
             }
         }
-        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
+        .frame(maxWidth: usesNoBubbleStyle ? nil : bubbleMaxWidth, alignment: .leading)
     }
 
     @ViewBuilder
