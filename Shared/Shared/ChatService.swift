@@ -4065,6 +4065,14 @@ public class ChatService {
         return tokenPerSecond(tokens: tokens, elapsed: generationDuration)
     }
 
+    func effectiveStreamResponseCompletedAt(
+        lastGeneratedDeltaAt: Date?,
+        lastStreamPartReceivedAt: Date?,
+        fallbackCompletedAt: Date
+    ) -> Date {
+        lastGeneratedDeltaAt ?? lastStreamPartReceivedAt ?? fallbackCompletedAt
+    }
+
     /// 将流式速度按“整秒”采样并追加到序列中，用于实时曲线展示。
     private func appendSpeedSample(
         to samples: inout [MessageResponseMetrics.SpeedSample],
@@ -4744,6 +4752,8 @@ public class ChatService {
             var latestOfficialCompletionTokens: Int?
             var accumulatedOutputText = ""
             var firstTokenAt: Date?
+            var lastStreamPartReceivedAt: Date?
+            var lastGeneratedDeltaAt: Date?
             var reasoningStartedAt: Date?
             var reasoningLastDeltaAt: Date?
             var reasoningCompletedAt: Date?
@@ -4753,11 +4763,13 @@ public class ChatService {
             var inlineReasoningDetectionTail = ""
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
             var messages = messagesSnapshot(for: currentSessionID)
+            var finalResponseCompletedAtForLog: Date?
 
             for try await line in bytes.lines {
                 guard let part = adapter.parseStreamingResponse(line: line) else { continue }
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                     let partReceivedAt = Date()
+                    lastStreamPartReceivedAt = partReceivedAt
                     if let usage = part.tokenUsage {
                         let mergedUsage = mergeTokenUsage(existing: latestTokenUsage, incoming: usage)
                         latestTokenUsage = mergedUsage
@@ -4767,11 +4779,13 @@ public class ChatService {
                         }
                     }
                     var didReceiveTextDelta = false
+                    var didReceiveGeneratedDelta = false
                     if let contentPart = part.content {
                         messages[index].content += contentPart
                         if !contentPart.isEmpty {
                             accumulatedOutputText += contentPart
                             didReceiveTextDelta = true
+                            didReceiveGeneratedDelta = true
                             updateReasoningTimingFromInlineThoughtTags(
                                 in: contentPart,
                                 receivedAt: partReceivedAt,
@@ -4799,6 +4813,7 @@ public class ChatService {
                         if !reasoningPart.isEmpty {
                             accumulatedOutputText += reasoningPart
                             didReceiveTextDelta = true
+                            didReceiveGeneratedDelta = true
                             receivedDedicatedReasoning = true
                             if reasoningStartedAt == nil {
                                 reasoningStartedAt = partReceivedAt
@@ -4814,6 +4829,7 @@ public class ChatService {
                         }
                     }
                     if let toolDeltas = part.toolCallDeltas, !toolDeltas.isEmpty {
+                        didReceiveGeneratedDelta = true
                         // 记录工具调用的增量信息
                         for delta in toolDeltas {
                             let resolvedIndex: Int
@@ -4864,10 +4880,14 @@ public class ChatService {
                             }
                         }
                     }
+                    if didReceiveGeneratedDelta {
+                        lastGeneratedDeltaAt = partReceivedAt
+                    }
                     if enableResponseSpeedMetrics || reasoningStartedAt != nil {
                         if didReceiveTextDelta, firstTokenAt == nil {
                             firstTokenAt = partReceivedAt
                         }
+                        let metricsSnapshotAt = lastGeneratedDeltaAt ?? partReceivedAt
                         let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                         let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
                         let speed: Double?
@@ -4876,11 +4896,11 @@ public class ChatService {
                                 tokens: completionTokensForSpeed,
                                 requestStartedAt: requestStartedAt,
                                 firstTokenAt: firstTokenAt,
-                                snapshotAt: partReceivedAt
+                                snapshotAt: metricsSnapshotAt
                             )
                             appendSpeedSample(
                                 to: &speedSamples,
-                                elapsed: max(0, partReceivedAt.timeIntervalSince(requestStartedAt)),
+                                elapsed: max(0, metricsSnapshotAt.timeIntervalSince(requestStartedAt)),
                                 speed: speed
                             )
                         } else {
@@ -4939,11 +4959,16 @@ public class ChatService {
                         latestOfficialCompletionTokens = completionTokens
                     }
                 }
+                let responseCompletedAt = effectiveStreamResponseCompletedAt(
+                    lastGeneratedDeltaAt: lastGeneratedDeltaAt,
+                    lastStreamPartReceivedAt: lastStreamPartReceivedAt,
+                    fallbackCompletedAt: Date()
+                )
+                finalResponseCompletedAtForLog = responseCompletedAt
                 if reasoningStartedAt != nil && reasoningCompletedAt == nil {
-                    reasoningCompletedAt = reasoningLastDeltaAt ?? Date()
+                    reasoningCompletedAt = reasoningLastDeltaAt ?? responseCompletedAt
                 }
                 if enableResponseSpeedMetrics || reasoningStartedAt != nil {
-                    let responseCompletedAt = Date()
                     let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                     let estimatedTokens = estimatedCompletionTokens(from: accumulatedOutputText)
                     let completionTokensForSpeed = latestOfficialCompletionTokens ?? (estimatedTokens > 0 ? estimatedTokens : nil)
@@ -4981,11 +5006,12 @@ public class ChatService {
             }
             
             if let finalAssistantMessage = finalAssistantMessage {
+                let finishedAt = finalResponseCompletedAtForLog ?? finalAssistantMessage.responseMetrics?.responseCompletedAt ?? Date()
                 persistRequestLog(
                     context: requestLogContext,
                     status: .success,
                     tokenUsage: finalAssistantMessage.tokenUsage,
-                    finishedAt: Date()
+                    finishedAt: finishedAt
                 )
                 await processResponseMessage(
                     responseMessage: finalAssistantMessage,

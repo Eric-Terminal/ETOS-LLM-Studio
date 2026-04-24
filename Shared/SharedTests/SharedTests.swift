@@ -3826,6 +3826,37 @@ fileprivate struct ChatServiceResponseMetricsTests {
 
         #expect(speed == nil)
     }
+
+    @Test("流式完成时间优先使用最后一次模型输出时间")
+    func testEffectiveStreamResponseCompletedAtUsesLastGeneratedDelta() {
+        let service = ChatService()
+        let lastGeneratedDeltaAt = Date(timeIntervalSince1970: 1_060)
+        let delayedUsagePartAt = Date(timeIntervalSince1970: 1_061)
+        let delayedStreamClosureAt = Date(timeIntervalSince1970: 1_300)
+
+        let completedAt = service.effectiveStreamResponseCompletedAt(
+            lastGeneratedDeltaAt: lastGeneratedDeltaAt,
+            lastStreamPartReceivedAt: delayedUsagePartAt,
+            fallbackCompletedAt: delayedStreamClosureAt
+        )
+
+        #expect(completedAt == lastGeneratedDeltaAt)
+    }
+
+    @Test("流式完成时间在没有模型输出时使用最后一次流分片时间")
+    func testEffectiveStreamResponseCompletedAtFallsBackToLastPart() {
+        let service = ChatService()
+        let lastStreamPartReceivedAt = Date(timeIntervalSince1970: 1_061)
+        let delayedStreamClosureAt = Date(timeIntervalSince1970: 1_300)
+
+        let completedAt = service.effectiveStreamResponseCompletedAt(
+            lastGeneratedDeltaAt: nil,
+            lastStreamPartReceivedAt: lastStreamPartReceivedAt,
+            fallbackCompletedAt: delayedStreamClosureAt
+        )
+
+        #expect(completedAt == lastStreamPartReceivedAt)
+    }
 }
 
 // MARK: - ChatSession Management Tests
