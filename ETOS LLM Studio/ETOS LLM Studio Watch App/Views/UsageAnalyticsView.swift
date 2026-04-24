@@ -3,9 +3,9 @@ import Shared
 
 struct UsageAnalyticsView: View {
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
-    private static let calendarCellSide: CGFloat = 24
+    private static let calendarCellSide: CGFloat = 20
     private static let calendarHeaderHeight: CGFloat = 14
-    private static let calendarCellSpacing: CGFloat = 4
+    private static let calendarCellSpacing: CGFloat = 3
     private let heatmapCellSide: CGFloat = 10
     private let heatmapCellSpacing: CGFloat = 3
 
