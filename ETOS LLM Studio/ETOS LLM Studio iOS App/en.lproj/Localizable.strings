@@ -350,6 +350,7 @@
 "录音文件未找到，无法处理。" = "Recording file not found.";
 "快速调试" = "Quick Debug";
 "思考过程" = "Reasoning";
+"深度思考" = "Deep Thinking";
 "思考过程 (可选)" = "Reasoning (optional)";
 "性能设置" = "Performance settings";
 "懒加载消息数" = "Lazy-load message count";

@@ -398,7 +398,14 @@ struct ChatBubble: View {
     }
 
     private var shouldRenderToolCallsAsSeparateBubbles: Bool {
-        !isOutgoing && hasToolCalls
+        // 工具调用已并入同一个助手气泡的时间线，保留旧分支以降低本次改动范围。
+        false
+    }
+
+    private var shouldRenderReasoningToolTimeline: Bool {
+        !isOutgoing
+            && !isError
+            && (hasToolCalls || !(message.reasoningContent ?? "").isEmpty)
     }
 
     private var hasMainContentWhenToolCallsSeparated: Bool {
@@ -843,24 +850,39 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private func textContentStack(includeToolCalls: Bool) -> some View {
-        // 思考过程 (Telegram 风格折叠)
-        if let reasoning = message.reasoningContent,
-           !reasoning.isEmpty {
-            ReasoningDisclosureView(
-                reasoning: reasoning,
-                isExpanded: $isReasoningExpanded,
-                isOutgoing: isOutgoing,
-                usesNoBubbleStyle: usesNoBubbleStyle,
-                isShimmering: shouldShimmerReasoningHeader,
-                customTextColor: customTextColorOverride,
-                reasoningStartedAt: reasoningStartedAt,
-                reasoningCompletedAt: reasoningCompletedAt,
-                reasoningSummary: message.responseMetrics?.reasoningSummary
-            )
-        }
+        let toolCalls = message.toolCalls ?? []
+        let reasoning = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canUseTimeline = shouldRenderReasoningToolTimeline && includeToolCalls
 
-        if includeToolCalls && shouldShowToolCallsBeforeContent {
-            toolCallsSection
+        if canUseTimeline {
+            if let reasoning, !reasoning.isEmpty {
+                reasoningToolTimeline(
+                    reasoning: reasoning,
+                    toolCalls: shouldShowToolCallsBeforeContent ? toolCalls : []
+                )
+            } else if shouldShowToolCallsBeforeContent {
+                reasoningToolTimeline(reasoning: nil, toolCalls: toolCalls)
+            }
+        } else {
+            // 思考过程 (Telegram 风格折叠)
+            if let reasoning,
+               !reasoning.isEmpty {
+                ReasoningDisclosureView(
+                    reasoning: reasoning,
+                    isExpanded: $isReasoningExpanded,
+                    isOutgoing: isOutgoing,
+                    usesNoBubbleStyle: usesNoBubbleStyle,
+                    isShimmering: shouldShimmerReasoningHeader,
+                    customTextColor: customTextColorOverride,
+                    reasoningStartedAt: reasoningStartedAt,
+                    reasoningCompletedAt: reasoningCompletedAt,
+                    reasoningSummary: message.responseMetrics?.reasoningSummary
+                )
+            }
+
+            if includeToolCalls && shouldShowToolCallsBeforeContent {
+                toolCallsSection
+            }
         }
         
         // 消息正文
@@ -893,9 +915,107 @@ struct ChatBubble: View {
             }
         }
 
-        if includeToolCalls && shouldShowToolCallsAfterContent {
+        if canUseTimeline {
+            if shouldShowToolCallsAfterContent {
+                reasoningToolTimeline(reasoning: nil, toolCalls: toolCalls)
+            }
+        } else if includeToolCalls && shouldShowToolCallsAfterContent {
             toolCallsSection
         }
+    }
+
+    @ViewBuilder
+    private func reasoningToolTimeline(reasoning: String?, toolCalls: [InternalToolCall]) -> some View {
+        let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasReasoning = !(trimmedReasoning ?? "").isEmpty
+        let stepCount = (hasReasoning ? 1 : 0) + toolCalls.count
+
+        if stepCount > 0 {
+            VStack(alignment: .leading, spacing: 0) {
+                if let trimmedReasoning, hasReasoning {
+                    AssistantTimelineStepShell(
+                        iconName: "lightbulb",
+                        iconColor: timelineAccentColor,
+                        lineColor: timelineLineColor,
+                        isFirst: true,
+                        isLast: stepCount == 1
+                    ) {
+                        TimelineReasoningStepView(
+                            reasoning: trimmedReasoning,
+                            isExpanded: $isReasoningExpanded,
+                            isShimmering: shouldShimmerReasoningHeader,
+                            customTextColor: customTextColorOverride,
+                            usesNoBubbleStyle: usesNoBubbleStyle,
+                            reasoningStartedAt: reasoningStartedAt,
+                            reasoningCompletedAt: reasoningCompletedAt,
+                            reasoningSummary: message.responseMetrics?.reasoningSummary
+                        )
+                    }
+                }
+
+                ForEach(Array(toolCalls.enumerated()), id: \.element.id) { offset, call in
+                    let stepIndex = (hasReasoning ? 1 : 0) + offset
+                    let status = toolCallStatus(for: call)
+                    AssistantTimelineStepShell(
+                        iconName: "wrench.and.screwdriver",
+                        iconColor: status.accentColor,
+                        lineColor: timelineLineColor,
+                        isFirst: stepIndex == 0,
+                        isLast: stepIndex == stepCount - 1
+                    ) {
+                        timelineToolCallRow(for: call, status: status)
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var timelineAccentColor: Color {
+        customTextColorOverride?.opacity(0.9) ?? (usesNoBubbleStyle ? Color.primary.opacity(0.82) : Color.secondary)
+    }
+
+    private var timelineLineColor: Color {
+        customTextColorOverride?.opacity(0.24) ?? Color.secondary.opacity(0.28)
+    }
+
+    @ViewBuilder
+    private func timelineToolCallRow(for call: InternalToolCall, status: ToolCallBubbleStatus) -> some View {
+        let label = toolDisplayLabel(for: call.toolName)
+        Button {
+            showRawToolResultInDetailSheet = false
+            selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
+                messageID: message.id,
+                toolCallID: call.id,
+                fallbackToolCall: call
+            )
+        } label: {
+            TimelineToolCallStepContent(
+                label: label,
+                statusTitle: status.title,
+                statusIconName: status.iconName,
+                statusColor: status.accentColor,
+                summary: toolCallTimelineSummary(for: call),
+                showPendingGuidance: shouldShowPendingGuidance(for: call),
+                customTextColor: customTextColorOverride
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toolCallTimelineSummary(for call: InternalToolCall) -> String? {
+        let result = resolvedToolResultText(for: call)
+        if !result.isEmpty {
+            return MCPToolResultFormatter.displayModel(from: result).summaryText
+        }
+
+        let argumentText = prettyPrintedJSONOrRaw(call.arguments)
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard argumentText != "{}", !argumentText.isEmpty else {
+            return nil
+        }
+        return String(argumentText.prefix(96))
     }
 
     @ViewBuilder
@@ -1592,6 +1712,242 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     deinit {
         stop()
+    }
+}
+
+// MARK: - 思考与工具时间线
+
+private struct AssistantTimelineStepShell<Content: View>: View {
+    let iconName: String
+    let iconColor: Color
+    let lineColor: Color
+    let isFirst: Bool
+    let isLast: Bool
+    private let content: Content
+
+    init(
+        iconName: String,
+        iconColor: Color,
+        lineColor: Color,
+        isFirst: Bool,
+        isLast: Bool,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.iconName = iconName
+        self.iconColor = iconColor
+        self.lineColor = lineColor
+        self.isFirst = isFirst
+        self.isLast = isLast
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: iconName)
+                .etFont(.system(size: 14, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 22, height: 22)
+                .padding(.top, 7)
+                .frame(width: 24)
+
+            content
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(alignment: .leading) {
+            AssistantTimelineLineShape(isFirst: isFirst, isLast: isLast)
+                .stroke(lineColor, lineWidth: 1)
+                .frame(width: 24)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct AssistantTimelineLineShape: Shape {
+    let isFirst: Bool
+    let isLast: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let x = rect.midX
+        if !isFirst {
+            path.move(to: CGPoint(x: x, y: rect.minY))
+            path.addLine(to: CGPoint(x: x, y: rect.minY + 7))
+        }
+        if !isLast {
+            path.move(to: CGPoint(x: x, y: rect.minY + 29))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+        }
+        return path
+    }
+}
+
+private struct TimelineReasoningStepView: View {
+    let reasoning: String
+    @Binding var isExpanded: Bool
+    let isShimmering: Bool
+    let customTextColor: Color?
+    let usesNoBubbleStyle: Bool
+    let reasoningStartedAt: Date?
+    let reasoningCompletedAt: Date?
+    let reasoningSummary: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    headerTitleView
+                        .layoutPriority(1)
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.right")
+                        .etFont(.system(size: 12, weight: .semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(secondaryColor)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Text(reasoning)
+                    .etFont(.subheadline, sampleText: reasoning)
+                    .foregroundStyle(secondaryColor)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+
+    private var titleColor: Color {
+        if let customTextColor {
+            return customTextColor.opacity(0.92)
+        }
+        return usesNoBubbleStyle ? .primary.opacity(0.88) : .primary.opacity(0.82)
+    }
+
+    private var secondaryColor: Color {
+        if let customTextColor {
+            return customTextColor.opacity(0.78)
+        }
+        return .secondary.opacity(0.92)
+    }
+
+    @ViewBuilder
+    private var headerTitleView: some View {
+        if let reasoningStartedAt, reasoningCompletedAt == nil {
+            TimelineView(.periodic(from: reasoningStartedAt, by: 1)) { context in
+                headerTitleLabel(title: reasoningHeaderTitle(referenceDate: context.date))
+            }
+        } else {
+            headerTitleLabel(title: reasoningHeaderTitle(referenceDate: reasoningCompletedAt ?? Date()))
+        }
+    }
+
+    @ViewBuilder
+    private func headerTitleLabel(title: String) -> some View {
+        if isShimmering {
+            ShimmeringText(
+                text: title,
+                font: .subheadline.weight(.semibold),
+                baseColor: secondaryColor,
+                highlightColor: titleColor
+            )
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(title)
+                .etFont(.subheadline.weight(.semibold))
+                .foregroundStyle(titleColor)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        var title = NSLocalizedString("深度思考", comment: "Timeline reasoning step title")
+        if let elapsed = reasoningElapsedSeconds(referenceDate: referenceDate) {
+            title += String(format: "（%.1f秒）", elapsed)
+        }
+        guard let summary = reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty else {
+            return title
+        }
+        return "\(title)：\(summary)"
+    }
+
+    private func reasoningElapsedSeconds(referenceDate: Date) -> Double? {
+        guard let reasoningStartedAt else { return nil }
+        let finishedAt = reasoningCompletedAt ?? referenceDate
+        return max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+    }
+}
+
+private struct TimelineToolCallStepContent: View {
+    let label: String
+    let statusTitle: String
+    let statusIconName: String
+    let statusColor: Color
+    let summary: String?
+    let showPendingGuidance: Bool
+    let customTextColor: Color?
+
+    private var titleText: String {
+        "\(NSLocalizedString("调用工具", comment: "Tool call timeline title"))：\(label)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if showPendingGuidance {
+                    ToolCallPendingGuidanceLabel(text: titleText, color: titleColor)
+                } else {
+                    Text(titleText)
+                        .etFont(.subheadline.weight(.semibold))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.right")
+                    .etFont(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(secondaryColor)
+            }
+
+            HStack(spacing: 4) {
+                Image(systemName: statusIconName)
+                    .etFont(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                Text(statusTitle)
+                    .etFont(.caption)
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
+            }
+
+            if let summary,
+               !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(summary)
+                    .etFont(.caption)
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var titleColor: Color {
+        customTextColor?.opacity(0.92) ?? .primary.opacity(0.82)
+    }
+
+    private var secondaryColor: Color {
+        customTextColor?.opacity(0.76) ?? .secondary.opacity(0.9)
     }
 }
 
