@@ -44,7 +44,7 @@ struct ExtendedFeaturesView: View {
                     NavigationLink {
                         AchievementJournalView()
                     } label: {
-                        Label("成就日记", systemImage: "rosette")
+                        SettingsListIconLabel("成就日记", icon: .achievementJournal)
                     }
                 }
             }
@@ -53,7 +53,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     FeedbackCenterView()
                 } label: {
-                    Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")
+                    SettingsListIconLabel(NSLocalizedString("反馈助手", comment: "反馈入口"), icon: .feedback)
                 }
             } footer: {
                 Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
@@ -65,7 +65,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     LocalDebugView()
                 } label: {
-                    Label("远程文件访问", systemImage: "terminal")
+                    SettingsListIconLabel("远程文件访问", icon: .remoteFiles)
                 }
             } footer: {
                 Text("通过局域网远程访问和管理 Documents 目录,方便命令行工具操作。")
@@ -77,7 +77,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     StorageManagementView()
                 } label: {
-                    Label("存储管理", systemImage: "internaldrive")
+                    SettingsListIconLabel("存储管理", icon: .storage)
                 }
             } footer: {
                 Text("管理本地模型、文件与缓存占用。")
@@ -89,7 +89,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     ThirdPartyImportView()
                 } label: {
-                    Label("导入数据", systemImage: "square.and.arrow.down.on.square")
+                    SettingsListIconLabel("导入数据", icon: .importData)
                 }
             } footer: {
                 Text("支持导入 ETOS 数据包，也可从 Cherry Studio 等来源迁移。")
@@ -203,7 +203,7 @@ struct LongTermMemoryFeatureView: View {
                             ConversationMemorySettingsView()
                                 .environmentObject(viewModel)
                         } label: {
-                            Label("跨对话记忆与画像", systemImage: "person.text.rectangle")
+                            SettingsListIconLabel("跨对话记忆与画像", icon: .conversationMemory)
                         }
                     }
                 } header: {
@@ -218,7 +218,7 @@ struct LongTermMemoryFeatureView: View {
                     NavigationLink {
                         MemorySettingsView().environmentObject(viewModel)
                     } label: {
-                        Label("记忆库管理", systemImage: "folder.badge.gearshape")
+                        SettingsListIconLabel("记忆库管理", icon: .memoryLibrary)
                     }
                 }
             }

@@ -49,6 +49,7 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(
@@ -77,7 +78,10 @@ struct SettingsView: View {
                                 selectedModel: selectedModelBinding
                             )
                         } label: {
-                            HStack {
+                            HStack(spacing: usesNativeSettingsIcons ? 10 : 8) {
+                                if usesNativeSettingsIcons {
+                                    SettingsListIconView(icon: .currentModel)
+                                }
                                 Text("当前模型")
                                 MarqueeText(
                                     content: selectedModelLabel(in: options),
@@ -94,7 +98,7 @@ struct SettingsView: View {
                         viewModel.createNewSession()
                         dismiss()
                     } label: {
-                        Label("开启新对话", systemImage: "plus.message")
+                        settingsNavigationLabel("开启新对话", icon: .newConversation)
                     }
                 } header: {
                     Text("当前模型")
@@ -147,11 +151,11 @@ struct SettingsView: View {
                             viewModel.moveSession(session, toFolderID: folderID)
                         }
                     )) {
-                        Label("历史会话管理", systemImage: "list.bullet.rectangle")
+                        settingsNavigationLabel("历史会话管理", icon: .sessionHistory)
                     }
 
                     NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
-                        Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
+                        settingsNavigationLabel("提供商与模型管理", icon: .providerManagement)
                     }
                     
                     NavigationLink(destination: ModelAdvancedSettingsView(
@@ -176,27 +180,24 @@ struct SettingsView: View {
                         updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
                         deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
                     )) {
-                        Label("模型高级设置", systemImage: "brain.head.profile")
+                        settingsNavigationLabel("模型高级设置", icon: .modelAdvanced)
                     }
 
                     NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {
-                        HStack(spacing: 8) {
-                            Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
-                            Spacer()
-                            if let status = dailyPulseEntryStatusText {
-                                Text(status)
-                                    .etFont(.caption2)
-                                    .foregroundStyle(pulseManager.hasUnviewedTodayRun ? .blue : .secondary)
-                            }
-                        }
+                        settingsStatusLabel(
+                            "每日脉冲",
+                            icon: .dailyPulse,
+                            status: dailyPulseEntryStatusText,
+                            statusColor: pulseManager.hasUnviewedTodayRun ? .blue : .secondary
+                        )
                     }
 
                     NavigationLink(destination: UsageAnalyticsView()) {
-                        Label("用量统计", systemImage: "calendar.badge.clock")
+                        settingsNavigationLabel("用量统计", icon: .usageAnalytics)
                     }
 
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
-                        Label("拓展功能", systemImage: "puzzlepiece.extension")
+                        settingsNavigationLabel("拓展功能", icon: .extendedFeatures)
                     }
 
                     NavigationLink(destination: DisplaySettingsView(
@@ -213,15 +214,15 @@ struct SettingsView: View {
                         enableNoBubbleUI: $viewModel.enableNoBubbleUI,
                         allBackgrounds: viewModel.backgroundImages
                     )) {
-                        Label("显示与外观", systemImage: "photo.on.rectangle")
+                        settingsNavigationLabel("显示与外观", icon: .display)
                     }
                     
                     NavigationLink(destination: DeviceSyncSettingsView()) {
-                        Label("同步与备份", systemImage: "arrow.triangle.2.circlepath")
+                        settingsNavigationLabel("同步与备份", icon: .sync)
                     }
                     
                     NavigationLink(destination: AboutView()) {
-                        Label("关于", systemImage: "info.circle")
+                        settingsNavigationLabel("关于", icon: .about)
                     }
                 }
                 
@@ -233,8 +234,12 @@ struct SettingsView: View {
                                 announcement: announcement,
                                 announcementManager: announcementManager
                             )) {
-                                HStack {
-                                    announcementIcon(for: announcement.type)
+                                HStack(spacing: usesNativeSettingsIcons ? 10 : 8) {
+                                    if usesNativeSettingsIcons {
+                                        SettingsListIconView(icon: announcementListIcon(for: announcement.type))
+                                    } else {
+                                        announcementIcon(for: announcement.type)
+                                    }
                                     Text(announcement.title)
                                         .lineLimit(2)
                                 }
@@ -272,6 +277,54 @@ struct SettingsView: View {
     }
     
     // MARK: - 辅助方法
+
+    private var usesNativeSettingsIcons: Bool {
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+
+    @ViewBuilder
+    private func settingsNavigationLabel(_ title: String, icon: SettingsListIcon) -> some View {
+        if usesNativeSettingsIcons {
+            SettingsListIconLabel(title, icon: icon)
+        } else {
+            Label(title, systemImage: icon.legacySystemName)
+        }
+    }
+
+    private func settingsStatusLabel(
+        _ title: String,
+        icon: SettingsListIcon,
+        status: String?,
+        statusColor: Color
+    ) -> some View {
+        HStack(spacing: usesNativeSettingsIcons ? 10 : 8) {
+            if usesNativeSettingsIcons {
+                SettingsListIconView(icon: icon)
+                Text(title)
+            } else {
+                Label(title, systemImage: icon.legacySystemName)
+            }
+            Spacer()
+            if let status {
+                Text(status)
+                    .etFont(.caption2)
+                    .foregroundStyle(statusColor)
+            }
+        }
+    }
+
+    private func announcementListIcon(for type: AnnouncementType) -> SettingsListIcon {
+        switch type {
+        case .info:
+            return .announcementInfo
+        case .warning:
+            return .announcementWarning
+        case .blocking:
+            return .announcementBlocking
+        @unknown default:
+            return .announcementInfo
+        }
+    }
     
     /// 根据公告类型返回对应图标
     @ViewBuilder
@@ -357,6 +410,97 @@ struct SettingsView: View {
             return deliveryCoordinator.reminderTimeText
         }
         return nil
+    }
+}
+
+struct SettingsListIcon {
+    let systemName: String
+    let backgroundColor: Color
+    let legacySystemName: String
+
+    init(systemName: String, backgroundColor: Color, legacySystemName: String? = nil) {
+        self.systemName = systemName
+        self.backgroundColor = backgroundColor
+        self.legacySystemName = legacySystemName ?? systemName
+    }
+}
+
+extension SettingsListIcon {
+    static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
+    static let newConversation = SettingsListIcon(systemName: "plus.message", backgroundColor: .green)
+    static let sessionHistory = SettingsListIcon(
+        systemName: "bubble.left.and.bubble.right",
+        backgroundColor: .indigo,
+        legacySystemName: "list.bullet.rectangle"
+    )
+    static let providerManagement = SettingsListIcon(
+        systemName: "shippingbox",
+        backgroundColor: .orange,
+        legacySystemName: "list.bullet.rectangle.portrait"
+    )
+    static let modelAdvanced = SettingsListIcon(systemName: "brain.head.profile", backgroundColor: .purple)
+    static let tts = SettingsListIcon(systemName: "speaker.wave.2", backgroundColor: .pink)
+    static let toolCenter = SettingsListIcon(systemName: "wrench.and.screwdriver", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")
+    static let dailyPulse = SettingsListIcon(systemName: "sparkles.rectangle.stack", backgroundColor: .yellow)
+    static let usageAnalytics = SettingsListIcon(systemName: "chart.bar.xaxis", backgroundColor: .cyan, legacySystemName: "calendar.badge.clock")
+    static let memory = SettingsListIcon(systemName: "brain.head.profile", backgroundColor: .mint)
+    static let mcp = SettingsListIcon(systemName: "network", backgroundColor: .blue)
+    static let agentSkills = SettingsListIcon(systemName: "sparkles.square.filled.on.square", backgroundColor: .purple)
+    static let shortcuts = SettingsListIcon(systemName: "bolt.horizontal.circle", backgroundColor: .orange)
+    static let imageGeneration = SettingsListIcon(systemName: "photo.on.rectangle.angled", backgroundColor: .pink)
+    static let worldbook = SettingsListIcon(systemName: "book.pages", backgroundColor: .brown)
+    static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
+    static let extendedFeatures = SettingsListIcon(systemName: "puzzlepiece.extension", backgroundColor: .indigo)
+    static let display = SettingsListIcon(systemName: "photo.on.rectangle", backgroundColor: .purple)
+    static let sync = SettingsListIcon(systemName: "arrow.triangle.2.circlepath", backgroundColor: .green)
+    static let about = SettingsListIcon(systemName: "info.circle", backgroundColor: .gray)
+    static let achievementJournal = SettingsListIcon(systemName: "rosette", backgroundColor: .yellow)
+    static let feedback = SettingsListIcon(systemName: "text.bubble", backgroundColor: .blue)
+    static let remoteFiles = SettingsListIcon(systemName: "terminal", backgroundColor: .gray)
+    static let storage = SettingsListIcon(systemName: "internaldrive", backgroundColor: .teal)
+    static let importData = SettingsListIcon(
+        systemName: "tray.and.arrow.down",
+        backgroundColor: .green,
+        legacySystemName: "square.and.arrow.down.on.square"
+    )
+    static let conversationMemory = SettingsListIcon(systemName: "person.text.rectangle", backgroundColor: .mint)
+    static let memoryLibrary = SettingsListIcon(systemName: "folder.badge.gearshape", backgroundColor: .orange)
+    static let announcementInfo = SettingsListIcon(systemName: "info.circle", backgroundColor: .blue)
+    static let announcementWarning = SettingsListIcon(systemName: "exclamationmark.triangle", backgroundColor: .orange)
+    static let announcementBlocking = SettingsListIcon(systemName: "exclamationmark.octagon", backgroundColor: .red)
+}
+
+struct SettingsListIconLabel: View {
+    let title: String
+    let icon: SettingsListIcon
+
+    init(_ title: String, icon: SettingsListIcon) {
+        self.title = title
+        self.icon = icon
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            SettingsListIconView(icon: icon)
+            Text(title)
+        }
+    }
+}
+
+struct SettingsListIconView: View {
+    let icon: SettingsListIcon
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .fill(icon.backgroundColor)
+            .frame(width: 24, height: 24)
+            .overlay {
+                Image(systemName: icon.systemName)
+                    .symbolVariant(.fill)
+                    .etFont(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
     }
 }
 

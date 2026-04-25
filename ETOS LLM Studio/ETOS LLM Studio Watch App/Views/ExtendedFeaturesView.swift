@@ -13,6 +13,7 @@ import Shared
 public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @ObservedObject private var achievementCenter = AchievementCenter.shared
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @State private var isShowingIntroDetails = false
     
     public init() {}
@@ -47,7 +48,7 @@ public struct ExtendedFeaturesView: View {
                     NavigationLink {
                         AchievementJournalView()
                     } label: {
-                        Label("成就日记", systemImage: "rosette")
+                        settingsNavigationLabel("成就日记", icon: .achievementJournal)
                             .etFont(.headline)
                             .padding(.vertical, 4)
                     }
@@ -59,7 +60,7 @@ public struct ExtendedFeaturesView: View {
                     ToolCenterView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label(NSLocalizedString("工具中心", comment: "Tool center title"), systemImage: "slider.horizontal.3")
+                    settingsNavigationLabel(NSLocalizedString("工具中心", comment: "Tool center title"), icon: .toolCenter)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -74,7 +75,7 @@ public struct ExtendedFeaturesView: View {
                     TTSSettingsView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
+                    settingsNavigationLabel("语音朗读（TTS）", icon: .tts)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -88,7 +89,7 @@ public struct ExtendedFeaturesView: View {
                         speechModels: viewModel.speechModels
                     )
                 } label: {
-                    Label("语音输入", systemImage: "mic")
+                    settingsNavigationLabel("语音输入", icon: .speechInput)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -102,7 +103,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     FeedbackCenterView()
                 } label: {
-                    Label(NSLocalizedString("反馈助手", comment: "反馈入口"), systemImage: "text.bubble")
+                    settingsNavigationLabel(NSLocalizedString("反馈助手", comment: "反馈入口"), icon: .feedback)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -117,7 +118,7 @@ public struct ExtendedFeaturesView: View {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("记忆系统", systemImage: "brain.head.profile")
+                    settingsNavigationLabel("记忆系统", icon: .memory)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -131,7 +132,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     MCPIntegrationView()
                 } label: {
-                    Label("MCP 工具集成", systemImage: "network")
+                    settingsNavigationLabel("MCP 工具集成", icon: .mcp)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -145,7 +146,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     ShortcutIntegrationView()
                 } label: {
-                    Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
+                    settingsNavigationLabel("快捷指令工具集成", icon: .shortcuts)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -159,7 +160,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     AgentSkillsView()
                 } label: {
-                    Label("Agent Skills", systemImage: "sparkles.square.filled.on.square")
+                    settingsNavigationLabel("Agent Skills", icon: .agentSkills)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -173,7 +174,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     WorldbookSettingsView(viewModel: viewModel)
                 } label: {
-                    Label("世界书", systemImage: "book.pages")
+                    settingsNavigationLabel("世界书", icon: .worldbook)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -187,7 +188,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     LocalDebugView()
                 } label: {
-                    Label("远程文件访问", systemImage: "terminal")
+                    settingsNavigationLabel("远程文件访问", icon: .remoteFiles)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -201,7 +202,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     StorageManagementView()
                 } label: {
-                    Label("存储管理", systemImage: "internaldrive")
+                    settingsNavigationLabel("存储管理", icon: .storage)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -215,7 +216,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     ThirdPartyImportWatchHintView()
                 } label: {
-                    Label("导入数据", systemImage: "square.and.arrow.down.on.square")
+                    settingsNavigationLabel("导入数据", icon: .importData)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -230,7 +231,7 @@ public struct ExtendedFeaturesView: View {
                     ImageGenerationFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), systemImage: "photo.on.rectangle.angled")
+                    settingsNavigationLabel(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), icon: .imageGeneration)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -283,6 +284,19 @@ public struct ExtendedFeaturesView: View {
             set: { viewModel.setSelectedSpeechModel($0) }
         )
     }
+
+    private var usesNativeSettingsIcons: Bool {
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+
+    @ViewBuilder
+    private func settingsNavigationLabel(_ title: String, icon: SettingsListIcon) -> some View {
+        if usesNativeSettingsIcons {
+            SettingsListIconLabel(title, icon: icon)
+        } else {
+            Label(title, systemImage: icon.legacySystemName)
+        }
+    }
 }
 
 // MARK: - 记忆系统设置
@@ -293,6 +307,7 @@ private struct LongTermMemoryFeatureView: View {
     @AppStorage("enableMemory") private var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
     @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @State private var isShowingIntroDetails = false
     
     var body: some View {
@@ -340,7 +355,7 @@ private struct LongTermMemoryFeatureView: View {
                             ConversationMemorySettingsView()
                                 .environmentObject(viewModel)
                         } label: {
-                            Label("跨对话记忆与画像", systemImage: "person.text.rectangle")
+                            settingsNavigationLabel("跨对话记忆与画像", icon: .conversationMemory)
                         }
                     }
                 } header: {
@@ -354,10 +369,10 @@ private struct LongTermMemoryFeatureView: View {
                 Section {
                     if #available(macOS 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
                         NavigationLink(destination: MemorySettingsView().environmentObject(viewModel)) {
-                            Label("记忆库管理", systemImage: "folder.badge.gearshape")
+                            settingsNavigationLabel("记忆库管理", icon: .memoryLibrary)
                         }
                     } else {
-                        Label("记忆库管理 (系统版本过低)", systemImage: "folder.badge.gearshape")
+                        settingsNavigationLabel("记忆库管理 (系统版本过低)", icon: .memoryLibrary)
                             .foregroundColor(.gray)
                     }
                 }
@@ -397,6 +412,19 @@ private struct LongTermMemoryFeatureView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
             }
+        }
+    }
+
+    private var usesNativeSettingsIcons: Bool {
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+
+    @ViewBuilder
+    private func settingsNavigationLabel(_ title: String, icon: SettingsListIcon) -> some View {
+        if usesNativeSettingsIcons {
+            SettingsListIconLabel(title, icon: icon)
+        } else {
+            Label(title, systemImage: icon.legacySystemName)
         }
     }
 }

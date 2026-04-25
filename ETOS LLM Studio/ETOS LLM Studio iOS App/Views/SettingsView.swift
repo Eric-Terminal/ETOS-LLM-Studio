@@ -58,7 +58,8 @@ struct SettingsView: View {
                             selectedModel: selectedModelBinding
                         )
                     } label: {
-                        HStack {
+                        HStack(spacing: 12) {
+                            SettingsListIconView(icon: .currentModel)
                             Text("模型")
                             Text(selectedModelLabel(in: options))
                                 .lineLimit(1)
@@ -75,7 +76,7 @@ struct SettingsView: View {
                     dismiss()
                     NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
                 } label: {
-                    Label("开启新对话", systemImage: "plus.message")
+                    SettingsListIconLabel("开启新对话", icon: .newConversation)
                 }
             }
             
@@ -83,13 +84,13 @@ struct SettingsView: View {
                 NavigationLink {
                     SessionListView().environmentObject(viewModel)
                 } label: {
-                    Label("历史会话管理", systemImage: "list.bullet.rectangle")
+                    SettingsListIconLabel("历史会话管理", icon: .sessionHistory)
                 }
 
                 NavigationLink {
                     ProviderListView().environmentObject(viewModel)
                 } label: {
-                    Label("提供商与模型管理", systemImage: "list.bullet.rectangle.portrait")
+                    SettingsListIconLabel("提供商与模型管理", icon: .providerManagement)
                 }
                 
                 NavigationLink {
@@ -116,14 +117,14 @@ struct SettingsView: View {
                         deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
                     )
                 } label: {
-                    Label("高级模型设置", systemImage: "slider.vertical.3")
+                    SettingsListIconLabel("高级模型设置", icon: .modelAdvanced)
                 }
 
                 NavigationLink {
                     TTSSettingsView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("语音朗读（TTS）", systemImage: "speaker.wave.2")
+                    SettingsListIconLabel("语音朗读（TTS）", icon: .tts)
                 }
             }
 
@@ -136,7 +137,7 @@ struct SettingsView: View {
                     ToolCenterView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label(NSLocalizedString("工具中心", comment: "Tool center title"), systemImage: "slider.horizontal.3")
+                    SettingsListIconLabel(NSLocalizedString("工具中心", comment: "Tool center title"), icon: .toolCenter)
                 }
 
                 NavigationLink {
@@ -144,7 +145,8 @@ struct SettingsView: View {
                         .environmentObject(viewModel)
                 } label: {
                     HStack(spacing: 12) {
-                        Label("每日脉冲", systemImage: "sparkles.rectangle.stack")
+                        SettingsListIconView(icon: .dailyPulse)
+                        Text("每日脉冲")
                         Spacer()
                         if let status = dailyPulseEntryStatusText {
                             Text(status)
@@ -157,45 +159,45 @@ struct SettingsView: View {
                 NavigationLink {
                     UsageAnalyticsView()
                 } label: {
-                    Label("用量统计", systemImage: "calendar.badge.clock")
+                    SettingsListIconLabel("用量统计", icon: .usageAnalytics)
                 }
 
                 NavigationLink {
                     LongTermMemoryFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("记忆系统", systemImage: "brain.head.profile")
+                    SettingsListIconLabel("记忆系统", icon: .memory)
                 }
 
                 NavigationLink {
                     MCPIntegrationView()
                 } label: {
-                    Label("MCP 工具集成", systemImage: "network")
+                    SettingsListIconLabel("MCP 工具集成", icon: .mcp)
                 }
 
                 NavigationLink {
                     AgentSkillsView()
                 } label: {
-                    Label("Agent Skills", systemImage: "sparkles.square.filled.on.square")
+                    SettingsListIconLabel("Agent Skills", icon: .agentSkills)
                 }
 
                 NavigationLink {
                     ShortcutIntegrationView()
                 } label: {
-                    Label("快捷指令工具集成", systemImage: "bolt.horizontal.circle")
+                    SettingsListIconLabel("快捷指令工具集成", icon: .shortcuts)
                 }
 
                 NavigationLink {
                     ImageGenerationFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), systemImage: "photo.on.rectangle.angled")
+                    SettingsListIconLabel(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), icon: .imageGeneration)
                 }
 
                 NavigationLink {
                     WorldbookSettingsView().environmentObject(viewModel)
                 } label: {
-                    Label("世界书", systemImage: "book.pages")
+                    SettingsListIconLabel("世界书", icon: .worldbook)
                 }
 
                 NavigationLink {
@@ -210,13 +212,13 @@ struct SettingsView: View {
                         speechModels: viewModel.speechModels
                     )
                 } label: {
-                    Label("语音输入", systemImage: "mic")
+                    SettingsListIconLabel("语音输入", icon: .speechInput)
                 }
 
                 NavigationLink {
                     ExtendedFeaturesView()
                 } label: {
-                    Label("拓展功能", systemImage: "puzzlepiece.extension")
+                    SettingsListIconLabel("拓展功能", icon: .extendedFeatures)
                 }
             }
             
@@ -237,19 +239,19 @@ struct SettingsView: View {
                         allBackgrounds: viewModel.backgroundImages
                     )
                 } label: {
-                    Label("背景与视觉", systemImage: "sparkles.rectangle.stack")
+                    SettingsListIconLabel("背景与视觉", icon: .display)
                 }
                 
                 NavigationLink {
                     DeviceSyncSettingsView()
                 } label: {
-                    Label("同步与备份", systemImage: "arrow.triangle.2.circlepath")
+                    SettingsListIconLabel("同步与备份", icon: .sync)
                 }
                 
                 NavigationLink {
                     AboutView()
                 } label: {
-                    Label("关于 ETOS LLM Studio", systemImage: "info.circle")
+                    SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
                 }
             }
 
@@ -263,8 +265,8 @@ struct SettingsView: View {
                                 announcementManager: announcementManager
                             )
                         } label: {
-                            HStack {
-                                announcementIcon(for: announcement.type)
+                            HStack(spacing: 12) {
+                                SettingsListIconView(icon: announcementIcon(for: announcement.type))
                                 Text(announcement.title)
                                     .lineLimit(2)
                             }
@@ -306,22 +308,16 @@ struct SettingsView: View {
     
     // MARK: - 辅助方法
     
-    /// 根据公告类型返回对应图标
-    @ViewBuilder
-    private func announcementIcon(for type: AnnouncementType) -> some View {
+    private func announcementIcon(for type: AnnouncementType) -> SettingsListIcon {
         switch type {
         case .info:
-            Image(systemName: "info.circle.fill")
-                .foregroundColor(.blue)
+            return .announcementInfo
         case .warning:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
+            return .announcementWarning
         case .blocking:
-            Image(systemName: "exclamationmark.octagon.fill")
-                .foregroundColor(.red)
+            return .announcementBlocking
         @unknown default:
-            Image(systemName: "bell.fill")
-                .foregroundColor(.gray)
+            return .announcementInfo
         }
     }
 
@@ -391,6 +387,78 @@ struct SettingsView: View {
 
         guard let first = options.first else { return "" }
         return "\(first.model.displayName) | \(first.provider.name)"
+    }
+}
+
+struct SettingsListIcon {
+    let systemName: String
+    let backgroundColor: Color
+}
+
+extension SettingsListIcon {
+    static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
+    static let newConversation = SettingsListIcon(systemName: "plus.message", backgroundColor: .green)
+    static let sessionHistory = SettingsListIcon(systemName: "bubble.left.and.bubble.right", backgroundColor: .indigo)
+    static let providerManagement = SettingsListIcon(systemName: "shippingbox", backgroundColor: .orange)
+    static let modelAdvanced = SettingsListIcon(systemName: "slider.vertical.3", backgroundColor: .purple)
+    static let tts = SettingsListIcon(systemName: "speaker.wave.2", backgroundColor: .pink)
+    static let toolCenter = SettingsListIcon(systemName: "wrench.and.screwdriver", backgroundColor: .teal)
+    static let dailyPulse = SettingsListIcon(systemName: "sparkles.rectangle.stack", backgroundColor: .yellow)
+    static let usageAnalytics = SettingsListIcon(systemName: "chart.bar.xaxis", backgroundColor: .cyan)
+    static let memory = SettingsListIcon(systemName: "brain.head.profile", backgroundColor: .mint)
+    static let mcp = SettingsListIcon(systemName: "network", backgroundColor: .blue)
+    static let agentSkills = SettingsListIcon(systemName: "sparkles.square.filled.on.square", backgroundColor: .purple)
+    static let shortcuts = SettingsListIcon(systemName: "bolt.horizontal.circle", backgroundColor: .orange)
+    static let imageGeneration = SettingsListIcon(systemName: "photo.on.rectangle.angled", backgroundColor: .pink)
+    static let worldbook = SettingsListIcon(systemName: "book.pages", backgroundColor: .brown)
+    static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
+    static let extendedFeatures = SettingsListIcon(systemName: "puzzlepiece.extension", backgroundColor: .indigo)
+    static let display = SettingsListIcon(systemName: "photo.on.rectangle", backgroundColor: .purple)
+    static let sync = SettingsListIcon(systemName: "arrow.triangle.2.circlepath", backgroundColor: .green)
+    static let about = SettingsListIcon(systemName: "info.circle", backgroundColor: .gray)
+    static let achievementJournal = SettingsListIcon(systemName: "rosette", backgroundColor: .yellow)
+    static let feedback = SettingsListIcon(systemName: "text.bubble", backgroundColor: .blue)
+    static let remoteFiles = SettingsListIcon(systemName: "terminal", backgroundColor: .gray)
+    static let storage = SettingsListIcon(systemName: "internaldrive", backgroundColor: .teal)
+    static let importData = SettingsListIcon(systemName: "tray.and.arrow.down", backgroundColor: .green)
+    static let conversationMemory = SettingsListIcon(systemName: "person.text.rectangle", backgroundColor: .mint)
+    static let memoryLibrary = SettingsListIcon(systemName: "folder.badge.gearshape", backgroundColor: .orange)
+    static let announcementInfo = SettingsListIcon(systemName: "info.circle", backgroundColor: .blue)
+    static let announcementWarning = SettingsListIcon(systemName: "exclamationmark.triangle", backgroundColor: .orange)
+    static let announcementBlocking = SettingsListIcon(systemName: "exclamationmark.octagon", backgroundColor: .red)
+}
+
+struct SettingsListIconLabel: View {
+    let title: String
+    let icon: SettingsListIcon
+
+    init(_ title: String, icon: SettingsListIcon) {
+        self.title = title
+        self.icon = icon
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SettingsListIconView(icon: icon)
+            Text(title)
+        }
+    }
+}
+
+struct SettingsListIconView: View {
+    let icon: SettingsListIcon
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(icon.backgroundColor)
+            .frame(width: 29, height: 29)
+            .overlay {
+                Image(systemName: icon.systemName)
+                    .symbolVariant(.fill)
+                    .etFont(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
     }
 }
 
