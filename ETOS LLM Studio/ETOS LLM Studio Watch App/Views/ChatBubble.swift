@@ -777,7 +777,13 @@ struct ChatBubble: View {
         let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReasoning = !(trimmedReasoning ?? "").isEmpty
         let toolPresentations = timelineToolCallPresentations(for: toolCalls, hasReasoning: hasReasoning)
-        let stepCount = (hasReasoning ? 1 : 0) + toolPresentations.filter { $0.stepIndex != nil }.count
+        let visibleToolStepCount = toolPresentations.filter { $0.stepIndex != nil }.count
+        let shouldShowDoneStep = shouldShowTimelineDoneStep(
+            hasReasoning: hasReasoning,
+            toolPresentations: toolPresentations
+        )
+        let stepCount = (hasReasoning ? 1 : 0) + visibleToolStepCount + (shouldShowDoneStep ? 1 : 0)
+        let doneStepIndex = stepCount - 1
 
         if stepCount > 0 || !toolPresentations.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
@@ -817,8 +823,35 @@ struct ChatBubble: View {
                         }
                     }
                 }
+
+                if shouldShowDoneStep {
+                    WatchAssistantTimelineStepShell(
+                        iconName: "checkmark.circle",
+                        iconColor: timelineDoneColor,
+                        lineColor: timelineLineColor,
+                        isFirst: doneStepIndex == 0 && !connectsTimelineFromPrevious,
+                        isLast: !connectsTimelineToNext
+                    ) {
+                        Text("Done")
+                            .etFont(.footnote.weight(.semibold))
+                            .foregroundStyle(timelineDoneColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
             .padding(.vertical, 1)
+        }
+    }
+
+    private func shouldShowTimelineDoneStep(
+        hasReasoning: Bool,
+        toolPresentations: [TimelineToolCallPresentation]
+    ) -> Bool {
+        guard hasReasoning, reasoningCompletedAt != nil else { return false }
+        return toolPresentations.allSatisfy { presentation in
+            guard presentation.stepIndex != nil else { return true }
+            let status = toolCallStatus(for: presentation.call)
+            return status != .pendingApproval && status != .running
         }
     }
 
@@ -853,6 +886,10 @@ struct ChatBubble: View {
 
     private var timelineLineColor: Color {
         customTextColorOverride?.opacity(0.26) ?? Color.secondary.opacity(0.32)
+    }
+
+    private var timelineDoneColor: Color {
+        customTextColorOverride?.opacity(0.82) ?? Color.secondary
     }
 
     @ViewBuilder
