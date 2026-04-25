@@ -108,7 +108,7 @@ public final class AchievementCenter: ObservableObject {
 
     public static let shared = AchievementCenter()
 
-    public static let storageKeyPrefix = "achievementJournal.unlock."
+    public nonisolated static let storageKeyPrefix = "achievementJournal.unlock."
 
     @Published public private(set) var journalEntries: [AchievementJournalEntry]
     @Published public private(set) var hasUnlockedAchievements: Bool
@@ -203,11 +203,16 @@ public final class AchievementCenter: ObservableObject {
         from defaults: UserDefaults
     ) -> [AchievementUnlockRecord] {
         let decoder = JSONDecoder()
-        defaults.dictionaryRepresentation().compactMap { key, value in
-            guard isAchievementStorageKey(key) else { return nil }
-            guard let data = value as? Data else { return nil }
-            return try? decoder.decode(AchievementUnlockRecord.self, from: data)
+        var records: [AchievementUnlockRecord] = []
+        for (key, value) in defaults.dictionaryRepresentation() {
+            guard isAchievementStorageKey(key),
+                  let data = value as? Data,
+                  let record = try? decoder.decode(AchievementUnlockRecord.self, from: data) else {
+                continue
+            }
+            records.append(record)
         }
+        return records
     }
 
     private nonisolated static func makeJournalEntries(
