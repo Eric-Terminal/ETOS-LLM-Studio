@@ -457,16 +457,14 @@ struct ContentView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    if isNativeNavigationEnabled {
-                        isNativeChatPresented = false
-                    } else {
+            if !isNativeNavigationEnabled {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
                         viewModel.activeSheet = nil
                         isSettingsPresented = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
                     }
-                } label: {
-                    Image(systemName: isNativeNavigationEnabled ? "chevron.left" : "gearshape.fill")
                 }
             }
         }
