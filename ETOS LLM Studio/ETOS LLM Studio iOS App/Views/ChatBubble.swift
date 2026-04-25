@@ -106,6 +106,7 @@ struct ChatBubble: View {
     let mergeWithNext: Bool
     let connectsTimelineFromPrevious: Bool
     let connectsTimelineToNext: Bool
+    let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
     let hasAutoOpenedPendingToolCall: (String) -> Bool
     let markPendingToolCallAutoOpened: (String) -> Void
     let onSwitchToPreviousVersion: () -> Void
@@ -146,6 +147,7 @@ struct ChatBubble: View {
         mergeWithNext: Bool,
         connectsTimelineFromPrevious: Bool = false,
         connectsTimelineToNext: Bool = false,
+        responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? = nil,
         hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
         markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
         onSwitchToPreviousVersion: @escaping () -> Void,
@@ -169,6 +171,7 @@ struct ChatBubble: View {
         self.mergeWithNext = mergeWithNext
         self.connectsTimelineFromPrevious = connectsTimelineFromPrevious
         self.connectsTimelineToNext = connectsTimelineToNext
+        self.responseAttemptVersionInfo = responseAttemptVersionInfo
         self.hasAutoOpenedPendingToolCall = hasAutoOpenedPendingToolCall
         self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
@@ -507,7 +510,7 @@ struct ChatBubble: View {
                             textContentStack(includeToolCalls: true)
                             
                             // 版本指示器（Telegram 风格：右下角）
-                            if message.hasMultipleVersions {
+                            if shouldShowVersionIndicator {
                                 HStack(spacing: 6) {
                                     compactVersionIndicator
                                 }
@@ -637,6 +640,8 @@ struct ChatBubble: View {
     
     @ViewBuilder
     private var compactVersionIndicator: some View {
+        let currentIndex = responseAttemptVersionInfo?.currentIndex ?? message.getCurrentVersionIndex()
+        let totalCount = responseAttemptVersionInfo?.totalCount ?? message.getAllVersions().count
         HStack(spacing: 4) {
             Button {
                 onSwitchToPreviousVersion()
@@ -645,10 +650,10 @@ struct ChatBubble: View {
                     .etFont(.system(size: 14, weight: .bold))
             }
             .buttonStyle(.plain)
-            .disabled(message.getCurrentVersionIndex() == 0)
-            .opacity(message.getCurrentVersionIndex() > 0 ? 1 : 0.4)
+            .disabled(currentIndex == 0)
+            .opacity(currentIndex > 0 ? 1 : 0.4)
             
-            Text("\(message.getCurrentVersionIndex() + 1)/\(message.getAllVersions().count)")
+            Text("\(currentIndex + 1)/\(totalCount)")
                 .etFont(.system(size: 14, weight: .semibold))
                 .monospacedDigit()
             
@@ -659,8 +664,8 @@ struct ChatBubble: View {
                     .etFont(.system(size: 14, weight: .bold))
             }
             .buttonStyle(.plain)
-            .disabled(message.getCurrentVersionIndex() >= message.getAllVersions().count - 1)
-            .opacity(message.getCurrentVersionIndex() < message.getAllVersions().count - 1 ? 1 : 0.4)
+            .disabled(currentIndex >= totalCount - 1)
+            .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
         }
         .foregroundStyle(
             usesNoBubbleStyle
@@ -681,6 +686,10 @@ struct ChatBubble: View {
                             : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.15))
                 )
         )
+    }
+
+    private var shouldShowVersionIndicator: Bool {
+        responseAttemptVersionInfo != nil || message.hasMultipleVersions
     }
     
     // MARK: - 气泡渐变背景
@@ -849,7 +858,7 @@ struct ChatBubble: View {
                 connectedToolBubbleContainer(isFirst: true, isLast: totalBubbleCount == 1) {
                     textContentStack(includeToolCalls: false)
 
-                    if message.hasMultipleVersions {
+                    if shouldShowVersionIndicator {
                         HStack(spacing: 6) {
                             compactVersionIndicator
                         }

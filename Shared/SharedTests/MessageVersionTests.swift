@@ -33,6 +33,10 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(message.getCurrentVersionIndex(), 0)
         XCTAssertFalse(message.hasMultipleVersions)
         XCTAssertNil(message.requestedAt)
+        XCTAssertNil(message.responseGroupID)
+        XCTAssertNil(message.responseAttemptID)
+        XCTAssertNil(message.responseAttemptIndex)
+        XCTAssertNil(message.selectedResponseAttemptID)
     }
     
     /// 测试新格式（多版本数组）的反序列化
@@ -195,13 +199,20 @@ final class MessageVersionTests: XCTestCase {
     
     /// 测试完整的序列化和反序列化往返
     func testSerializationRoundTrip() throws {
+        let responseGroupID = UUID()
+        let responseAttemptID = UUID()
+        let selectedResponseAttemptID = UUID()
         var original = ChatMessage(
             id: UUID(),
             role: .assistant,
             content: "First",
             reasoningContent: "Thinking...",
             toolCalls: nil,
-            tokenUsage: MessageTokenUsage(promptTokens: 10, completionTokens: 20, totalTokens: 30)
+            tokenUsage: MessageTokenUsage(promptTokens: 10, completionTokens: 20, totalTokens: 30),
+            responseGroupID: responseGroupID,
+            responseAttemptID: responseAttemptID,
+            responseAttemptIndex: 2,
+            selectedResponseAttemptID: selectedResponseAttemptID
         )
         original.addVersion("Second")
         original.addVersion("Third")
@@ -220,6 +231,76 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decoded.getCurrentVersionIndex(), 1)
         XCTAssertEqual(decoded.reasoningContent, original.reasoningContent)
         XCTAssertEqual(decoded.tokenUsage?.totalTokens, 30)
+        XCTAssertEqual(decoded.responseGroupID, responseGroupID)
+        XCTAssertEqual(decoded.responseAttemptID, responseAttemptID)
+        XCTAssertEqual(decoded.responseAttemptIndex, 2)
+        XCTAssertEqual(decoded.selectedResponseAttemptID, selectedResponseAttemptID)
+    }
+
+    /// 测试回复轮次尝试只显示当前选中的完整工具链
+    func testResponseAttemptVisibleMessagesAndSwitching() throws {
+        let userID = UUID()
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let userMessage = ChatMessage(
+            id: userID,
+            role: .user,
+            content: "需要调用工具的问题",
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let firstToolCall = ChatMessage(
+            role: .assistant,
+            content: "",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let firstToolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let firstFinal = ChatMessage(
+            role: .assistant,
+            content: "第一次回复",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondFinal = ChatMessage(
+            role: .assistant,
+            content: "第二次回复",
+            responseGroupID: userID,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1
+        )
+        let nextUser = ChatMessage(role: .user, content: "下一轮对话")
+        let messages = [userMessage, firstToolCall, firstToolResult, firstFinal, secondFinal, nextUser]
+
+        XCTAssertEqual(ChatResponseAttemptSupport.visibleMessages(from: messages).map(\.id), [userMessage.id, secondFinal.id, nextUser.id])
+        XCTAssertNil(ChatResponseAttemptSupport.versionInfo(for: firstFinal, in: messages))
+
+        let secondInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: secondFinal, in: messages))
+        XCTAssertEqual(secondInfo.currentAttemptID, secondAttemptID)
+        XCTAssertEqual(secondInfo.currentIndex, 1)
+        XCTAssertEqual(secondInfo.totalCount, 2)
+
+        let switchedMessages = try XCTUnwrap(ChatResponseAttemptSupport.selectPreviousAttempt(for: secondFinal, in: messages))
+        XCTAssertEqual(ChatResponseAttemptSupport.visibleMessages(from: switchedMessages).map(\.id), [
+            userMessage.id,
+            firstToolCall.id,
+            firstToolResult.id,
+            firstFinal.id,
+            nextUser.id
+        ])
+        XCTAssertNil(ChatResponseAttemptSupport.versionInfo(for: firstToolCall, in: switchedMessages))
+
+        let firstInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: firstFinal, in: switchedMessages))
+        XCTAssertEqual(firstInfo.currentAttemptID, firstAttemptID)
+        XCTAssertEqual(firstInfo.currentIndex, 0)
+        XCTAssertEqual(firstInfo.totalCount, 2)
     }
 
     /// 测试扩展 Token 字段的序列化与反序列化兼容

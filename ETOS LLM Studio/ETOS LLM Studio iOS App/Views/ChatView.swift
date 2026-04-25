@@ -376,6 +376,7 @@ struct ChatView: View {
                                         mergeWithNext: mergeWithNext,
                                         connectsTimelineFromPrevious: connectsTimelineFromPrevious,
                                         connectsTimelineToNext: connectsTimelineToNext,
+                                        responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
                                         hasAutoOpenedPendingToolCall: { toolCallID in
                                             viewModel.hasAutoOpenedPendingToolCall(toolCallID)
                                         },
@@ -611,7 +612,7 @@ struct ChatView: View {
                     messageToDelete = nil
                 }
             } message: {
-                Text(messageToDelete?.hasMultipleVersions == true
+                Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
                      ? "删除后将无法恢复这条消息的所有版本。"
                      : "删除后无法恢复这条消息。")
             }
@@ -2112,15 +2113,15 @@ struct ChatView: View {
         Divider()
         
         // 版本管理菜单项
-        if message.hasMultipleVersions {
+        if viewModel.hasDisplayVersions(for: message) {
             Menu {
-                ForEach(0..<message.getAllVersions().count, id: \.self) { index in
+                ForEach(0..<viewModel.displayVersionCount(for: message), id: \.self) { index in
                     Button {
                         viewModel.switchToVersion(index, of: message)
                     } label: {
                         HStack {
                             Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
-                            if index == message.getCurrentVersionIndex() {
+                            if index == viewModel.displayCurrentVersionIndex(for: message) {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -2130,14 +2131,14 @@ struct ChatView: View {
                 Label(
                     String(
                         format: NSLocalizedString("切换版本 (%d/%d)", comment: ""),
-                        message.getCurrentVersionIndex() + 1,
-                        message.getAllVersions().count
+                        viewModel.displayCurrentVersionIndex(for: message) + 1,
+                        viewModel.displayVersionCount(for: message)
                     ),
                     systemImage: "clock.arrow.circlepath"
                 )
             }
             
-            if message.getAllVersions().count > 1 {
+            if viewModel.displayVersionCount(for: message) > 1 {
                 Button(role: .destructive) {
                     messageVersionToDelete = message
                 } label: {
@@ -2151,7 +2152,7 @@ struct ChatView: View {
         Button(role: .destructive) {
             messageToDelete = message
         } label: {
-            Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
+            Label(viewModel.hasDisplayVersions(for: message) ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
         }
         
         Divider()
@@ -2200,7 +2201,7 @@ struct ChatView: View {
         do {
             let output = try transcriptExportService.export(
                 session: viewModel.currentSession,
-                messages: viewModel.allMessagesForSession,
+                messages: ChatResponseAttemptSupport.visibleMessages(from: viewModel.allMessagesForSession),
                 format: format,
                 includeReasoning: includeReasoning,
                 upToMessageID: upToMessage?.id
@@ -2226,7 +2227,7 @@ struct ChatView: View {
 
             let output = try transcriptExportService.export(
                 session: session,
-                messages: messages,
+                messages: ChatResponseAttemptSupport.visibleMessages(from: messages),
                 format: format,
                 includeReasoning: includeReasoning,
                 upToMessageID: nil

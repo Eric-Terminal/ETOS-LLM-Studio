@@ -1740,6 +1740,24 @@ public enum SyncEngine {
         ) else {
             return nil
         }
+        guard let responseGroupID = mergeOptionalScalarField(
+            local.responseGroupID,
+            incoming.responseGroupID
+        ) else {
+            return nil
+        }
+        guard let responseAttemptID = mergeOptionalScalarField(
+            local.responseAttemptID,
+            incoming.responseAttemptID
+        ) else {
+            return nil
+        }
+        guard let responseAttemptIndex = mergeOptionalScalarField(
+            local.responseAttemptIndex,
+            incoming.responseAttemptIndex
+        ) else {
+            return nil
+        }
         guard let fullErrorContent = mergeOptionalStringField(
             local.fullErrorContent,
             incoming.fullErrorContent,
@@ -1769,6 +1787,10 @@ public enum SyncEngine {
             fullErrorContent: fullErrorContent.value,
             responseMetrics: mergedResponseMetrics
         )
+        merged.responseGroupID = responseGroupID.value
+        merged.responseAttemptID = responseAttemptID.value
+        merged.responseAttemptIndex = responseAttemptIndex.value
+        merged.selectedResponseAttemptID = incoming.selectedResponseAttemptID ?? local.selectedResponseAttemptID
 
         if local.id != incoming.id, local.content == incoming.content {
             merged.id = local.id
@@ -2508,6 +2530,10 @@ public enum SyncEngine {
             hasher.combine(version)
         }
         hasher.combine(message.getCurrentVersionIndex())
+        hasher.combine(message.responseGroupID?.uuidString ?? "")
+        hasher.combine(message.responseAttemptID?.uuidString ?? "")
+        hasher.combine(message.responseAttemptIndex ?? -1)
+        hasher.combine(message.selectedResponseAttemptID?.uuidString ?? "")
         hasher.combine(message.reasoningContent ?? "")
         for toolCall in message.toolCalls ?? [] {
             hasher.combine(toolCall.id)

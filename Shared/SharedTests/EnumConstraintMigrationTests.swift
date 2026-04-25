@@ -308,17 +308,19 @@ struct EnumConstraintMigrationTests {
         _ = try PersistenceGRDBStore(chatsDirectory: chatsDirectory)
 
         let queue = try DatabaseQueue(path: databaseURL.path)
-        let repaired = try queue.read { db -> (Bool, Bool, Bool) in
-            (
+        let repairedColumns = try queue.read { db -> [Bool] in
+            [
                 try tableHasColumn(db, tableName: "messages", columnName: "response_metrics_json"),
                 try tableHasColumn(db, tableName: "messages", columnName: "file_file_names_json"),
+                try tableHasColumn(db, tableName: "messages", columnName: "response_group_id"),
+                try tableHasColumn(db, tableName: "messages", columnName: "response_attempt_id"),
+                try tableHasColumn(db, tableName: "messages", columnName: "response_attempt_index"),
+                try tableHasColumn(db, tableName: "messages", columnName: "selected_response_attempt_id"),
                 try tableHasColumn(db, tableName: "session_folders", columnName: "parent_id")
-            )
+            ]
         }
 
-        #expect(repaired.0)
-        #expect(repaired.1)
-        #expect(repaired.2)
+        #expect(repairedColumns.allSatisfy { $0 })
     }
 }
 

@@ -722,6 +722,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
     public var responseMetrics: MessageResponseMetrics? // 单次请求的响应测速信息
+    public var responseGroupID: UUID? // 回复组 ID，通常指向锚点 user 消息
+    public var responseAttemptID: UUID? // 当前消息所属的一次回复尝试
+    public var responseAttemptIndex: Int? // 当前回复尝试在组内的序号
+    public var selectedResponseAttemptID: UUID? // 锚点 user 消息当前选中的回复尝试
 
     public init(
         id: UUID = UUID(),
@@ -736,7 +740,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         imageFileNames: [String]? = nil,
         fileFileNames: [String]? = nil,
         fullErrorContent: String? = nil,
-        responseMetrics: MessageResponseMetrics? = nil
+        responseMetrics: MessageResponseMetrics? = nil,
+        responseGroupID: UUID? = nil,
+        responseAttemptID: UUID? = nil,
+        responseAttemptIndex: Int? = nil,
+        selectedResponseAttemptID: UUID? = nil
     ) {
         self.id = id
         self.role = role
@@ -752,6 +760,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.fileFileNames = fileFileNames
         self.fullErrorContent = fullErrorContent
         self.responseMetrics = responseMetrics
+        self.responseGroupID = responseGroupID
+        self.responseAttemptID = responseAttemptID
+        self.responseAttemptIndex = responseAttemptIndex
+        self.selectedResponseAttemptID = selectedResponseAttemptID
     }
     
     // MARK: - 版本管理方法
@@ -789,6 +801,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, toolCalls, toolCallsPlacement, tokenUsage
         case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
+        case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
     }
     
     public init(from decoder: Decoder) throws {
@@ -823,6 +836,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
         self.responseMetrics = try container.decodeIfPresent(MessageResponseMetrics.self, forKey: .responseMetrics)
+        self.responseGroupID = try container.decodeIfPresent(UUID.self, forKey: .responseGroupID)
+        self.responseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .responseAttemptID)
+        self.responseAttemptIndex = try container.decodeIfPresent(Int.self, forKey: .responseAttemptIndex)
+        self.selectedResponseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .selectedResponseAttemptID)
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -848,6 +865,135 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
         try container.encodeIfPresent(responseMetrics, forKey: .responseMetrics)
+        try container.encodeIfPresent(responseGroupID, forKey: .responseGroupID)
+        try container.encodeIfPresent(responseAttemptID, forKey: .responseAttemptID)
+        try container.encodeIfPresent(responseAttemptIndex, forKey: .responseAttemptIndex)
+        try container.encodeIfPresent(selectedResponseAttemptID, forKey: .selectedResponseAttemptID)
+    }
+}
+
+public struct ChatResponseAttemptVersionInfo: Equatable, Sendable {
+    public let responseGroupID: UUID
+    public let currentAttemptID: UUID
+    public let currentIndex: Int
+    public let totalCount: Int
+}
+
+public enum ChatResponseAttemptSupport {
+    public static func visibleMessages(from messages: [ChatMessage]) -> [ChatMessage] {
+        let selectedByGroup = selectedAttemptIDsByGroup(in: messages)
+        return messages.filter { message in
+            guard let groupID = message.responseGroupID,
+                  let attemptID = message.responseAttemptID,
+                  let selectedAttemptID = selectedByGroup[groupID] else {
+                return true
+            }
+            return attemptID == selectedAttemptID
+        }
+    }
+
+    public static func versionInfo(for message: ChatMessage, in messages: [ChatMessage]) -> ChatResponseAttemptVersionInfo? {
+        guard (message.role == .assistant || message.role == .error),
+              let groupID = message.responseGroupID,
+              let attemptID = message.responseAttemptID else {
+            return nil
+        }
+
+        let attempts = orderedAttemptIDs(for: groupID, in: messages)
+        guard attempts.count > 1,
+              let currentIndex = attempts.firstIndex(of: attemptID) else {
+            return nil
+        }
+
+        if let selectedAttemptID = selectedAttemptIDsByGroup(in: messages)[groupID],
+           selectedAttemptID != attemptID {
+            return nil
+        }
+
+        let visibleAttemptMessages = messages.filter {
+            $0.responseGroupID == groupID && $0.responseAttemptID == attemptID
+        }
+        let lastDisplayableID = visibleAttemptMessages.last(where: { $0.role == .assistant || $0.role == .error })?.id
+        guard lastDisplayableID == message.id else { return nil }
+
+        return ChatResponseAttemptVersionInfo(
+            responseGroupID: groupID,
+            currentAttemptID: attemptID,
+            currentIndex: currentIndex,
+            totalCount: attempts.count
+        )
+    }
+
+    public static func selectPreviousAttempt(for message: ChatMessage, in messages: [ChatMessage]) -> [ChatMessage]? {
+        guard let info = versionInfo(for: message, in: messages), info.currentIndex > 0 else { return nil }
+        return selectAttempt(attemptID: orderedAttemptIDs(for: info.responseGroupID, in: messages)[info.currentIndex - 1], groupID: info.responseGroupID, in: messages)
+    }
+
+    public static func selectNextAttempt(for message: ChatMessage, in messages: [ChatMessage]) -> [ChatMessage]? {
+        guard let info = versionInfo(for: message, in: messages), info.currentIndex + 1 < info.totalCount else { return nil }
+        return selectAttempt(attemptID: orderedAttemptIDs(for: info.responseGroupID, in: messages)[info.currentIndex + 1], groupID: info.responseGroupID, in: messages)
+    }
+
+    public static func selectAttempt(attemptID: UUID, groupID: UUID, in messages: [ChatMessage]) -> [ChatMessage] {
+        messages.map { message in
+            guard message.id == groupID, message.role == .user else { return message }
+            var updated = message
+            updated.selectedResponseAttemptID = attemptID
+            return updated
+        }
+    }
+
+    public static func orderedAttemptIDs(for groupID: UUID, in messages: [ChatMessage]) -> [UUID] {
+        struct AttemptOrder {
+            let id: UUID
+            let explicitIndex: Int
+            let firstPosition: Int
+        }
+
+        var orderByID: [UUID: AttemptOrder] = [:]
+        for (position, message) in messages.enumerated() {
+            guard message.responseGroupID == groupID,
+                  let attemptID = message.responseAttemptID else {
+                continue
+            }
+            let explicitIndex = message.responseAttemptIndex ?? Int.max
+            if let existing = orderByID[attemptID] {
+                orderByID[attemptID] = AttemptOrder(
+                    id: attemptID,
+                    explicitIndex: min(existing.explicitIndex, explicitIndex),
+                    firstPosition: min(existing.firstPosition, position)
+                )
+            } else {
+                orderByID[attemptID] = AttemptOrder(
+                    id: attemptID,
+                    explicitIndex: explicitIndex,
+                    firstPosition: position
+                )
+            }
+        }
+
+        return orderByID.values
+            .sorted {
+                if $0.explicitIndex != $1.explicitIndex {
+                    return $0.explicitIndex < $1.explicitIndex
+                }
+                return $0.firstPosition < $1.firstPosition
+            }
+            .map(\.id)
+    }
+
+    public static func selectedAttemptID(for groupID: UUID, in messages: [ChatMessage]) -> UUID? {
+        selectedAttemptIDsByGroup(in: messages)[groupID]
+    }
+
+    private static func selectedAttemptIDsByGroup(in messages: [ChatMessage]) -> [UUID: UUID] {
+        var selectedByGroup: [UUID: UUID] = [:]
+        for message in messages where message.role == .user {
+            if let selectedAttemptID = message.selectedResponseAttemptID {
+                selectedByGroup[message.id] = selectedAttemptID
+            }
+        }
+        return selectedByGroup
     }
 }
 

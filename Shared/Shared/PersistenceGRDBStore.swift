@@ -172,6 +172,10 @@ final class PersistenceGRDBStore {
         let fileFileNamesJSON: Data?
         let fullErrorContent: String?
         let responseMetricsJSON: Data?
+        let responseGroupID: String?
+        let responseAttemptID: String?
+        let responseAttemptIndex: Int?
+        let selectedResponseAttemptID: String?
         let position: Int
         let createdAt: Double
     }
@@ -440,7 +444,8 @@ final class PersistenceGRDBStore {
                     SELECT id, role, requested_at, content, content_versions_json, current_version_index,
                            reasoning_content, tool_calls_json, tool_calls_placement, token_usage_json,
                            audio_file_name, image_file_names_json, file_file_names_json,
-                           full_error_content, response_metrics_json
+                           full_error_content, response_metrics_json,
+                           response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id
                     FROM messages
                     WHERE session_id = ?
                     ORDER BY position ASC, created_at ASC, id ASC
@@ -486,7 +491,11 @@ final class PersistenceGRDBStore {
                         imageFileNames: imageFileNames,
                         fileFileNames: fileFileNames,
                         fullErrorContent: row["full_error_content"],
-                        responseMetrics: responseMetrics
+                        responseMetrics: responseMetrics,
+                        responseGroupID: (row["response_group_id"] as String?).flatMap(UUID.init(uuidString:)),
+                        responseAttemptID: (row["response_attempt_id"] as String?).flatMap(UUID.init(uuidString:)),
+                        responseAttemptIndex: row["response_attempt_index"],
+                        selectedResponseAttemptID: (row["selected_response_attempt_id"] as String?).flatMap(UUID.init(uuidString:))
                     )
 
                     if contentVersions.count > 1 {
@@ -1370,6 +1379,10 @@ final class PersistenceGRDBStore {
                     file_file_names_json BLOB,
                     full_error_content TEXT,
                     response_metrics_json BLOB,
+                    response_group_id TEXT,
+                    response_attempt_id TEXT,
+                    response_attempt_index INTEGER,
+                    selected_response_attempt_id TEXT,
                     position INTEGER NOT NULL DEFAULT 0,
                     created_at REAL NOT NULL
                 )
@@ -1474,6 +1487,10 @@ final class PersistenceGRDBStore {
                     file_file_names_json BLOB,
                     full_error_content TEXT,
                     response_metrics_json BLOB,
+                    response_group_id TEXT,
+                    response_attempt_id TEXT,
+                    response_attempt_index INTEGER,
+                    selected_response_attempt_id TEXT,
                     position INTEGER NOT NULL DEFAULT 0,
                     created_at REAL NOT NULL
                 )
@@ -1485,7 +1502,9 @@ final class PersistenceGRDBStore {
                     content_versions_json, current_version_index,
                     reasoning_content, tool_calls_json, tool_calls_placement,
                     token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
-                    full_error_content, response_metrics_json, position, created_at
+                    full_error_content, response_metrics_json,
+                    response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+                    position, created_at
                 )
                 SELECT
                     id,
@@ -1513,6 +1532,10 @@ final class PersistenceGRDBStore {
                     file_file_names_json,
                     full_error_content,
                     response_metrics_json,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
                     position,
                     created_at
                 FROM messages
@@ -1670,6 +1693,10 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "messages", column: "file_file_names_json", definition: "file_file_names_json BLOB")
             try ensureColumn(db, table: "messages", column: "full_error_content", definition: "full_error_content TEXT")
             try ensureColumn(db, table: "messages", column: "response_metrics_json", definition: "response_metrics_json BLOB")
+            try ensureColumn(db, table: "messages", column: "response_group_id", definition: "response_group_id TEXT")
+            try ensureColumn(db, table: "messages", column: "response_attempt_id", definition: "response_attempt_id TEXT")
+            try ensureColumn(db, table: "messages", column: "response_attempt_index", definition: "response_attempt_index INTEGER")
+            try ensureColumn(db, table: "messages", column: "selected_response_attempt_id", definition: "selected_response_attempt_id TEXT")
             try ensureColumn(db, table: "messages", column: "position", definition: "position INTEGER NOT NULL DEFAULT 0")
             try ensureColumn(db, table: "messages", column: "created_at", definition: "created_at REAL NOT NULL DEFAULT 0")
 
@@ -1737,6 +1764,10 @@ final class PersistenceGRDBStore {
                 file_file_names_json BLOB,
                 full_error_content TEXT,
                 response_metrics_json BLOB,
+                response_group_id TEXT,
+                response_attempt_id TEXT,
+                response_attempt_index INTEGER,
+                selected_response_attempt_id TEXT,
                 position INTEGER NOT NULL DEFAULT 0,
                 created_at REAL NOT NULL DEFAULT 0
             )
@@ -3009,7 +3040,9 @@ final class PersistenceGRDBStore {
             SELECT id, session_id, role, requested_at, content, content_versions_json,
                    current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
                    token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
-                   full_error_content, response_metrics_json, position, created_at
+                   full_error_content, response_metrics_json,
+                   response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+                   position, created_at
             FROM messages
             WHERE session_id = ?
             """,
@@ -3036,6 +3069,10 @@ final class PersistenceGRDBStore {
                 fileFileNamesJSON: row["file_file_names_json"],
                 fullErrorContent: row["full_error_content"],
                 responseMetricsJSON: row["response_metrics_json"],
+                responseGroupID: row["response_group_id"],
+                responseAttemptID: row["response_attempt_id"],
+                responseAttemptIndex: row["response_attempt_index"],
+                selectedResponseAttemptID: row["selected_response_attempt_id"],
                 position: row["position"],
                 createdAt: row["created_at"]
             )
@@ -3082,6 +3119,10 @@ final class PersistenceGRDBStore {
             fileFileNamesJSON: encodeJSON(message.fileFileNames),
             fullErrorContent: message.fullErrorContent,
             responseMetricsJSON: encodeJSON(message.responseMetrics),
+            responseGroupID: message.responseGroupID?.uuidString,
+            responseAttemptID: message.responseAttemptID?.uuidString,
+            responseAttemptIndex: message.responseAttemptIndex,
+            selectedResponseAttemptID: message.selectedResponseAttemptID?.uuidString,
             position: position,
             createdAt: createdAt
         )
@@ -3097,8 +3138,10 @@ final class PersistenceGRDBStore {
                 id, session_id, role, requested_at, content, content_versions_json,
                 current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
                 token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
-                full_error_content, response_metrics_json, position, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                full_error_content, response_metrics_json,
+                response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+                position, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 session_id = excluded.session_id,
                 role = excluded.role,
@@ -3115,6 +3158,10 @@ final class PersistenceGRDBStore {
                 file_file_names_json = excluded.file_file_names_json,
                 full_error_content = excluded.full_error_content,
                 response_metrics_json = excluded.response_metrics_json,
+                response_group_id = excluded.response_group_id,
+                response_attempt_id = excluded.response_attempt_id,
+                response_attempt_index = excluded.response_attempt_index,
+                selected_response_attempt_id = excluded.selected_response_attempt_id,
                 position = excluded.position,
                 created_at = excluded.created_at
             """,
@@ -3135,6 +3182,10 @@ final class PersistenceGRDBStore {
                 record.fileFileNamesJSON,
                 record.fullErrorContent,
                 record.responseMetricsJSON,
+                record.responseGroupID,
+                record.responseAttemptID,
+                record.responseAttemptIndex,
+                record.selectedResponseAttemptID,
                 record.position,
                 record.createdAt
             ]

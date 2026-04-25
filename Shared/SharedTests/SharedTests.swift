@@ -4563,6 +4563,60 @@ fileprivate struct PersistenceTests {
         cleanup(sessions: [session])
     }
 
+    @Test("GRDB saveMessages 会保留回复尝试元数据")
+    func testGRDBSaveAndLoadResponseAttemptMetadata() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let session = ChatSession(id: UUID(), name: "回复尝试元数据会话", isTemporary: false)
+        let groupID = UUID()
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let messages = [
+            ChatMessage(
+                id: groupID,
+                role: .user,
+                content: "问题",
+                selectedResponseAttemptID: secondAttemptID
+            ),
+            ChatMessage(
+                role: .assistant,
+                content: "第一次回复",
+                responseGroupID: groupID,
+                responseAttemptID: firstAttemptID,
+                responseAttemptIndex: 0
+            ),
+            ChatMessage(
+                role: .assistant,
+                content: "第二次回复",
+                responseGroupID: groupID,
+                responseAttemptID: secondAttemptID,
+                responseAttemptIndex: 1
+            )
+        ]
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+
+        let loadedMessages = Persistence.loadMessages(for: session.id)
+        #expect(loadedMessages.count == 3)
+        #expect(loadedMessages[0].id == groupID)
+        #expect(loadedMessages[0].selectedResponseAttemptID == secondAttemptID)
+        #expect(loadedMessages[1].responseGroupID == groupID)
+        #expect(loadedMessages[1].responseAttemptID == firstAttemptID)
+        #expect(loadedMessages[1].responseAttemptIndex == 0)
+        #expect(loadedMessages[2].responseGroupID == groupID)
+        #expect(loadedMessages[2].responseAttemptID == secondAttemptID)
+        #expect(loadedMessages[2].responseAttemptIndex == 1)
+
+        cleanup(sessions: [session])
+    }
+
     @Test("GRDB saveMessages 仅增量更新变更行并支持位置变化")
     func testGRDBSaveMessagesUsesIncrementalWrites() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests

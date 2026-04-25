@@ -1420,13 +1420,41 @@ class ChatViewModel: ObservableObject {
     }
     
     func deleteMessage(_ message: ChatMessage) {
+        if let groupID = message.responseGroupID {
+            var updatedMessages = allMessagesForSession.filter { $0.responseGroupID != groupID }
+            if let anchorIndex = updatedMessages.firstIndex(where: { $0.id == groupID && $0.role == .user }) {
+                updatedMessages[anchorIndex].selectedResponseAttemptID = nil
+            }
+            updateMessages(updatedMessages)
+            return
+        }
         chatService.deleteMessage(message)
     }
     
     // MARK: - Message Version Management
+
+    func responseAttemptVersionInfo(for message: ChatMessage) -> ChatResponseAttemptVersionInfo? {
+        ChatResponseAttemptSupport.versionInfo(for: message, in: allMessagesForSession)
+    }
+
+    func hasDisplayVersions(for message: ChatMessage) -> Bool {
+        responseAttemptVersionInfo(for: message) != nil || message.hasMultipleVersions
+    }
+
+    func displayVersionCount(for message: ChatMessage) -> Int {
+        responseAttemptVersionInfo(for: message)?.totalCount ?? message.getAllVersions().count
+    }
+
+    func displayCurrentVersionIndex(for message: ChatMessage) -> Int {
+        responseAttemptVersionInfo(for: message)?.currentIndex ?? message.getCurrentVersionIndex()
+    }
     
     /// 切换到指定消息的上一个版本
     func switchToPreviousVersion(of message: ChatMessage) {
+        if let updatedMessages = ChatResponseAttemptSupport.selectPreviousAttempt(for: message, in: allMessagesForSession) {
+            updateMessages(updatedMessages)
+            return
+        }
         guard var updatedMessage = findMessage(by: message.id),
               updatedMessage.hasMultipleVersions else { return }
         
@@ -1437,6 +1465,10 @@ class ChatViewModel: ObservableObject {
     
     /// 切换到指定消息的下一个版本
     func switchToNextVersion(of message: ChatMessage) {
+        if let updatedMessages = ChatResponseAttemptSupport.selectNextAttempt(for: message, in: allMessagesForSession) {
+            updateMessages(updatedMessages)
+            return
+        }
         guard var updatedMessage = findMessage(by: message.id),
               updatedMessage.hasMultipleVersions else { return }
         
@@ -1447,6 +1479,12 @@ class ChatViewModel: ObservableObject {
     
     /// 切换到指定版本
     func switchToVersion(_ index: Int, of message: ChatMessage) {
+        if let info = responseAttemptVersionInfo(for: message) {
+            let attempts = ChatResponseAttemptSupport.orderedAttemptIDs(for: info.responseGroupID, in: allMessagesForSession)
+            guard attempts.indices.contains(index) else { return }
+            updateMessages(ChatResponseAttemptSupport.selectAttempt(attemptID: attempts[index], groupID: info.responseGroupID, in: allMessagesForSession))
+            return
+        }
         guard var updatedMessage = findMessage(by: message.id) else { return }
         updatedMessage.switchToVersion(index)
         updateMessage(updatedMessage)
@@ -1454,6 +1492,9 @@ class ChatViewModel: ObservableObject {
     
     /// 删除指定消息的当前版本（如果只剩一个版本则删除整个消息）
     func deleteCurrentVersion(of message: ChatMessage) {
+        if deleteCurrentResponseAttempt(of: message) {
+            return
+        }
         guard var updatedMessage = findMessage(by: message.id) else { return }
         
         if updatedMessage.getAllVersions().count <= 1 {
@@ -1483,8 +1524,36 @@ class ChatViewModel: ObservableObject {
         guard let index = allMessagesForSession.firstIndex(where: { $0.id == message.id }) else { return }
         var updatedMessages = allMessagesForSession
         updatedMessages[index] = message
+        updateMessages(updatedMessages)
+    }
+
+    private func updateMessages(_ updatedMessages: [ChatMessage]) {
         chatService.updateMessages(updatedMessages, for: currentSession?.id ?? UUID())
         saveCurrentSessionDetails()
+    }
+
+    private func deleteCurrentResponseAttempt(of message: ChatMessage) -> Bool {
+        guard let info = responseAttemptVersionInfo(for: message) else { return false }
+        let attempts = ChatResponseAttemptSupport.orderedAttemptIDs(for: info.responseGroupID, in: allMessagesForSession)
+        let remainingAttempts = attempts.filter { $0 != info.currentAttemptID }
+        var updatedMessages = allMessagesForSession.filter {
+            !($0.responseGroupID == info.responseGroupID && $0.responseAttemptID == info.currentAttemptID)
+        }
+
+        let replacementIndex = max(0, min(info.currentIndex, remainingAttempts.count - 1))
+        if remainingAttempts.indices.contains(replacementIndex) {
+            let replacementAttemptID = remainingAttempts[replacementIndex]
+            updatedMessages = ChatResponseAttemptSupport.selectAttempt(
+                attemptID: replacementAttemptID,
+                groupID: info.responseGroupID,
+                in: updatedMessages
+            )
+        } else if let anchorIndex = updatedMessages.firstIndex(where: { $0.id == info.responseGroupID && $0.role == .user }) {
+            updatedMessages[anchorIndex].selectedResponseAttemptID = nil
+        }
+
+        updateMessages(updatedMessages)
+        return true
     }
     
     func deleteSession(at offsets: IndexSet) {
@@ -2098,7 +2167,7 @@ class ChatViewModel: ObservableObject {
     }
 
     private func latestAssistantReplyMarker(from messages: [ChatMessage]) -> AssistantReplyMarker? {
-        for message in messages.reversed() where message.role == .assistant {
+        for message in ChatResponseAttemptSupport.visibleMessages(from: messages).reversed() where message.role == .assistant {
             let normalizedText = normalizedNotificationText(message.content)
             let imageCount = message.imageFileNames?.count ?? 0
             let hasAudio = message.audioFileName != nil
@@ -2348,7 +2417,7 @@ class ChatViewModel: ObservableObject {
     }
     
     private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
-        source
+        ChatResponseAttemptSupport.visibleMessages(from: source)
     }
 
     nonisolated static func lazyLoadWeight(for message: ChatMessage) -> Int {
@@ -2446,9 +2515,17 @@ class ChatViewModel: ObservableObject {
         var updatedToolCallResultIDs = toolCallResultIDs
         var updatedLatestAssistantID = latestAssistantMessageID
         var needsDisplayRefilter = false
+        var needsFullDisplayRefresh = false
         var shouldBumpStreamingScrollAnchor = false
 
         for (oldMessage, newMessage) in zip(previousMessages, incomingMessages) where oldMessage != newMessage {
+            if oldMessage.selectedResponseAttemptID != newMessage.selectedResponseAttemptID
+                || oldMessage.responseGroupID != newMessage.responseGroupID
+                || oldMessage.responseAttemptID != newMessage.responseAttemptID
+                || oldMessage.responseAttemptIndex != newMessage.responseAttemptIndex {
+                needsFullDisplayRefresh = true
+            }
+
             if visibleIDs.contains(newMessage.id) {
                 messageStateByID[newMessage.id]?.update(with: newMessage)
                 scheduleMarkdownPreparationIfNeeded(for: newMessage)
@@ -2488,6 +2565,10 @@ class ChatViewModel: ObservableObject {
         if shouldBumpStreamingScrollAnchor {
             streamingScrollAnchorVersion &+= 1
         }
+        if needsFullDisplayRefresh {
+            updateDisplayedMessages()
+            return
+        }
         if needsDisplayRefilter {
             updateDisplayMessagesIfNeeded()
         }
@@ -2497,7 +2578,7 @@ class ChatViewModel: ObservableObject {
         var resultIDs = Set<String>()
         var latestAssistantID: UUID?
 
-        for message in messages {
+        for message in ChatResponseAttemptSupport.visibleMessages(from: messages) {
             resultIDs.formUnion(toolCallResultIDs(for: message))
             if message.role == .assistant {
                 latestAssistantID = message.id

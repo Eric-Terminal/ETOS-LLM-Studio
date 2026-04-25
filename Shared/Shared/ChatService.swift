@@ -233,6 +233,12 @@ public class ChatService {
         var imageGenerationContext: ImageGenerationContext?
     }
 
+    private struct ResponseAttemptMetadata: Sendable {
+        let groupID: UUID
+        let attemptID: UUID
+        let attemptIndex: Int
+    }
+
     private struct RequestLogContext {
         let requestID: UUID
         let sessionID: UUID?
@@ -1282,7 +1288,7 @@ public class ChatService {
         )
         logger.info("从消息处创建分支会话: \(newSession.name)\(copyPrompts ? "（包含提示词）": "（不含提示词）")")
         
-        let sourceMessages = Persistence.loadMessages(for: sourceSession.id)
+        let sourceMessages = ChatResponseAttemptSupport.visibleMessages(from: Persistence.loadMessages(for: sourceSession.id))
         if let messageIndex = sourceMessages.firstIndex(where: { $0.id == upToMessage.id }) {
             // 只保留到指定消息的消息（包含该消息）
             var messagesToCopy = Array(sourceMessages[0...messageIndex])
@@ -1717,7 +1723,11 @@ public class ChatService {
             return isLastLoadingAssistant ? lastIndex : nil
         }()
 
-        func makeErrorMessage(_ requestedAt: Date?, _ prefix: String? = nil) -> ChatMessage {
+        func makeErrorMessage(
+            _ requestedAt: Date?,
+            _ prefix: String? = nil,
+            metadata: ResponseAttemptMetadata? = nil
+        ) -> ChatMessage {
             let resolvedContent: String
             let resolvedFullContent: String?
             if let prefix, !prefix.isEmpty {
@@ -1731,18 +1741,21 @@ public class ChatService {
                 resolvedContent = formattedContent
                 resolvedFullContent = fullContent
             }
-            return ChatMessage(
+            var message = ChatMessage(
                 id: UUID(),
                 role: .error,
                 content: resolvedContent,
                 requestedAt: requestedAt,
                 fullErrorContent: resolvedFullContent
             )
+            applyResponseAttemptMetadata(metadata, to: &message)
+            return message
         }
 
         // 找到正在加载中的消息
         if let loadingIndex {
             let loadingMessage = messages[loadingIndex]
+            let loadingAttemptMetadata = responseAttemptMetadata(from: loadingMessage)
             let shouldPreserveLoadingMessage = messageHasDisplayablePayload(loadingMessage)
 
             // 检查是否在重试 assistant 场景（有保留的旧 assistant）
@@ -1752,7 +1765,8 @@ public class ChatService {
                     messages.insert(
                         makeErrorMessage(
                             loadingMessage.requestedAt,
-                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
+                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix"),
+                            metadata: loadingAttemptMetadata
                         ),
                         at: loadingIndex + 1
                     )
@@ -1761,13 +1775,18 @@ public class ChatService {
                     messages.insert(
                         makeErrorMessage(
                             loadingMessage.requestedAt,
-                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
+                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix"),
+                            metadata: loadingAttemptMetadata
                         ),
                         at: loadingIndex + 1
                     )
                 } else if shouldPreserveLoadingMessage {
                     messages.insert(
-                        makeErrorMessage(loadingMessage.requestedAt, NSLocalizedString("重试失败", comment: "Retry failed error message prefix")),
+                        makeErrorMessage(
+                            loadingMessage.requestedAt,
+                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix"),
+                            metadata: loadingAttemptMetadata
+                        ),
                         at: loadingIndex + 1
                     )
                 } else {
@@ -1776,7 +1795,10 @@ public class ChatService {
                         role: .error,
                         content: "重试失败\n\n\(formattedContent)",
                         requestedAt: loadingMessage.requestedAt,
-                        fullErrorContent: fullContent.map { "重试失败\n\n\($0)" }
+                        fullErrorContent: fullContent.map { "重试失败\n\n\($0)" },
+                        responseGroupID: loadingMessage.responseGroupID,
+                        responseAttemptID: loadingMessage.responseAttemptID,
+                        responseAttemptIndex: loadingMessage.responseAttemptIndex
                     )
                 }
                 
@@ -1784,7 +1806,7 @@ public class ChatService {
                 retryTargetOriginalAssistantMessage = nil
                 logger.error("重试失败，已根据输出情况保留或恢复 assistant，并追加错误气泡: \(content)")
             } else if shouldPreserveLoadingMessage {
-                messages.insert(makeErrorMessage(loadingMessage.requestedAt), at: loadingIndex + 1)
+                messages.insert(makeErrorMessage(loadingMessage.requestedAt, metadata: loadingAttemptMetadata), at: loadingIndex + 1)
                 logger.error("流式内容已保留，并追加错误消息: \(content)")
             } else {
                 // 正常场景：将 loading message 转为 error
@@ -1793,7 +1815,10 @@ public class ChatService {
                     role: .error,
                     content: formattedContent,
                     requestedAt: loadingMessage.requestedAt,
-                    fullErrorContent: fullContent
+                    fullErrorContent: fullContent,
+                    responseGroupID: loadingMessage.responseGroupID,
+                    responseAttemptID: loadingMessage.responseAttemptID,
+                    responseAttemptIndex: loadingMessage.responseAttemptIndex
                 )
                 logger.error("错误消息已添加: \(content)")
             }
@@ -1968,7 +1993,8 @@ public class ChatService {
         loadingMessageID: UUID,
         session: ChatSession?
     ) -> [ChatMessage] {
-        let baseMessages = messages.filter { $0.role != .error && $0.id != loadingMessageID }
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        let baseMessages = visibleMessages.filter { $0.role != .error && $0.id != loadingMessageID }
         let normalizedMessages = normalizedMessagesForToolCallChain(baseMessages)
         guard session?.isWorldbookContextIsolationActive == true else {
             return normalizedMessages
@@ -1986,6 +2012,95 @@ public class ChatService {
             }
             return sanitized
         }
+    }
+
+    private func responseAttemptMetadata(from message: ChatMessage) -> ResponseAttemptMetadata? {
+        guard let groupID = message.responseGroupID,
+              let attemptID = message.responseAttemptID else {
+            return nil
+        }
+        return ResponseAttemptMetadata(
+            groupID: groupID,
+            attemptID: attemptID,
+            attemptIndex: message.responseAttemptIndex ?? 0
+        )
+    }
+
+    private func responseAttemptMetadata(for messageID: UUID, in sessionID: UUID) -> ResponseAttemptMetadata? {
+        guard let message = messagesSnapshot(for: sessionID).first(where: { $0.id == messageID }) else {
+            return nil
+        }
+        return responseAttemptMetadata(from: message)
+    }
+
+    private func applyResponseAttemptMetadata(_ metadata: ResponseAttemptMetadata?, to message: inout ChatMessage) {
+        guard let metadata else { return }
+        message.responseGroupID = metadata.groupID
+        message.responseAttemptID = metadata.attemptID
+        message.responseAttemptIndex = metadata.attemptIndex
+    }
+
+    private func insertingResponseAttemptMessages(
+        _ additions: [ChatMessage],
+        afterAttemptOf referenceMessageID: UUID,
+        in messages: [ChatMessage]
+    ) -> [ChatMessage] {
+        guard !additions.isEmpty else { return messages }
+        var updatedMessages = messages
+        let referenceMessage = updatedMessages.first(where: { $0.id == referenceMessageID })
+        let attemptID = referenceMessage?.responseAttemptID ?? additions.first?.responseAttemptID
+
+        let insertionIndex: Int
+        if let attemptID,
+           let lastAttemptIndex = updatedMessages.lastIndex(where: { $0.responseAttemptID == attemptID }) {
+            insertionIndex = updatedMessages.index(after: lastAttemptIndex)
+        } else if let referenceIndex = updatedMessages.firstIndex(where: { $0.id == referenceMessageID }) {
+            insertionIndex = updatedMessages.index(after: referenceIndex)
+        } else {
+            insertionIndex = updatedMessages.endIndex
+        }
+
+        updatedMessages.insert(contentsOf: additions, at: insertionIndex)
+        return updatedMessages
+    }
+
+    private func responseRoundEndIndex(in messages: [ChatMessage], anchorUserIndex: Int) -> Int {
+        guard anchorUserIndex + 1 < messages.count else { return messages.count }
+        return messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .user }) ?? messages.count
+    }
+
+    private func prepareRetryAttemptMetadata(
+        in messages: inout [ChatMessage],
+        anchorUserIndex: Int
+    ) -> ResponseAttemptMetadata {
+        let groupID = messages[anchorUserIndex].id
+        let roundEndIndex = responseRoundEndIndex(in: messages, anchorUserIndex: anchorUserIndex)
+        let roundRange = messages.index(after: anchorUserIndex)..<roundEndIndex
+        let existingAttemptIDs = ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages)
+
+        if existingAttemptIDs.isEmpty, !roundRange.isEmpty {
+            let legacyAttemptID = UUID()
+            for index in roundRange where messages[index].role != .user {
+                messages[index].responseGroupID = groupID
+                messages[index].responseAttemptID = legacyAttemptID
+                messages[index].responseAttemptIndex = 0
+            }
+            messages[anchorUserIndex].selectedResponseAttemptID = legacyAttemptID
+        } else if messages[anchorUserIndex].selectedResponseAttemptID == nil {
+            messages[anchorUserIndex].selectedResponseAttemptID = existingAttemptIDs.last
+        }
+
+        let nextAttemptIndex = messages[roundRange]
+            .compactMap(\.responseAttemptIndex)
+            .max()
+            .map { $0 + 1 } ?? (existingAttemptIDs.isEmpty ? 0 : existingAttemptIDs.count)
+        let newAttempt = ResponseAttemptMetadata(
+            groupID: groupID,
+            attemptID: UUID(),
+            attemptIndex: nextAttemptIndex
+        )
+        messages[anchorUserIndex].selectedResponseAttemptID = newAttempt.attemptID
+        return newAttempt
     }
 
     /// 规范化历史中的工具调用链，避免把不完整/损坏的工具消息带入下一次请求。
@@ -2245,10 +2360,24 @@ public class ChatService {
         } else {
             primaryUserMessage = userMessages.first
         }
+        let responseAttempt = ResponseAttemptMetadata(
+            groupID: userMessages[userMessages.index(before: userMessages.endIndex)].id,
+            attemptID: UUID(),
+            attemptIndex: 0
+        )
+        if let anchorUserIndex = userMessages.indices.last {
+            userMessages[anchorUserIndex].selectedResponseAttemptID = responseAttempt.attemptID
+            if primaryUserMessage?.id == userMessages[anchorUserIndex].id {
+                primaryUserMessage = userMessages[anchorUserIndex]
+            }
+        }
         let loadingMessage = ChatMessage(
             role: .assistant,
             content: "",
-            requestedAt: requestTimestamp
+            requestedAt: requestTimestamp,
+            responseGroupID: responseAttempt.groupID,
+            responseAttemptID: responseAttempt.attemptID,
+            responseAttemptIndex: responseAttempt.attemptIndex
         ) // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
         
@@ -3385,7 +3514,7 @@ public class ChatService {
         // 决定重试时要重发的 user 消息，以及保留下来的前缀/后缀
         // 核心逻辑：无论重试什么消息，都找到对应的 user 消息重新发送
         let anchorUserIndex: Int
-        let messageToSend: ChatMessage
+        var messageToSend: ChatMessage
         
         switch message.role {
         case .user:
@@ -3405,115 +3534,33 @@ public class ChatService {
             return
         }
         registerRetryAchievementAttempt(sessionID: currentSession.id, content: messageToSend.content)
-        
-        // 统一逻辑：保留 anchorUser 到被重试消息之间的内容作为历史版本，保留下一个 user 及之后的对话
-        let tailStartIndex: Int?
-        if messageIndex + 1 < messages.count {
-            tailStartIndex = messages[(messageIndex + 1)...].firstIndex(where: { $0.role == .user })
-        } else {
-            tailStartIndex = nil
-        }
-        
-        // 生成重试时的前缀与需要恢复的后缀
-        let leadingMessages = Array(messages.prefix(upTo: anchorUserIndex))
-        
-        // 找到被重试的 assistant 消息（如果重试 assistant/error）
-        var assistantToUpdate: ChatMessage?
-        var assistantUpdateIndex: Int?
-        if message.role == .assistant || message.role == .error {
-            if message.role == .assistant {
-                assistantToUpdate = message
-                assistantUpdateIndex = messageIndex
-            } else if anchorUserIndex + 1 < messageIndex,
-                      let previousAssistantIndex = messages[(anchorUserIndex + 1)..<messageIndex]
-                        .lastIndex(where: { $0.role == .assistant }) {
-                // 点击错误气泡重试时，如果同轮里已有 assistant（包括半截输出），
-                // 就复用那条 assistant 继续生成，保证与直接点 assistant 的行为一致。
-                assistantToUpdate = messages[previousAssistantIndex]
-                assistantUpdateIndex = previousAssistantIndex
-            }
-        } else {
-            // 如果重试 user 消息，找到它后面第一个 assistant（不包括error）
-            if anchorUserIndex + 1 < messages.count {
-                if let nextAssistantIndex = messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .assistant }) {
-                    assistantToUpdate = messages[nextAssistantIndex]
-                    assistantUpdateIndex = nextAssistantIndex
-                }
-            }
-        }
-        
-        let trailingMessages: [ChatMessage]
-        if let tailIndex = tailStartIndex {
-            trailingMessages = Array(messages[tailIndex...])
-            logger.info("  - 保留后续 \(trailingMessages.count) 条消息，等待重试完成后恢复。")
-        } else {
-            trailingMessages = []
-            logger.info("  - 没有需要保留的后续消息。")
-        }
-        
-        // 构造新的消息列表：
-        // - requestMessages: 发送给模型的历史（不包含保留尾部）
-        // - persistedMessages: UI/持久化显示的历史（包含尾部，防止崩溃丢失）
+
+        // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
+        // 否则取消流程会把刚创建的请求上下文提前清理
+        await cancelOngoingRequest()
+
+        var updatedMessages = messages
+        let responseAttempt = prepareRetryAttemptMetadata(
+            in: &updatedMessages,
+            anchorUserIndex: anchorUserIndex
+        )
         let retryRequestedAt = Date()
         let loadingMessage = ChatMessage(
             role: .assistant,
             content: "",
-            requestedAt: retryRequestedAt
+            requestedAt: retryRequestedAt,
+            responseGroupID: responseAttempt.groupID,
+            responseAttemptID: responseAttempt.attemptID,
+            responseAttemptIndex: responseAttempt.attemptIndex
         )
-        var requestMessages = leadingMessages
-        requestMessages.append(messageToSend)
-        
-        // 移除旧的 assistant 到下一个 user 之间的消息（不包括被重试的消息本身）
-        var middleMessages: [ChatMessage] = []
-        if anchorUserIndex + 1 < messageIndex {
-            middleMessages = Array(messages[(anchorUserIndex + 1)..<messageIndex])
-            if let assistantIdx = assistantUpdateIndex, assistantIdx > anchorUserIndex && assistantIdx < messageIndex {
-                middleMessages.removeAll { $0.id == assistantToUpdate?.id }
-            }
-        }
-        
-        // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
-        // 否则取消流程会把刚创建的请求上下文提前清理
-        await cancelOngoingRequest()
-        
-        var persistedMessages = leadingMessages
-        persistedMessages.append(messageToSend)
-        persistedMessages.append(contentsOf: middleMessages)
-        
-        // 计算实际使用的 loadingMessageID（在取消旧请求后、设置新请求状态前确定）
-        let actualLoadingMessageID: UUID
-        
-        // 如果有需要更新的 assistant 消息，将其转换为 loading 状态
-        // 这样用户看到的是原消息位置上的 loading，而不是两个气泡
-        if let existingAssistant = assistantToUpdate {
-            // 创建一个 loading 状态的消息，保留原消息的所有属性和版本历史
-            var loadingAssistant = existingAssistant
-            // 【重要】添加一个空版本作为 loading 状态，而不是直接设置 content = ""
-            // 直接设置 content 会覆盖当前版本的内容，导致切换回旧版本时看不到内容
-            loadingAssistant.addVersion("")
-            loadingAssistant.requestedAt = retryRequestedAt
-            // 清除推理内容、工具调用和 token 统计（这些是上次请求的）
-            loadingAssistant.reasoningContent = nil
-            loadingAssistant.toolCalls = nil
-            loadingAssistant.tokenUsage = nil
-            loadingAssistant.responseMetrics = nil
-            
-            persistedMessages.append(loadingAssistant)
-            // 记录要添加版本的消息ID
-            retryTargetMessageID = existingAssistant.id
-            retryTargetOriginalAssistantMessage = existingAssistant
-            // loadingMessageID 使用原消息的 ID
-            actualLoadingMessageID = existingAssistant.id
-        } else {
-            retryTargetMessageID = nil
-            retryTargetOriginalAssistantMessage = nil
-            persistedMessages.append(loadingMessage)
-            actualLoadingMessageID = loadingMessage.id
-        }
-        persistedMessages.append(contentsOf: trailingMessages)
-        
-        // 更新 UI 显示新的 loading message
-        persistAndPublishMessages(persistedMessages, for: currentSession.id)
+        let insertionIndex = responseRoundEndIndex(in: updatedMessages, anchorUserIndex: anchorUserIndex)
+        updatedMessages.insert(loadingMessage, at: insertionIndex)
+        messageToSend = updatedMessages[anchorUserIndex]
+        retryTargetMessageID = nil
+        retryTargetOriginalAssistantMessage = nil
+
+        persistAndPublishMessages(updatedMessages, for: currentSession.id)
+        let actualLoadingMessageID = loadingMessage.id
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -3523,17 +3570,6 @@ public class ChatService {
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
         
-        // 恢复原消息的图片附件（如果有）
-        var imageAttachments: [ImageAttachment] = []
-        if let imageFileNames = messageToSend.imageFileNames {
-            for fileName in imageFileNames {
-                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
-                    imageAttachments.append(attachment)
-                    logger.info("重试时恢复图片附件: \(fileName)")
-                }
-            }
-        }
-
         // 恢复原消息的文件附件（如果有）
         var fileAttachments: [FileAttachment] = []
         if let fileFileNames = messageToSend.fileFileNames {
@@ -3547,7 +3583,7 @@ public class ChatService {
         
         // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
         await startRequestWithPresetMessages(
-            messages: requestMessages,
+            messages: updatedMessages,
             loadingMessageID: actualLoadingMessageID,  // 使用局部变量，避免强制解包可能导致的崩溃
             currentSession: currentSession,
             userMessage: messageToSend,
@@ -3672,55 +3708,11 @@ public class ChatService {
         periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true
     ) async {
-        guard let currentSession = currentSessionSubject.value else { return }
-        await cancelOngoingRequest()
         let messages = messagesForSessionSubject.value
-        
-        // 1. 找到最后一条用户消息
         guard let lastUserMessageIndex = messages.lastIndex(where: { $0.role == .user }) else { return }
         let lastUserMessage = messages[lastUserMessageIndex]
-        registerRetryAchievementAttempt(sessionID: currentSession.id, content: lastUserMessage.content)
-        
-        // 2. 将历史记录裁剪到这条消息之前
-        let historyBeforeRetry = Array(messages.prefix(upTo: lastUserMessageIndex))
-        
-        // 3. 更新实时消息列表
-        publishMessages(historyBeforeRetry)
-        persistMessages(historyBeforeRetry, for: currentSession.id)
-        
-        // 4. 恢复原消息的音频附件（如果有）
-        var audioAttachment: AudioAttachment? = nil
-        if let audioFileName = lastUserMessage.audioFileName,
-           let restoredAudioAttachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
-            audioAttachment = restoredAudioAttachment
-            logger.info("重试时恢复音频附件: \(audioFileName)")
-        }
-        
-        // 5. 恢复原消息的图片附件（如果有）
-        var imageAttachments: [ImageAttachment] = []
-        if let imageFileNames = lastUserMessage.imageFileNames {
-            for fileName in imageFileNames {
-                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
-                    imageAttachments.append(attachment)
-                    logger.info("重试时恢复图片附件: \(fileName)")
-                }
-            }
-        }
-
-        // 6. 恢复原消息的文件附件（如果有）
-        var fileAttachments: [FileAttachment] = []
-        if let fileFileNames = lastUserMessage.fileFileNames {
-            for fileName in fileFileNames {
-                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
-                    fileAttachments.append(attachment)
-                    logger.info("重试时恢复文件附件: \(fileName)")
-                }
-            }
-        }
-        
-        // 7. 使用原消息内容和附件，调用主要的发送函数，重用其完整逻辑
-        await sendAndProcessMessage(
-            content: lastUserMessage.content,
+        await retryMessage(
+            lastUserMessage,
             aiTemperature: aiTemperature,
             aiTopP: aiTopP,
             systemPrompt: systemPrompt,
@@ -3733,11 +3725,7 @@ public class ChatService {
             includeSystemTime: includeSystemTime,
             enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-            audioAttachment: audioAttachment,
-            imageAttachments: imageAttachments,
-            fileAttachments: fileAttachments,
-            isRetry: true
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics
         )
     }
 
@@ -4905,6 +4893,8 @@ public class ChatService {
         scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
         let toolCallMessageID = loadingMessageID
         ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
+        let activeAttemptMetadata = responseAttemptMetadata(for: toolCallMessageID, in: currentSessionID)
+            ?? responseAttemptMetadata(from: responseMessage)
 
         // 2. 根据 isBlocking 标志将工具调用分类
         let toolDefs = availableTools ?? []
@@ -4934,7 +4924,9 @@ public class ChatService {
                 if let toolResult = outcome.toolResult {
                     await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                 }
-                blockingResultMessages.append(outcome.message)
+                var outcomeMessage = outcome.message
+                applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
+                blockingResultMessages.append(outcomeMessage)
                 if outcome.shouldAwaitUserSupplement {
                     shouldAwaitUserSupplement = true
                     break
@@ -4944,7 +4936,11 @@ public class ChatService {
 
         if shouldAwaitUserSupplement {
             var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages.append(contentsOf: blockingResultMessages)
+            updatedMessages = insertingResponseAttemptMessages(
+                blockingResultMessages,
+                afterAttemptOf: toolCallMessageID,
+                in: updatedMessages
+            )
             self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
@@ -4962,8 +4958,14 @@ public class ChatService {
                             await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
                         // 非阻塞工具也写入消息列表，便于 UI 直接展示结果
+                        var outcomeMessage = outcome.message
+                        self.applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
                         var messages = self.messagesSnapshot(for: currentSessionID)
-                        messages.append(outcome.message)
+                        messages = self.insertingResponseAttemptMessages(
+                            [outcomeMessage],
+                            afterAttemptOf: toolCallMessageID,
+                            in: messages
+                        )
                         self.persistAndPublishMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
@@ -4976,7 +4978,9 @@ public class ChatService {
                     if let toolResult = outcome.toolResult {
                         await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                     }
-                    nonBlockingResultsForFollowUp.append(outcome.message)
+                    var outcomeMessage = outcome.message
+                    applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
+                    nonBlockingResultsForFollowUp.append(outcomeMessage)
                     if outcome.shouldAwaitUserSupplement {
                         shouldAwaitUserSupplement = true
                         break
@@ -4987,7 +4991,11 @@ public class ChatService {
 
         if shouldAwaitUserSupplement {
             var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
+            updatedMessages = insertingResponseAttemptMessages(
+                blockingResultMessages + nonBlockingResultsForFollowUp,
+                afterAttemptOf: toolCallMessageID,
+                in: updatedMessages
+            )
             self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
@@ -4997,15 +5005,19 @@ public class ChatService {
 
         if shouldTriggerFollowUp {
             var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages.append(contentsOf: blockingResultMessages + nonBlockingResultsForFollowUp)
 
             // 新增一个独立的 loading assistant 气泡，用于最终回复
-            let followUpLoadingMessage = ChatMessage(
+            var followUpLoadingMessage = ChatMessage(
                 role: .assistant,
                 content: "",
                 requestedAt: Date()
             )
-            updatedMessages.append(followUpLoadingMessage)
+            applyResponseAttemptMetadata(activeAttemptMetadata, to: &followUpLoadingMessage)
+            updatedMessages = insertingResponseAttemptMessages(
+                blockingResultMessages + nonBlockingResultsForFollowUp + [followUpLoadingMessage],
+                afterAttemptOf: toolCallMessageID,
+                in: updatedMessages
+            )
             self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             updateRequestLoadingMessageID(followUpLoadingMessage.id, for: currentSessionID)
 
@@ -5498,6 +5510,9 @@ public class ChatService {
             if let newMetrics = newMessage.responseMetrics {
                 targetMessage.responseMetrics = newMetrics
             }
+            targetMessage.responseGroupID = newMessage.responseGroupID ?? targetMessage.responseGroupID
+            targetMessage.responseAttemptID = newMessage.responseAttemptID ?? targetMessage.responseAttemptID
+            targetMessage.responseAttemptIndex = newMessage.responseAttemptIndex ?? targetMessage.responseAttemptIndex
             
             messages[targetIndex] = targetMessage
             
@@ -5534,7 +5549,11 @@ public class ChatService {
                 imageFileNames: newMessage.imageFileNames ?? messages[index].imageFileNames,
                 fileFileNames: newMessage.fileFileNames ?? messages[index].fileFileNames,
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
-                responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
+                responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics,
+                responseGroupID: newMessage.responseGroupID ?? messages[index].responseGroupID,
+                responseAttemptID: newMessage.responseAttemptID ?? messages[index].responseAttemptID,
+                responseAttemptIndex: newMessage.responseAttemptIndex ?? messages[index].responseAttemptIndex,
+                selectedResponseAttemptID: newMessage.selectedResponseAttemptID ?? messages[index].selectedResponseAttemptID
             )
             persistAndPublishMessages(messages, for: sessionID)
         }
@@ -6506,7 +6525,7 @@ public class ChatService {
             return
         }
         guard !session.isWorldbookContextIsolationActive else { return }
-        let messagesSnapshot = messagesSnapshot(for: sessionID)
+        let messagesSnapshot = ChatResponseAttemptSupport.visibleMessages(from: messagesSnapshot(for: sessionID))
         Task { [weak self] in
             await self?.performConversationMemoryUpdateIfNeeded(
                 for: sessionID,

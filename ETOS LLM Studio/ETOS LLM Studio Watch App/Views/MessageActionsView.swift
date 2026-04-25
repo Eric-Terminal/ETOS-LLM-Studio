@@ -89,6 +89,26 @@ struct MessageActionsView: View {
     @State private var jumpError: String?
     @ObservedObject private var ttsManager = TTSManager.shared
 
+    private var responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? {
+        ChatResponseAttemptSupport.versionInfo(for: message, in: allMessages)
+    }
+
+    private var hasDisplayVersions: Bool {
+        responseAttemptVersionInfo != nil || message.hasMultipleVersions
+    }
+
+    private var displayVersionCount: Int {
+        responseAttemptVersionInfo?.totalCount ?? message.getAllVersions().count
+    }
+
+    private var displayCurrentVersionIndex: Int {
+        responseAttemptVersionInfo?.currentIndex ?? message.getCurrentVersionIndex()
+    }
+
+    private var visibleAllMessages: [ChatMessage] {
+        ChatResponseAttemptSupport.visibleMessages(from: allMessages)
+    }
+
     // MARK: - 视图主体
     
     var body: some View {
@@ -164,7 +184,7 @@ struct MessageActionsView: View {
                 NavigationLink {
                     ChatExportFormatsView(
                         session: session,
-                        messages: allMessages,
+                        messages: visibleAllMessages,
                         upToMessageID: nil
                     )
                 } label: {
@@ -174,7 +194,7 @@ struct MessageActionsView: View {
                 NavigationLink {
                     ChatExportFormatsView(
                         session: session,
-                        messages: allMessages,
+                        messages: visibleAllMessages,
                         upToMessageID: message.id
                     )
                 } label: {
@@ -183,23 +203,23 @@ struct MessageActionsView: View {
             }
             
             // 版本管理菜单
-            if message.hasMultipleVersions {
+            if hasDisplayVersions {
                 Section("版本管理") {
                     Picker("选择版本", selection: Binding(
-                        get: { message.getCurrentVersionIndex() },
+                        get: { displayCurrentVersionIndex },
                         set: { newIndex in
                             onSwitchVersion(newIndex)
                             dismiss()
                         }
                     )) {
-                        ForEach(0..<message.getAllVersions().count, id: \.self) { index in
+                        ForEach(0..<displayVersionCount, id: \.self) { index in
                             Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
                                 .tag(index)
                         }
                     }
                     .pickerStyle(.navigationLink)
                     
-                    if message.getAllVersions().count > 1 {
+                    if displayVersionCount > 1 {
                         Button(role: .destructive) {
                             showDeleteVersionConfirm = true
                         } label: {
@@ -213,7 +233,7 @@ struct MessageActionsView: View {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Label(message.hasMultipleVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
+                    Label(hasDisplayVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
                 }
             }
             
@@ -228,7 +248,7 @@ struct MessageActionsView: View {
                     }
                 }
                 
-                if message.hasMultipleVersions {
+                if hasDisplayVersions {
                     VStack(alignment: .leading) {
                         Text("版本信息")
                             .etFont(.caption)
@@ -236,8 +256,8 @@ struct MessageActionsView: View {
                         Text(
                             String(
                                 format: NSLocalizedString("当前显示第 %d / %d 版", comment: ""),
-                                message.getCurrentVersionIndex() + 1,
-                                message.getAllVersions().count
+                                displayCurrentVersionIndex + 1,
+                                displayVersionCount
                             )
                         )
                             .etFont(.caption2)
@@ -339,7 +359,7 @@ struct MessageActionsView: View {
             }
             Button("取消", role: .cancel) { }
         } message: {
-            Text(message.hasMultipleVersions ? "删除后将无法恢复这条消息的所有版本。" : "删除后无法恢复这条消息。")
+            Text(hasDisplayVersions ? "删除后将无法恢复这条消息的所有版本。" : "删除后无法恢复这条消息。")
         }
         .alert("确认删除当前版本", isPresented: $showDeleteVersionConfirm) {
             Button("删除", role: .destructive) {
