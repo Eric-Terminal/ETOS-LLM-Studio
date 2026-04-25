@@ -32,6 +32,7 @@ public extension AchievementID {
     static let steadyCatch: Self = "steadyCatch"
     static let languageLubrication: Self = "languageLubrication"
     static let forbiddenPlace: Self = "forbiddenPlace"
+    static let privacyReader: Self = "privacyReader"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -78,6 +79,13 @@ public enum AchievementCatalog {
             sentenceKey: "连续点击7次，触发了某种不可名状的机制。",
             triggerNoteKey: "触发条件：连续点击版本号 7 次",
             systemImageName: "lock.open"
+        ),
+        AchievementDefinition(
+            id: .privacyReader,
+            titleKey: "我真的读了",
+            sentenceKey: "法务部门在某处落下了一滴感动的泪水",
+            triggerNoteKey: "触发条件：打开隐私政策链接",
+            systemImageName: "doc.text.magnifyingglass"
         )
     ]
 }

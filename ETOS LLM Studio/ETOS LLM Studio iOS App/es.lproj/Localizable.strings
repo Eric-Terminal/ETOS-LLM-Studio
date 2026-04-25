@@ -1630,3 +1630,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "不该来的地方" = "Un lugar al que no debías venir";
 "连续点击7次，触发了某种不可名状的机制。" = "Tocaste siete veces seguidas y activaste algún mecanismo innombrable.";
 "触发条件：连续点击版本号 7 次" = "Condición de activación: tocar el número de versión 7 veces seguidas";
+"我真的读了" = "De verdad lo leí";
+"法务部门在某处落下了一滴感动的泪水" = "En algún lugar, Legal derramó una lágrima de emoción.";
+"触发条件：打开隐私政策链接" = "Condición de activación: abrir el enlace de la política de privacidad";

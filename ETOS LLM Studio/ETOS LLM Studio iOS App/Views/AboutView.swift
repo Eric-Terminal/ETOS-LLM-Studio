@@ -138,6 +138,11 @@ struct AboutView: View {
                 LabeledContent("开源协议", value: "GPLv3")
                 Button {
                     openURL(privacyURL)
+                    Task {
+                        let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .privacyReader)
+                        guard !hasUnlocked else { return }
+                        await AchievementCenter.shared.unlock(id: .privacyReader)
+                    }
                 } label: {
                     LabeledContent("隐私政策") {
                         Text(privacyHost)

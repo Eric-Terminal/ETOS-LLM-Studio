@@ -235,6 +235,15 @@ struct AchievementCenterTests {
         #expect(definition?.triggerNoteKey == "触发条件：连续点击版本号 7 次")
     }
 
+    @Test("我真的读了成就定义已登记")
+    func privacyReaderDefinitionIsRegistered() {
+        let definition = AchievementCatalog.definitions.first { $0.id == .privacyReader }
+
+        #expect(definition?.titleKey == "我真的读了")
+        #expect(definition?.sentenceKey == "法务部门在某处落下了一滴感动的泪水")
+        #expect(definition?.triggerNoteKey == "触发条件：打开隐私政策链接")
+    }
+
     @Test("稳稳接住触发词支持中文与英文")
     func steadyCatchTriggerMatchesExpectedKeywords() {
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "这一回我会稳稳的接住你。"))

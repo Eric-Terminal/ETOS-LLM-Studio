@@ -1630,3 +1630,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "不该来的地方" = "Un endroit où il ne fallait pas venir";
 "连续点击7次，触发了某种不可名状的机制。" = "Sept taps d'affilée ont déclenché un mécanisme innommable.";
 "触发条件：连续点击版本号 7 次" = "Condition de déclenchement : toucher le numéro de version 7 fois de suite";
+"我真的读了" = "Je l'ai vraiment lu";
+"法务部门在某处落下了一滴感动的泪水" = "Quelque part, le service juridique a versé une larme émue.";
+"触发条件：打开隐私政策链接" = "Condition de déclenchement : ouvrir le lien de la politique de confidentialité";

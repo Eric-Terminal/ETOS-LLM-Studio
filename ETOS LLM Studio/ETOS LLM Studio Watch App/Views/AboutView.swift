@@ -152,6 +152,11 @@ struct AboutView: View {
                     
                     Button {
                         webAuthLauncher.open(url: privacyURL)
+                        Task {
+                            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .privacyReader)
+                            guard !hasUnlocked else { return }
+                            await AchievementCenter.shared.unlock(id: .privacyReader)
+                        }
                     } label: {
                         HStack {
                             Text("隐私政策")
