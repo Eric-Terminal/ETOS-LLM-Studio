@@ -684,7 +684,9 @@ struct ContentView: View {
         let bubble = ChatBubble(
             messageState: state,
             preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
+            preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
             isReasoningExpanded: isReasoningExpandedBinding,
+            isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
             isToolCallsExpanded: isToolCallsExpandedBinding,
             enableMarkdown: viewModel.enableMarkdown,
             enableBackground: viewModel.enableBackground,

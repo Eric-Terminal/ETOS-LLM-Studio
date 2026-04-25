@@ -90,7 +90,9 @@ private struct BubbleCornerShape: Shape {
 struct ChatBubble: View {
     @ObservedObject var messageState: ChatMessageRenderState
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
+    let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
     @Binding var isReasoningExpanded: Bool
+    let isReasoningAutoPreview: Bool
     @Binding var isToolCallsExpanded: Bool
     let enableMarkdown: Bool
     let enableBackground: Bool
@@ -128,7 +130,9 @@ struct ChatBubble: View {
     init(
         messageState: ChatMessageRenderState,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
+        preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         isReasoningExpanded: Binding<Bool>,
+        isReasoningAutoPreview: Bool = false,
         isToolCallsExpanded: Binding<Bool>,
         enableMarkdown: Bool,
         enableBackground: Bool,
@@ -149,7 +153,9 @@ struct ChatBubble: View {
     ) {
         self.messageState = messageState
         self.preparedMarkdownPayload = preparedMarkdownPayload
+        self.preparedReasoningMarkdownPayload = preparedReasoningMarkdownPayload
         self._isReasoningExpanded = isReasoningExpanded
+        self.isReasoningAutoPreview = isReasoningAutoPreview
         self._isToolCallsExpanded = isToolCallsExpanded
         self.enableMarkdown = enableMarkdown
         self.enableBackground = enableBackground
@@ -881,11 +887,16 @@ struct ChatBubble: View {
                !reasoning.isEmpty {
                 ReasoningDisclosureView(
                     reasoning: reasoning,
+                    preparedReasoningContent: preparedReasoningMarkdownPayload,
                     isExpanded: $isReasoningExpanded,
+                    isPreviewing: isReasoningAutoPreview,
                     isOutgoing: isOutgoing,
                     usesNoBubbleStyle: usesNoBubbleStyle,
                     isShimmering: shouldShimmerReasoningHeader,
                     customTextColor: customTextColorOverride,
+                    enableMarkdown: enableMarkdown,
+                    enableAdvancedRenderer: enableAdvancedRenderer,
+                    enableMathRendering: enableMathRendering,
                     reasoningStartedAt: reasoningStartedAt,
                     reasoningCompletedAt: reasoningCompletedAt,
                     reasoningSummary: message.responseMetrics?.reasoningSummary
@@ -971,10 +982,15 @@ struct ChatBubble: View {
                     ) {
                         TimelineReasoningStepView(
                             reasoning: trimmedReasoning,
+                            preparedReasoningContent: preparedReasoningMarkdownPayload,
                             isExpanded: $isReasoningExpanded,
+                            isPreviewing: isReasoningAutoPreview,
                             isShimmering: shouldShimmerReasoningHeader,
                             customTextColor: customTextColorOverride,
                             usesNoBubbleStyle: usesNoBubbleStyle,
+                            enableMarkdown: enableMarkdown,
+                            enableAdvancedRenderer: enableAdvancedRenderer,
+                            enableMathRendering: enableMathRendering,
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
                             reasoningSummary: message.responseMetrics?.reasoningSummary
@@ -1896,10 +1912,15 @@ private struct AssistantTimelineLineShape: Shape {
 
 private struct TimelineReasoningStepView: View {
     let reasoning: String
+    let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
     @Binding var isExpanded: Bool
+    let isPreviewing: Bool
     let isShimmering: Bool
     let customTextColor: Color?
     let usesNoBubbleStyle: Bool
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
     let reasoningStartedAt: Date?
     let reasoningCompletedAt: Date?
     let reasoningSummary: String?
@@ -1908,7 +1929,11 @@ private struct TimelineReasoningStepView: View {
         VStack(alignment: .leading, spacing: 7) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+                    if isPreviewing {
+                        isExpanded = true
+                    } else {
+                        isExpanded.toggle()
+                    }
                 }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -1917,23 +1942,43 @@ private struct TimelineReasoningStepView: View {
                     Spacer(minLength: 6)
                     Image(systemName: "chevron.right")
                         .etFont(.system(size: 12, weight: .semibold))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .rotationEffect(.degrees(isFullyExpanded ? 90 : 0))
                         .foregroundStyle(secondaryColor)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            if isExpanded {
-                Text(reasoning)
-                    .etFont(.subheadline, sampleText: reasoning)
-                    .foregroundStyle(secondaryColor)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity)
+            if shouldShowContent {
+                ReasoningPreviewContent(
+                    isPreviewing: isPreviewing,
+                    maxHeight: 118,
+                    contentID: reasoning
+                ) {
+                    ReasoningMarkdownContentView(
+                        reasoning: reasoning,
+                        preparedReasoningContent: preparedReasoningContent,
+                        enableMarkdown: enableMarkdown,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableMathRendering,
+                        isOutgoing: false,
+                        textColor: secondaryColor,
+                        font: .subheadline
+                    )
+                }
+                .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isPreviewing)
+    }
+
+    private var isFullyExpanded: Bool {
+        isExpanded && !isPreviewing
+    }
+
+    private var shouldShowContent: Bool {
+        isExpanded || isPreviewing
     }
 
     private var titleColor: Color {
@@ -1984,6 +2029,12 @@ private struct TimelineReasoningStepView: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        if reasoningCompletedAt == nil,
+           let thinkingTitle = preparedReasoningContent?.thinkingTitle,
+           !thinkingTitle.isEmpty {
+            return thinkingTitle
+        }
+
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
             baseTitle = "已经思考\(elapsedSeconds)秒"
@@ -2061,28 +2112,146 @@ private struct TimelineToolCallStepContent: View {
     }
 }
 
+private enum ReasoningPreviewScrollTarget {
+    case bottom
+}
+
+private struct ReasoningPreviewContent<Content: View>: View {
+    let isPreviewing: Bool
+    let maxHeight: CGFloat
+    let contentID: String
+    private let content: Content
+
+    init(
+        isPreviewing: Bool,
+        maxHeight: CGFloat,
+        contentID: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.isPreviewing = isPreviewing
+        self.maxHeight = maxHeight
+        self.contentID = contentID
+        self.content = content()
+    }
+
+    var body: some View {
+        if isPreviewing {
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        content
+                        Color.clear
+                            .frame(height: 1)
+                            .id(ReasoningPreviewScrollTarget.bottom)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: maxHeight)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.16),
+                            .init(color: .black, location: 0.84),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .onAppear {
+                    scrollToBottom(with: proxy, animated: false)
+                }
+                .onChange(of: contentID) {
+                    scrollToBottom(with: proxy, animated: true)
+                }
+            }
+        } else {
+            content
+        }
+    }
+
+    private func scrollToBottom(with proxy: ScrollViewProxy, animated: Bool) {
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.16)) {
+                    proxy.scrollTo(ReasoningPreviewScrollTarget.bottom, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(ReasoningPreviewScrollTarget.bottom, anchor: .bottom)
+            }
+        }
+    }
+}
+
+private struct ReasoningMarkdownContentView: View {
+    let reasoning: String
+    let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
+    let isOutgoing: Bool
+    let textColor: Color
+    let font: Font
+
+    var body: some View {
+        if enableMarkdown,
+           let preparedReasoningContent,
+           preparedReasoningContent.sourceText == reasoning {
+            ETAdvancedMarkdownRenderer(
+                content: reasoning,
+                preparedContent: preparedReasoningContent,
+                enableMarkdown: true,
+                isOutgoing: isOutgoing,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableMathRendering,
+                customTextColor: textColor
+            )
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(reasoning)
+                .etFont(font, sampleText: reasoning)
+                .foregroundStyle(textColor)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 // MARK: - 思考过程折叠视图（性能优化）
 
 /// 独立的思考过程视图，避免长文本导致父视图重复布局
 /// 使用 Equatable 优化：只有在 reasoning 或 isExpanded 变化时才重新渲染
 struct ReasoningDisclosureView: View, Equatable {
     let reasoning: String
+    let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
     @Binding var isExpanded: Bool
+    let isPreviewing: Bool
     let isOutgoing: Bool
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
     let reasoningStartedAt: Date?
     let reasoningCompletedAt: Date?
     let reasoningSummary: String?
     
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
+            && lhs.preparedReasoningContent == rhs.preparedReasoningContent
             && lhs.isExpanded == rhs.isExpanded
+            && lhs.isPreviewing == rhs.isPreviewing
             && lhs.isOutgoing == rhs.isOutgoing
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
             && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
+            && lhs.enableMarkdown == rhs.enableMarkdown
+            && lhs.enableAdvancedRenderer == rhs.enableAdvancedRenderer
+            && lhs.enableMathRendering == rhs.enableMathRendering
             && lhs.reasoningStartedAt == rhs.reasoningStartedAt
             && lhs.reasoningCompletedAt == rhs.reasoningCompletedAt
             && lhs.reasoningSummary == rhs.reasoningSummary
@@ -2106,7 +2275,11 @@ struct ReasoningDisclosureView: View, Equatable {
             )
             // 点击区域：标题行
             Button {
-                isExpanded.toggle()
+                if isPreviewing {
+                    isExpanded = true
+                } else {
+                    isExpanded.toggle()
+                }
             } label: {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "brain.head.profile")
@@ -2118,7 +2291,7 @@ struct ReasoningDisclosureView: View, Equatable {
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .etFont(.system(size: 12, weight: .semibold))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .rotationEffect(.degrees(isFullyExpanded ? 90 : 0))
                         .foregroundStyle(baseColor)
                         .padding(.top, 2)
                 }
@@ -2127,27 +2300,45 @@ struct ReasoningDisclosureView: View, Equatable {
             }
             .buttonStyle(.plain)
             
-            // 内容区域：只在展开时渲染
-            if isExpanded {
-                Text(reasoning)
-                    .etFont(.subheadline, sampleText: reasoning)
-                    .foregroundStyle(
-                        resolvedSecondaryTextColor(
-                            default: usesNoBubbleStyle
-                                ? Color.secondary
-                                : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary),
-                            customTextColor: customTextColor,
-                            customOpacity: 0.85
-                        )
+            if shouldShowContent {
+                let contentColor = resolvedSecondaryTextColor(
+                    default: usesNoBubbleStyle
+                        ? Color.secondary
+                        : (isOutgoing ? Color.white.opacity(0.85) : Color.secondary),
+                    customTextColor: customTextColor,
+                    customOpacity: 0.85
+                )
+                ReasoningPreviewContent(
+                    isPreviewing: isPreviewing,
+                    maxHeight: 118,
+                    contentID: reasoning
+                ) {
+                    ReasoningMarkdownContentView(
+                        reasoning: reasoning,
+                        preparedReasoningContent: preparedReasoningContent,
+                        enableMarkdown: enableMarkdown,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableMathRendering,
+                        isOutgoing: isOutgoing,
+                        textColor: contentColor,
+                        font: .subheadline
                     )
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
-                    .transition(.opacity)
+                }
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isPreviewing)
+    }
+
+    private var isFullyExpanded: Bool {
+        isExpanded && !isPreviewing
+    }
+
+    private var shouldShowContent: Bool {
+        isExpanded || isPreviewing
     }
 
     private func resolvedTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
@@ -2205,6 +2396,12 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        if reasoningCompletedAt == nil,
+           let thinkingTitle = preparedReasoningContent?.thinkingTitle,
+           !thinkingTitle.isEmpty {
+            return thinkingTitle
+        }
+
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
             baseTitle = "已经思考\(elapsedSeconds)秒"

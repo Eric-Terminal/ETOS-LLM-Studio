@@ -76,7 +76,9 @@ struct ChatBubble: View {
     
     @ObservedObject var messageState: ChatMessageRenderState
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
+    let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
     @Binding var isReasoningExpanded: Bool
+    let isReasoningAutoPreview: Bool
     @Binding var isToolCallsExpanded: Bool
     
     let enableMarkdown: Bool
@@ -116,7 +118,9 @@ struct ChatBubble: View {
     init(
         messageState: ChatMessageRenderState,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
+        preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         isReasoningExpanded: Binding<Bool>,
+        isReasoningAutoPreview: Bool = false,
         isToolCallsExpanded: Binding<Bool>,
         enableMarkdown: Bool,
         enableBackground: Bool,
@@ -136,7 +140,9 @@ struct ChatBubble: View {
     ) {
         self.messageState = messageState
         self.preparedMarkdownPayload = preparedMarkdownPayload
+        self.preparedReasoningMarkdownPayload = preparedReasoningMarkdownPayload
         self._isReasoningExpanded = isReasoningExpanded
+        self.isReasoningAutoPreview = isReasoningAutoPreview
         self._isToolCallsExpanded = isToolCallsExpanded
         self.enableMarkdown = enableMarkdown
         self.enableBackground = enableBackground
@@ -826,9 +832,14 @@ struct ChatBubble: View {
                     ) {
                         WatchTimelineReasoningStepView(
                             reasoning: trimmedReasoning,
+                            preparedReasoningContent: preparedReasoningMarkdownPayload,
                             isExpanded: $isReasoningExpanded,
+                            isPreviewing: isReasoningAutoPreview,
                             isShimmering: shouldShimmerReasoningHeader,
                             customTextColor: customTextColorOverride,
+                            enableMarkdown: enableMarkdown,
+                            enableAdvancedRenderer: enableAdvancedRenderer,
+                            enableMathRendering: enableMathRendering,
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
                             fallbackReasoningDuration: fallbackReasoningDuration,
@@ -1368,7 +1379,11 @@ struct ChatBubble: View {
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
-                    isReasoningExpanded.toggle()
+                    if isReasoningAutoPreview {
+                        isReasoningExpanded = true
+                    } else {
+                        isReasoningExpanded.toggle()
+                    }
                 }
             }) {
                 HStack(alignment: .top, spacing: 6) {
@@ -1387,7 +1402,7 @@ struct ChatBubble: View {
                     }
                     .layoutPriority(1)
                     Spacer(minLength: 4)
-                    Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isReasoningExpanded && !isReasoningAutoPreview ? "chevron.down" : "chevron.right")
                         .etFont(.caption)
                         .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                         .padding(.top, 2)
@@ -1396,16 +1411,28 @@ struct ChatBubble: View {
             }
             .buttonStyle(.plain)
 
-            if isReasoningExpanded {
-                Text(reasoning)
-                    .etFont(.footnote, sampleText: reasoning)
-                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if isReasoningExpanded || isReasoningAutoPreview {
+                let contentColor = resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
+                WatchReasoningPreviewContent(
+                    isPreviewing: isReasoningAutoPreview,
+                    maxHeight: 86,
+                    contentID: reasoning
+                ) {
+                    WatchReasoningMarkdownContentView(
+                        reasoning: reasoning,
+                        preparedReasoningContent: preparedReasoningMarkdownPayload,
+                        enableMarkdown: enableMarkdown,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableMathRendering,
+                        textColor: contentColor,
+                        font: .footnote,
+                        onCodeBlockHeaderTap: onCodeBlockHeaderTap
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, isReasoningExpanded ? 5 : 0)
+        .padding(.bottom, (isReasoningExpanded || isReasoningAutoPreview) ? 5 : 0)
     }
 
     @ViewBuilder
@@ -1452,6 +1479,12 @@ struct ChatBubble: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        if reasoningCompletedAt == nil,
+           let thinkingTitle = preparedReasoningMarkdownPayload?.thinkingTitle,
+           !thinkingTitle.isEmpty {
+            return thinkingTitle
+        }
+
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
             baseTitle = "已经思考\(elapsedSeconds)秒"
@@ -2099,11 +2132,123 @@ private struct WatchAssistantTimelineLineShape: Shape {
     }
 }
 
+private enum WatchReasoningPreviewScrollTarget {
+    case bottom
+}
+
+private struct WatchReasoningPreviewContent<Content: View>: View {
+    let isPreviewing: Bool
+    let maxHeight: CGFloat
+    let contentID: String
+    private let content: Content
+
+    init(
+        isPreviewing: Bool,
+        maxHeight: CGFloat,
+        contentID: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.isPreviewing = isPreviewing
+        self.maxHeight = maxHeight
+        self.contentID = contentID
+        self.content = content()
+    }
+
+    var body: some View {
+        if isPreviewing {
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        content
+                        Color.clear
+                            .frame(height: 1)
+                            .id(WatchReasoningPreviewScrollTarget.bottom)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: maxHeight)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.16),
+                            .init(color: .black, location: 0.84),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .onAppear {
+                    scrollToBottom(with: proxy, animated: false)
+                }
+                .onChange(of: contentID) {
+                    scrollToBottom(with: proxy, animated: true)
+                }
+            }
+        } else {
+            content
+        }
+    }
+
+    private func scrollToBottom(with proxy: ScrollViewProxy, animated: Bool) {
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.16)) {
+                    proxy.scrollTo(WatchReasoningPreviewScrollTarget.bottom, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(WatchReasoningPreviewScrollTarget.bottom, anchor: .bottom)
+            }
+        }
+    }
+}
+
+private struct WatchReasoningMarkdownContentView: View {
+    let reasoning: String
+    let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
+    let textColor: Color
+    let font: Font
+    let onCodeBlockHeaderTap: ((String) -> Void)?
+
+    var body: some View {
+        if enableMarkdown,
+           let preparedReasoningContent,
+           preparedReasoningContent.sourceText == reasoning {
+            ETAdvancedMarkdownRenderer(
+                content: reasoning,
+                preparedContent: preparedReasoningContent,
+                enableMarkdown: true,
+                isOutgoing: false,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableMathRendering,
+                customTextColor: textColor,
+                onCodeBlockHeaderTap: onCodeBlockHeaderTap
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(reasoning)
+                .etFont(font, sampleText: reasoning)
+                .foregroundStyle(textColor)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 private struct WatchTimelineReasoningStepView: View {
     let reasoning: String
+    let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
     @Binding var isExpanded: Bool
+    let isPreviewing: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+    let enableMathRendering: Bool
     let reasoningStartedAt: Date?
     let reasoningCompletedAt: Date?
     let fallbackReasoningDuration: TimeInterval?
@@ -2113,14 +2258,18 @@ private struct WatchTimelineReasoningStepView: View {
         VStack(alignment: .leading, spacing: 5) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+                    if isPreviewing {
+                        isExpanded = true
+                    } else {
+                        isExpanded.toggle()
+                    }
                 }
             } label: {
                 HStack(alignment: .center, spacing: 4) {
                     headerTitleView
                         .layoutPriority(1)
                     Spacer(minLength: 4)
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isFullyExpanded ? "chevron.down" : "chevron.right")
                         .etFont(.caption2.weight(.semibold))
                         .foregroundStyle(secondaryColor)
                 }
@@ -2128,15 +2277,36 @@ private struct WatchTimelineReasoningStepView: View {
             }
             .buttonStyle(.plain)
 
-            if isExpanded {
-                Text(reasoning)
-                    .etFont(.footnote, sampleText: reasoning)
-                    .foregroundStyle(secondaryColor)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity)
+            if shouldShowContent {
+                WatchReasoningPreviewContent(
+                    isPreviewing: isPreviewing,
+                    maxHeight: 86,
+                    contentID: reasoning
+                ) {
+                    WatchReasoningMarkdownContentView(
+                        reasoning: reasoning,
+                        preparedReasoningContent: preparedReasoningContent,
+                        enableMarkdown: enableMarkdown,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableMathRendering,
+                        textColor: secondaryColor,
+                        font: .footnote,
+                        onCodeBlockHeaderTap: nil
+                    )
+                }
+                .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isPreviewing)
+    }
+
+    private var isFullyExpanded: Bool {
+        isExpanded && !isPreviewing
+    }
+
+    private var shouldShowContent: Bool {
+        isExpanded || isPreviewing
     }
 
     private var titleColor: Color {
@@ -2178,6 +2348,12 @@ private struct WatchTimelineReasoningStepView: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
+        if reasoningCompletedAt == nil,
+           let thinkingTitle = preparedReasoningContent?.thinkingTitle,
+           !thinkingTitle.isEmpty {
+            return thinkingTitle
+        }
+
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
             baseTitle = "已经思考\(elapsedSeconds)秒"

@@ -38,6 +38,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var messages: [ChatMessageRenderState] = []
     @Published private(set) var displayMessages: [ChatMessageRenderState] = []
     @Published private(set) var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
+    @Published private(set) var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
     private(set) var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
@@ -74,6 +75,7 @@ final class ChatViewModel: ObservableObject {
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    private var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     
     // MARK: - Attachment State
     
@@ -1697,6 +1699,7 @@ final class ChatViewModel: ObservableObject {
             }
             state.update(with: message)
             scheduleMarkdownPreparationIfNeeded(for: message)
+            scheduleReasoningMarkdownPreparationIfNeeded(for: message)
             newStates.append(state)
         }
 
@@ -1731,15 +1734,48 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    private func scheduleReasoningMarkdownPreparationIfNeeded(for message: ChatMessage) {
+        let messageID = message.id
+        guard let sourceText = message.reasoningContent,
+              !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            preparedReasoningMarkdownByMessageID.removeValue(forKey: messageID)
+            reasoningMarkdownPrepareTasks[messageID]?.cancel()
+            reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
+            return
+        }
+
+        if preparedReasoningMarkdownByMessageID[messageID]?.sourceText == sourceText {
+            return
+        }
+
+        reasoningMarkdownPrepareTasks[messageID]?.cancel()
+        reasoningMarkdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText] in
+            let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: sourceText)
+            guard !Task.isCancelled, let self else { return }
+            guard self.messageStateByID[messageID]?.message.reasoningContent == sourceText else { return }
+            self.preparedReasoningMarkdownByMessageID[messageID] = prepared
+            self.reasoningMarkdownPrepareTasks[messageID] = nil
+        }
+    }
+
     private func cleanupPreparedMarkdownCache(validIDs: Set<UUID>) {
         if !preparedMarkdownByMessageID.isEmpty {
             preparedMarkdownByMessageID = preparedMarkdownByMessageID.filter { validIDs.contains($0.key) }
+        }
+        if !preparedReasoningMarkdownByMessageID.isEmpty {
+            preparedReasoningMarkdownByMessageID = preparedReasoningMarkdownByMessageID.filter { validIDs.contains($0.key) }
         }
         if !markdownPrepareTasks.isEmpty {
             for (messageID, task) in markdownPrepareTasks where !validIDs.contains(messageID) {
                 task.cancel()
             }
             markdownPrepareTasks = markdownPrepareTasks.filter { validIDs.contains($0.key) }
+        }
+        if !reasoningMarkdownPrepareTasks.isEmpty {
+            for (messageID, task) in reasoningMarkdownPrepareTasks where !validIDs.contains(messageID) {
+                task.cancel()
+            }
+            reasoningMarkdownPrepareTasks = reasoningMarkdownPrepareTasks.filter { validIDs.contains($0.key) }
         }
     }
     
@@ -1852,6 +1888,7 @@ final class ChatViewModel: ObservableObject {
             if visibleIDs.contains(newMessage.id) {
                 messageStateByID[newMessage.id]?.update(with: newMessage)
                 scheduleMarkdownPreparationIfNeeded(for: newMessage)
+                scheduleReasoningMarkdownPreparationIfNeeded(for: newMessage)
             }
 
             let oldResultIDs = toolCallResultIDs(for: oldMessage)
@@ -1912,6 +1949,10 @@ final class ChatViewModel: ObservableObject {
 
     func hasAutoOpenedPendingToolCall(_ toolCallID: String) -> Bool {
         autoOpenedPendingToolCallIDs.contains(toolCallID)
+    }
+
+    func isAutoReasoningPreview(for messageID: UUID) -> Bool {
+        autoReasoningPreviewMessageIDs.contains(messageID)
     }
 
     func setReasoningExpanded(_ isExpanded: Bool, for messageID: UUID) {
@@ -1990,7 +2031,7 @@ final class ChatViewModel: ObservableObject {
         if isSendingMessage, hasReasoning, !hasBodyContent, !hasToolCalls {
             return true
         }
-        if (hasBodyContent || hasToolCalls), wasAutoExpanded {
+        if (!isSendingMessage || hasBodyContent || hasToolCalls), wasAutoExpanded {
             return false
         }
         return nil
@@ -2531,6 +2572,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let mathSegments: [ETMathContentSegment]
     let containsMathContent: Bool
     let containsMermaidContent: Bool
+    let thinkingTitle: String?
 
     nonisolated static func build(from sourceText: String) async -> ETPreparedMarkdownRenderPayload {
         let normalizedText = normalizedMarkdownForStreaming(sourceText)
@@ -2555,7 +2597,8 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
             ),
             mathSegments: mathSegments,
             containsMathContent: containsMath,
-            containsMermaidContent: containsMermaid
+            containsMermaidContent: containsMermaid,
+            thinkingTitle: extractThinkingTitle(from: normalizedText)
         )
     }
 
@@ -2612,6 +2655,35 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
             normalizedText += "\n" + closingFence
         }
         return normalizedText
+    }
+
+    nonisolated private static func extractThinkingTitle(from text: String) -> String? {
+        for line in text.components(separatedBy: "\n").reversed() {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            if trimmed.hasPrefix("**"), trimmed.hasSuffix("**"), trimmed.count > 4 {
+                let start = trimmed.index(trimmed.startIndex, offsetBy: 2)
+                let end = trimmed.index(trimmed.endIndex, offsetBy: -2)
+                let title = trimmed[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !title.isEmpty {
+                    return title
+                }
+            }
+
+            let headingPrefix = trimmed.prefix { $0 == "#" }
+            if !headingPrefix.isEmpty,
+               headingPrefix.count <= 6,
+               trimmed.dropFirst(headingPrefix.count).first?.isWhitespace == true {
+                let title = trimmed
+                    .dropFirst(headingPrefix.count)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !title.isEmpty {
+                    return title
+                }
+            }
+        }
+        return nil
     }
 
     nonisolated private static func containsMermaidFence(in text: String) -> Bool {

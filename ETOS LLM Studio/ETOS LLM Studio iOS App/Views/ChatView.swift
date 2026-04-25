@@ -354,10 +354,12 @@ struct ChatView: View {
                                     ChatBubble(
                                         messageState: state,
                                         preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
+                                        preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
                                         isReasoningExpanded: Binding(
                                             get: { viewModel.reasoningExpandedState[message.id, default: false] },
                                             set: { viewModel.setReasoningExpanded($0, for: message.id) }
                                         ),
+                                        isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
                                         isToolCallsExpanded: Binding(
                                             get: { viewModel.toolCallsExpandedState[message.id, default: false] },
                                             set: { viewModel.toolCallsExpandedState[message.id] = $0 }
