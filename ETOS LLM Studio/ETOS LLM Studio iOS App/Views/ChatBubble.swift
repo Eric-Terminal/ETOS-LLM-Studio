@@ -3315,8 +3315,6 @@ private struct ShimmeringText: View {
     var bandWidthRatio: CGFloat = 0.6
     var bandHeightRatio: CGFloat = 1.6
 
-    @State private var isAnimating = false
-
     var body: some View {
         Text(text)
             .etFont(font)
@@ -3329,23 +3327,31 @@ private struct ShimmeringText: View {
                     let bandHeight = max(1, height * bandHeightRatio)
                     let startX = -bandWidth
                     let endX = width + bandWidth
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .clear, location: 0),
-                                    .init(color: highlightColor, location: 0.35),
-                                    .init(color: highlightColor, location: 0.65),
-                                    .init(color: .clear, location: 1)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                    let safeDuration = max(duration, 0.1)
+                    TimelineView(.animation) { timeline in
+                        let phase = timeline.date.timeIntervalSinceReferenceDate
+                            .truncatingRemainder(dividingBy: safeDuration) / safeDuration
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: highlightColor, location: 0.35),
+                                        .init(color: highlightColor, location: 0.65),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(width: bandWidth, height: bandHeight)
-                        .rotationEffect(.degrees(angle))
-                        .position(x: isAnimating ? endX : startX, y: height / 2)
-                        .blendMode(.screen)
+                            .frame(width: bandWidth, height: bandHeight)
+                            .rotationEffect(.degrees(angle))
+                            .position(
+                                x: startX + (endX - startX) * CGFloat(phase),
+                                y: height / 2
+                            )
+                            .blendMode(.screen)
+                    }
                 }
                 .mask(
                     Text(text)
@@ -3353,12 +3359,6 @@ private struct ShimmeringText: View {
                 )
                 .allowsHitTesting(false)
             )
-            .onAppear {
-                guard !isAnimating else { return }
-                withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
-                    isAnimating = true
-                }
-            }
     }
 }
 
