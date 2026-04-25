@@ -41,6 +41,10 @@ public extension AchievementID {
     static let unstoppableConversation: Self = "unstoppableConversation"
     static let nightOwl: Self = "nightOwl"
     static let memoryPurge: Self = "memoryPurge"
+    static let politeHuman: Self = "politeHuman"
+    static let schrodingerQuestion: Self = "schrodingerQuestion"
+    static let settingsResearcher: Self = "settingsResearcher"
+    static let conversationArchaeologist: Self = "conversationArchaeologist"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -150,13 +154,44 @@ public enum AchievementCatalog {
             sentenceKey: "删除了所有的记忆，AI毫无察觉。",
             triggerNoteKey: "触发条件：清空所有对话记录",
             systemImageName: "trash.slash"
+        ),
+        AchievementDefinition(
+            id: .politeHuman,
+            titleKey: "有礼貌的人类",
+            sentenceKey: "向一个不需要被感谢的程序道了谢。",
+            triggerNoteKey: "触发条件：对 AI 说「谢谢」",
+            systemImageName: "hands.clap"
+        ),
+        AchievementDefinition(
+            id: .schrodingerQuestion,
+            titleKey: "薛定谔的问题",
+            sentenceKey: "坚持认为第三次AI会给出不同答案。",
+            triggerNoteKey: "触发条件：连续重试同一条消息 3 次",
+            systemImageName: "questionmark.bubble"
+        ),
+        AchievementDefinition(
+            id: .settingsResearcher,
+            titleKey: "研究者",
+            sentenceKey: "在设置里找到了什么，或者什么都没找到。",
+            triggerNoteKey: "触发条件：在设置页面停留超过 5 分钟",
+            systemImageName: "magnifyingglass"
+        ),
+        AchievementDefinition(
+            id: .conversationArchaeologist,
+            titleKey: "考古学家",
+            sentenceKey: "翻到了最早的对话记录。",
+            triggerNoteKey: "触发条件：超过 300 个会话后翻到最后一页",
+            systemImageName: "archivebox"
         )
     ]
 }
 
-enum AchievementTriggerEvaluator {
+public enum AchievementTriggerEvaluator {
     static let longMessageCharacterThreshold = 1_000
     static let longConversationTurnThreshold = 50
+    static let repeatedRetryThreshold = 3
+    public static let settingsResearchDuration: TimeInterval = 5 * 60
+    public static let archaeologySessionThreshold = 300
 
     static func shouldUnlockSteadyCatch(from assistantReply: String) -> Bool {
         if assistantReply.contains("稳稳的接住你") {
@@ -184,6 +219,9 @@ enum AchievementTriggerEvaluator {
         calendar: Calendar = .current
     ) -> [AchievementID] {
         var ids: [AchievementID] = []
+        if shouldUnlockPoliteHuman(from: content) {
+            ids.append(.politeHuman)
+        }
         if shouldUnlockSingleCharacterMessage(from: content) {
             ids.append(.singleCharacterMessage)
         }
@@ -203,6 +241,10 @@ enum AchievementTriggerEvaluator {
         content.trimmingCharacters(in: .whitespacesAndNewlines).count == 1
     }
 
+    static func shouldUnlockPoliteHuman(from content: String) -> Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines) == "谢谢"
+    }
+
     static func shouldUnlockLongConfession(from content: String) -> Bool {
         content.trimmingCharacters(in: .whitespacesAndNewlines).count > longMessageCharacterThreshold
     }
@@ -214,6 +256,24 @@ enum AchievementTriggerEvaluator {
     static func shouldUnlockNightOwl(sentAt: Date, calendar: Calendar = .current) -> Bool {
         let hour = calendar.component(.hour, from: sentAt)
         return hour >= 3 && hour < 6
+    }
+
+    static func shouldUnlockSchrodingerQuestion(consecutiveRetryCount: Int) -> Bool {
+        consecutiveRetryCount >= repeatedRetryThreshold
+    }
+
+    public static func shouldUnlockSettingsResearcher(elapsedTime: TimeInterval) -> Bool {
+        elapsedTime >= settingsResearchDuration
+    }
+
+    public static func shouldUnlockConversationArchaeologist(
+        totalSessions: Int,
+        pageIndex: Int,
+        totalPages: Int
+    ) -> Bool {
+        totalSessions > archaeologySessionThreshold
+            && totalPages > 1
+            && pageIndex == totalPages - 1
     }
 
     private static func foldedText(_ text: String) -> String {

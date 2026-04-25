@@ -266,6 +266,10 @@ struct AchievementCenterTests {
         #expect(definitions[.unstoppableConversation]?.titleKey == "停不下来")
         #expect(definitions[.nightOwl]?.titleKey == "夜猫子")
         #expect(definitions[.memoryPurge]?.titleKey == "断舍离")
+        #expect(definitions[.politeHuman]?.titleKey == "有礼貌的人类")
+        #expect(definitions[.schrodingerQuestion]?.titleKey == "薛定谔的问题")
+        #expect(definitions[.settingsResearcher]?.titleKey == "研究者")
+        #expect(definitions[.conversationArchaeologist]?.titleKey == "考古学家")
     }
 
     @Test("稳稳接住触发词支持中文与英文")
@@ -294,6 +298,8 @@ struct AchievementCenterTests {
 
         #expect(AchievementTriggerEvaluator.shouldUnlockSingleCharacterMessage(from: " 嗯 "))
         #expect(AchievementTriggerEvaluator.shouldUnlockSingleCharacterMessage(from: "嗯嗯") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: " 谢谢 "))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "谢谢你") == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockLongConfession(from: String(repeating: "我", count: 1_001)))
         #expect(AchievementTriggerEvaluator.shouldUnlockLongConfession(from: String(repeating: "我", count: 1_000)) == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockUnstoppableConversation(userMessageCount: 51))
@@ -310,6 +316,17 @@ struct AchievementCenterTests {
         #expect(ids.contains(.longConfession))
         #expect(ids.contains(.unstoppableConversation))
         #expect(ids.contains(.nightOwl))
+    }
+
+    @Test("操作类成就触发器匹配预期条件")
+    func operationAchievementTriggersMatchExpectedConditions() {
+        #expect(AchievementTriggerEvaluator.shouldUnlockSchrodingerQuestion(consecutiveRetryCount: 3))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSchrodingerQuestion(consecutiveRetryCount: 2) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockSettingsResearcher(elapsedTime: 300))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSettingsResearcher(elapsedTime: 299) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 3, totalPages: 4))
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 300, pageIndex: 2, totalPages: 3) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 2, totalPages: 4) == false)
     }
 
     @Test("成就中心可以快速判断指定成就是否已解锁")

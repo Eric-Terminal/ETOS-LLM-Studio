@@ -69,6 +69,13 @@ public class ChatService {
     private static let conversationMemorySummaryMinIntervalMinutesKey = "conversationMemorySummaryMinIntervalMinutes"
     private static let conversationProfileDailyUpdateEnabledKey = "enableConversationProfileDailyUpdate"
     private static let reasoningSummaryEnabledKey = "enableReasoningSummary"
+    private struct RetryAchievementSignature: Equatable {
+        let sessionID: UUID
+        let content: String
+    }
+
+    private var consecutiveRetrySignature: RetryAchievementSignature?
+    private var consecutiveRetryCount = 0
     public static let systemSpeechRecognizerProviderID = UUID(uuidString: "2FB43D6B-8E40-4D65-9EA6-C13AB41D8A2E")!
     public static let systemSpeechRecognizerModelID = UUID(uuidString: "EE2F84DF-F640-47B8-9A83-BE438905C4F3")!
     public static let systemSpeechRecognizerRunnableModel: RunnableModel = {
@@ -2070,12 +2077,17 @@ public class ChatService {
         enableResponseSpeedMetrics: Bool = true,
         audioAttachment: AudioAttachment? = nil,
         imageAttachments: [ImageAttachment] = [],
-        fileAttachments: [FileAttachment] = []
+        fileAttachments: [FileAttachment] = [],
+        isRetry: Bool = false
     ) async {
         guard var currentSession = currentSessionSubject.value else {
             addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
             requestStatusSubject.send(.error)
             return
+        }
+
+        if !isRetry {
+            resetConsecutiveRetryTracking()
         }
 
         // 若当前模型具备生图能力，则主聊天输入直接切到生图请求通道。
@@ -3361,6 +3373,7 @@ public class ChatService {
             logger.warning("不支持重试 \(String(describing: message.role)) 类型的消息")
             return
         }
+        registerRetryAchievementAttempt(sessionID: currentSession.id, content: messageToSend.content)
         
         // 统一逻辑：保留 anchorUser 到被重试消息之间的内容作为历史版本，保留下一个 user 及之后的对话
         let tailStartIndex: Int?
@@ -3635,6 +3648,7 @@ public class ChatService {
         // 1. 找到最后一条用户消息
         guard let lastUserMessageIndex = messages.lastIndex(where: { $0.role == .user }) else { return }
         let lastUserMessage = messages[lastUserMessageIndex]
+        registerRetryAchievementAttempt(sessionID: currentSession.id, content: lastUserMessage.content)
         
         // 2. 将历史记录裁剪到这条消息之前
         let historyBeforeRetry = Array(messages.prefix(upTo: lastUserMessageIndex))
@@ -3691,7 +3705,8 @@ public class ChatService {
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             audioAttachment: audioAttachment,
             imageAttachments: imageAttachments,
-            fileAttachments: fileAttachments
+            fileAttachments: fileAttachments,
+            isRetry: true
         )
     }
 
@@ -5293,6 +5308,31 @@ public class ChatService {
             guard !hasUnlocked else { return }
             await AchievementCenter.shared.unlock(id: id)
         }
+    }
+
+    private func registerRetryAchievementAttempt(sessionID: UUID, content: String) {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else {
+            resetConsecutiveRetryTracking()
+            return
+        }
+
+        let signature = RetryAchievementSignature(sessionID: sessionID, content: trimmedContent)
+        if consecutiveRetrySignature == signature {
+            consecutiveRetryCount += 1
+        } else {
+            consecutiveRetrySignature = signature
+            consecutiveRetryCount = 1
+        }
+
+        if AchievementTriggerEvaluator.shouldUnlockSchrodingerQuestion(consecutiveRetryCount: consecutiveRetryCount) {
+            scheduleAchievementUnlockIfNeeded(.schrodingerQuestion)
+        }
+    }
+
+    private func resetConsecutiveRetryTracking() {
+        consecutiveRetrySignature = nil
+        consecutiveRetryCount = 0
     }
 
     private struct InlineImageExtractionResult {

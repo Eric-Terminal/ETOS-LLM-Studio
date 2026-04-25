@@ -913,6 +913,7 @@ private struct SessionFolderBrowserView: View {
     private func goToNextPage() {
         guard canGoToNextPage else { return }
         sessionPageIndex += 1
+        unlockConversationArchaeologistIfNeeded()
     }
 
     private func normalizeSearchResultPageIndex() {
@@ -941,6 +942,20 @@ private struct SessionFolderBrowserView: View {
             return
         }
         goToNextPage()
+    }
+
+    private func unlockConversationArchaeologistIfNeeded() {
+        guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
+            totalSessions: totalDirectSessionCount,
+            pageIndex: sessionPageIndex,
+            totalPages: totalSessionPages
+        ) else { return }
+
+        Task {
+            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .conversationArchaeologist)
+            guard !hasUnlocked else { return }
+            await AchievementCenter.shared.unlock(id: .conversationArchaeologist)
+        }
     }
 
     private func normalizedFolderID(of session: ChatSession) -> UUID? {

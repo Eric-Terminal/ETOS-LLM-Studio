@@ -9,6 +9,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 enum WatchSettingsNavigationDestination: Hashable, Identifiable {
@@ -48,6 +49,7 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
+    @State private var settingsResearchTask: Task<Void, Never>?
 
     init(
         viewModel: ChatViewModel,
@@ -246,6 +248,10 @@ struct SettingsView: View {
             .navigationTitle("设置")
             .onAppear {
                 ensureSelectedModel(in: viewModel.activatedModels)
+                scheduleSettingsResearchAchievementIfNeeded()
+            }
+            .onDisappear {
+                cancelSettingsResearchAchievementTask()
             }
             .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedModels)
@@ -294,6 +300,28 @@ struct SettingsView: View {
             ChatService.shared.setSelectedModel(first)
             return
         }
+    }
+
+    private func scheduleSettingsResearchAchievementIfNeeded() {
+        cancelSettingsResearchAchievementTask()
+        guard !AchievementCenter.shared.hasUnlocked(id: .settingsResearcher) else { return }
+
+        let delay = UInt64(AchievementTriggerEvaluator.settingsResearchDuration * 1_000_000_000)
+        settingsResearchTask = Task {
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            guard AchievementTriggerEvaluator.shouldUnlockSettingsResearcher(
+                elapsedTime: AchievementTriggerEvaluator.settingsResearchDuration
+            ) else { return }
+            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .settingsResearcher)
+            guard !hasUnlocked else { return }
+            await AchievementCenter.shared.unlock(id: .settingsResearcher)
+        }
+    }
+
+    private func cancelSettingsResearchAchievementTask() {
+        settingsResearchTask?.cancel()
+        settingsResearchTask = nil
     }
 
     private var selectedModelBinding: Binding<RunnableModel?> {
