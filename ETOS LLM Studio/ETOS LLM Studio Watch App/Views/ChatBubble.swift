@@ -2071,21 +2071,28 @@ private struct WatchTimelineReasoningStepView: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        var title = NSLocalizedString("深度思考", comment: "Timeline reasoning step title")
-        if let elapsed = reasoningElapsedSeconds(referenceDate: referenceDate) {
-            title += String(format: "（%.1f秒）", elapsed)
+        let baseTitle: String
+        if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
+            baseTitle = "已经思考\(elapsedSeconds)秒"
+        } else {
+            baseTitle = "思考过程"
         }
+
         guard let reasoningSummary,
               !reasoningSummary.isEmpty else {
-            return title
+            return baseTitle
         }
-        return "\(title)：\(reasoningSummary)"
+        return "\(baseTitle)：\(reasoningSummary)"
     }
 
-    private func reasoningElapsedSeconds(referenceDate: Date) -> Double? {
+    private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
         guard let reasoningStartedAt else { return nil }
         let finishedAt = reasoningCompletedAt ?? referenceDate
-        return max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+        let elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+        if elapsed == 0 {
+            return 0
+        }
+        return max(1, Int(elapsed.rounded(.down)))
     }
 }
 
