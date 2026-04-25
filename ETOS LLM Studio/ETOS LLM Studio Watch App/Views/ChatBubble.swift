@@ -262,11 +262,30 @@ struct ChatBubble: View {
     }
 
     private var reasoningStartedAt: Date? {
-        message.responseMetrics?.reasoningStartedAt
+        if let reasoningStartedAt = message.responseMetrics?.reasoningStartedAt {
+            return reasoningStartedAt
+        }
+        if showsStreamingIndicators {
+            return message.responseMetrics?.requestStartedAt ?? message.requestedAt
+        }
+        return nil
     }
 
     private var reasoningCompletedAt: Date? {
-        message.responseMetrics?.reasoningCompletedAt
+        message.responseMetrics?.reasoningCompletedAt ?? message.responseMetrics?.responseCompletedAt
+    }
+
+    private var fallbackReasoningDuration: TimeInterval? {
+        guard !showsStreamingIndicators,
+              message.responseMetrics?.reasoningStartedAt == nil,
+              message.responseMetrics?.reasoningCompletedAt == nil else {
+            return nil
+        }
+        return message.responseMetrics?.totalResponseDuration
+    }
+
+    private var isReasoningFinishedForTimeline: Bool {
+        reasoningCompletedAt != nil || !showsStreamingIndicators
     }
 
     private var reasoningSummaryText: String? {
@@ -804,6 +823,7 @@ struct ChatBubble: View {
                             customTextColor: customTextColorOverride,
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
+                            fallbackReasoningDuration: fallbackReasoningDuration,
                             reasoningSummary: reasoningSummaryText
                         )
                     }
@@ -850,7 +870,7 @@ struct ChatBubble: View {
         isReasoningExpanded: Bool,
         toolPresentations: [TimelineToolCallPresentation]
     ) -> Bool {
-        guard hasReasoning, isReasoningExpanded, reasoningCompletedAt != nil else { return false }
+        guard hasReasoning, isReasoningExpanded, isReasoningFinishedForTimeline else { return false }
         return toolPresentations.allSatisfy { presentation in
             guard presentation.stepIndex != nil else { return true }
             let status = toolCallStatus(for: presentation.call)
@@ -884,15 +904,18 @@ struct ChatBubble: View {
     }
 
     private var timelineAccentColor: Color {
-        customTextColorOverride?.opacity(0.9) ?? .secondary
+        customTextColorOverride?.opacity(0.9)
+            ?? (colorScheme == .dark ? Color.white.opacity(0.84) : Color.secondary)
     }
 
     private var timelineLineColor: Color {
-        customTextColorOverride?.opacity(0.26) ?? Color.secondary.opacity(0.32)
+        customTextColorOverride?.opacity(0.44)
+            ?? (colorScheme == .dark ? Color.white.opacity(0.56) : Color.secondary.opacity(0.38))
     }
 
     private var timelineDoneColor: Color {
-        customTextColorOverride?.opacity(0.82) ?? Color.secondary
+        customTextColorOverride?.opacity(0.86)
+            ?? (colorScheme == .dark ? Color.white.opacity(0.86) : Color.secondary)
     }
 
     @ViewBuilder
@@ -1433,9 +1456,15 @@ struct ChatBubble: View {
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
-        guard let reasoningStartedAt else { return nil }
-        let finishedAt = reasoningCompletedAt ?? referenceDate
-        let elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+        let elapsed: TimeInterval
+        if let reasoningStartedAt {
+            let finishedAt = reasoningCompletedAt ?? referenceDate
+            elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+        } else if let fallbackReasoningDuration {
+            elapsed = max(0, fallbackReasoningDuration)
+        } else {
+            return nil
+        }
         if elapsed == 0 {
             return 0
         }
@@ -1893,7 +1922,17 @@ struct ChatBubble: View {
         if let resolvedAssistantBubbleColorOverride {
             return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.7) : resolvedAssistantBubbleColorOverride
         }
-        return enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
+        if colorScheme == .dark {
+            return Color.white.opacity(enableBackground ? 0.16 : 0.20)
+        }
+        return enableBackground ? Color.black.opacity(0.08) : Color(white: 0.92)
+    }
+
+    private var assistantGlassBackground: Color {
+        if let resolvedAssistantBubbleColorOverride {
+            return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.5) : resolvedAssistantBubbleColorOverride
+        }
+        return assistantFallbackBackground
     }
 
     private var standaloneAssistantBubbleShape: BubbleCornerShape {
@@ -1944,9 +1983,7 @@ struct ChatBubble: View {
                             .background(
                                 isError
                                     ? Color.red.opacity(0.5)
-                                    : resolvedAssistantBubbleColorOverride.map {
-                                        enableBackground ? $0.opacity(0.5) : $0
-                                    }
+                                    : assistantGlassBackground
                             )
                     } else {
                         assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
@@ -2043,6 +2080,7 @@ private struct WatchTimelineReasoningStepView: View {
     let customTextColor: Color?
     let reasoningStartedAt: Date?
     let reasoningCompletedAt: Date?
+    let fallbackReasoningDuration: TimeInterval?
     let reasoningSummary: String?
 
     var body: some View {
@@ -2129,9 +2167,15 @@ private struct WatchTimelineReasoningStepView: View {
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
-        guard let reasoningStartedAt else { return nil }
-        let finishedAt = reasoningCompletedAt ?? referenceDate
-        let elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+        let elapsed: TimeInterval
+        if let reasoningStartedAt {
+            let finishedAt = reasoningCompletedAt ?? referenceDate
+            elapsed = max(0, finishedAt.timeIntervalSince(reasoningStartedAt))
+        } else if let fallbackReasoningDuration {
+            elapsed = max(0, fallbackReasoningDuration)
+        } else {
+            return nil
+        }
         if elapsed == 0 {
             return 0
         }
