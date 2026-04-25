@@ -674,7 +674,18 @@ private struct SessionFolderBrowserView: View {
         case .folder(let folder):
             return AnyView(folderRow(folder))
         case .session(let session):
-            return AnyView(sessionRow(session))
+            return AnyView(
+                sessionRow(session)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if !isBatchSelecting {
+                            Button(role: .destructive) {
+                                sessionToDelete = session
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                    }
+            )
         }
     }
 
