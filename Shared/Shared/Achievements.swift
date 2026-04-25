@@ -31,6 +31,7 @@ public struct AchievementID: RawRepresentable, Codable, Hashable, Sendable, Expr
 public extension AchievementID {
     static let steadyCatch: Self = "steadyCatch"
     static let languageLubrication: Self = "languageLubrication"
+    static let forbiddenPlace: Self = "forbiddenPlace"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -70,6 +71,13 @@ public enum AchievementCatalog {
             sentenceKey: "谄媚这一块～",
             triggerNoteKey: "触发关键词：你说得太对了 / You're absolutely right / 你问到了问题的核心 / Great question / You're asking exactly the right question",
             systemImageName: "quote.bubble"
+        ),
+        AchievementDefinition(
+            id: .forbiddenPlace,
+            titleKey: "不该来的地方",
+            sentenceKey: "连续点击7次，触发了某种不可名状的机制。",
+            triggerNoteKey: "触发条件：连续点击版本号 7 次",
+            systemImageName: "lock.open"
         )
     ]
 }

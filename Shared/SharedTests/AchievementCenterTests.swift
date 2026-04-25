@@ -226,6 +226,15 @@ struct AchievementCenterTests {
         #expect(definition?.triggerNoteKey == "触发关键词：你说得太对了 / You're absolutely right / 你问到了问题的核心 / Great question / You're asking exactly the right question")
     }
 
+    @Test("不该来的地方成就定义已登记")
+    func forbiddenPlaceDefinitionIsRegistered() {
+        let definition = AchievementCatalog.definitions.first { $0.id == .forbiddenPlace }
+
+        #expect(definition?.titleKey == "不该来的地方")
+        #expect(definition?.sentenceKey == "连续点击7次，触发了某种不可名状的机制。")
+        #expect(definition?.triggerNoteKey == "触发条件：连续点击版本号 7 次")
+    }
+
     @Test("稳稳接住触发词支持中文与英文")
     func steadyCatchTriggerMatchesExpectedKeywords() {
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "这一回我会稳稳的接住你。"))
