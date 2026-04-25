@@ -644,7 +644,6 @@ private struct SessionFolderBrowserView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityAddTraits(isEnabled ? [] : .isDisabled)
     }
 
     @ViewBuilder

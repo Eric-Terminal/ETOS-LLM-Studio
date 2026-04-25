@@ -1545,7 +1545,6 @@ struct ChatView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityAddTraits(isEnabled ? [] : .isDisabled)
     }
 
     @ViewBuilder
