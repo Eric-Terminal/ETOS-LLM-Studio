@@ -161,7 +161,7 @@ struct ChatView: View {
         showModelPickerPanel || showSessionPickerPanel
     }
     private var isNativeNavigationEnabled: Bool {
-        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode) == .nativeNavigation
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
     }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {

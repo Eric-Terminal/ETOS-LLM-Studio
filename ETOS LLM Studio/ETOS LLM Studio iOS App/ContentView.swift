@@ -2,7 +2,7 @@
 // ContentView.swift (iOS)
 // ============================================================================
 // 应用根视图:
-// - 构建底部 TabView，包含聊天、会话、设置三个主要模块
+// - 构建原生导航根视图，统一承接通知与页面跳转
 // - 通过环境注入的 ChatViewModel 在各子视图间共享状态
 // ============================================================================
 
@@ -22,7 +22,6 @@ struct ContentView: View {
     @StateObject private var announcementManager = AnnouncementManager.shared
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
-    @State private var selection: Tab = .chat
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
@@ -33,16 +32,6 @@ struct ContentView: View {
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @State private var isNativeChatPresented: Bool = true
     @State private var isNativeSettingsPresented: Bool = false
-    
-    enum Tab: Hashable {
-        case chat
-        case sessions
-        case settings
-    }
-
-    private var isNativeNavigationEnabled: Bool {
-        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode) == .nativeNavigation
-    }
     
     var body: some View {
         contentWithMigrationOverlays
@@ -61,25 +50,13 @@ struct ContentView: View {
     }
 
     private var baseContent: some View {
-        Group {
-            if isNativeNavigationEnabled {
-                nativeNavigationContent
-            } else {
-                legacyOverlayContent
-            }
-        }
+        nativeNavigationContent
         .environment(\.font, rootBodyFont)
         .onAppear {
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
-            if isNativeNavigationEnabled {
-                pushNativeChatIfNeeded()
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selection = .chat
-                }
-            }
+            pushNativeChatIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
@@ -90,13 +67,8 @@ struct ContentView: View {
             refreshRootBodyFont()
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
-            if !isNativeNavigationEnabled {
-                isNativeChatPresented = false
-                isNativeSettingsPresented = false
-            } else {
-                isNativeSettingsPresented = false
-                isNativeChatPresented = true
-            }
+            isNativeSettingsPresented = false
+            isNativeChatPresented = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
             openDailyPulse()
@@ -135,34 +107,6 @@ struct ContentView: View {
                     }
                 )
             }
-        }
-    }
-
-    private var legacyOverlayContent: some View {
-        TabView(selection: $selection) {
-            NavigationStack {
-                ChatView()
-            }
-            .tabItem {
-                Label("聊天", systemImage: "bubble.left.and.bubble.right.fill")
-            }
-            .tag(Tab.chat)
-
-            NavigationStack {
-                SessionListView()
-            }
-            .tabItem {
-                Label("会话", systemImage: "list.bullet")
-            }
-            .tag(Tab.sessions)
-
-            NavigationStack {
-                SettingsView(requestedDestination: $settingsDestination)
-            }
-            .tabItem {
-                Label("设置", systemImage: "gearshape.fill")
-            }
-            .tag(Tab.settings)
         }
     }
 
@@ -239,17 +183,7 @@ struct ContentView: View {
     }
 
     private func openDailyPulse() {
-        if isNativeNavigationEnabled {
-            pushNativeSettings(destination: .dailyPulse)
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selection = .settings
-        }
-        settingsDestination = nil
-        DispatchQueue.main.async {
-            settingsDestination = .dailyPulse
-        }
+        pushNativeSettings(destination: .dailyPulse)
     }
 
     private var launchRecoveryNoticePresented: Binding<Bool> {
@@ -288,13 +222,7 @@ struct ContentView: View {
 
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
-        if isNativeNavigationEnabled {
-            pushNativeChatIfNeeded()
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selection = .chat
-        }
+        pushNativeChatIfNeeded()
     }
 
     private func openFeedback(issueNumber: Int?) {
@@ -305,31 +233,11 @@ struct ContentView: View {
         } else {
             destination = .feedbackCenter
         }
-        if isNativeNavigationEnabled {
-            pushNativeSettings(destination: destination)
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selection = .settings
-        }
-        settingsDestination = nil
-        DispatchQueue.main.async {
-            settingsDestination = destination
-        }
+        pushNativeSettings(destination: destination)
     }
 
     private func openAchievementJournal() {
-        if isNativeNavigationEnabled {
-            pushNativeSettings(destination: .achievementJournal)
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selection = .settings
-        }
-        settingsDestination = nil
-        DispatchQueue.main.async {
-            settingsDestination = .achievementJournal
-        }
+        pushNativeSettings(destination: .achievementJournal)
     }
 
     private func handleLaunchTasks() async {
@@ -365,13 +273,7 @@ struct ContentView: View {
             sessionID: continuation.sessionID,
             prompt: continuation.prompt
         )
-        if isNativeNavigationEnabled {
-            pushNativeChatIfNeeded()
-            return true
-        }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selection = .chat
-        }
+        pushNativeChatIfNeeded()
         return true
     }
 

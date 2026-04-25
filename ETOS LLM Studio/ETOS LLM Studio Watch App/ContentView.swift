@@ -102,7 +102,7 @@ struct ContentView: View {
     }
 
     private var isNativeNavigationEnabled: Bool {
-        (ChatNavigationMode(rawValue: chatNavigationModeRawValue) ?? .defaultMode) == .nativeNavigation
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
     }
     
     // MARK: - 视图主体
