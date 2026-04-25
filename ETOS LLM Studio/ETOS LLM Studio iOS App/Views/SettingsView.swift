@@ -256,12 +256,6 @@ struct SettingsView: View {
                 } label: {
                     SettingsListIconLabel("同步与备份", icon: .sync)
                 }
-
-                NavigationLink {
-                    SettingsLaboratoryView()
-                } label: {
-                    settingsLaboratoryLabel(isEnabled: useBetaSettingsHome)
-                }
                 
                 NavigationLink {
                     AboutView()
@@ -326,14 +320,6 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var betaSettingsHomeSections: some View {
-        Section {
-            NavigationLink {
-                SettingsLaboratoryView()
-            } label: {
-                settingsLaboratoryLabel(isEnabled: useBetaSettingsHome)
-            }
-        }
-
         Section {
             NavigationLink {
                 SettingsCategoryList(title: "对话与模型") {
@@ -562,6 +548,12 @@ struct SettingsView: View {
             }
 
             NavigationLink {
+                SettingsLaboratoryView()
+            } label: {
+                SettingsListIconLabel("设置实验室", icon: .settingsLaboratory)
+            }
+
+            NavigationLink {
                 AboutView()
             } label: {
                 SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
@@ -637,20 +629,6 @@ struct SettingsView: View {
         }
     }
 
-    private func settingsLaboratoryLabel(isEnabled: Bool) -> some View {
-        HStack(spacing: 8) {
-            SettingsListIconView(icon: .settingsLaboratory)
-            Text("设置实验室")
-            SettingsBetaBadge()
-            Spacer()
-            if isEnabled {
-                Text("已开启")
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-    
     /// 根据公告类型返回对应图标
     @ViewBuilder
     private func announcementIcon(for type: AnnouncementType) -> some View {
@@ -839,8 +817,10 @@ private struct SettingsCategoryList<Content: View>: View {
     }
 }
 
-private struct SettingsLaboratoryView: View {
+struct SettingsLaboratoryView: View {
     @AppStorage(SettingsHomeExperiment.storageKey) private var useBetaSettingsHome = false
+
+    init() {}
 
     var body: some View {
         List {
@@ -869,14 +849,14 @@ private struct SettingsLaboratoryView: View {
 
 private struct SettingsBetaBadge: View {
     var body: some View {
-        Text(verbatim: "BETA")
-            .etFont(.caption2.weight(.semibold))
-            .foregroundStyle(.white)
+        Text(verbatim: "Beta")
+            .etFont(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
             .background {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.blue)
+                Capsule()
+                    .stroke(Color.secondary.opacity(0.28), lineWidth: 1)
             }
             .accessibilityLabel("Beta")
     }

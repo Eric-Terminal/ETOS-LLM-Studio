@@ -229,10 +229,6 @@ struct SettingsView: View {
                     NavigationLink(destination: DeviceSyncSettingsView()) {
                         settingsNavigationLabel("同步与备份", icon: .sync)
                     }
-
-                    NavigationLink(destination: SettingsLaboratoryView(canUseBetaSettingsHome: canUseBetaSettingsHome)) {
-                        settingsLaboratoryLabel(isEnabled: useBetaSettingsHome && canUseBetaSettingsHome)
-                    }
                     
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
@@ -302,12 +298,6 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var betaSettingsHomeSections: some View {
-        Section {
-            NavigationLink(destination: SettingsLaboratoryView(canUseBetaSettingsHome: canUseBetaSettingsHome)) {
-                settingsLaboratoryLabel(isEnabled: useBetaSettingsHome && canUseBetaSettingsHome)
-            }
-        }
-
         Section {
             NavigationLink {
                 SettingsCategoryList(title: "对话与模型") {
@@ -525,6 +515,10 @@ struct SettingsView: View {
                 }
             }
 
+            NavigationLink(destination: SettingsLaboratoryView(canUseBetaSettingsHome: canUseBetaSettingsHome)) {
+                settingsNavigationLabel("设置实验室", icon: .settingsLaboratory)
+            }
+
             NavigationLink(destination: AboutView()) {
                 settingsNavigationLabel("关于", icon: .about)
             }
@@ -630,24 +624,6 @@ struct SettingsView: View {
             audioRecordingFormat: $viewModel.audioRecordingFormat,
             speechModels: viewModel.speechModels
         )
-    }
-
-    private func settingsLaboratoryLabel(isEnabled: Bool) -> some View {
-        HStack(spacing: 8) {
-            if usesNativeSettingsIcons {
-                SettingsListIconView(icon: .settingsLaboratory)
-                Text("设置实验室")
-            } else {
-                Label("设置实验室", systemImage: SettingsListIcon.settingsLaboratory.legacySystemName)
-            }
-            SettingsBetaBadge()
-            Spacer()
-            if isEnabled {
-                Text("已开启")
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     @ViewBuilder
@@ -893,9 +869,13 @@ private struct SettingsCategoryList<Content: View>: View {
     }
 }
 
-private struct SettingsLaboratoryView: View {
+struct SettingsLaboratoryView: View {
     @AppStorage(SettingsHomeExperiment.storageKey) private var useBetaSettingsHome = false
     let canUseBetaSettingsHome: Bool
+
+    init(canUseBetaSettingsHome: Bool) {
+        self.canUseBetaSettingsHome = canUseBetaSettingsHome
+    }
 
     var body: some View {
         List {
@@ -948,14 +928,14 @@ private struct SettingsLaboratoryView: View {
 
 private struct SettingsBetaBadge: View {
     var body: some View {
-        Text(verbatim: "BETA")
-            .etFont(.caption2.weight(.semibold))
-            .foregroundStyle(.white)
+        Text(verbatim: "Beta")
+            .etFont(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
             .background {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.blue)
+                Capsule()
+                    .stroke(Color.secondary.opacity(0.28), lineWidth: 1)
             }
             .accessibilityLabel("Beta")
     }

@@ -57,6 +57,20 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    SettingsLaboratoryView(canUseBetaSettingsHome: usesNativeSettingsIcons)
+                } label: {
+                    settingsNavigationLabel("设置实验室", icon: .settingsLaboratory)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text("这是仍在验证中的设置界面实验，默认关闭。")
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     ToolCenterView()
                         .environmentObject(viewModel)
                 } label: {

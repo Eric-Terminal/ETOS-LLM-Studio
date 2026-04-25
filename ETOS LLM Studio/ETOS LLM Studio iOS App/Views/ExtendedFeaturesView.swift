@@ -51,6 +51,18 @@ struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    SettingsLaboratoryView()
+                } label: {
+                    SettingsListIconLabel("设置实验室", icon: .settingsLaboratory)
+                }
+            } footer: {
+                Text("这是仍在验证中的设置界面实验，默认关闭。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     FeedbackCenterView()
                 } label: {
                     SettingsListIconLabel("反馈助手", icon: .feedback)
