@@ -632,7 +632,10 @@ private struct SessionFolderBrowserView: View {
         isEnabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button {
+            guard isEnabled else { return }
+            action()
+        } label: {
             Image(systemName: systemName)
                 .etFont(.system(size: 17, weight: .semibold))
                 .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
@@ -640,8 +643,8 @@ private struct SessionFolderBrowserView: View {
                 .background(paginationButtonBackground)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isEnabled ? [] : .isDisabled)
     }
 
     @ViewBuilder

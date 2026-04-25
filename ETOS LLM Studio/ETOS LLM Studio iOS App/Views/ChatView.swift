@@ -1486,20 +1486,13 @@ struct ChatView: View {
         Group {
             if shouldShowSessionPickerPaginationBar(queryActive: queryActive) {
                 HStack(spacing: 12) {
-                    Button {
+                    sessionPickerFooterButton(
+                        systemName: "chevron.left",
+                        accessibilityLabel: NSLocalizedString("上一页", comment: "Session picker previous page"),
+                        isEnabled: canGoToPreviousActiveSessionPickerPage(queryActive: queryActive)
+                    ) {
                         goToPreviousActiveSessionPickerPage(queryActive: queryActive)
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .etFont(.system(size: 14, weight: .semibold))
-                            .frame(width: 32, height: 32)
-                            .background(
-                                Circle()
-                                    .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
-                            )
                     }
-                    .foregroundColor(TelegramColors.sendButtonColor)
-                    .disabled(!canGoToPreviousActiveSessionPickerPage(queryActive: queryActive))
-                    .accessibilityLabel(NSLocalizedString("上一页", comment: "Session picker previous page"))
 
                     Text(activeSessionPickerPaginationSummaryText(queryActive: queryActive))
                         .lineLimit(1)
@@ -1510,25 +1503,15 @@ struct ChatView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
-                        .background(
-                            Capsule()
-                                .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
-                        )
+                        .background(sessionPickerFooterSummaryBackground)
 
-                    Button {
+                    sessionPickerFooterButton(
+                        systemName: "chevron.right",
+                        accessibilityLabel: NSLocalizedString("下一页", comment: "Session picker next page"),
+                        isEnabled: canGoToNextActiveSessionPickerPage(queryActive: queryActive)
+                    ) {
                         goToNextActiveSessionPickerPage(queryActive: queryActive)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .etFont(.system(size: 14, weight: .semibold))
-                            .frame(width: 32, height: 32)
-                            .background(
-                                Circle()
-                                    .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
-                            )
                     }
-                    .foregroundColor(TelegramColors.sendButtonColor)
-                    .disabled(!canGoToNextActiveSessionPickerPage(queryActive: queryActive))
-                    .accessibilityLabel(NSLocalizedString("下一页", comment: "Session picker next page"))
                 }
             } else {
                 Text(
@@ -1542,6 +1525,77 @@ struct ChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 14)
+    }
+
+    private func sessionPickerFooterButton(
+        systemName: String,
+        accessibilityLabel: String,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            guard isEnabled else { return }
+            action()
+        } label: {
+            Image(systemName: systemName)
+                .etFont(.system(size: 14, weight: .semibold))
+                .foregroundColor(isEnabled ? TelegramColors.sendButtonColor : TelegramColors.navBarSubtitle.opacity(0.45))
+                .frame(width: 32, height: 32)
+                .background(sessionPickerFooterButtonBackground)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isEnabled ? [] : .isDisabled)
+    }
+
+    @ViewBuilder
+    private var sessionPickerFooterButtonBackground: some View {
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                Circle()
+                    .fill(Color.clear)
+                    .glassEffect(.clear, in: Circle())
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
+            } else {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
+            }
+        } else {
+            Circle()
+                .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+        }
+    }
+
+    @ViewBuilder
+    private var sessionPickerFooterSummaryBackground: some View {
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                Capsule()
+                    .fill(Color.clear)
+                    .glassEffect(.clear, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
+            } else {
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
+            }
+        } else {
+            Capsule()
+                .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
+        }
     }
 
     private func normalizeSessionPickerPageIndex() {
