@@ -978,7 +978,8 @@ struct ChatBubble: View {
                         lineTopY: 4,
                         lineBottomY: 20,
                         isFirst: !connectsTimelineFromPrevious,
-                        isLast: stepCount == 1 && !connectsTimelineToNext
+                        isLast: stepCount == 1 && !connectsTimelineToNext,
+                        extendsLineThroughContent: isReasoningExpanded || isReasoningAutoPreview
                     ) {
                         TimelineReasoningStepView(
                             reasoning: trimmedReasoning,
@@ -1827,6 +1828,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
     let lineBottomY: CGFloat
     let isFirst: Bool
     let isLast: Bool
+    let extendsLineThroughContent: Bool
     private let content: Content
 
     init(
@@ -1843,6 +1845,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         lineBottomY: CGFloat = 28,
         isFirst: Bool,
         isLast: Bool,
+        extendsLineThroughContent: Bool = false,
         @ViewBuilder content: () -> Content
     ) {
         self.iconName = iconName
@@ -1858,6 +1861,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         self.lineBottomY = lineBottomY
         self.isFirst = isFirst
         self.isLast = isLast
+        self.extendsLineThroughContent = extendsLineThroughContent
         self.content = content()
     }
 
@@ -1879,6 +1883,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
             AssistantTimelineLineShape(
                 isFirst: isFirst,
                 isLast: isLast,
+                extendsLineThroughContent: extendsLineThroughContent,
                 iconTopY: lineTopY,
                 iconBottomY: lineBottomY
             )
@@ -1892,6 +1897,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
 private struct AssistantTimelineLineShape: Shape {
     let isFirst: Bool
     let isLast: Bool
+    let extendsLineThroughContent: Bool
     let iconTopY: CGFloat
     let iconBottomY: CGFloat
 
@@ -1903,9 +1909,10 @@ private struct AssistantTimelineLineShape: Shape {
             path.move(to: CGPoint(x: x, y: rect.minY - rowOverlap))
             path.addLine(to: CGPoint(x: x, y: rect.minY + iconTopY))
         }
-        if !isLast {
+        if extendsLineThroughContent || !isLast {
+            let endY = isLast ? rect.maxY : rect.maxY + rowOverlap
             path.move(to: CGPoint(x: x, y: rect.minY + iconBottomY))
-            path.addLine(to: CGPoint(x: x, y: rect.maxY + rowOverlap))
+            path.addLine(to: CGPoint(x: x, y: endY))
         }
         return path
     }
