@@ -497,7 +497,7 @@ struct SettingsListIconView: View {
             .overlay {
                 Image(systemName: icon.systemName)
                     .symbolVariant(.fill)
-                    .font(.system(size: 3, weight: .regular))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
