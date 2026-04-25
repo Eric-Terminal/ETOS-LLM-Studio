@@ -57,20 +57,32 @@ struct SettingsView: View {
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(SettingsHomeExperiment.storageKey) private var useBetaSettingsHome = false
     @State private var settingsResearchTask: Task<Void, Never>?
+    private let embedsInNavigationStack: Bool
 
     init(
         viewModel: ChatViewModel,
-        requestedDestination: Binding<WatchSettingsNavigationDestination?> = .constant(nil)
+        requestedDestination: Binding<WatchSettingsNavigationDestination?> = .constant(nil),
+        embedsInNavigationStack: Bool = true
     ) {
         self.viewModel = viewModel
         self._requestedDestination = requestedDestination
+        self.embedsInNavigationStack = embedsInNavigationStack
     }
     
     // MARK: - 视图主体
     
     var body: some View {
-        NavigationStack {
-            List {
+        if embedsInNavigationStack {
+            NavigationStack {
+                settingsContent
+            }
+        } else {
+            settingsContent
+        }
+    }
+
+    private var settingsContent: some View {
+        List {
                 Section {
                     let options = viewModel.activatedModels
                     if options.isEmpty {
@@ -283,7 +295,6 @@ struct SettingsView: View {
                     AchievementJournalView()
                 }
             }
-        }
     }
     
     // MARK: - 辅助方法

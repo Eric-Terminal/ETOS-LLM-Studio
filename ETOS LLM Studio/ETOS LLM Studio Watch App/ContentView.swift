@@ -55,6 +55,13 @@ enum WatchChatInputActionState: Equatable {
     }
 }
 
+private enum WatchNativeNavigationDestination: String, Identifiable {
+    case chat
+    case settings
+
+    var id: String { rawValue }
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     
@@ -83,8 +90,7 @@ struct ContentView: View {
     @State private var launchRecoveryNoticeMessage: String?
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
-    @State private var isNativeChatPresented = true
-    @State private var isNativeSettingsPresented = false
+    @State private var nativeDestination: WatchNativeNavigationDestination? = .chat
     @State private var isQuickModelSelectorPresented = false
     @State private var isAttachmentImportPresented = false
     @State private var attachmentSourceText: String = ""
@@ -125,11 +131,17 @@ struct ContentView: View {
             NavigationStack {
                 if isNativeNavigationEnabled {
                     nativeSessionRootView
-                        .navigationDestination(isPresented: $isNativeChatPresented) {
-                            legacyChatRootView
-                        }
-                        .navigationDestination(isPresented: $isNativeSettingsPresented) {
-                            SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
+                        .navigationDestination(item: $nativeDestination) { destination in
+                            switch destination {
+                            case .chat:
+                                legacyChatRootView
+                            case .settings:
+                                SettingsView(
+                                    viewModel: viewModel,
+                                    requestedDestination: $settingsDestination,
+                                    embedsInNavigationStack: false
+                                )
+                            }
                         }
                 } else {
                     legacyChatRootView
@@ -198,11 +210,9 @@ struct ContentView: View {
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
             if !isNativeNavigationEnabled {
-                isNativeChatPresented = false
-                isNativeSettingsPresented = false
+                nativeDestination = nil
             } else {
-                isNativeSettingsPresented = false
-                isNativeChatPresented = true
+                nativeDestination = .chat
                 isSessionListPresented = false
                 isSettingsPresented = false
             }
@@ -263,16 +273,23 @@ struct ContentView: View {
     }
 
     private var nativeSessionRootView: some View {
-        sessionListView
+        Group {
+            if nativeDestination == nil {
+                sessionListView
+            } else {
+                Color.clear
+            }
+        }
             .navigationTitle("历史会话")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        isNativeChatPresented = false
-                        isNativeSettingsPresented = true
-                    } label: {
-                        Image(systemName: "gearshape.fill")
+                if nativeDestination == nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            nativeDestination = .settings
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                        }
                     }
                 }
             }
@@ -575,8 +592,7 @@ struct ContentView: View {
                 }
                 ChatService.shared.setCurrentSession(selectedSession)
                 if isNativeNavigationEnabled {
-                    isNativeSettingsPresented = false
-                    isNativeChatPresented = true
+                    nativeDestination = .chat
                 } else {
                     isSessionListPresented = false
                 }
@@ -598,8 +614,7 @@ struct ContentView: View {
             },
             createConversationAction: isNativeNavigationEnabled ? {
                 viewModel.createNewSession()
-                isNativeSettingsPresented = false
-                isNativeChatPresented = true
+                nativeDestination = .chat
             } : nil
         )
     }
@@ -905,7 +920,7 @@ struct ContentView: View {
         isSettingsPresented = false
         settingsDestination = nil
         if isNativeNavigationEnabled {
-            isNativeChatPresented = false
+            nativeDestination = nil
         } else {
             isSessionListPresented = true
         }
@@ -1345,8 +1360,7 @@ struct ContentView: View {
     private func openDailyPulse() {
         if isNativeNavigationEnabled {
             settingsDestination = nil
-            isNativeChatPresented = false
-            isNativeSettingsPresented = true
+            nativeDestination = .settings
             DispatchQueue.main.async {
                 settingsDestination = .dailyPulse
             }
@@ -1378,8 +1392,7 @@ struct ContentView: View {
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
         if isNativeNavigationEnabled {
-            isNativeSettingsPresented = false
-            isNativeChatPresented = true
+            nativeDestination = .chat
             return
         }
         isSettingsPresented = false
@@ -1389,8 +1402,7 @@ struct ContentView: View {
     private func openFeedback(issueNumber: Int?) {
         if isNativeNavigationEnabled {
             settingsDestination = nil
-            isNativeChatPresented = false
-            isNativeSettingsPresented = true
+            nativeDestination = .settings
             DispatchQueue.main.async {
                 if let issueNumber,
                    FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
@@ -1416,8 +1428,7 @@ struct ContentView: View {
     private func openAchievementJournal() {
         if isNativeNavigationEnabled {
             settingsDestination = nil
-            isNativeChatPresented = false
-            isNativeSettingsPresented = true
+            nativeDestination = .settings
             DispatchQueue.main.async {
                 settingsDestination = .achievementJournal
             }
@@ -1440,8 +1451,7 @@ struct ContentView: View {
             prompt: continuation.prompt
         )
         if isNativeNavigationEnabled {
-            isNativeSettingsPresented = false
-            isNativeChatPresented = true
+            nativeDestination = .chat
             return true
         }
         isSettingsPresented = false
