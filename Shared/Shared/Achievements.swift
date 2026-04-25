@@ -36,17 +36,20 @@ public struct AchievementDefinition: Identifiable, Hashable, Sendable {
     public let id: AchievementID
     public let titleKey: String
     public let sentenceKey: String
+    public let triggerNoteKey: String
     public let systemImageName: String
 
     public init(
         id: AchievementID,
         titleKey: String,
         sentenceKey: String,
+        triggerNoteKey: String,
         systemImageName: String
     ) {
         self.id = id
         self.titleKey = titleKey
         self.sentenceKey = sentenceKey
+        self.triggerNoteKey = triggerNoteKey
         self.systemImageName = systemImageName
     }
 }
@@ -57,6 +60,7 @@ public enum AchievementCatalog {
             id: .steadyCatch,
             titleKey: "AI张开了双臂，尽管它没有手。",
             sentenceKey: "被稳稳的接住力",
+            triggerNoteKey: "触发关键词：稳稳的接住你 / I've got you",
             systemImageName: "hands.sparkles"
         )
     ]
@@ -101,6 +105,7 @@ public struct AchievementJournalEntry: Identifiable, Hashable, Sendable {
     public let achievementID: AchievementID
     public let titleKey: String
     public let sentenceKey: String
+    public let triggerNoteKey: String
     public let systemImageName: String
     public let unlockedAt: Date
     public let unlockID: UUID
@@ -109,6 +114,7 @@ public struct AchievementJournalEntry: Identifiable, Hashable, Sendable {
         self.achievementID = definition.id
         self.titleKey = definition.titleKey
         self.sentenceKey = definition.sentenceKey
+        self.triggerNoteKey = definition.triggerNoteKey
         self.systemImageName = definition.systemImageName
         self.unlockedAt = record.unlockedAt
         self.unlockID = record.unlockID
@@ -120,6 +126,10 @@ public struct AchievementJournalEntry: Identifiable, Hashable, Sendable {
 
     public var localizedSentence: String {
         NSLocalizedString(sentenceKey, comment: "Achievement sentence")
+    }
+
+    public var localizedTriggerNote: String {
+        NSLocalizedString(triggerNoteKey, comment: "Achievement trigger note")
     }
 }
 

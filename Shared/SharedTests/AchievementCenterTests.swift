@@ -37,6 +37,7 @@ struct AchievementCenterTests {
         #expect(center.hasUnlockedAchievements)
         #expect(center.journalEntries.count == 1)
         #expect(center.journalEntries.first?.achievementID == Self.firstDefinition.id)
+        #expect(center.journalEntries.first?.triggerNoteKey == "触发关键词：测试一")
         #expect(achievementStorageKeys(in: defaults).count == 1)
     }
 
@@ -248,6 +249,7 @@ struct AchievementCenterTests {
         id: "test.first",
         titleKey: "测试成就一",
         sentenceKey: "第一条隐藏句子。",
+        triggerNoteKey: "触发关键词：测试一",
         systemImageName: "sparkles"
     )
 
@@ -255,13 +257,15 @@ struct AchievementCenterTests {
         id: "test.second",
         titleKey: "测试成就二",
         sentenceKey: "第二条隐藏句子。",
+        triggerNoteKey: "触发关键词：测试二",
         systemImageName: "rosette"
     )
 
     private static let steadyCatchDefinition = AchievementDefinition(
         id: .steadyCatch,
-        titleKey: "稳稳的接住你",
+        titleKey: "AI张开了双臂，尽管它没有手。",
         sentenceKey: "被稳稳的接住力",
+        triggerNoteKey: "触发关键词：稳稳的接住你 / I've got you",
         systemImageName: "hands.sparkles"
     )
 

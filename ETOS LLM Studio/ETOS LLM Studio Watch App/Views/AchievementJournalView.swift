@@ -52,6 +52,11 @@ private struct AchievementJournalRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(4)
 
+            Text(entry.localizedTriggerNote)
+                .etFont(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(3)
+
             Text(entry.unlockedAt, format: .dateTime.year().month().day().hour().minute())
                 .etFont(.caption2)
                 .foregroundStyle(.tertiary)
