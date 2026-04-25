@@ -289,7 +289,7 @@ private struct SessionFolderBrowserView: View {
                 ForEach(entries) { entry in
                     mergedEntryRow(entry)
                         .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
+                        .listRowSeparator(.visible)
                 }
             }
         }
@@ -523,7 +523,7 @@ private struct SessionFolderBrowserView: View {
                 ForEach(pagedSearchResultItems) { result in
                     searchResultRow(result)
                         .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
+                        .listRowSeparator(.visible)
                 }
             }
         } header: {
@@ -818,9 +818,7 @@ private struct SessionFolderBrowserView: View {
                     subtitle: result.match.preview,
                     footnote: nil,
                     isCurrent: session.id == viewModel.currentSession?.id,
-                    isRunning: viewModel.runningSessionIDs.contains(session.id),
-                    avatarSystemName: "magnifyingglass",
-                    avatarText: SessionListRowContent.avatarText(for: searchResultTitle(for: result))
+                    isRunning: viewModel.runningSessionIDs.contains(session.id)
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(.primary)
@@ -834,18 +832,16 @@ private struct SessionFolderBrowserView: View {
 
     @ViewBuilder
     private func folderLabel(for folder: SessionFolder) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "folder")
-                .etFont(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.accent)
-                .frame(width: 36, height: 36)
-                .background(
-                    Circle()
-                        .fill(Color.accentColor.opacity(0.12))
-                )
+        HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(folder.name)
-                    .etFont(.system(size: 16, weight: .medium))
+                Label {
+                    Text(folder.name)
+                } icon: {
+                    Image(systemName: "folder")
+                        .foregroundStyle(Color.accentColor)
+                }
+                .etFont(.system(size: 16, weight: .medium))
+
                 let count = recursiveSessionCount(in: folder.id)
                 Text("\(count) 个会话")
                     .etFont(.system(size: 12))
@@ -1174,9 +1170,7 @@ private struct BatchSelectableSessionRow: View {
                     subtitle: session.topicPrompt,
                     footnote: nil,
                     isCurrent: false,
-                    isRunning: false,
-                    avatarSystemName: "bubble.left.and.bubble.right.fill",
-                    avatarText: SessionListRowContent.avatarText(for: session.name)
+                    isRunning: false
                 )
             }
             .contentShape(Rectangle())
@@ -1242,9 +1236,7 @@ private struct SessionRow: View {
                     subtitle: primarySubtitle,
                     footnote: secondarySubtitle,
                     isCurrent: isCurrent,
-                    isRunning: isRunning,
-                    avatarSystemName: "bubble.left.and.bubble.right.fill",
-                    avatarText: SessionListRowContent.avatarText(for: session.name)
+                    isRunning: isRunning
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -1357,13 +1349,9 @@ private struct SessionListRowContent: View {
     let footnote: String?
     let isCurrent: Bool
     let isRunning: Bool
-    let avatarSystemName: String
-    let avatarText: String?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            avatar
-
+        HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .etFont(.system(size: 16, weight: .medium))
@@ -1390,29 +1378,7 @@ private struct SessionListRowContent: View {
             trailingStatus
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isCurrent ? Color.accentColor.opacity(0.08) : Color.clear)
-        )
         .accessibilityElement(children: .combine)
-    }
-
-    private var avatar: some View {
-        ZStack {
-            Circle()
-                .fill(isCurrent ? Color.accentColor.opacity(0.16) : Color(uiColor: .secondarySystemFill))
-
-            if let avatarText {
-                Text(avatarText)
-                    .etFont(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
-            } else {
-                Image(systemName: avatarSystemName)
-                    .etFont(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
-            }
-        }
-        .frame(width: 36, height: 36)
     }
 
     @ViewBuilder
@@ -1431,12 +1397,6 @@ private struct SessionListRowContent: View {
             }
         }
         .frame(minWidth: 22, alignment: .topTrailing)
-    }
-
-    static func avatarText(for title: String) -> String? {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let first = trimmed.first else { return nil }
-        return String(first).uppercased()
     }
 }
 
