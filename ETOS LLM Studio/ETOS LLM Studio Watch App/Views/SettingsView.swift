@@ -283,7 +283,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ title: String, icon: SettingsListIcon) -> some View {
+    private func settingsNavigationLabel(_ title: LocalizedStringKey, icon: SettingsListIcon) -> some View {
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {
@@ -292,7 +292,7 @@ struct SettingsView: View {
     }
 
     private func settingsStatusLabel(
-        _ title: String,
+        _ title: LocalizedStringKey,
         icon: SettingsListIcon,
         status: String?,
         statusColor: Color
@@ -471,10 +471,10 @@ extension SettingsListIcon {
 }
 
 struct SettingsListIconLabel: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: SettingsListIcon
 
-    init(_ title: String, icon: SettingsListIcon) {
+    init(_ title: LocalizedStringKey, icon: SettingsListIcon) {
         self.title = title
         self.icon = icon
     }

@@ -53,7 +53,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     FeedbackCenterView()
                 } label: {
-                    SettingsListIconLabel(NSLocalizedString("反馈助手", comment: "反馈入口"), icon: .feedback)
+                    SettingsListIconLabel("反馈助手", icon: .feedback)
                 }
             } footer: {
                 Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))

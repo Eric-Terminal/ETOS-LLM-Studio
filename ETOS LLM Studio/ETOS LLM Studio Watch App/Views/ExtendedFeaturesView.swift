@@ -60,7 +60,7 @@ public struct ExtendedFeaturesView: View {
                     ToolCenterView()
                         .environmentObject(viewModel)
                 } label: {
-                    settingsNavigationLabel(NSLocalizedString("工具中心", comment: "Tool center title"), icon: .toolCenter)
+                    settingsNavigationLabel("工具中心", icon: .toolCenter)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -103,7 +103,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     FeedbackCenterView()
                 } label: {
-                    settingsNavigationLabel(NSLocalizedString("反馈助手", comment: "反馈入口"), icon: .feedback)
+                    settingsNavigationLabel("反馈助手", icon: .feedback)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -231,7 +231,7 @@ public struct ExtendedFeaturesView: View {
                     ImageGenerationFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    settingsNavigationLabel(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), icon: .imageGeneration)
+                    settingsNavigationLabel("图片生成", icon: .imageGeneration)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
@@ -290,7 +290,7 @@ public struct ExtendedFeaturesView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ title: String, icon: SettingsListIcon) -> some View {
+    private func settingsNavigationLabel(_ title: LocalizedStringKey, icon: SettingsListIcon) -> some View {
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {
@@ -420,7 +420,7 @@ private struct LongTermMemoryFeatureView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ title: String, icon: SettingsListIcon) -> some View {
+    private func settingsNavigationLabel(_ title: LocalizedStringKey, icon: SettingsListIcon) -> some View {
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {

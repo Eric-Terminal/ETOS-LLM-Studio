@@ -137,7 +137,7 @@ struct SettingsView: View {
                     ToolCenterView()
                         .environmentObject(viewModel)
                 } label: {
-                    SettingsListIconLabel(NSLocalizedString("工具中心", comment: "Tool center title"), icon: .toolCenter)
+                    SettingsListIconLabel("工具中心", icon: .toolCenter)
                 }
 
                 NavigationLink {
@@ -191,7 +191,7 @@ struct SettingsView: View {
                     ImageGenerationFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    SettingsListIconLabel(NSLocalizedString("图片生成", comment: "Image generation feature entry title"), icon: .imageGeneration)
+                    SettingsListIconLabel("图片生成", icon: .imageGeneration)
                 }
 
                 NavigationLink {
@@ -429,10 +429,10 @@ extension SettingsListIcon {
 }
 
 struct SettingsListIconLabel: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: SettingsListIcon
 
-    init(_ title: String, icon: SettingsListIcon) {
+    init(_ title: LocalizedStringKey, icon: SettingsListIcon) {
         self.title = title
         self.icon = icon
     }
