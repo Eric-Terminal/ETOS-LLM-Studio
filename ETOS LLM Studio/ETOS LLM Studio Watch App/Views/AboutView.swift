@@ -201,7 +201,7 @@ struct AboutView: View {
         showAppLogs = true
         AppLog.userOperation(category: "调试入口", action: "打开应用日志页")
         Task {
-            let hasUnlocked = await AchievementCenter.shared.hasUnlocked(id: .forbiddenPlace)
+            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .forbiddenPlace)
             guard !hasUnlocked else { return }
             await AchievementCenter.shared.unlock(id: .forbiddenPlace)
         }
