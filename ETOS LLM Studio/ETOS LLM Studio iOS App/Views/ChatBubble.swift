@@ -944,6 +944,7 @@ struct ChatBubble: View {
         let visibleToolStepCount = toolPresentations.filter { $0.stepIndex != nil }.count
         let shouldShowDoneStep = shouldShowTimelineDoneStep(
             hasReasoning: hasReasoning,
+            isReasoningExpanded: isReasoningExpanded,
             toolPresentations: toolPresentations
         )
         let stepCount = (hasReasoning ? 1 : 0) + visibleToolStepCount + (shouldShowDoneStep ? 1 : 0)
@@ -1010,9 +1011,10 @@ struct ChatBubble: View {
 
     private func shouldShowTimelineDoneStep(
         hasReasoning: Bool,
+        isReasoningExpanded: Bool,
         toolPresentations: [TimelineToolCallPresentation]
     ) -> Bool {
-        guard hasReasoning, reasoningCompletedAt != nil else { return false }
+        guard hasReasoning, isReasoningExpanded, reasoningCompletedAt != nil else { return false }
         return toolPresentations.allSatisfy { presentation in
             guard presentation.stepIndex != nil else { return true }
             let status = toolCallStatus(for: presentation.call)
