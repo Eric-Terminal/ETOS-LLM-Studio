@@ -957,6 +957,7 @@ struct ChatBubble: View {
                         iconName: "lightbulb",
                         iconColor: timelineAccentColor,
                         lineColor: timelineLineColor,
+                        iconSize: 12,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext
                     ) {
@@ -1792,6 +1793,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
     let iconName: String
     let iconColor: Color
     let lineColor: Color
+    let iconSize: CGFloat
     let isFirst: Bool
     let isLast: Bool
     private let content: Content
@@ -1800,6 +1802,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         iconName: String,
         iconColor: Color,
         lineColor: Color,
+        iconSize: CGFloat = 14,
         isFirst: Bool,
         isLast: Bool,
         @ViewBuilder content: () -> Content
@@ -1807,6 +1810,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         self.iconName = iconName
         self.iconColor = iconColor
         self.lineColor = lineColor
+        self.iconSize = iconSize
         self.isFirst = isFirst
         self.isLast = isLast
         self.content = content()
@@ -1815,7 +1819,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: iconName)
-                .etFont(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: iconSize, weight: .semibold))
                 .foregroundStyle(iconColor)
                 .frame(width: 22, height: 22)
                 .padding(.top, 7)
