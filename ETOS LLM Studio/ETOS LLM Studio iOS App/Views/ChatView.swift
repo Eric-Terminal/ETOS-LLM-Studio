@@ -1684,10 +1684,7 @@ struct ChatView: View {
     private func sessionPickerRow(_ session: ChatSession) -> some View {
         let isCurrent = session.id == viewModel.currentSession?.id
         let isEditing = editingSessionID == session.id
-        let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
-        let selectedFill = colorScheme == .dark ? Color.black.opacity(0.36) : Color.black.opacity(0.08)
-        let borderOpacitySelected: Double = colorScheme == .dark ? 0.16 : 0.3
-        let borderOpacityUnselected: Double = colorScheme == .dark ? 0.1 : 0.15
+        let selectedFill = Color.accentColor.opacity(colorScheme == .dark ? 0.2 : 0.12)
 
         return SessionPickerRow(
             session: session,
@@ -1737,20 +1734,13 @@ struct ChatView: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isCurrent ? selectedFill : baseFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(isCurrent ? borderOpacitySelected : borderOpacityUnselected), lineWidth: isCurrent ? 0.8 : 0.5)
+                .fill(isCurrent ? selectedFill : Color.clear)
         )
     }
 
     private func sessionPickerSearchResultRow(_ result: SessionHistorySearchResult) -> some View {
         let isCurrent = result.sessionID == viewModel.currentSession?.id
-        let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
-        let selectedFill = colorScheme == .dark ? Color.black.opacity(0.36) : Color.black.opacity(0.08)
-        let borderOpacitySelected: Double = colorScheme == .dark ? 0.16 : 0.3
-        let borderOpacityUnselected: Double = colorScheme == .dark ? 0.1 : 0.15
+        let selectedFill = Color.accentColor.opacity(colorScheme == .dark ? 0.2 : 0.12)
 
         return Button {
             if let session = viewModel.chatSessions.first(where: { $0.id == result.sessionID }) {
@@ -1772,11 +1762,7 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isCurrent ? selectedFill : baseFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(isCurrent ? borderOpacitySelected : borderOpacityUnselected), lineWidth: isCurrent ? 0.8 : 0.5)
+                .fill(isCurrent ? selectedFill : Color.clear)
         )
     }
 
