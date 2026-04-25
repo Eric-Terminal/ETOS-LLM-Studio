@@ -10,6 +10,7 @@ import SwiftUI
 import Shared
 
 struct ExtendedFeaturesView: View {
+    @ObservedObject private var achievementCenter = AchievementCenter.shared
     @State private var isShowingIntroDetails = false
 
     var body: some View {
@@ -35,6 +36,17 @@ struct ExtendedFeaturesView: View {
                     """,
                     isExpanded: $isShowingIntroDetails
                 )
+            }
+
+            if achievementCenter.hasUnlockedAchievements {
+                Section {
+                    // 彩蛋入口只在已有记录后出现，避免提前暴露隐藏日记。
+                    NavigationLink {
+                        AchievementJournalView()
+                    } label: {
+                        Label("成就日记", systemImage: "rosette")
+                    }
+                }
             }
 
             Section {

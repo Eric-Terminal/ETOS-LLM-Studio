@@ -1380,6 +1380,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "成就日记" = "Journal des succès";
 "已点亮" = "Débloqué";
 "这里还没有留下记录。" = "Aucune entrée n'a encore été laissée ici.";
-"解锁：%@" = "Débloqué : %@";
+"解锁成就：%@" = "Succès débloqué : %@";
 "稳稳的接住你" = "Je te rattrape";
 "被稳稳的接住力" = "Énergie d'atterrissage tout doux.";

@@ -39,7 +39,6 @@ struct SettingsView: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
-    @ObservedObject private var achievementCenter = AchievementCenter.shared
     
     // MARK: - 公告管理器
     
@@ -192,13 +191,6 @@ struct SettingsView: View {
 
                     NavigationLink(destination: UsageAnalyticsView()) {
                         Label("用量统计", systemImage: "calendar.badge.clock")
-                    }
-
-                    if achievementCenter.hasUnlockedAchievements {
-                        // 彩蛋入口只在已有记录后出现，避免提前暴露隐藏日记。
-                        NavigationLink(destination: AchievementJournalView()) {
-                            Label("成就日记", systemImage: "rosette")
-                        }
                     }
 
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {

@@ -277,7 +277,7 @@ public final class AchievementCenter: ObservableObject {
 
         let content = UNMutableNotificationContent()
         content.title = String(
-            format: NSLocalizedString("解锁：%@", comment: "Achievement unlock notification title"),
+            format: NSLocalizedString("解锁成就：%@", comment: "Achievement unlock notification title"),
             entry.localizedTitle
         )
         content.body = entry.localizedSentence
