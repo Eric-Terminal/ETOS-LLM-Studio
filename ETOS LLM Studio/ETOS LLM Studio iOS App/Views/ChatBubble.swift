@@ -949,10 +949,7 @@ struct ChatBubble: View {
         )
         let stepCount = (hasReasoning ? 1 : 0) + visibleToolStepCount + (shouldShowDoneStep ? 1 : 0)
         let doneStepIndex = stepCount - 1
-        let isCollapsedReasoningOnly = hasReasoning
-            && !isReasoningExpanded
-            && visibleToolStepCount == 0
-            && !shouldShowDoneStep
+        let usesCompactReasoningTimeline = hasReasoning && toolPresentations.isEmpty
 
         if stepCount > 0 || !toolPresentations.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
@@ -962,13 +959,13 @@ struct ChatBubble: View {
                         iconColor: timelineAccentColor,
                         lineColor: timelineLineColor,
                         iconSize: 12,
-                        iconFrameSize: isReasoningExpanded ? 22 : 18,
-                        iconColumnWidth: isReasoningExpanded ? 24 : 18,
-                        contentSpacing: isReasoningExpanded ? 8 : 6,
-                        iconTopPadding: isReasoningExpanded ? 7 : 3,
-                        contentVerticalPadding: isReasoningExpanded ? 7 : 2,
-                        lineTopY: isReasoningExpanded ? 8 : 4,
-                        lineBottomY: isReasoningExpanded ? 28 : 20,
+                        iconFrameSize: 18,
+                        iconColumnWidth: 18,
+                        contentSpacing: 6,
+                        iconTopPadding: 3,
+                        contentVerticalPadding: 2,
+                        lineTopY: 4,
+                        lineBottomY: 20,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext
                     ) {
@@ -1017,7 +1014,7 @@ struct ChatBubble: View {
                     }
                 }
             }
-            .padding(.vertical, isCollapsedReasoningOnly ? 0 : 2)
+            .padding(.vertical, usesCompactReasoningTimeline ? 0 : 2)
         }
     }
 
