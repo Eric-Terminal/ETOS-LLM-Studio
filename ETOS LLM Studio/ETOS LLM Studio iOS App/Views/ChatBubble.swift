@@ -949,6 +949,10 @@ struct ChatBubble: View {
         )
         let stepCount = (hasReasoning ? 1 : 0) + visibleToolStepCount + (shouldShowDoneStep ? 1 : 0)
         let doneStepIndex = stepCount - 1
+        let isCollapsedReasoningOnly = hasReasoning
+            && !isReasoningExpanded
+            && visibleToolStepCount == 0
+            && !shouldShowDoneStep
 
         if stepCount > 0 || !toolPresentations.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
@@ -958,6 +962,13 @@ struct ChatBubble: View {
                         iconColor: timelineAccentColor,
                         lineColor: timelineLineColor,
                         iconSize: 12,
+                        iconFrameSize: isReasoningExpanded ? 22 : 18,
+                        iconColumnWidth: isReasoningExpanded ? 24 : 18,
+                        contentSpacing: isReasoningExpanded ? 8 : 6,
+                        iconTopPadding: isReasoningExpanded ? 7 : 3,
+                        contentVerticalPadding: isReasoningExpanded ? 7 : 2,
+                        lineTopY: isReasoningExpanded ? 8 : 4,
+                        lineBottomY: isReasoningExpanded ? 28 : 20,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext
                     ) {
@@ -1006,7 +1017,7 @@ struct ChatBubble: View {
                     }
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, isCollapsedReasoningOnly ? 0 : 2)
         }
     }
 
@@ -1794,6 +1805,13 @@ private struct AssistantTimelineStepShell<Content: View>: View {
     let iconColor: Color
     let lineColor: Color
     let iconSize: CGFloat
+    let iconFrameSize: CGFloat
+    let iconColumnWidth: CGFloat
+    let contentSpacing: CGFloat
+    let iconTopPadding: CGFloat
+    let contentVerticalPadding: CGFloat
+    let lineTopY: CGFloat
+    let lineBottomY: CGFloat
     let isFirst: Bool
     let isLast: Bool
     private let content: Content
@@ -1803,6 +1821,13 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         iconColor: Color,
         lineColor: Color,
         iconSize: CGFloat = 14,
+        iconFrameSize: CGFloat = 22,
+        iconColumnWidth: CGFloat = 24,
+        contentSpacing: CGFloat = 8,
+        iconTopPadding: CGFloat = 7,
+        contentVerticalPadding: CGFloat = 7,
+        lineTopY: CGFloat = 8,
+        lineBottomY: CGFloat = 28,
         isFirst: Bool,
         isLast: Bool,
         @ViewBuilder content: () -> Content
@@ -1811,28 +1836,40 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         self.iconColor = iconColor
         self.lineColor = lineColor
         self.iconSize = iconSize
+        self.iconFrameSize = iconFrameSize
+        self.iconColumnWidth = iconColumnWidth
+        self.contentSpacing = contentSpacing
+        self.iconTopPadding = iconTopPadding
+        self.contentVerticalPadding = contentVerticalPadding
+        self.lineTopY = lineTopY
+        self.lineBottomY = lineBottomY
         self.isFirst = isFirst
         self.isLast = isLast
         self.content = content()
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: contentSpacing) {
             Image(systemName: iconName)
                 .etFont(.system(size: iconSize, weight: .semibold))
                 .foregroundStyle(iconColor)
-                .frame(width: 22, height: 22)
-                .padding(.top, 7)
-                .frame(width: 24)
+                .frame(width: iconFrameSize, height: iconFrameSize)
+                .padding(.top, iconTopPadding)
+                .frame(width: iconColumnWidth)
 
             content
-                .padding(.vertical, 7)
+                .padding(.vertical, contentVerticalPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(alignment: .leading) {
-            AssistantTimelineLineShape(isFirst: isFirst, isLast: isLast)
+            AssistantTimelineLineShape(
+                isFirst: isFirst,
+                isLast: isLast,
+                iconTopY: lineTopY,
+                iconBottomY: lineBottomY
+            )
                 .stroke(lineColor, style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                .frame(width: 24)
+                .frame(width: iconColumnWidth)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1841,13 +1878,13 @@ private struct AssistantTimelineStepShell<Content: View>: View {
 private struct AssistantTimelineLineShape: Shape {
     let isFirst: Bool
     let isLast: Bool
+    let iconTopY: CGFloat
+    let iconBottomY: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let x = rect.midX
         let rowOverlap: CGFloat = 14
-        let iconTopY: CGFloat = 8
-        let iconBottomY: CGFloat = 28
         if !isFirst {
             path.move(to: CGPoint(x: x, y: rect.minY - rowOverlap))
             path.addLine(to: CGPoint(x: x, y: rect.minY + iconTopY))
