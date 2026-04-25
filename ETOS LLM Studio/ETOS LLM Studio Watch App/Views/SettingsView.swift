@@ -427,44 +427,44 @@ struct SettingsListIcon {
 
 extension SettingsListIcon {
     static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
-    static let newConversation = SettingsListIcon(systemName: "plus.message", backgroundColor: .green)
+    static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green, legacySystemName: "plus.message")
     static let sessionHistory = SettingsListIcon(
-        systemName: "bubble.left.and.bubble.right",
+        systemName: "clock",
         backgroundColor: .indigo,
         legacySystemName: "list.bullet.rectangle"
     )
     static let providerManagement = SettingsListIcon(
-        systemName: "shippingbox",
+        systemName: "cube",
         backgroundColor: .orange,
         legacySystemName: "list.bullet.rectangle.portrait"
     )
-    static let modelAdvanced = SettingsListIcon(systemName: "brain.head.profile", backgroundColor: .purple)
-    static let tts = SettingsListIcon(systemName: "speaker.wave.2", backgroundColor: .pink)
-    static let toolCenter = SettingsListIcon(systemName: "wrench.and.screwdriver", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")
-    static let dailyPulse = SettingsListIcon(systemName: "sparkles.rectangle.stack", backgroundColor: .yellow)
-    static let usageAnalytics = SettingsListIcon(systemName: "chart.bar.xaxis", backgroundColor: .cyan, legacySystemName: "calendar.badge.clock")
-    static let memory = SettingsListIcon(systemName: "brain.head.profile", backgroundColor: .mint)
+    static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple, legacySystemName: "brain.head.profile")
+    static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink, legacySystemName: "speaker.wave.2")
+    static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")
+    static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow, legacySystemName: "sparkles.rectangle.stack")
+    static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan, legacySystemName: "calendar.badge.clock")
+    static let memory = SettingsListIcon(systemName: "brain", backgroundColor: .mint, legacySystemName: "brain.head.profile")
     static let mcp = SettingsListIcon(systemName: "network", backgroundColor: .blue)
-    static let agentSkills = SettingsListIcon(systemName: "sparkles.square.filled.on.square", backgroundColor: .purple)
-    static let shortcuts = SettingsListIcon(systemName: "bolt.horizontal.circle", backgroundColor: .orange)
-    static let imageGeneration = SettingsListIcon(systemName: "photo.on.rectangle.angled", backgroundColor: .pink)
-    static let worldbook = SettingsListIcon(systemName: "book.pages", backgroundColor: .brown)
+    static let agentSkills = SettingsListIcon(systemName: "star", backgroundColor: .purple, legacySystemName: "sparkles.square.filled.on.square")
+    static let shortcuts = SettingsListIcon(systemName: "bolt", backgroundColor: .orange, legacySystemName: "bolt.horizontal.circle")
+    static let imageGeneration = SettingsListIcon(systemName: "photo", backgroundColor: .pink, legacySystemName: "photo.on.rectangle.angled")
+    static let worldbook = SettingsListIcon(systemName: "book", backgroundColor: .brown, legacySystemName: "book.pages")
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
-    static let extendedFeatures = SettingsListIcon(systemName: "puzzlepiece.extension", backgroundColor: .indigo)
-    static let display = SettingsListIcon(systemName: "photo.on.rectangle", backgroundColor: .purple)
-    static let sync = SettingsListIcon(systemName: "arrow.triangle.2.circlepath", backgroundColor: .green)
+    static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo, legacySystemName: "puzzlepiece.extension")
+    static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple, legacySystemName: "photo.on.rectangle")
+    static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green, legacySystemName: "arrow.triangle.2.circlepath")
     static let about = SettingsListIcon(systemName: "info.circle", backgroundColor: .gray)
-    static let achievementJournal = SettingsListIcon(systemName: "rosette", backgroundColor: .yellow)
-    static let feedback = SettingsListIcon(systemName: "text.bubble", backgroundColor: .blue)
-    static let remoteFiles = SettingsListIcon(systemName: "terminal", backgroundColor: .gray)
-    static let storage = SettingsListIcon(systemName: "internaldrive", backgroundColor: .teal)
+    static let achievementJournal = SettingsListIcon(systemName: "star", backgroundColor: .yellow, legacySystemName: "rosette")
+    static let feedback = SettingsListIcon(systemName: "bubble", backgroundColor: .blue, legacySystemName: "text.bubble")
+    static let remoteFiles = SettingsListIcon(systemName: "folder", backgroundColor: .gray, legacySystemName: "terminal")
+    static let storage = SettingsListIcon(systemName: "archivebox", backgroundColor: .teal, legacySystemName: "internaldrive")
     static let importData = SettingsListIcon(
-        systemName: "tray.and.arrow.down",
+        systemName: "arrow.down",
         backgroundColor: .green,
         legacySystemName: "square.and.arrow.down.on.square"
     )
-    static let conversationMemory = SettingsListIcon(systemName: "person.text.rectangle", backgroundColor: .mint)
-    static let memoryLibrary = SettingsListIcon(systemName: "folder.badge.gearshape", backgroundColor: .orange)
+    static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint, legacySystemName: "person.text.rectangle")
+    static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange, legacySystemName: "folder.badge.gearshape")
     static let announcementInfo = SettingsListIcon(systemName: "info.circle", backgroundColor: .blue)
     static let announcementWarning = SettingsListIcon(systemName: "exclamationmark.triangle", backgroundColor: .orange)
     static let announcementBlocking = SettingsListIcon(systemName: "exclamationmark.octagon", backgroundColor: .red)
