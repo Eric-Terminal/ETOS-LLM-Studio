@@ -404,7 +404,9 @@ struct ChatBubble: View {
         if usesNoBubbleStyle {
             return true
         }
-        return message.role != .user && message.role != .error && (mergeWithPrevious || mergeWithNext)
+        return message.role != .user
+            && message.role != .error
+            && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
     }
 
     private var rowVerticalPadding: CGFloat {
@@ -2096,6 +2098,7 @@ private struct WatchAssistantTimelineStepShell<Content: View>: View {
                 .padding(.vertical, contentVerticalPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .leading) {
             WatchAssistantTimelineLineShape(
                 isFirst: isFirst,
@@ -2273,6 +2276,7 @@ private struct WatchTimelineReasoningStepView: View {
                         .etFont(.caption2.weight(.semibold))
                         .foregroundStyle(secondaryColor)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -2297,6 +2301,7 @@ private struct WatchTimelineReasoningStepView: View {
                 .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
         .animation(.easeInOut(duration: 0.2), value: isPreviewing)
     }
@@ -2413,6 +2418,7 @@ private struct WatchTimelineToolCallStepContent: View {
                     .etFont(.caption2.weight(.semibold))
                     .foregroundStyle(secondaryColor)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 3) {
                 Image(systemName: statusIconName)
@@ -2426,6 +2432,7 @@ private struct WatchTimelineToolCallStepContent: View {
 
         }
         .contentShape(Rectangle())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var titleColor: Color {

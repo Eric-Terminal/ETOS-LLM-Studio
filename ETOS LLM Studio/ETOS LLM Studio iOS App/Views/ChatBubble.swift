@@ -279,7 +279,7 @@ struct ChatBubble: View {
         if usesNoBubbleStyle {
             return true
         }
-        return !isOutgoing && (mergeWithPrevious || mergeWithNext)
+        return !isOutgoing && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
     }
 
     private var rowSideSpacerMinLength: CGFloat {
@@ -1874,6 +1874,7 @@ private struct AssistantTimelineStepShell<Content: View>: View {
                 .padding(.vertical, contentVerticalPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .leading) {
             AssistantTimelineLineShape(
                 isFirst: isFirst,
@@ -1945,6 +1946,7 @@ private struct TimelineReasoningStepView: View {
                         .rotationEffect(.degrees(isFullyExpanded ? 90 : 0))
                         .foregroundStyle(secondaryColor)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1969,6 +1971,7 @@ private struct TimelineReasoningStepView: View {
                 .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
         .animation(.easeInOut(duration: 0.2), value: isPreviewing)
     }
@@ -2088,6 +2091,7 @@ private struct TimelineToolCallStepContent: View {
                     .etFont(.system(size: 12, weight: .semibold))
                     .foregroundStyle(secondaryColor)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 4) {
                 Image(systemName: statusIconName)
@@ -2101,6 +2105,7 @@ private struct TimelineToolCallStepContent: View {
 
         }
         .contentShape(Rectangle())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var titleColor: Color {

@@ -194,7 +194,7 @@ final class PersistenceGRDBStore {
     private let dbPool: DatabasePool
     private let messageWriteQueue = DispatchQueue(
         label: "com.etos.persistence.messages.write.queue",
-        qos: .utility
+        qos: .userInitiated
     )
     private let messageWriteQueueSpecificKey = DispatchSpecificKey<UInt8>()
 
