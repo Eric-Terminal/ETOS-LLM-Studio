@@ -585,10 +585,9 @@ private struct SessionFolderBrowserView: View {
             )
         }
         .padding(.horizontal, 18)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(.bar)
     }
 
     @ViewBuilder
