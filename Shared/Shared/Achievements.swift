@@ -28,6 +28,10 @@ public struct AchievementID: RawRepresentable, Codable, Hashable, Sendable, Expr
     }
 }
 
+public extension AchievementID {
+    static let steadyCatch: Self = "steadyCatch"
+}
+
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
     public let id: AchievementID
     public let titleKey: String
@@ -48,8 +52,25 @@ public struct AchievementDefinition: Identifiable, Hashable, Sendable {
 }
 
 public enum AchievementCatalog {
-    // 首版只搭骨架。新增真实成就时在这里登记定义，并补齐双端本地化文案。
-    public static let definitions: [AchievementDefinition] = []
+    public static let definitions: [AchievementDefinition] = [
+        AchievementDefinition(
+            id: .steadyCatch,
+            titleKey: "稳稳的接住你",
+            sentenceKey: "被稳稳的接住力",
+            systemImageName: "hands.sparkles"
+        )
+    ]
+}
+
+enum AchievementTriggerEvaluator {
+    static func shouldUnlockSteadyCatch(from assistantReply: String) -> Bool {
+        if assistantReply.contains("稳稳的接住你") {
+            return true
+        }
+
+        let folded = assistantReply.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        return folded.contains("i've got you") || folded.contains("i’ve got you")
+    }
 }
 
 public struct AchievementUnlockRecord: Identifiable, Codable, Hashable, Sendable {
@@ -117,6 +138,7 @@ public final class AchievementCenter: ObservableObject {
     private let definitionsByID: [AchievementID: AchievementDefinition]
     private let notificationHandler: NotificationHandler?
     private let encoder = JSONEncoder()
+    private var unlockedAchievementIDs: Set<AchievementID>
     private var defaultsObserver: NSObjectProtocol?
 
     public init(
@@ -133,6 +155,7 @@ public final class AchievementCenter: ObservableObject {
         )
         self.journalEntries = entries
         self.hasUnlockedAchievements = !entries.isEmpty
+        self.unlockedAchievementIDs = Set(entries.map(\.achievementID))
         observeDefaultsChanges()
     }
 
@@ -169,6 +192,10 @@ public final class AchievementCenter: ObservableObject {
         refreshFromStorage(records: Self.loadUnlockRecords(from: defaults))
     }
 
+    public func hasUnlocked(id: AchievementID) -> Bool {
+        unlockedAchievementIDs.contains(id)
+    }
+
     public nonisolated static func isAchievementStorageKey(_ key: String) -> Bool {
         key.hasPrefix(storageKeyPrefix)
     }
@@ -185,6 +212,7 @@ public final class AchievementCenter: ObservableObject {
         let entries = Self.makeJournalEntries(records: records, definitionsByID: definitionsByID)
         journalEntries = entries
         hasUnlockedAchievements = !entries.isEmpty
+        unlockedAchievementIDs = Set(entries.map(\.achievementID))
     }
 
     private func observeDefaultsChanges() {

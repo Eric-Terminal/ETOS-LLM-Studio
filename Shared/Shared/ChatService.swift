@@ -4563,6 +4563,8 @@ public class ChatService {
             responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + inlineImageExtraction.imageFileNames
         }
 
+        scheduleAssistantReplyAchievementDetectionIfNeeded(responseMessage.content)
+
         if let toolCalls = responseMessage.toolCalls {
             let resolvedCalls = resolveToolCalls(toolCalls, availableTools: availableTools ?? [])
             let filteredCalls = resolvedCalls.filter { !sanitizedToolName($0.toolName).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -5226,6 +5228,16 @@ public class ChatService {
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics
             )
             persistAndPublishMessages(messages, for: sessionID)
+        }
+    }
+
+    private func scheduleAssistantReplyAchievementDetectionIfNeeded(_ content: String) {
+        Task.detached(priority: .utility) {
+            let alreadyUnlocked = await AchievementCenter.shared.hasUnlocked(id: .steadyCatch)
+            guard !alreadyUnlocked else { return }
+            guard !content.isEmpty else { return }
+            guard AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: content) else { return }
+            await AchievementCenter.shared.unlock(id: .steadyCatch)
         }
     }
 

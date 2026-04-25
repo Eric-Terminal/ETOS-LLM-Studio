@@ -207,6 +207,43 @@ struct AchievementCenterTests {
         #expect(defaults.data(forKey: AchievementCenter.storageKey(for: remoteRecord)) != nil)
     }
 
+    @Test("稳稳接住成就定义已登记")
+    func steadyCatchDefinitionIsRegistered() {
+        let definition = AchievementCatalog.definitions.first { $0.id == .steadyCatch }
+
+        #expect(definition?.titleKey == "稳稳的接住你")
+        #expect(definition?.sentenceKey == "被稳稳的接住力")
+    }
+
+    @Test("稳稳接住触发词支持中文与英文")
+    func steadyCatchTriggerMatchesExpectedKeywords() {
+        #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "这一回我会稳稳的接住你。"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I've got you. Take a breath."))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I’ve got you. Take a breath."))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "This is only nearby comfort.") == false)
+    }
+
+    @Test("成就中心可以快速判断指定成就是否已解锁")
+    func centerReportsSpecificUnlockState() async {
+        let suite = "com.ETOS.tests.achievement.hasUnlocked.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let center = AchievementCenter(
+            defaults: defaults,
+            definitions: [Self.steadyCatchDefinition],
+            notificationHandler: { _ in }
+        )
+
+        #expect(center.hasUnlocked(id: .steadyCatch) == false)
+        _ = await center.unlock(id: .steadyCatch, unlockedAt: Date(timeIntervalSince1970: 1_744_156_800))
+        #expect(center.hasUnlocked(id: .steadyCatch))
+    }
+
     private static let firstDefinition = AchievementDefinition(
         id: "test.first",
         titleKey: "测试成就一",
@@ -219,6 +256,13 @@ struct AchievementCenterTests {
         titleKey: "测试成就二",
         sentenceKey: "第二条隐藏句子。",
         systemImageName: "rosette"
+    )
+
+    private static let steadyCatchDefinition = AchievementDefinition(
+        id: .steadyCatch,
+        titleKey: "稳稳的接住你",
+        sentenceKey: "被稳稳的接住力",
+        systemImageName: "hands.sparkles"
     )
 
     private func store(_ record: AchievementUnlockRecord, in defaults: UserDefaults) {
