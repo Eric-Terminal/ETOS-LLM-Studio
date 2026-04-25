@@ -449,7 +449,7 @@ struct SettingsListIconView: View {
     let icon: SettingsListIcon
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
+        Circle()
             .fill(icon.backgroundColor)
             .frame(width: 29, height: 29)
             .overlay {
