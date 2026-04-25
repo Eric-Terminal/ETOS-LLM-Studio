@@ -277,7 +277,7 @@ struct ChatView: View {
     }
     var body: some View {
         let displayedMessages = viewModel.displayMessages
-        NavigationStack {
+        Group {
             ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
                 telegramBackgroundLayer
@@ -802,6 +802,7 @@ struct ChatView: View {
             deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
         )
         .navigationBarBackButtonHidden(true)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
