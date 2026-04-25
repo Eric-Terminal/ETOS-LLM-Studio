@@ -295,6 +295,10 @@ struct ChatBubble: View {
         return enableNoBubbleUI ? basePadding * 3 : basePadding
     }
 
+    private var bubbleContentVerticalPadding: CGFloat {
+        usesNoBubbleStyle ? 4 : 8
+    }
+
     private var textForegroundColor: Color {
         if isError && usesNoBubbleStyle {
             return .red
@@ -795,7 +799,7 @@ struct ChatBubble: View {
             content()
         }
         .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
-        .padding(.vertical, usesNoBubbleStyle ? 4 : 8)
+        .padding(.vertical, bubbleContentVerticalPadding)
         .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
         .background(
             bubbleDecoratedBackground(
@@ -966,6 +970,8 @@ struct ChatBubble: View {
         let stepCount = (hasReasoning ? 1 : 0) + visibleToolStepCount + (shouldShowDoneStep ? 1 : 0)
         let doneStepIndex = stepCount - 1
         let usesCompactReasoningTimeline = hasReasoning && toolPresentations.isEmpty
+        let timelineVerticalPadding: CGFloat = usesCompactReasoningTimeline ? 0 : 2
+        let externalLineBridge = bubbleContentVerticalPadding + timelineVerticalPadding
 
         if stepCount > 0 || !toolPresentations.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
@@ -984,7 +990,9 @@ struct ChatBubble: View {
                         lineBottomY: 20,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext,
-                        extendsLineThroughContent: isReasoningExpanded || isReasoningAutoPreview
+                        extendsLineThroughContent: isReasoningExpanded || isReasoningAutoPreview,
+                        lineTopExtension: connectsTimelineFromPrevious ? externalLineBridge : 0,
+                        lineBottomExtension: stepCount == 1 && connectsTimelineToNext ? externalLineBridge : 0
                     ) {
                         TimelineReasoningStepView(
                             reasoning: trimmedReasoning,
@@ -1014,7 +1022,9 @@ struct ChatBubble: View {
                             iconColor: status.accentColor,
                             lineColor: timelineLineColor,
                             isFirst: stepIndex == 0 && !connectsTimelineFromPrevious,
-                            isLast: stepIndex == stepCount - 1 && !connectsTimelineToNext
+                            isLast: stepIndex == stepCount - 1 && !connectsTimelineToNext,
+                            lineTopExtension: stepIndex == 0 && connectsTimelineFromPrevious ? externalLineBridge : 0,
+                            lineBottomExtension: stepIndex == stepCount - 1 && connectsTimelineToNext ? externalLineBridge : 0
                         ) {
                             timelineToolCallRow(for: presentation.call, status: status)
                         }
@@ -1027,7 +1037,9 @@ struct ChatBubble: View {
                         iconColor: timelineDoneColor,
                         lineColor: timelineLineColor,
                         isFirst: doneStepIndex == 0 && !connectsTimelineFromPrevious,
-                        isLast: !connectsTimelineToNext
+                        isLast: !connectsTimelineToNext,
+                        lineTopExtension: doneStepIndex == 0 && connectsTimelineFromPrevious ? externalLineBridge : 0,
+                        lineBottomExtension: connectsTimelineToNext ? externalLineBridge : 0
                     ) {
                         Text("Done")
                             .etFont(.subheadline.weight(.semibold))
@@ -1036,7 +1048,7 @@ struct ChatBubble: View {
                     }
                 }
             }
-            .padding(.vertical, usesCompactReasoningTimeline ? 0 : 2)
+            .padding(.vertical, timelineVerticalPadding)
         }
     }
 
@@ -1840,6 +1852,8 @@ private struct AssistantTimelineStepShell<Content: View>: View {
     let isFirst: Bool
     let isLast: Bool
     let extendsLineThroughContent: Bool
+    let lineTopExtension: CGFloat
+    let lineBottomExtension: CGFloat
     private let content: Content
 
     init(
@@ -1857,6 +1871,8 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         isFirst: Bool,
         isLast: Bool,
         extendsLineThroughContent: Bool = false,
+        lineTopExtension: CGFloat = 0,
+        lineBottomExtension: CGFloat = 0,
         @ViewBuilder content: () -> Content
     ) {
         self.iconName = iconName
@@ -1873,6 +1889,8 @@ private struct AssistantTimelineStepShell<Content: View>: View {
         self.isFirst = isFirst
         self.isLast = isLast
         self.extendsLineThroughContent = extendsLineThroughContent
+        self.lineTopExtension = lineTopExtension
+        self.lineBottomExtension = lineBottomExtension
         self.content = content()
     }
 
@@ -1895,6 +1913,8 @@ private struct AssistantTimelineStepShell<Content: View>: View {
                 isFirst: isFirst,
                 isLast: isLast,
                 extendsLineThroughContent: extendsLineThroughContent,
+                lineTopExtension: lineTopExtension,
+                lineBottomExtension: lineBottomExtension,
                 iconTopY: lineTopY,
                 iconBottomY: lineBottomY
             )
@@ -1909,21 +1929,21 @@ private struct AssistantTimelineLineShape: Shape {
     let isFirst: Bool
     let isLast: Bool
     let extendsLineThroughContent: Bool
+    let lineTopExtension: CGFloat
+    let lineBottomExtension: CGFloat
     let iconTopY: CGFloat
     let iconBottomY: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let x = rect.midX
-        let rowOverlap: CGFloat = 14
         if !isFirst {
-            path.move(to: CGPoint(x: x, y: rect.minY - rowOverlap))
+            path.move(to: CGPoint(x: x, y: rect.minY - lineTopExtension))
             path.addLine(to: CGPoint(x: x, y: rect.minY + iconTopY))
         }
         if extendsLineThroughContent || !isLast {
-            let endY = isLast ? rect.maxY : rect.maxY + rowOverlap
             path.move(to: CGPoint(x: x, y: rect.minY + iconBottomY))
-            path.addLine(to: CGPoint(x: x, y: endY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY + lineBottomExtension))
         }
         return path
     }
