@@ -84,6 +84,22 @@ struct TTSModelSelectionTests {
         #expect(chunks == ["你好世界。", "今天继续测试", "分片能力！", "最后一句"])
     }
 
+    @Test("提取引号内容时保留嵌套单引号词")
+    func testExtractQuotedContentKeepsNestedSingleQuotedWords() {
+        let text = "提示：“请朗读 'Alpha' 和 'Beta'，不要漏掉后半句。”"
+        let quoted = TTSManager.extractQuotedContentForPlayback(text)
+
+        #expect(quoted == "请朗读 'Alpha' 和 'Beta'，不要漏掉后半句。")
+    }
+
+    @Test("提取多个引号片段时按原顺序拼接")
+    func testExtractQuotedContentKeepsMultipleSegments() {
+        let text = "她说“第一句”，又说“第二句”。"
+        let quoted = TTSManager.extractQuotedContentForPlayback(text)
+
+        #expect(quoted == "第一句\n第二句")
+    }
+
     private func clearAllProviders() {
         let current = ConfigLoader.loadProviders()
         current.forEach { ConfigLoader.deleteProvider($0) }

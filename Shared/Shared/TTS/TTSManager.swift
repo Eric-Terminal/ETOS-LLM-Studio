@@ -724,7 +724,7 @@ public final class TTSManager: NSObject, ObservableObject {
 #else
         stripped = stripMarkdown(normalized)
 #endif
-        let quoted = settings.onlyReadQuotedContent ? extractQuotedContent(from: stripped) : stripped
+        let quoted = settings.onlyReadQuotedContent ? Self.extractQuotedContentForPlayback(stripped) : stripped
         return quoted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -826,19 +826,69 @@ public final class TTSManager: NSObject, ObservableObject {
         return payloads
     }
 
-    private func extractQuotedContent(from text: String) -> String {
-        let pattern = #"["“”'‘’]([^"“”'‘’]+)["“”'‘’]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return text
+    public nonisolated static func extractQuotedContentForPlayback(_ text: String) -> String {
+        struct QuoteFrame {
+            let closing: Character
+            let contentStart: String.Index
         }
-        let nsText = text as NSString
-        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
-        let parts: [String] = matches.compactMap { match in
-            guard match.numberOfRanges >= 2 else { return nil }
-            return nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty }
+
+        var parts: [String] = []
+        var stack: [QuoteFrame] = []
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            let character = text[index]
+
+            if let frame = stack.last, character == frame.closing {
+                stack.removeLast()
+                if stack.isEmpty {
+                    let part = String(text[frame.contentStart..<index]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !part.isEmpty {
+                        parts.append(part)
+                    }
+                }
+            } else if let closing = closingQuote(for: character, in: text, at: index) {
+                stack.append(QuoteFrame(closing: closing, contentStart: text.index(after: index)))
+            }
+
+            index = text.index(after: index)
+        }
+
         if parts.isEmpty { return text }
         return parts.joined(separator: "\n")
+    }
+
+    private nonisolated static func closingQuote(for character: Character, in text: String, at index: String.Index) -> Character? {
+        switch character {
+        case "\"":
+            return "\""
+        case "'":
+            return isLikelyApostrophe(in: text, at: index) ? nil : "'"
+        case "“":
+            return "”"
+        case "‘":
+            return "’"
+        case "「":
+            return "」"
+        case "『":
+            return "』"
+        default:
+            return nil
+        }
+    }
+
+    private nonisolated static func isLikelyApostrophe(in text: String, at index: String.Index) -> Bool {
+        guard index > text.startIndex else { return false }
+        let nextIndex = text.index(after: index)
+        guard nextIndex < text.endIndex else { return false }
+
+        let previous = text[text.index(before: index)]
+        let next = text[nextIndex]
+        return isLetterOrNumber(previous) && isLetterOrNumber(next)
+    }
+
+    private nonisolated static func isLetterOrNumber(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
     }
 
     private func stripMarkdown(_ text: String) -> String {
