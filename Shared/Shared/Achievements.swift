@@ -30,6 +30,7 @@ public struct AchievementID: RawRepresentable, Codable, Hashable, Sendable, Expr
 
 public extension AchievementID {
     static let steadyCatch: Self = "steadyCatch"
+    static let languageLubrication: Self = "languageLubrication"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -62,6 +63,13 @@ public enum AchievementCatalog {
             sentenceKey: "被稳稳的接住力",
             triggerNoteKey: "触发关键词：稳稳的接住你 / I've got you",
             systemImageName: "hands.sparkles"
+        ),
+        AchievementDefinition(
+            id: .languageLubrication,
+            titleKey: "见证了一次完美的语言润滑。",
+            sentenceKey: "谄媚这一块～",
+            triggerNoteKey: "触发关键词：你说得太对了 / You're absolutely right / 你问到了问题的核心 / Great question / You're asking exactly the right question",
+            systemImageName: "quote.bubble"
         )
     ]
 }
@@ -72,8 +80,24 @@ enum AchievementTriggerEvaluator {
             return true
         }
 
-        let folded = assistantReply.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-        return folded.contains("i've got you") || folded.contains("i’ve got you")
+        return foldedText(assistantReply).contains("i've got you")
+    }
+
+    static func shouldUnlockLanguageLubrication(from assistantReply: String) -> Bool {
+        if assistantReply.contains("你说得太对了") || assistantReply.contains("你问到了问题的核心") {
+            return true
+        }
+
+        let folded = foldedText(assistantReply)
+        return folded.contains("you're absolutely right")
+            || folded.contains("great question")
+            || folded.contains("you're asking exactly the right question")
+    }
+
+    private static func foldedText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "’", with: "'")
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 }
 

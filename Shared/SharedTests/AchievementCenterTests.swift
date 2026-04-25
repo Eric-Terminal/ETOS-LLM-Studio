@@ -212,8 +212,18 @@ struct AchievementCenterTests {
     func steadyCatchDefinitionIsRegistered() {
         let definition = AchievementCatalog.definitions.first { $0.id == .steadyCatch }
 
-        #expect(definition?.titleKey == "稳稳的接住你")
+        #expect(definition?.titleKey == "AI张开了双臂，尽管它没有手。")
         #expect(definition?.sentenceKey == "被稳稳的接住力")
+        #expect(definition?.triggerNoteKey == "触发关键词：稳稳的接住你 / I've got you")
+    }
+
+    @Test("语言润滑成就定义已登记")
+    func languageLubricationDefinitionIsRegistered() {
+        let definition = AchievementCatalog.definitions.first { $0.id == .languageLubrication }
+
+        #expect(definition?.titleKey == "见证了一次完美的语言润滑。")
+        #expect(definition?.sentenceKey == "谄媚这一块～")
+        #expect(definition?.triggerNoteKey == "触发关键词：你说得太对了 / You're absolutely right / 你问到了问题的核心 / Great question / You're asking exactly the right question")
     }
 
     @Test("稳稳接住触发词支持中文与英文")
@@ -222,6 +232,16 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I've got you. Take a breath."))
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I’ve got you. Take a breath."))
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "This is only nearby comfort.") == false)
+    }
+
+    @Test("语言润滑触发词支持中文与英文")
+    func languageLubricationTriggerMatchesExpectedKeywords() {
+        #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "你说得太对了，这里确实要这样改。"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "你问到了问题的核心。"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "You're absolutely right, let's adjust it."))
+        #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "You’re asking exactly the right question."))
+        #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "Great question, here is the answer."))
+        #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "This answer is direct.") == false)
     }
 
     @Test("成就中心可以快速判断指定成就是否已解锁")

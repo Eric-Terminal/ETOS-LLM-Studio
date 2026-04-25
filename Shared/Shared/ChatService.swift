@@ -5233,11 +5233,19 @@ public class ChatService {
 
     private func scheduleAssistantReplyAchievementDetectionIfNeeded(_ content: String) {
         Task.detached(priority: .utility) {
-            let alreadyUnlocked = await AchievementCenter.shared.hasUnlocked(id: .steadyCatch)
-            guard !alreadyUnlocked else { return }
             guard !content.isEmpty else { return }
-            guard AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: content) else { return }
-            await AchievementCenter.shared.unlock(id: .steadyCatch)
+
+            let hasUnlockedSteadyCatch = await AchievementCenter.shared.hasUnlocked(id: .steadyCatch)
+            if !hasUnlockedSteadyCatch,
+               AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: content) {
+                await AchievementCenter.shared.unlock(id: .steadyCatch)
+            }
+
+            let hasUnlockedLanguageLubrication = await AchievementCenter.shared.hasUnlocked(id: .languageLubrication)
+            if !hasUnlockedLanguageLubrication,
+               AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: content) {
+                await AchievementCenter.shared.unlock(id: .languageLubrication)
+            }
         }
     }
 
