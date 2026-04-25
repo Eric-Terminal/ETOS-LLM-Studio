@@ -199,6 +199,8 @@ public class ChatService {
     private let urlSession: URLSession
     private let startupStateLoadLock = NSLock()
     private var hasTriggeredStartupStateLoad = false
+    private var hasCompletedStartupStateLoad = false
+    private var startupStateLoadTask: Task<Void, Never>?
     private let audioAttachmentDataCache: NSCache<NSString, NSData> = {
         let cache = NSCache<NSString, NSData>()
         cache.countLimit = 24
@@ -645,32 +647,56 @@ public class ChatService {
         )
     }
 
-    public func loadInitialPersistenceStateIfNeeded(priority: TaskPriority = .utility) {
+    @discardableResult
+    public func loadInitialPersistenceStateIfNeeded(priority: TaskPriority = .utility) -> Task<Void, Never>? {
         startupStateLoadLock.lock()
-        let shouldStart = !hasTriggeredStartupStateLoad
+        if let startupStateLoadTask {
+            startupStateLoadLock.unlock()
+            return startupStateLoadTask
+        }
+        let shouldStart = !hasTriggeredStartupStateLoad && !hasCompletedStartupStateLoad
         if shouldStart {
             hasTriggeredStartupStateLoad = true
         }
-        startupStateLoadLock.unlock()
+        guard shouldStart else {
+            startupStateLoadLock.unlock()
+            return nil
+        }
 
-        guard shouldStart else { return }
-
-        Task.detached(priority: priority) { [weak self] in
+        let task = Task.detached(priority: priority) { [weak self] in
             guard let self else { return }
             let launchState = Self.loadLaunchPersistenceState(using: self.startupTemporarySession)
-            DispatchQueue.main.async { [weak self] in
+            await MainActor.run { [weak self] in
                 guard let self else { return }
-                guard self.shouldApplyLaunchPersistenceState() else {
+                if self.shouldApplyLaunchPersistenceState() {
+                    self.sessionFoldersSubject.send(launchState.sessionFolders)
+                    self.chatSessionsSubject.send(launchState.loadedSessions)
+                    self.currentSessionSubject.send(launchState.initialSession)
+                    self.messagesForSessionSubject.send(launchState.initialMessages)
+                    self.logger.info("启动持久化状态已异步加载完成。")
+                } else {
                     self.logger.info("启动持久化状态已加载，但检测到前台状态已变更，已跳过覆盖。")
-                    return
                 }
-                self.sessionFoldersSubject.send(launchState.sessionFolders)
-                self.chatSessionsSubject.send(launchState.loadedSessions)
-                self.currentSessionSubject.send(launchState.initialSession)
-                self.messagesForSessionSubject.send(launchState.initialMessages)
-                self.logger.info("启动持久化状态已异步加载完成。")
+                self.markStartupStateLoadCompleted()
             }
         }
+        startupStateLoadTask = task
+        startupStateLoadLock.unlock()
+
+        return task
+    }
+
+    public func waitForInitialPersistenceStateIfNeeded(priority: TaskPriority = .utility) async {
+        if let task = loadInitialPersistenceStateIfNeeded(priority: priority) {
+            await task.value
+        }
+    }
+
+    private func markStartupStateLoadCompleted() {
+        startupStateLoadLock.lock()
+        hasCompletedStartupStateLoad = true
+        startupStateLoadTask = nil
+        startupStateLoadLock.unlock()
     }
 
     private func shouldApplyLaunchPersistenceState() -> Bool {
@@ -2080,6 +2106,8 @@ public class ChatService {
         fileAttachments: [FileAttachment] = [],
         isRetry: Bool = false
     ) async {
+        await waitForInitialPersistenceStateIfNeeded()
+
         guard var currentSession = currentSessionSubject.value else {
             addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
             requestStatusSubject.send(.error)
@@ -3033,7 +3061,10 @@ public class ChatService {
         currentAudioAttachment: AudioAttachment?, // 当前消息的音频附件（用于首次发送，尚未保存到文件）
         currentFileAttachments: [FileAttachment] // 当前消息的文件附件（用于首次发送，尚未保存到文件）
     ) async {
-        let sessionForRequest = chatSessionsSubject.value.first(where: { $0.id == currentSessionID }) ?? currentSessionSubject.value
+        let currentSessionSnapshot = currentSessionSubject.value
+        let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
+            ? currentSessionSnapshot
+            : chatSessionsSubject.value.first(where: { $0.id == currentSessionID })
         let requestMessages = preparedMessagesForRequest(
             from: messages,
             loadingMessageID: loadingMessageID,

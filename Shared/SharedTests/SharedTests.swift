@@ -3624,6 +3624,53 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("会话列表快照落后时仍使用当前会话世界书绑定")
+    func testWorldbookUsesCurrentSessionBindingWhenSessionListSnapshotIsStale() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        let sessionID = UUID()
+        defer {
+            store.saveWorldbooks(originalBooks)
+            Persistence.deleteSessionArtifacts(sessionID: sessionID)
+        }
+
+        let book = Worldbook(
+            name: "当前会话绑定书",
+            entries: [WorldbookEntry(content: "current-session-worldbook-hit", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([book])
+
+        let staleSession = ChatSession(id: sessionID, name: "快照落后会话", isTemporary: false)
+        var currentSession = staleSession
+        currentSession.lorebookIDs = [book.id]
+
+        chatService.chatSessionsSubject.send([staleSession])
+        chatService.currentSessionSubject.send(currentSession)
+        chatService.messagesForSessionSubject.send([])
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let systemPrompt = mockAdapter.receivedMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("<worldbook_after>"))
+        #expect(systemPrompt.contains("current-session-worldbook-hit"))
+
+        await cleanup()
+    }
+
     @Test("Worldbook isolation suppresses memory and tool context")
     func testWorldbookIsolationSuppressesMemoryAndToolContext() async throws {
         await cleanup()

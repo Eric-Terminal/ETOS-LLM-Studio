@@ -67,7 +67,7 @@ public final class AppLaunchStateMachine: ObservableObject {
 
             await Task.detached(priority: .utility) {
                 let chatService = ChatService.shared
-                chatService.loadInitialPersistenceStateIfNeeded()
+                await chatService.waitForInitialPersistenceStateIfNeeded()
             }.value
 
             guard !Task.isCancelled else {
