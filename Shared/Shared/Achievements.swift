@@ -45,6 +45,7 @@ public extension AchievementID {
     static let schrodingerQuestion: Self = "schrodingerQuestion"
     static let settingsResearcher: Self = "settingsResearcher"
     static let conversationArchaeologist: Self = "conversationArchaeologist"
+    static let fishTankReview: Self = "fishTankReview"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -159,7 +160,7 @@ public enum AchievementCatalog {
             id: .politeHuman,
             titleKey: "有礼貌的人类",
             sentenceKey: "向一个不需要被感谢的程序道了谢。",
-            triggerNoteKey: "触发条件：对 AI 说「谢谢」",
+            triggerNoteKey: "触发条件：用支持的语言向 AI 道谢",
             systemImageName: "hands.clap"
         ),
         AchievementDefinition(
@@ -182,6 +183,13 @@ public enum AchievementCatalog {
             sentenceKey: "翻到了最早的对话记录。",
             triggerNoteKey: "触发条件：超过 300 个会话后翻到最后一页",
             systemImageName: "archivebox"
+        ),
+        AchievementDefinition(
+            id: .fishTankReview,
+            titleKey: "让AI评价鱼缸",
+            sentenceKey: "AI使用了评价这款App的工具。套娃已完成。",
+            triggerNoteKey: "触发条件：AI 调用 app_submit_feedback_ticket 工具",
+            systemImageName: "bubble.left.and.text.bubble.right"
         )
     ]
 }
@@ -192,6 +200,21 @@ public enum AchievementTriggerEvaluator {
     static let repeatedRetryThreshold = 3
     public static let settingsResearchDuration: TimeInterval = 5 * 60
     public static let archaeologySessionThreshold = 300
+    private static let politeHumanPhrases: Set<String> = [
+        "谢谢",
+        "謝謝",
+        "多謝",
+        "thanks",
+        "thank you",
+        "gracias",
+        "merci",
+        "ありがとう",
+        "ありがとうございます",
+        "спасибо",
+        "شكرا",
+        "شكراً",
+        "شكرًا"
+    ]
 
     static func shouldUnlockSteadyCatch(from assistantReply: String) -> Bool {
         if assistantReply.contains("稳稳的接住你") {
@@ -216,10 +239,11 @@ public enum AchievementTriggerEvaluator {
         for content: String,
         userMessageCount: Int,
         sentAt: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        includePoliteHuman: Bool = true
     ) -> [AchievementID] {
         var ids: [AchievementID] = []
-        if shouldUnlockPoliteHuman(from: content) {
+        if includePoliteHuman && shouldUnlockPoliteHuman(from: content) {
             ids.append(.politeHuman)
         }
         if shouldUnlockSingleCharacterMessage(from: content) {
@@ -242,7 +266,9 @@ public enum AchievementTriggerEvaluator {
     }
 
     static func shouldUnlockPoliteHuman(from content: String) -> Bool {
-        content.trimmingCharacters(in: .whitespacesAndNewlines) == "谢谢"
+        let normalized = normalizedPoliteHumanPhrase(content)
+        guard !normalized.isEmpty else { return false }
+        return politeHumanPhrases.contains(normalized)
     }
 
     static func shouldUnlockLongConfession(from content: String) -> Bool {
@@ -276,10 +302,20 @@ public enum AchievementTriggerEvaluator {
             && pageIndex == totalPages - 1
     }
 
+    static func shouldUnlockFishTankReview(appToolName: String) -> Bool {
+        appToolName == "app_submit_feedback_ticket"
+    }
+
+    private static func normalizedPoliteHumanPhrase(_ text: String) -> String {
+        let trimSet = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        return foldedText(text.trimmingCharacters(in: trimSet))
+    }
+
     private static func foldedText(_ text: String) -> String {
         text
             .replacingOccurrences(of: "’", with: "'")
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
     }
 }
 

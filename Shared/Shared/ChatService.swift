@@ -5287,10 +5287,12 @@ public class ChatService {
         sentAt: Date
     ) {
         Task.detached(priority: .utility) {
+            let hasUnlockedPoliteHuman = await AchievementCenter.shared.hasUnlocked(id: .politeHuman)
             let ids = AchievementTriggerEvaluator.userMessageAchievementIDs(
                 for: content,
                 userMessageCount: userMessageCount,
-                sentAt: sentAt
+                sentAt: sentAt,
+                includePoliteHuman: !hasUnlockedPoliteHuman
             )
             guard !ids.isEmpty else { return }
 

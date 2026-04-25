@@ -1719,6 +1719,10 @@ public final class AppToolManager: ObservableObject {
                 "moderationBlocked": ticket.moderationBlocked as Any,
                 "moderationMessage": ticket.moderationMessage as Any
             ]
+            if AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: AppToolKind.submitFeedbackTicket.toolName),
+               !AchievementCenter.shared.hasUnlocked(id: .fishTankReview) {
+                await AchievementCenter.shared.unlock(id: .fishTankReview)
+            }
             return prettyPrintedJSONString(from: payload)
         case .listSandboxDirectory:
             struct ListDirectoryArgs: Decodable {

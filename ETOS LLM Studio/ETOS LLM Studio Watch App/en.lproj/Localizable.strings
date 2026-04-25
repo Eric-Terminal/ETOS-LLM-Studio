@@ -1320,7 +1320,7 @@
 "触发条件：清空所有对话记录" = "Trigger condition: clear all conversation records";
 "有礼貌的人类" = "Polite Human";
 "向一个不需要被感谢的程序道了谢。" = "Thanked a program that does not need to be thanked.";
-"触发条件：对 AI 说「谢谢」" = "Trigger condition: say \"谢谢\" to the AI";
+"触发条件：用支持的语言向 AI 道谢" = "Trigger condition: thank the AI in a supported language";
 "薛定谔的问题" = "Schrodinger's Question";
 "坚持认为第三次AI会给出不同答案。" = "Kept believing the third try would make the AI answer differently.";
 "触发条件：连续重试同一条消息 3 次" = "Trigger condition: retry the same message 3 times in a row";
@@ -1330,3 +1330,6 @@
 "考古学家" = "Archaeologist";
 "翻到了最早的对话记录。" = "Reached the earliest conversation records.";
 "触发条件：超过 300 个会话后翻到最后一页" = "Trigger condition: with over 300 sessions, turn to the last page";
+"让AI评价鱼缸" = "Let the AI Review the Fish Tank";
+"AI使用了评价这款App的工具。套娃已完成。" = "The AI used the tool for reviewing this app. The nesting is complete.";
+"触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Trigger condition: AI calls the app_submit_feedback_ticket tool";

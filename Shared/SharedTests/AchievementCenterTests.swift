@@ -270,6 +270,7 @@ struct AchievementCenterTests {
         #expect(definitions[.schrodingerQuestion]?.titleKey == "薛定谔的问题")
         #expect(definitions[.settingsResearcher]?.titleKey == "研究者")
         #expect(definitions[.conversationArchaeologist]?.titleKey == "考古学家")
+        #expect(definitions[.fishTankReview]?.titleKey == "让AI评价鱼缸")
     }
 
     @Test("稳稳接住触发词支持中文与英文")
@@ -299,6 +300,13 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockSingleCharacterMessage(from: " 嗯 "))
         #expect(AchievementTriggerEvaluator.shouldUnlockSingleCharacterMessage(from: "嗯嗯") == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: " 谢谢 "))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "THANK YOU!"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "Thanks"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "gracias"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "merci"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "ありがとうございます"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "спасибо"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "شكراً"))
         #expect(AchievementTriggerEvaluator.shouldUnlockPoliteHuman(from: "谢谢你") == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockLongConfession(from: String(repeating: "我", count: 1_001)))
         #expect(AchievementTriggerEvaluator.shouldUnlockLongConfession(from: String(repeating: "我", count: 1_000)) == false)
@@ -316,6 +324,15 @@ struct AchievementCenterTests {
         #expect(ids.contains(.longConfession))
         #expect(ids.contains(.unstoppableConversation))
         #expect(ids.contains(.nightOwl))
+
+        let idsWithoutPoliteCheck = AchievementTriggerEvaluator.userMessageAchievementIDs(
+            for: "THANK YOU",
+            userMessageCount: 1,
+            sentAt: daytime,
+            calendar: calendar,
+            includePoliteHuman: false
+        )
+        #expect(idsWithoutPoliteCheck.contains(.politeHuman) == false)
     }
 
     @Test("操作类成就触发器匹配预期条件")
@@ -327,6 +344,8 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 3, totalPages: 4))
         #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 300, pageIndex: 2, totalPages: 3) == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 2, totalPages: 4) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: "app_submit_feedback_ticket"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: "app_echo_text") == false)
     }
 
     @Test("成就中心可以快速判断指定成就是否已解锁")
