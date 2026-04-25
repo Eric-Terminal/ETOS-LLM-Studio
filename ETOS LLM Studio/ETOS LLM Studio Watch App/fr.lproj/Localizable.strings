@@ -1393,3 +1393,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "我真的读了" = "Je l'ai vraiment lu";
 "法务部门在某处落下了一滴感动的泪水" = "Quelque part, le service juridique a versé une larme émue.";
 "触发条件：打开隐私政策链接" = "Condition de déclenchement : ouvrir le lien de la politique de confidentialité";
+"RTFM" = "RTFM";
+"翻开了文档，成为了时代的逆行者" = "A ouvert la documentation et est devenu un dissident de son époque.";
+"触发条件：打开文档链接" = "Condition de déclenchement : ouvrir le lien de la documentation";

@@ -244,6 +244,15 @@ struct AchievementCenterTests {
         #expect(definition?.triggerNoteKey == "触发条件：打开隐私政策链接")
     }
 
+    @Test("RTFM 成就定义已登记")
+    func documentationReaderDefinitionIsRegistered() {
+        let definition = AchievementCatalog.definitions.first { $0.id == .documentationReader }
+
+        #expect(definition?.titleKey == "RTFM")
+        #expect(definition?.sentenceKey == "翻开了文档，成为了时代的逆行者")
+        #expect(definition?.triggerNoteKey == "触发条件：打开文档链接")
+    }
+
     @Test("稳稳接住触发词支持中文与英文")
     func steadyCatchTriggerMatchesExpectedKeywords() {
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "这一回我会稳稳的接住你。"))

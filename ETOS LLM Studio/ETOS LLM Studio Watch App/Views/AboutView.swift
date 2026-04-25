@@ -130,6 +130,11 @@ struct AboutView: View {
 
                 Button {
                     webAuthLauncher.open(url: documentationURL)
+                    Task {
+                        let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .documentationReader)
+                        guard !hasUnlocked else { return }
+                        await AchievementCenter.shared.unlock(id: .documentationReader)
+                    }
                 } label: {
                     HStack {
                         Text(NSLocalizedString("文档", comment: "Documentation"))

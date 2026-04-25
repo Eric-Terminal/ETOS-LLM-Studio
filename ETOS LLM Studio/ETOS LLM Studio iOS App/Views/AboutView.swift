@@ -122,6 +122,11 @@ struct AboutView: View {
 
                 Button {
                     openURL(documentationURL)
+                    Task {
+                        let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .documentationReader)
+                        guard !hasUnlocked else { return }
+                        await AchievementCenter.shared.unlock(id: .documentationReader)
+                    }
                 } label: {
                     LabeledContent(NSLocalizedString("文档", comment: "Documentation")) {
                         Text(documentationHost)

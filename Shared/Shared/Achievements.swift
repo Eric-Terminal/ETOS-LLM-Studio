@@ -33,6 +33,7 @@ public extension AchievementID {
     static let languageLubrication: Self = "languageLubrication"
     static let forbiddenPlace: Self = "forbiddenPlace"
     static let privacyReader: Self = "privacyReader"
+    static let documentationReader: Self = "documentationReader"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -86,6 +87,13 @@ public enum AchievementCatalog {
             sentenceKey: "法务部门在某处落下了一滴感动的泪水",
             triggerNoteKey: "触发条件：打开隐私政策链接",
             systemImageName: "doc.text.magnifyingglass"
+        ),
+        AchievementDefinition(
+            id: .documentationReader,
+            titleKey: "RTFM",
+            sentenceKey: "翻开了文档，成为了时代的逆行者",
+            triggerNoteKey: "触发条件：打开文档链接",
+            systemImageName: "book"
         )
     ]
 }
