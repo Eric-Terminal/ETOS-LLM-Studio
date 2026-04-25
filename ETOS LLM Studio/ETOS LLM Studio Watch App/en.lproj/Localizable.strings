@@ -1333,3 +1333,7 @@
 "让AI评价鱼缸" = "Let the AI Review the Fish Tank";
 "AI使用了评价这款App的工具。套娃已完成。" = "The AI used the tool for reviewing this app. The nesting is complete.";
 "触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Trigger condition: AI calls the app_submit_feedback_ticket tool";
+"链接或文件路径" = "Link or file path";
+"正在导入..." = "Importing...";
+"附件导入失败" = "Attachment Import Failed";
+"导入" = "Import";

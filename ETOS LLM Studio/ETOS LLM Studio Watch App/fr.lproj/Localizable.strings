@@ -1432,3 +1432,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "让AI评价鱼缸" = "Faire évaluer le bocal par l’IA";
 "AI使用了评价这款App的工具。套娃已完成。" = "L’IA a utilisé l’outil d’évaluation de cette app. La mise en abyme est complète.";
 "触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Condition de déclenchement : l’IA appelle l’outil app_submit_feedback_ticket";
+"链接或文件路径" = "Lien ou chemin de fichier";
+"正在导入..." = "Importation...";
+"附件导入失败" = "Échec de l'importation de la pièce jointe";
+"导入" = "Importer";

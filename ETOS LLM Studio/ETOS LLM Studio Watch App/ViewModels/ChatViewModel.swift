@@ -18,6 +18,9 @@ import Combine
 import Shared
 import AVFoundation
 import AVFAudio
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
 #if canImport(CoreImage)
 import CoreImage
 #endif
@@ -91,6 +94,11 @@ class ChatViewModel: ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var pendingAudioAttachment: AudioAttachment? = nil  // 待发送的音频附件
+    @Published var pendingImageAttachments: [ImageAttachment] = []
+    @Published var pendingFileAttachments: [FileAttachment] = []
+    @Published var attachmentImportInProgress: Bool = false
+    @Published var attachmentImportErrorMessage: String?
+    @Published var showAttachmentImportErrorAlert: Bool = false
     @Published private(set) var latestAssistantMessageID: UUID?
     @Published private(set) var streamingScrollAnchorVersion: Int = 0
     @Published private(set) var toolCallResultIDs: Set<String> = []
@@ -607,15 +615,24 @@ class ChatViewModel: ObservableObject {
     func sendMessage() {
         logger.info("sendMessage called.")
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasText = !userMessageContent.isEmpty
         let hasAudio = pendingAudioAttachment != nil
         
-        // 必须有文字或音频附件才能发送
-        guard (hasText || hasAudio), !isSendingMessage else { return }
+        // 必须有文字或附件才能发送
+        guard Self.hasSendableContent(
+            text: userMessageContent,
+            hasAudio: hasAudio,
+            imageCount: pendingImageAttachments.count,
+            fileCount: pendingFileAttachments.count,
+            isSending: isSendingMessage
+        ) else { return }
         
         let audioToSend = pendingAudioAttachment
+        let imagesToSend = pendingImageAttachments
+        let filesToSend = pendingFileAttachments
         userInput = ""
         pendingAudioAttachment = nil
+        pendingImageAttachments = []
+        pendingFileAttachments = []
         
         // 构建消息内容（仅使用用户输入文本）
         let messageContent = userMessageContent
@@ -636,7 +653,9 @@ class ChatViewModel: ObservableObject {
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                audioAttachment: audioToSend
+                audioAttachment: audioToSend,
+                imageAttachments: imagesToSend,
+                fileAttachments: filesToSend
             )
         }
     }
@@ -650,6 +669,73 @@ class ChatViewModel: ObservableObject {
     /// 清除待发送的音频附件
     func clearPendingAudioAttachment() {
         pendingAudioAttachment = nil
+    }
+
+    func removePendingImageAttachment(_ attachment: ImageAttachment) {
+        pendingImageAttachments.removeAll { $0.id == attachment.id }
+    }
+
+    func removePendingFileAttachment(_ attachment: FileAttachment) {
+        pendingFileAttachments.removeAll { $0.id == attachment.id }
+    }
+
+    func clearAllAttachments() {
+        pendingAudioAttachment = nil
+        pendingImageAttachments = []
+        pendingFileAttachments = []
+    }
+
+    func importAttachment(from source: String) {
+        guard !attachmentImportInProgress else { return }
+        attachmentImportInProgress = true
+        attachmentImportErrorMessage = nil
+        let documentsDirectory = Self.documentsDirectory()
+
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                try await Self.loadAttachmentImportPayload(
+                    from: source,
+                    documentsDirectory: documentsDirectory
+                )
+            }.result
+
+            switch result {
+            case .success(let payload):
+                applyImportedAttachment(payload)
+            case .failure(let error):
+                presentAttachmentImportError(error.localizedDescription)
+            }
+            attachmentImportInProgress = false
+        }
+    }
+
+    private func applyImportedAttachment(_ payload: WatchAttachmentImportPayload) {
+        switch payload.kind {
+        case .audio:
+            pendingAudioAttachment = AudioAttachment(
+                data: payload.data,
+                mimeType: payload.mimeType,
+                format: payload.audioFormat,
+                fileName: payload.fileName
+            )
+        case .image:
+            pendingImageAttachments.append(ImageAttachment(
+                data: payload.data,
+                mimeType: payload.mimeType,
+                fileName: payload.fileName
+            ))
+        case .file:
+            pendingFileAttachments.append(FileAttachment(
+                data: payload.data,
+                mimeType: payload.mimeType,
+                fileName: payload.fileName
+            ))
+        }
+    }
+
+    private func presentAttachmentImportError(_ message: String) {
+        attachmentImportErrorMessage = message.isEmpty ? "附件导入失败，请稍后重试。" : message
+        showAttachmentImportErrorAlert = true
     }
 
     var imageGenerationModelOptions: [RunnableModel] {
@@ -2903,6 +2989,303 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
             .first
             .map { String($0).lowercased() }
         return (marker: marker, count: count, tail: tail, infoToken: infoToken)
+    }
+}
+
+enum WatchAttachmentImportKind: Equatable, Sendable {
+    case audio
+    case image
+    case file
+}
+
+enum WatchAttachmentSourceResolution: Equatable, Sendable {
+    case remote(URL)
+    case local(URL)
+}
+
+struct WatchAttachmentImportPayload: Equatable, Sendable {
+    let kind: WatchAttachmentImportKind
+    let data: Data
+    let mimeType: String
+    let fileName: String
+    let audioFormat: String
+}
+
+private enum WatchAttachmentImportError: LocalizedError {
+    case emptySource
+    case unsupportedScheme
+    case invalidURL
+    case invalidPath
+    case missingLocalFile(String)
+    case directoryPath(String)
+    case invalidHTTPStatus(Int)
+    case emptyData
+    case readFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .emptySource:
+            return "请输入链接或文件路径。"
+        case .unsupportedScheme:
+            return "仅支持 http、https、file 链接或本地文件路径。"
+        case .invalidURL:
+            return "链接格式无效。"
+        case .invalidPath:
+            return "文件路径无效。"
+        case .missingLocalFile(let path):
+            return "未找到文件“\(path)”。"
+        case .directoryPath(let path):
+            return "路径“\(path)”是目录，不能作为附件发送。"
+        case .invalidHTTPStatus(let statusCode):
+            return "下载失败，服务器返回 HTTP \(statusCode)。"
+        case .emptyData:
+            return "附件内容为空，无法发送。"
+        case .readFailed(let message):
+            return "无法加载文件：\(message)"
+        }
+    }
+}
+
+extension ChatViewModel {
+    nonisolated static func hasSendableContent(
+        text: String,
+        hasAudio: Bool,
+        imageCount: Int,
+        fileCount: Int,
+        isSending: Bool
+    ) -> Bool {
+        guard !isSending else { return false }
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasText || hasAudio || imageCount > 0 || fileCount > 0
+    }
+
+    nonisolated static func documentsDirectory() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    nonisolated static func resolveAttachmentSource(
+        _ rawSource: String,
+        documentsDirectory: URL = ChatViewModel.documentsDirectory()
+    ) throws -> WatchAttachmentSourceResolution {
+        let source = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty else { throw WatchAttachmentImportError.emptySource }
+
+        if let url = URL(string: source), let scheme = url.scheme?.lowercased() {
+            switch scheme {
+            case "http", "https":
+                guard url.host?.isEmpty == false else { throw WatchAttachmentImportError.invalidURL }
+                return .remote(url)
+            case "file":
+                return try validatedLocalAttachmentURL(url)
+            default:
+                throw WatchAttachmentImportError.unsupportedScheme
+            }
+        }
+
+        let localURL: URL
+        if source.hasPrefix("/") {
+            localURL = URL(fileURLWithPath: source)
+        } else {
+            let root = documentsDirectory.standardizedFileURL
+            localURL = root.appendingPathComponent(source).standardizedFileURL
+            guard isFileURL(localURL, containedIn: root) else {
+                throw WatchAttachmentImportError.invalidPath
+            }
+        }
+        return try validatedLocalAttachmentURL(localURL)
+    }
+
+    nonisolated static func resolvedAttachmentMimeType(fileName: String, responseMimeType: String? = nil) -> String {
+        if let responseMimeType = responseMimeType?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !responseMimeType.isEmpty {
+            let loweredResponseMimeType = responseMimeType.lowercased()
+            if loweredResponseMimeType != "application/octet-stream" {
+                return loweredResponseMimeType
+            }
+        }
+
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        guard !ext.isEmpty else { return "application/octet-stream" }
+#if canImport(UniformTypeIdentifiers)
+        if let type = UTType(filenameExtension: ext), let mimeType = type.preferredMIMEType {
+            return mimeType.lowercased()
+        }
+#endif
+        switch ext {
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "png":
+            return "image/png"
+        case "gif":
+            return "image/gif"
+        case "webp":
+            return "image/webp"
+        case "mp3":
+            return "audio/mpeg"
+        case "m4a":
+            return "audio/mp4"
+        case "wav":
+            return "audio/wav"
+        case "aac":
+            return "audio/aac"
+        case "flac":
+            return "audio/flac"
+        case "txt":
+            return "text/plain"
+        case "json":
+            return "application/json"
+        case "pdf":
+            return "application/pdf"
+        default:
+            return "application/octet-stream"
+        }
+    }
+
+    nonisolated static func makeAttachmentImportPayload(
+        data: Data,
+        mimeType: String,
+        fileName: String
+    ) throws -> WatchAttachmentImportPayload {
+        guard !data.isEmpty else { throw WatchAttachmentImportError.emptyData }
+        let normalizedMimeType = mimeType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let effectiveMimeType = normalizedMimeType.isEmpty ? resolvedAttachmentMimeType(fileName: fileName) : normalizedMimeType
+        let normalizedFileName = normalizedAttachmentFileName(fileName, mimeType: effectiveMimeType)
+        let kind: WatchAttachmentImportKind
+        if effectiveMimeType.hasPrefix("audio/") {
+            kind = .audio
+        } else if effectiveMimeType.hasPrefix("image/") {
+            kind = .image
+        } else {
+            kind = .file
+        }
+
+        return WatchAttachmentImportPayload(
+            kind: kind,
+            data: data,
+            mimeType: effectiveMimeType,
+            fileName: normalizedFileName,
+            audioFormat: audioFormat(fileName: normalizedFileName, mimeType: effectiveMimeType)
+        )
+    }
+
+    nonisolated static func loadAttachmentImportPayload(
+        from rawSource: String,
+        documentsDirectory: URL = ChatViewModel.documentsDirectory()
+    ) async throws -> WatchAttachmentImportPayload {
+        let resolution = try resolveAttachmentSource(rawSource, documentsDirectory: documentsDirectory)
+        switch resolution {
+        case .remote(let url):
+            var request = URLRequest(url: url)
+            request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
+            let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                throw WatchAttachmentImportError.invalidHTTPStatus(httpResponse.statusCode)
+            }
+            let fileName = resolvedRemoteFileName(url: url, response: response)
+            let mimeType = resolvedAttachmentMimeType(fileName: fileName, responseMimeType: response.mimeType)
+            return try makeAttachmentImportPayload(data: data, mimeType: mimeType, fileName: fileName)
+        case .local(let url):
+            do {
+                let data = try Data(contentsOf: url)
+                let fileName = normalizedAttachmentFileName(url.lastPathComponent, mimeType: resolvedAttachmentMimeType(fileName: url.lastPathComponent))
+                let mimeType = resolvedAttachmentMimeType(fileName: fileName)
+                return try makeAttachmentImportPayload(data: data, mimeType: mimeType, fileName: fileName)
+            } catch let error as WatchAttachmentImportError {
+                throw error
+            } catch {
+                throw WatchAttachmentImportError.readFailed(error.localizedDescription)
+            }
+        }
+    }
+
+    nonisolated private static func validatedLocalAttachmentURL(_ url: URL) throws -> WatchAttachmentSourceResolution {
+        let fileURL = url.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+            throw WatchAttachmentImportError.missingLocalFile(fileURL.path)
+        }
+        guard !isDirectory.boolValue else {
+            throw WatchAttachmentImportError.directoryPath(fileURL.path)
+        }
+        return .local(fileURL)
+    }
+
+    nonisolated private static func isFileURL(_ url: URL, containedIn root: URL) -> Bool {
+        let rootPath = root.path
+        let candidatePath = url.path
+        return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
+    }
+
+    nonisolated private static func resolvedRemoteFileName(url: URL, response: URLResponse) -> String {
+        let responseName = response.suggestedFilename?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !responseName.isEmpty && responseName.lowercased() != "unknown" {
+            return responseName
+        }
+        let pathName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !pathName.isEmpty {
+            return pathName
+        }
+        return "附件_\(UUID().uuidString)"
+    }
+
+    nonisolated private static func normalizedAttachmentFileName(_ fileName: String, mimeType: String) -> String {
+        let trimmed = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = (trimmed.isEmpty ? "附件_\(UUID().uuidString)" : trimmed) as NSString
+        let lastPathComponent = baseName.lastPathComponent.isEmpty ? "附件_\(UUID().uuidString)" : baseName.lastPathComponent
+        guard (lastPathComponent as NSString).pathExtension.isEmpty else { return lastPathComponent }
+        let ext = fallbackFileExtension(for: mimeType)
+        return ext.isEmpty ? lastPathComponent : "\(lastPathComponent).\(ext)"
+    }
+
+    nonisolated private static func fallbackFileExtension(for mimeType: String) -> String {
+        switch mimeType.lowercased() {
+        case "image/jpeg":
+            return "jpg"
+        case "image/png":
+            return "png"
+        case "image/gif":
+            return "gif"
+        case "image/webp":
+            return "webp"
+        case "audio/mpeg":
+            return "mp3"
+        case "audio/mp4", "audio/x-m4a":
+            return "m4a"
+        case "audio/wav", "audio/x-wav":
+            return "wav"
+        case "audio/aac":
+            return "aac"
+        case "audio/flac":
+            return "flac"
+        case "text/plain":
+            return "txt"
+        case "application/json":
+            return "json"
+        case "application/pdf":
+            return "pdf"
+        default:
+            return ""
+        }
+    }
+
+    nonisolated private static func audioFormat(fileName: String, mimeType: String) -> String {
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        if !ext.isEmpty { return ext }
+        switch mimeType.lowercased() {
+        case "audio/mpeg":
+            return "mp3"
+        case "audio/mp4", "audio/x-m4a":
+            return "m4a"
+        case "audio/wav", "audio/x-wav":
+            return "wav"
+        case "audio/aac":
+            return "aac"
+        case "audio/flac":
+            return "flac"
+        default:
+            return "m4a"
+        }
     }
 }
 

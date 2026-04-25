@@ -86,8 +86,11 @@ struct ContentView: View {
     @State private var isNativeChatPresented = true
     @State private var isNativeSettingsPresented = false
     @State private var isQuickModelSelectorPresented = false
+    @State private var isAttachmentImportPresented = false
+    @State private var attachmentSourceText: String = ""
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -924,6 +927,91 @@ struct ContentView: View {
     private var inputStrokeColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
+
+    private var hasPendingAttachments: Bool {
+        viewModel.pendingAudioAttachment != nil
+            || !viewModel.pendingImageAttachments.isEmpty
+            || !viewModel.pendingFileAttachments.isEmpty
+    }
+
+    @ViewBuilder
+    private var pendingAttachmentPreview: some View {
+        VStack(spacing: 6) {
+            if let audio = viewModel.pendingAudioAttachment {
+                attachmentPreviewRow(
+                    systemImage: "waveform",
+                    title: "语音文件",
+                    fileName: audio.fileName,
+                    tint: .blue,
+                    onRemove: {
+                        viewModel.clearPendingAudioAttachment()
+                    }
+                )
+            }
+
+            ForEach(viewModel.pendingImageAttachments) { attachment in
+                attachmentPreviewRow(
+                    systemImage: "photo",
+                    title: "图片文件",
+                    fileName: attachment.fileName,
+                    tint: .green,
+                    onRemove: {
+                        viewModel.removePendingImageAttachment(attachment)
+                    }
+                )
+            }
+
+            ForEach(viewModel.pendingFileAttachments) { attachment in
+                attachmentPreviewRow(
+                    systemImage: "doc",
+                    title: "文件",
+                    fileName: attachment.fileName,
+                    tint: .cyan,
+                    onRemove: {
+                        viewModel.removePendingFileAttachment(attachment)
+                    }
+                )
+            }
+        }
+    }
+
+    private func attachmentPreviewRow(
+        systemImage: String,
+        title: String,
+        fileName: String,
+        tint: Color,
+        onRemove: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .etFont(.system(size: 12))
+                .foregroundStyle(tint)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .etFont(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(fileName)
+                    .etFont(.system(size: 10))
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+
+            Spacer()
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .etFont(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(white: 0.2))
+        .cornerRadius(8)
+    }
     
     private var transparentInputField: some View {
         ZStack(alignment: .leading) {
@@ -945,7 +1033,7 @@ struct ContentView: View {
     
     private var inputBubble: some View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let canSend = hasTrimmedText || viewModel.pendingAudioAttachment != nil
+        let canSend = hasTrimmedText || hasPendingAttachments
         let inputActionState = WatchChatInputActionState.resolve(
             isSending: viewModel.isSendingMessage,
             hasSendableContent: canSend,
@@ -954,33 +1042,8 @@ struct ContentView: View {
         
         let coreBubble = Group {
             VStack(spacing: 6) {
-                // 音频附件预览
-                if let audio = viewModel.pendingAudioAttachment {
-                    HStack(spacing: 6) {
-                        Image(systemName: "waveform")
-                            .etFont(.system(size: 12))
-                            .foregroundStyle(.blue)
-                        
-                        Text(audio.fileName)
-                            .etFont(.system(size: 10))
-                            .lineLimit(1)
-                            .foregroundStyle(.secondary)
-                        
-                        Spacer()
-                        
-                        Button {
-                            viewModel.clearPendingAudioAttachment()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .etFont(.system(size: 14))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color(white: 0.2))
-                    .cornerRadius(8)
+                if hasPendingAttachments {
+                    pendingAttachmentPreview
                 }
                 
                 if isLiquidGlassEnabled {
@@ -1074,11 +1137,25 @@ struct ContentView: View {
             set: { viewModel.showSpeechErrorAlert = $0 }
         )
         let bubbleWithTrailingSwipe = coreBubble
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                if !viewModel.userInput.isEmpty || viewModel.pendingAudioAttachment != nil {
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button {
+                    attachmentSourceText = lastAttachmentSource
+                    isAttachmentImportPresented = true
+                } label: {
+                    Image(systemName: "plus")
+                        .etFont(.system(size: 16, weight: .semibold))
+                        .frame(width: inputControlHeight, height: inputControlHeight)
+                        .contentShape(Circle())
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("添加附件")
+                .tint(.blue)
+                .disabled(viewModel.attachmentImportInProgress)
+
+                if !viewModel.userInput.isEmpty || hasPendingAttachments {
                     Button(role: .destructive) {
                         viewModel.clearUserInput()
-                        viewModel.clearPendingAudioAttachment()
+                        viewModel.clearAllAttachments()
                     } label: {
                         Image(systemName: "trash")
                             .etFont(.system(size: 16, weight: .semibold))
@@ -1140,6 +1217,23 @@ struct ContentView: View {
                     )
                 }
             }
+            .sheet(isPresented: $isAttachmentImportPresented) {
+                NavigationStack {
+                    WatchAttachmentImportView(
+                        source: $attachmentSourceText,
+                        isImporting: viewModel.attachmentImportInProgress,
+                        onImport: {
+                            let trimmedSource = attachmentSourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            lastAttachmentSource = trimmedSource
+                            viewModel.importAttachment(from: trimmedSource)
+                            isAttachmentImportPresented = false
+                        },
+                        onCancel: {
+                            isAttachmentImportPresented = false
+                        }
+                    )
+                }
+            }
             .sheet(isPresented: speechSheetBinding) {
                 SpeechRecorderView(viewModel: viewModel)
             }
@@ -1147,6 +1241,11 @@ struct ContentView: View {
                 Button("好的", role: .cancel) { }
             } message: {
                 Text(viewModel.speechErrorMessage ?? "发生未知错误，请稍后重试。")
+            }
+            .alert("附件导入失败", isPresented: $viewModel.showAttachmentImportErrorAlert) {
+                Button("好的", role: .cancel) { }
+            } message: {
+                Text(viewModel.attachmentImportErrorMessage ?? "附件导入失败，请稍后重试。")
             }
             .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
                 Button("好的", role: .cancel) { }
@@ -1350,6 +1449,42 @@ struct ContentView: View {
         dailyPulsePreparationTask = nil
     }
 
+}
+
+private struct WatchAttachmentImportView: View {
+    @Binding var source: String
+    let isImporting: Bool
+    let onImport: () -> Void
+    let onCancel: () -> Void
+
+    private var canImport: Bool {
+        !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isImporting
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("链接或文件路径", text: $source)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+
+                if isImporting {
+                    ProgressView("正在导入...")
+                }
+            }
+        }
+        .navigationTitle("添加附件")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消", action: onCancel)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("导入", action: onImport)
+                    .disabled(!canImport)
+            }
+        }
+    }
 }
 
 private struct WatchQuickModelSelectorView: View {

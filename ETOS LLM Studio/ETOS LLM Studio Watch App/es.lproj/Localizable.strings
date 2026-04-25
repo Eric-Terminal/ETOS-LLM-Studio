@@ -1432,3 +1432,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "让AI评价鱼缸" = "Que la IA evalúe la pecera";
 "AI使用了评价这款App的工具。套娃已完成。" = "La IA usó la herramienta para evaluar esta app. La recursión está completa.";
 "触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Condición de activación: la IA llama a la herramienta app_submit_feedback_ticket";
+"链接或文件路径" = "Enlace o ruta de archivo";
+"正在导入..." = "Importando...";
+"附件导入失败" = "Error al importar adjunto";
+"导入" = "Importar";

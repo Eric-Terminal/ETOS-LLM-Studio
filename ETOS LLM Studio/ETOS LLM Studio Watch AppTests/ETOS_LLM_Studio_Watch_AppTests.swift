@@ -119,6 +119,140 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(chunks == ["你好世界。", "今天继续测试", "分片能力！"])
     }
 
+    @Test("watchOS 附件来源会解析远程链接和 Documents 相对路径")
+    func testWatchAttachmentSourceResolution() throws {
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: documentsDirectory)
+        }
+
+        let nestedDirectory = documentsDirectory.appendingPathComponent("imports", isDirectory: true)
+        try fileManager.createDirectory(at: nestedDirectory, withIntermediateDirectories: true)
+        let localFile = nestedDirectory.appendingPathComponent("photo.png")
+        try Data([0x89, 0x50, 0x4e, 0x47]).write(to: localFile)
+
+        let remoteURL = URL(string: "https://example.com/audio.mp3")!
+        let remote = try ChatViewModel.resolveAttachmentSource(
+            " \(remoteURL.absoluteString) ",
+            documentsDirectory: documentsDirectory
+        )
+        #expect(remote == .remote(remoteURL))
+
+        let relative = try ChatViewModel.resolveAttachmentSource(
+            "imports/photo.png",
+            documentsDirectory: documentsDirectory
+        )
+        #expect(relative == .local(localFile.standardizedFileURL))
+    }
+
+    @Test("watchOS 附件来源会拒绝空输入和不支持的 scheme")
+    func testWatchAttachmentSourceRejectsInvalidInput() {
+        do {
+            _ = try ChatViewModel.resolveAttachmentSource("")
+            #expect(Bool(false))
+        } catch {
+            #expect(error.localizedDescription == "请输入链接或文件路径。")
+        }
+
+        do {
+            _ = try ChatViewModel.resolveAttachmentSource("ftp://example.com/file.txt")
+            #expect(Bool(false))
+        } catch {
+            #expect(error.localizedDescription == "仅支持 http、https、file 链接或本地文件路径。")
+        }
+    }
+
+    @Test("watchOS 附件载荷会按 MIME 分类")
+    func testWatchAttachmentPayloadClassification() throws {
+        #expect(ChatViewModel.resolvedAttachmentMimeType(
+            fileName: "photo.png",
+            responseMimeType: "application/octet-stream"
+        ) == "image/png")
+
+        let imagePayload = try ChatViewModel.makeAttachmentImportPayload(
+            data: Data([0x01]),
+            mimeType: "image/png",
+            fileName: "photo"
+        )
+        #expect(imagePayload.kind == .image)
+        #expect(imagePayload.fileName == "photo.png")
+
+        let audioPayload = try ChatViewModel.makeAttachmentImportPayload(
+            data: Data([0x02]),
+            mimeType: "audio/mpeg",
+            fileName: "voice"
+        )
+        #expect(audioPayload.kind == .audio)
+        #expect(audioPayload.fileName == "voice.mp3")
+        #expect(audioPayload.audioFormat == "mp3")
+
+        let filePayload = try ChatViewModel.makeAttachmentImportPayload(
+            data: Data([0x03]),
+            mimeType: "application/pdf",
+            fileName: "report"
+        )
+        #expect(filePayload.kind == .file)
+        #expect(filePayload.fileName == "report.pdf")
+    }
+
+    @Test("watchOS 图片和文件附件也会让输入框进入可发送状态")
+    func testWatchAttachmentSendableContent() {
+        #expect(ChatViewModel.hasSendableContent(
+            text: "",
+            hasAudio: false,
+            imageCount: 1,
+            fileCount: 0,
+            isSending: false
+        ))
+        #expect(ChatViewModel.hasSendableContent(
+            text: "",
+            hasAudio: false,
+            imageCount: 0,
+            fileCount: 1,
+            isSending: false
+        ))
+        #expect(!ChatViewModel.hasSendableContent(
+            text: "   ",
+            hasAudio: false,
+            imageCount: 0,
+            fileCount: 0,
+            isSending: false
+        ))
+        #expect(!ChatViewModel.hasSendableContent(
+            text: "有内容",
+            hasAudio: false,
+            imageCount: 0,
+            fileCount: 0,
+            isSending: true
+        ))
+    }
+
+    @MainActor
+    @Test("watchOS 发送消息会消费待发送图片和文件附件")
+    func testWatchSendMessageConsumesImageAndFileAttachments() {
+        let session = URLSession(configuration: .ephemeral)
+        let service = ChatService(
+            adapters: [:],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+        let viewModel = ChatViewModel(chatService: service)
+        viewModel.pendingImageAttachments = [
+            ImageAttachment(data: Data([0x01]), mimeType: "image/png", fileName: "photo.png")
+        ]
+        viewModel.pendingFileAttachments = [
+            FileAttachment(data: Data([0x02]), mimeType: "application/pdf", fileName: "report.pdf")
+        ]
+
+        viewModel.sendMessage()
+
+        #expect(viewModel.pendingImageAttachments.isEmpty)
+        #expect(viewModel.pendingFileAttachments.isEmpty)
+    }
+
     @Test("代码块内容可按换行策略追加到输入框")
     func testInputByAppendingCodeBlockContent() {
         let appended = ChatViewModel.inputByAppendingCodeBlockContent("\nlet value = 42\n", to: "请解释下面代码")
