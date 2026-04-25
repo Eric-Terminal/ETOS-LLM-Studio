@@ -265,8 +265,8 @@ struct SettingsView: View {
                                 announcementManager: announcementManager
                             )
                         } label: {
-                            HStack(spacing: 8) {
-                                SettingsListIconView(icon: announcementIcon(for: announcement.type))
+                            HStack {
+                                announcementIcon(for: announcement.type)
                                 Text(announcement.title)
                                     .lineLimit(2)
                             }
@@ -308,16 +308,22 @@ struct SettingsView: View {
     
     // MARK: - 辅助方法
     
-    private func announcementIcon(for type: AnnouncementType) -> SettingsListIcon {
+    /// 根据公告类型返回对应图标
+    @ViewBuilder
+    private func announcementIcon(for type: AnnouncementType) -> some View {
         switch type {
         case .info:
-            return .announcementInfo
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.blue)
         case .warning:
-            return .announcementWarning
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
         case .blocking:
-            return .announcementBlocking
+            Image(systemName: "exclamationmark.octagon.fill")
+                .foregroundColor(.red)
         @unknown default:
-            return .announcementInfo
+            Image(systemName: "bell.fill")
+                .foregroundColor(.gray)
         }
     }
 
@@ -423,9 +429,6 @@ extension SettingsListIcon {
     static let importData = SettingsListIcon(systemName: "arrow.down", backgroundColor: .green)
     static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint)
     static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange)
-    static let announcementInfo = SettingsListIcon(systemName: "info.circle", backgroundColor: .blue)
-    static let announcementWarning = SettingsListIcon(systemName: "exclamationmark.triangle", backgroundColor: .orange)
-    static let announcementBlocking = SettingsListIcon(systemName: "exclamationmark.octagon", backgroundColor: .red)
 }
 
 struct SettingsListIconLabel: View {
