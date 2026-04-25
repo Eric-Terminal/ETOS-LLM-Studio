@@ -880,6 +880,28 @@ public struct ChatResponseAttemptVersionInfo: Equatable, Sendable {
 }
 
 public enum ChatResponseAttemptSupport {
+    public static func shouldMergeAdjacentAssistantTurnMessages(_ message: ChatMessage, _ nextMessage: ChatMessage) -> Bool {
+        guard isAssistantTurnMessage(message),
+              isAssistantTurnMessage(nextMessage) else {
+            return false
+        }
+
+        let messageHasAttempt = message.responseGroupID != nil || message.responseAttemptID != nil
+        let nextMessageHasAttempt = nextMessage.responseGroupID != nil || nextMessage.responseAttemptID != nil
+        guard messageHasAttempt || nextMessageHasAttempt else {
+            return true
+        }
+
+        guard let messageGroupID = message.responseGroupID,
+              let messageAttemptID = message.responseAttemptID,
+              let nextMessageGroupID = nextMessage.responseGroupID,
+              let nextMessageAttemptID = nextMessage.responseAttemptID else {
+            return false
+        }
+
+        return messageGroupID == nextMessageGroupID && messageAttemptID == nextMessageAttemptID
+    }
+
     public static func visibleMessages(from messages: [ChatMessage]) -> [ChatMessage] {
         let selectedByGroup = selectedAttemptIDsByGroup(in: messages)
         return messages.filter { message in
@@ -994,6 +1016,15 @@ public enum ChatResponseAttemptSupport {
             }
         }
         return selectedByGroup
+    }
+
+    private static func isAssistantTurnMessage(_ message: ChatMessage) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .system:
+            return true
+        case .user, .error:
+            return false
+        }
     }
 }
 

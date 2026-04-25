@@ -303,6 +303,48 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(firstInfo.totalCount, 2)
     }
 
+    /// 测试回复轮次只在同一个 attempt 内合并连续助手气泡
+    func testResponseAttemptBubbleMergeScope() {
+        let userID = UUID()
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let firstAssistant = ChatMessage(
+            role: .assistant,
+            content: "",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let firstToolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondAssistant = ChatMessage(
+            role: .assistant,
+            content: "第二次回复",
+            responseGroupID: userID,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1
+        )
+        let partialAttemptAssistant = ChatMessage(
+            role: .assistant,
+            content: "缺少 attempt",
+            responseGroupID: userID
+        )
+        let legacyAssistant = ChatMessage(role: .assistant, content: "旧回复")
+        let legacyTool = ChatMessage(role: .tool, content: "旧工具结果")
+        let userMessage = ChatMessage(role: .user, content: "下一轮")
+
+        XCTAssertTrue(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(firstAssistant, firstToolResult))
+        XCTAssertFalse(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(firstToolResult, secondAssistant))
+        XCTAssertFalse(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(firstAssistant, partialAttemptAssistant))
+        XCTAssertTrue(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(legacyAssistant, legacyTool))
+        XCTAssertFalse(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(legacyAssistant, userMessage))
+    }
+
     /// 测试扩展 Token 字段的序列化与反序列化兼容
     func testExtendedTokenUsageRoundTrip() throws {
         let originalUsage = MessageTokenUsage(

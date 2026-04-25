@@ -2455,7 +2455,7 @@ private extension ChatView {
 
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
-        return isAssistantTurnMessage(message) && isAssistantTurnMessage(nextMessage)
+        return ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(message, nextMessage)
     }
 
     func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {

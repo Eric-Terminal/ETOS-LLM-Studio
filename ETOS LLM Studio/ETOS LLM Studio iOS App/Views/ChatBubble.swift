@@ -648,11 +648,19 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var versionSwitcherRow: some View {
-        HStack(spacing: 0) {
+        let row = HStack(spacing: 0) {
             compactVersionIndicator
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .padding(.top, 2)
+
+        if shouldForceMergedWidth {
+            row
+                .frame(width: bubbleMaxWidth, alignment: .trailing)
+                .padding(.top, 2)
+        } else {
+            row
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, 2)
+        }
     }
     
     @ViewBuilder
