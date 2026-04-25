@@ -4230,6 +4230,15 @@ public class ChatService {
             Persistence.appendRequestLog(logEntry)
         }
 
+        logRequestResult(
+            context: context,
+            status: status,
+            tokenUsage: normalizedUsage,
+            finishedAt: finishedAt,
+            httpStatusCode: httpStatusCode,
+            errorKind: errorKind
+        )
+
         guard recordUsageEvent else { return }
 
         let usageEvent = UsageAnalyticsEvent(
@@ -4250,6 +4259,74 @@ public class ChatService {
         Persistence.appendUsageAnalyticsEvent(usageEvent)
     }
 
+    private func logRequestResult(
+        context: RequestLogContext,
+        status: RequestLogStatus,
+        tokenUsage: MessageTokenUsage?,
+        finishedAt: Date,
+        httpStatusCode: Int?,
+        errorKind: String?
+    ) {
+        let duration = max(0, finishedAt.timeIntervalSince(context.requestedAt))
+        var payload: [String: String] = [
+            "requestID": context.requestID.uuidString,
+            "来源": context.requestSource.displayName,
+            "状态": requestLogStatusDisplayName(status),
+            "耗时秒": String(format: "%.3f", duration),
+            "提供商": context.providerName,
+            "模型": context.modelID,
+            "流式": context.isStreaming ? "true" : "false"
+        ]
+        if let sessionID = context.sessionID {
+            payload["sessionID"] = sessionID.uuidString
+        }
+        if let providerID = context.providerID {
+            payload["providerID"] = providerID.uuidString
+        }
+        if let httpStatusCode {
+            payload["HTTP状态码"] = "\(httpStatusCode)"
+        }
+        if let errorKind {
+            payload["错误类型"] = errorKind
+        }
+        if let tokenUsage {
+            payload["输入Token"] = tokenUsage.promptTokens.map { "\($0)" } ?? "未知"
+            payload["输出Token"] = tokenUsage.completionTokens.map { "\($0)" } ?? "未知"
+            payload["思考Token"] = tokenUsage.thinkingTokens.map { "\($0)" } ?? "未知"
+            payload["总Token"] = tokenUsage.totalTokens.map { "\($0)" } ?? "未知"
+        }
+
+        AppLog.developer(
+            level: appLogLevel(for: status),
+            category: "请求",
+            action: "记录请求结果",
+            message: "\(context.requestSource.displayName)请求\(requestLogStatusDisplayName(status))",
+            payload: payload
+        )
+    }
+
+    private func appLogLevel(for status: RequestLogStatus) -> AppLogLevel {
+        switch status {
+        case .success:
+            return .info
+        case .failed:
+            return .error
+        case .cancelled:
+            return .warning
+        }
+    }
+
+    private func requestLogStatusDisplayName(_ status: RequestLogStatus) -> String {
+        switch status {
+        case .success:
+            return "成功"
+        case .failed:
+            return "失败"
+        case .cancelled:
+            return "已取消"
+        }
+    }
+
     private func makeProxySessionIfNeeded(for provider: Provider?) -> (session: URLSession, proxy: NetworkProxyConfiguration?) {
         guard let proxyConfiguration = NetworkProxySettings.resolvedConfiguration(for: provider),
               let proxyDictionary = NetworkProxySettings.makeConnectionProxyDictionary(from: proxyConfiguration) else {
@@ -4264,24 +4341,179 @@ public class ChatService {
         for request: URLRequest,
         provider: Provider?
     ) async throws -> (Data, URLResponse) {
+        let startedAt = Date()
         let resolved = makeProxySessionIfNeeded(for: provider)
         let proxiedRequest = NetworkProxySettings.applyProxyAuthorizationHeader(
             to: request,
             configuration: resolved.proxy
         )
-        return try await resolved.session.data(for: proxiedRequest)
+        logHTTPRequestStart(request: proxiedRequest, provider: provider, proxy: resolved.proxy, transport: "data")
+        do {
+            let result = try await resolved.session.data(for: proxiedRequest)
+            logHTTPResponse(
+                request: proxiedRequest,
+                response: result.1,
+                provider: provider,
+                bodyByteCount: result.0.count,
+                startedAt: startedAt,
+                transport: "data"
+            )
+            return result
+        } catch {
+            logHTTPTransportFailure(
+                request: proxiedRequest,
+                provider: provider,
+                error: error,
+                startedAt: startedAt,
+                transport: "data"
+            )
+            throw error
+        }
     }
 
     private func requestBytes(
         for request: URLRequest,
         provider: Provider?
     ) async throws -> (URLSession.AsyncBytes, URLResponse) {
+        let startedAt = Date()
         let resolved = makeProxySessionIfNeeded(for: provider)
         let proxiedRequest = NetworkProxySettings.applyProxyAuthorizationHeader(
             to: request,
             configuration: resolved.proxy
         )
-        return try await resolved.session.bytes(for: proxiedRequest)
+        logHTTPRequestStart(request: proxiedRequest, provider: provider, proxy: resolved.proxy, transport: "stream")
+        do {
+            let result = try await resolved.session.bytes(for: proxiedRequest)
+            logHTTPResponse(
+                request: proxiedRequest,
+                response: result.1,
+                provider: provider,
+                bodyByteCount: nil,
+                startedAt: startedAt,
+                transport: "stream"
+            )
+            return result
+        } catch {
+            logHTTPTransportFailure(
+                request: proxiedRequest,
+                provider: provider,
+                error: error,
+                startedAt: startedAt,
+                transport: "stream"
+            )
+            throw error
+        }
+    }
+
+    private func logHTTPRequestStart(
+        request: URLRequest,
+        provider: Provider?,
+        proxy: NetworkProxyConfiguration?,
+        transport: String
+    ) {
+        var payload: [String: String] = [
+            "传输": transport,
+            "方法": request.httpMethod ?? "GET",
+            "地址": AppLogRedactor.sanitizeURLForLog(request.url),
+            "提供商": provider?.name ?? "无",
+            "请求体字节数": "\(request.httpBody?.count ?? 0)",
+            "超时秒": String(format: "%.1f", request.timeoutInterval)
+        ]
+        if let proxy {
+            payload["代理"] = "\(proxy.type.rawValue)://\(proxy.trimmedHost):\(proxy.port)"
+            payload["代理鉴权"] = proxy.hasAuthentication ? "true" : "false"
+        } else {
+            payload["代理"] = "未启用"
+        }
+
+        AppLog.developer(
+            level: .debug,
+            category: "网络",
+            action: "发送HTTP请求",
+            message: "HTTP 请求已发出",
+            payload: payload
+        )
+    }
+
+    private func logHTTPResponse(
+        request: URLRequest,
+        response: URLResponse,
+        provider: Provider?,
+        bodyByteCount: Int?,
+        startedAt: Date,
+        transport: String
+    ) {
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+        var payload: [String: String] = [
+            "传输": transport,
+            "方法": request.httpMethod ?? "GET",
+            "地址": AppLogRedactor.sanitizeURLForLog(request.url),
+            "提供商": provider?.name ?? "无",
+            "HTTP状态码": "\(statusCode)",
+            "耗时秒": String(format: "%.3f", max(0, Date().timeIntervalSince(startedAt))),
+            "MIME": response.mimeType ?? "未知"
+        ]
+        if let bodyByteCount {
+            payload["响应字节数"] = "\(bodyByteCount)"
+        }
+        if response.expectedContentLength >= 0 {
+            payload["预期响应字节数"] = "\(response.expectedContentLength)"
+        }
+
+        let isSuccess = (200...299).contains(statusCode)
+        AppLog.developer(
+            level: isSuccess ? .debug : .warning,
+            category: "网络",
+            action: "收到HTTP响应",
+            message: isSuccess ? "HTTP 响应成功" : "HTTP 响应状态异常",
+            payload: payload
+        )
+    }
+
+    private func logHTTPTransportFailure(
+        request: URLRequest,
+        provider: Provider?,
+        error: Error,
+        startedAt: Date,
+        transport: String
+    ) {
+        AppLog.developer(
+            level: isCancellationError(error) ? .warning : .error,
+            category: "网络",
+            action: "HTTP传输失败",
+            message: AppLogRedactor.sanitizeFreeTextForLog(error.localizedDescription, maxLength: 1_000),
+            payload: [
+                "传输": transport,
+                "方法": request.httpMethod ?? "GET",
+                "地址": AppLogRedactor.sanitizeURLForLog(request.url),
+                "提供商": provider?.name ?? "无",
+                "耗时秒": String(format: "%.3f", max(0, Date().timeIntervalSince(startedAt))),
+                "错误类型": String(describing: type(of: error))
+            ]
+        )
+    }
+
+    private func logHTTPErrorBody(
+        request: URLRequest,
+        provider: Provider?,
+        statusCode: Int,
+        bodyData: Data?,
+        transport: String
+    ) {
+        AppLog.developer(
+            level: .error,
+            category: "网络",
+            action: "HTTP错误响应体",
+            message: "HTTP \(statusCode) 错误响应体已捕获",
+            payload: [
+                "传输": transport,
+                "方法": request.httpMethod ?? "GET",
+                "地址": AppLogRedactor.sanitizeURLForLog(request.url),
+                "提供商": provider?.name ?? "无",
+                "HTTP状态码": "\(statusCode)",
+                "响应体摘要": AppLogRedactor.sanitizeFreeTextForLog(responseBodySnippet(from: bodyData), maxLength: 4_000)
+            ]
+        )
     }
 
     private func fetchData(for request: URLRequest, provider: Provider?) async throws -> Data {
@@ -4295,6 +4527,13 @@ public class ChatService {
             } else {
                 logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体为空。")
             }
+            logHTTPErrorBody(
+                request: request,
+                provider: provider,
+                statusCode: statusCode,
+                bodyData: data.isEmpty ? nil : data,
+                transport: "data"
+            )
             throw NetworkError.badStatusCode(code: statusCode, responseBody: data.isEmpty ? nil : data)
         }
         return data
@@ -4326,6 +4565,13 @@ public class ChatService {
             } else {
                 logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体为空。")
             }
+            logHTTPErrorBody(
+                request: request,
+                provider: provider,
+                statusCode: statusCode,
+                bodyData: capturedBody,
+                transport: "stream"
+            )
             throw NetworkError.badStatusCode(code: statusCode, responseBody: capturedBody)
         }
         return bytes

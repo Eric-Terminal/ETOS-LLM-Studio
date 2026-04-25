@@ -84,6 +84,89 @@ struct AppLogCenterTests {
         #expect(output?.contains("Content-Type: application/json") == true)
     }
 
+    @Test("自由文本日志会隐藏常见密钥并截断长内容")
+    func testFreeTextSanitizationForLogs() {
+        let raw = """
+        Authorization: Bearer secret-token
+        api_key=abc123
+        {"access_token":"json-secret"}
+        body=\(String(repeating: "x", count: 260))
+        """
+
+        let output = AppLogRedactor.sanitizeFreeTextForLog(raw, maxLength: 200)
+
+        #expect(output.contains("secret-token") == false)
+        #expect(output.contains("abc123") == false)
+        #expect(output.contains("json-secret") == false)
+        #expect(output.contains("Authorization: Bearer ***"))
+        #expect(output.contains("api_key=***"))
+        #expect(output.contains(#""access_token":"***""#))
+        #expect(output.contains("已截断"))
+    }
+
+    @Test("日志来源上下文会生成可反馈的定位字段")
+    func testSourceContextPayloadFields() {
+        let source = AppLogSourceContext(
+            fileID: "Shared/ChatService.swift",
+            function: "sendMessage()",
+            line: 42,
+            capturedOnMainThread: false
+        )
+
+        #expect(source.payloadFields["来源文件"] == "Shared/ChatService.swift")
+        #expect(source.payloadFields["来源函数"] == "sendMessage()")
+        #expect(source.payloadFields["来源行"] == "42")
+        #expect(source.payloadFields["捕获线程"] == "background")
+    }
+
+    @Test("反馈诊断日志会合并请求摘要和最近 AppLog")
+    func testFeedbackDiagnosticFormatterIncludesRecentLogs() {
+        let requestedAt = Date(timeIntervalSince1970: 1_772_848_800)
+        let finishedAt = requestedAt.addingTimeInterval(1.25)
+        let requestID = UUID()
+        let requestLog = RequestLogEntry(
+            requestID: requestID,
+            sessionID: UUID(),
+            providerID: UUID(),
+            providerName: "providerA",
+            modelID: "model-a",
+            requestedAt: requestedAt,
+            finishedAt: finishedAt,
+            isStreaming: true,
+            status: .failed,
+            tokenUsage: MessageTokenUsage(promptTokens: 12, completionTokens: 3, totalTokens: 15)
+        )
+        let appLog = AppLogEvent(
+            timestamp: finishedAt,
+            channel: .developer,
+            level: .error,
+            category: "网络",
+            action: "HTTP错误响应体",
+            message: "Authorization: Bearer secret-token",
+            payload: ["响应体摘要": "api_key=abc123"]
+        )
+        var summary = RequestLogSummary()
+        summary.totalRequests = 1
+        summary.failedCount = 1
+        summary.tokenTotals.totalTokens = 15
+
+        let lines = FeedbackDiagnosticLogFormatter.build(
+            baseLines: ["timestamp=2026-03-07T12:00:00Z"],
+            requestSummary: summary,
+            requestLogs: [requestLog],
+            appLogs: [appLog],
+            requestLogLimit: 20,
+            appLogLimit: 80
+        )
+        let joined = lines.joined(separator: "\n")
+
+        #expect(joined.contains("request_summary_7d total=1"))
+        #expect(joined.contains("request_id=\(requestID.uuidString)"))
+        #expect(joined.contains("category=网络"))
+        #expect(joined.contains("secret-token") == false)
+        #expect(joined.contains("abc123") == false)
+    }
+
     @Test("日志筛选器支持按等级过滤")
     func testLogFilterByLevel() {
         let events = makeFilterFixtureEvents()
