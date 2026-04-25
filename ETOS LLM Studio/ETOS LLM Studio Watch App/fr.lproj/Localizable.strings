@@ -1452,3 +1452,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "语音与媒体" = "Voix et médias";
 "数据与维护" = "Données et maintenance";
 "支持与关于" = "Assistance et à propos";
+"语言" = "Langue";
+"App 语言" = "Langue de l’app";
+"跟随系统" = "Suivre le système";
+"手动选择 App 界面语言；跟随系统时会使用设备当前语言。" = "Choisissez manuellement la langue de l’interface de l’app ; Suivre le système utilise la langue actuelle de l’appareil.";

@@ -97,6 +97,7 @@ struct ContentView: View {
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
     @AppStorage("watch.attachment.sourceHistory") private var attachmentSourceHistoryRawValue: String = "[]"
     private let inputControlHeight: CGFloat = 38
@@ -190,7 +191,9 @@ struct ContentView: View {
             }
         }
         .environment(\.font, rootBodyFont)
+        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appLanguageRawValue))
         .onAppear {
+            AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
@@ -216,6 +219,9 @@ struct ContentView: View {
                 isSessionListPresented = false
                 isSettingsPresented = false
             }
+        }
+        .onChange(of: appLanguageRawValue) { _, newValue in
+            AppLanguageRuntime.apply(rawValue: newValue)
         }
         .onDisappear {
             pendingBottomSnapTask?.cancel()

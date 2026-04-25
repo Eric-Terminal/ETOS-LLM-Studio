@@ -1353,3 +1353,7 @@
 "语音与媒体" = "Voice & Media";
 "数据与维护" = "Data & Maintenance";
 "支持与关于" = "Support & About";
+"语言" = "Language";
+"App 语言" = "App Language";
+"跟随系统" = "Follow System";
+"手动选择 App 界面语言；跟随系统时会使用设备当前语言。" = "Choose the app interface language manually; Follow System uses the device's current language.";

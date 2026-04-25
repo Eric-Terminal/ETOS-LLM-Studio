@@ -31,6 +31,7 @@ struct ContentView: View {
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @State private var isNativeChatPresented: Bool = true
     @State private var isNativeSettingsPresented: Bool = false
     
@@ -53,7 +54,9 @@ struct ContentView: View {
     private var baseContent: some View {
         nativeNavigationContent
         .environment(\.font, rootBodyFont)
+        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appLanguageRawValue))
         .onAppear {
+            AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
@@ -77,6 +80,9 @@ struct ContentView: View {
         .onChange(of: chatNavigationModeRawValue) { _, _ in
             isNativeSettingsPresented = false
             isNativeChatPresented = true
+        }
+        .onChange(of: appLanguageRawValue) { _, newValue in
+            AppLanguageRuntime.apply(rawValue: newValue)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
             openDailyPulse()

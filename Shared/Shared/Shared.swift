@@ -9,6 +9,9 @@
 
 import Foundation
 import Combine
+#if canImport(ObjectiveC)
+import ObjectiveC
+#endif
 
 public enum ChatNavigationMode: String, CaseIterable, Identifiable {
     case legacyOverlay = "legacyOverlay"
@@ -23,6 +26,128 @@ public enum ChatNavigationMode: String, CaseIterable, Identifiable {
         ChatNavigationMode(rawValue: rawValue) ?? defaultMode
     }
 }
+
+public enum AppLanguagePreference: String, CaseIterable, Identifiable {
+    case system = "system"
+    case simplifiedChinese = "zh-Hans"
+    case traditionalChinese = "zh-Hant-HK"
+    case english = "en"
+    case japanese = "ja"
+    case russian = "ru"
+    case french = "fr"
+    case spanish = "es"
+    case arabic = "ar"
+
+    public static let storageKey = "ui.appLanguage"
+    public static let defaultLanguage: AppLanguagePreference = .system
+
+    public var id: String { rawValue }
+
+    public var localizationIdentifier: String? {
+        switch self {
+        case .system:
+            return nil
+        default:
+            return rawValue
+        }
+    }
+
+    public var localeIdentifier: String {
+        switch self {
+        case .system:
+            return Locale.autoupdatingCurrent.identifier
+        case .simplifiedChinese:
+            return "zh_Hans"
+        case .traditionalChinese:
+            return "zh_Hant_HK"
+        case .english:
+            return "en"
+        case .japanese:
+            return "ja"
+        case .russian:
+            return "ru"
+        case .french:
+            return "fr"
+        case .spanish:
+            return "es"
+        case .arabic:
+            return "ar"
+        }
+    }
+
+    public var nativeDisplayName: String {
+        switch self {
+        case .system:
+            return "跟随系统"
+        case .simplifiedChinese:
+            return "简体中文"
+        case .traditionalChinese:
+            return "繁體中文（香港）"
+        case .english:
+            return "English"
+        case .japanese:
+            return "日本語"
+        case .russian:
+            return "Русский"
+        case .french:
+            return "Français"
+        case .spanish:
+            return "Español"
+        case .arabic:
+            return "العربية"
+        }
+    }
+
+    public static func resolved(rawValue: String) -> AppLanguagePreference {
+        AppLanguagePreference(rawValue: rawValue) ?? defaultLanguage
+    }
+
+    public static func preferredLocale(rawValue: String) -> Locale {
+        let preference = resolved(rawValue: rawValue)
+        if preference == .system {
+            return .autoupdatingCurrent
+        }
+        return Locale(identifier: preference.localeIdentifier)
+    }
+
+    public static var storedPreference: AppLanguagePreference {
+        let rawValue = UserDefaults.standard.string(forKey: storageKey) ?? defaultLanguage.rawValue
+        return resolved(rawValue: rawValue)
+    }
+}
+
+public enum AppLanguageRuntime {
+    public static func apply(rawValue: String) {
+        let preference = AppLanguagePreference.resolved(rawValue: rawValue)
+
+        #if canImport(ObjectiveC)
+        if object_getClass(Bundle.main) !== AppLanguageBundle.self {
+            object_setClass(Bundle.main, AppLanguageBundle.self)
+        }
+
+        if let identifier = preference.localizationIdentifier,
+           let path = Bundle.main.path(forResource: identifier, ofType: "lproj"),
+           let bundle = Bundle(path: path) {
+            objc_setAssociatedObject(Bundle.main, &appLanguageBundleKey, bundle, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        } else {
+            objc_setAssociatedObject(Bundle.main, &appLanguageBundleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        #endif
+    }
+}
+
+#if canImport(ObjectiveC)
+private var appLanguageBundleKey: UInt8 = 0
+
+private final class AppLanguageBundle: Bundle {
+    override func localizedString(forKey key: String, value: String?, table tableName: String?) -> String {
+        if let bundle = objc_getAssociatedObject(self, &appLanguageBundleKey) as? Bundle {
+            return bundle.localizedString(forKey: key, value: value, table: tableName)
+        }
+        return super.localizedString(forKey: key, value: value, table: tableName)
+    }
+}
+#endif
 
 public enum ToolPermissionDecision: String {
     case deny
@@ -275,6 +400,12 @@ public enum ModelPromptLanguage: Equatable, Sendable {
     case arabic
 
     public static var current: ModelPromptLanguage {
+        let appLanguage = AppLanguagePreference.storedPreference
+        if let identifier = appLanguage.localizationIdentifier,
+           let language = resolve(identifier: identifier) {
+            return language
+        }
+
         let identifiers = Bundle.main.preferredLocalizations + Locale.preferredLanguages
         return resolve(identifiers: identifiers)
     }

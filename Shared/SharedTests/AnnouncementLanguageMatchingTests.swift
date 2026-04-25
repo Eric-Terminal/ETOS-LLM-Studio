@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Shared
 
 @Suite("公告语言匹配测试")
@@ -53,5 +54,22 @@ struct AnnouncementLanguageMatchingTests {
         )
 
         #expect(specific > generic)
+    }
+
+    @Test("手动 App 语言会影响内置模型提示语言")
+    func manualAppLanguageControlsModelPromptLanguage() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.string(forKey: AppLanguagePreference.storageKey)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: AppLanguagePreference.storageKey)
+            } else {
+                defaults.removeObject(forKey: AppLanguagePreference.storageKey)
+            }
+        }
+
+        defaults.set(AppLanguagePreference.japanese.rawValue, forKey: AppLanguagePreference.storageKey)
+
+        #expect(ModelPromptLanguage.current == .japanese)
     }
 }

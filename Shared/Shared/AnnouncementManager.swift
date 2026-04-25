@@ -327,8 +327,10 @@ public class AnnouncementManager: ObservableObject {
     private func selectBestFromGroup(_ group: [Announcement]) -> [Announcement] {
         guard !group.isEmpty else { return [] }
         
-        let deviceLanguage = Locale.current.language.languageCode?.identifier ?? "en"
-        let deviceFullLanguage = Locale.current.identifier // e.g., "zh-Hans_CN"
+        let appLanguage = AppLanguagePreference.storedPreference
+        let effectiveLocale = appLanguage == .system ? Locale.current : Locale(identifier: appLanguage.localeIdentifier)
+        let deviceLanguage = effectiveLocale.language.languageCode?.identifier ?? "en"
+        let deviceFullLanguage = appLanguage.localizationIdentifier ?? effectiveLocale.identifier // e.g., "zh-Hans_CN"
         let restricted = group.filter { announcement in
             if let lang = announcement.language, !lang.isEmpty {
                 return true

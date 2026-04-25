@@ -25,6 +25,7 @@ struct DisplaySettingsView: View {
     @Binding var enableNoBubbleUI: Bool
 
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
     @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
     @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
@@ -80,6 +81,21 @@ struct DisplaySettingsView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section {
+                Picker("App 语言", selection: appLanguageBinding) {
+                    ForEach(AppLanguagePreference.allCases) { language in
+                        appLanguageLabel(language)
+                            .tag(language.rawValue)
+                    }
+                }
+            } header: {
+                Text("语言")
+            } footer: {
+                Text("手动选择 App 界面语言；跟随系统时会使用设备当前语言。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -241,6 +257,25 @@ struct DisplaySettingsView: View {
             get: { ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) },
             set: { chatNavigationModeRawValue = $0.rawValue }
         )
+    }
+
+    private var appLanguageBinding: Binding<String> {
+        Binding(
+            get: { appLanguageRawValue },
+            set: { newValue in
+                appLanguageRawValue = newValue
+                AppLanguageRuntime.apply(rawValue: newValue)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func appLanguageLabel(_ language: AppLanguagePreference) -> some View {
+        if language == .system {
+            Text("跟随系统")
+        } else {
+            Text(verbatim: language.nativeDisplayName)
+        }
     }
 
     @ViewBuilder

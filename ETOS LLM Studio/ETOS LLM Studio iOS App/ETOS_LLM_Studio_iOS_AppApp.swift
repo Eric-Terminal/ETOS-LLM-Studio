@@ -27,6 +27,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
 
     init() {
+        AppLanguageRuntime.apply(rawValue: UserDefaults.standard.string(forKey: AppLanguagePreference.storageKey) ?? AppLanguagePreference.defaultLanguage.rawValue)
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
     }

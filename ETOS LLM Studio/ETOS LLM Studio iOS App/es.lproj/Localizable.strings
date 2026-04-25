@@ -1687,3 +1687,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "语音与媒体" = "Voz y medios";
 "数据与维护" = "Datos y mantenimiento";
 "支持与关于" = "Soporte y acerca de";
+"App 语言" = "Idioma de la app";
+"跟随系统" = "Seguir sistema";
+"手动选择 App 界面语言；跟随系统时会使用设备当前语言。" = "Elige manualmente el idioma de la interfaz de la app; Seguir sistema usa el idioma actual del dispositivo.";
