@@ -1922,17 +1922,7 @@ struct ChatBubble: View {
         if let resolvedAssistantBubbleColorOverride {
             return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.7) : resolvedAssistantBubbleColorOverride
         }
-        if colorScheme == .dark {
-            return Color.white.opacity(enableBackground ? 0.16 : 0.20)
-        }
-        return enableBackground ? Color.black.opacity(0.08) : Color(white: 0.92)
-    }
-
-    private var assistantGlassBackground: Color {
-        if let resolvedAssistantBubbleColorOverride {
-            return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.5) : resolvedAssistantBubbleColorOverride
-        }
-        return assistantFallbackBackground
+        return enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
     }
 
     private var standaloneAssistantBubbleShape: BubbleCornerShape {
@@ -1983,7 +1973,9 @@ struct ChatBubble: View {
                             .background(
                                 isError
                                     ? Color.red.opacity(0.5)
-                                    : assistantGlassBackground
+                                    : resolvedAssistantBubbleColorOverride.map {
+                                        enableBackground ? $0.opacity(0.5) : $0
+                                    }
                             )
                     } else {
                         assistantBubbleFallback(sizedContent, isError: isError, shape: shape)
