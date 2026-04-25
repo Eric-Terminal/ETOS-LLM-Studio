@@ -803,10 +803,12 @@ struct ChatBubble: View {
     private func reasoningToolTimeline(reasoning: String?, toolCalls: [InternalToolCall]) -> some View {
         let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReasoning = !(trimmedReasoning ?? "").isEmpty
+        let hasVisibleBodyContent = hasNonPlaceholderText && message.role != .tool
         let toolPresentations = timelineToolCallPresentations(for: toolCalls, hasReasoning: hasReasoning)
         let visibleToolStepCount = toolPresentations.filter { $0.stepIndex != nil }.count
         let shouldShowDoneStep = shouldShowTimelineDoneStep(
             hasReasoning: hasReasoning,
+            hasVisibleBodyContent: hasVisibleBodyContent,
             isReasoningExpanded: isReasoningExpanded,
             toolPresentations: toolPresentations
         )
@@ -889,10 +891,16 @@ struct ChatBubble: View {
 
     private func shouldShowTimelineDoneStep(
         hasReasoning: Bool,
+        hasVisibleBodyContent: Bool,
         isReasoningExpanded: Bool,
         toolPresentations: [TimelineToolCallPresentation]
     ) -> Bool {
-        guard hasReasoning, isReasoningExpanded, isReasoningFinishedForTimeline else { return false }
+        guard hasReasoning,
+              hasVisibleBodyContent,
+              isReasoningExpanded,
+              isReasoningFinishedForTimeline else {
+            return false
+        }
         return toolPresentations.allSatisfy { presentation in
             guard presentation.stepIndex != nil else { return true }
             let status = toolCallStatus(for: presentation.call)

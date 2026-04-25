@@ -951,10 +951,15 @@ struct ChatBubble: View {
     private func reasoningToolTimeline(reasoning: String?, toolCalls: [InternalToolCall]) -> some View {
         let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReasoning = !(trimmedReasoning ?? "").isEmpty
+        let trimmedBodyContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasVisibleBodyContent = message.role != .tool
+            && !trimmedBodyContent.isEmpty
+            && !Self.imagePlaceholders.contains(trimmedBodyContent)
         let toolPresentations = timelineToolCallPresentations(for: toolCalls, hasReasoning: hasReasoning)
         let visibleToolStepCount = toolPresentations.filter { $0.stepIndex != nil }.count
         let shouldShowDoneStep = shouldShowTimelineDoneStep(
             hasReasoning: hasReasoning,
+            hasVisibleBodyContent: hasVisibleBodyContent,
             isReasoningExpanded: isReasoningExpanded,
             toolPresentations: toolPresentations
         )
@@ -1037,10 +1042,16 @@ struct ChatBubble: View {
 
     private func shouldShowTimelineDoneStep(
         hasReasoning: Bool,
+        hasVisibleBodyContent: Bool,
         isReasoningExpanded: Bool,
         toolPresentations: [TimelineToolCallPresentation]
     ) -> Bool {
-        guard hasReasoning, isReasoningExpanded, reasoningCompletedAt != nil else { return false }
+        guard hasReasoning,
+              hasVisibleBodyContent,
+              isReasoningExpanded,
+              reasoningCompletedAt != nil else {
+            return false
+        }
         return toolPresentations.allSatisfy { presentation in
             guard presentation.stepIndex != nil else { return true }
             let status = toolCallStatus(for: presentation.call)
