@@ -288,9 +288,12 @@ private struct SessionFolderBrowserView: View {
 
                 ForEach(entries) { entry in
                     mergedEntryRow(entry)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
                 }
             }
         }
+        .listStyle(.plain)
         .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -519,6 +522,8 @@ private struct SessionFolderBrowserView: View {
             } else {
                 ForEach(pagedSearchResultItems) { result in
                     searchResultRow(result)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
                 }
             }
         } header: {
@@ -808,14 +813,19 @@ private struct SessionFolderBrowserView: View {
             Button {
                 selectSession(session, messageOrdinal: result.messageOrdinal)
             } label: {
-                MarqueeTitleSubtitleSelectionRow(
+                SessionListRowContent(
                     title: searchResultTitle(for: result),
                     subtitle: result.match.preview,
-                    isSelected: session.id == viewModel.currentSession?.id
+                    footnote: nil,
+                    isCurrent: session.id == viewModel.currentSession?.id,
+                    isRunning: viewModel.runningSessionIDs.contains(session.id),
+                    avatarSystemName: "magnifyingglass",
+                    avatarText: SessionListRowContent.avatarText(for: searchResultTitle(for: result))
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(.primary)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
@@ -826,16 +836,25 @@ private struct SessionFolderBrowserView: View {
     private func folderLabel(for folder: SessionFolder) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "folder")
+                .etFont(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.accent)
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.12))
+                )
             VStack(alignment: .leading, spacing: 2) {
                 Text(folder.name)
-                    .etFont(.headline)
+                    .etFont(.system(size: 16, weight: .medium))
                 let count = recursiveSessionCount(in: folder.id)
                 Text("\(count) 个会话")
-                    .etFont(.caption)
+                    .etFont(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
+            Spacer(minLength: 8)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private func toggleBatchMode() {
@@ -1147,24 +1166,22 @@ private struct BatchSelectableSessionRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(session.name)
-                        .etFont(.headline)
-                        .foregroundStyle(.primary)
-                    if let topic = session.topicPrompt, !topic.isEmpty {
-                        Text(topic)
-                            .etFont(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
+                SessionListRowContent(
+                    title: session.name,
+                    subtitle: session.topicPrompt,
+                    footnote: nil,
+                    isCurrent: false,
+                    isRunning: false,
+                    avatarSystemName: "bubble.left.and.bubble.right.fill",
+                    avatarText: SessionListRowContent.avatarText(for: session.name)
+                )
             }
             .contentShape(Rectangle())
-            .padding(.vertical, 6)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
     }
@@ -1220,51 +1237,23 @@ private struct SessionRow: View {
                 }
                 .padding(.top, 4)
             } else {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(session.name)
-                            .etFont(.headline)
-                        if let topic = session.topicPrompt, !topic.isEmpty {
-                            Text(topic)
-                                .etFont(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        if let locationSummary, !locationSummary.isEmpty {
-                            Text(locationSummary)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        if let searchSummary, !searchSummary.isEmpty {
-                            Text(searchSummary)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                        }
-                    }
-
-                    Spacer()
-
-                    if isRunning {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 8, height: 8)
-                    }
-
-                    if isCurrent {
-                        Image(systemName: "checkmark")
-                            .etFont(.footnote.bold())
-                            .foregroundColor(.accentColor)
-                    }
-                }
+                SessionListRowContent(
+                    title: session.name,
+                    subtitle: primarySubtitle,
+                    footnote: secondarySubtitle,
+                    isCurrent: isCurrent,
+                    isRunning: isRunning,
+                    avatarSystemName: "bubble.left.and.bubble.right.fill",
+                    avatarText: SessionListRowContent.avatarText(for: session.name)
+                )
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onSelect()
                 }
             }
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .contextMenu {
             Button {
                 onSelect()
@@ -1339,6 +1328,115 @@ private struct SessionRow: View {
         let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         onCommit(trimmed)
+    }
+
+    private var primarySubtitle: String? {
+        if let searchSummary, !searchSummary.isEmpty {
+            return searchSummary
+        }
+        if let topic = session.topicPrompt, !topic.isEmpty {
+            return topic
+        }
+        return locationSummary
+    }
+
+    private var secondarySubtitle: String? {
+        guard searchSummary == nil || searchSummary?.isEmpty == true else {
+            return locationSummary
+        }
+        if let topic = session.topicPrompt, !topic.isEmpty {
+            return locationSummary
+        }
+        return nil
+    }
+}
+
+private struct SessionListRowContent: View {
+    let title: String
+    let subtitle: String?
+    let footnote: String?
+    let isCurrent: Bool
+    let isRunning: Bool
+    let avatarSystemName: String
+    let avatarText: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .etFont(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .etFont(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if let footnote, !footnote.isEmpty {
+                    Text(footnote)
+                        .etFont(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            trailingStatus
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isCurrent ? Color.accentColor.opacity(0.08) : Color.clear)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private var avatar: some View {
+        ZStack {
+            Circle()
+                .fill(isCurrent ? Color.accentColor.opacity(0.16) : Color(uiColor: .secondarySystemFill))
+
+            if let avatarText {
+                Text(avatarText)
+                    .etFont(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+            } else {
+                Image(systemName: avatarSystemName)
+                    .etFont(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+            }
+        }
+        .frame(width: 36, height: 36)
+    }
+
+    @ViewBuilder
+    private var trailingStatus: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if isRunning {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 8, height: 8)
+            }
+
+            if isCurrent {
+                Image(systemName: "checkmark")
+                    .etFont(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .frame(minWidth: 22, alignment: .topTrailing)
+    }
+
+    static func avatarText(for title: String) -> String? {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return nil }
+        return String(first).uppercased()
     }
 }
 
