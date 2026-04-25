@@ -390,7 +390,7 @@ struct ChatBubble: View {
 
     private var bubbleMaxWidth: CGFloat {
         let screenWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
-        let rowWidth = availableWidth > 0 ? availableWidth : screenWidth
+        let rowWidth = availableWidth > 0 ? min(availableWidth, screenWidth) : screenWidth
         if usesNoBubbleStyle {
             let availableBubbleWidth = max(1, rowWidth - noBubbleRowHorizontalPadding * 2)
             return min(max(rowWidth * 0.92, 1), availableBubbleWidth)
