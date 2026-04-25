@@ -602,12 +602,12 @@ private struct SessionFolderBrowserView: View {
 
         if #available(iOS 26.0, *) {
             field
-                .background(.regularMaterial, in: Capsule())
                 .glassEffect(.clear, in: Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(Color.white.opacity(0.24), lineWidth: 0.5)
+                        .stroke(Color.white.opacity(0.28), lineWidth: 0.5)
                 )
+                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         } else {
             field
                 .background(
@@ -630,12 +630,11 @@ private struct SessionFolderBrowserView: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .etFont(.system(size: 17, weight: .semibold))
+                .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
                 .frame(width: 44, height: 44)
+                .background(paginationButtonBackground)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
-        .background(paginationButtonBackground)
-        .opacity(isEnabled ? 1 : 0.42)
         .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -654,6 +653,7 @@ private struct SessionFolderBrowserView: View {
                     Circle()
                         .stroke(Color.white.opacity(0.24), lineWidth: 0.5)
                 )
+                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         } else {
             Circle()
                 .fill(.ultraThinMaterial)
