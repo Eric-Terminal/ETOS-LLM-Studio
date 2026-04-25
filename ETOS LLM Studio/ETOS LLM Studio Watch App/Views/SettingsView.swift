@@ -78,7 +78,7 @@ struct SettingsView: View {
                                 selectedModel: selectedModelBinding
                             )
                         } label: {
-                            HStack(spacing: usesNativeSettingsIcons ? 10 : 8) {
+                            HStack(spacing: 8) {
                                 if usesNativeSettingsIcons {
                                     SettingsListIconView(icon: .currentModel)
                                 }
@@ -234,7 +234,7 @@ struct SettingsView: View {
                                 announcement: announcement,
                                 announcementManager: announcementManager
                             )) {
-                                HStack(spacing: usesNativeSettingsIcons ? 10 : 8) {
+                                HStack(spacing: 8) {
                                     if usesNativeSettingsIcons {
                                         SettingsListIconView(icon: announcementListIcon(for: announcement.type))
                                     } else {
@@ -297,7 +297,7 @@ struct SettingsView: View {
         status: String?,
         statusColor: Color
     ) -> some View {
-        HStack(spacing: usesNativeSettingsIcons ? 10 : 8) {
+        HStack(spacing: 8) {
             if usesNativeSettingsIcons {
                 SettingsListIconView(icon: icon)
                 Text(title)
@@ -480,7 +480,7 @@ struct SettingsListIconLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             SettingsListIconView(icon: icon)
             Text(title)
         }
@@ -493,11 +493,11 @@ struct SettingsListIconView: View {
     var body: some View {
         Circle()
             .fill(icon.backgroundColor)
-            .frame(width: 24, height: 24)
+            .frame(width: 20, height: 20)
             .overlay {
                 Image(systemName: icon.systemName)
                     .symbolVariant(.fill)
-                    .etFont(.system(size: 12, weight: .semibold))
+                    .etFont(.system(size: 12, weight: .regular))
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)

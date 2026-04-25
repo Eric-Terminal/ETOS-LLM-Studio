@@ -58,7 +58,7 @@ struct SettingsView: View {
                             selectedModel: selectedModelBinding
                         )
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 8) {
                             SettingsListIconView(icon: .currentModel)
                             Text("模型")
                             Text(selectedModelLabel(in: options))
@@ -144,7 +144,7 @@ struct SettingsView: View {
                     DailyPulseView()
                         .environmentObject(viewModel)
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 8) {
                         SettingsListIconView(icon: .dailyPulse)
                         Text("每日脉冲")
                         Spacer()
@@ -265,7 +265,7 @@ struct SettingsView: View {
                                 announcementManager: announcementManager
                             )
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: 8) {
                                 SettingsListIconView(icon: announcementIcon(for: announcement.type))
                                 Text(announcement.title)
                                     .lineLimit(2)
@@ -438,7 +438,7 @@ struct SettingsListIconLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             SettingsListIconView(icon: icon)
             Text(title)
         }
@@ -451,11 +451,11 @@ struct SettingsListIconView: View {
     var body: some View {
         Circle()
             .fill(icon.backgroundColor)
-            .frame(width: 29, height: 29)
+            .frame(width: 20, height: 20)
             .overlay {
                 Image(systemName: icon.systemName)
                     .symbolVariant(.fill)
-                    .etFont(.system(size: 15, weight: .semibold))
+                    .etFont(.system(size: 12, weight: .regular))
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
