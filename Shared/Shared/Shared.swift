@@ -15,13 +15,12 @@ public enum ChatNavigationMode: String, CaseIterable, Identifiable {
     case nativeNavigation = "nativeNavigation"
 
     public static let storageKey = "ui.chatNavigationMode"
-    public static let defaultMode: ChatNavigationMode = .nativeNavigation
+    public static let defaultMode: ChatNavigationMode = .legacyOverlay
 
     public var id: String { rawValue }
 
     public static func resolvedMode(rawValue: String) -> ChatNavigationMode {
-        let mode = ChatNavigationMode(rawValue: rawValue) ?? defaultMode
-        return mode == .legacyOverlay ? .nativeNavigation : mode
+        ChatNavigationMode(rawValue: rawValue) ?? defaultMode
     }
 }
 

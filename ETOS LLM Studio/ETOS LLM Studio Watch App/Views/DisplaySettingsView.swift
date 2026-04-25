@@ -27,6 +27,7 @@ struct DisplaySettingsView: View {
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
 
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
     @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
     @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
@@ -88,6 +89,17 @@ struct DisplaySettingsView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section {
+                Picker("界面架构", selection: chatNavigationModeBinding) {
+                    Text("沉浸浮层").tag(ChatNavigationMode.legacyOverlay)
+                    Text("原生导航").tag(ChatNavigationMode.nativeNavigation)
+                }
+            } footer: {
+                Text("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -232,6 +244,13 @@ struct DisplaySettingsView: View {
                     .frame(width: 14, height: 14)
             }
         }
+    }
+
+    private var chatNavigationModeBinding: Binding<ChatNavigationMode> {
+        Binding(
+            get: { ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) },
+            set: { chatNavigationModeRawValue = $0.rawValue }
+        )
     }
 
     private func resetCustomChatColors() {

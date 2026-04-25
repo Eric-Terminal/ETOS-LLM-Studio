@@ -109,30 +109,6 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // 背景图
-            if !isNativeNavigationEnabled,
-               viewModel.enableBackground,
-               let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
-                GeometryReader { proxy in
-                    let size = proxy.size
-                    ZStack {
-                        if viewModel.backgroundContentMode == "fit" {
-                            colorScheme == .dark ? Color.black : Color(white: 0.95)
-                        }
-                        
-                        Image(uiImage: bgImage)
-                            .resizable()
-                            .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
-                            .frame(width: size.width, height: size.height)
-                            .position(x: size.width / 2, y: size.height / 2)
-                            .clipped()
-                            .opacity(viewModel.backgroundOpacity)
-                    }
-                    .frame(width: size.width, height: size.height)
-                }
-                .ignoresSafeArea()
-            }
-            
             // 主导航
             NavigationStack {
                 if isNativeNavigationEnabled {
@@ -286,6 +262,9 @@ struct ContentView: View {
     private var legacyChatRootView: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
+                chatBackgroundLayer
+                    .ignoresSafeArea()
+
                 chatList(proxy: proxy)
 
                 if showScrollToBottomButton {
@@ -316,6 +295,32 @@ struct ContentView: View {
                     viewModel.cancelAskUserInputRequest(using: request)
                 }
             )
+        }
+    }
+
+    @ViewBuilder
+    private var chatBackgroundLayer: some View {
+        if viewModel.enableBackground,
+           let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
+            GeometryReader { proxy in
+                let size = proxy.size
+                ZStack {
+                    if viewModel.backgroundContentMode == "fit" {
+                        colorScheme == .dark ? Color.black : Color(white: 0.95)
+                    }
+
+                    Image(uiImage: bgImage)
+                        .resizable()
+                        .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
+                        .frame(width: size.width, height: size.height)
+                        .position(x: size.width / 2, y: size.height / 2)
+                        .clipped()
+                        .opacity(viewModel.backgroundOpacity)
+                }
+                .frame(width: size.width, height: size.height)
+            }
+        } else {
+            Color.clear
         }
     }
     
@@ -449,6 +454,7 @@ struct ContentView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .background(Color.clear)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {

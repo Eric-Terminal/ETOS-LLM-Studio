@@ -22,14 +22,14 @@ import SQLite3
 
 @Suite("聊天界面架构默认值测试")
 struct ChatNavigationModeTests {
-    @Test("默认使用原生导航界面")
-    func defaultModeUsesNativeNavigation() {
-        #expect(ChatNavigationMode.defaultMode == .nativeNavigation)
+    @Test("默认使用沉浸浮层界面")
+    func defaultModeUsesLegacyOverlay() {
+        #expect(ChatNavigationMode.defaultMode == .legacyOverlay)
     }
 
-    @Test("旧版沉浸浮层配置会迁移到原生导航")
-    func legacyOverlayResolvesToNativeNavigation() {
-        #expect(ChatNavigationMode.resolvedMode(rawValue: ChatNavigationMode.legacyOverlay.rawValue) == .nativeNavigation)
+    @Test("沉浸浮层配置会保持沉浸浮层")
+    func legacyOverlayResolvesToLegacyOverlay() {
+        #expect(ChatNavigationMode.resolvedMode(rawValue: ChatNavigationMode.legacyOverlay.rawValue) == .legacyOverlay)
     }
 }
 
