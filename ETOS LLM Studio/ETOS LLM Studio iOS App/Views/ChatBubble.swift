@@ -508,14 +508,6 @@ struct ChatBubble: View {
                     } else {
                         bubbleContainer {
                             textContentStack(includeToolCalls: true)
-                            
-                            // 版本指示器（Telegram 风格：右下角）
-                            if shouldShowVersionIndicator {
-                                HStack(spacing: 6) {
-                                    compactVersionIndicator
-                                }
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                            }
                         }
                     }
                 }
@@ -524,6 +516,10 @@ struct ChatBubble: View {
                    let imageFileNames = message.imageFileNames,
                    !imageFileNames.isEmpty {
                     imageAttachmentsView(fileNames: imageFileNames)
+                }
+
+                if shouldShowVersionIndicator {
+                    versionSwitcherRow
                 }
             }
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
@@ -636,7 +632,16 @@ struct ChatBubble: View {
         }
     }
     
-    // MARK: - 紧凑版本指示器 (Telegram 风格)
+    // MARK: - 回复版本切换器
+
+    @ViewBuilder
+    private var versionSwitcherRow: some View {
+        HStack(spacing: 0) {
+            compactVersionIndicator
+        }
+        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
+        .padding(.top, 2)
+    }
     
     @ViewBuilder
     private var compactVersionIndicator: some View {
@@ -668,24 +673,20 @@ struct ChatBubble: View {
             .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
         }
         .foregroundStyle(
-            usesNoBubbleStyle
-                ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
-                : (isOutgoing
-                    ? resolvedSecondaryTextColor(default: Color.white.opacity(0.8), customOpacity: 0.8)
-                    : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
+            resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.86)
         )
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
             Capsule()
                 .fill(
-                    usesNoBubbleStyle
-                        ? Color.clear
-                        : (isOutgoing
-                            ? resolvedSecondaryTextColor(default: Color.white, customOpacity: 0.2)
-                            : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.15))
+                    resolvedSecondaryTextColor(
+                        default: Color.secondary,
+                        customOpacity: colorScheme == .dark ? 0.18 : 0.13
+                    )
                 )
         )
+        .contentShape(Capsule())
     }
 
     private var shouldShowVersionIndicator: Bool {
@@ -857,13 +858,6 @@ struct ChatBubble: View {
             if hasMainBubble {
                 connectedToolBubbleContainer(isFirst: true, isLast: totalBubbleCount == 1) {
                     textContentStack(includeToolCalls: false)
-
-                    if shouldShowVersionIndicator {
-                        HStack(spacing: 6) {
-                            compactVersionIndicator
-                        }
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
                 }
             }
 
