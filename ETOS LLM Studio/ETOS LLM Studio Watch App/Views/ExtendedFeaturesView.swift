@@ -301,7 +301,7 @@ public struct ExtendedFeaturesView: View {
 
 // MARK: - 记忆系统设置
 
-private struct LongTermMemoryFeatureView: View {
+struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     
     @AppStorage("enableMemory") private var enableMemory: Bool = true
