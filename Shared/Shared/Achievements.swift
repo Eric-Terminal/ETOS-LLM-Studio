@@ -55,7 +55,7 @@ public enum AchievementCatalog {
     public static let definitions: [AchievementDefinition] = [
         AchievementDefinition(
             id: .steadyCatch,
-            titleKey: "稳稳的接住你",
+            titleKey: "AI张开了双臂，尽管它没有手。",
             sentenceKey: "被稳稳的接住力",
             systemImageName: "hands.sparkles"
         )

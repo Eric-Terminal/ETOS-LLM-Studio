@@ -44,7 +44,7 @@ private struct AchievementJournalRow: View {
                     .foregroundStyle(.tint)
                 Text(entry.localizedTitle)
                     .etFont(.headline)
-                    .lineLimit(2)
+                    .lineLimit(3)
             }
 
             Text(entry.localizedSentence)
