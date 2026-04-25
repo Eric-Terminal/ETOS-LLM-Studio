@@ -32,6 +32,10 @@ enum WatchSettingsNavigationDestination: Hashable, Identifiable {
     }
 }
 
+private enum SettingsHomeExperiment {
+    static let storageKey = "ui.betaSettingsHomeEnabled"
+}
+
 /// 设置视图
 struct SettingsView: View {
     
@@ -40,6 +44,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @ObservedObject private var achievementCenter = AchievementCenter.shared
     
     // MARK: - 公告管理器
     
@@ -50,6 +55,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsHomeExperiment.storageKey) private var useBetaSettingsHome = false
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(
@@ -104,7 +110,10 @@ struct SettingsView: View {
                     Text("当前模型")
                 }
 
-                Section {
+                if useBetaSettingsHome && canUseBetaSettingsHome {
+                    betaSettingsHomeSections
+                } else {
+                    Section {
                     NavigationLink(destination: SessionListView(
                         sessions: $viewModel.chatSessions,
                         folders: $viewModel.sessionFolders,
@@ -220,10 +229,15 @@ struct SettingsView: View {
                     NavigationLink(destination: DeviceSyncSettingsView()) {
                         settingsNavigationLabel("同步与备份", icon: .sync)
                     }
+
+                    NavigationLink(destination: SettingsLaboratoryView(canUseBetaSettingsHome: canUseBetaSettingsHome)) {
+                        settingsLaboratoryLabel(isEnabled: useBetaSettingsHome && canUseBetaSettingsHome)
+                    }
                     
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
                     }
+                }
                 }
                 
                 // MARK: - 公告通知 Section
@@ -249,6 +263,7 @@ struct SettingsView: View {
             .navigationTitle("设置")
             .onAppear {
                 ensureSelectedModel(in: viewModel.activatedModels)
+                disableBetaSettingsHomeIfNeeded()
                 scheduleSettingsResearchAchievementIfNeeded()
             }
             .onDisappear {
@@ -256,6 +271,9 @@ struct SettingsView: View {
             }
             .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedModels)
+            }
+            .onChange(of: chatNavigationModeRawValue) { _, _ in
+                disableBetaSettingsHomeIfNeeded()
             }
             .navigationDestination(item: $requestedDestination) { destination in
                 switch destination {
@@ -274,8 +292,362 @@ struct SettingsView: View {
     
     // MARK: - 辅助方法
 
+    private var canUseBetaSettingsHome: Bool {
+        usesNativeSettingsIcons
+    }
+
     private var usesNativeSettingsIcons: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+
+    @ViewBuilder
+    private var betaSettingsHomeSections: some View {
+        Section {
+            NavigationLink(destination: SettingsLaboratoryView(canUseBetaSettingsHome: canUseBetaSettingsHome)) {
+                settingsLaboratoryLabel(isEnabled: useBetaSettingsHome && canUseBetaSettingsHome)
+            }
+        }
+
+        Section {
+            NavigationLink {
+                SettingsCategoryList(title: "对话与模型") {
+                    conversationAndModelSettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("对话与模型", icon: .conversationAndModels)
+            }
+
+            NavigationLink {
+                SettingsCategoryList(title: "AI 能力") {
+                    aiCapabilitySettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("AI 能力", icon: .aiCapabilities)
+            }
+
+            NavigationLink {
+                SettingsCategoryList(title: "工具与自动化") {
+                    toolAutomationSettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("工具与自动化", icon: .toolAutomation)
+            }
+
+            NavigationLink {
+                SettingsCategoryList(title: "语音与媒体") {
+                    voiceAndMediaSettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("语音与媒体", icon: .voiceAndMedia)
+            }
+        }
+
+        Section {
+            NavigationLink {
+                SettingsCategoryList(title: "显示与外观") {
+                    displayAppearanceSettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("显示与外观", icon: .display)
+            }
+
+            NavigationLink {
+                SettingsCategoryList(title: "数据与维护") {
+                    dataMaintenanceSettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("数据与维护", icon: .dataMaintenance)
+            }
+
+            NavigationLink {
+                SettingsCategoryList(title: "支持与关于") {
+                    supportAboutSettingsSection
+                }
+            } label: {
+                settingsNavigationLabel("支持与关于", icon: .supportAbout)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var conversationAndModelSettingsSection: some View {
+        Section {
+            NavigationLink(destination: sessionListDestination) {
+                settingsNavigationLabel("历史会话管理", icon: .sessionHistory)
+            }
+
+            NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
+                settingsNavigationLabel("提供商与模型管理", icon: .providerManagement)
+            }
+
+            NavigationLink(destination: modelAdvancedSettingsDestination) {
+                settingsNavigationLabel("偏好设置", icon: .modelAdvanced)
+            }
+
+            NavigationLink(destination: UsageAnalyticsView()) {
+                settingsNavigationLabel("用量统计", icon: .usageAnalytics)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aiCapabilitySettingsSection: some View {
+        Section {
+            NavigationLink {
+                LongTermMemoryFeatureView()
+                    .environmentObject(viewModel)
+            } label: {
+                settingsNavigationLabel("记忆系统", icon: .memory)
+            }
+
+            NavigationLink {
+                WorldbookSettingsView(viewModel: viewModel)
+            } label: {
+                settingsNavigationLabel("世界书", icon: .worldbook)
+            }
+
+            NavigationLink {
+                AgentSkillsView()
+            } label: {
+                settingsNavigationLabel("Agent Skills", icon: .agentSkills)
+            }
+
+            NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {
+                settingsStatusLabel(
+                    "每日脉冲",
+                    icon: .dailyPulse,
+                    status: dailyPulseEntryStatusText,
+                    statusColor: pulseManager.hasUnviewedTodayRun ? .blue : .secondary
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var toolAutomationSettingsSection: some View {
+        Section {
+            NavigationLink {
+                ToolCenterView()
+                    .environmentObject(viewModel)
+            } label: {
+                settingsNavigationLabel("工具中心", icon: .toolCenter)
+            }
+
+            NavigationLink {
+                MCPIntegrationView()
+            } label: {
+                settingsNavigationLabel("MCP 工具集成", icon: .mcp)
+            }
+
+            NavigationLink {
+                ShortcutIntegrationView()
+            } label: {
+                settingsNavigationLabel("快捷指令工具集成", icon: .shortcuts)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var voiceAndMediaSettingsSection: some View {
+        Section {
+            NavigationLink {
+                speechInputSettingsDestination
+            } label: {
+                settingsNavigationLabel("语音输入", icon: .speechInput)
+            }
+
+            NavigationLink {
+                TTSSettingsView()
+                    .environmentObject(viewModel)
+            } label: {
+                settingsNavigationLabel("语音朗读（TTS）", icon: .tts)
+            }
+
+            NavigationLink {
+                ImageGenerationFeatureView()
+                    .environmentObject(viewModel)
+            } label: {
+                settingsNavigationLabel("图片生成", icon: .imageGeneration)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var displayAppearanceSettingsSection: some View {
+        Section {
+            NavigationLink(destination: displaySettingsDestination) {
+                settingsNavigationLabel("显示与外观", icon: .display)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dataMaintenanceSettingsSection: some View {
+        Section {
+            NavigationLink(destination: DeviceSyncSettingsView()) {
+                settingsNavigationLabel("同步与备份", icon: .sync)
+            }
+
+            NavigationLink {
+                StorageManagementView()
+            } label: {
+                settingsNavigationLabel("存储管理", icon: .storage)
+            }
+
+            NavigationLink {
+                ThirdPartyImportWatchHintView()
+            } label: {
+                settingsNavigationLabel("导入数据", icon: .importData)
+            }
+
+            NavigationLink {
+                LocalDebugView()
+            } label: {
+                settingsNavigationLabel("远程文件访问", icon: .remoteFiles)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var supportAboutSettingsSection: some View {
+        Section {
+            NavigationLink {
+                FeedbackCenterView()
+            } label: {
+                settingsNavigationLabel("反馈助手", icon: .feedback)
+            }
+
+            if achievementCenter.hasUnlockedAchievements {
+                NavigationLink {
+                    AchievementJournalView()
+                } label: {
+                    settingsNavigationLabel("成就日记", icon: .achievementJournal)
+                }
+            }
+
+            NavigationLink(destination: AboutView()) {
+                settingsNavigationLabel("关于", icon: .about)
+            }
+        }
+    }
+
+    private var sessionListDestination: some View {
+        SessionListView(
+            sessions: $viewModel.chatSessions,
+            folders: $viewModel.sessionFolders,
+            currentSession: $viewModel.currentSession,
+            runningSessionIDs: viewModel.runningSessionIDs,
+            deleteSessionAction: { session in
+                viewModel.deleteSessions([session])
+            },
+            branchAction: { session, copyMessages in
+                let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
+                return newSession
+            },
+            deleteLastMessageAction: { session in
+                viewModel.deleteLastMessage(for: session)
+            },
+            sendSessionToCompanionAction: { session in
+                WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
+            },
+            onSessionSelected: { selectedSession, messageOrdinal in
+                if let messageOrdinal {
+                    viewModel.requestMessageJump(
+                        sessionID: selectedSession.id,
+                        messageOrdinal: messageOrdinal
+                    )
+                } else {
+                    viewModel.clearPendingMessageJumpTarget()
+                }
+                ChatService.shared.setCurrentSession(selectedSession)
+                dismiss()
+            },
+            updateSessionAction: { session in
+                viewModel.updateSession(session)
+            },
+            createFolderAction: { name, parentID in
+                viewModel.createSessionFolder(name: name, parentID: parentID)
+            },
+            renameFolderAction: { folder, newName in
+                viewModel.renameSessionFolder(folder, newName: newName)
+            },
+            deleteFolderAction: { folder in
+                viewModel.deleteSessionFolder(folder)
+            },
+            moveSessionToFolderAction: { session, folderID in
+                viewModel.moveSession(session, toFolderID: folderID)
+            }
+        )
+    }
+
+    private var modelAdvancedSettingsDestination: some View {
+        ModelAdvancedSettingsView(
+            aiTemperature: $viewModel.aiTemperature,
+            aiTopP: $viewModel.aiTopP,
+            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
+            maxChatHistory: $viewModel.maxChatHistory,
+            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
+            enableStreaming: $viewModel.enableStreaming,
+            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
+            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
+            enableReasoningSummary: $viewModel.enableReasoningSummary,
+            currentSession: $viewModel.currentSession,
+            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
+            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
+        )
+    }
+
+    private var displaySettingsDestination: some View {
+        DisplaySettingsView(
+            enableMarkdown: $viewModel.enableMarkdown,
+            enableBackground: $viewModel.enableBackground,
+            backgroundBlur: $viewModel.backgroundBlur,
+            backgroundOpacity: $viewModel.backgroundOpacity,
+            enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
+            currentBackgroundImage: $viewModel.currentBackgroundImage,
+            backgroundContentMode: $viewModel.backgroundContentMode,
+            enableLiquidGlass: $viewModel.enableLiquidGlass,
+            enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+            enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+            enableNoBubbleUI: $viewModel.enableNoBubbleUI,
+            allBackgrounds: viewModel.backgroundImages
+        )
+    }
+
+    private var speechInputSettingsDestination: some View {
+        SpeechInputSettingsView(
+            enableSpeechInput: $viewModel.enableSpeechInput,
+            selectedSpeechModel: speechModelBinding,
+            sendSpeechAsAudio: $viewModel.sendSpeechAsAudio,
+            audioRecordingFormat: $viewModel.audioRecordingFormat,
+            speechModels: viewModel.speechModels
+        )
+    }
+
+    private func settingsLaboratoryLabel(isEnabled: Bool) -> some View {
+        HStack(spacing: 8) {
+            if usesNativeSettingsIcons {
+                SettingsListIconView(icon: .settingsLaboratory)
+                Text("设置实验室")
+            } else {
+                Label("设置实验室", systemImage: SettingsListIcon.settingsLaboratory.legacySystemName)
+            }
+            SettingsBetaBadge()
+            Spacer()
+            if isEnabled {
+                Text("已开启")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder
@@ -360,6 +732,12 @@ struct SettingsView: View {
         settingsResearchTask = nil
     }
 
+    private func disableBetaSettingsHomeIfNeeded() {
+        if !canUseBetaSettingsHome {
+            useBetaSettingsHome = false
+        }
+    }
+
     private var selectedModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.selectedModel },
@@ -367,6 +745,13 @@ struct SettingsView: View {
                 viewModel.selectedModel = model
                 ChatService.shared.setSelectedModel(model)
             }
+        )
+    }
+
+    private var speechModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedSpeechModel },
+            set: { viewModel.setSelectedSpeechModel($0) }
         )
     }
 
@@ -448,6 +833,13 @@ extension SettingsListIcon {
     )
     static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint, legacySystemName: "person.text.rectangle")
     static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange, legacySystemName: "folder.badge.gearshape")
+    static let settingsLaboratory = SettingsListIcon(systemName: "hammer", backgroundColor: .blue)
+    static let conversationAndModels = SettingsListIcon(systemName: "bubble", backgroundColor: .blue)
+    static let aiCapabilities = SettingsListIcon(systemName: "brain", backgroundColor: .purple, legacySystemName: "brain.head.profile")
+    static let toolAutomation = SettingsListIcon(systemName: "wrench", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")
+    static let voiceAndMedia = SettingsListIcon(systemName: "waveform", backgroundColor: .pink)
+    static let dataMaintenance = SettingsListIcon(systemName: "externaldrive", backgroundColor: .green, legacySystemName: "internaldrive")
+    static let supportAbout = SettingsListIcon(systemName: "questionmark.bubble", backgroundColor: .gray)
 }
 
 struct SettingsListIconLabel: View {
@@ -481,6 +873,91 @@ struct SettingsListIconView: View {
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
+    }
+}
+
+private struct SettingsCategoryList<Content: View>: View {
+    let title: LocalizedStringKey
+    let content: () -> Content
+
+    init(title: LocalizedStringKey, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.content = content
+    }
+
+    var body: some View {
+        List {
+            content()
+        }
+        .navigationTitle(title)
+    }
+}
+
+private struct SettingsLaboratoryView: View {
+    @AppStorage(SettingsHomeExperiment.storageKey) private var useBetaSettingsHome = false
+    let canUseBetaSettingsHome: Bool
+
+    var body: some View {
+        List {
+            Section {
+                Toggle(isOn: betaSettingsHomeBinding) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text("新版设置首页")
+                            SettingsBetaBadge()
+                        }
+
+                        Text("开启后，设置首页会切换为分类收纳版；关闭后会立即恢复当前设置首页。")
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!canUseBetaSettingsHome)
+            } footer: {
+                Text(footerText)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("设置实验室")
+        .onAppear {
+            if !canUseBetaSettingsHome {
+                useBetaSettingsHome = false
+            }
+        }
+    }
+
+    private var betaSettingsHomeBinding: Binding<Bool> {
+        Binding(
+            get: { canUseBetaSettingsHome && useBetaSettingsHome },
+            set: { newValue in
+                if canUseBetaSettingsHome {
+                    useBetaSettingsHome = newValue
+                }
+            }
+        )
+    }
+
+    private var footerText: LocalizedStringKey {
+        if canUseBetaSettingsHome {
+            return "这是仍在验证中的设置界面实验，默认关闭。"
+        }
+        return "watchOS 需要先在“显示与外观”里将界面架构切换为“原生导航”，沉浸浮层模式不会启用新版设置首页。"
+    }
+}
+
+private struct SettingsBetaBadge: View {
+    var body: some View {
+        Text(verbatim: "BETA")
+            .etFont(.caption2.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.blue)
+            }
+            .accessibilityLabel("Beta")
     }
 }
 
