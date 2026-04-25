@@ -76,7 +76,7 @@ public enum AchievementCatalog {
             id: .steadyCatch,
             titleKey: "AI张开了双臂，尽管它没有手。",
             sentenceKey: "被稳稳的接住力",
-            triggerNoteKey: "触发关键词：稳稳的接住你 / I've got you",
+            triggerNoteKey: "触发关键词：稳稳的接住你",
             systemImageName: "hands.sparkles"
         ),
         AchievementDefinition(
@@ -221,7 +221,9 @@ public enum AchievementTriggerEvaluator {
             return true
         }
 
-        return foldedText(assistantReply).contains("i've got you")
+        let folded = foldedText(assistantReply)
+        return folded.contains("i've got you")
+            || folded.contains("i am here to hold space for you")
     }
 
     static func shouldUnlockLanguageLubrication(from assistantReply: String) -> Bool {

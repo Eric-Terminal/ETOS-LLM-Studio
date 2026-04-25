@@ -214,7 +214,7 @@ struct AchievementCenterTests {
 
         #expect(definition?.titleKey == "AI张开了双臂，尽管它没有手。")
         #expect(definition?.sentenceKey == "被稳稳的接住力")
-        #expect(definition?.triggerNoteKey == "触发关键词：稳稳的接住你 / I've got you")
+        #expect(definition?.triggerNoteKey == "触发关键词：稳稳的接住你")
     }
 
     @Test("语言润滑成就定义已登记")
@@ -278,6 +278,7 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "这一回我会稳稳的接住你。"))
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I've got you. Take a breath."))
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I’ve got you. Take a breath."))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "I am here to hold space for you."))
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "This is only nearby comfort.") == false)
     }
 
@@ -389,7 +390,7 @@ struct AchievementCenterTests {
         id: .steadyCatch,
         titleKey: "AI张开了双臂，尽管它没有手。",
         sentenceKey: "被稳稳的接住力",
-        triggerNoteKey: "触发关键词：稳稳的接住你 / I've got you",
+        triggerNoteKey: "触发关键词：稳稳的接住你",
         systemImageName: "hands.sparkles"
     )
 
