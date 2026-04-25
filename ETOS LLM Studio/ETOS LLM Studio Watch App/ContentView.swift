@@ -91,6 +91,7 @@ struct ContentView: View {
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
+    @AppStorage("watch.attachment.sourceHistory") private var attachmentSourceHistoryRawValue: String = "[]"
     private let inputControlHeight: CGFloat = 38
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
@@ -106,6 +107,13 @@ struct ContentView: View {
 
     private var isNativeNavigationEnabled: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+
+    private var attachmentSourceHistory: [String] {
+        WatchAttachmentSourceHistory.values(
+            from: attachmentSourceHistoryRawValue,
+            fallback: lastAttachmentSource
+        )
     }
     
     // MARK: - 视图主体
@@ -928,6 +936,15 @@ struct ContentView: View {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
 
+    private func rememberAttachmentSource(_ source: String) {
+        let updatedHistory = WatchAttachmentSourceHistory.appending(
+            source,
+            to: attachmentSourceHistory
+        )
+        attachmentSourceHistoryRawValue = WatchAttachmentSourceHistory.rawValue(for: updatedHistory)
+        lastAttachmentSource = updatedHistory.first ?? ""
+    }
+
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
             || !viewModel.pendingImageAttachments.isEmpty
@@ -1139,7 +1156,7 @@ struct ContentView: View {
         let bubbleWithTrailingSwipe = coreBubble
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button {
-                    attachmentSourceText = lastAttachmentSource
+                    attachmentSourceText = attachmentSourceHistory.first ?? lastAttachmentSource
                     isAttachmentImportPresented = true
                 } label: {
                     Image(systemName: "plus")
@@ -1221,10 +1238,11 @@ struct ContentView: View {
                 NavigationStack {
                     WatchAttachmentImportView(
                         source: $attachmentSourceText,
+                        history: attachmentSourceHistory,
                         isImporting: viewModel.attachmentImportInProgress,
                         onImport: {
                             let trimmedSource = attachmentSourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            lastAttachmentSource = trimmedSource
+                            rememberAttachmentSource(trimmedSource)
                             viewModel.importAttachment(from: trimmedSource)
                             isAttachmentImportPresented = false
                         },
@@ -1451,8 +1469,48 @@ struct ContentView: View {
 
 }
 
+enum WatchAttachmentSourceHistory {
+    static let limit = 5
+
+    static func values(from rawValue: String, fallback: String = "") -> [String] {
+        guard let data = rawValue.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return normalized([fallback])
+        }
+        let history = normalized(decoded)
+        return history.isEmpty ? normalized([fallback]) : history
+    }
+
+    static func appending(_ source: String, to history: [String]) -> [String] {
+        normalized([source] + history)
+    }
+
+    static func rawValue(for history: [String]) -> String {
+        let normalizedHistory = normalized(history)
+        guard let data = try? JSONEncoder().encode(normalizedHistory),
+              let rawValue = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return rawValue
+    }
+
+    static func normalized(_ sources: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for source in sources {
+            let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(trimmed).inserted else { continue }
+            result.append(trimmed)
+            if result.count == limit { break }
+        }
+        return result
+    }
+}
+
 private struct WatchAttachmentImportView: View {
     @Binding var source: String
+    let history: [String]
     let isImporting: Bool
     let onImport: () -> Void
     let onCancel: () -> Void
@@ -1470,6 +1528,28 @@ private struct WatchAttachmentImportView: View {
 
                 if isImporting {
                     ProgressView("正在导入...")
+                }
+            }
+
+            if !history.isEmpty {
+                Section("最近链接") {
+                    ForEach(history, id: \.self) { item in
+                        Button {
+                            source = item
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(item)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                                if source == item {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.blue)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }

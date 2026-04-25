@@ -1436,3 +1436,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "正在导入..." = "Importation...";
 "附件导入失败" = "Échec de l'importation de la pièce jointe";
 "导入" = "Importer";
+"最近链接" = "Liens récents";
