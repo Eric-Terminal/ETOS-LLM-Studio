@@ -34,6 +34,13 @@ public extension AchievementID {
     static let forbiddenPlace: Self = "forbiddenPlace"
     static let privacyReader: Self = "privacyReader"
     static let documentationReader: Self = "documentationReader"
+    static let wildTemperature: Self = "wildTemperature"
+    static let absoluteReason: Self = "absoluteReason"
+    static let singleCharacterMessage: Self = "singleCharacterMessage"
+    static let longConfession: Self = "longConfession"
+    static let unstoppableConversation: Self = "unstoppableConversation"
+    static let nightOwl: Self = "nightOwl"
+    static let memoryPurge: Self = "memoryPurge"
 }
 
 public struct AchievementDefinition: Identifiable, Hashable, Sendable {
@@ -94,11 +101,63 @@ public enum AchievementCatalog {
             sentenceKey: "翻开了文档，成为了时代的逆行者",
             triggerNoteKey: "触发条件：打开文档链接",
             systemImageName: "book"
+        ),
+        AchievementDefinition(
+            id: .wildTemperature,
+            titleKey: "放飞自我",
+            sentenceKey: "解除了AI的所有束缚，后果自负。",
+            triggerNoteKey: "触发条件：将 Temperature 调到 2.0",
+            systemImageName: "flame"
+        ),
+        AchievementDefinition(
+            id: .absoluteReason,
+            titleKey: "绝对理性",
+            sentenceKey: "要求AI成为一台没有灵魂的机器。",
+            triggerNoteKey: "触发条件：将 Temperature 调到 0",
+            systemImageName: "cpu"
+        ),
+        AchievementDefinition(
+            id: .singleCharacterMessage,
+            titleKey: "惜字如金",
+            sentenceKey: "一个字，也算一条消息。",
+            triggerNoteKey: "触发条件：发送一条只有 1 个字的消息",
+            systemImageName: "1.circle"
+        ),
+        AchievementDefinition(
+            id: .longConfession,
+            titleKey: "倾诉欲爆表",
+            sentenceKey: "一次性说完了所有想说的话。",
+            triggerNoteKey: "触发条件：发送超过 1000 字的消息",
+            systemImageName: "text.alignleft"
+        ),
+        AchievementDefinition(
+            id: .unstoppableConversation,
+            titleKey: "停不下来",
+            sentenceKey: "和AI聊了很久很久，Token如奶油般化开。",
+            triggerNoteKey: "触发条件：单个会话内连续对话超过 50 轮",
+            systemImageName: "infinity"
+        ),
+        AchievementDefinition(
+            id: .nightOwl,
+            titleKey: "夜猫子",
+            sentenceKey: "在不该清醒的时间，找了一个永远不会睡着的东西说话。",
+            triggerNoteKey: "触发条件：凌晨 3 点后发送消息",
+            systemImageName: "moon.stars"
+        ),
+        AchievementDefinition(
+            id: .memoryPurge,
+            titleKey: "断舍离",
+            sentenceKey: "删除了所有的记忆，AI毫无察觉。",
+            triggerNoteKey: "触发条件：清空所有对话记录",
+            systemImageName: "trash.slash"
         )
     ]
 }
 
 enum AchievementTriggerEvaluator {
+    static let longMessageCharacterThreshold = 1_000
+    static let longConversationTurnThreshold = 50
+
     static func shouldUnlockSteadyCatch(from assistantReply: String) -> Bool {
         if assistantReply.contains("稳稳的接住你") {
             return true
@@ -116,6 +175,45 @@ enum AchievementTriggerEvaluator {
         return folded.contains("you're absolutely right")
             || folded.contains("great question")
             || folded.contains("you're asking exactly the right question")
+    }
+
+    static func userMessageAchievementIDs(
+        for content: String,
+        userMessageCount: Int,
+        sentAt: Date,
+        calendar: Calendar = .current
+    ) -> [AchievementID] {
+        var ids: [AchievementID] = []
+        if shouldUnlockSingleCharacterMessage(from: content) {
+            ids.append(.singleCharacterMessage)
+        }
+        if shouldUnlockLongConfession(from: content) {
+            ids.append(.longConfession)
+        }
+        if shouldUnlockUnstoppableConversation(userMessageCount: userMessageCount) {
+            ids.append(.unstoppableConversation)
+        }
+        if shouldUnlockNightOwl(sentAt: sentAt, calendar: calendar) {
+            ids.append(.nightOwl)
+        }
+        return ids
+    }
+
+    static func shouldUnlockSingleCharacterMessage(from content: String) -> Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines).count == 1
+    }
+
+    static func shouldUnlockLongConfession(from content: String) -> Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines).count > longMessageCharacterThreshold
+    }
+
+    static func shouldUnlockUnstoppableConversation(userMessageCount: Int) -> Bool {
+        userMessageCount > longConversationTurnThreshold
+    }
+
+    static func shouldUnlockNightOwl(sentAt: Date, calendar: Calendar = .current) -> Bool {
+        let hour = calendar.component(.hour, from: sentAt)
+        return hour >= 3 && hour < 6
     }
 
     private static func foldedText(_ text: String) -> String {

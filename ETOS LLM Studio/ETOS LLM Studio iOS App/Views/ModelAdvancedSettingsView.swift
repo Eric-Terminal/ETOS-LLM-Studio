@@ -174,7 +174,7 @@ struct ModelAdvancedSettingsView: View {
                         .etFont(.subheadline)
                     Slider(value: $aiTemperature, in: 0...2, step: 0.05)
                         .onChange(of: aiTemperature) { _, value in
-                            aiTemperature = (value * 100).rounded() / 100
+                            handleTemperatureChange(value)
                         }
                 }
 
@@ -207,6 +207,30 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .navigationTitle("高级模型设置")
+    }
+
+    private func handleTemperatureChange(_ value: Double) {
+        let roundedValue = (value * 100).rounded() / 100
+        aiTemperature = roundedValue
+        unlockTemperatureBoundaryAchievementIfNeeded(roundedValue)
+    }
+
+    private func unlockTemperatureBoundaryAchievementIfNeeded(_ value: Double) {
+        let achievementID: AchievementID?
+        if value == 2.0 {
+            achievementID = .wildTemperature
+        } else if value == 0.0 {
+            achievementID = .absoluteReason
+        } else {
+            achievementID = nil
+        }
+
+        guard let achievementID else { return }
+        Task {
+            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: achievementID)
+            guard !hasUnlocked else { return }
+            await AchievementCenter.shared.unlock(id: achievementID)
+        }
     }
 
     private func displayTitle(for entry: GlobalSystemPromptEntry?) -> String {

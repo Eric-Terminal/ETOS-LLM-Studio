@@ -253,6 +253,21 @@ struct AchievementCenterTests {
         #expect(definition?.triggerNoteKey == "触发条件：打开文档链接")
     }
 
+    @Test("新增行为成就定义已登记")
+    func behaviorAchievementDefinitionsAreRegistered() {
+        let definitions = Dictionary(uniqueKeysWithValues: AchievementCatalog.definitions.map { ($0.id, $0) })
+
+        #expect(definitions[.wildTemperature]?.titleKey == "放飞自我")
+        #expect(definitions[.wildTemperature]?.sentenceKey == "解除了AI的所有束缚，后果自负。")
+        #expect(definitions[.absoluteReason]?.titleKey == "绝对理性")
+        #expect(definitions[.absoluteReason]?.sentenceKey == "要求AI成为一台没有灵魂的机器。")
+        #expect(definitions[.singleCharacterMessage]?.titleKey == "惜字如金")
+        #expect(definitions[.longConfession]?.titleKey == "倾诉欲爆表")
+        #expect(definitions[.unstoppableConversation]?.titleKey == "停不下来")
+        #expect(definitions[.nightOwl]?.titleKey == "夜猫子")
+        #expect(definitions[.memoryPurge]?.titleKey == "断舍离")
+    }
+
     @Test("稳稳接住触发词支持中文与英文")
     func steadyCatchTriggerMatchesExpectedKeywords() {
         #expect(AchievementTriggerEvaluator.shouldUnlockSteadyCatch(from: "这一回我会稳稳的接住你。"))
@@ -269,6 +284,32 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "You’re asking exactly the right question."))
         #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "Great question, here is the answer."))
         #expect(AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: "This answer is direct.") == false)
+    }
+
+    @Test("用户消息行为触发器匹配预期条件")
+    func userMessageBehaviorTriggersMatchExpectedConditions() {
+        let calendar = Self.fixedCalendar
+        let deepNight = Self.fixedDate(hour: 3, minute: 30)
+        let daytime = Self.fixedDate(hour: 14, minute: 0)
+
+        #expect(AchievementTriggerEvaluator.shouldUnlockSingleCharacterMessage(from: " 嗯 "))
+        #expect(AchievementTriggerEvaluator.shouldUnlockSingleCharacterMessage(from: "嗯嗯") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockLongConfession(from: String(repeating: "我", count: 1_001)))
+        #expect(AchievementTriggerEvaluator.shouldUnlockLongConfession(from: String(repeating: "我", count: 1_000)) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockUnstoppableConversation(userMessageCount: 51))
+        #expect(AchievementTriggerEvaluator.shouldUnlockUnstoppableConversation(userMessageCount: 50) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockNightOwl(sentAt: deepNight, calendar: calendar))
+        #expect(AchievementTriggerEvaluator.shouldUnlockNightOwl(sentAt: daytime, calendar: calendar) == false)
+
+        let ids = AchievementTriggerEvaluator.userMessageAchievementIDs(
+            for: String(repeating: "你", count: 1_001),
+            userMessageCount: 51,
+            sentAt: deepNight,
+            calendar: calendar
+        )
+        #expect(ids.contains(.longConfession))
+        #expect(ids.contains(.unstoppableConversation))
+        #expect(ids.contains(.nightOwl))
     }
 
     @Test("成就中心可以快速判断指定成就是否已解锁")
@@ -315,6 +356,26 @@ struct AchievementCenterTests {
         triggerNoteKey: "触发关键词：稳稳的接住你 / I've got you",
         systemImageName: "hands.sparkles"
     )
+
+    private static var fixedCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        if let timeZone = TimeZone(secondsFromGMT: 0) {
+            calendar.timeZone = timeZone
+        }
+        return calendar
+    }
+
+    private static func fixedDate(hour: Int, minute: Int) -> Date {
+        var components = DateComponents()
+        components.calendar = fixedCalendar
+        components.timeZone = fixedCalendar.timeZone
+        components.year = 2026
+        components.month = 4
+        components.day = 25
+        components.hour = hour
+        components.minute = minute
+        return components.date ?? Date(timeIntervalSince1970: 0)
+    }
 
     private func store(_ record: AchievementUnlockRecord, in defaults: UserDefaults) {
         guard let data = encoded(record) else { return }

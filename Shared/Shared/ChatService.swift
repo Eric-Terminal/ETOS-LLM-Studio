@@ -1130,6 +1130,10 @@ public class ChatService {
     
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
         var currentSessions = chatSessionsSubject.value
+        let existingPermanentSessionIDs = Set(currentSessions.filter { !$0.isTemporary }.map(\.id))
+        let deletingSessionIDs = Set(sessionsToDelete.map(\.id))
+        let isClearingAllConversationRecords = !existingPermanentSessionIDs.isEmpty
+            && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
         for session in sessionsToDelete {
             // 删除消息文件前先加载消息，清理关联的音频和图片文件
             let messages = Persistence.loadMessages(for: session.id)
@@ -1163,6 +1167,9 @@ public class ChatService {
             action: "删除会话",
             payload: ["count": "\(sessionsToDelete.count)"]
         )
+        if isClearingAllConversationRecords {
+            scheduleAchievementUnlockIfNeeded(.memoryPurge)
+        }
     }
     
     @discardableResult
@@ -2209,6 +2216,11 @@ public class ChatService {
         messages.append(contentsOf: userMessages)
         messages.append(loadingMessage)
         persistAndPublishMessages(messages, for: currentSession.id)
+        scheduleUserMessageAchievementDetectionIfNeeded(
+            content: messageContent,
+            userMessageCount: messages.filter { $0.role == .user }.count,
+            sentAt: requestTimestamp
+        )
         
         // 注意：当音频作为附件直接发送给模型时，不再需要后台转文字
         // 因为每次发送消息都会重新加载音频文件并以 base64 发送
@@ -2438,6 +2450,11 @@ public class ChatService {
         messages.append(userMessage)
         messages.append(loadingMessage)
         persistAndPublishMessages(messages, for: currentSession.id)
+        scheduleUserMessageAchievementDetectionIfNeeded(
+            content: trimmedPrompt,
+            userMessageCount: messages.filter { $0.role == .user }.count,
+            sentAt: userMessage.requestedAt ?? Date()
+        )
         logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
         if currentSession.isTemporary {
@@ -5246,6 +5263,35 @@ public class ChatService {
                AchievementTriggerEvaluator.shouldUnlockLanguageLubrication(from: content) {
                 await AchievementCenter.shared.unlock(id: .languageLubrication)
             }
+        }
+    }
+
+    private func scheduleUserMessageAchievementDetectionIfNeeded(
+        content: String,
+        userMessageCount: Int,
+        sentAt: Date
+    ) {
+        Task.detached(priority: .utility) {
+            let ids = AchievementTriggerEvaluator.userMessageAchievementIDs(
+                for: content,
+                userMessageCount: userMessageCount,
+                sentAt: sentAt
+            )
+            guard !ids.isEmpty else { return }
+
+            for id in ids {
+                let hasUnlocked = await AchievementCenter.shared.hasUnlocked(id: id)
+                guard !hasUnlocked else { continue }
+                await AchievementCenter.shared.unlock(id: id)
+            }
+        }
+    }
+
+    private func scheduleAchievementUnlockIfNeeded(_ id: AchievementID) {
+        Task.detached(priority: .utility) {
+            let hasUnlocked = await AchievementCenter.shared.hasUnlocked(id: id)
+            guard !hasUnlocked else { return }
+            await AchievementCenter.shared.unlock(id: id)
         }
     }
 
