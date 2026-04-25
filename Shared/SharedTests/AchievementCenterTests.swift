@@ -214,7 +214,7 @@ struct AchievementCenterTests {
 
         #expect(definition?.titleKey == "AI张开了双臂，尽管它没有手。")
         #expect(definition?.sentenceKey == "被稳稳的接住力")
-        #expect(definition?.triggerNoteKey == "触发关键词：稳稳的接住你")
+        #expect(definition?.triggerNoteKey == "触发关键词：稳稳的接住你和相似表达")
     }
 
     @Test("语言润滑成就定义已登记")
@@ -390,7 +390,7 @@ struct AchievementCenterTests {
         id: .steadyCatch,
         titleKey: "AI张开了双臂，尽管它没有手。",
         sentenceKey: "被稳稳的接住力",
-        triggerNoteKey: "触发关键词：稳稳的接住你",
+        triggerNoteKey: "触发关键词：稳稳的接住你和相似表达",
         systemImageName: "hands.sparkles"
     )
 

@@ -76,7 +76,7 @@ public enum AchievementCatalog {
             id: .steadyCatch,
             titleKey: "AI张开了双臂，尽管它没有手。",
             sentenceKey: "被稳稳的接住力",
-            triggerNoteKey: "触发关键词：稳稳的接住你",
+            triggerNoteKey: "触发关键词：稳稳的接住你和相似表达",
             systemImageName: "hands.sparkles"
         ),
         AchievementDefinition(
