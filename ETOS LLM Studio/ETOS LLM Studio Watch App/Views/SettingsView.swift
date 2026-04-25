@@ -180,7 +180,7 @@ struct SettingsView: View {
                         updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
                         deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
                     )) {
-                        settingsNavigationLabel("模型高级设置", icon: .modelAdvanced)
+                        settingsNavigationLabel("偏好设置", icon: .modelAdvanced)
                     }
 
                     NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {

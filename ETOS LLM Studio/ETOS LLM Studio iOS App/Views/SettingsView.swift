@@ -117,7 +117,7 @@ struct SettingsView: View {
                         deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
                     )
                 } label: {
-                    SettingsListIconLabel("高级模型设置", icon: .modelAdvanced)
+                    SettingsListIconLabel("偏好设置", icon: .modelAdvanced)
                 }
 
                 NavigationLink {

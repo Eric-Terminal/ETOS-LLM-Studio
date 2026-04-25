@@ -1,7 +1,7 @@
 // ============================================================================
 // ModelAdvancedSettingsView.swift
 // ============================================================================
-// ETOS LLM Studio Watch App 高级模型设置视图
+// ETOS LLM Studio Watch App 偏好设置视图
 //
 // 功能特性:
 // - 调整 Temperature, Top P, System Prompt 等参数
@@ -12,7 +12,7 @@ import SwiftUI
 import Foundation
 import Shared
 
-/// 高级模型设置视图
+/// 偏好设置视图
 struct ModelAdvancedSettingsView: View {
     @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
 
@@ -238,7 +238,7 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
         }
-        .navigationTitle("高级模型设置")
+        .navigationTitle("偏好设置")
     }
 
     private func handleTemperatureChange(_ value: Double) {

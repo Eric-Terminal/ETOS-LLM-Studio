@@ -206,7 +206,7 @@ struct ModelAdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("高级模型设置")
+        .navigationTitle("偏好设置")
     }
 
     private func handleTemperatureChange(_ value: Double) {

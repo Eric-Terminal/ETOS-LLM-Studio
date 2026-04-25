@@ -157,7 +157,7 @@
 "重命名" = "Rename";
 "重试" = "Reintentar";
 "错误" = "Error";
-"高级模型设置" = "Preferencias";
+"偏好设置" = "Preferencias";
 "MCP +%d" = "MCP +%d";
 "图片 +%d" = "Imágenes +%d";
 "，" = ",";
@@ -441,7 +441,6 @@ Agregar Authorization y other auth headers manually.";
 "模型信息" = "Modelo Info";
 "模型名称" = "Modelo Nombre";
 "模型名称 (可选)" = "Modelo Nombre (Opcional)";
-"模型高级设置" = "Preferencias";
 "正在发送…" = "Sending…";
 "正在同步 MCP 状态…" = "Syncing MCP Estado…";
 "正在录音…" = "Grabando…";

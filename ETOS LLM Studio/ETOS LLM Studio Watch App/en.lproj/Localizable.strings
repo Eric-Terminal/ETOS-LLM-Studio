@@ -159,7 +159,7 @@
 "重命名" = "Rename";
 "重试" = "Retry";
 "错误" = "Error";
-"高级模型设置" = "Preferences";
+"偏好设置" = "Preferences";
 "MCP +%d" = "MCP +%d";
 "图片 +%d" = "Images +%d";
 "，" = ", ";
@@ -431,7 +431,6 @@
 "模型信息" = "Model info";
 "模型名称" = "Model name";
 "模型名称 (可选)" = "Model name (optional)";
-"模型高级设置" = "Preferences";
 "正在发送…" = "Sending…";
 "正在同步 MCP 状态…" = "Syncing MCP status…";
 "正在录音…" = "Recording…";
