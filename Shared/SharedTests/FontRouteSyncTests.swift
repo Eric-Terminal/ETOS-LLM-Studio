@@ -290,6 +290,38 @@ struct FontRouteSyncTests {
         }
     }
 
+    @Test("自定义字体字号比例会限制范围并刷新适配缓存标记")
+    func testCustomFontScaleIsClampedAndIncludedInAdapterCacheToken() async throws {
+        let defaults = UserDefaults.standard
+        let key = FontLibrary.fontScaleStorageKey
+        let previousValue = defaults.object(forKey: key)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+            FontLibrary.preloadRuntimeCache(forceReload: true)
+        }
+
+        try await withIsolatedFontStore {
+            defaults.removeObject(forKey: key)
+            FontLibrary.preloadRuntimeCache(forceReload: true)
+            #expect(FontLibrary.customFontScale == FontLibrary.defaultFontScale)
+            let defaultToken = FontLibrary.adapterCacheToken()
+
+            defaults.set(1.75, forKey: key)
+            #expect(FontLibrary.customFontScale == 1.75)
+            #expect(FontLibrary.adapterCacheToken() != defaultToken)
+
+            defaults.set(9.0, forKey: key)
+            #expect(FontLibrary.customFontScale == FontLibrary.maximumFontScale)
+
+            defaults.set(0.1, forKey: key)
+            #expect(FontLibrary.customFontScale == FontLibrary.minimumFontScale)
+        }
+    }
+
     @Test("单字回退模式会优先保留首个可渲染字符的高优先级字体")
     func testCharacterFallbackScopeKeepsHigherPriorityFontForMixedSample() async throws {
         let defaults = UserDefaults.standard

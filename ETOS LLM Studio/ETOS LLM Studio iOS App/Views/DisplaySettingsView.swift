@@ -273,6 +273,7 @@ private struct FontSettingsView: View {
     @Environment(\.editMode) private var editMode
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -312,6 +313,7 @@ private struct FontSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            fontScaleSection
             fallbackScopeSection
 
             fontFilesSection
@@ -337,6 +339,14 @@ private struct FontSettingsView: View {
         }
         .onChange(of: fallbackScopeRawValue) { _, _ in
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
+        .onChange(of: customFontScale) { _, newValue in
+            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
+            if normalizedValue != newValue {
+                customFontScale = normalizedValue
+                return
+            }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
         .fileImporter(
@@ -428,8 +438,44 @@ private struct FontSettingsView: View {
         )
     }
 
+    private var fontScaleBinding: Binding<Double> {
+        Binding(
+            get: { FontLibrary.normalizedFontScale(customFontScale) },
+            set: { customFontScale = FontLibrary.normalizedFontScale($0) }
+        )
+    }
+
     private var allFallbackScopes: [FontFallbackScope] {
         FontFallbackScope.allCases
+    }
+
+    private var fontScaleSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("字号比例")
+                    Spacer(minLength: 8)
+                    Text("\(Int((fontScaleBinding.wrappedValue * 100).rounded()))%")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: fontScaleBinding,
+                    in: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale,
+                    step: FontLibrary.fontScaleStep
+                )
+            }
+            Button("恢复默认字号") {
+                fontScaleBinding.wrappedValue = FontLibrary.defaultFontScale
+            }
+            .disabled(abs(fontScaleBinding.wrappedValue - FontLibrary.defaultFontScale) < 0.001)
+        } header: {
+            Text("字体大小")
+        } footer: {
+            Text("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。")
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var fallbackScopeSection: some View {
@@ -714,14 +760,15 @@ private struct FontFallbackScopeSelectionView: View {
 
 private enum FontRoutePreview {
     static func font(for role: FontSemanticRole, sample: String, size: CGFloat = 17) -> Font {
+        let scaledSize = size * CGFloat(FontLibrary.customFontScale)
         if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) {
-            return .custom(postScriptName, size: size)
+            return .custom(postScriptName, size: scaledSize)
         }
         switch role {
         case .code:
-            return .system(size: size, design: .monospaced)
+            return .system(size: scaledSize, design: .monospaced)
         default:
-            return .system(size: size)
+            return .system(size: scaledSize)
         }
     }
 }

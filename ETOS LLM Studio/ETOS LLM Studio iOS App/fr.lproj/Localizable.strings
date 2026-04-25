@@ -1672,3 +1672,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "让AI评价鱼缸" = "Faire évaluer le bocal par l’IA";
 "AI使用了评价这款App的工具。套娃已完成。" = "L’IA a utilisé l’outil d’évaluation de cette app. La mise en abyme est complète.";
 "触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Condition de déclenchement : l’IA appelle l’outil app_submit_feedback_ticket";
+"字体大小" = "Taille de police";
+"字号比例" = "Échelle de taille";
+"恢复默认字号" = "Rétablir la taille par défaut";
+"仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Ajuste uniquement la taille d’affichage des polices personnalisées, de 50 % à 200 % ; la taille dynamique du système continue de s’appliquer.";

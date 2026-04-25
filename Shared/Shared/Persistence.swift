@@ -3114,6 +3114,11 @@ public enum FontLibrary {
     private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
     public static let customFontEnabledStorageKey = "font.useCustomFonts"
     public static let fallbackScopeStorageKey = "font.fallbackScope"
+    public static let fontScaleStorageKey = "font.customScale"
+    public static let minimumFontScale = 0.5
+    public static let maximumFontScale = 2.0
+    public static let defaultFontScale = 1.0
+    public static let fontScaleStep = 0.05
     private static let cacheLock = NSLock()
     private static let sampledResolutionCacheLimit = 256
 
@@ -3131,6 +3136,7 @@ public enum FontLibrary {
         var sampledResolutionCache: [String: FontResolutionCacheEntry] = [:]
         var isCustomFontEnabled = true
         var fallbackScope: FontFallbackScope = .segment
+        var customFontScale = FontLibrary.defaultFontScale
     }
 
     private static var runtimeSnapshot = RuntimeSnapshot()
@@ -3155,6 +3161,18 @@ public enum FontLibrary {
         ensureRuntimeCachePrepared()
         ensureRuntimeSettingsSynchronized()
         return withRuntimeSnapshot { $0.fallbackScope }
+    }
+
+    /// 自定义字体显示比例，用于校正不同字体视觉大小差异。
+    public static var customFontScale: Double {
+        ensureRuntimeCachePrepared()
+        ensureRuntimeSettingsSynchronized()
+        return withRuntimeSnapshot { $0.customFontScale }
+    }
+
+    public static func normalizedFontScale(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultFontScale }
+        return min(max(value, minimumFontScale), maximumFontScale)
     }
 
     public static func preloadRuntimeCacheAsync(forceReload: Bool = false) {
@@ -3196,6 +3214,7 @@ public enum FontLibrary {
             snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
             snapshot.isCustomFontEnabled = settings.isCustomFontEnabled
             snapshot.fallbackScope = settings.fallbackScope
+            snapshot.customFontScale = settings.customFontScale
         }
     }
 
@@ -3392,7 +3411,7 @@ public enum FontLibrary {
                     return "\(role.rawValue)=\(names.joined(separator: ","))"
                 }
                 .joined(separator: "|")
-            return "\(snapshot.isPrepared ? 1 : 0)|\(snapshot.isCustomFontEnabled ? 1 : 0)|\(snapshot.fallbackScope.rawValue)|\(roleSignature)"
+            return "\(snapshot.isPrepared ? 1 : 0)|\(snapshot.isCustomFontEnabled ? 1 : 0)|\(snapshot.fallbackScope.rawValue)|\(snapshot.customFontScale)|\(roleSignature)"
         }
     }
 
@@ -3576,6 +3595,7 @@ public enum FontLibrary {
             guard snapshot.isPrepared else { return false }
             return snapshot.isCustomFontEnabled != settings.isCustomFontEnabled
                 || snapshot.fallbackScope != settings.fallbackScope
+                || snapshot.customFontScale != settings.customFontScale
         }
         if needReload {
             preloadRuntimeCache(forceReload: true)
@@ -3637,7 +3657,7 @@ public enum FontLibrary {
         return configuration
     }
 
-    private static func loadFontSettingsFromUserDefaults() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope) {
+    private static func loadFontSettingsFromUserDefaults() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope, customFontScale: Double) {
         let customEnabled = (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
         let scope: FontFallbackScope
         if let rawValue = UserDefaults.standard.string(forKey: fallbackScopeStorageKey),
@@ -3646,7 +3666,8 @@ public enum FontLibrary {
         } else {
             scope = .segment
         }
-        return (customEnabled, scope)
+        let scale = normalizedFontScale((UserDefaults.standard.object(forKey: fontScaleStorageKey) as? Double) ?? defaultFontScale)
+        return (customEnabled, scope, scale)
     }
 
     private static func buildRoleMappings(

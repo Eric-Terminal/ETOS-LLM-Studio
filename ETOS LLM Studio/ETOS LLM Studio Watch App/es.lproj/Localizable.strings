@@ -1437,3 +1437,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "附件导入失败" = "Error al importar adjunto";
 "导入" = "Importar";
 "最近链接" = "Enlaces recientes";
+"字体大小" = "Tamaño de fuente";
+"字号比例" = "Escala de tamaño";
+"恢复默认字号" = "Restaurar tamaño predeterminado";
+"仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Solo ajusta el tamaño de visualización de las fuentes personalizadas, de 50% a 200%; el tamaño dinámico del sistema sigue aplicándose.";

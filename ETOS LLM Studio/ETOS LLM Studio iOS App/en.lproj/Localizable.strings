@@ -1573,3 +1573,7 @@
 "让AI评价鱼缸" = "Let the AI Review the Fish Tank";
 "AI使用了评价这款App的工具。套娃已完成。" = "The AI used the tool for reviewing this app. The nesting is complete.";
 "触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Trigger condition: AI calls the app_submit_feedback_ticket tool";
+"字体大小" = "Font Size";
+"字号比例" = "Size Scale";
+"恢复默认字号" = "Restore Default Size";
+"仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Only adjusts the display size of custom fonts, from 50% to 200%; the system Dynamic Type size still applies.";

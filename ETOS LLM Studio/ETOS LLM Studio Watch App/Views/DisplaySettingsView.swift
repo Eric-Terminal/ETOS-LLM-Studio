@@ -410,6 +410,7 @@ private struct WatchColorEditorView: View {
 private struct WatchFontSettingsView: View {
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -449,6 +450,8 @@ private struct WatchFontSettingsView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            fontScaleSection
 
             Section("回退范围") {
                 Picker("字体回退范围", selection: fallbackScopeBinding) {
@@ -606,6 +609,14 @@ private struct WatchFontSettingsView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
+        .onChange(of: customFontScale) { _, newValue in
+            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
+            if normalizedValue != newValue {
+                customFontScale = normalizedValue
+                return
+            }
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
         .confirmationDialog(
             "添加字体到当前槽位",
             isPresented: $showAddAssetDialog,
@@ -689,6 +700,42 @@ private struct WatchFontSettingsView: View {
             get: { fallbackScope },
             set: { fallbackScopeRawValue = $0.rawValue }
         )
+    }
+
+    private var fontScaleBinding: Binding<Double> {
+        Binding(
+            get: { FontLibrary.normalizedFontScale(customFontScale) },
+            set: { customFontScale = FontLibrary.normalizedFontScale($0) }
+        )
+    }
+
+    private var fontScaleSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("字号比例")
+                    Spacer(minLength: 8)
+                    Text("\(Int((fontScaleBinding.wrappedValue * 100).rounded()))%")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: fontScaleBinding,
+                    in: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale,
+                    step: FontLibrary.fontScaleStep
+                )
+            }
+            Button("恢复默认字号") {
+                fontScaleBinding.wrappedValue = FontLibrary.defaultFontScale
+            }
+            .disabled(abs(fontScaleBinding.wrappedValue - FontLibrary.defaultFontScale) < 0.001)
+        } header: {
+            Text("字体大小")
+        } footer: {
+            Text("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。")
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func moveAsset(at index: Int, offset: Int) {
@@ -812,14 +859,15 @@ private struct WatchFontSettingsView: View {
 
 private enum FontRoutePreview {
     static func font(for role: FontSemanticRole, sample: String, size: CGFloat) -> Font {
+        let scaledSize = size * CGFloat(FontLibrary.customFontScale)
         if let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: sample) {
-            return .custom(postScriptName, size: size)
+            return .custom(postScriptName, size: scaledSize)
         }
         switch role {
         case .code:
-            return .system(size: size, design: .monospaced)
+            return .system(size: scaledSize, design: .monospaced)
         default:
-            return .system(size: size)
+            return .system(size: scaledSize)
         }
     }
 }

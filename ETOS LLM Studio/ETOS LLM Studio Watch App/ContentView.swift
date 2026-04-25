@@ -89,6 +89,7 @@ struct ContentView: View {
     @State private var isAttachmentImportPresented = false
     @State private var attachmentSourceText: String = ""
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
     @AppStorage("watch.attachment.sourceHistory") private var attachmentSourceHistoryRawValue: String = "[]"
@@ -186,6 +187,13 @@ struct ContentView: View {
         .onChange(of: isCustomFontEnabled) { _, isEnabled in
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+            refreshRootBodyFont()
+        }
+        .onChange(of: customFontScale) { _, newValue in
+            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
+            if normalizedValue != newValue {
+                customFontScale = normalizedValue
+            }
             refreshRootBodyFont()
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
@@ -2104,15 +2112,15 @@ private enum AppFontAdapter {
 
         var mapped: Font
         if let explicitSize = descriptor.explicitSize {
-            mapped = .custom(postScriptName, size: explicitSize)
+            mapped = .custom(postScriptName, size: scaledPointSize(explicitSize))
         } else if let textStyle = descriptor.textStyle {
             mapped = .custom(
                 postScriptName,
-                size: defaultPointSize(for: textStyle),
+                size: scaledPointSize(defaultPointSize(for: textStyle)),
                 relativeTo: textStyle
             )
         } else {
-            mapped = .custom(postScriptName, size: 15, relativeTo: .body)
+            mapped = .custom(postScriptName, size: scaledPointSize(15), relativeTo: .body)
         }
 
         if descriptor.isItalic {
@@ -2126,12 +2134,16 @@ private enum AppFontAdapter {
 
     private static func resolvedPointSize(for descriptor: FontDescriptorInfo) -> CGFloat {
         if let explicitSize = descriptor.explicitSize {
-            return explicitSize
+            return scaledPointSize(explicitSize)
         }
         if let textStyle = descriptor.textStyle {
-            return defaultPointSize(for: textStyle)
+            return scaledPointSize(defaultPointSize(for: textStyle))
         }
-        return 15
+        return scaledPointSize(15)
+    }
+
+    private static func scaledPointSize(_ pointSize: CGFloat) -> CGFloat {
+        pointSize * CGFloat(FontLibrary.customFontScale)
     }
 
     private static func mappedFontWithCascade(
