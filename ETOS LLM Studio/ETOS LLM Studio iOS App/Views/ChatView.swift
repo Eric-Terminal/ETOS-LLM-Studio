@@ -169,6 +169,48 @@ struct ChatView: View {
         }
         return false
     }
+    private var messageDeleteAlertPresented: Binding<Bool> {
+        Binding(
+            get: { messageToDelete != nil },
+            set: { if !$0 { messageToDelete = nil } }
+        )
+    }
+    private var messageVersionDeleteAlertPresented: Binding<Bool> {
+        Binding(
+            get: { messageVersionToDelete != nil },
+            set: { if !$0 { messageVersionToDelete = nil } }
+        )
+    }
+    private var sessionDeleteAlertPresented: Binding<Bool> {
+        Binding(
+            get: { sessionToDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionToDelete = nil
+                }
+            }
+        )
+    }
+    private var exportErrorAlertPresented: Binding<Bool> {
+        Binding(
+            get: { exportErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    exportErrorMessage = nil
+                }
+            }
+        )
+    }
+    private var imageDownloadAlertPresented: Binding<Bool> {
+        Binding(
+            get: { imageDownloadAlertMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    imageDownloadAlertMessage = nil
+                }
+            }
+        )
+    }
     private var navBarGlassOverlayColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
@@ -556,10 +598,7 @@ struct ChatView: View {
                     Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
             }
-            .alert("确认删除消息", isPresented: Binding(
-                get: { messageToDelete != nil },
-                set: { if !$0 { messageToDelete = nil } }
-            )) {
+            .alert("确认删除消息", isPresented: messageDeleteAlertPresented) {
                 Button("删除", role: .destructive) {
                     if let message = messageToDelete {
                         viewModel.deleteMessage(message)
@@ -574,10 +613,7 @@ struct ChatView: View {
                      ? "删除后将无法恢复这条消息的所有版本。"
                      : "删除后无法恢复这条消息。")
             }
-            .alert("确认删除当前版本", isPresented: Binding(
-                get: { messageVersionToDelete != nil },
-                set: { if !$0 { messageVersionToDelete = nil } }
-            )) {
+            .alert("确认删除当前版本", isPresented: messageVersionDeleteAlertPresented) {
                 Button("删除", role: .destructive) {
                     if let message = messageVersionToDelete {
                         viewModel.deleteCurrentVersion(of: message)
@@ -590,14 +626,7 @@ struct ChatView: View {
             } message: {
                 Text("删除后将无法恢复此版本的内容。")
             }
-            .alert("确认删除会话", isPresented: Binding(
-                get: { sessionToDelete != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        sessionToDelete = nil
-                    }
-                }
-            )) {
+            .alert("确认删除会话", isPresented: sessionDeleteAlertPresented) {
                 Button("删除", role: .destructive) {
                     if let session = sessionToDelete {
                         viewModel.deleteSessions([session])
@@ -623,14 +652,7 @@ struct ChatView: View {
             } message: {
                 Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
             }
-            .alert("导出失败", isPresented: Binding(
-                get: { exportErrorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        exportErrorMessage = nil
-                    }
-                }
-            )) {
+            .alert("导出失败", isPresented: exportErrorAlertPresented) {
                 Button("确定", role: .cancel) {
                     exportErrorMessage = nil
                 }
@@ -639,12 +661,7 @@ struct ChatView: View {
             }
             .alert(
                 Text(NSLocalizedString("提示", comment: "Notice")),
-                isPresented: Binding(
-                    get: { imageDownloadAlertMessage != nil },
-                    set: { isPresented in
-                        if !isPresented { imageDownloadAlertMessage = nil }
-                    }
-                )
+                isPresented: imageDownloadAlertPresented
             ) {
                 Button(NSLocalizedString("确定", comment: "OK"), role: .cancel) {}
             } message: {
