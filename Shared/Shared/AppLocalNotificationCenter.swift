@@ -24,12 +24,15 @@ public extension Notification.Name {
     static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
     /// 请求当前设备直接打开指定聊天会话。
     static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
+    /// 请求当前设备直接打开隐藏日记页面。
+    static let requestOpenAchievementJournal = Notification.Name("com.ETOS.achievementJournal.requestOpen")
 }
 
 public enum AppLocalNotificationRoute: String, Sendable {
     case dailyPulse
     case feedback
     case chatSession
+    case achievementJournal
 }
 
 public struct AppLocalNotificationDailyPulseContinuation: Sendable, Equatable {
@@ -49,6 +52,7 @@ private let appLocalNotificationRunIDUserInfoKey = "runID"
 private let appLocalNotificationCardIDUserInfoKey = "cardID"
 private let appLocalNotificationIssueNumberUserInfoKey = "issue_number"
 private let appLocalNotificationSessionIDUserInfoKey = "session_id"
+private let appLocalNotificationAchievementIDUserInfoKey = "achievement_id"
 private let appLocalNotificationDailyPulseReminderCategoryIdentifier = "dailyPulse.reminder"
 private let appLocalNotificationDailyPulseReadyCategoryIdentifier = "dailyPulse.ready"
 private let appLocalNotificationDailyPulseOpenActionIdentifier = "dailyPulse.action.open"
@@ -207,6 +211,21 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         return route == AppLocalNotificationRoute.chatSession.rawValue
     }
 
+    public nonisolated static func notificationTargetsAchievementJournal(userInfo: [AnyHashable: Any]) -> Bool {
+        guard let route = userInfo[appLocalNotificationRouteUserInfoKey] as? String else { return false }
+        return route == AppLocalNotificationRoute.achievementJournal.rawValue
+    }
+
+    public nonisolated static func achievementJournalUserInfo(achievementID: String? = nil) -> [AnyHashable: Any] {
+        var info: [AnyHashable: Any] = [
+            appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.achievementJournal.rawValue
+        ]
+        if let achievementID, !achievementID.isEmpty {
+            info[appLocalNotificationAchievementIDUserInfoKey] = achievementID
+        }
+        return info
+    }
+
     public nonisolated static func dailyPulseCategoryIdentifier(kind: String) -> String {
         kind == "ready"
             ? appLocalNotificationDailyPulseReadyCategoryIdentifier
@@ -305,6 +324,11 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         NotificationCenter.default.post(name: .requestOpenChatSession, object: nil)
     }
 
+    private func openAchievementJournalFromNotification() {
+        pendingRoute = .achievementJournal
+        NotificationCenter.default.post(name: .requestOpenAchievementJournal, object: nil)
+    }
+
     private func continueDailyPulseFromNotification(payload: AppLocalNotificationPayload) {
         guard let target = dailyPulseTarget(from: payload),
               let session = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID) else {
@@ -341,6 +365,8 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
             openFeedbackFromNotification(payload: payload)
         } else if payload.route == .chatSession {
             openChatSessionFromNotification(payload: payload)
+        } else if payload.route == .achievementJournal {
+            openAchievementJournalFromNotification()
         }
     }
 
@@ -417,6 +443,7 @@ public extension Notification.Name {
     static let requestOpenDailyPulse = Notification.Name("com.ETOS.dailyPulse.requestOpen")
     static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
     static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
+    static let requestOpenAchievementJournal = Notification.Name("com.ETOS.achievementJournal.requestOpen")
 }
 
 @MainActor

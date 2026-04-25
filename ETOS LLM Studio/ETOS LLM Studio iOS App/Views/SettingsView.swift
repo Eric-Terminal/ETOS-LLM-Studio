@@ -14,6 +14,7 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse
     case feedbackCenter
     case feedbackIssue(issueNumber: Int)
+    case achievementJournal
 
     var id: String {
         switch self {
@@ -23,6 +24,8 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
             return "feedbackCenter"
         case .feedbackIssue(let issueNumber):
             return "feedbackIssue-\(issueNumber)"
+        case .achievementJournal:
+            return "achievementJournal"
         }
     }
 }
@@ -33,6 +36,7 @@ struct SettingsView: View {
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @ObservedObject private var achievementCenter = AchievementCenter.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -154,6 +158,15 @@ struct SettingsView: View {
                     UsageAnalyticsView()
                 } label: {
                     Label("用量统计", systemImage: "calendar.badge.clock")
+                }
+
+                if achievementCenter.hasUnlockedAchievements {
+                    // 彩蛋入口只在已有记录后出现，避免提前暴露隐藏日记。
+                    NavigationLink {
+                        AchievementJournalView()
+                    } label: {
+                        Label("成就日记", systemImage: "rosette")
+                    }
                 }
 
                 NavigationLink {
@@ -290,6 +303,8 @@ struct SettingsView: View {
                 FeedbackCenterView()
             case .feedbackIssue(let issueNumber):
                 FeedbackDetailView(issueNumber: issueNumber)
+            case .achievementJournal:
+                AchievementJournalView()
             }
         }
     }

@@ -107,6 +107,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
             openChatSessionFromNotification()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
+            openAchievementJournalFromNotification()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
             Task { @MainActor in
                 openDailyPulseContinuationIfNeeded()
@@ -278,6 +281,11 @@ struct ContentView: View {
         openChatSession(sessionID: sessionID)
     }
 
+    private func openAchievementJournalFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        openAchievementJournal()
+    }
+
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
         if isNativeNavigationEnabled {
@@ -310,6 +318,20 @@ struct ContentView: View {
         }
     }
 
+    private func openAchievementJournal() {
+        if isNativeNavigationEnabled {
+            pushNativeSettings(destination: .achievementJournal)
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selection = .settings
+        }
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .achievementJournal
+        }
+    }
+
     private func handleLaunchTasks() async {
         launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
         legacyJSONMigrationManager.refreshStatus()
@@ -328,6 +350,8 @@ struct ContentView: View {
                 if let sessionID = notificationCenter.consumePendingChatSessionID() {
                     openChatSession(sessionID: sessionID)
                 }
+            case .achievementJournal:
+                openAchievementJournal()
             }
         }
     }

@@ -159,6 +159,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
                 openChatSessionFromNotification()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
+                openAchievementJournalFromNotification()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
                 Task { @MainActor in
                     applyDailyPulseContinuationIfNeeded()
@@ -1193,6 +1196,8 @@ struct ContentView: View {
                         if let sessionID = notificationCenter.consumePendingChatSessionID() {
                             openChatSession(sessionID: sessionID)
                         }
+                    case .achievementJournal:
+                        openAchievementJournal()
                     }
                 }
             }
@@ -1234,6 +1239,11 @@ struct ContentView: View {
         openChatSession(sessionID: sessionID)
     }
 
+    private func openAchievementJournalFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        openAchievementJournal()
+    }
+
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
         if isNativeNavigationEnabled {
@@ -1269,6 +1279,23 @@ struct ContentView: View {
             } else {
                 settingsDestination = .feedbackCenter
             }
+        }
+    }
+
+    private func openAchievementJournal() {
+        if isNativeNavigationEnabled {
+            settingsDestination = nil
+            isNativeChatPresented = false
+            isNativeSettingsPresented = true
+            DispatchQueue.main.async {
+                settingsDestination = .achievementJournal
+            }
+            return
+        }
+        isSettingsPresented = true
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .achievementJournal
         }
     }
 

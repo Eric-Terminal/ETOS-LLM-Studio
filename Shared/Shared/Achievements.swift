@@ -1,0 +1,263 @@
+// ============================================================================
+// Achievements.swift
+// ============================================================================
+// 隐藏成就日记骨架
+//
+// 维护约束:
+// - 不要在公开文档、README 或普通设置说明中主动宣传这个入口。
+// - 未解锁前不要展示入口，也不要展示未触发成就。
+// - 后续只在明确触发条件达成后调用 AchievementCenter.unlock(id:)。
+// ============================================================================
+
+import Combine
+import Foundation
+
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
+
+public struct AchievementID: RawRepresentable, Codable, Hashable, Sendable, ExpressibleByStringLiteral {
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public init(stringLiteral value: StringLiteralType) {
+        self.rawValue = value
+    }
+}
+
+public struct AchievementDefinition: Identifiable, Hashable, Sendable {
+    public let id: AchievementID
+    public let titleKey: String
+    public let sentenceKey: String
+    public let systemImageName: String
+
+    public init(
+        id: AchievementID,
+        titleKey: String,
+        sentenceKey: String,
+        systemImageName: String
+    ) {
+        self.id = id
+        self.titleKey = titleKey
+        self.sentenceKey = sentenceKey
+        self.systemImageName = systemImageName
+    }
+}
+
+public enum AchievementCatalog {
+    // 首版只搭骨架。新增真实成就时在这里登记定义，并补齐双端本地化文案。
+    public static let definitions: [AchievementDefinition] = []
+}
+
+public struct AchievementUnlockRecord: Identifiable, Codable, Hashable, Sendable {
+    public let unlockID: UUID
+    public var id: UUID { unlockID }
+    public let achievementID: AchievementID
+    public let unlockedAt: Date
+    public let originDeviceID: String
+    public let originPlatform: String
+
+    public init(
+        unlockID: UUID = UUID(),
+        achievementID: AchievementID,
+        unlockedAt: Date = Date(),
+        originDeviceID: String = UsageAnalyticsRuntimeContext.currentDeviceIdentifier(),
+        originPlatform: String = UsageAnalyticsRuntimeContext.platformName
+    ) {
+        self.unlockID = unlockID
+        self.achievementID = achievementID
+        self.unlockedAt = unlockedAt
+        self.originDeviceID = originDeviceID
+        self.originPlatform = originPlatform
+    }
+}
+
+public struct AchievementJournalEntry: Identifiable, Hashable, Sendable {
+    public var id: AchievementID { achievementID }
+    public let achievementID: AchievementID
+    public let titleKey: String
+    public let sentenceKey: String
+    public let systemImageName: String
+    public let unlockedAt: Date
+    public let unlockID: UUID
+
+    public init(definition: AchievementDefinition, record: AchievementUnlockRecord) {
+        self.achievementID = definition.id
+        self.titleKey = definition.titleKey
+        self.sentenceKey = definition.sentenceKey
+        self.systemImageName = definition.systemImageName
+        self.unlockedAt = record.unlockedAt
+        self.unlockID = record.unlockID
+    }
+
+    public var localizedTitle: String {
+        NSLocalizedString(titleKey, comment: "Achievement title")
+    }
+
+    public var localizedSentence: String {
+        NSLocalizedString(sentenceKey, comment: "Achievement sentence")
+    }
+}
+
+@MainActor
+public final class AchievementCenter: ObservableObject {
+    public typealias NotificationHandler = @MainActor (AchievementJournalEntry) async -> Void
+
+    public static let shared = AchievementCenter()
+
+    public static let storageKeyPrefix = "achievementJournal.unlock."
+
+    @Published public private(set) var journalEntries: [AchievementJournalEntry]
+    @Published public private(set) var hasUnlockedAchievements: Bool
+
+    private let defaults: UserDefaults
+    private let definitionsByID: [AchievementID: AchievementDefinition]
+    private let notificationHandler: NotificationHandler?
+    private let encoder = JSONEncoder()
+    private var defaultsObserver: NSObjectProtocol?
+
+    public init(
+        defaults: UserDefaults = .standard,
+        definitions: [AchievementDefinition] = AchievementCatalog.definitions,
+        notificationHandler: NotificationHandler? = nil
+    ) {
+        self.defaults = defaults
+        self.definitionsByID = Dictionary(uniqueKeysWithValues: definitions.map { ($0.id, $0) })
+        self.notificationHandler = notificationHandler ?? Self.deliverUnlockNotification
+        let entries = Self.makeJournalEntries(
+            records: Self.loadUnlockRecords(from: defaults),
+            definitionsByID: definitionsByID
+        )
+        self.journalEntries = entries
+        self.hasUnlockedAchievements = !entries.isEmpty
+        observeDefaultsChanges()
+    }
+
+    deinit {
+        if let defaultsObserver {
+            NotificationCenter.default.removeObserver(defaultsObserver)
+        }
+    }
+
+    @discardableResult
+    public func unlock(id: AchievementID, unlockedAt: Date = Date()) async -> AchievementUnlockRecord? {
+        guard let definition = definitionsByID[id] else { return nil }
+        let existingRecords = Self.loadUnlockRecords(from: defaults)
+        guard !existingRecords.contains(where: { $0.achievementID == id }) else {
+            refreshFromStorage()
+            return nil
+        }
+
+        let record = AchievementUnlockRecord(
+            achievementID: id,
+            unlockedAt: unlockedAt,
+            originDeviceID: UsageAnalyticsRuntimeContext.currentDeviceIdentifier(userDefaults: defaults)
+        )
+        guard let data = try? encoder.encode(record) else { return nil }
+        defaults.set(data, forKey: Self.storageKey(for: record))
+        refreshFromStorage(records: existingRecords + [record])
+
+        let entry = AchievementJournalEntry(definition: definition, record: record)
+        await notificationHandler?(entry)
+        return record
+    }
+
+    public func refreshFromStorage() {
+        refreshFromStorage(records: Self.loadUnlockRecords(from: defaults))
+    }
+
+    public nonisolated static func isAchievementStorageKey(_ key: String) -> Bool {
+        key.hasPrefix(storageKeyPrefix)
+    }
+
+    public nonisolated static func storageKey(for record: AchievementUnlockRecord) -> String {
+        storageKey(achievementID: record.achievementID, unlockID: record.unlockID)
+    }
+
+    public nonisolated static func storageKey(achievementID: AchievementID, unlockID: UUID) -> String {
+        "\(storageKeyPrefix)\(achievementID.rawValue).\(unlockID.uuidString)"
+    }
+
+    private func refreshFromStorage(records: [AchievementUnlockRecord]) {
+        let entries = Self.makeJournalEntries(records: records, definitionsByID: definitionsByID)
+        journalEntries = entries
+        hasUnlockedAchievements = !entries.isEmpty
+    }
+
+    private func observeDefaultsChanges() {
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshFromStorage()
+            }
+        }
+    }
+
+    private nonisolated static func loadUnlockRecords(
+        from defaults: UserDefaults
+    ) -> [AchievementUnlockRecord] {
+        let decoder = JSONDecoder()
+        defaults.dictionaryRepresentation().compactMap { key, value in
+            guard isAchievementStorageKey(key) else { return nil }
+            guard let data = value as? Data else { return nil }
+            return try? decoder.decode(AchievementUnlockRecord.self, from: data)
+        }
+    }
+
+    private nonisolated static func makeJournalEntries(
+        records: [AchievementUnlockRecord],
+        definitionsByID: [AchievementID: AchievementDefinition]
+    ) -> [AchievementJournalEntry] {
+        let earliestRecords = records.reduce(into: [AchievementID: AchievementUnlockRecord]()) { partialResult, record in
+            guard definitionsByID[record.achievementID] != nil else { return }
+            if let existing = partialResult[record.achievementID] {
+                if record.unlockedAt < existing.unlockedAt {
+                    partialResult[record.achievementID] = record
+                }
+            } else {
+                partialResult[record.achievementID] = record
+            }
+        }
+
+        return earliestRecords.compactMap { achievementID, record in
+            guard let definition = definitionsByID[achievementID] else { return nil }
+            return AchievementJournalEntry(definition: definition, record: record)
+        }
+        .sorted { lhs, rhs in
+            if lhs.unlockedAt == rhs.unlockedAt {
+                return lhs.achievementID.rawValue < rhs.achievementID.rawValue
+            }
+            return lhs.unlockedAt > rhs.unlockedAt
+        }
+    }
+
+    private static func deliverUnlockNotification(for entry: AchievementJournalEntry) async {
+#if canImport(UserNotifications)
+        let granted = await AppLocalNotificationCenter.shared.requestAuthorizationIfNeeded(options: [.alert, .sound, .badge])
+        guard granted else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = String(
+            format: NSLocalizedString("解锁：%@", comment: "Achievement unlock notification title"),
+            entry.localizedTitle
+        )
+        content.body = entry.localizedSentence
+        content.sound = .default
+        content.threadIdentifier = "achievement.journal"
+        content.userInfo = AppLocalNotificationCenter.achievementJournalUserInfo(
+            achievementID: entry.achievementID.rawValue
+        )
+
+        let identifier = "achievement.journal.\(entry.achievementID.rawValue).\(entry.unlockID.uuidString)"
+            .replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "-", options: .regularExpression)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        _ = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
+#endif
+    }
+}
