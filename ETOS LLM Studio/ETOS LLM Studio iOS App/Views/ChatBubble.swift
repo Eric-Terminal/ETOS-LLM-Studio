@@ -204,6 +204,18 @@ struct ChatBubble: View {
         )
     }
 
+    private var versionSwitcherBackgroundColor: Color {
+        if isOutgoing, responseAttemptVersionInfo == nil {
+            return resolvedUserBubbleEndColor.opacity(colorScheme == .dark ? 0.28 : 0.18)
+        }
+        if let resolvedAssistantBubbleColor {
+            return resolvedAssistantBubbleColor.opacity(enableBackground ? 0.75 : 1)
+        }
+        return enableBackground
+            ? Color(uiColor: .secondarySystemBackground).opacity(0.75)
+            : Color(uiColor: .systemBackground)
+    }
+
     private var customTextColorOverride: Color? {
         if colorScheme == .dark {
             guard enableCustomDarkTextColor else { return nil }
@@ -639,7 +651,7 @@ struct ChatBubble: View {
         HStack(spacing: 0) {
             compactVersionIndicator
         }
-        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(.top, 2)
     }
     
@@ -679,12 +691,11 @@ struct ChatBubble: View {
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(
-                    resolvedSecondaryTextColor(
-                        default: Color.secondary,
-                        customOpacity: colorScheme == .dark ? 0.18 : 0.13
-                    )
-                )
+                .fill(versionSwitcherBackgroundColor)
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
         )
         .contentShape(Capsule())
     }
