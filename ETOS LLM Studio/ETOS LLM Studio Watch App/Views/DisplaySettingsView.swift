@@ -63,8 +63,8 @@ struct DisplaySettingsView: View {
                     }
                     
                     VStack(alignment: .leading) {
-                        Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), backgroundOpacity))
-                        Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
+                        Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), normalizedBackgroundOpacity))
+                        Slider(value: backgroundOpacityBinding, in: WatchBackgroundOpacitySetting.allowedRange, step: 0.05)
                     }
                     
                     Toggle("背景随机轮换", isOn: $enableAutoRotateBackground)
@@ -219,6 +219,7 @@ struct DisplaySettingsView: View {
             }
         }
         .onAppear {
+            normalizeBackgroundOpacityIfNeeded()
             disableColorfulSettingsIconsIfNeeded()
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
@@ -247,6 +248,17 @@ struct DisplaySettingsView: View {
 
     private var defaultDarkTextColor: Color {
         .white
+    }
+
+    private var normalizedBackgroundOpacity: Double {
+        WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
+    }
+
+    private var backgroundOpacityBinding: Binding<Double> {
+        Binding(
+            get: { normalizedBackgroundOpacity },
+            set: { backgroundOpacity = WatchBackgroundOpacitySetting.normalized($0) }
+        )
     }
 
     @ViewBuilder
@@ -300,6 +312,12 @@ struct DisplaySettingsView: View {
     private func disableColorfulSettingsIconsIfNeeded() {
         if !canUseColorfulSettingsIcons {
             useColorfulSettingsIcons = false
+        }
+    }
+
+    private func normalizeBackgroundOpacityIfNeeded() {
+        if normalizedBackgroundOpacity != backgroundOpacity {
+            backgroundOpacity = normalizedBackgroundOpacity
         }
     }
 

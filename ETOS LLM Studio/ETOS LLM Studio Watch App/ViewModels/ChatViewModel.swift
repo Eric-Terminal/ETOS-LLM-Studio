@@ -33,6 +33,16 @@ import UserNotifications
 
 private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
+enum WatchBackgroundOpacitySetting {
+    static let defaultValue: Double = 0.7
+    static let allowedRange: ClosedRange<Double> = 0.1...1.0
+
+    static func normalized(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultValue }
+        return min(max(value, allowedRange.lowerBound), allowedRange.upperBound)
+    }
+}
+
 @MainActor
 class ChatViewModel: ObservableObject {
     // 注意：这里必须使用系统合成的 objectWillChange，
@@ -133,7 +143,9 @@ class ChatViewModel: ObservableObject {
     @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0 {
         didSet { refreshBlurredBackgroundImage() }
     }
-    @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
+    @AppStorage("backgroundOpacity") var backgroundOpacity: Double = WatchBackgroundOpacitySetting.defaultValue {
+        didSet { normalizeBackgroundOpacityIfNeeded() }
+    }
     @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill" // "fill" 或 "fit"
     @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
     @AppStorage("aiTopP") var aiTopP: Double = 0.95
@@ -200,6 +212,10 @@ class ChatViewModel: ObservableObject {
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
         return loadBackgroundImage(named: currentBackgroundImage)
+    }
+
+    var resolvedBackgroundOpacity: Double {
+        WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
     }
     
     var embeddingModelOptions: [RunnableModel] {
@@ -347,6 +363,7 @@ class ChatViewModel: ObservableObject {
         self.chatService = chatService
         self.ttsManager = .shared
         self.backgroundImages = ConfigLoader.loadBackgroundImages()
+        normalizeBackgroundOpacityIfNeeded()
         reloadGlobalSystemPromptEntries()
 
         // 设置 Combine 订阅
@@ -608,6 +625,13 @@ class ChatViewModel: ObservableObject {
         let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
         logger.info("自动轮换背景，新背景: \(self.currentBackgroundImage, privacy: .public)")
+    }
+
+    private func normalizeBackgroundOpacityIfNeeded() {
+        let normalized = WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
+        if normalized != backgroundOpacity {
+            backgroundOpacity = normalized
+        }
     }
     
     // MARK: - 公开方法 (视图操作)
