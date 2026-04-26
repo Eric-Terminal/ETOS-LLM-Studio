@@ -4649,6 +4649,29 @@ final class PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_worldbook_entry_metadata_entry ON worldbook_entry_metadata(entry_id)")
                 }
             }
+
+            migrator.registerMigration("v6_create_global_system_prompt_tables") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS global_system_prompt_entries (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        title TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        sort_index INTEGER NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_global_system_prompt_entries_sort ON global_system_prompt_entries(sort_index ASC, updated_at DESC)")
+
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS global_system_prompt_selection (
+                        singleton_id TEXT PRIMARY KEY NOT NULL CHECK(singleton_id = 'current'),
+                        selected_entry_id TEXT,
+                        active_system_prompt TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        FOREIGN KEY(selected_entry_id) REFERENCES global_system_prompt_entries(id) ON DELETE SET NULL
+                    )
+                """)
+            }
         }
 
         if supportsMemoryRelationalSchema {

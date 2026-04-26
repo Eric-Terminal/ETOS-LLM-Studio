@@ -55,7 +55,7 @@ struct ShortcutSyncTests {
             defaults.removePersistentDomain(forName: suiteName)
         }
 
-        defaults.set("这是同步测试提示词", forKey: "systemPrompt")
+        defaults.set("旧版镜像提示词", forKey: "systemPrompt")
         let promptEntries = [
             GlobalSystemPromptEntry(
                 id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
@@ -74,14 +74,14 @@ struct ShortcutSyncTests {
         defaults.set(false, forKey: "enableExperimentalToolResultDisplay")
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
 
-        #expect(package.globalSystemPrompt == "这是同步测试提示词")
+        #expect(package.globalSystemPrompt == "请使用二次元插画风格")
         guard let snapshotData = package.appStorageSnapshot else {
             Issue.record("未导出 appStorageSnapshot")
             return
         }
 
         let snapshot = decodeSnapshot(snapshotData)
-        #expect(snapshot["systemPrompt"] as? String == "这是同步测试提示词")
+        #expect(snapshot["systemPrompt"] as? String == "请使用二次元插画风格")
         #expect(snapshot[GlobalSystemPromptStore.entriesStorageKey] as? Data == promptEntriesData)
         #expect(snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] as? String == "11111111-1111-1111-1111-111111111111")
         #expect((snapshot["enableMarkdown"] as? NSNumber)?.boolValue == true)
@@ -116,7 +116,7 @@ struct ShortcutSyncTests {
         }
 
         let incomingSnapshot: [String: Any] = [
-            "systemPrompt": "新提示词",
+            "systemPrompt": "请优先输出 Swift 代码",
             "enableStreaming": true,
             "maxChatHistory": 256,
             "enableExperimentalToolResultDisplay": false,
@@ -130,7 +130,7 @@ struct ShortcutSyncTests {
         )
 
         let summary = await SyncEngine.apply(package: package, userDefaults: defaults)
-        #expect(defaults.string(forKey: "systemPrompt") == "新提示词")
+        #expect(defaults.string(forKey: "systemPrompt") == "请优先输出 Swift 代码")
         #expect(defaults.bool(forKey: "enableStreaming") == true)
         #expect(defaults.integer(forKey: "maxChatHistory") == 256)
         #expect(defaults.bool(forKey: "enableExperimentalToolResultDisplay") == false)

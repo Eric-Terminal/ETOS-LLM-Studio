@@ -43,10 +43,11 @@ struct CloudSyncManagerTests {
             transport: transport,
             userDefaults: defaults,
             snapshotBuilder: { _ in
-                makeSnapshot(
+                let snapshotDefaults = UserDefaults(suiteName: suiteName)!
+                return makeSnapshot(
                     package: localPackage,
                     channel: "cloud.sync.tests.upload",
-                    userDefaults: defaults,
+                    userDefaults: snapshotDefaults,
                     generatedAt: now
                 )
             },
@@ -109,10 +110,11 @@ struct CloudSyncManagerTests {
             transport: transport,
             userDefaults: defaults,
             snapshotBuilder: { _ in
-                makeSnapshot(
+                let snapshotDefaults = UserDefaults(suiteName: suiteName)!
+                return makeSnapshot(
                     package: localPackage,
                     channel: "cloud.sync.tests.disabled",
-                    userDefaults: defaults
+                    userDefaults: snapshotDefaults
                 )
             },
             deltaApplier: { delta in
@@ -166,10 +168,11 @@ struct CloudSyncManagerTests {
             transport: transport,
             userDefaults: defaults,
             snapshotBuilder: { _ in
-                makeSnapshot(
+                let snapshotDefaults = UserDefaults(suiteName: suiteName)!
+                return makeSnapshot(
                     package: localPackage,
                     channel: "cloud.sync.tests.dedupe",
-                    userDefaults: defaults,
+                    userDefaults: snapshotDefaults,
                     generatedAt: now
                 )
             },
@@ -228,10 +231,11 @@ struct CloudSyncManagerTests {
             transport: transport,
             userDefaults: defaults,
             snapshotBuilder: { _ in
-                makeSnapshot(
+                let snapshotDefaults = UserDefaults(suiteName: suiteName)!
+                return makeSnapshot(
                     package: localPackage,
                     channel: "cloud.sync.tests.skippedOnly",
-                    userDefaults: defaults,
+                    userDefaults: snapshotDefaults,
                     generatedAt: now
                 )
             },
@@ -307,15 +311,17 @@ struct CloudSyncManagerTests {
         let localState = LocalSnapshotState(
             package: SyncPackage(options: [.providers], providers: [provider])
         )
+        let snapshotSuiteName = suiteName
 
         let manager = CloudSyncManager(
             transport: transport,
             userDefaults: defaults,
             snapshotBuilder: { _ in
-                makeSnapshot(
+                let snapshotDefaults = UserDefaults(suiteName: snapshotSuiteName)!
+                return makeSnapshot(
                     package: localState.package,
                     channel: "cloud.sync.tests.deletion",
-                    userDefaults: defaults,
+                    userDefaults: snapshotDefaults,
                     generatedAt: now
                 )
             },

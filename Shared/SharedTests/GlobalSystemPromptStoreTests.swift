@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import GRDB
 @testable import Shared
 
 @Suite("Global System Prompt Store Tests")
@@ -117,5 +118,78 @@ struct GlobalSystemPromptStoreTests {
 
         #expect(snapshot.entries.count == 1)
         #expect(snapshot.entries.first?.title == "A")
+    }
+
+    @Test("GRDB 模式下多版本提示词迁入配置数据库")
+    func testRelationalStoreMigration() {
+        let defaults = UserDefaults.standard
+        let originalEntriesObject = defaults.object(forKey: GlobalSystemPromptStore.entriesStorageKey)
+        let originalSelectedObject = defaults.object(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
+        let originalLegacyObject = defaults.object(forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        let originalSnapshot = GlobalSystemPromptStore.load(userDefaults: defaults)
+
+        defer {
+            _ = GlobalSystemPromptStore.save(
+                entries: originalSnapshot.entries,
+                selectedEntryID: originalSnapshot.selectedEntryID,
+                userDefaults: defaults
+            )
+            restore(originalEntriesObject, forKey: GlobalSystemPromptStore.entriesStorageKey, in: defaults)
+            restore(originalSelectedObject, forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey, in: defaults)
+            restore(originalLegacyObject, forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey, in: defaults)
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        _ = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM global_system_prompt_entries")
+            try db.execute(sql: "DELETE FROM global_system_prompt_selection")
+        }
+
+        let entry = GlobalSystemPromptEntry(
+            id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+            title: "数据库提示词",
+            content: "请从配置数据库读取",
+            updatedAt: Date(timeIntervalSince1970: 1_714_100_000)
+        )
+        guard let entryData = try? JSONEncoder().encode([entry]) else {
+            Issue.record("编码全局提示词测试数据失败")
+            return
+        }
+        defaults.set(entryData, forKey: GlobalSystemPromptStore.entriesStorageKey)
+        defaults.set(entry.id.uuidString, forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
+
+        let snapshot = GlobalSystemPromptStore.load(userDefaults: defaults)
+
+        #expect(snapshot.entries == [entry])
+        #expect(snapshot.selectedEntryID == entry.id)
+        #expect(defaults.data(forKey: GlobalSystemPromptStore.entriesStorageKey) == nil)
+        #expect(defaults.string(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) == nil)
+        #expect(defaults.string(forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey) == entry.content)
+
+        let storedCount = Persistence.withConfigDatabaseRead { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM global_system_prompt_entries")
+        } ?? -1
+        let storedContent = Persistence.withConfigDatabaseRead { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT content FROM global_system_prompt_entries WHERE id = ?",
+                arguments: [entry.id.uuidString]
+            )
+        } ?? ""
+
+        #expect(storedCount == 1)
+        #expect(storedContent == entry.content)
+    }
+
+    private func restore(_ value: Any?, forKey key: String, in defaults: UserDefaults) {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
     }
 }

@@ -759,6 +759,14 @@ public enum SyncEngine {
 
         var imported = 0
         var skipped = 0
+        let globalPromptMergeResult = mergeGlobalSystemPromptStorageKeys(
+            in: &incomingSnapshot,
+            legacyGlobalSystemPrompt: legacyGlobalSystemPrompt,
+            userDefaults: userDefaults
+        )
+        imported += globalPromptMergeResult.imported
+        skipped += globalPromptMergeResult.skipped
+
         for (key, incomingValue) in incomingSnapshot {
             guard isCandidateAppStorageKey(key) else {
                 skipped += 1
@@ -794,16 +802,85 @@ public enum SyncEngine {
 
     private static func collectAppStorageSnapshot(userDefaults: UserDefaults) -> [String: Any] {
         // 优先读取当前 App 的持久域，避免把系统域键值（如 AppleLanguages）同步出去。
+        var snapshot: [String: Any]
         if userDefaults === UserDefaults.standard,
            let bundleIdentifier = Bundle.main.bundleIdentifier,
            let domain = userDefaults.persistentDomain(forName: bundleIdentifier),
            !domain.isEmpty {
-            return domain.filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+            snapshot = domain.filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+        } else {
+            // 测试与极端环境兜底：仅保留可序列化且非系统前缀键。
+            snapshot = userDefaults.dictionaryRepresentation()
+                .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
         }
 
-        // 测试与极端环境兜底：仅保留可序列化且非系统前缀键。
-        return userDefaults.dictionaryRepresentation()
-            .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+        let globalPromptSnapshot = GlobalSystemPromptStore.load(userDefaults: userDefaults)
+        snapshot[legacyGlobalSystemPromptKey] = globalPromptSnapshot.activeSystemPrompt
+        if globalPromptSnapshot.entries.isEmpty {
+            snapshot.removeValue(forKey: GlobalSystemPromptStore.entriesStorageKey)
+            snapshot.removeValue(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
+        } else {
+            if let encoded = try? JSONEncoder().encode(globalPromptSnapshot.entries) {
+                snapshot[GlobalSystemPromptStore.entriesStorageKey] = encoded
+            }
+            snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] = globalPromptSnapshot.selectedEntryID?.uuidString
+        }
+        return snapshot
+    }
+
+    private static func mergeGlobalSystemPromptStorageKeys(
+        in snapshot: inout [String: Any],
+        legacyGlobalSystemPrompt: String?,
+        userDefaults: UserDefaults
+    ) -> (imported: Int, skipped: Int) {
+        let entriesData = snapshot.removeValue(forKey: GlobalSystemPromptStore.entriesStorageKey) as? Data
+        let selectedRawID = snapshot.removeValue(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) as? String
+        let activePrompt = snapshot.removeValue(forKey: legacyGlobalSystemPromptKey) as? String
+        let touchedKeyCount = [entriesData as Any?, selectedRawID as Any?, activePrompt as Any?]
+            .filter { $0 != nil }
+            .count
+
+        if let entriesData {
+            let incomingEntries = (try? JSONDecoder().decode([GlobalSystemPromptEntry].self, from: entriesData)) ?? []
+            let before = GlobalSystemPromptStore.load(userDefaults: userDefaults)
+            let after = GlobalSystemPromptStore.save(
+                entries: incomingEntries,
+                selectedEntryID: selectedRawID.flatMap(UUID.init(uuidString:)),
+                userDefaults: userDefaults
+            )
+            let keyCount = max(1, touchedKeyCount)
+            return before == after ? (0, keyCount) : (keyCount, 0)
+        }
+
+        guard let legacyPrompt = activePrompt ?? legacyGlobalSystemPrompt else {
+            return (0, 0)
+        }
+
+        let before = GlobalSystemPromptStore.load(userDefaults: userDefaults)
+        if before.activeSystemPrompt == legacyPrompt {
+            return (0, max(1, touchedKeyCount))
+        }
+
+        var entries = before.entries
+        if let selectedID = before.selectedEntryID,
+           let index = entries.firstIndex(where: { $0.id == selectedID }) {
+            entries[index].content = legacyPrompt
+            entries[index].updatedAt = Date()
+        } else {
+            let entry = GlobalSystemPromptEntry(
+                title: legacyPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "历史提示词" : "同步提示词",
+                content: legacyPrompt,
+                updatedAt: Date()
+            )
+            entries.insert(entry, at: 0)
+        }
+
+        _ = GlobalSystemPromptStore.save(
+            entries: entries,
+            selectedEntryID: entries.first?.id,
+            userDefaults: userDefaults
+        )
+        return (max(1, touchedKeyCount), 0)
     }
 
     private static func isPropertyListEncodableValue(_ value: Any) -> Bool {

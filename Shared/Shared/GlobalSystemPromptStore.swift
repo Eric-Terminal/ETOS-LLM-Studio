@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 
 public struct GlobalSystemPromptEntry: Codable, Equatable, Identifiable {
     public var id: UUID
@@ -51,61 +52,32 @@ public enum GlobalSystemPromptStore {
     /// 读取并规范化全局系统提示词状态。
     ///
     /// 规范化规则：
-    /// - 当列表为空且旧版 systemPrompt 非空时，自动迁移为一条历史记录。
+    /// - 优先读取配置数据库中的多版本提示词。
+    /// - 当数据库为空且旧版 UserDefaults 数据存在时，自动迁移为数据库记录。
     /// - 当选中项丢失时，自动回退到第一条。
-    /// - 始终将当前选中内容镜像回 systemPrompt。
+    /// - 始终将当前选中内容镜像回旧版 systemPrompt。
     @discardableResult
     public static func load(userDefaults: UserDefaults = .standard) -> GlobalSystemPromptSnapshot {
-        let entriesData = userDefaults.data(forKey: entriesStorageKey)
-        let selectedRawID = userDefaults.string(forKey: selectedEntryIDStorageKey)
-        let legacyPrompt = userDefaults.string(forKey: legacySystemPromptStorageKey) ?? ""
-
-        var entries = decodeEntries(from: entriesData)
-        var selectedEntryID = selectedRawID.flatMap(UUID.init(uuidString:))
-        var didMutate = false
-
-        entries = normalizeEntries(entries)
-
-        if entries.isEmpty {
-            let trimmedLegacy = legacyPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedLegacy.isEmpty {
-                let migratedEntry = GlobalSystemPromptEntry(
-                    title: defaultTitle(for: trimmedLegacy),
-                    content: legacyPrompt,
-                    updatedAt: Date()
-                )
-                entries = [migratedEntry]
-                selectedEntryID = migratedEntry.id
-                didMutate = true
-            } else if selectedEntryID != nil {
-                selectedEntryID = nil
-                didMutate = true
+        let useDatabase = shouldUseDatabase(userDefaults: userDefaults)
+        if useDatabase, let databaseSnapshot = loadFromDatabase() {
+            let snapshot = normalizedSnapshot(
+                entries: databaseSnapshot.entries,
+                selectedEntryID: databaseSnapshot.selectedEntryID,
+                legacyPrompt: nil
+            )
+            if snapshot != databaseSnapshot {
+                _ = saveToDatabase(snapshot)
             }
-        } else if let selectedID = selectedEntryID {
-            if entries.contains(where: { $0.id == selectedID }) == false {
-                selectedEntryID = entries.first?.id
-                didMutate = true
-            }
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: false)
+            return snapshot
+        }
+
+        let snapshot = loadFromUserDefaults(userDefaults)
+        if useDatabase, saveToDatabase(snapshot) {
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: false)
         } else {
-            selectedEntryID = entries.first?.id
-            didMutate = true
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: true)
         }
-
-        let activePrompt = entries.first(where: { $0.id == selectedEntryID })?.content ?? ""
-        if legacyPrompt != activePrompt {
-            didMutate = true
-        }
-
-        let snapshot = GlobalSystemPromptSnapshot(
-            entries: entries,
-            selectedEntryID: selectedEntryID,
-            activeSystemPrompt: activePrompt
-        )
-
-        if didMutate {
-            persist(snapshot, userDefaults: userDefaults)
-        }
-
         return snapshot
     }
 
@@ -123,37 +95,137 @@ public enum GlobalSystemPromptStore {
         userDefaults: UserDefaults = .standard
     ) -> GlobalSystemPromptSnapshot {
         let normalizedEntries = normalizeEntries(entries)
-        let normalizedSelectedID: UUID?
-        if let selectedEntryID,
-           normalizedEntries.contains(where: { $0.id == selectedEntryID }) {
-            normalizedSelectedID = selectedEntryID
-        } else {
-            normalizedSelectedID = normalizedEntries.first?.id
-        }
-
-        let activePrompt = normalizedEntries.first(where: { $0.id == normalizedSelectedID })?.content ?? ""
-        let snapshot = GlobalSystemPromptSnapshot(
+        let snapshot = normalizedSnapshot(
             entries: normalizedEntries,
-            selectedEntryID: normalizedSelectedID,
-            activeSystemPrompt: activePrompt
+            selectedEntryID: selectedEntryID,
+            legacyPrompt: nil
         )
-        persist(snapshot, userDefaults: userDefaults)
+        if shouldUseDatabase(userDefaults: userDefaults), saveToDatabase(snapshot) {
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: false)
+        } else {
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: true)
+        }
         return snapshot
     }
 
-    private static func persist(_ snapshot: GlobalSystemPromptSnapshot, userDefaults: UserDefaults) {
-        if snapshot.entries.isEmpty {
+    private static func shouldUseDatabase(userDefaults: UserDefaults) -> Bool {
+        userDefaults === UserDefaults.standard
+    }
+
+    private static func loadFromDatabase() -> GlobalSystemPromptSnapshot? {
+        Persistence.withConfigDatabaseRead { db -> GlobalSystemPromptSnapshot? in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, title, content, updated_at
+                FROM global_system_prompt_entries
+                ORDER BY sort_index ASC, updated_at DESC, id ASC
+                """
+            )
+            let selectionRow = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT selected_entry_id, active_system_prompt
+                FROM global_system_prompt_selection
+                WHERE singleton_id = 'current'
+                """
+            )
+
+            guard !rows.isEmpty || selectionRow != nil else { return nil }
+
+            let entries = rows.map { row in
+                let id: String = row["id"]
+                let title: String = row["title"]
+                let content: String = row["content"]
+                let updatedAt: Double = row["updated_at"]
+                return GlobalSystemPromptEntry(
+                    id: UUID(uuidString: id) ?? UUID(),
+                    title: title,
+                    content: content,
+                    updatedAt: Date(timeIntervalSince1970: updatedAt)
+                )
+            }
+            let selectedRawID = selectionRow.flatMap { row -> String? in row["selected_entry_id"] }
+            let activePrompt = selectionRow.map { row -> String in row["active_system_prompt"] } ?? ""
+            return GlobalSystemPromptSnapshot(
+                entries: entries,
+                selectedEntryID: selectedRawID.flatMap(UUID.init(uuidString:)),
+                activeSystemPrompt: activePrompt
+            )
+        } ?? nil
+    }
+
+    @discardableResult
+    private static func saveToDatabase(_ snapshot: GlobalSystemPromptSnapshot) -> Bool {
+        Persistence.withConfigDatabaseWrite { db in
+            try db.execute(sql: "DELETE FROM global_system_prompt_entries")
+            for (index, entry) in snapshot.entries.enumerated() {
+                try db.execute(
+                    sql: """
+                    INSERT INTO global_system_prompt_entries (
+                        id, title, content, updated_at, sort_index
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        entry.id.uuidString,
+                        entry.title,
+                        entry.content,
+                        entry.updatedAt.timeIntervalSince1970,
+                        index
+                    ]
+                )
+            }
+
+            try db.execute(
+                sql: """
+                INSERT INTO global_system_prompt_selection (
+                    singleton_id, selected_entry_id, active_system_prompt, updated_at
+                ) VALUES ('current', ?, ?, ?)
+                ON CONFLICT(singleton_id) DO UPDATE SET
+                    selected_entry_id = excluded.selected_entry_id,
+                    active_system_prompt = excluded.active_system_prompt,
+                    updated_at = excluded.updated_at
+                """,
+                arguments: [
+                    snapshot.selectedEntryID?.uuidString,
+                    snapshot.activeSystemPrompt,
+                    Date().timeIntervalSince1970
+                ]
+            )
+            return true
+        } ?? false
+    }
+
+    private static func loadFromUserDefaults(_ userDefaults: UserDefaults) -> GlobalSystemPromptSnapshot {
+        normalizedSnapshot(
+            entries: decodeEntries(from: userDefaults.data(forKey: entriesStorageKey)),
+            selectedEntryID: userDefaults.string(forKey: selectedEntryIDStorageKey).flatMap(UUID.init(uuidString:)),
+            legacyPrompt: userDefaults.string(forKey: legacySystemPromptStorageKey) ?? ""
+        )
+    }
+
+    private static func mirrorCompatibilityFields(
+        _ snapshot: GlobalSystemPromptSnapshot,
+        userDefaults: UserDefaults,
+        includeListInUserDefaults: Bool
+    ) {
+        if includeListInUserDefaults {
+            if snapshot.entries.isEmpty {
+                userDefaults.removeObject(forKey: entriesStorageKey)
+                userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
+            } else {
+                if let encoded = try? JSONEncoder().encode(snapshot.entries) {
+                    userDefaults.set(encoded, forKey: entriesStorageKey)
+                }
+                if let selectedEntryID = snapshot.selectedEntryID {
+                    userDefaults.set(selectedEntryID.uuidString, forKey: selectedEntryIDStorageKey)
+                } else {
+                    userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
+                }
+            }
+        } else {
             userDefaults.removeObject(forKey: entriesStorageKey)
             userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
-        } else {
-            if let encoded = try? JSONEncoder().encode(snapshot.entries) {
-                userDefaults.set(encoded, forKey: entriesStorageKey)
-            }
-            if let selectedEntryID = snapshot.selectedEntryID {
-                userDefaults.set(selectedEntryID.uuidString, forKey: selectedEntryIDStorageKey)
-            } else {
-                userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
-            }
         }
 
         userDefaults.set(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey)
@@ -178,6 +250,41 @@ public enum GlobalSystemPromptStore {
         }
 
         return normalized
+    }
+
+    private static func normalizedSnapshot(
+        entries: [GlobalSystemPromptEntry],
+        selectedEntryID: UUID?,
+        legacyPrompt: String?
+    ) -> GlobalSystemPromptSnapshot {
+        var normalizedEntries = normalizeEntries(entries)
+        var normalizedSelectedID = selectedEntryID
+
+        if normalizedEntries.isEmpty {
+            let trimmedLegacy = legacyPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmedLegacy.isEmpty {
+                let migratedEntry = GlobalSystemPromptEntry(
+                    title: defaultTitle(for: trimmedLegacy),
+                    content: legacyPrompt ?? "",
+                    updatedAt: Date()
+                )
+                normalizedEntries = [migratedEntry]
+                normalizedSelectedID = migratedEntry.id
+            } else {
+                normalizedSelectedID = nil
+            }
+        } else if let selectedEntryID,
+                  normalizedEntries.contains(where: { $0.id == selectedEntryID }) {
+            normalizedSelectedID = selectedEntryID
+        } else {
+            normalizedSelectedID = normalizedEntries.first?.id
+        }
+
+        return GlobalSystemPromptSnapshot(
+            entries: normalizedEntries,
+            selectedEntryID: normalizedSelectedID,
+            activeSystemPrompt: normalizedEntries.first(where: { $0.id == normalizedSelectedID })?.content ?? ""
+        )
     }
 
     private static func defaultTitle(for content: String) -> String {

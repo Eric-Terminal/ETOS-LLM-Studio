@@ -261,7 +261,8 @@ struct DailyPulseSyncTests {
                 sourceDayKey: localRun.dayKey,
                 sourceCardID: localRun.cards.first?.id,
                 title: "清空测试任务",
-                details: "执行清空验证"
+                details: "执行清空验证",
+                suggestedPrompt: "帮我执行清空验证"
             )
         ])
 
