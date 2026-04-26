@@ -1566,6 +1566,28 @@ public class ChatService {
         logger.info("已删除会话文件夹及子目录，共 \(removedIDs.count) 个。")
     }
 
+    public func moveSessionFolder(folderID: UUID, toParentID parentID: UUID?) {
+        var folders = sessionFoldersSubject.value
+        guard let folderIndex = folders.firstIndex(where: { $0.id == folderID }) else { return }
+        guard folders[folderIndex].parentID != parentID else { return }
+
+        if let parentID {
+            guard folders.contains(where: { $0.id == parentID }) else { return }
+            let descendantIDs = collectSessionFolderDescendantIDs(rootID: folderID, folders: folders)
+            guard !descendantIDs.contains(parentID) else { return }
+        }
+
+        folders[folderIndex].parentID = parentID
+        folders[folderIndex].updatedAt = Date()
+        sessionFoldersSubject.send(folders)
+        Persistence.saveSessionFolders(folders)
+        logger.info("已移动会话文件夹。")
+    }
+
+    public func moveSessionFolder(_ folder: SessionFolder, toParentID parentID: UUID?) {
+        moveSessionFolder(folderID: folder.id, toParentID: parentID)
+    }
+
     public func moveSession(sessionID: UUID, toFolderID folderID: UUID?) {
         var sessions = chatSessionsSubject.value
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }

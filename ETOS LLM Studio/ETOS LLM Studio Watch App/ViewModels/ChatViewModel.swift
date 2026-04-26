@@ -1857,6 +1857,10 @@ class ChatViewModel: ObservableObject {
         chatService.deleteSessionFolder(folderID: folder.id)
     }
 
+    func moveSessionFolder(_ folder: SessionFolder, toParentID parentID: UUID?) {
+        chatService.moveSessionFolder(folder, toParentID: parentID)
+    }
+
     func moveSession(_ session: ChatSession, toFolderID folderID: UUID?) {
         chatService.moveSession(session, toFolderID: folderID)
     }

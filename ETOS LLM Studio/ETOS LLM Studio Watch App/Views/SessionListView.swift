@@ -35,6 +35,7 @@ struct SessionListView: View {
     let renameFolderAction: (SessionFolder, String) -> Void
     let deleteFolderAction: (SessionFolder) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
+    let moveFolderToFolderAction: (SessionFolder, UUID?) -> Void
     var createConversationAction: (() -> Void)? = nil
 
     var body: some View {
@@ -54,6 +55,7 @@ struct SessionListView: View {
             renameFolderAction: renameFolderAction,
             deleteFolderAction: deleteFolderAction,
             moveSessionToFolderAction: moveSessionToFolderAction,
+            moveFolderToFolderAction: moveFolderToFolderAction,
             createConversationAction: createConversationAction,
             isRoot: true
         )
@@ -79,6 +81,7 @@ private struct SessionFolderBrowserView: View {
     let renameFolderAction: (SessionFolder, String) -> Void
     let deleteFolderAction: (SessionFolder) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
+    let moveFolderToFolderAction: (SessionFolder, UUID?) -> Void
     let createConversationAction: (() -> Void)?
     let isRoot: Bool
 
@@ -101,7 +104,6 @@ private struct SessionFolderBrowserView: View {
     @State private var selectedSessionIDs: Set<UUID> = []
     @State private var selectedFolderIDs: Set<UUID> = []
     @State private var showBatchDeleteConfirm = false
-    @State private var showBatchMovePicker = false
     @State private var showSessionSearch = false
     @State private var sessionPageIndex: Int = 0
 
@@ -196,6 +198,10 @@ private struct SessionFolderBrowserView: View {
             }
     }
 
+    private var batchMoveTargets: [SessionMoveTarget] {
+        moveTargets.filter { isValidBatchMoveTarget($0.id) }
+    }
+
     private var selectedSessions: [ChatSession] {
         pagedDirectSessions.filter { selectedSessionIDs.contains($0.id) }
     }
@@ -284,11 +290,6 @@ private struct SessionFolderBrowserView: View {
                 }
             )
         }
-        .safeAreaInset(edge: .bottom) {
-            if isBatchSelecting {
-                batchActionBar
-            }
-        }
     }
 
     private var pagedSessionIDs: [UUID] {
@@ -360,12 +361,8 @@ private struct SessionFolderBrowserView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showBatchMovePicker) {
-                NavigationStack {
-                    BatchMoveDestinationPickerView(moveTargets: moveTargets) { targetFolderID in
-                        applyBatchMove(toFolderID: targetFolderID)
-                    }
-                }
+            .sheet(isPresented: $showMoreActions) {
+                moreActionsSheet
             }
     }
 
@@ -409,39 +406,6 @@ private struct SessionFolderBrowserView: View {
                     Text(String(format: NSLocalizedString("从“%@”创建新的分支对话。", comment: ""), session.name))
                 }
             }
-            .confirmationDialog("会话列表操作", isPresented: $showMoreActions, titleVisibility: .visible) {
-                if let createConversationAction {
-                    Button("新建对话") {
-                        createConversationAction()
-                    }
-                }
-
-                Button("搜索会话") {
-                    DispatchQueue.main.async {
-                        showSessionSearch = true
-                    }
-                }
-
-                Button(folderID == nil ? "新建文件夹" : "新建子文件夹") {
-                    openCreateFolderEditor(parentID: folderID)
-                }
-
-                Button(isBatchSelecting ? "结束批量选中" : "批量选中") {
-                    toggleBatchMode()
-                }
-
-                if let currentFolder {
-                    Button("重命名当前文件夹") {
-                        openRenameFolderEditor(currentFolder)
-                    }
-
-                    Button("删除当前文件夹", role: .destructive) {
-                        folderToDelete = currentFolder
-                    }
-                }
-
-                Button("取消", role: .cancel) {}
-            }
             .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
                 Button("删除所选项目", role: .destructive) {
                     performBatchDelete()
@@ -480,35 +444,109 @@ private struct SessionFolderBrowserView: View {
             }
     }
 
-    private var batchActionBar: some View {
-        VStack(spacing: 8) {
-            Text("已选 \(selectedBatchItemCount) 个项目")
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
+    private var moreActionsSheet: some View {
+        NavigationStack {
+            List {
+                if isBatchSelecting {
+                    Section {
+                        Text("已选 \(selectedBatchItemCount) 个项目")
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
-                Button {
-                    showBatchMovePicker = true
-                } label: {
-                    Label("移动", systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(selectedSessionIDs.isEmpty)
+                        NavigationLink {
+                            BatchMoveDestinationPickerView(moveTargets: batchMoveTargets) { targetFolderID in
+                                applyBatchMove(toFolderID: targetFolderID)
+                                showMoreActions = false
+                            }
+                        } label: {
+                            Label("移动所选项目", systemImage: "folder")
+                        }
+                        .disabled(!hasBatchSelection)
 
-                Button(role: .destructive) {
-                    showBatchDeleteConfirm = true
-                } label: {
-                    Label("删除", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
+                        Button(role: .destructive) {
+                            dismissMoreActionsThen {
+                                showBatchDeleteConfirm = true
+                            }
+                        } label: {
+                            Label("删除所选项目", systemImage: "trash")
+                        }
+                        .disabled(!hasBatchSelection)
+
+                        Button {
+                            dismissMoreActionsThen {
+                                endBatchMode()
+                            }
+                        } label: {
+                            Label("退出选中模式", systemImage: "xmark.circle")
+                        }
+                    }
+                } else {
+                    Section {
+                        if let createConversationAction {
+                            Button {
+                                dismissMoreActionsThen {
+                                    createConversationAction()
+                                }
+                            } label: {
+                                Label("新建对话", systemImage: "plus.message")
+                            }
+                        }
+
+                        Button {
+                            dismissMoreActionsThen {
+                                showSessionSearch = true
+                            }
+                        } label: {
+                            Label("搜索会话", systemImage: "magnifyingglass")
+                        }
+
+                        Button {
+                            dismissMoreActionsThen {
+                                openCreateFolderEditor(parentID: folderID)
+                            }
+                        } label: {
+                            Label(folderID == nil ? "新建文件夹" : "新建子文件夹", systemImage: "folder.badge.plus")
+                        }
+
+                        Button {
+                            dismissMoreActionsThen {
+                                toggleBatchMode()
+                            }
+                        } label: {
+                            Label("批量选中", systemImage: "checkmark.circle")
+                        }
+                    }
+
+                    if let currentFolder {
+                        Section {
+                            Button {
+                                dismissMoreActionsThen {
+                                    openRenameFolderEditor(currentFolder)
+                                }
+                            } label: {
+                                Label("重命名当前文件夹", systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                dismissMoreActionsThen {
+                                    folderToDelete = currentFolder
+                                }
+                            } label: {
+                                Label("删除当前文件夹", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
-                .buttonStyle(.bordered)
-                .disabled(!hasBatchSelection)
+            }
+            .navigationTitle("会话列表操作")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") {
+                        showMoreActions = false
+                    }
+                }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
     }
 
     private var paginationBottomBar: some View {
@@ -560,6 +598,7 @@ private struct SessionFolderBrowserView: View {
                     renameFolderAction: renameFolderAction,
                     deleteFolderAction: deleteFolderAction,
                     moveSessionToFolderAction: moveSessionToFolderAction,
+                    moveFolderToFolderAction: moveFolderToFolderAction,
                     createConversationAction: createConversationAction,
                     isRoot: false
                 )
@@ -621,6 +660,19 @@ private struct SessionFolderBrowserView: View {
         }
     }
 
+    private func endBatchMode() {
+        isBatchSelecting = false
+        selectedSessionIDs.removeAll()
+        selectedFolderIDs.removeAll()
+    }
+
+    private func dismissMoreActionsThen(_ action: @escaping () -> Void) {
+        showMoreActions = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            action()
+        }
+    }
+
     private func toggleSessionSelection(_ sessionID: UUID) {
         if selectedSessionIDs.contains(sessionID) {
             selectedSessionIDs.remove(sessionID)
@@ -641,7 +693,23 @@ private struct SessionFolderBrowserView: View {
         for session in selectedSessions {
             moveSessionToFolderAction(session, folderID)
         }
+        for folder in selectedFolders {
+            moveFolderToFolderAction(folder, folderID)
+        }
         selectedSessionIDs.removeAll()
+        selectedFolderIDs.removeAll()
+    }
+
+    private func isValidBatchMoveTarget(_ targetFolderID: UUID) -> Bool {
+        for selectedFolderID in selectedFolderIDs {
+            if targetFolderID == selectedFolderID {
+                return false
+            }
+            if folderHierarchyContains(descendantFolderID: targetFolderID, ancestorFolderID: selectedFolderID) {
+                return false
+            }
+        }
+        return true
     }
 
     private func performBatchDelete() {

@@ -154,6 +154,10 @@ private struct SessionFolderBrowserView: View {
             }
     }
 
+    private var batchMoveFolderOptions: [SessionMoveFolderOption] {
+        moveFolderOptions.filter { isValidBatchMoveTarget($0.id) }
+    }
+
     private var selectedSessions: [ChatSession] {
         pagedDirectSessions.filter { selectedSessionIDs.contains($0.id) }
     }
@@ -565,7 +569,7 @@ private struct SessionFolderBrowserView: View {
                     Label("未分类", systemImage: "tray")
                 }
 
-                ForEach(moveFolderOptions) { option in
+                ForEach(batchMoveFolderOptions) { option in
                     Button {
                         applyBatchMove(toFolderID: option.id)
                     } label: {
@@ -577,7 +581,7 @@ private struct SessionFolderBrowserView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .disabled(selectedSessionIDs.isEmpty)
+            .disabled(!hasBatchSelection)
 
             Button(role: .destructive) {
                 showBatchDeleteConfirm = true
@@ -922,7 +926,23 @@ private struct SessionFolderBrowserView: View {
         for session in selectedSessions {
             viewModel.moveSession(session, toFolderID: folderID)
         }
+        for folder in selectedFolders {
+            viewModel.moveSessionFolder(folder, toParentID: folderID)
+        }
         selectedSessionIDs.removeAll()
+        selectedFolderIDs.removeAll()
+    }
+
+    private func isValidBatchMoveTarget(_ targetFolderID: UUID) -> Bool {
+        for selectedFolderID in selectedFolderIDs {
+            if targetFolderID == selectedFolderID {
+                return false
+            }
+            if folderHierarchyContains(descendantFolderID: targetFolderID, ancestorFolderID: selectedFolderID) {
+                return false
+            }
+        }
+        return true
     }
 
     private func performBatchDelete() {

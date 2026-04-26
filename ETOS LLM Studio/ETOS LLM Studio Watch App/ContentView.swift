@@ -625,6 +625,9 @@ struct ContentView: View {
             moveSessionToFolderAction: { session, folderID in
                 viewModel.moveSession(session, toFolderID: folderID)
             },
+            moveFolderToFolderAction: { folder, parentID in
+                viewModel.moveSessionFolder(folder, toParentID: parentID)
+            },
             createConversationAction: isNativeNavigationEnabled ? {
                 viewModel.createNewSession()
                 nativeDestination = .chat

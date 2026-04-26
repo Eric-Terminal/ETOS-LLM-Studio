@@ -4160,6 +4160,36 @@ fileprivate struct ChatSessionTests {
         #expect(updatedSession != nil)
         #expect(updatedSession?.folderID == nil)
     }
+
+    @Test("移动文件夹时会更新父文件夹")
+    func testMoveSessionFolderUpdatesParentFolder() {
+        guard let firstRoot = chatService.createSessionFolder(name: "项目一", parentID: nil),
+              let secondRoot = chatService.createSessionFolder(name: "项目二", parentID: nil),
+              let childFolder = chatService.createSessionFolder(name: "子目录", parentID: firstRoot.id) else {
+            Issue.record("创建测试文件夹失败")
+            return
+        }
+
+        chatService.moveSessionFolder(folderID: childFolder.id, toParentID: secondRoot.id)
+
+        let movedFolder = chatService.sessionFoldersSubject.value.first(where: { $0.id == childFolder.id })
+        #expect(movedFolder?.parentID == secondRoot.id)
+    }
+
+    @Test("移动文件夹时会拒绝移动到自身或子目录")
+    func testMoveSessionFolderRejectsSelfAndDescendantTargets() {
+        guard let rootFolder = chatService.createSessionFolder(name: "项目", parentID: nil),
+              let childFolder = chatService.createSessionFolder(name: "子目录", parentID: rootFolder.id) else {
+            Issue.record("创建测试文件夹失败")
+            return
+        }
+
+        chatService.moveSessionFolder(folderID: rootFolder.id, toParentID: rootFolder.id)
+        chatService.moveSessionFolder(folderID: rootFolder.id, toParentID: childFolder.id)
+
+        let rootAfterMove = chatService.sessionFoldersSubject.value.first(where: { $0.id == rootFolder.id })
+        #expect(rootAfterMove?.parentID == nil)
+    }
 }
 
 // MARK: - Persistence & Config Tests

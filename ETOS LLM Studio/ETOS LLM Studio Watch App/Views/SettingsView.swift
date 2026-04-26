@@ -162,6 +162,9 @@ struct SettingsView: View {
                         },
                         moveSessionToFolderAction: { session, folderID in
                             viewModel.moveSession(session, toFolderID: folderID)
+                        },
+                        moveFolderToFolderAction: { folder, parentID in
+                            viewModel.moveSessionFolder(folder, toParentID: parentID)
                         }
                     )) {
                         settingsNavigationLabel("历史会话管理", icon: .sessionHistory)
