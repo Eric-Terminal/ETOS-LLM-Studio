@@ -55,8 +55,6 @@ public struct ExtendedFeaturesView: View {
                 }
             }
 
-            settingsLaboratorySection
-
             Section {
                 NavigationLink {
                     ToolCenterView()
@@ -289,37 +287,6 @@ public struct ExtendedFeaturesView: View {
 
     private var usesNativeSettingsIcons: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
-    }
-
-    @ViewBuilder
-    private var settingsLaboratorySection: some View {
-        Section {
-            if usesNativeSettingsIcons {
-                NavigationLink {
-                    SettingsLaboratoryView(canUseBetaSettingsHome: true)
-                } label: {
-                    settingsNavigationLabel("设置实验室", icon: .settingsLaboratory)
-                        .etFont(.headline)
-                        .padding(.vertical, 4)
-                }
-            } else {
-                settingsNavigationLabel("设置实验室", icon: .settingsLaboratory)
-                    .etFont(.headline)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 4)
-            }
-        } footer: {
-            Text(settingsLaboratoryFooterText)
-                .etFont(.footnote)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    private var settingsLaboratoryFooterText: LocalizedStringKey {
-        if usesNativeSettingsIcons {
-            return "这是仍在验证中的设置界面实验，默认关闭。"
-        }
-        return "watchOS 需要先在“显示与外观”里将界面架构切换为“原生导航”，沉浸浮层模式不会启用新版设置首页。"
     }
 
     @ViewBuilder
