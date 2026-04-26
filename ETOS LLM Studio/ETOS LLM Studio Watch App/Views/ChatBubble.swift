@@ -385,7 +385,7 @@ struct ChatBubble: View {
     }
 
     private var rowSpacerReserveWidth: CGFloat {
-        8
+        16
     }
 
     private var bubbleMaxWidth: CGFloat {
@@ -396,7 +396,7 @@ struct ChatBubble: View {
             return min(max(rowWidth * 0.92, 1), availableBubbleWidth)
         }
         let availableBubbleWidth = max(1, rowWidth - rowSpacerReserveWidth)
-        let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.94
+        let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.92
         return min(rowWidth * widthRatio, availableBubbleWidth)
     }
 
@@ -2020,7 +2020,11 @@ struct ChatBubble: View {
         let shape = shapeOverride ?? (standalone ? standaloneAssistantBubbleShape : assistantBubbleShape)
         let shouldShowSeparator = showMergedSeparator ?? (!standalone && shouldShowMergedSeparator)
         let sizedContent = content
-            .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: .leading)
+            .frame(
+                minWidth: shouldForceMergedWidth ? bubbleMaxWidth : nil,
+                maxWidth: bubbleMaxWidth,
+                alignment: .leading
+            )
 
         if usesNoBubbleStyle {
             sizedContent
