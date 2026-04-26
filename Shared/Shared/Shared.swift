@@ -139,7 +139,7 @@ public enum AppLanguageRuntime {
 #if canImport(ObjectiveC)
 private var appLanguageBundleKey: UInt8 = 0
 
-private final class AppLanguageBundle: Bundle {
+private final class AppLanguageBundle: Bundle, @unchecked Sendable {
     override func localizedString(forKey key: String, value: String?, table tableName: String?) -> String {
         if let bundle = objc_getAssociatedObject(self, &appLanguageBundleKey) as? Bundle {
             return bundle.localizedString(forKey: key, value: value, table: tableName)
