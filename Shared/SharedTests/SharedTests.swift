@@ -3110,6 +3110,91 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("删除错误分段不会删除同轮工具调用链")
+    func testDeleteErrorSegmentKeepsToolCallTurn() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证消息删除行为。")
+            await cleanup()
+            return
+        }
+
+        let attemptID = UUID()
+        let toolCall = InternalToolCall(
+            id: "call_delete_segment",
+            toolName: "search_memory",
+            arguments: "{}",
+            result: "工具结果"
+        )
+        let userMessage = ChatMessage(
+            role: .user,
+            content: "查一下记忆",
+            selectedResponseAttemptID: attemptID
+        )
+        let toolCallingAssistant = ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [toolCall],
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        let toolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            toolCalls: [
+                InternalToolCall(
+                    id: toolCall.id,
+                    toolName: toolCall.toolName,
+                    arguments: toolCall.arguments
+                )
+            ],
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        let finalAssistant = ChatMessage(
+            role: .assistant,
+            content: "根据记忆回答",
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        let errorMessage = ChatMessage(
+            role: .error,
+            content: "后续请求失败",
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        chatService.updateMessages(
+            [userMessage, toolCallingAssistant, toolResult, finalAssistant, errorMessage],
+            for: sessionID
+        )
+
+        chatService.deleteMessage(errorMessage)
+
+        let afterDeletingError = chatService.messagesForSessionSubject.value
+        #expect(afterDeletingError.map(\.id) == [
+            userMessage.id,
+            toolCallingAssistant.id,
+            toolResult.id,
+            finalAssistant.id
+        ])
+
+        chatService.deleteMessage(toolCallingAssistant)
+
+        let afterDeletingAssistant = chatService.messagesForSessionSubject.value
+        #expect(afterDeletingAssistant.map(\.id) == [
+            userMessage.id,
+            finalAssistant.id
+        ])
+        #expect(afterDeletingAssistant.first?.selectedResponseAttemptID == attemptID)
+
+        await cleanup()
+    }
+
     @Test("Memory prompt is added when memory is enabled")
     func testMemoryPrompt_Enabled() async throws {
         await cleanup()

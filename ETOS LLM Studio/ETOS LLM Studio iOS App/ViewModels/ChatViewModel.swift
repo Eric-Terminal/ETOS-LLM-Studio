@@ -1239,14 +1239,6 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Session & Message Management
     
     func deleteMessage(_ message: ChatMessage) {
-        if let groupID = message.responseGroupID {
-            var updatedMessages = allMessagesForSession.filter { $0.responseGroupID != groupID }
-            if let anchorIndex = updatedMessages.firstIndex(where: { $0.id == groupID && $0.role == .user }) {
-                updatedMessages[anchorIndex].selectedResponseAttemptID = nil
-            }
-            updateMessages(updatedMessages)
-            return
-        }
         chatService.deleteMessage(message)
     }
     

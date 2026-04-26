@@ -1390,64 +1390,100 @@ public class ChatService {
     public func deleteMessage(_ message: ChatMessage) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
-        let toolCallIDs = Set(message.toolCalls?.map(\.id) ?? [])
-        let relatedToolMessageIDs: Set<UUID>
-        if toolCallIDs.isEmpty {
-            relatedToolMessageIDs = []
-        } else {
-            relatedToolMessageIDs = Set(messages.compactMap { candidate in
-                guard candidate.role == .tool, candidate.id != message.id,
-                      let toolCalls = candidate.toolCalls,
-                      toolCalls.contains(where: { toolCallIDs.contains($0.id) }) else {
-                    return nil
-                }
-                return candidate.id
-            })
+        guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
+        let targetMessage = messages[messageIndex]
+        let relatedToolMessageIDs = relatedToolResultMessageIDs(for: targetMessage, at: messageIndex, in: messages)
+        let deletedMessageIDs = Set([targetMessage.id]).union(relatedToolMessageIDs)
+        let deletedMessages = messages.filter { deletedMessageIDs.contains($0.id) }
+        for deletedMessage in deletedMessages {
+            deleteStoredAttachments(for: deletedMessage)
         }
-        if !relatedToolMessageIDs.isEmpty {
-            for candidate in messages where relatedToolMessageIDs.contains(candidate.id) {
-                invalidateAttachmentCache(for: candidate)
-                if let audioFileName = candidate.audioFileName {
-                    Persistence.deleteAudio(fileName: audioFileName)
-                }
-                if let imageFileNames = candidate.imageFileNames {
-                    for fileName in imageFileNames {
-                        Persistence.deleteImage(fileName: fileName)
-                    }
-                }
-                if let fileFileNames = candidate.fileFileNames {
-                    for fileName in fileFileNames {
-                        Persistence.deleteFile(fileName: fileName)
-                    }
-                }
+        messages.removeAll { deletedMessageIDs.contains($0.id) }
+        repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
+
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
+        logger.info("已删除消息: \(targetMessage.id.uuidString)")
+    }
+
+    private func relatedToolResultMessageIDs(for message: ChatMessage, at messageIndex: Int, in messages: [ChatMessage]) -> Set<UUID> {
+        guard message.role == .assistant,
+              let toolCalls = message.toolCalls,
+              !toolCalls.isEmpty else {
+            return []
+        }
+
+        let toolCallIDs = Set(toolCalls.map(\.id))
+        var relatedIDs = Set<UUID>()
+        var cursor = messages.index(after: messageIndex)
+        while cursor < messages.endIndex {
+            let candidate = messages[cursor]
+            guard candidate.role == .tool else { break }
+            if isSameResponseAttempt(candidate, message),
+               let candidateToolCalls = candidate.toolCalls,
+               candidateToolCalls.contains(where: { toolCallIDs.contains($0.id) }) {
+                relatedIDs.insert(candidate.id)
             }
+            cursor = messages.index(after: cursor)
         }
-        
-        // 清理被删除消息关联的音频文件
+        return relatedIDs
+    }
+
+    private func isSameResponseAttempt(_ lhs: ChatMessage, _ rhs: ChatMessage) -> Bool {
+        switch (lhs.responseAttemptID, rhs.responseAttemptID) {
+        case let (lhsAttemptID?, rhsAttemptID?):
+            return lhsAttemptID == rhsAttemptID
+        case (nil, nil):
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func deleteStoredAttachments(for message: ChatMessage) {
         invalidateAttachmentCache(for: message)
         if let audioFileName = message.audioFileName {
             Persistence.deleteAudio(fileName: audioFileName)
         }
-        
-        // 清理被删除消息关联的图片文件
         if let imageFileNames = message.imageFileNames {
             for fileName in imageFileNames {
                 Persistence.deleteImage(fileName: fileName)
             }
         }
-
-        // 清理被删除消息关联的文件附件
         if let fileFileNames = message.fileFileNames {
             for fileName in fileFileNames {
                 Persistence.deleteFile(fileName: fileName)
             }
         }
-        
-        messages.removeAll { $0.id == message.id || relatedToolMessageIDs.contains($0.id) }
-        
-        publishMessages(messages)
-        persistMessages(messages, for: currentSession.id)
-        logger.info("已删除消息: \(message.id.uuidString)")
+    }
+
+    private func repairSelectedResponseAttempts(in messages: inout [ChatMessage], affectedBy deletedMessages: [ChatMessage]) {
+        let affectedGroupIDs = Set(deletedMessages.compactMap(\.responseGroupID))
+        guard !affectedGroupIDs.isEmpty else { return }
+
+        for groupID in affectedGroupIDs {
+            guard let anchorIndex = messages.firstIndex(where: { $0.id == groupID && $0.role == .user }),
+                  let selectedAttemptID = messages[anchorIndex].selectedResponseAttemptID else {
+                continue
+            }
+            guard !responseAttemptHasDisplaySegment(groupID: groupID, attemptID: selectedAttemptID, in: messages) else {
+                continue
+            }
+
+            let replacementAttemptID = ChatResponseAttemptSupport
+                .orderedAttemptIDs(for: groupID, in: messages)
+                .reversed()
+                .first { responseAttemptHasDisplaySegment(groupID: groupID, attemptID: $0, in: messages) }
+            messages[anchorIndex].selectedResponseAttemptID = replacementAttemptID
+        }
+    }
+
+    private func responseAttemptHasDisplaySegment(groupID: UUID, attemptID: UUID, in messages: [ChatMessage]) -> Bool {
+        messages.contains {
+            $0.responseGroupID == groupID
+                && $0.responseAttemptID == attemptID
+                && ($0.role == .assistant || $0.role == .error)
+        }
     }
     
     public func updateMessageContent(_ message: ChatMessage, with newContent: String) {
