@@ -6,7 +6,7 @@
 // 功能特性:
 // - 文件夹与会话在同一列表混合展示
 // - 顶部三点菜单支持新建文件夹与批量选中
-// - 支持会话批量移动、批量删除
+// - 支持会话/文件夹批量移动、批量删除
 // ============================================================================
 
 import Foundation
@@ -99,6 +99,7 @@ private struct SessionFolderBrowserView: View {
 
     @State private var isBatchSelecting = false
     @State private var selectedSessionIDs: Set<UUID> = []
+    @State private var selectedFolderIDs: Set<UUID> = []
     @State private var showBatchDeleteConfirm = false
     @State private var showBatchMovePicker = false
     @State private var showSessionSearch = false
@@ -199,6 +200,18 @@ private struct SessionFolderBrowserView: View {
         pagedDirectSessions.filter { selectedSessionIDs.contains($0.id) }
     }
 
+    private var selectedFolders: [SessionFolder] {
+        childFolders.filter { selectedFolderIDs.contains($0.id) }
+    }
+
+    private var selectedBatchItemCount: Int {
+        selectedSessionIDs.count + selectedFolderIDs.count
+    }
+
+    private var hasBatchSelection: Bool {
+        selectedBatchItemCount > 0
+    }
+
     private var emptyStateText: String {
         folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
     }
@@ -282,6 +295,10 @@ private struct SessionFolderBrowserView: View {
         pagedDirectSessions.map(\.id)
     }
 
+    private var childFolderIDs: [UUID] {
+        childFolders.map(\.id)
+    }
+
     private func applyStateHandlers<Content: View>(to content: Content) -> some View {
         content
             .onChange(of: folders) { _, _ in
@@ -292,6 +309,9 @@ private struct SessionFolderBrowserView: View {
             }
             .onChange(of: pagedSessionIDs) { _, visibleIDs in
                 selectedSessionIDs.formIntersection(Set(visibleIDs))
+            }
+            .onChange(of: childFolderIDs) { _, visibleIDs in
+                selectedFolderIDs.formIntersection(Set(visibleIDs))
             }
             .onChange(of: totalDirectSessionCount) { _, _ in
                 normalizeSessionPageIndex()
@@ -423,12 +443,12 @@ private struct SessionFolderBrowserView: View {
                 Button("取消", role: .cancel) {}
             }
             .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
-                Button("删除所选会话", role: .destructive) {
+                Button("删除所选项目", role: .destructive) {
                     performBatchDelete()
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("将删除 \(selectedSessionIDs.count) 个会话，操作不可恢复。")
+                Text(batchDeleteMessage)
             }
             .confirmationDialog("确认删除文件夹", isPresented: Binding(
                 get: { folderToDelete != nil },
@@ -462,7 +482,7 @@ private struct SessionFolderBrowserView: View {
 
     private var batchActionBar: some View {
         VStack(spacing: 8) {
-            Text("已选 \(selectedSessionIDs.count) 个会话")
+            Text("已选 \(selectedBatchItemCount) 个项目")
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
 
@@ -483,7 +503,7 @@ private struct SessionFolderBrowserView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(selectedSessionIDs.isEmpty)
+                .disabled(!hasBatchSelection)
             }
         }
         .padding(.horizontal, 8)
@@ -514,7 +534,14 @@ private struct SessionFolderBrowserView: View {
     @ViewBuilder
     private func folderRow(_ folder: SessionFolder) -> some View {
         if isBatchSelecting {
-            folderLabel(for: folder)
+            BatchSelectableFolderRow(
+                folder: folder,
+                sessionCount: recursiveSessionCount(in: folder.id),
+                isSelected: selectedFolderIDs.contains(folder.id),
+                onToggle: {
+                    toggleFolderSelection(folder.id)
+                }
+            )
         } else {
             NavigationLink {
                 SessionFolderBrowserView(
@@ -590,6 +617,7 @@ private struct SessionFolderBrowserView: View {
         isBatchSelecting.toggle()
         if !isBatchSelecting {
             selectedSessionIDs.removeAll()
+            selectedFolderIDs.removeAll()
         }
     }
 
@@ -601,6 +629,14 @@ private struct SessionFolderBrowserView: View {
         }
     }
 
+    private func toggleFolderSelection(_ folderID: UUID) {
+        if selectedFolderIDs.contains(folderID) {
+            selectedFolderIDs.remove(folderID)
+        } else {
+            selectedFolderIDs.insert(folderID)
+        }
+    }
+
     private func applyBatchMove(toFolderID folderID: UUID?) {
         for session in selectedSessions {
             moveSessionToFolderAction(session, folderID)
@@ -609,10 +645,23 @@ private struct SessionFolderBrowserView: View {
     }
 
     private func performBatchDelete() {
-        let targets = selectedSessions
-        guard !targets.isEmpty else { return }
-        targets.forEach { deleteSessionAction($0) }
+        let targetSessions = selectedSessions
+        let targetFolders = selectedFolders
+        guard !targetSessions.isEmpty || !targetFolders.isEmpty else { return }
+        targetSessions.forEach { deleteSessionAction($0) }
+        targetFolders.forEach { deleteFolderAction($0) }
         selectedSessionIDs.removeAll()
+        selectedFolderIDs.removeAll()
+    }
+
+    private var batchDeleteMessage: String {
+        let folderText = selectedFolderIDs.isEmpty ? "" : "\(selectedFolderIDs.count) 个文件夹"
+        let sessionText = selectedSessionIDs.isEmpty ? "" : "\(selectedSessionIDs.count) 个会话"
+        let targetText = [folderText, sessionText]
+            .filter { !$0.isEmpty }
+            .joined(separator: "和")
+        let targetSummary = targetText.isEmpty ? "所选项目" : targetText
+        return "将删除 \(targetSummary)。文件夹内的会话会移回未分类，操作不可恢复。"
     }
 
     private func normalizeSessionPageIndex() {
@@ -764,6 +813,38 @@ private enum SessionMergedEntry: Identifiable {
 private struct SessionMoveTarget: Identifiable {
     let id: UUID
     let title: String
+}
+
+private struct BatchSelectableFolderRow: View {
+    let folder: SessionFolder
+    let sessionCount: Int
+    let isSelected: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                Image(systemName: "folder")
+                    .foregroundStyle(Color.accentColor)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(folder.name)
+                        .etFont(.footnote)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("\(sessionCount) 个会话")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 private struct BatchSelectableSessionRow: View {
