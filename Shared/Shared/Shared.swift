@@ -27,6 +27,10 @@ public enum ChatNavigationMode: String, CaseIterable, Identifiable {
     }
 }
 
+public enum SettingsIconAppearancePreference {
+    public static let storageKey = "ui.settingsColorfulIconsEnabled"
+}
+
 public enum AppLanguagePreference: String, CaseIterable, Identifiable {
     case system = "system"
     case simplifiedChinese = "zh-Hans"

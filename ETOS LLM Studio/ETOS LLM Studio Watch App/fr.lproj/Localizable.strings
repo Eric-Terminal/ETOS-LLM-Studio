@@ -1440,3 +1440,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "字号比例" = "Échelle de taille";
 "恢复默认字号" = "Rétablir la taille par défaut";
 "仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Ajuste uniquement la taille d’affichage des polices personnalisées, de 50 % à 200 % ; la taille dynamique du système continue de s’appliquer.";
+"彩色设置图标" = "Icônes de réglages colorées";
+"需要先将界面架构切换为“原生导航”才可开启彩色设置图标；沉浸浮层会继续使用单色线条图标。" = "Passez d’abord l’architecture d’interface sur « Navigation native » pour activer les icônes de réglages colorées ; le mode de superposition immersive conservera les icônes linéaires monochromes.";

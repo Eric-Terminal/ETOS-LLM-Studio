@@ -14,6 +14,7 @@ public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @ObservedObject private var achievementCenter = AchievementCenter.shared
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @State private var isShowingIntroDetails = false
     
     public init() {}
@@ -287,6 +288,7 @@ public struct ExtendedFeaturesView: View {
 
     private var usesNativeSettingsIcons: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+            && useColorfulSettingsIcons
     }
 
     @ViewBuilder
@@ -308,6 +310,7 @@ struct LongTermMemoryFeatureView: View {
     @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
     @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @State private var isShowingIntroDetails = false
     
     var body: some View {
@@ -417,6 +420,7 @@ struct LongTermMemoryFeatureView: View {
 
     private var usesNativeSettingsIcons: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+            && useColorfulSettingsIcons
     }
 
     @ViewBuilder

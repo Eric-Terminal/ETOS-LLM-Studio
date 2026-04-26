@@ -50,6 +50,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @State private var settingsResearchTask: Task<Void, Never>?
     private let embedsInNavigationStack: Bool
 
@@ -287,6 +288,7 @@ struct SettingsView: View {
 
     private var usesNativeSettingsIcons: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+            && useColorfulSettingsIcons
     }
 
     @ViewBuilder

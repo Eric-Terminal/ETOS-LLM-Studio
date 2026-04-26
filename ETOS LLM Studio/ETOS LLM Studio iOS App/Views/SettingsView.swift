@@ -37,6 +37,7 @@ struct SettingsView: View {
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -59,7 +60,7 @@ struct SettingsView: View {
                         )
                     } label: {
                         HStack(spacing: 8) {
-                            SettingsListIconView(icon: .currentModel)
+                            settingsListIcon(.currentModel)
                             Text("模型")
                             Text(selectedModelLabel(in: options))
                                 .lineLimit(1)
@@ -145,7 +146,7 @@ struct SettingsView: View {
                         .environmentObject(viewModel)
                 } label: {
                     HStack(spacing: 8) {
-                        SettingsListIconView(icon: .dailyPulse)
+                        settingsListIcon(.dailyPulse)
                         Text("每日脉冲")
                         Spacer()
                         if let status = dailyPulseEntryStatusText {
@@ -308,6 +309,15 @@ struct SettingsView: View {
 
     // MARK: - 辅助方法
 
+    @ViewBuilder
+    private func settingsListIcon(_ icon: SettingsListIcon) -> some View {
+        if useColorfulSettingsIcons {
+            SettingsListIconView(icon: icon)
+        } else {
+            SettingsListPlainIconView(icon: icon)
+        }
+    }
+
     /// 根据公告类型返回对应图标
     @ViewBuilder
     private func announcementIcon(for type: AnnouncementType) -> some View {
@@ -434,6 +444,7 @@ extension SettingsListIcon {
 struct SettingsListIconLabel: View {
     let title: LocalizedStringKey
     let icon: SettingsListIcon
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
 
     init(_ title: LocalizedStringKey, icon: SettingsListIcon) {
         self.title = title
@@ -442,9 +453,24 @@ struct SettingsListIconLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            SettingsListIconView(icon: icon)
+            if useColorfulSettingsIcons {
+                SettingsListIconView(icon: icon)
+            } else {
+                SettingsListPlainIconView(icon: icon)
+            }
             Text(title)
         }
+    }
+}
+
+struct SettingsListPlainIconView: View {
+    let icon: SettingsListIcon
+
+    var body: some View {
+        Image(systemName: icon.systemName)
+            .font(.system(size: 17, weight: .regular))
+            .frame(width: 20, height: 20)
+            .accessibilityHidden(true)
     }
 }
 

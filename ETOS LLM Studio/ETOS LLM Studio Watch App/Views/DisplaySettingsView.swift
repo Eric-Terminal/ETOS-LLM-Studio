@@ -28,6 +28,7 @@ struct DisplaySettingsView: View {
     @Binding var enableNoBubbleUI: Bool
 
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
     @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
@@ -114,6 +115,15 @@ struct DisplaySettingsView: View {
                 }
             } footer: {
                 Text("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("彩色设置图标", isOn: colorfulSettingsIconsBinding)
+                    .disabled(!canUseColorfulSettingsIcons)
+            } footer: {
+                Text("需要先将界面架构切换为“原生导航”才可开启彩色设置图标；沉浸浮层会继续使用单色线条图标。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -208,6 +218,12 @@ struct DisplaySettingsView: View {
                 enableAdvancedRenderer = false
             }
         }
+        .onAppear {
+            disableColorfulSettingsIconsIfNeeded()
+        }
+        .onChange(of: chatNavigationModeRawValue) { _, _ in
+            disableColorfulSettingsIconsIfNeeded()
+        }
     }
 
     private var hasAnyCustomColorOverride: Bool {
@@ -267,6 +283,23 @@ struct DisplaySettingsView: View {
             get: { ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) },
             set: { chatNavigationModeRawValue = $0.rawValue }
         )
+    }
+
+    private var canUseColorfulSettingsIcons: Bool {
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+
+    private var colorfulSettingsIconsBinding: Binding<Bool> {
+        Binding(
+            get: { canUseColorfulSettingsIcons && useColorfulSettingsIcons },
+            set: { useColorfulSettingsIcons = canUseColorfulSettingsIcons && $0 }
+        )
+    }
+
+    private func disableColorfulSettingsIconsIfNeeded() {
+        if !canUseColorfulSettingsIcons {
+            useColorfulSettingsIcons = false
+        }
     }
 
     private var appLanguageBinding: Binding<String> {

@@ -1675,3 +1675,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "字号比例" = "Escala de tamaño";
 "恢复默认字号" = "Restaurar tamaño predeterminado";
 "仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Solo ajusta el tamaño de visualización de las fuentes personalizadas, de 50% a 200%; el tamaño dinámico del sistema sigue aplicándose.";
+"彩色设置图标" = "Iconos de ajustes coloridos";
+"开启后，设置入口会使用彩色圆形图标；关闭后恢复单色线条图标。" = "Al activarlo, las entradas de ajustes usan iconos circulares coloridos; al desactivarlo, vuelven a iconos lineales monocromos.";

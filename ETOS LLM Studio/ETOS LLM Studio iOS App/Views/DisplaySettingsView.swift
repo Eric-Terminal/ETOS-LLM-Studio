@@ -25,6 +25,7 @@ struct DisplaySettingsView: View {
     @Binding var enableNoBubbleUI: Bool
 
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
     @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
@@ -106,6 +107,14 @@ struct DisplaySettingsView: View {
                 .pickerStyle(.segmented)
             } footer: {
                 Text("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。")
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("彩色设置图标", isOn: $useColorfulSettingsIcons)
+            } footer: {
+                Text("开启后，设置入口会使用彩色圆形图标；关闭后恢复单色线条图标。")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

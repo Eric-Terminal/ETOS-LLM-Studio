@@ -1440,3 +1440,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "字号比例" = "Escala de tamaño";
 "恢复默认字号" = "Restaurar tamaño predeterminado";
 "仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Solo ajusta el tamaño de visualización de las fuentes personalizadas, de 50% a 200%; el tamaño dinámico del sistema sigue aplicándose.";
+"彩色设置图标" = "Iconos de ajustes coloridos";
+"需要先将界面架构切换为“原生导航”才可开启彩色设置图标；沉浸浮层会继续使用单色线条图标。" = "Cambia primero la arquitectura de interfaz a «Navegación nativa» para activar los iconos de ajustes coloridos; la superposición inmersiva seguirá usando iconos lineales monocromos.";
