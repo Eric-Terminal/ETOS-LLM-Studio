@@ -256,6 +256,7 @@ struct DisplaySettingsView: View {
         fallback: Color,
         description: String
     ) -> some View {
+        let localizedTitle = NSLocalizedString(title, comment: "")
         NavigationLink {
             WatchColorEditorView(
                 title: title,
@@ -265,7 +266,7 @@ struct DisplaySettingsView: View {
             )
         } label: {
             HStack(spacing: 8) {
-                Text("设置\(title)")
+                Text(String(format: NSLocalizedString("设置%@", comment: ""), localizedTitle))
                 Spacer(minLength: 8)
                 Circle()
                     .fill(ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback))
@@ -355,7 +356,7 @@ private struct WatchColorEditorView: View {
     var body: some View {
         Form {
             Section {
-                Text(description)
+                Text(LocalizedStringKey(description))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -397,7 +398,7 @@ private struct WatchColorEditorView: View {
                 }
             }
         }
-        .navigationTitle(title)
+        .navigationTitle(LocalizedStringKey(title))
         .onAppear {
             loadFromHex()
         }
@@ -419,7 +420,7 @@ private struct WatchColorEditorView: View {
     private func channelSlider(title: String, value: Binding<Double>, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(title)
+                Text(LocalizedStringKey(title))
                 Spacer(minLength: 8)
                 Text("\(Int((value.wrappedValue * 255).rounded()))")
                     .foregroundStyle(.secondary)
