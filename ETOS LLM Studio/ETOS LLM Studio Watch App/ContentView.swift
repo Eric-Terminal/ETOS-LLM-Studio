@@ -309,6 +309,11 @@ struct ContentView: View {
     private var legacyChatRootView: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
+                if isNativeNavigationEnabled {
+                    chatBackgroundLayer
+                        .ignoresSafeArea()
+                }
+
                 chatList(proxy: proxy)
 
                 if showScrollToBottomButton {
