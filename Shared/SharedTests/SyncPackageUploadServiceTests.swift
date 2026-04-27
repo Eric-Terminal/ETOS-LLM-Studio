@@ -93,7 +93,7 @@ struct SyncPackageUploadServiceTests {
         } catch let error as SyncPackageUploadError {
             switch error {
             case .invalidHTTPResponse:
-                #expect(true)
+                break
             default:
                 Issue.record("错误类型不符合预期：\(error.localizedDescription)")
             }

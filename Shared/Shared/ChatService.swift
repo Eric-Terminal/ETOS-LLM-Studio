@@ -1063,7 +1063,7 @@ public class ChatService {
         }
 
         let cancelledImageContext = activeContext.imageGenerationContext
-        withRequestStateLock {
+        _ = withRequestStateLock {
             requestContextBySessionID.removeValue(forKey: sessionID)
         }
         setSessionRunning(sessionID, isRunning: false)
