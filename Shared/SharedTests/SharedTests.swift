@@ -2994,8 +2994,8 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
-    @Test("重试 assistant 流式出首字后断开会保留半截新版本并追加错误气泡")
-    func testRetryAssistantStreamingFailureAfterFirstTokenKeepsPartialVersion() async {
+    @Test("重试尾部 assistant 流式出首字后断开会在断点后续跑并追加错误气泡")
+    func testRetryTailAssistantStreamingFailureAfterFirstTokenContinuesFromTail() async {
         await cleanup()
 
         RetryStreamingFailureURLProtocol.reset()
@@ -3039,19 +3039,20 @@ fileprivate struct ChatServiceTests {
         )
 
         let messages = streamingService.messagesForSessionSubject.value
-        #expect(messages.count == 3)
+        #expect(messages.count == 4)
 
-        guard let retriedAssistant = messages.first(where: { $0.id == assistantMessage.id }) else {
-            Issue.record("未找到重试后的 assistant 消息。")
+        guard let originalAssistant = messages.first(where: { $0.id == assistantMessage.id }) else {
+            Issue.record("未找到原始 assistant 消息。")
             await cleanup()
             return
         }
-        #expect(retriedAssistant.role == .assistant)
-        #expect(retriedAssistant.content == "新版本半截回复")
-        #expect(retriedAssistant.getAllVersions().count == 2)
-        #expect(retriedAssistant.getAllVersions().contains("旧版本回复"))
-        #expect(retriedAssistant.getAllVersions().contains("新版本半截回复"))
-        #expect(retriedAssistant.getAllVersions().contains(where: { $0.contains("重试失败") }) == false)
+        #expect(originalAssistant.role == .assistant)
+        #expect(originalAssistant.content == "旧版本回复")
+        #expect(originalAssistant.getAllVersions().count == 1)
+
+        let continuedAssistant = messages.dropFirst(2).first { $0.role == .assistant }
+        #expect(continuedAssistant?.content == "新版本半截回复")
+        #expect(continuedAssistant?.getAllVersions().count == 1)
 
         let errorMessage = messages.last
         #expect(errorMessage?.role == .error)
@@ -3106,6 +3107,83 @@ fileprivate struct ChatServiceTests {
         #expect(latestError?.role == .error)
         #expect(latestError?.content.contains("重试失败") == true)
         #expect(latestError?.content.contains("HTTP 500") == true)
+
+        await cleanup()
+    }
+
+    @Test("重试尾部 error 会清理错误并沿同一工具调用回合续跑")
+    func testRetryTailErrorContinuesCurrentToolAttempt() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证尾部 error 续跑行为。")
+            await cleanup()
+            return
+        }
+
+        setupMockResponsesForChatAndTitle()
+
+        let attemptID = UUID()
+        let toolCall = InternalToolCall(
+            id: "call_continue_tail",
+            toolName: "search_memory",
+            arguments: #"{"query":"断点"}"#,
+            result: "工具结果"
+        )
+        let userMessage = ChatMessage(
+            role: .user,
+            content: "从工具结果继续",
+            selectedResponseAttemptID: attemptID
+        )
+        let toolCallingAssistant = ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [toolCall],
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        let toolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            toolCalls: [toolCall],
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        let errorMessage = ChatMessage(
+            role: .error,
+            content: "流式传输错误",
+            responseGroupID: userMessage.id,
+            responseAttemptID: attemptID,
+            responseAttemptIndex: 0
+        )
+        chatService.updateMessages([userMessage, toolCallingAssistant, toolResult, errorMessage], for: sessionID)
+
+        await chatService.retryMessage(
+            errorMessage,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.map(\.role) == [.user, .assistant, .tool, .assistant])
+        #expect(!messages.contains(where: { $0.id == errorMessage.id }))
+        #expect(messages.last?.content == "聊天回复")
+        #expect(messages.last?.responseAttemptID == attemptID)
+        #expect(messages.first?.selectedResponseAttemptID == attemptID)
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        #expect(sentMessages.contains(where: { $0.id == toolCallingAssistant.id }))
+        #expect(sentMessages.contains(where: { $0.id == toolResult.id }))
+        #expect(!sentMessages.contains(where: { $0.id == errorMessage.id }))
 
         await cleanup()
     }

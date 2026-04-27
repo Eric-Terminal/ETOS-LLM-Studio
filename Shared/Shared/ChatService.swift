@@ -2187,6 +2187,63 @@ public class ChatService {
         return newAttempt
     }
 
+    private func isTailContinuationRetryTarget(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
+        guard message.role == .assistant || message.role == .error else { return false }
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        guard let visibleIndex = visibleMessages.firstIndex(where: { $0.id == message.id }) else { return false }
+        let trailingMessages = visibleMessages[visibleMessages.index(after: visibleIndex)...]
+        return !trailingMessages.contains { trailingMessage in
+            switch trailingMessage.role {
+            case .user, .assistant, .tool, .error:
+                return true
+            case .system:
+                return false
+            }
+        }
+    }
+
+    private func continuationAttemptMetadata(
+        for message: ChatMessage,
+        in messages: [ChatMessage],
+        anchorUserIndex: Int,
+        targetIndex: Int
+    ) -> ResponseAttemptMetadata? {
+        if let metadata = responseAttemptMetadata(from: message) {
+            return metadata
+        }
+
+        let anchorUser = messages[anchorUserIndex]
+        if let selectedAttemptID = anchorUser.selectedResponseAttemptID {
+            let attemptIndex = messages
+                .filter { $0.responseGroupID == anchorUser.id && $0.responseAttemptID == selectedAttemptID }
+                .compactMap(\.responseAttemptIndex)
+                .min() ?? 0
+            return ResponseAttemptMetadata(
+                groupID: anchorUser.id,
+                attemptID: selectedAttemptID,
+                attemptIndex: attemptIndex
+            )
+        }
+
+        guard targetIndex > anchorUserIndex else { return nil }
+        return messages[anchorUserIndex...targetIndex]
+            .reversed()
+            .compactMap { responseAttemptMetadata(from: $0) }
+            .first
+    }
+
+    private func continuationInsertionIndex(
+        in messages: [ChatMessage],
+        referenceIndex: Int,
+        metadata: ResponseAttemptMetadata?
+    ) -> Int {
+        if let attemptID = metadata?.attemptID,
+           let lastAttemptIndex = messages.lastIndex(where: { $0.responseAttemptID == attemptID }) {
+            return messages.index(after: lastAttemptIndex)
+        }
+        return messages.index(after: referenceIndex)
+    }
+
     /// 规范化历史中的工具调用链，避免把不完整/损坏的工具消息带入下一次请求。
     /// 这一步会：
     /// 1. 丢弃无法关联到 assistant.toolCalls 的孤立 tool 消息；
@@ -3618,26 +3675,58 @@ public class ChatService {
             return
         }
         registerRetryAchievementAttempt(sessionID: currentSession.id, content: messageToSend.content)
+        let shouldContinueFromTail = isTailContinuationRetryTarget(message, in: messages)
 
         // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
         // 否则取消流程会把刚创建的请求上下文提前清理
         await cancelOngoingRequest()
 
         var updatedMessages = messages
-        let responseAttempt = prepareRetryAttemptMetadata(
-            in: &updatedMessages,
-            anchorUserIndex: anchorUserIndex
-        )
         let retryRequestedAt = Date()
-        let loadingMessage = ChatMessage(
-            role: .assistant,
-            content: "",
-            requestedAt: retryRequestedAt,
-            responseGroupID: responseAttempt.groupID,
-            responseAttemptID: responseAttempt.attemptID,
-            responseAttemptIndex: responseAttempt.attemptIndex
-        )
-        let insertionIndex = responseRoundEndIndex(in: updatedMessages, anchorUserIndex: anchorUserIndex)
+        let loadingMessage: ChatMessage
+        let insertionIndex: Int
+        if shouldContinueFromTail {
+            let metadata = continuationAttemptMetadata(
+                for: message,
+                in: updatedMessages,
+                anchorUserIndex: anchorUserIndex,
+                targetIndex: messageIndex
+            )
+            if message.role == .error {
+                updatedMessages.remove(at: messageIndex)
+            }
+            let referenceIndex = min(message.role == .error ? messageIndex - 1 : messageIndex, updatedMessages.index(before: updatedMessages.endIndex))
+            var continuationLoadingMessage = ChatMessage(
+                role: .assistant,
+                content: "",
+                requestedAt: retryRequestedAt
+            )
+            applyResponseAttemptMetadata(metadata, to: &continuationLoadingMessage)
+            if let metadata,
+               let anchorIndex = updatedMessages.firstIndex(where: { $0.id == metadata.groupID && $0.role == .user }) {
+                updatedMessages[anchorIndex].selectedResponseAttemptID = metadata.attemptID
+            }
+            loadingMessage = continuationLoadingMessage
+            insertionIndex = continuationInsertionIndex(
+                in: updatedMessages,
+                referenceIndex: max(anchorUserIndex, referenceIndex),
+                metadata: metadata
+            )
+        } else {
+            let responseAttempt = prepareRetryAttemptMetadata(
+                in: &updatedMessages,
+                anchorUserIndex: anchorUserIndex
+            )
+            loadingMessage = ChatMessage(
+                role: .assistant,
+                content: "",
+                requestedAt: retryRequestedAt,
+                responseGroupID: responseAttempt.groupID,
+                responseAttemptID: responseAttempt.attemptID,
+                responseAttemptIndex: responseAttempt.attemptIndex
+            )
+            insertionIndex = responseRoundEndIndex(in: updatedMessages, anchorUserIndex: anchorUserIndex)
+        }
         updatedMessages.insert(loadingMessage, at: insertionIndex)
         messageToSend = updatedMessages[anchorUserIndex]
         retryTargetMessageID = nil
