@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Combine
 @testable import Shared
 
 @Suite("TTS 模型选择测试")
@@ -74,6 +75,68 @@ struct TTSModelSelectionTests {
 
         #expect(activated.isEmpty)
         #expect(service.resolveSelectedTTSModel() == nil)
+    }
+
+    @Test("删除当前选中提供商后会切换到可用模型")
+    func testDeletingSelectedProviderReconcilesSelectedModel() {
+        let selectedModelKey = "selectedRunnableModelID"
+        let backupProviders = ConfigLoader.loadProviders()
+        let backupSelectedModelID = UserDefaults.standard.string(forKey: selectedModelKey)
+        defer {
+            restoreProviders(backupProviders)
+            if let backupSelectedModelID {
+                UserDefaults.standard.set(backupSelectedModelID, forKey: selectedModelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedModelKey)
+            }
+        }
+
+        clearAllProviders()
+
+        let deletedModel = Model(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            modelName: "deleted-model",
+            displayName: "待删除模型",
+            isActivated: true,
+            capabilities: [.chat]
+        )
+        let fallbackModel = Model(
+            id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+            modelName: "fallback-model",
+            displayName: "备用模型",
+            isActivated: true,
+            capabilities: [.chat]
+        )
+        let deletedProvider = Provider(
+            id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+            name: "待删除提供商",
+            baseURL: "https://deleted.example.com/v1",
+            apiKeys: ["deleted-key"],
+            apiFormat: "openai-compatible",
+            models: [deletedModel]
+        )
+        let fallbackProvider = Provider(
+            id: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
+            name: "备用提供商",
+            baseURL: "https://fallback.example.com/v1",
+            apiKeys: ["fallback-key"],
+            apiFormat: "openai-compatible",
+            models: [fallbackModel]
+        )
+        ConfigLoader.saveProvider(deletedProvider)
+        ConfigLoader.saveProvider(fallbackProvider)
+
+        let service = ChatService()
+        let deletedRunnable = RunnableModel(provider: deletedProvider, model: deletedModel)
+        let fallbackRunnable = RunnableModel(provider: fallbackProvider, model: fallbackModel)
+        service.setSelectedModel(deletedRunnable)
+
+        service.deleteProvider(deletedProvider)
+
+        #expect(!service.providersSubject.value.contains(where: { $0.id == deletedProvider.id }))
+        #expect(!service.configuredRunnableModels.contains(where: { $0.id == deletedRunnable.id }))
+        #expect(service.selectedModelSubject.value?.id == fallbackRunnable.id)
+        #expect(UserDefaults.standard.string(forKey: selectedModelKey) == fallbackRunnable.id)
     }
 
     @Test("文本分片函数会按标点与长度切分")

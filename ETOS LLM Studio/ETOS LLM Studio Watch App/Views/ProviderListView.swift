@@ -98,8 +98,7 @@ private struct WatchProviderManagementContentView: View {
     }
 
     private func deleteProvider(_ provider: Provider) {
-        ConfigLoader.deleteProvider(provider)
-        ChatService.shared.reloadProviders()
+        ChatService.shared.deleteProvider(provider)
     }
 }
 
