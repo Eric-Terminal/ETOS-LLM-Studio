@@ -57,6 +57,7 @@ public class ChatService {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
     private static let modelOrderStorageKey = "modelOrder.runnableModels"
+    private static let selectedRunnableModelStorageKey = "selectedRunnableModelID"
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
     private static let ttsModelStorageKey = "ttsModelIdentifier"
     private static let conversationSummaryModelStorageKey = "conversationSummaryModelIdentifier"
@@ -606,7 +607,7 @@ public class ChatService {
             }
             .store(in: &cancellables)
         
-        let savedModelID = UserDefaults.standard.string(forKey: "selectedRunnableModelID")
+        let savedModelID = UserDefaults.standard.string(forKey: Self.selectedRunnableModelStorageKey)
         let allRunnable = activatedRunnableModels
         var initialModel: RunnableModel? = allRunnable.first { $0.id == savedModelID }
         if initialModel == nil {
@@ -765,41 +766,49 @@ public class ChatService {
         guard let session, !session.isTemporary else { return }
         UserDefaults.standard.set(session.id.uuidString, forKey: Self.lastActiveSessionIDStorageKey)
     }
+
+    private func persistSelectedRunnableModelID(_ modelID: String?) {
+        if let modelID {
+            UserDefaults.standard.set(modelID, forKey: Self.selectedRunnableModelStorageKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.selectedRunnableModelStorageKey)
+        }
+    }
     
     // MARK: - 公开方法 (配置管理)
 
     public func reloadProviders() {
         logger.info("正在重新加载提供商配置...")
-        let currentSelectedID = selectedModelSubject.value?.id // 1. 记住当前选中模型的 ID
+        let currentSelectedID = selectedModelSubject.value?.id
 
-        self.providers = ConfigLoader.loadProviders() // 2. 从磁盘重载
+        self.providers = ConfigLoader.loadProviders()
         self.reconcileStoredModelOrder()
-        providersSubject.send(self.providers)
 
-        let allRunnable = activatedRunnableModels // 3. 获取新的模型列表
-
-        var newSelectedModel: RunnableModel? = nil
+        let allRunnable = activatedRunnableModels
+        var newSelectedModel: RunnableModel?
         if let currentID = currentSelectedID {
-            // 4. 在新列表中找到对应的模型
             newSelectedModel = allRunnable.first { $0.id == currentID }
         }
-
-        // 如果找不到（比如被删了或停用了），就用列表里第一个
         if newSelectedModel == nil {
             newSelectedModel = allRunnable.first
         }
 
-        // 5. **关键**: 用新的模型对象强制更新当前选中的模型
         selectedModelSubject.send(newSelectedModel)
-        // (我们直接操作 subject, 以绕过 setSelectedModel 里的“无变化则不更新”的检查)
-        
+        persistSelectedRunnableModelID(newSelectedModel?.id)
+        providersSubject.send(self.providers)
+
         logger.info("提供商配置已刷新，并已更新当前选中模型。")
+    }
+
+    public func deleteProvider(_ provider: Provider) {
+        ConfigLoader.deleteProvider(provider)
+        reloadProviders()
     }
 
     public func setSelectedModel(_ model: RunnableModel?) {
         guard selectedModelSubject.value?.id != model?.id else { return }
         selectedModelSubject.send(model)
-        UserDefaults.standard.set(model?.id, forKey: "selectedRunnableModelID")
+        persistSelectedRunnableModelID(model?.id)
         logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
         AppLog.userOperation(
             category: "模型",

@@ -149,8 +149,7 @@ private struct ProviderManagementContentView: View {
         .alert("确认删除提供商", isPresented: $showDeleteAlert) {
             Button("删除", role: .destructive) {
                 if let target = providerToDelete {
-                    ConfigLoader.deleteProvider(target)
-                    ChatService.shared.reloadProviders()
+                    ChatService.shared.deleteProvider(target)
                 }
                 providerToDelete = nil
             }
