@@ -306,6 +306,7 @@ class ChatViewModel: ObservableObject {
         cache.countLimit = 6
         return cache
     }()
+    private var globalSystemPromptReloadTask: Task<Void, Never>?
     private var backgroundBlurTask: Task<Void, Never>?
 
     enum ImageGenerationFeedbackPhase {
@@ -385,11 +386,19 @@ class ChatViewModel: ObservableObject {
 
     private func reloadGlobalSystemPromptEntries() {
         guard !isPersistingGlobalSystemPrompts else { return }
-        let snapshot = GlobalSystemPromptStore.load()
-        applyGlobalSystemPromptSnapshot(snapshot)
+        globalSystemPromptReloadTask?.cancel()
+        globalSystemPromptReloadTask = Task { [weak self] in
+            let snapshot = await Task.detached(priority: .utility) {
+                GlobalSystemPromptStore.load()
+            }.value
+
+            guard let self, !Task.isCancelled, !self.isPersistingGlobalSystemPrompts else { return }
+            self.applyGlobalSystemPromptSnapshot(snapshot)
+        }
     }
 
     private func persistGlobalSystemPromptEntries(selectedEntryID: UUID?) {
+        globalSystemPromptReloadTask?.cancel()
         isPersistingGlobalSystemPrompts = true
         let snapshot = GlobalSystemPromptStore.save(
             entries: globalSystemPromptEntries,
@@ -579,7 +588,7 @@ class ChatViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+        NotificationCenter.default.publisher(for: .globalSystemPromptStoreDidChange)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.reloadGlobalSystemPromptEntries()

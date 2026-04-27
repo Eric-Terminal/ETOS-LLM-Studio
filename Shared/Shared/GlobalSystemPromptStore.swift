@@ -9,7 +9,11 @@
 import Foundation
 import GRDB
 
-public struct GlobalSystemPromptEntry: Codable, Equatable, Identifiable {
+public extension Notification.Name {
+    static let globalSystemPromptStoreDidChange = Notification.Name("com.ETOS.globalSystemPrompt.storeDidChange")
+}
+
+public struct GlobalSystemPromptEntry: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var title: String
     public var content: String
@@ -28,7 +32,7 @@ public struct GlobalSystemPromptEntry: Codable, Equatable, Identifiable {
     }
 }
 
-public struct GlobalSystemPromptSnapshot: Equatable {
+public struct GlobalSystemPromptSnapshot: Equatable, Sendable {
     public var entries: [GlobalSystemPromptEntry]
     public var selectedEntryID: UUID?
     public var activeSystemPrompt: String
@@ -105,6 +109,7 @@ public enum GlobalSystemPromptStore {
         } else {
             mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: true)
         }
+        NotificationCenter.default.post(name: .globalSystemPromptStoreDidChange, object: nil)
         return snapshot
     }
 
@@ -204,31 +209,53 @@ public enum GlobalSystemPromptStore {
         )
     }
 
+    @discardableResult
     private static func mirrorCompatibilityFields(
         _ snapshot: GlobalSystemPromptSnapshot,
         userDefaults: UserDefaults,
         includeListInUserDefaults: Bool
-    ) {
+    ) -> Bool {
+        var didChange = false
+
         if includeListInUserDefaults {
             if snapshot.entries.isEmpty {
-                userDefaults.removeObject(forKey: entriesStorageKey)
-                userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
+                didChange = removeObjectIfNeeded(forKey: entriesStorageKey, in: userDefaults) || didChange
+                didChange = removeObjectIfNeeded(forKey: selectedEntryIDStorageKey, in: userDefaults) || didChange
             } else {
                 if let encoded = try? JSONEncoder().encode(snapshot.entries) {
-                    userDefaults.set(encoded, forKey: entriesStorageKey)
+                    didChange = setDataIfNeeded(encoded, forKey: entriesStorageKey, in: userDefaults) || didChange
                 }
                 if let selectedEntryID = snapshot.selectedEntryID {
-                    userDefaults.set(selectedEntryID.uuidString, forKey: selectedEntryIDStorageKey)
+                    didChange = setStringIfNeeded(selectedEntryID.uuidString, forKey: selectedEntryIDStorageKey, in: userDefaults) || didChange
                 } else {
-                    userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
+                    didChange = removeObjectIfNeeded(forKey: selectedEntryIDStorageKey, in: userDefaults) || didChange
                 }
             }
         } else {
-            userDefaults.removeObject(forKey: entriesStorageKey)
-            userDefaults.removeObject(forKey: selectedEntryIDStorageKey)
+            didChange = removeObjectIfNeeded(forKey: entriesStorageKey, in: userDefaults) || didChange
+            didChange = removeObjectIfNeeded(forKey: selectedEntryIDStorageKey, in: userDefaults) || didChange
         }
 
-        userDefaults.set(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey)
+        didChange = setStringIfNeeded(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
+        return didChange
+    }
+
+    private static func setDataIfNeeded(_ value: Data, forKey key: String, in userDefaults: UserDefaults) -> Bool {
+        guard userDefaults.data(forKey: key) != value else { return false }
+        userDefaults.set(value, forKey: key)
+        return true
+    }
+
+    private static func setStringIfNeeded(_ value: String, forKey key: String, in userDefaults: UserDefaults) -> Bool {
+        guard userDefaults.string(forKey: key) != value else { return false }
+        userDefaults.set(value, forKey: key)
+        return true
+    }
+
+    private static func removeObjectIfNeeded(forKey key: String, in userDefaults: UserDefaults) -> Bool {
+        guard userDefaults.object(forKey: key) != nil else { return false }
+        userDefaults.removeObject(forKey: key)
+        return true
     }
 
     private static func decodeEntries(from data: Data?) -> [GlobalSystemPromptEntry] {
