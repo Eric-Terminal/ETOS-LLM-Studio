@@ -985,6 +985,7 @@ public class ChatService {
         }
 
         if let loadingID = activeContext.loadingMessageID {
+            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingID, in: sessionID)
             if restoreRetryTargetMessageIfNeeded(loadingMessageID: loadingID, in: sessionID) {
                 logger.info("已恢复被取消重试的原始 assistant 消息: \(loadingID.uuidString)")
             } else if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
@@ -1812,7 +1813,8 @@ public class ChatService {
 
         // 找到正在加载中的消息
         if let loadingIndex {
-            let loadingMessage = messages[loadingIndex]
+            let loadingMessage = finalizeInterruptedReasoningMessage(messages[loadingIndex])
+            messages[loadingIndex] = loadingMessage
             let loadingAttemptMetadata = responseAttemptMetadata(from: loadingMessage)
             let shouldPreserveLoadingMessage = messageHasDisplayablePayload(loadingMessage)
 
@@ -4233,6 +4235,46 @@ public class ChatService {
         )
     }
 
+    private func ensureReasoningTimingIfNeeded(
+        for message: inout ChatMessage,
+        fallbackRequestStartedAt: Date? = nil,
+        fallbackCompletedAt: Date? = nil
+    ) {
+        let reasoning = (message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reasoning.isEmpty else { return }
+
+        var metrics = message.responseMetrics ?? MessageResponseMetrics()
+        if metrics.reasoningStartedAt == nil {
+            metrics.reasoningStartedAt = metrics.requestStartedAt
+                ?? fallbackRequestStartedAt
+                ?? message.requestedAt
+                ?? metrics.responseCompletedAt
+                ?? fallbackCompletedAt
+        }
+        if metrics.reasoningCompletedAt == nil {
+            metrics.reasoningCompletedAt = fallbackCompletedAt
+                ?? metrics.responseCompletedAt
+                ?? metrics.reasoningStartedAt
+        }
+        message.responseMetrics = metrics
+    }
+
+    private func finalizeInterruptedReasoningMessage(_ message: ChatMessage, completedAt: Date = Date()) -> ChatMessage {
+        var updated = message
+        let reasoning = (updated.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reasoning.isEmpty else { return updated }
+
+        var metrics = updated.responseMetrics ?? MessageResponseMetrics()
+        if metrics.reasoningStartedAt == nil {
+            metrics.reasoningStartedAt = metrics.requestStartedAt ?? updated.requestedAt ?? completedAt
+        }
+        if metrics.reasoningCompletedAt == nil {
+            metrics.reasoningCompletedAt = completedAt
+        }
+        updated.responseMetrics = metrics
+        return updated
+    }
+
     /// 仅在内存中保留“最近一条助手消息”的流式速度采样，避免历史样本长期占用内存。
     private func normalizedMessagesForRuntime(
         _ messages: [ChatMessage],
@@ -4769,9 +4811,9 @@ public class ChatService {
             
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
+                let responseCompletedAt = Date()
+                let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                 if enableResponseSpeedMetrics {
-                    let responseCompletedAt = Date()
-                    let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                     let completionTokens = parsedMessage.tokenUsage?.completionTokens
                     parsedMessage.responseMetrics = makeResponseMetrics(
                         requestStartedAt: requestStartedAt,
@@ -4781,6 +4823,13 @@ public class ChatService {
                         completionTokensForSpeed: completionTokens,
                         tokenPerSecond: tokenPerSecond(tokens: completionTokens, elapsed: totalDuration),
                         isEstimated: false
+                    )
+                }
+                if !(parsedMessage.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ensureReasoningTimingIfNeeded(
+                        for: &parsedMessage,
+                        fallbackRequestStartedAt: requestStartedAt,
+                        fallbackCompletedAt: responseCompletedAt
                     )
                 }
                 persistRequestLog(
@@ -4911,6 +4960,7 @@ public class ChatService {
                 }
             }
         }
+        ensureReasoningTimingIfNeeded(for: &responseMessage)
 
         let inlineImageExtraction = await extractInlineImagesFromMarkdown(responseMessage.content)
         if !inlineImageExtraction.imageFileNames.isEmpty {
@@ -5348,6 +5398,12 @@ public class ChatService {
                     fallbackCompletedAt: Date()
                 )
                 finalResponseCompletedAtForLog = responseCompletedAt
+                if reasoningStartedAt == nil,
+                   !extractedReasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    reasoningStartedAt = requestStartedAt
+                    reasoningLastDeltaAt = lastGeneratedDeltaAt ?? responseCompletedAt
+                    reasoningCompletedAt = responseCompletedAt
+                }
                 if reasoningStartedAt != nil && reasoningCompletedAt == nil {
                     reasoningCompletedAt = reasoningLastDeltaAt ?? responseCompletedAt
                 }
@@ -5426,6 +5482,7 @@ public class ChatService {
 
         } catch is CancellationError {
             logger.info("流式请求在处理中被取消。")
+            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .cancelled,
@@ -5459,6 +5516,7 @@ public class ChatService {
             // 检测是否为取消错误（URLError.cancelled 不会匹配 CancellationError）
             if isCancellationError(error) {
                 logger.info("流式请求在处理中被取消 (URLError)。")
+                finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .cancelled,
@@ -5498,6 +5556,15 @@ public class ChatService {
             return false
         }
         return !messageHasDisplayablePayload(message)
+    }
+
+    private func finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) {
+        var messages = messagesSnapshot(for: sessionID)
+        guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
+        let finalizedMessage = finalizeInterruptedReasoningMessage(messages[index])
+        guard finalizedMessage != messages[index] else { return }
+        messages[index] = finalizedMessage
+        persistAndPublishMessages(messages, for: sessionID)
     }
 
     private func restoreRetryTargetMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) -> Bool {

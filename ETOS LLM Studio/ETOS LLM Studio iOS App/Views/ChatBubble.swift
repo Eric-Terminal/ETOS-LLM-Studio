@@ -411,11 +411,17 @@ struct ChatBubble: View {
     }
 
     private var reasoningStartedAt: Date? {
-        message.responseMetrics?.reasoningStartedAt
+        if let reasoningStartedAt = message.responseMetrics?.reasoningStartedAt {
+            return reasoningStartedAt
+        }
+        if showsStreamingIndicators {
+            return message.responseMetrics?.requestStartedAt ?? message.requestedAt
+        }
+        return nil
     }
 
     private var reasoningCompletedAt: Date? {
-        message.responseMetrics?.reasoningCompletedAt
+        message.responseMetrics?.reasoningCompletedAt ?? message.responseMetrics?.responseCompletedAt
     }
 
     private var resolvedToolCallsPlacement: ToolCallsPlacement {
@@ -2092,7 +2098,8 @@ private struct TimelineReasoningStepView: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        if reasoningCompletedAt == nil,
+        if reasoningStartedAt == nil,
+           reasoningCompletedAt == nil,
            let thinkingTitle = preparedReasoningContent?.thinkingTitle,
            !thinkingTitle.isEmpty {
             return thinkingTitle
@@ -2461,7 +2468,8 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        if reasoningCompletedAt == nil,
+        if reasoningStartedAt == nil,
+           reasoningCompletedAt == nil,
            let thinkingTitle = preparedReasoningContent?.thinkingTitle,
            !thinkingTitle.isEmpty {
             return thinkingTitle
