@@ -292,6 +292,7 @@ public enum AppToolSQLiteDatabase: String, CaseIterable, Identifiable, Hashable,
 public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable {
     case showWidget = "show_widget"
     case askUserInput = "ask_user_input"
+    case getSystemTime = "get_system_time"
     case echoText = "echo_text"
     case fillUserInput = "fill_user_input"
     case editMemory = "edit_memory"
@@ -318,7 +319,7 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     public var requiresApproval: Bool {
         switch self {
-        case .showWidget, .askUserInput:
+        case .showWidget, .askUserInput, .getSystemTime:
             return false
         default:
             return true
@@ -331,6 +332,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_show_widget"
         case .askUserInput:
             return "app_ask_user_input"
+        case .getSystemTime:
+            return "app_get_system_time"
         case .echoText:
             return "app_echo_text"
         case .fillUserInput:
@@ -382,6 +385,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("显示网页卡片", comment: "Show widget tool name")
         case .askUserInput:
             return NSLocalizedString("询问用户选项", comment: "Ask user input tool name")
+        case .getSystemTime:
+            return NSLocalizedString("获取系统时间", comment: "Get system time tool name")
         case .echoText:
             return NSLocalizedString("示例：文本回显", comment: "Example echo tool name")
         case .fillUserInput:
@@ -433,6 +438,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("在聊天中渲染可视化网页卡片（Widget）。", comment: "Show widget tool summary")
         case .askUserInput:
             return NSLocalizedString("弹出结构化问答面板，支持单选、多选和“其他输入”。", comment: "Ask user input tool summary")
+        case .getSystemTime:
+            return NSLocalizedString("返回当前设备系统时间。", comment: "Get system time tool summary")
         case .echoText:
             return NSLocalizedString("把传入文本原样返回，用于验证拓展工具链路是否正常。", comment: "Example echo tool summary")
         case .fillUserInput:
@@ -484,6 +491,8 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：显示网页卡片", comment: "Show widget tool detail description")
         case .askUserInput:
             return NSLocalizedString("工具详情：询问用户选项", comment: "Ask user input tool detail description")
+        case .getSystemTime:
+            return NSLocalizedString("工具详情：获取系统时间", comment: "Get system time tool detail description")
         case .echoText:
             return NSLocalizedString("示例工具详情：文本回显", comment: "Example echo tool detail description")
         case .fillUserInput:
@@ -628,6 +637,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                     ])
                 ]),
                 "required": .array([.string("questions")])
+            ])
+        case .getSystemTime:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([:])
             ])
         case .echoText:
             return JSONValue.dictionary([
@@ -1067,6 +1081,11 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
                 "向用户展示结构化问答面板。支持 single_select / multi_select、可选的“其他输入”、必填校验与自定义提交按钮文案。此工具用于在回答前收集关键信息，调用后应等待用户补充。",
                 comment: "Ask user input tool description sent to model"
             )
+        case .getSystemTime:
+            return NSLocalizedString(
+                "获取当前设备系统时间。无需参数；当用户询问当前时间、日期或需要实时本地时间线索时调用。",
+                comment: "Get system time tool description sent to model"
+            )
         case .echoText:
             return NSLocalizedString(
                 "示例工具：把 text 参数中的文本原样返回，仅用于验证本地拓展工具链路与参数生成是否正常。",
@@ -1249,11 +1268,11 @@ public final class AppToolManager: ObservableObject {
     private nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
     private nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
     #if os(watchOS)
-    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.askUserInput]
+    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.askUserInput, .getSystemTime]
     #else
-    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput]
+    private nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput, .getSystemTime]
     #endif
-    private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput]
+    private nonisolated static let builtInToolKinds: Set<AppToolKind> = [.showWidget, .askUserInput, .getSystemTime]
     private nonisolated static let sqliteToolDefaultMaxRows = 50
     private nonisolated static let sqliteToolMaximumMaxRows = 500
     private nonisolated static let sqliteToolMaxBlobPreviewBytes = 1024
@@ -1270,7 +1289,10 @@ public final class AppToolManager: ObservableObject {
     private init(defaults: UserDefaults = .standard) {
         chatToolsEnabled = defaults.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
         if let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) {
-            enabledToolIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
+            var migratedIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
+            migratedIDs.formUnion(Self.defaultEnabledToolKinds.map(\.rawValue))
+            enabledToolIDs = migratedIDs
+            defaults.set(Array(migratedIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
         } else {
             let defaultIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
             enabledToolIDs = defaultIDs
@@ -1375,6 +1397,9 @@ public final class AppToolManager: ObservableObject {
         if isToolEnabled(.askUserInput) {
             tools.append(toolDefinition(for: .askUserInput))
         }
+        if isToolEnabled(.getSystemTime) {
+            tools.append(toolDefinition(for: .getSystemTime))
+        }
         return tools
     }
 
@@ -1429,6 +1454,8 @@ public final class AppToolManager: ObservableObject {
                 "loading_messages": normalizedLoadingMessages
             ]
             return prettyPrintedJSONString(from: payload)
+        case .getSystemTime:
+            return SystemTimeContextFormatter.description()
         case .askUserInput:
             struct AskUserInputArgs: Decodable {
                 struct Question: Decodable {

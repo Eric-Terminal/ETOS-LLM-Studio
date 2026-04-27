@@ -149,7 +149,8 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
     @AppStorage("conversationSummaryModelIdentifier") var conversationSummaryModelIdentifier: String = ""
     @AppStorage("reasoningSummaryModelIdentifier") var reasoningSummaryModelIdentifier: String = ""
-    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = true
+    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
+    @AppStorage("systemTimeInjectionPosition") private var systemTimeInjectionPositionRawValue: String = SystemTimeInjectionPosition.front.rawValue
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
     @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
@@ -171,6 +172,11 @@ final class ChatViewModel: ObservableObject {
     var audioRecordingFormat: AudioRecordingFormat {
         get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
         set { audioRecordingFormatRaw = newValue.rawValue }
+    }
+
+    var systemTimeInjectionPosition: SystemTimeInjectionPosition {
+        get { SystemTimeInjectionPosition(rawValue: systemTimeInjectionPositionRawValue) ?? .front }
+        set { systemTimeInjectionPositionRawValue = newValue.rawValue }
     }
     
     // MARK: - Public Properties
@@ -681,6 +687,7 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -1025,6 +1032,7 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -1238,6 +1246,7 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
@@ -1414,6 +1423,7 @@ final class ChatViewModel: ObservableObject {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTimeInPrompt,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics

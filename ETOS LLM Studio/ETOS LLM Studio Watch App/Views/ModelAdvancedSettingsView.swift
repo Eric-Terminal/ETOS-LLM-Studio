@@ -31,6 +31,7 @@ struct ModelAdvancedSettingsView: View {
     @Binding var enableReasoningSummary: Bool
     @Binding var currentSession: ChatSession?
     @Binding var includeSystemTimeInPrompt: Bool
+    @Binding var systemTimeInjectionPosition: SystemTimeInjectionPosition
     @Binding var enablePeriodicTimeLandmark: Bool
     @Binding var periodicTimeLandmarkIntervalMinutes: Int
 
@@ -124,11 +125,18 @@ struct ModelAdvancedSettingsView: View {
 
             Section(
                 header: Text("系统时间注入"),
-                footer: Text("开启后会在系统提示中插入 <time> 块，提供当前时间线索。")
+                footer: Text("开启后可选择在前置系统提示词中插入 <time>，或在消息末尾追加一条 system 时间提示。")
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             ) {
                 Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
+                if includeSystemTimeInPrompt {
+                    Picker("发送位置", selection: $systemTimeInjectionPosition) {
+                        ForEach(SystemTimeInjectionPosition.allCases) { position in
+                            Text(position.displayName).tag(position)
+                        }
+                    }
+                }
             }
 
             Section(
