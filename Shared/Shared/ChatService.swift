@@ -182,6 +182,7 @@ public class ChatService {
     private var cancellables = Set<AnyCancellable>()
     /// 每个会话独立维护请求上下文，支持跨会话并发。
     private var requestContextBySessionID: [UUID: RequestExecutionContext] = [:]
+    private let requestStateLock = NSRecursiveLock()
     /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
     private var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
     /// 重试时要添加新版本的assistant消息ID（如果有）
@@ -275,39 +276,57 @@ public class ChatService {
         persistMessages(messages, for: sessionID)
     }
 
+    private func withRequestStateLock<T>(_ body: () -> T) -> T {
+        requestStateLock.lock()
+        defer { requestStateLock.unlock() }
+        return body()
+    }
+
     private func setRequestContext(_ context: RequestExecutionContext, for sessionID: UUID) {
-        requestContextBySessionID[sessionID] = context
+        withRequestStateLock {
+            requestContextBySessionID[sessionID] = context
+        }
         setSessionRunning(sessionID, isRunning: true)
     }
 
     private func updateRequestTask(_ task: Task<Void, Error>, for sessionID: UUID, token: UUID) {
-        guard var context = requestContextBySessionID[sessionID], context.token == token else { return }
-        context.task = task
-        requestContextBySessionID[sessionID] = context
+        withRequestStateLock {
+            guard var context = requestContextBySessionID[sessionID], context.token == token else { return }
+            context.task = task
+            requestContextBySessionID[sessionID] = context
+        }
     }
 
     private func updateRequestLoadingMessageID(_ loadingMessageID: UUID, for sessionID: UUID) {
-        guard var context = requestContextBySessionID[sessionID] else { return }
-        context.loadingMessageID = loadingMessageID
-        requestContextBySessionID[sessionID] = context
+        withRequestStateLock {
+            guard var context = requestContextBySessionID[sessionID] else { return }
+            context.loadingMessageID = loadingMessageID
+            requestContextBySessionID[sessionID] = context
+        }
     }
 
     private func clearRequestContextIfNeeded(for sessionID: UUID, token: UUID) {
-        guard let context = requestContextBySessionID[sessionID], context.token == token else { return }
-        requestContextBySessionID.removeValue(forKey: sessionID)
+        let didClear = withRequestStateLock { () -> Bool in
+            guard let context = requestContextBySessionID[sessionID], context.token == token else { return false }
+            requestContextBySessionID.removeValue(forKey: sessionID)
+            return true
+        }
+        guard didClear else { return }
         setSessionRunning(sessionID, isRunning: false)
     }
 
     private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {
-        var running = runningSessionIDsSubject.value
-        let changed: Bool
-        if isRunning {
-            changed = running.insert(sessionID).inserted
-        } else {
-            changed = running.remove(sessionID) != nil
+        withRequestStateLock {
+            var running = runningSessionIDsSubject.value
+            let changed: Bool
+            if isRunning {
+                changed = running.insert(sessionID).inserted
+            } else {
+                changed = running.remove(sessionID) != nil
+            }
+            guard changed else { return }
+            runningSessionIDsSubject.send(running)
         }
-        guard changed else { return }
-        runningSessionIDsSubject.send(running)
     }
 
     private func emitSessionRequestStatus(_ status: SessionRequestStatus, sessionID: UUID) {
@@ -963,7 +982,8 @@ public class ChatService {
 
     /// 取消指定会话正在进行的请求，并进行必要的状态恢复。
     public func cancelRequest(for sessionID: UUID) async {
-        guard let context = requestContextBySessionID[sessionID], let task = context.task else { return }
+        guard let context = withRequestStateLock({ requestContextBySessionID[sessionID] }),
+              let task = context.task else { return }
         let token = context.token
         task.cancel()
 
@@ -980,7 +1000,8 @@ public class ChatService {
             }
         }
 
-        guard let activeContext = requestContextBySessionID[sessionID], activeContext.token == token else {
+        guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),
+              activeContext.token == token else {
             return
         }
 
@@ -998,7 +1019,9 @@ public class ChatService {
         }
 
         let cancelledImageContext = activeContext.imageGenerationContext
-        requestContextBySessionID.removeValue(forKey: sessionID)
+        withRequestStateLock {
+            requestContextBySessionID.removeValue(forKey: sessionID)
+        }
         setSessionRunning(sessionID, isRunning: false)
         emitSessionRequestStatus(.cancelled, sessionID: sessionID)
 
@@ -1020,7 +1043,8 @@ public class ChatService {
             await cancelRequest(for: currentSessionID)
             return
         }
-        for sessionID in Array(requestContextBySessionID.keys) {
+        let sessionIDs = withRequestStateLock { Array(requestContextBySessionID.keys) }
+        for sessionID in sessionIDs {
             await cancelRequest(for: sessionID)
         }
     }
@@ -1763,7 +1787,7 @@ public class ChatService {
         
         let loadingIndex: Int? = {
             // 优先使用当前请求记录的 loading 消息，避免误命中历史中的空 assistant（例如工具调用占位消息）。
-            if let loadingMessageID = requestContextBySessionID[resolvedSessionID]?.loadingMessageID,
+            if let loadingMessageID = withRequestStateLock({ requestContextBySessionID[resolvedSessionID]?.loadingMessageID }),
                let index = messages.firstIndex(where: { $0.id == loadingMessageID && $0.role == .assistant }) {
                 return index
             }
