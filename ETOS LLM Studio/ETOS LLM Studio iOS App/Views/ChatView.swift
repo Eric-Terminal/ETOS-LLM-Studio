@@ -813,6 +813,7 @@ struct ChatView: View {
             enableReasoningSummary: $viewModel.enableReasoningSummary,
             currentSession: $viewModel.currentSession,
             includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+            systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
             enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
             addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,

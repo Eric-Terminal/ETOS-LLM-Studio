@@ -41,6 +41,7 @@ struct AppToolManagerTests {
 
         #expect(kinds.contains(.showWidget))
         #expect(kinds.contains(.askUserInput))
+        #expect(kinds.contains(.getSystemTime))
         #expect(kinds.contains(.editMemory))
         #expect(kinds.contains(.submitFeedbackTicket))
         #expect(kinds.contains(.fillUserInput))
@@ -264,6 +265,46 @@ struct AppToolManagerTests {
         #expect(manager.approvalPolicy(for: .showWidget) == .alwaysAllow)
         #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }) == false)
         #expect(manager.builtInToolsForLLM().contains(where: { $0.name == AppToolKind.showWidget.toolName }))
+    }
+
+    @MainActor
+    @Test("获取系统时间工具默认免审批并使用无参 schema")
+    func testGetSystemTimeToolAlwaysAllowWithoutApproval() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+
+        manager.restoreStateForTests(
+            chatToolsEnabled: false,
+            enabledKinds: [.getSystemTime],
+            approvalPolicies: [.getSystemTime: .alwaysDeny]
+        )
+
+        #expect(manager.approvalPolicy(for: .getSystemTime) == .alwaysAllow)
+        #expect(manager.chatToolsForLLM().contains(where: { $0.name == AppToolKind.getSystemTime.toolName }) == false)
+
+        let tool = try #require(manager.builtInToolsForLLM().first(where: { $0.name == AppToolKind.getSystemTime.toolName }))
+        guard case let .dictionary(schema) = tool.parameters,
+              case let .dictionary(properties)? = schema["properties"] else {
+            Issue.record("获取系统时间工具未提供 object/properties schema。")
+            return
+        }
+        #expect(properties.isEmpty)
+
+        let result = try await manager.executeToolFromChat(
+            toolName: AppToolKind.getSystemTime.toolName,
+            argumentsJSON: "{}"
+        )
+        #expect(result.contains("当前系统本地时间"))
+        #expect(result.contains("ISO8601"))
     }
 
     @MainActor

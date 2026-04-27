@@ -3409,6 +3409,40 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("系统时间可作为末尾 system 消息注入")
+    func testSystemTimeTailPromptInjection() async throws {
+        await cleanup()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
+
+        await chatService.sendAndProcessMessage(
+            content: "现在几点？",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: "保持简洁",
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: true,
+            systemTimeInjectionPosition: .tail
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let systemMessages = sentMessages.filter { $0.role == .system }
+        let firstSystemContent = systemMessages.first?.content ?? ""
+        let lastMessage = sentMessages.last
+
+        #expect(systemMessages.count == 3, "应包含语言约束、增强提示词和末尾时间三条 system message。")
+        #expect(firstSystemContent.contains("<app_language>"))
+        #expect(!firstSystemContent.contains("<time>"), "末尾发送时不应把时间放入前置系统提示词。")
+        #expect(lastMessage?.role == .system)
+        #expect(lastMessage?.content.contains("<time>") == true)
+        #expect(lastMessage?.content.contains("ISO8601") == true)
+
+        await cleanup()
+    }
+
     @Test("周期性时间路标支持自定义分钟并插入在锚点消息前")
     func testPeriodicTimeLandmark_CustomIntervalAndInsertPosition() async throws {
         await cleanup()

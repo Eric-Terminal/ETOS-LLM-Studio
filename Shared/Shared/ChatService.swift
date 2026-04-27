@@ -36,6 +36,41 @@ public struct RunnableModel: Identifiable, Hashable {
     }
 }
 
+public enum SystemTimeInjectionPosition: String, CaseIterable, Identifiable, Sendable {
+    case front
+    case tail
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .front:
+            return NSLocalizedString("前置发送", comment: "System time injection position before system prompt")
+        case .tail:
+            return NSLocalizedString("末尾发送", comment: "System time injection position tail system message")
+        }
+    }
+}
+
+public enum SystemTimeContextFormatter {
+    public static func description(at date: Date = Date()) -> String {
+        let localeFormatter = DateFormatter()
+        localeFormatter.calendar = Calendar(identifier: .gregorian)
+        localeFormatter.locale = Locale(identifier: "zh_CN")
+        localeFormatter.timeZone = TimeZone.current
+        localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
+        let localTime = localeFormatter.string(from: date)
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone.current
+        let isoTime = isoFormatter.string(from: date)
+
+        let localTimeLine = String(format: NSLocalizedString("当前系统本地时间：%@", comment: "System local time line for model prompt."), localTime)
+        let isoTimeLine = String(format: NSLocalizedString("ISO8601：%@", comment: "ISO8601 time line for model prompt."), isoTime)
+        return "\(localTimeLine)\n\(isoTimeLine)"
+    }
+}
+
 private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
     let sortedOffsets = offsets.sorted()
     guard !sortedOffsets.isEmpty else { return }
@@ -2363,6 +2398,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition = .front,
         enablePeriodicTimeLandmark: Bool = false,
         periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true,
@@ -2612,6 +2648,7 @@ public class ChatService {
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -3334,6 +3371,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition,
         enablePeriodicTimeLandmark: Bool,
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
@@ -3447,7 +3485,7 @@ public class ChatService {
             memories: memories,
             recentConversationSummaries: recentConversationSummaries,
             conversationProfile: conversationUserProfile,
-            includeSystemTime: includeSystemTime,
+            includeSystemTime: includeSystemTime && systemTimeInjectionPosition == .front,
             worldbookBefore: worldbookResult.before,
             worldbookAfter: worldbookResult.after,
             worldbookANTop: worldbookResult.anTop,
@@ -3488,6 +3526,10 @@ public class ChatService {
 
         if let enhancedPromptMessage = makeEnhancedPromptSystemMessage(enhancedPrompt) {
             messagesToSend.append(enhancedPromptMessage)
+        }
+
+        if includeSystemTime && systemTimeInjectionPosition == .tail {
+            messagesToSend.append(makeSystemTimeSystemMessage())
         }
         
         // 构建音频附件字典：从历史消息中加载已保存的音频文件
@@ -3584,6 +3626,7 @@ public class ChatService {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -3608,6 +3651,7 @@ public class ChatService {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -3645,6 +3689,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition = .front,
         enablePeriodicTimeLandmark: Bool = false,
         periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true
@@ -3779,6 +3824,7 @@ public class ChatService {
             enableMemoryWrite: enableMemoryWrite,
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             includeSystemTime: includeSystemTime,
+            systemTimeInjectionPosition: systemTimeInjectionPosition,
             enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -3803,6 +3849,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition,
         enablePeriodicTimeLandmark: Bool,
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
@@ -3848,6 +3895,7 @@ public class ChatService {
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
@@ -3886,6 +3934,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool = false,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition = .front,
         enablePeriodicTimeLandmark: Bool = false,
         periodicTimeLandmarkIntervalMinutes: Int = 30,
         enableResponseSpeedMetrics: Bool = true
@@ -3905,6 +3954,7 @@ public class ChatService {
             enableMemoryWrite: enableMemoryWrite,
             enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
             includeSystemTime: includeSystemTime,
+            systemTimeInjectionPosition: systemTimeInjectionPosition,
             enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics
@@ -4920,6 +4970,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition,
         enablePeriodicTimeLandmark: Bool,
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
@@ -4975,6 +5026,7 @@ public class ChatService {
                     enableMemoryWrite: enableMemoryWrite,
                     enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                     includeSystemTime: includeSystemTime,
+                    systemTimeInjectionPosition: systemTimeInjectionPosition,
                     enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                     periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
                 )
@@ -5062,7 +5114,7 @@ public class ChatService {
     }
     
     /// 处理已解析的聊天消息，包含所有工具调用和UI更新的核心逻辑 (可测试)
-    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, enableMemoryActiveRetrieval: Bool = false, includeSystemTime: Bool, enablePeriodicTimeLandmark: Bool = false, periodicTimeLandmarkIntervalMinutes: Int = 30) async {
+    internal func processResponseMessage(responseMessage: ChatMessage, loadingMessageID: UUID, currentSessionID: UUID, userMessage: ChatMessage?, wasTemporarySession: Bool, availableTools: [InternalToolDefinition]?, aiTemperature: Double, aiTopP: Double, systemPrompt: String, maxChatHistory: Int, enableMemory: Bool, enableMemoryWrite: Bool, enableMemoryActiveRetrieval: Bool = false, includeSystemTime: Bool, systemTimeInjectionPosition: SystemTimeInjectionPosition = .front, enablePeriodicTimeLandmark: Bool = false, periodicTimeLandmarkIntervalMinutes: Int = 30) async {
         var responseMessage = responseMessage // Make mutable
         if let reasoning = responseMessage.reasoningContent {
             let normalized = normalizeEscapedNewlinesIfNeeded(reasoning)
@@ -5259,6 +5311,7 @@ public class ChatService {
                 enableStreaming: false, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: false,
@@ -5290,6 +5343,7 @@ public class ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
         includeSystemTime: Bool,
+        systemTimeInjectionPosition: SystemTimeInjectionPosition,
         enablePeriodicTimeLandmark: Bool,
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
@@ -5589,6 +5643,7 @@ public class ChatService {
                     enableMemoryWrite: enableMemoryWrite,
                     enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                     includeSystemTime: includeSystemTime,
+                    systemTimeInjectionPosition: systemTimeInjectionPosition,
                     enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                     periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
                 )
@@ -6224,13 +6279,7 @@ public class ChatService {
         }
         
         if includeSystemTime {
-            let timeHeader = NSLocalizedString("# 以下是用户发送最后一条消息时的系统时间，每轮对话都会动态更新。", comment: "System time header for model prompt.")
-            parts.append("""
-<time>
-\(timeHeader)
-\(formattedSystemTimeDescription())
-</time>
-""")
+            parts.append(makeSystemTimePromptBlock())
         }
 
         if !memories.isEmpty {
@@ -6309,6 +6358,20 @@ public class ChatService {
 </enhanced_prompt>
 """
         return ChatMessage(role: .system, content: content)
+    }
+
+    private func makeSystemTimeSystemMessage() -> ChatMessage {
+        ChatMessage(role: .system, content: makeSystemTimePromptBlock())
+    }
+
+    private func makeSystemTimePromptBlock() -> String {
+        let timeHeader = NSLocalizedString("# 以下是用户发送最后一条消息时的系统时间，每轮对话都会动态更新。", comment: "System time header for model prompt.")
+        return """
+<time>
+\(timeHeader)
+\(SystemTimeContextFormatter.description())
+</time>
+"""
     }
 
     private func makeWorldbookPromptBlock(
@@ -6515,27 +6578,6 @@ public class ChatService {
         return ordered
     }
     
-    private func formattedSystemTimeDescription() -> String {
-        formattedSystemTimeDescription(at: Date())
-    }
-
-    private func formattedSystemTimeDescription(at date: Date) -> String {
-        let localeFormatter = DateFormatter()
-        localeFormatter.calendar = Calendar(identifier: .gregorian)
-        localeFormatter.locale = Locale(identifier: "zh_CN")
-        localeFormatter.timeZone = TimeZone.current
-        localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
-        let localTime = localeFormatter.string(from: date)
-        
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.timeZone = TimeZone.current
-        let isoTime = isoFormatter.string(from: date)
-        
-        let localTimeLine = String(format: NSLocalizedString("当前系统本地时间：%@", comment: "System local time line for model prompt."), localTime)
-        let isoTimeLine = String(format: NSLocalizedString("ISO8601：%@", comment: "ISO8601 time line for model prompt."), isoTime)
-        return "\(localTimeLine)\n\(isoTimeLine)"
-    }
-
     /// 解析长期记忆检索的 Top K 配置，支持旧版本留下的字符串/浮点数形式。
     private func resolvedMemoryTopK() -> Int {
         let defaults = UserDefaults.standard
