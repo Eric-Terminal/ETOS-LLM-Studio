@@ -285,7 +285,7 @@ struct SettingsView: View {
         .onDisappear {
             cancelSettingsResearchAchievementTask()
         }
-        .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
+        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
             ensureSelectedModel(in: viewModel.activatedModels)
         }
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in

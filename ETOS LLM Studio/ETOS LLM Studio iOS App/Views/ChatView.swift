@@ -447,8 +447,8 @@ struct ChatView: View {
                         scheduleImmediateBottomSnap(proxy: proxy)
                         resolvePendingSearchJumpIfNeeded()
                     }
-                    .onChange(of: viewModel.displayMessages.map(\.id)) { _, ids in
-                        if needsImmediateBottomSnap, !ids.isEmpty {
+                    .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
+                        if needsImmediateBottomSnap, !viewModel.displayMessages.isEmpty {
                             scheduleImmediateBottomSnap(proxy: proxy)
                         }
                         resolvePendingSearchJumpIfNeeded()
@@ -1309,7 +1309,7 @@ struct ChatView: View {
             sessionPickerSearchResultPageIndex = 0
             scheduleSessionPickerSearch(for: newValue)
         }
-        .onChange(of: viewModel.chatSessions) { _, _ in
+        .onChange(of: viewModel.chatSessionListVersion) { _, _ in
             normalizeSessionPickerPageIndex()
             normalizeSessionPickerSearchResultPageIndex()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
@@ -1317,7 +1317,7 @@ struct ChatView: View {
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
-        .onChange(of: viewModel.allMessagesForSession) { _, _ in
+        .onChange(of: viewModel.allMessageIdentityVersion) { _, _ in
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onDisappear {

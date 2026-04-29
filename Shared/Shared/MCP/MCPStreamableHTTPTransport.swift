@@ -40,9 +40,6 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     public weak var samplingHandler: MCPSamplingHandler?
     public weak var elicitationHandler: MCPElicitationHandler?
 
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-
     public init(
         endpoint: URL,
         session: URLSession = NetworkSessionConfiguration.shared,
@@ -458,7 +455,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     private func processSSEPayload(_ data: String) async {
         guard let jsonData = data.data(using: .utf8) else { return }
 
-        guard let envelope = try? decoder.decode(JSONRPCDispatchEnvelope.self, from: jsonData) else {
+        guard let envelope = try? JSONDecoder().decode(JSONRPCDispatchEnvelope.self, from: jsonData) else {
             return
         }
 
@@ -466,13 +463,13 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
             if let requestID = envelope.id {
                 switch method {
                 case "sampling/createMessage":
-                    if let samplingRequest = try? decoder.decode(MCPServerSamplingRequest.self, from: jsonData) {
+                    if let samplingRequest = try? JSONDecoder().decode(MCPServerSamplingRequest.self, from: jsonData) {
                         await handleSamplingRequest(samplingRequest)
                     } else {
                         await sendErrorResponse(requestId: requestID, code: -32602, message: "Sampling 请求参数无效")
                     }
                 case "elicitation/create":
-                    if let elicitationRequest = try? decoder.decode(MCPServerElicitationRequest.self, from: jsonData) {
+                    if let elicitationRequest = try? JSONDecoder().decode(MCPServerElicitationRequest.self, from: jsonData) {
                         await handleElicitationRequest(elicitationRequest)
                     } else {
                         await sendErrorResponse(requestId: requestID, code: -32602, message: "Elicitation 请求参数无效")
@@ -483,7 +480,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
                 return
             }
 
-            if let notification = try? decoder.decode(MCPNotification.self, from: jsonData) {
+            if let notification = try? JSONDecoder().decode(MCPNotification.self, from: jsonData) {
                 await handleNotification(notification)
             }
             return
@@ -552,7 +549,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     private func sendSamplingResponse(requestId: JSONRPCID, response: MCPSamplingResponse) async {
         let rpcResponse = JSONRPCSamplingResponse(id: requestId, result: response)
-        guard let data = try? encoder.encode(rpcResponse) else { return }
+        guard let data = try? JSONEncoder().encode(rpcResponse) else { return }
 
         do {
             try await sendNotification(data)
@@ -563,7 +560,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     private func sendElicitationResponse(requestId: JSONRPCID, response: MCPElicitationResult) async {
         let rpcResponse = JSONRPCElicitationResponse(id: requestId, result: response)
-        guard let data = try? encoder.encode(rpcResponse) else { return }
+        guard let data = try? JSONEncoder().encode(rpcResponse) else { return }
 
         do {
             try await sendNotification(data)
@@ -577,7 +574,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
             id: requestId,
             error: JSONRPCErrorBody(code: code, message: message)
         )
-        guard let data = try? encoder.encode(error) else { return }
+        guard let data = try? JSONEncoder().encode(error) else { return }
 
         do {
             try await sendNotification(data)
@@ -587,13 +584,13 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     }
 
     private func decodeLogEntry(from value: JSONValue) throws -> MCPLogEntry {
-        let data = try encoder.encode(value)
-        return try decoder.decode(MCPLogEntry.self, from: data)
+        let data = try JSONEncoder().encode(value)
+        return try JSONDecoder().decode(MCPLogEntry.self, from: data)
     }
 
     private func decodeProgress(from value: JSONValue) throws -> MCPProgressParams {
-        let data = try encoder.encode(value)
-        return try decoder.decode(MCPProgressParams.self, from: data)
+        let data = try JSONEncoder().encode(value)
+        return try JSONDecoder().decode(MCPProgressParams.self, from: data)
     }
 
     private func applyHeaders(to request: inout URLRequest, includeResumption: Bool, dynamicHeaders: [String: String]) {
@@ -763,14 +760,14 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     }
 
     private func extractRequestId(from payload: Data) throws -> JSONRPCID {
-        if let request = try? decoder.decode(JSONRPCRequestEnvelope.self, from: payload) {
+        if let request = try? JSONDecoder().decode(JSONRPCRequestEnvelope.self, from: payload) {
             return request.id
         }
         throw MCPClientError.invalidResponse
     }
 
     private func extractNotificationMethod(from payload: Data) -> String? {
-        (try? decoder.decode(JSONRPCNotificationEnvelope.self, from: payload))?.method
+        (try? JSONDecoder().decode(JSONRPCNotificationEnvelope.self, from: payload))?.method
     }
 
     private func parseSSEEvents(from data: Data) -> [SSEEvent] {

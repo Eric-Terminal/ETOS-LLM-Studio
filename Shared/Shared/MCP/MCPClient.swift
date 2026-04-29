@@ -12,14 +12,10 @@ private let mcpClientLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category:
 public final class MCPClient {
     
     private let transport: MCPTransport
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
     public private(set) var negotiatedProtocolVersion: String?
     
     public init(transport: MCPTransport) {
         self.transport = transport
-        self.encoder = JSONEncoder()
-        self.decoder = JSONDecoder()
     }
     
     // MARK: - 公共方法
@@ -157,7 +153,7 @@ public final class MCPClient {
         let request = JSONRPCRequest(id: requestID, method: method, params: params)
         let payload: Data
         do {
-            payload = try encoder.encode(request)
+            payload = try JSONEncoder().encode(request)
         } catch {
             mcpClientLogger.error("MCP 请求编码失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw MCPClientError.encodingError(error)
@@ -193,7 +189,7 @@ public final class MCPClient {
         logJSON(data: rawResponse, prefix: "收到 MCP 响应 \(method)")
         
         do {
-            let response = try decoder.decode(JSONRPCResponse<Result>.self, from: rawResponse)
+            let response = try JSONDecoder().decode(JSONRPCResponse<Result>.self, from: rawResponse)
             if let error = response.error {
                 mcpClientLogger.error("MCP RPC 错误：\(method, privacy: .public)，code=\(error.code), message=\(error.message, privacy: .public)")
                 throw MCPClientError.rpcError(error)
@@ -215,7 +211,7 @@ public final class MCPClient {
         let payload: Data
         do {
             let notification = JSONRPCNotification(method: method, params: params)
-            payload = try encoder.encode(notification)
+            payload = try JSONEncoder().encode(notification)
         } catch {
             mcpClientLogger.error("MCP 通知编码失败：\(method, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             throw MCPClientError.encodingError(error)

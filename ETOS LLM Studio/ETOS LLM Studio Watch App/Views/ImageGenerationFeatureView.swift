@@ -222,7 +222,7 @@ struct ImageGenerationFeatureView: View {
             loadParameterExpressions(for: imageGenerationModelIdentifier)
             validateParameterExpressions()
         }
-        .onChange(of: viewModel.activatedModels) { _, _ in
+        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
             let previousIdentifier = imageGenerationModelIdentifier
             syncSelectedImageModel()
             if previousIdentifier != imageGenerationModelIdentifier {

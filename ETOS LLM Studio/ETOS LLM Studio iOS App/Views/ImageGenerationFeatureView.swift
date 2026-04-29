@@ -238,7 +238,7 @@ struct ImageGenerationFeatureView: View {
         .onChange(of: selectedPhotos) { _, newItems in
             loadSelectedPhotos(newItems)
         }
-        .onChange(of: viewModel.activatedModels) { _, _ in
+        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
             let previousIdentifier = imageGenerationModelIdentifier
             syncSelectedImageModel()
             if previousIdentifier != imageGenerationModelIdentifier {

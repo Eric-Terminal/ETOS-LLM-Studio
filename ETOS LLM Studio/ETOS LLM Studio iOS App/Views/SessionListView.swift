@@ -337,7 +337,7 @@ private struct SessionFolderBrowserView: View {
 
     private func applyStateHandlers<Content: View>(to content: Content) -> some View {
         content
-            .onChange(of: viewModel.sessionFolders) { _, _ in
+            .onChange(of: viewModel.sessionFolderListVersion) { _, _ in
                 guard folderID != nil else { return }
                 if currentFolder == nil {
                     dismiss()
@@ -371,7 +371,7 @@ private struct SessionFolderBrowserView: View {
                 searchResultPageIndex = 0
                 scheduleSearch(for: newValue)
             }
-            .onChange(of: viewModel.chatSessions) { _, _ in
+            .onChange(of: viewModel.chatSessionListVersion) { _, _ in
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }
@@ -379,7 +379,7 @@ private struct SessionFolderBrowserView: View {
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }
-            .onChange(of: viewModel.allMessagesForSession) { _, _ in
+            .onChange(of: viewModel.allMessageIdentityVersion) { _, _ in
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }

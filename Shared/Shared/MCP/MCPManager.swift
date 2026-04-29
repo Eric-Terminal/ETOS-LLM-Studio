@@ -864,17 +864,11 @@ public final class MCPManager: ObservableObject {
 
     private func refreshMetadata(for serverID: UUID, client: MCPClient, serverInfo: MCPServerInfo?) async {
         do {
-            async let toolsTask = client.listTools()
-            async let resourcesTask = listResourcesIfSupported(client: client)
-            async let resourceTemplatesTask = listResourceTemplatesIfSupported(client: client)
-            async let promptsTask = listPromptsIfSupported(client: client)
-            async let rootsTask = listRootsIfSupported(client: client)
-            
-            let tools = try await toolsTask
-            let resources = try await resourcesTask
-            let resourceTemplates = try await resourceTemplatesTask
-            let prompts = try await promptsTask
-            let roots = try await rootsTask
+            let tools = try await client.listTools()
+            let resources = try await listResourcesIfSupported(client: client)
+            let resourceTemplates = try await listResourceTemplatesIfSupported(client: client)
+            let prompts = try await listPromptsIfSupported(client: client)
+            let roots = try await listRootsIfSupported(client: client)
             if let server = servers.first(where: { $0.id == serverID }) {
                 mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，resourceTemplates=\(resourceTemplates.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             } else {

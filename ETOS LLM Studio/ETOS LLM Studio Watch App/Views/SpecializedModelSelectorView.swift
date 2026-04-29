@@ -116,7 +116,7 @@ struct SpecializedModelSelectorView: View {
         }
         .navigationTitle("专用模型")
         .onAppear(perform: syncImageGenerationSelection)
-        .onChange(of: viewModel.activatedModels.map(\.id)) { _, _ in
+        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
             syncImageGenerationSelection()
         }
     }

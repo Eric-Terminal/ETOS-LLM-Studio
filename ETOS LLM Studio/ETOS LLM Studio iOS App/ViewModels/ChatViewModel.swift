@@ -37,6 +37,11 @@ final class ChatViewModel: ObservableObject {
     
     @Published private(set) var messages: [ChatMessageRenderState] = []
     @Published private(set) var displayMessages: [ChatMessageRenderState] = []
+    @Published private(set) var displayMessageIdentityVersion: Int = 0
+    @Published private(set) var allMessageIdentityVersion: Int = 0
+    @Published private(set) var chatSessionListVersion: Int = 0
+    @Published private(set) var sessionFolderListVersion: Int = 0
+    @Published private(set) var activatedModelListVersion: Int = 0
     @Published private(set) var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
     @Published private(set) var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
     private(set) var allMessagesForSession: [ChatMessage] = []
@@ -233,6 +238,8 @@ final class ChatViewModel: ObservableObject {
     private var lastSessionID: UUID?
     private let incrementalHistoryBatchSize = 5
     private var cancellables = Set<AnyCancellable>()
+    private var displayMessageIDs: [UUID] = []
+    private var activatedModelIDs: [String] = []
     private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
     private var autoReasoningPreviewMessageIDs: Set<UUID> = []
     private var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
@@ -451,12 +458,16 @@ final class ChatViewModel: ObservableObject {
     private func setupSubscriptions() {
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.chatSessions, on: self)
+            .sink { [weak self] sessions in
+                self?.applyChatSessions(sessions)
+            }
             .store(in: &cancellables)
 
         chatService.sessionFoldersSubject
             .receive(on: DispatchQueue.main)
-            .assign(to: \.sessionFolders, on: self)
+            .sink { [weak self] folders in
+                self?.applySessionFolders(folders)
+            }
             .store(in: &cancellables)
         
         chatService.currentSessionSubject
@@ -482,7 +493,7 @@ final class ChatViewModel: ObservableObject {
                 guard let self else { return }
                 self.providers = providers
                 self.configuredModels = chatService.configuredRunnableModels
-                self.activatedModels = chatService.activatedRunnableModels
+                self.applyActivatedModels(chatService.activatedRunnableModels)
                 self.speechModels = chatService.activatedSpeechModels
                 self.ttsModels = chatService.activatedTTSModels
                 self.syncSpeechModelSelection()
@@ -642,6 +653,30 @@ final class ChatViewModel: ObservableObject {
         syncConversationSummaryModelSelection()
         syncReasoningSummaryModelSelection()
         reloadConversationMemoryState()
+    }
+
+    private func applyChatSessions(_ sessions: [ChatSession]) {
+        guard chatSessions != sessions else { return }
+        chatSessions = sessions
+        chatSessionListVersion &+= 1
+    }
+
+    private func applySessionFolders(_ folders: [SessionFolder]) {
+        guard sessionFolders != folders else { return }
+        sessionFolders = folders
+        sessionFolderListVersion &+= 1
+    }
+
+    private func applyActivatedModels(_ models: [RunnableModel]) {
+        let ids = models.map(\.id)
+        let identityChanged = activatedModelIDs != ids
+        if activatedModels != models {
+            activatedModels = models
+        }
+        if identityChanged {
+            activatedModelIDs = ids
+            activatedModelListVersion &+= 1
+        }
     }
     
     private func rotateBackgroundImageIfNeeded() {
@@ -1578,10 +1613,14 @@ final class ChatViewModel: ObservableObject {
     private func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
         let previousMessages = allMessagesForSession
         allMessagesForSession = incomingMessages
+        let hasSameMessageIdentity = hasMatchingMessageIdentity(previousMessages, incomingMessages)
+        if !hasSameMessageIdentity {
+            allMessageIdentityVersion &+= 1
+        }
         syncAutoOpenedPendingToolCallIDs(with: incomingMessages)
         updateAutoReasoningPreviewState(with: incomingMessages)
 
-        if hasMatchingMessageIdentity(previousMessages, incomingMessages) {
+        if hasSameMessageIdentity {
             applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)
             return
         }
@@ -1927,10 +1966,11 @@ final class ChatViewModel: ObservableObject {
     private func updateDisplayMessagesIfNeeded(with source: [ChatMessageRenderState]? = nil) {
         let base = source ?? messages
         let filtered = filterDisplayMessages(base)
-        let currentIDs = displayMessages.map(\.id)
         let newIDs = filtered.map(\.id)
-        guard currentIDs != newIDs else { return }
+        guard displayMessageIDs != newIDs else { return }
+        displayMessageIDs = newIDs
         displayMessages = filtered
+        displayMessageIdentityVersion &+= 1
     }
 
     private func filterDisplayMessages(_ source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {

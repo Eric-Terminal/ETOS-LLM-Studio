@@ -555,8 +555,8 @@ struct ContentView: View {
             scheduleImmediateBottomSnap(proxy: proxy)
             resolvePendingSearchJumpIfNeeded()
         }
-        .onChange(of: viewModel.displayMessages.map(\.id)) { _, ids in
-            if needsImmediateBottomSnap, !ids.isEmpty {
+        .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
+            if needsImmediateBottomSnap, !viewModel.displayMessages.isEmpty {
                 scheduleImmediateBottomSnap(proxy: proxy)
             }
             resolvePendingSearchJumpIfNeeded()
