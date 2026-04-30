@@ -244,7 +244,7 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
         case .chat:
             return NSLocalizedString("聊天", comment: "模型主用途：聊天")
         case .image:
-            return NSLocalizedString("图像", comment: "模型主用途：图像")
+            return NSLocalizedString("图片生成", comment: "模型主用途：图片生成")
         case .embedding:
             return NSLocalizedString("嵌入", comment: "模型主用途：嵌入")
         case .rerank:
@@ -469,6 +469,13 @@ public struct Model: Codable, Identifiable, Hashable {
 }
 
 public extension Model {
+    mutating func resetCapabilityShape(for kind: ModelKind) {
+        self.kind = kind
+        inputModalities = Self.defaultInputModalities(for: kind)
+        outputModalities = Self.defaultOutputModalities(for: kind)
+        capabilities = Self.defaultCapabilities(for: kind)
+    }
+
     static func defaultInputModalities(for kind: ModelKind) -> [ModelModality] {
         switch kind {
         case .chat:

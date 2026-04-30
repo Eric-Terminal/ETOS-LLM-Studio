@@ -2783,7 +2783,7 @@ public class ChatService {
         }
 
         guard runnableModel.model.supportsImageGeneration else {
-            let reason = NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像，或在输出模态中启用图像。", comment: "模型没有图像输出能力提示")
+            let reason = NSLocalizedString("当前模型不可用于生图，请在模型设置中将用途设为图片生成，或在模型能力中开启可生成图片。", comment: "模型没有生图能力提示")
             addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(

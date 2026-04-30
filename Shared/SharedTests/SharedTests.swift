@@ -531,6 +531,30 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.outputModalities == [.text])
     }
 
+    @Test("切换模型用途会重置默认能力形态")
+    func testResetCapabilityShapeWhenChangingModelKind() throws {
+        var model = Model(
+            modelName: "hybrid-model",
+            inputModalities: [.text, .image, .audio, .file],
+            outputModalities: [.text, .image],
+            capabilities: [.toolCalling, .reasoning, .streaming, .jsonMode]
+        )
+
+        model.resetCapabilityShape(for: .image)
+
+        #expect(model.kind == .image)
+        #expect(model.inputModalities == [.text, .image])
+        #expect(model.outputModalities == [.image])
+        #expect(model.capabilities.isEmpty)
+
+        model.resetCapabilityShape(for: .chat)
+
+        #expect(model.kind == .chat)
+        #expect(model.inputModalities == [.text])
+        #expect(model.outputModalities == [.text])
+        #expect(model.capabilities == [.toolCalling, .reasoning, .streaming])
+    }
+
     @Test("旧模型可用名称推断补齐新能力结构")
     func testLegacyModelCanApplyInferredCapabilityHints() throws {
         let legacyImage = Model(modelName: "gpt-image-1").applyingInferredCapabilityHints()
