@@ -19,6 +19,28 @@ struct MCPManagerToolExposureTests {
         #expect(MCPRuntimeDefaults.maxRetryAttempts == 3)
     }
 
+    @Test("MCP 连接失败通知会合并同一批服务器")
+    func testMCPConnectionFailureNotificationBatchAggregatesServers() {
+        let batch = MCPConnectionFailureNotificationBatch(failures: [
+            MCPConnectionFailureNotificationEvent(serverDisplayName: "服务器A", reason: "握手超时", isTimeout: true),
+            MCPConnectionFailureNotificationEvent(serverDisplayName: "服务器B", reason: "握手超时", isTimeout: true),
+            MCPConnectionFailureNotificationEvent(serverDisplayName: "服务器C", reason: "握手超时", isTimeout: true)
+        ])
+
+        #expect(batch.failures.count == 3)
+        #expect(batch.body.contains("服务器A、服务器B、服务器C"))
+    }
+
+    @Test("MCP 连接失败通知会保持单服务器文案")
+    func testMCPConnectionFailureNotificationBatchKeepsSingleServerBody() {
+        let batch = MCPConnectionFailureNotificationBatch(failures: [
+            MCPConnectionFailureNotificationEvent(serverDisplayName: "服务器A", reason: "握手超时", isTimeout: true)
+        ])
+
+        #expect(batch.failures.count == 1)
+        #expect(batch.body.contains("服务器A"))
+    }
+
     @MainActor
     @Test("MCP 聊天总开关关闭时 chatToolsForLLM 返回空数组")
     func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() {

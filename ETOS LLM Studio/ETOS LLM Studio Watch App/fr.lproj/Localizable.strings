@@ -2144,3 +2144,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "预计 %.1f MB，约 %d 个会话" = "Estimated %.1f MB, about %d sessions";
 "风来疏竹，风过而竹不留声。" = "Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "默认“每次询问”，可按工具单独设置。" = "Default is “Ask Every Time.” You can set this per tool.";
+"MCP 连接异常" = "Problème de connexion MCP";
+"%d 个 MCP 服务器连接异常：%@。请检查网络或服务器状态后再重试。" = "%d serveurs MCP ont un problème de connexion : %@. Vérifiez le réseau ou l’état du serveur, puis réessayez.";
+"%@ 等" = "%@, etc.";

@@ -2046,3 +2046,6 @@
 "预计 %.1f MB，约 %d 个会话" = "Estimated %.1f MB, about %d sessions";
 "风来疏竹，风过而竹不留声。" = "Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "默认“每次询问”，可按工具单独设置。" = "Default is “Ask Every Time.” You can set this per tool.";
+"MCP 连接异常" = "MCP 接続異常";
+"%d 个 MCP 服务器连接异常：%@。请检查网络或服务器状态后再重试。" = "%d 個の MCP サーバーで接続異常が発生しました：%@。ネットワークまたはサーバー状態を確認してから再試行してください。";
+"%@ 等" = "%@ など";

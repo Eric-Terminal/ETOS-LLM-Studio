@@ -1974,12 +1974,81 @@ private extension JSONValue {
     }
 }
 
+struct MCPConnectionFailureNotificationEvent: Equatable {
+    let serverDisplayName: String
+    let reason: String
+    let isTimeout: Bool
+}
+
+struct MCPConnectionFailureNotificationBatch: Equatable {
+    static let notificationIdentifier = "mcp.connection.failed.batch"
+    static let aggregationDelay: TimeInterval = 1.0
+
+    let failures: [MCPConnectionFailureNotificationEvent]
+
+    init(failures: [MCPConnectionFailureNotificationEvent]) {
+        var seenNames: Set<String> = []
+        var uniqueFailures: [MCPConnectionFailureNotificationEvent] = []
+        for failure in failures {
+            let normalizedName = failure.serverDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedName.isEmpty else { continue }
+            if seenNames.insert(normalizedName).inserted {
+                uniqueFailures.append(failure)
+            }
+        }
+        self.failures = uniqueFailures
+    }
+
+    var body: String {
+        guard failures.count != 1 else {
+            return singleFailureBody(for: failures[0])
+        }
+        return String(
+            format: NSLocalizedString("%d 个 MCP 服务器连接异常：%@。请检查网络或服务器状态后再重试。", comment: "Aggregated MCP connection failure notification body"),
+            failures.count,
+            serverListSummary
+        )
+    }
+
+    private var serverListSummary: String {
+        let names = failures.prefix(3).map(\.serverDisplayName).joined(separator: "、")
+        guard failures.count > 3 else { return names }
+        return String(
+            format: NSLocalizedString("%@ 等", comment: "List summary with more items"),
+            names
+        )
+    }
+
+    private func singleFailureBody(for failure: MCPConnectionFailureNotificationEvent) -> String {
+        if failure.isTimeout {
+            return String(
+                format: NSLocalizedString("服务器“%@”握手超时，请检查网络或服务器状态。", comment: "MCP handshake timeout notification body"),
+                failure.serverDisplayName
+            )
+        }
+        let trimmedReason = failure.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedReason.isEmpty {
+            return String(
+                format: NSLocalizedString("服务器“%@”握手失败，请稍后重试。", comment: "MCP handshake failure notification body"),
+                failure.serverDisplayName
+            )
+        }
+        return String(
+            format: NSLocalizedString("服务器“%@”握手失败：%@", comment: "MCP handshake failure notification body with reason"),
+            failure.serverDisplayName,
+            trimmedReason
+        )
+    }
+}
+
 #if canImport(UserNotifications)
 @MainActor
 private final class MCPFailureNotificationCenter: NSObject, UNUserNotificationCenterDelegate {
     static let shared = MCPFailureNotificationCenter()
 
     private var didConfigure = false
+    private var pendingFailures: [MCPConnectionFailureNotificationEvent] = []
+    private var pendingNotificationTask: Task<Void, Never>?
 
     private override init() {
         super.init()
@@ -1987,37 +2056,42 @@ private final class MCPFailureNotificationCenter: NSObject, UNUserNotificationCe
 
     func notifyMCPConnectionFailure(serverDisplayName: String, reason: String, isTimeout: Bool) {
         configureIfNeeded()
+        pendingFailures.append(
+            MCPConnectionFailureNotificationEvent(
+                serverDisplayName: serverDisplayName,
+                reason: reason,
+                isTimeout: isTimeout
+            )
+        )
+        guard pendingNotificationTask == nil else { return }
+        pendingNotificationTask = Task { [weak self] in
+            let delay = UInt64(MCPConnectionFailureNotificationBatch.aggregationDelay * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            await self?.flushPendingConnectionFailures()
+        }
+    }
+
+    private func flushPendingConnectionFailures() {
+        let failures = pendingFailures
+        pendingFailures = []
+        pendingNotificationTask = nil
+        let batch = MCPConnectionFailureNotificationBatch(failures: failures)
+        guard !batch.failures.isEmpty else { return }
 
         let content = UNMutableNotificationContent()
         content.title = NSLocalizedString("MCP 连接异常", comment: "MCP connection failure notification title")
-        if isTimeout {
-            content.body = String(
-                format: NSLocalizedString("服务器“%@”握手超时，请检查网络或服务器状态。", comment: "MCP handshake timeout notification body"),
-                serverDisplayName
-            )
-        } else {
-            let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmedReason.isEmpty {
-                content.body = String(
-                    format: NSLocalizedString("服务器“%@”握手失败，请稍后重试。", comment: "MCP handshake failure notification body"),
-                    serverDisplayName
-                )
-            } else {
-                content.body = String(
-                    format: NSLocalizedString("服务器“%@”握手失败：%@", comment: "MCP handshake failure notification body with reason"),
-                    serverDisplayName,
-                    trimmedReason
-                )
-            }
-        }
+        content.body = batch.body
         content.sound = .default
 
         let request = UNNotificationRequest(
-            identifier: "mcp.connection.failed.\(UUID().uuidString)",
+            identifier: MCPConnectionFailureNotificationBatch.notificationIdentifier,
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        let notificationCenter = UNUserNotificationCenter.current()
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: [MCPConnectionFailureNotificationBatch.notificationIdentifier])
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: [MCPConnectionFailureNotificationBatch.notificationIdentifier])
+        notificationCenter.add(request)
     }
 
     private func configureIfNeeded() {

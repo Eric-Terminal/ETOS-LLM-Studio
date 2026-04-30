@@ -2279,3 +2279,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。若勾选“提供商配置”，包含 API Key 的配置数据可能会随同步包在您的设备间同步。" = "Off by default. When enabled, iCloud Sync uploads the current device snapshot first, then pulls and merges snapshots from other devices. If “Provider Configs” is selected, configuration data containing API keys may sync across your devices.";
 "顶部毛玻璃渐隐" = "Fondu verre en haut";
 "无气泡UI会透明化聊天气泡并放宽消息文本宽度；顶部毛玻璃渐隐会让聊天页顶部向消息区自然过渡。" = "L’interface sans bulles rend les bulles transparentes et élargit le texte des messages ; le fondu verre en haut crée une transition naturelle vers la zone des messages.";
+"MCP 连接异常" = "Problème de connexion MCP";
+"%d 个 MCP 服务器连接异常：%@。请检查网络或服务器状态后再重试。" = "%d serveurs MCP ont un problème de connexion : %@. Vérifiez le réseau ou l’état du serveur, puis réessayez.";
+"%@ 等" = "%@, etc.";

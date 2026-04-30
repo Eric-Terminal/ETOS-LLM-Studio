@@ -2279,3 +2279,6 @@
 "无" = "None";
 "将导出前 %d 条消息（包含目标消息与其上文）。" = "Will export the first %d messages, including the target message and earlier context.";
 "将导出当前会话全部 %d 条消息。" = "Will export all %d messages in the current chat.";
+"MCP 连接异常" = "MCP Connection Issue";
+"%d 个 MCP 服务器连接异常：%@。请检查网络或服务器状态后再重试。" = "%d MCP servers have connection issues: %@. Check the network or server status, then try again.";
+"%@ 等" = "%@, etc.";
