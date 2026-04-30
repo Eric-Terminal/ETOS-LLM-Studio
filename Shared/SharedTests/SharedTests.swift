@@ -933,6 +933,69 @@ struct MemoryManagerTests {
     }
 }
 
+@Suite("CloudEmbeddingService Tests")
+struct CloudEmbeddingServiceTests {
+    @Test("默认嵌入服务会按 Gemini 格式选择原生适配器")
+    func testDefaultServiceRoutesGeminiEmbeddingModelToGeminiAdapter() async throws {
+        let backupProviders = ConfigLoader.loadProviders()
+        defer {
+            restoreProviders(backupProviders)
+            MockURLProtocol.mockResponses = [:]
+        }
+        clearAllProviders()
+        MockURLProtocol.mockResponses = [:]
+
+        let providerID = UUID()
+        let modelID = UUID()
+        let model = Model(
+            id: modelID,
+            modelName: "gemini-embedding-001",
+            displayName: "Gemini Embedding",
+            capabilities: [.embedding]
+        )
+        let provider = Provider(
+            id: providerID,
+            name: "Gemini 嵌入测试",
+            baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+            apiKeys: ["test-key"],
+            apiFormat: "gemini",
+            models: [model]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        let expectedURL = try #require(URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=test-key"))
+        let response = try #require(HTTPURLResponse(
+            url: expectedURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        ))
+        let responseData = Data(#"{"embedding":{"values":[0.1,0.2,0.3]}}"#.utf8)
+        MockURLProtocol.mockResponses[expectedURL] = .success((response, responseData))
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let service = CloudEmbeddingService(urlSession: URLSession(configuration: configuration))
+
+        let embeddings = try await service.generateEmbeddings(
+            for: ["用户喜欢冷萃咖啡。"],
+            preferredModelID: "\(providerID.uuidString)-\(modelID.uuidString)"
+        )
+
+        #expect(embeddings.count == 1)
+        #expect(embeddings.first?.count == 3)
+    }
+
+    private func clearAllProviders() {
+        ConfigLoader.loadProviders().forEach { ConfigLoader.deleteProvider($0) }
+    }
+
+    private func restoreProviders(_ providers: [Provider]) {
+        clearAllProviders()
+        providers.forEach { ConfigLoader.saveProvider($0) }
+    }
+}
+
 // MARK: - OpenAIAdapter Tests
 
 @Suite("OpenAIAdapter Tests")
@@ -949,6 +1012,28 @@ struct OpenAIAdapterTests {
         ),
         model: Model(modelName: "test-model")
     )
+
+    @Test("OpenAI 兼容模型列表会识别嵌入模型")
+    func testOpenAIModelListInfersEmbeddingCapability() throws {
+        let data = Data("""
+        {
+          "data": [
+            { "id": "gemini-embedding-001" },
+            { "id": "text-embedding-3-large" },
+            { "id": "gpt-4o" }
+          ]
+        }
+        """.utf8)
+
+        let models = try adapter.parseModelListResponse(data: data)
+        let geminiEmbedding = models.first { $0.modelName == "gemini-embedding-001" }
+        let openAIEmbedding = models.first { $0.modelName == "text-embedding-3-large" }
+        let chatModel = models.first { $0.modelName == "gpt-4o" }
+
+        #expect(geminiEmbedding?.capabilities == [.embedding])
+        #expect(openAIEmbedding?.capabilities == [.embedding])
+        #expect(chatModel?.supportsEmbedding == false)
+    }
 
     private var saveMemoryTool: InternalToolDefinition {
         let parameters = JSONValue.dictionary([
@@ -1753,6 +1838,58 @@ struct GeminiAdapterTests {
         ),
         model: Model(modelName: "gemini-2.5-pro")
     )
+
+    @Test("Gemini 原生模型列表会保留嵌入模型")
+    func testGeminiModelListKeepsEmbeddingOnlyModels() throws {
+        let data = Data("""
+        {
+          "models": [
+            {
+              "name": "models/gemini-embedding-001",
+              "displayName": "Gemini Embedding",
+              "supportedGenerationMethods": ["embedContent", "batchEmbedContents"]
+            },
+            {
+              "name": "models/gemini-2.5-pro",
+              "displayName": "Gemini 2.5 Pro",
+              "supportedGenerationMethods": ["generateContent", "streamGenerateContent"]
+            }
+          ]
+        }
+        """.utf8)
+
+        let models = try adapter.parseModelListResponse(data: data)
+        let embeddingModel = models.first { $0.modelName == "gemini-embedding-001" }
+        let chatModel = models.first { $0.modelName == "gemini-2.5-pro" }
+
+        #expect(embeddingModel?.capabilities == [.embedding])
+        #expect(chatModel?.supportsEmbedding == false)
+        #expect(chatModel?.capabilities.contains(.chat) == true)
+    }
+
+    @Test("Gemini 嵌入请求使用原生端点并修正官方 OpenAI 兼容基址")
+    func testGeminiEmbeddingRequestUsesNativeEndpoint() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Gemini Test Provider",
+            baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+            apiKeys: ["test-key"],
+            apiFormat: "gemini"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "gemini-embedding-001", capabilities: [.embedding])
+        )
+
+        let request = try #require(adapter.buildEmbeddingRequest(for: model, texts: ["第一段", "第二段"]))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let requests = try #require(payload["requests"] as? [[String: Any]])
+
+        #expect(request.url?.absoluteString == "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents?key=test-key")
+        #expect(requests.count == 2)
+        #expect(requests.first?["model"] as? String == "models/gemini-embedding-001")
+    }
 
     @Test("Gemini 工具 schema 缺失 type 时自动补全")
     func testGeminiToolSchemaTypeInferenceForEnumField() throws {

@@ -286,6 +286,9 @@ public class OpenAIAdapter: APIAdapter {
 
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
         let lowered = modelName.lowercased()
+        if lowered.contains("embedding") || lowered.contains("embed") {
+            return [.embedding]
+        }
         var capabilities: [Model.Capability] = Model.defaultCapabilities
         if lowered.contains("tts") || lowered.contains("text-to-speech") || lowered.contains("speech") {
             capabilities.append(.textToSpeech)
@@ -1892,6 +1895,9 @@ public class GeminiAdapter: APIAdapter {
 
     private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
         let lowered = modelName.lowercased()
+        if lowered.contains("embedding") || lowered.contains("embed") {
+            return [.embedding]
+        }
         var capabilities: [Model.Capability] = Model.defaultCapabilities
         if lowered.contains("tts") || lowered.contains("speech") {
             capabilities.append(.textToSpeech)
@@ -1900,6 +1906,47 @@ public class GeminiAdapter: APIAdapter {
             capabilities.append(.imageGeneration)
         }
         return capabilities
+    }
+
+    private func inferredCapabilities(for modelName: String, supportedGenerationMethods: [String]?) -> [Model.Capability] {
+        guard let supportedGenerationMethods else {
+            return inferredCapabilities(for: modelName)
+        }
+
+        var capabilities: [Model.Capability] = []
+        if supportedGenerationMethods.contains("generateContent") || supportedGenerationMethods.contains("streamGenerateContent") {
+            capabilities.append(contentsOf: Model.defaultCapabilities)
+        }
+        if supportedGenerationMethods.contains("embedContent") ||
+            supportedGenerationMethods.contains("batchEmbedContents") ||
+            supportedGenerationMethods.contains("asyncBatchEmbedContent") {
+            capabilities.append(.embedding)
+        }
+
+        guard !capabilities.isEmpty else {
+            return inferredCapabilities(for: modelName)
+        }
+        return orderedUniqueCapabilities(capabilities)
+    }
+
+    private func orderedUniqueCapabilities(_ capabilities: [Model.Capability]) -> [Model.Capability] {
+        let capabilitySet = Set(capabilities)
+        let orderedCapabilities: [Model.Capability] = [.chat, .toolCalling, .speechToText, .textToSpeech, .embedding, .imageGeneration]
+        return orderedCapabilities.filter { capabilitySet.contains($0) }
+    }
+
+    private func normalizedGeminiBaseURL(from rawBaseURL: String) -> URL? {
+        guard var components = URLComponents(string: rawBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return nil
+        }
+        if components.host == "generativelanguage.googleapis.com" {
+            var pathParts = components.path.split(separator: "/").map(String.init)
+            if pathParts.last?.lowercased() == "openai" {
+                pathParts.removeLast()
+                components.path = pathParts.isEmpty ? "" : "/" + pathParts.joined(separator: "/")
+            }
+        }
+        return components.url
     }
 
     private func normalizedGeminiToolParameters(_ parameters: [String: Any]) -> [String: Any] {
@@ -2369,7 +2416,7 @@ public class GeminiAdapter: APIAdapter {
     // MARK: - 协议方法实现
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
-        guard let baseURL = URL(string: model.provider.baseURL) else {
+        guard let baseURL = normalizedGeminiBaseURL(from: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
         }
@@ -2611,7 +2658,7 @@ public class GeminiAdapter: APIAdapter {
     }
     
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {
-        guard let baseURL = URL(string: provider.baseURL) else {
+        guard let baseURL = normalizedGeminiBaseURL(from: provider.baseURL) else {
             logger.error("构建模型列表请求失败: 无效的 API 基础 URL - \(provider.baseURL)")
             return nil
         }
@@ -2645,7 +2692,11 @@ public class GeminiAdapter: APIAdapter {
 
         let supportedModels = models.filter { info in
             guard let methods = info.supportedGenerationMethods else { return true }
-            return methods.contains("generateContent") || methods.contains("streamGenerateContent")
+            return methods.contains("generateContent") ||
+                methods.contains("streamGenerateContent") ||
+                methods.contains("embedContent") ||
+                methods.contains("batchEmbedContents") ||
+                methods.contains("asyncBatchEmbedContent")
         }
 
         return supportedModels.map { info in
@@ -2654,7 +2705,10 @@ public class GeminiAdapter: APIAdapter {
             return Model(
                 modelName: normalizedName,
                 displayName: info.displayName,
-                capabilities: inferredCapabilities(for: normalizedName)
+                capabilities: inferredCapabilities(
+                    for: normalizedName,
+                    supportedGenerationMethods: info.supportedGenerationMethods
+                )
             )
         }
     }
@@ -2805,7 +2859,7 @@ public class GeminiAdapter: APIAdapter {
     }
     
     public func buildEmbeddingRequest(for model: RunnableModel, texts: [String]) -> URLRequest? {
-        guard let baseURL = URL(string: model.provider.baseURL) else {
+        guard let baseURL = normalizedGeminiBaseURL(from: model.provider.baseURL) else {
             logger.error("构建嵌入请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
         }
@@ -2872,7 +2926,7 @@ public class GeminiAdapter: APIAdapter {
     }
 
     public func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {
-        guard let baseURL = URL(string: model.provider.baseURL) else {
+        guard let baseURL = normalizedGeminiBaseURL(from: model.provider.baseURL) else {
             logger.error("构建 Gemini 生图请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
         }
