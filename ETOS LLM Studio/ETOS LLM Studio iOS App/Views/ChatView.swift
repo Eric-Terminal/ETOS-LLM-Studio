@@ -121,9 +121,9 @@ struct ChatView: View {
     private let navBarVerticalPadding: CGFloat = 8
     private let navBarPillVerticalPadding: CGFloat = 6
     private let navBarPillSpacing: CGFloat = 1
-    private let navBarBlurFadeMinHeight: CGFloat = 72
-    private let navBarBlurFadeMaxHeight: CGFloat = 150
-    private let navBarBlurFadeHeightRatio: CGFloat = 0.1
+    private let navBarBlurFadeMinHeight: CGFloat = 44
+    private let navBarBlurFadeMaxHeight: CGFloat = 96
+    private let navBarBlurFadeHeightRatio: CGFloat = 0.06
     private let modelPickerHeightRatio: CGFloat = 0.4
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
@@ -465,6 +465,11 @@ struct ChatView: View {
                         scheduleImmediateBottomSnap(proxy: proxy)
                         resolvePendingSearchJumpIfNeeded()
                     }
+                    .overlay(alignment: .top) {
+                        if viewModel.enableChatTopBlurFade {
+                            navBarFadeBlurOverlay
+                        }
+                    }
                     // Telegram 风格：顶部导航栏
                     .safeAreaInset(edge: .top) {
                         telegramNavBar
@@ -493,11 +498,6 @@ struct ChatView: View {
                             .padding(.trailing, 16)
                             .padding(.bottom, scrollToBottomButtonBottomPadding)
                             .transition(.scale.combined(with: .opacity))
-                        }
-                    }
-                    .overlay(alignment: .top) {
-                        if viewModel.enableChatTopBlurFade {
-                            navBarFadeBlurOverlay
                         }
                     }
                     .allowsHitTesting(!isOverlayPanelPresented)
@@ -975,13 +975,13 @@ struct ChatView: View {
                 navBarBlurFadeMaxHeight,
                 max(navBarBlurFadeMinHeight, proxy.size.height * navBarBlurFadeHeightRatio)
             )
-            BlurView(style: .systemThinMaterial)
+            BlurView(style: .regular)
             .mask(
                 LinearGradient(
                     gradient: Gradient(stops: [
                         .init(color: Color.black, location: 0),
-                        .init(color: Color.black.opacity(0.92), location: 0.44),
-                        .init(color: Color.black.opacity(0.38), location: 0.78),
+                        .init(color: Color.black.opacity(0.88), location: 0.28),
+                        .init(color: Color.black.opacity(0.22), location: 0.72),
                         .init(color: Color.black.opacity(0), location: 1)
                     ]),
                     startPoint: .top,
