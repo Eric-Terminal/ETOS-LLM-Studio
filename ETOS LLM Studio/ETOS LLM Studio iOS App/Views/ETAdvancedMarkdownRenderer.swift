@@ -1894,15 +1894,22 @@ private enum ETCodePreviewSupport {
     private static let previewableLanguages: Set<String> = [
         "html", "htm", "xhtml", "xml", "svg"
     ]
-    private static let previewResetStyle = """
+    private static func previewResetStyle(prefersDarkPalette: Bool) -> String {
+        let backgroundColor = prefersDarkPalette ? "#1C1C1E" : "#FFFFFF"
+        let textColor = prefersDarkPalette ? "#FFFFFF" : "#1C1C1E"
+
+        return """
 <style id="et-preview-reset">
   html, body {
     margin: 0 !important;
     padding: 0 !important;
     min-height: 100%;
     width: 100%;
+    color-scheme: \(prefersDarkPalette ? "dark" : "light");
   }
   body {
+    background: \(backgroundColor);
+    color: \(textColor);
     overflow: auto !important;
     -webkit-overflow-scrolling: touch;
   }
@@ -1914,13 +1921,17 @@ private enum ETCodePreviewSupport {
   }
 </style>
 """
+    }
 
     static func canPreview(_ language: String?) -> Bool {
         previewableLanguages.contains(normalizedLanguage(language))
     }
 
-    static func htmlDocument(content: String, language: String?) -> String {
+    static func htmlDocument(content: String, language: String?, prefersDarkPalette: Bool) -> String {
         let normalized = normalizedLanguage(language)
+        let backgroundColor = prefersDarkPalette ? "#1C1C1E" : "#FFFFFF"
+        let textColor = prefersDarkPalette ? "#FFFFFF" : "#1C1C1E"
+
         switch normalized {
         case "svg":
             return """
@@ -1933,8 +1944,9 @@ private enum ETCodePreviewSupport {
     html, body {
       margin: 0;
       padding: 0;
-      background: #FFFFFF;
-      color: #1C1C1E;
+      background: \(backgroundColor);
+      color: \(textColor);
+      color-scheme: \(prefersDarkPalette ? "dark" : "light");
       width: 100%;
       min-height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
@@ -1961,16 +1973,16 @@ private enum ETCodePreviewSupport {
 </html>
 """
         case "html", "htm", "xhtml":
-            return wrappedHTMLIfNeeded(content)
+            return wrappedHTMLIfNeeded(content, prefersDarkPalette: prefersDarkPalette)
         default:
             return content
         }
     }
 
-    private static func wrappedHTMLIfNeeded(_ content: String) -> String {
+    private static func wrappedHTMLIfNeeded(_ content: String, prefersDarkPalette: Bool) -> String {
         let lowercased = content.lowercased()
         if lowercased.contains("<html") || lowercased.contains("<!doctype") {
-            return injectingPreviewResetStyle(into: content)
+            return injectingPreviewResetStyle(into: content, prefersDarkPalette: prefersDarkPalette)
         }
         return """
 <!doctype html>
@@ -1978,7 +1990,7 @@ private enum ETCodePreviewSupport {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  \(previewResetStyle)
+  \(previewResetStyle(prefersDarkPalette: prefersDarkPalette))
 </head>
 <body>
 \(content)
@@ -1987,14 +1999,14 @@ private enum ETCodePreviewSupport {
 """
     }
 
-    private static func injectingPreviewResetStyle(into html: String) -> String {
+    private static func injectingPreviewResetStyle(into html: String, prefersDarkPalette: Bool) -> String {
         if html.contains("id=\"et-preview-reset\"") {
             return html
         }
 
         if let headCloseRange = html.range(of: "</head>", options: [.caseInsensitive]) {
             var output = html
-            output.insert(contentsOf: "\n\(previewResetStyle)\n", at: headCloseRange.lowerBound)
+            output.insert(contentsOf: "\n\(previewResetStyle(prefersDarkPalette: prefersDarkPalette))\n", at: headCloseRange.lowerBound)
             return output
         }
 
@@ -2002,7 +2014,7 @@ private enum ETCodePreviewSupport {
            let htmlTagClose = html[htmlOpenRange.lowerBound...].firstIndex(of: ">") {
             var output = html
             let insertIndex = output.index(after: htmlTagClose)
-            output.insert(contentsOf: "\n<head>\n\(previewResetStyle)\n</head>\n", at: insertIndex)
+            output.insert(contentsOf: "\n<head>\n\(previewResetStyle(prefersDarkPalette: prefersDarkPalette))\n</head>\n", at: insertIndex)
             return output
         }
 
@@ -2012,7 +2024,7 @@ private enum ETCodePreviewSupport {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  \(previewResetStyle)
+  \(previewResetStyle(prefersDarkPalette: prefersDarkPalette))
 </head>
 <body>
 \(html)
@@ -2029,6 +2041,8 @@ private enum ETCodePreviewSupport {
 }
 
 private struct ETCodePreviewButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let content: String
     let language: String?
     let tintColor: Color
@@ -2048,7 +2062,8 @@ private struct ETCodePreviewButton: View {
         .fullScreenCover(isPresented: $showingPreview) {
             ETCodePreviewSheet(
                 content: content,
-                language: language
+                language: language,
+                prefersDarkPalette: colorScheme == .dark
             )
         }
     }
@@ -2057,12 +2072,17 @@ private struct ETCodePreviewButton: View {
 private struct ETCodePreviewSheet: View {
     let content: String
     let language: String?
+    let prefersDarkPalette: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ETCodePreviewWebView(
-                htmlContent: ETCodePreviewSupport.htmlDocument(content: content, language: language)
+                htmlContent: ETCodePreviewSupport.htmlDocument(
+                    content: content,
+                    language: language,
+                    prefersDarkPalette: prefersDarkPalette
+                )
             )
             .ignoresSafeArea()
             .toolbar {
