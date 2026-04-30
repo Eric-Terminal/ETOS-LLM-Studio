@@ -459,6 +459,15 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.rawRequestBodyJSON == nil)
     }
 
+    @Test("聊天模型默认开启工具调用、推理和流式输出")
+    func testChatModelDefaultCapabilitiesEnableReasoningAndStreaming() throws {
+        let model = Model(modelName: "plain-chat")
+
+        #expect(model.supportsToolCalling)
+        #expect(model.supportsReasoning)
+        #expect(model.supportsStreaming)
+    }
+
     @Test("旧模型能力解码会迁移到新能力结构")
     func testLegacyModelCapabilitiesDecodeIntoNewShape() throws {
         let legacyJSON = """

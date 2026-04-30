@@ -338,7 +338,7 @@ public struct Model: Codable, Identifiable, Hashable {
         case imageGeneration
     }
 
-    public static let defaultCapabilities: [ModelCapability] = [.toolCalling]
+    public static let defaultCapabilities: [ModelCapability] = [.toolCalling, .reasoning, .streaming]
 
     public enum RequestBodyOverrideMode: String, Codable, Hashable {
         case expression
