@@ -3703,8 +3703,8 @@ public class ChatService {
     }
 
     /// 重试指定消息，支持任意位置的消息重试
-    /// - 对于 user 消息：删除该 user 与下一个 user 之间的内容，保留下游对话，重新发送该 user。
-    /// - 对于 assistant/error 消息：回溯到上一个 user 重新生成回复，保留下一个 assistant 之后的内容。
+    /// - 对于 user 消息：保留下游对话，在该 user 对应回复位置插入新版本，重新发送该 user。
+    /// - 对于 assistant/error 消息：回溯到上一个 user 重新生成回复，并保留后续对话。
     public func retryMessage(
         _ message: ChatMessage,
         aiTemperature: Double,
@@ -3816,6 +3816,8 @@ public class ChatService {
 
         persistAndPublishMessages(updatedMessages, for: currentSession.id)
         let actualLoadingMessageID = loadingMessage.id
+        // 保留尾部只用于本地消息列表，请求上下文截止到新占位回复。
+        let requestMessages = Array(updatedMessages.prefix(through: insertionIndex))
         
         // 恢复原消息的音频附件（如果有）
         var audioAttachment: AudioAttachment? = nil
@@ -3836,9 +3838,9 @@ public class ChatService {
             }
         }
         
-        // 使用原消息内容和附件，调用主要的发送函数（不移除保留尾部）
+        // 使用原消息内容和附件发起请求，尾部对话已在本地保留但不参与本次请求。
         await startRequestWithPresetMessages(
-            messages: updatedMessages,
+            messages: requestMessages,
             loadingMessageID: actualLoadingMessageID,  // 使用局部变量，避免强制解包可能导致的崩溃
             currentSession: currentSession,
             userMessage: messageToSend,

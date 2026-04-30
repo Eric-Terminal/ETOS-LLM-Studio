@@ -2994,6 +2994,56 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("重试中间用户只序列化目标上文并保留后续对话")
+    func testRetryMiddleUserSendsOnlyPrefixContext() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证中间用户重试行为。")
+            await cleanup()
+            return
+        }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "用户1的新回复")
+
+        let firstUser = ChatMessage(role: .user, content: "用户1")
+        let firstAssistant = ChatMessage(role: .assistant, content: "助手1")
+        let secondUser = ChatMessage(role: .user, content: "用户2")
+        let secondAssistant = ChatMessage(role: .assistant, content: "助手2")
+        chatService.updateMessages([firstUser, firstAssistant, secondUser, secondAssistant], for: sessionID)
+
+        await chatService.retryMessage(
+            firstUser,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        #expect(sentMessages.map(\.content) == ["用户1"])
+
+        let storedMessages = chatService.messagesForSessionSubject.value
+        #expect(storedMessages.map(\.content) == ["用户1", "助手1", "用户1的新回复", "用户2", "助手2"])
+        #expect(storedMessages[0].selectedResponseAttemptID == storedMessages[2].responseAttemptID)
+        #expect(storedMessages[1].responseAttemptIndex == 0)
+        #expect(storedMessages[2].responseAttemptIndex == 1)
+        #expect(ChatResponseAttemptSupport.visibleMessages(from: storedMessages).map(\.content) == [
+            "用户1",
+            "用户1的新回复",
+            "用户2",
+            "助手2"
+        ])
+
+        await cleanup()
+    }
+
     @Test("重试尾部 assistant 流式出首字后断开会在断点后续跑并追加错误气泡")
     func testRetryTailAssistantStreamingFailureAfterFirstTokenContinuesFromTail() async {
         await cleanup()
