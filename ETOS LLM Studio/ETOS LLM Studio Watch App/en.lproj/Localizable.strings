@@ -1389,3 +1389,17 @@
 "返回当前设备系统时间。" = "Returns the current device system time.";
 "工具详情：获取系统时间" = "Tool details: get system time";
 "获取当前设备系统时间。无需参数；当用户询问当前时间、日期或需要实时本地时间线索时调用。" = "Gets the current device system time. No parameters are required; call this when the user asks for the current time, date, or needs a live local time hint.";
+"拓展能力" = "Extensions";
+"每日脉冲" = "Daily Pulse";
+"准备中" = "Preparing";
+"今日待查看" = "Ready today";
+"今日已生成" = "Generated today";
+"明早 %@" = "Tomorrow %@";
+"待查看" = "Ready";
+"已生成" = "Generated";
+"用量统计" = "Usage Analytics";
+"记忆系统" = "Memory System";
+"快捷指令工具集成" = "Shortcuts Tool Integration";
+"世界书" = "Worldbook";
+"语音朗读（TTS）" = "Text-to-Speech (TTS)";
+"同步与备份" = "Sync & Backup";

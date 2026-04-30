@@ -382,16 +382,19 @@ struct SettingsView: View {
 
     private var dailyPulseEntryStatusText: String? {
         if pulseManager.isPreparingTodayPulse {
-            return "准备中"
+            return NSLocalizedString("准备中", comment: "每日脉冲准备中状态")
         }
         if pulseManager.hasUnviewedTodayRun {
-            return "今日待查看"
+            return NSLocalizedString("今日待查看", comment: "每日脉冲今日未查看状态")
         }
         if pulseManager.todayRun != nil {
-            return "今日已生成"
+            return NSLocalizedString("今日已生成", comment: "每日脉冲今日已生成状态")
         }
         if deliveryCoordinator.reminderEnabled {
-            return "明早 \(deliveryCoordinator.reminderTimeText)"
+            return String(
+                format: NSLocalizedString("明早 %@", comment: "每日脉冲明早提醒状态"),
+                deliveryCoordinator.reminderTimeText
+            )
         }
         return nil
     }
