@@ -263,8 +263,9 @@ struct ChatBubble: View {
     }
 
     private var shouldShimmerReasoningHeader: Bool {
-        guard showsStreamingIndicators, message.role == .assistant else { return false }
-        return true
+        showsStreamingIndicators
+            && message.role == .assistant
+            && reasoningCompletedAt == nil
     }
 
     private var reasoningStartedAt: Date? {
@@ -1847,63 +1848,6 @@ struct ChatBubble: View {
         }
     }
 
-    private struct ShimmeringText: View {
-        let text: String
-        let font: Font
-        let baseColor: Color
-        let highlightColor: Color
-        var duration: Double = 1.6
-        var angle: Double = 18
-        var bandWidthRatio: CGFloat = 0.7
-        var bandHeightRatio: CGFloat = 1.6
-
-        var body: some View {
-            Text(text)
-                .etFont(font)
-                .foregroundStyle(baseColor)
-                .overlay(
-                    GeometryReader { proxy in
-                        let width = proxy.size.width
-                        let height = proxy.size.height
-                        let bandWidth = max(1, width * bandWidthRatio)
-                        let bandHeight = max(1, height * bandHeightRatio)
-                        let startX = -bandWidth
-                        let endX = width + bandWidth
-                        let safeDuration = max(duration, 0.1)
-                        TimelineView(.animation) { timeline in
-                            let phase = timeline.date.timeIntervalSinceReferenceDate
-                                .truncatingRemainder(dividingBy: safeDuration) / safeDuration
-                            Rectangle()
-                                .fill(
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .clear, location: 0),
-                                            .init(color: highlightColor, location: 0.35),
-                                            .init(color: highlightColor, location: 0.65),
-                                            .init(color: .clear, location: 1)
-                                        ],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: bandWidth, height: bandHeight)
-                                .rotationEffect(.degrees(angle))
-                                .position(
-                                    x: startX + (endX - startX) * CGFloat(phase),
-                                    y: height / 2
-                                )
-                                .blendMode(.screen)
-                        }
-                    }
-                    .mask(
-                        Text(text)
-                            .etFont(font)
-                    )
-                    .allowsHitTesting(false)
-                )
-        }
-    }
-
     private struct CappedScrollableText: View {
         let text: String
         let maxHeight: CGFloat
@@ -2056,6 +2000,63 @@ struct ChatBubble: View {
             }
             .clipShape(shape)
         }
+    }
+}
+
+private struct ShimmeringText: View {
+    let text: String
+    let font: Font
+    let baseColor: Color
+    let highlightColor: Color
+    var duration: Double = 1.6
+    var angle: Double = 18
+    var bandWidthRatio: CGFloat = 0.7
+    var bandHeightRatio: CGFloat = 1.6
+
+    var body: some View {
+        Text(text)
+            .etFont(font)
+            .foregroundStyle(baseColor)
+            .overlay(
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let height = proxy.size.height
+                    let bandWidth = max(1, width * bandWidthRatio)
+                    let bandHeight = max(1, height * bandHeightRatio)
+                    let startX = -bandWidth
+                    let endX = width + bandWidth
+                    let safeDuration = max(duration, 0.1)
+                    TimelineView(.animation) { timeline in
+                        let phase = timeline.date.timeIntervalSinceReferenceDate
+                            .truncatingRemainder(dividingBy: safeDuration) / safeDuration
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: highlightColor, location: 0.35),
+                                        .init(color: highlightColor, location: 0.65),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: bandWidth, height: bandHeight)
+                            .rotationEffect(.degrees(angle))
+                            .position(
+                                x: startX + (endX - startX) * CGFloat(phase),
+                                y: height / 2
+                            )
+                            .blendMode(.screen)
+                    }
+                }
+                .mask(
+                    Text(text)
+                        .etFont(font)
+                )
+                .allowsHitTesting(false)
+            )
     }
 }
 
@@ -2372,9 +2373,12 @@ private struct WatchTimelineReasoningStepView: View {
     @ViewBuilder
     private func headerTitleLabel(title: String) -> some View {
         if isShimmering {
-            Text(title)
-                .etFont(.footnote.weight(.semibold))
-                .foregroundStyle(titleColor)
+            ShimmeringText(
+                text: title,
+                font: .footnote.weight(.semibold),
+                baseColor: secondaryColor,
+                highlightColor: titleColor
+            )
                 .lineLimit(nil)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)

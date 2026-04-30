@@ -406,8 +406,9 @@ struct ChatBubble: View {
     }
 
     private var shouldShimmerReasoningHeader: Bool {
-        guard showsStreamingIndicators, message.role == .assistant else { return false }
-        return true
+        showsStreamingIndicators
+            && message.role == .assistant
+            && reasoningCompletedAt == nil
     }
 
     private var reasoningStartedAt: Date? {
