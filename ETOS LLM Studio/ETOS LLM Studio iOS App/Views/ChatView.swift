@@ -604,7 +604,7 @@ struct ChatView: View {
             .alert("确认删除消息", isPresented: messageDeleteAlertPresented) {
                 Button("删除", role: .destructive) {
                     if let message = messageToDelete {
-                        viewModel.deleteMessage(message)
+                        viewModel.deleteAllVersions(of: message)
                     }
                     messageToDelete = nil
                 }

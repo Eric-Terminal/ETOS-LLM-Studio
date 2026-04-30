@@ -3273,6 +3273,59 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
+    @Test("删除所有回复版本会清理同组全部尝试")
+    func testDeleteAllResponseAttemptVersionsRemovesWholeGroup() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证回复版本整组删除行为。")
+            await cleanup()
+            return
+        }
+
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let userMessage = ChatMessage(
+            role: .user,
+            content: "请重新生成",
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let firstAssistant = ChatMessage(
+            role: .assistant,
+            content: "第一版回复",
+            responseGroupID: userMessage.id,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let toolMessage = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            responseGroupID: userMessage.id,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondAssistant = ChatMessage(
+            role: .assistant,
+            content: "第二版回复",
+            responseGroupID: userMessage.id,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1
+        )
+        let nextUser = ChatMessage(role: .user, content: "下一轮")
+        chatService.updateMessages(
+            [userMessage, firstAssistant, toolMessage, secondAssistant, nextUser],
+            for: sessionID
+        )
+
+        chatService.deleteAllVersions(of: secondAssistant)
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.map(\.id) == [userMessage.id, nextUser.id])
+        #expect(messages.first?.selectedResponseAttemptID == nil)
+
+        await cleanup()
+    }
+
     @Test("Memory prompt is added when memory is enabled")
     func testMemoryPrompt_Enabled() async throws {
         await cleanup()

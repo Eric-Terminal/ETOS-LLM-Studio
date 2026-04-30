@@ -791,7 +791,7 @@ struct ContentView: View {
                     viewModel.stopSpeakingMessage()
                 },
                 onDelete: {
-                    viewModel.deleteMessage(message)
+                    viewModel.deleteAllVersions(of: message)
                 },
                 onDeleteCurrentVersion: {
                     viewModel.deleteCurrentVersion(of: message)

@@ -1560,6 +1560,10 @@ final class ChatViewModel: ObservableObject {
             updateMessage(updatedMessage)
         }
     }
+
+    func deleteAllVersions(of message: ChatMessage) {
+        chatService.deleteAllVersions(of: message)
+    }
     
     /// 添加新版本到消息（用于重试功能）
     func addVersionToMessage(_ message: ChatMessage, newContent: String) {

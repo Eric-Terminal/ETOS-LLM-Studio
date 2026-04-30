@@ -1475,6 +1475,34 @@ public class ChatService {
         logger.info("已删除消息: \(targetMessage.id.uuidString)")
     }
 
+    public func deleteAllVersions(of message: ChatMessage) {
+        guard let currentSession = currentSessionSubject.value else { return }
+        var messages = messagesForSessionSubject.value
+        guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
+        let targetMessage = messages[messageIndex]
+
+        if let groupID = targetMessage.responseGroupID,
+           targetMessage.responseAttemptID != nil,
+           ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages).count > 1 {
+            let deletedMessages = messages.filter { $0.responseGroupID == groupID }
+            guard !deletedMessages.isEmpty else { return }
+            for deletedMessage in deletedMessages {
+                deleteStoredAttachments(for: deletedMessage)
+            }
+            messages.removeAll { $0.responseGroupID == groupID }
+            if let anchorIndex = messages.firstIndex(where: { $0.id == groupID && $0.role == .user }) {
+                messages[anchorIndex].selectedResponseAttemptID = nil
+            }
+
+            publishMessages(messages)
+            persistMessages(messages, for: currentSession.id)
+            logger.info("已删除回复组的所有版本: \(groupID.uuidString)")
+            return
+        }
+
+        deleteMessage(targetMessage)
+    }
+
     private func relatedToolResultMessageIDs(for message: ChatMessage, at messageIndex: Int, in messages: [ChatMessage]) -> Set<UUID> {
         guard message.role == .assistant,
               let toolCalls = message.toolCalls,
