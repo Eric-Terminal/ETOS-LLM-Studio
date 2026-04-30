@@ -413,7 +413,11 @@ public enum SyncEngine {
                     guard providerMergeIdentity(local[candidateIndex]) == providerMergeIdentity(provider) else {
                         break
                     }
-                    let conservativeResult = mergeProviderConservatively(local[candidateIndex], with: provider)
+                    let conservativeResult = mergeProviderConservatively(
+                        local[candidateIndex],
+                        with: provider,
+                        preferIncomingModelCapabilityShape: true
+                    )
                     if conservativeResult.changed {
                         local[candidateIndex] = conservativeResult.provider
                         ConfigLoader.saveProvider(conservativeResult.provider)
@@ -1437,7 +1441,8 @@ public enum SyncEngine {
 
     private static func mergeProviderConservatively(
         _ local: Provider,
-        with incoming: Provider
+        with incoming: Provider,
+        preferIncomingModelCapabilityShape: Bool = false
     ) -> (provider: Provider, changed: Bool) {
         var merged = local
         var changed = false
@@ -1469,7 +1474,11 @@ public enum SyncEngine {
             changed = true
         }
 
-        let mergedModelsResult = mergeProviderModelsConservatively(merged.models, incoming.models)
+        let mergedModelsResult = mergeProviderModelsConservatively(
+            merged.models,
+            incoming.models,
+            preferIncomingCapabilityShape: preferIncomingModelCapabilityShape
+        )
         if mergedModelsResult.changed {
             merged.models = mergedModelsResult.models
             changed = true
@@ -1480,7 +1489,8 @@ public enum SyncEngine {
 
     private static func mergeProviderModelsConservatively(
         _ localModels: [Model],
-        _ incomingModels: [Model]
+        _ incomingModels: [Model],
+        preferIncomingCapabilityShape: Bool = false
     ) -> (models: [Model], changed: Bool) {
         var merged = localModels
         var changed = false
@@ -1497,7 +1507,11 @@ public enum SyncEngine {
                     merged[existingIndex] = model
                     changed = true
                 case .conflict:
-                    let conservative = mergeModelConservatively(merged[existingIndex], with: incomingModel)
+                    let conservative = mergeModelConservatively(
+                        merged[existingIndex],
+                        with: incomingModel,
+                        preferIncomingCapabilityShape: preferIncomingCapabilityShape
+                    )
                     if conservative.changed {
                         merged[existingIndex] = conservative.model
                         changed = true
@@ -1520,7 +1534,8 @@ public enum SyncEngine {
 
     private static func mergeModelConservatively(
         _ local: Model,
-        with incoming: Model
+        with incoming: Model,
+        preferIncomingCapabilityShape: Bool = false
     ) -> (model: Model, changed: Bool) {
         var merged = local
         var changed = false
@@ -1538,31 +1553,39 @@ public enum SyncEngine {
             changed = true
         }
 
-        let mergedKind = mergeModelKind(merged.kind, incoming.kind)
+        let mergedKind = preferIncomingCapabilityShape ? incoming.kind : mergeModelKind(merged.kind, incoming.kind)
         if mergedKind != merged.kind {
             merged.kind = mergedKind
             changed = true
         }
 
-        let mergedInputModalities = mergeModelModalities(merged.inputModalities, incoming.inputModalities)
+        let mergedInputModalities = preferIncomingCapabilityShape
+            ? incoming.inputModalities
+            : mergeModelModalities(merged.inputModalities, incoming.inputModalities)
         if mergedInputModalities != merged.inputModalities {
             merged.inputModalities = mergedInputModalities
             changed = true
         }
 
-        let mergedOutputModalities = mergeModelModalities(merged.outputModalities, incoming.outputModalities)
+        let mergedOutputModalities = preferIncomingCapabilityShape
+            ? incoming.outputModalities
+            : mergeModelModalities(merged.outputModalities, incoming.outputModalities)
         if mergedOutputModalities != merged.outputModalities {
             merged.outputModalities = mergedOutputModalities
             changed = true
         }
 
-        let mergedCapabilities = mergeCapabilities(merged.capabilities, incoming.capabilities)
+        let mergedCapabilities = preferIncomingCapabilityShape
+            ? incoming.capabilities
+            : mergeCapabilities(merged.capabilities, incoming.capabilities)
         if mergedCapabilities != merged.capabilities {
             merged.capabilities = mergedCapabilities
             changed = true
         }
 
-        let mergedBuiltInTools = mergeBuiltInTools(merged.builtInTools, incoming.builtInTools)
+        let mergedBuiltInTools = preferIncomingCapabilityShape
+            ? incoming.builtInTools
+            : mergeBuiltInTools(merged.builtInTools, incoming.builtInTools)
         if mergedBuiltInTools != merged.builtInTools {
             merged.builtInTools = mergedBuiltInTools
             changed = true
@@ -2110,31 +2133,31 @@ public enum SyncEngine {
             changed = true
         }
 
-        let mergedKind = mergeModelKind(local.kind, incoming.kind)
+        let mergedKind = incoming.kind
         if mergedKind != local.kind {
             merged.kind = mergedKind
             changed = true
         }
 
-        let mergedInputModalities = mergeModelModalities(local.inputModalities, incoming.inputModalities)
+        let mergedInputModalities = incoming.inputModalities
         if mergedInputModalities != local.inputModalities {
             merged.inputModalities = mergedInputModalities
             changed = true
         }
 
-        let mergedOutputModalities = mergeModelModalities(local.outputModalities, incoming.outputModalities)
+        let mergedOutputModalities = incoming.outputModalities
         if mergedOutputModalities != local.outputModalities {
             merged.outputModalities = mergedOutputModalities
             changed = true
         }
 
-        let mergedCapabilities = mergeCapabilities(local.capabilities, incoming.capabilities)
+        let mergedCapabilities = incoming.capabilities
         if mergedCapabilities != local.capabilities {
             merged.capabilities = mergedCapabilities
             changed = true
         }
 
-        let mergedBuiltInTools = mergeBuiltInTools(local.builtInTools, incoming.builtInTools)
+        let mergedBuiltInTools = incoming.builtInTools
         if mergedBuiltInTools != local.builtInTools {
             merged.builtInTools = mergedBuiltInTools
             changed = true

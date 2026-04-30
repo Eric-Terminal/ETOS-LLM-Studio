@@ -503,6 +503,21 @@ struct RequestBodyOverrideModeTests {
         #expect(ttsModel.supportsTextToSpeech)
         #expect(ttsModel.outputModalities.contains(.audio))
     }
+
+    @Test("旧模型可用名称推断补齐新能力结构")
+    func testLegacyModelCanApplyInferredCapabilityHints() throws {
+        let legacyImage = Model(modelName: "gpt-image-1").applyingInferredCapabilityHints()
+        let legacyVision = Model(modelName: "gpt-4o").applyingInferredCapabilityHints()
+        let legacyReasoning = Model(modelName: "deepseek-r1").applyingInferredCapabilityHints()
+
+        #expect(legacyImage.kind == .image)
+        #expect(legacyImage.outputModalities.contains(.image))
+        #expect(legacyImage.supportsImageGeneration)
+        #expect(legacyVision.kind == .chat)
+        #expect(legacyVision.inputModalities.contains(.image))
+        #expect(legacyReasoning.kind == .chat)
+        #expect(legacyReasoning.capabilities.contains(.reasoning))
+    }
 }
 
 

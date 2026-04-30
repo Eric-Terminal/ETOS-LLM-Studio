@@ -123,6 +123,58 @@ struct SyncConflictStrategyTests {
         }
     }
 
+    @Test("同步导入会使用对端模型能力形状覆盖本地")
+    func testProviderSyncUsesIncomingModelCapabilityShape() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            resetProviders(to: originalProviders)
+        }
+
+        resetProviders(to: [])
+        let localProvider = Provider(
+            id: UUID(),
+            name: "能力同步提供商",
+            baseURL: "https://capability-sync.example.com",
+            apiKeys: ["local-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(
+                    modelName: "gpt-sync",
+                    isActivated: true,
+                    inputModalities: [.text, .image],
+                    outputModalities: [.text, .image],
+                    capabilities: [.toolCalling, .reasoning],
+                    builtInTools: [.imageGeneration]
+                )
+            ]
+        )
+        ConfigLoader.saveProvider(localProvider)
+
+        let chatService = ChatService()
+        var incomingProvider = localProvider
+        incomingProvider.models[0].inputModalities = [.text]
+        incomingProvider.models[0].outputModalities = [.text]
+        incomingProvider.models[0].capabilities = [.toolCalling]
+        incomingProvider.models[0].builtInTools = []
+
+        let summary = await SyncEngine.apply(
+            package: SyncPackage(options: [.providers], providers: [incomingProvider]),
+            chatService: chatService
+        )
+        let mergedModel = ConfigLoader.loadProviders()
+            .first { $0.id == localProvider.id }?
+            .models
+            .first { $0.modelName == "gpt-sync" }
+
+        #expect(summary.importedProviders == 1)
+        #expect(mergedModel?.inputModalities == [.text])
+        #expect(mergedModel?.outputModalities == [.text])
+        #expect(mergedModel?.capabilities == [.toolCalling])
+        #expect(mergedModel?.builtInTools == [])
+        #expect(mergedModel?.supportsImageGeneration == false)
+        #expect(mergedModel?.supportsReasoning == false)
+    }
+
     @Test("提供商同键不同值时会优先保留本地且不生成重复项")
     func testProvidersPreferLocalWhenSameHeaderKeyHasDifferentValue() async {
         let originalProviders = ConfigLoader.loadProviders()

@@ -188,8 +188,13 @@ public struct ConfigLoader {
                 do {
                     let data = try Data(contentsOf: url)
                     var provider = try JSONDecoder().decode(Provider.self, from: data)
-                    let fileAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
                     var didRepair = false
+                    let hintedProvider = provider.applyingInferredModelCapabilityHints()
+                    if hintedProvider != provider {
+                        provider = hintedProvider
+                        didRepair = true
+                    }
+                    let fileAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
 
                     if shouldMigrateToolCapability,
                        migrateToolCallingCapabilityIfNeeded(for: &provider) {
@@ -531,7 +536,7 @@ public struct ConfigLoader {
                     .flatMap(Model.RequestBodyOverrideMode.init(rawValue:))
                     ?? .expression
 
-                let model = Model(
+                var model = Model(
                     id: modelID,
                     modelName: modelRow.modelName,
                     displayName: modelRow.displayName,
@@ -546,6 +551,9 @@ public struct ConfigLoader {
                     requestBodyOverrideMode: requestBodyOverrideMode,
                     rawRequestBodyJSON: modelRow.rawRequestBodyJSON
                 )
+                if !hasStoredCapabilityShape {
+                    model = model.applyingInferredCapabilityHints()
+                }
                 models.append(model)
             }
 

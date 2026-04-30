@@ -222,6 +222,14 @@ public struct Provider: Codable, Identifiable, Hashable {
     }
 }
 
+public extension Provider {
+    func applyingInferredModelCapabilityHints() -> Provider {
+        var repaired = self
+        repaired.models = models.map { $0.applyingInferredCapabilityHints() }
+        return repaired
+    }
+}
+
 /// 代表一个在提供商下的具体模型
 public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
     case chat
@@ -564,6 +572,43 @@ public extension Model {
             capabilities: profile.capabilities,
             builtInTools: profile.builtInTools
         )
+    }
+
+    func applyingInferredCapabilityHints() -> Model {
+        let inferred = Self.inferredCapabilityShape(
+            modelName: modelName,
+            displayName: displayName,
+            supportedGenerationMethods: nil
+        )
+
+        let originalKind = kind
+        let originalInputModalities = inputModalities
+        let originalOutputModalities = outputModalities
+        let originalCapabilities = capabilities
+        var repaired = self
+
+        if repaired.kind == .chat, inferred.kind != .chat {
+            repaired.kind = inferred.kind
+        }
+
+        let shouldApplyInferredShape = originalKind == .chat || inferred.kind == originalKind
+        guard shouldApplyInferredShape else {
+            return repaired
+        }
+
+        if originalInputModalities == Self.defaultInputModalities(for: originalKind) {
+            repaired.inputModalities = inferred.inputModalities
+        }
+        if originalOutputModalities == Self.defaultOutputModalities(for: originalKind) {
+            repaired.outputModalities = inferred.outputModalities
+        }
+        if originalCapabilities == Self.defaultCapabilities(for: originalKind) {
+            repaired.capabilities = inferred.capabilities
+        }
+        if repaired.builtInTools.isEmpty {
+            repaired.builtInTools = inferred.builtInTools
+        }
+        return repaired
     }
 }
 
