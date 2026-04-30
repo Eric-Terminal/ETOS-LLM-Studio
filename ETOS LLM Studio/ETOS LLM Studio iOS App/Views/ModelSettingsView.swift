@@ -61,7 +61,7 @@ struct ModelSettingsView: View {
             }
 
             Section(NSLocalizedString("协议能力", comment: "模型协议能力区块标题")) {
-                ForEach(ModelCapability.allCases, id: \.self) { capability in
+                ForEach(ModelCapability.editableCases, id: \.self) { capability in
                     Toggle(capability.localizedName, isOn: capabilityBinding(capability))
                 }
             }

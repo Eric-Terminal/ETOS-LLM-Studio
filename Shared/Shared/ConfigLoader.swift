@@ -504,7 +504,13 @@ public struct ConfigLoader {
                     .sorted { $0.sortIndex < $1.sortIndex }
                     .map(\.capability)
 
-                let capabilities = Model.orderedCapabilities(rawCapabilities.compactMap(ModelCapability.init(rawValue:)))
+                let hasStoredCapabilityShape = modelRow.kind != nil
+                    || modelRow.inputModalitiesJSON != nil
+                    || modelRow.outputModalitiesJSON != nil
+                    || modelRow.builtInToolsJSON != nil
+                let decodedCapabilities = Model.orderedCapabilities(rawCapabilities.compactMap(ModelCapability.init(rawValue:)))
+                let capabilities = rawCapabilities.isEmpty && !hasStoredCapabilityShape ? nil : decodedCapabilities
+                let legacyCapabilityRawValues = rawCapabilities.isEmpty && !hasStoredCapabilityShape ? nil : rawCapabilities
 
                 let overrideRows = try RelationalProviderModelOverrideParameterRecord
                     .filter(RelationalProviderModelOverrideParameterRecord.Columns.modelID == modelIDRaw)
@@ -536,7 +542,7 @@ public struct ConfigLoader {
                     outputModalities: decodeRawValues(modelRow.outputModalitiesJSON, as: ModelModality.self),
                     capabilities: capabilities,
                     builtInTools: decodeRawValues(modelRow.builtInToolsJSON, as: ModelBuiltInTool.self) ?? [],
-                    legacyCapabilityRawValues: rawCapabilities,
+                    legacyCapabilityRawValues: legacyCapabilityRawValues,
                     requestBodyOverrideMode: requestBodyOverrideMode,
                     rawRequestBodyJSON: modelRow.rawRequestBodyJSON
                 )

@@ -477,6 +477,32 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.builtInTools.contains(.imageGeneration))
         #expect(decoded.supportsImageGeneration)
     }
+
+    @Test("旧语音能力解码后仍能通过便捷属性识别")
+    func testLegacySpeechCapabilitiesRemainSelectable() throws {
+        let speechJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000125",
+          "modelName": "legacy-speech",
+          "capabilities": ["speechToText"]
+        }
+        """
+        let ttsJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000126",
+          "modelName": "legacy-tts",
+          "capabilities": ["textToSpeech"]
+        }
+        """
+
+        let speechModel = try JSONDecoder().decode(Model.self, from: Data(speechJSON.utf8))
+        let ttsModel = try JSONDecoder().decode(Model.self, from: Data(ttsJSON.utf8))
+
+        #expect(speechModel.supportsSpeechToText)
+        #expect(speechModel.inputModalities.contains(.audio))
+        #expect(ttsModel.supportsTextToSpeech)
+        #expect(ttsModel.outputModalities.contains(.audio))
+    }
 }
 
 
@@ -6602,6 +6628,70 @@ fileprivate struct ConfigLoaderTests {
         #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
         #expect(!Persistence.auxiliaryBlobExists(forKey: "providers"))
+    }
+
+    @Test("旧 SQLite 模型没有能力记录时保留默认聊天能力")
+    func testLegacySQLiteModelWithoutCapabilityRowsKeepsChatDefaults() throws {
+        let providerID = UUID()
+        let modelID = UUID()
+        let providerName = "legacy-sqlite-\(providerID.uuidString)"
+
+        let inserted = Persistence.withConfigDatabaseWrite { db in
+            try db.execute(
+                sql: """
+                INSERT INTO providers (id, name, base_url, api_format, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    providerID.uuidString,
+                    providerName,
+                    "https://legacy-sqlite.example.com/v1",
+                    "openai-compatible",
+                    Date().timeIntervalSince1970
+                ]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO provider_api_keys (provider_id, key_index, api_key)
+                VALUES (?, ?, ?)
+                """,
+                arguments: [providerID.uuidString, 0, "key"]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO provider_models (
+                    id, provider_id, model_name, display_name, is_activated,
+                    request_body_override_mode, raw_request_body_json, sort_index, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    modelID.uuidString,
+                    providerID.uuidString,
+                    "legacy-chat",
+                    "legacy-chat",
+                    1,
+                    Model.RequestBodyOverrideMode.expression.rawValue,
+                    nil,
+                    0,
+                    Date().timeIntervalSince1970
+                ]
+            )
+        }
+        #expect(inserted != nil)
+        defer {
+            if let loaded = ConfigLoader.loadProviders().first(where: { $0.id == providerID }) {
+                ConfigLoader.deleteProvider(loaded)
+            }
+        }
+
+        let loadedModel = ConfigLoader.loadProviders()
+            .first(where: { $0.id == providerID })?
+            .models
+            .first(where: { $0.id == modelID })
+
+        #expect(loadedModel?.kind == .chat)
+        #expect(loadedModel?.supportsToolCalling == true)
     }
 
     @Test("同步包编码会包含 Provider JSON 中的 API Key")

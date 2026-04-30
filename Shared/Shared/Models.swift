@@ -274,6 +274,15 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     case reasoning
     case streaming
     case jsonMode
+    case speechToText
+    case textToSpeech
+
+    public static let editableCases: [ModelCapability] = [
+        .toolCalling,
+        .reasoning,
+        .streaming,
+        .jsonMode
+    ]
 
     public var localizedName: String {
         switch self {
@@ -285,6 +294,10 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("流式输出", comment: "模型协议能力：流式输出")
         case .jsonMode:
             return NSLocalizedString("JSON 模式", comment: "模型协议能力：JSON 模式")
+        case .speechToText:
+            return NSLocalizedString("语音转文字", comment: "模型兼容能力：语音转文字")
+        case .textToSpeech:
+            return NSLocalizedString("文字转语音", comment: "模型兼容能力：文字转语音")
         }
     }
 }
@@ -609,8 +622,14 @@ private extension Model {
         if legacySet.contains(.speechToText), !resolvedInputModalities.contains(.audio) {
             resolvedInputModalities.append(.audio)
         }
+        if legacySet.contains(.speechToText), !resolvedCapabilities.contains(.speechToText) {
+            resolvedCapabilities.append(.speechToText)
+        }
         if legacySet.contains(.textToSpeech), !resolvedOutputModalities.contains(.audio) {
             resolvedOutputModalities.append(.audio)
+        }
+        if legacySet.contains(.textToSpeech), !resolvedCapabilities.contains(.textToSpeech) {
+            resolvedCapabilities.append(.textToSpeech)
         }
         if legacySet.contains(.imageGeneration) {
             if resolvedKind == .image {
@@ -845,11 +864,11 @@ public extension Model {
     }
 
     var supportsSpeechToText: Bool {
-        kind == .speechToText
+        kind == .speechToText || capabilities.contains(.speechToText)
     }
 
     var supportsTextToSpeech: Bool {
-        kind == .textToSpeech
+        kind == .textToSpeech || capabilities.contains(.textToSpeech)
     }
     
     var supportsEmbedding: Bool {
