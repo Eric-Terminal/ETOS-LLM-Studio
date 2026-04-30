@@ -2298,9 +2298,6 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "可处理文件" = "Can process files";
 "可生成图片" = "Can generate images";
 "可调用工具" = "Can call tools";
-"支持推理" = "Supports reasoning";
-"支持流式回复" = "Supports streaming replies";
-"支持 JSON 模式" = "Supports JSON mode";
 "支持参考图片" = "Supports reference images";
 "此模型用于生成文本向量。" = "This model generates text embeddings.";
 "此模型用于重新排序候选内容。" = "This model reranks candidate content.";

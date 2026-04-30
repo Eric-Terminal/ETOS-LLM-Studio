@@ -288,10 +288,7 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     case textToSpeech
 
     public static let editableCases: [ModelCapability] = [
-        .toolCalling,
-        .reasoning,
-        .streaming,
-        .jsonMode
+        .toolCalling
     ]
 
     public var localizedName: String {
@@ -323,7 +320,7 @@ public struct Model: Codable, Identifiable, Hashable {
         case imageGeneration
     }
 
-    public static let defaultCapabilities: [ModelCapability] = [.toolCalling, .reasoning, .streaming]
+    public static let defaultCapabilities: [ModelCapability] = [.toolCalling]
 
     public enum RequestBodyOverrideMode: String, Codable, Hashable {
         case expression
@@ -718,7 +715,7 @@ private extension Model {
 
         var inputModalities = defaultInputModalities(for: kind)
         let outputModalities = defaultOutputModalities(for: kind)
-        var capabilities = defaultCapabilities(for: kind)
+        let capabilities = defaultCapabilities(for: kind)
 
         if kind == .chat {
             let visionSignals = [
@@ -739,22 +736,6 @@ private extension Model {
                 inputModalities.append(.image)
             }
 
-            let reasoningSignals = [
-                "o1",
-                "o3",
-                "o4",
-                "gpt-5",
-                "deepseek-r1",
-                "reasoner",
-                "thinking",
-                "qwq"
-            ]
-            if normalizedName == "o" || containsAny(normalizedName, signals: reasoningSignals) {
-                capabilities.append(.reasoning)
-            }
-            if supportedGenerationMethods?.contains("streamGenerateContent") == true {
-                capabilities.append(.streaming)
-            }
         }
 
         return CapabilityShape(

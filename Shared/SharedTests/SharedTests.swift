@@ -459,13 +459,13 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.rawRequestBodyJSON == nil)
     }
 
-    @Test("聊天模型默认开启工具调用、推理和流式输出")
-    func testChatModelDefaultCapabilitiesEnableReasoningAndStreaming() throws {
+    @Test("聊天模型默认开启工具调用")
+    func testChatModelDefaultCapabilitiesEnableToolCalling() throws {
         let model = Model(modelName: "plain-chat")
 
         #expect(model.supportsToolCalling)
-        #expect(model.supportsReasoning)
-        #expect(model.supportsStreaming)
+        #expect(model.supportsReasoning == false)
+        #expect(model.supportsStreaming == false)
     }
 
     @Test("旧模型能力解码会迁移到新能力结构")
@@ -552,22 +552,19 @@ struct RequestBodyOverrideModeTests {
         #expect(model.kind == .chat)
         #expect(model.inputModalities == [.text])
         #expect(model.outputModalities == [.text])
-        #expect(model.capabilities == [.toolCalling, .reasoning, .streaming])
+        #expect(model.capabilities == [.toolCalling])
     }
 
     @Test("旧模型可用名称推断补齐新能力结构")
     func testLegacyModelCanApplyInferredCapabilityHints() throws {
         let legacyImage = Model(modelName: "gpt-image-1").applyingInferredCapabilityHints()
         let legacyVision = Model(modelName: "gpt-4o").applyingInferredCapabilityHints()
-        let legacyReasoning = Model(modelName: "deepseek-r1").applyingInferredCapabilityHints()
 
         #expect(legacyImage.kind == .image)
         #expect(legacyImage.outputModalities.contains(.image))
         #expect(legacyImage.supportsImageGeneration)
         #expect(legacyVision.kind == .chat)
         #expect(legacyVision.inputModalities.contains(.image))
-        #expect(legacyReasoning.kind == .chat)
-        #expect(legacyReasoning.capabilities.contains(.reasoning))
     }
 }
 
@@ -1148,7 +1145,7 @@ struct OpenAIAdapterTests {
         #expect(chatModel?.supportsVisionInput == true)
     }
 
-    @Test("OpenAI 兼容模型列表会推断主用途、推理、视觉和生图能力")
+    @Test("OpenAI 兼容模型列表会推断主用途、视觉和生图能力")
     func testOpenAIModelListInfersNewCapabilityShape() throws {
         let data = Data("""
         {
@@ -1172,7 +1169,8 @@ struct OpenAIAdapterTests {
         #expect(rerankModel?.kind == .rerank)
         #expect(imageModel?.kind == .image)
         #expect(imageModel?.supportsImageGeneration == true)
-        #expect(reasoningModel?.capabilities.contains(.reasoning) == true)
+        #expect(reasoningModel?.kind == .chat)
+        #expect(reasoningModel?.supportsReasoning == false)
         #expect(visionModel?.supportsVisionInput == true)
         #expect(chatModel?.kind == .chat)
         #expect(chatModel?.supportsToolCalling == true)
