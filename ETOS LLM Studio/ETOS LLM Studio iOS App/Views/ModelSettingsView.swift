@@ -66,12 +66,6 @@ struct ModelSettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("原生工具", comment: "模型原生工具区块标题")) {
-                ForEach(ModelBuiltInTool.allCases, id: \.self) { tool in
-                    Toggle(tool.localizedName, isOn: builtInToolBinding(tool))
-                }
-            }
-
             Section(NSLocalizedString("请求体编辑方式", comment: "")) {
                 Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
                     Text(NSLocalizedString("参数表达式", comment: "")).tag(Model.RequestBodyOverrideMode.expression)
@@ -599,22 +593,6 @@ extension ModelSettingsView {
         )
     }
 
-    private func builtInToolBinding(_ tool: ModelBuiltInTool) -> Binding<Bool> {
-        Binding(
-            get: {
-                model.builtInTools.contains(tool)
-            },
-            set: { isEnabled in
-                var toolSet = Set(model.builtInTools)
-                if isEnabled {
-                    toolSet.insert(tool)
-                } else {
-                    toolSet.remove(tool)
-                }
-                model.builtInTools = Model.orderedBuiltInTools(Array(toolSet))
-            }
-        )
-    }
 }
 
 // MARK: - 子视图

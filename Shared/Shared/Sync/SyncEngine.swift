@@ -1583,14 +1583,6 @@ public enum SyncEngine {
             changed = true
         }
 
-        let mergedBuiltInTools = preferIncomingCapabilityShape
-            ? incoming.builtInTools
-            : mergeBuiltInTools(merged.builtInTools, incoming.builtInTools)
-        if mergedBuiltInTools != merged.builtInTools {
-            merged.builtInTools = mergedBuiltInTools
-            changed = true
-        }
-
         let mergedOverrideParameters = mergeJSONDictionaryConservatively(
             merged.overrideParameters,
             incoming.overrideParameters
@@ -2157,12 +2149,6 @@ public enum SyncEngine {
             changed = true
         }
 
-        let mergedBuiltInTools = incoming.builtInTools
-        if mergedBuiltInTools != local.builtInTools {
-            merged.builtInTools = mergedBuiltInTools
-            changed = true
-        }
-
         guard let mergedOverrideParameters = mergeJSONDictionary(local.overrideParameters, incoming.overrideParameters) else {
             return .conflict
         }
@@ -2289,17 +2275,6 @@ public enum SyncEngine {
             merged.append(modality)
         }
         return Model.orderedModalities(merged)
-    }
-
-    private static func mergeBuiltInTools(
-        _ local: [ModelBuiltInTool],
-        _ incoming: [ModelBuiltInTool]
-    ) -> [ModelBuiltInTool] {
-        var merged = local
-        for tool in incoming where !merged.contains(tool) {
-            merged.append(tool)
-        }
-        return Model.orderedBuiltInTools(merged)
     }
 
     private static func mergeRequestBodyOverrideMode(
@@ -2695,9 +2670,6 @@ public enum SyncEngine {
             hasher.combine(model.rawRequestBodyJSON ?? "")
             for capability in model.capabilities.sorted(by: { $0.rawValue < $1.rawValue }) {
                 hasher.combine(capability.rawValue)
-            }
-            for tool in model.builtInTools.sorted(by: { $0.rawValue < $1.rawValue }) {
-                hasher.combine("builtIn:\(tool.rawValue)")
             }
             for (key, value) in model.overrideParameters.sorted(by: { $0.key < $1.key }) {
                 hasher.combine(key)

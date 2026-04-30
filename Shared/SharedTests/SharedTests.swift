@@ -483,7 +483,6 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.kind == .chat)
         #expect(decoded.capabilities.contains(.toolCalling))
         #expect(decoded.outputModalities.contains(.image))
-        #expect(decoded.builtInTools.contains(.imageGeneration))
         #expect(decoded.supportsImageGeneration)
     }
 

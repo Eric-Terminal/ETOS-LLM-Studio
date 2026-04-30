@@ -4013,7 +4013,6 @@ final class PersistenceAuxiliaryGRDBStore {
                         kind TEXT,
                         input_modalities_json TEXT,
                         output_modalities_json TEXT,
-                        built_in_tools_json TEXT,
                         request_body_override_mode TEXT NOT NULL,
                         raw_request_body_json TEXT,
                         sort_index INTEGER NOT NULL,
@@ -4694,9 +4693,6 @@ final class PersistenceAuxiliaryGRDBStore {
                 }
                 if !(try tableHasColumn("provider_models", columnName: "output_modalities_json")) {
                     try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN output_modalities_json TEXT")
-                }
-                if !(try tableHasColumn("provider_models", columnName: "built_in_tools_json")) {
-                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN built_in_tools_json TEXT")
                 }
             }
         }

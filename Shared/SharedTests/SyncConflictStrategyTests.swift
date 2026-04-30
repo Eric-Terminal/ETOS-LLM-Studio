@@ -143,8 +143,7 @@ struct SyncConflictStrategyTests {
                     isActivated: true,
                     inputModalities: [.text, .image],
                     outputModalities: [.text, .image],
-                    capabilities: [.toolCalling, .reasoning],
-                    builtInTools: [.imageGeneration]
+                    capabilities: [.toolCalling, .reasoning]
                 )
             ]
         )
@@ -155,7 +154,6 @@ struct SyncConflictStrategyTests {
         incomingProvider.models[0].inputModalities = [.text]
         incomingProvider.models[0].outputModalities = [.text]
         incomingProvider.models[0].capabilities = [.toolCalling]
-        incomingProvider.models[0].builtInTools = []
 
         let summary = await SyncEngine.apply(
             package: SyncPackage(options: [.providers], providers: [incomingProvider]),
@@ -170,7 +168,6 @@ struct SyncConflictStrategyTests {
         #expect(mergedModel?.inputModalities == [.text])
         #expect(mergedModel?.outputModalities == [.text])
         #expect(mergedModel?.capabilities == [.toolCalling])
-        #expect(mergedModel?.builtInTools == [])
         #expect(mergedModel?.supportsImageGeneration == false)
         #expect(mergedModel?.supportsReasoning == false)
     }

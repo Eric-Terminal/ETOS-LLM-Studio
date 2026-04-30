@@ -386,7 +386,6 @@ public struct ConfigLoader {
                         kind: model.kind.rawValue,
                         inputModalitiesJSON: encodeRawValues(model.inputModalities),
                         outputModalitiesJSON: encodeRawValues(model.outputModalities),
-                        builtInToolsJSON: encodeRawValues(model.builtInTools),
                         requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
                         rawRequestBodyJSON: model.rawRequestBodyJSON,
                         sortIndex: modelIndex,
@@ -512,7 +511,6 @@ public struct ConfigLoader {
                 let hasStoredCapabilityShape = modelRow.kind != nil
                     || modelRow.inputModalitiesJSON != nil
                     || modelRow.outputModalitiesJSON != nil
-                    || modelRow.builtInToolsJSON != nil
                 let decodedCapabilities = Model.orderedCapabilities(rawCapabilities.compactMap(ModelCapability.init(rawValue:)))
                 let capabilities = rawCapabilities.isEmpty && !hasStoredCapabilityShape ? nil : decodedCapabilities
                 let legacyCapabilityRawValues = rawCapabilities.isEmpty && !hasStoredCapabilityShape ? nil : rawCapabilities
@@ -546,7 +544,6 @@ public struct ConfigLoader {
                     inputModalities: decodeRawValues(modelRow.inputModalitiesJSON, as: ModelModality.self),
                     outputModalities: decodeRawValues(modelRow.outputModalitiesJSON, as: ModelModality.self),
                     capabilities: capabilities,
-                    builtInTools: decodeRawValues(modelRow.builtInToolsJSON, as: ModelBuiltInTool.self) ?? [],
                     legacyCapabilityRawValues: legacyCapabilityRawValues,
                     requestBodyOverrideMode: requestBodyOverrideMode,
                     rawRequestBodyJSON: modelRow.rawRequestBodyJSON
@@ -897,7 +894,6 @@ public struct ConfigLoader {
             case kind
             case inputModalitiesJSON = "input_modalities_json"
             case outputModalitiesJSON = "output_modalities_json"
-            case builtInToolsJSON = "built_in_tools_json"
             case requestBodyOverrideMode = "request_body_override_mode"
             case rawRequestBodyJSON = "raw_request_body_json"
             case sortIndex = "sort_index"
@@ -916,7 +912,6 @@ public struct ConfigLoader {
         var kind: String?
         var inputModalitiesJSON: String?
         var outputModalitiesJSON: String?
-        var builtInToolsJSON: String?
         var requestBodyOverrideMode: String?
         var rawRequestBodyJSON: String?
         var sortIndex: Int

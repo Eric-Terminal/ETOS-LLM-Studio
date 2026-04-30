@@ -177,7 +177,7 @@ struct ImageGenerationFeatureView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像、启用图像输出或原生生图。", comment: "模型没有图像输出能力提示"))
+                    Text(NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像，或在输出模态中启用图像。", comment: "模型没有图像输出能力提示"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -419,7 +419,7 @@ struct ImageGenerationFeatureView: View {
         }
 
         guard viewModel.supportsImageGeneration(for: selectedImageModel) else {
-            viewModel.addErrorMessage(NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像、启用图像输出或原生生图。", comment: "模型没有图像输出能力提示"))
+            viewModel.addErrorMessage(NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像，或在输出模态中启用图像。", comment: "模型没有图像输出能力提示"))
             return
         }
 

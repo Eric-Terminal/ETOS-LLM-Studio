@@ -653,7 +653,6 @@ extension Model {
         inputModalities == other.inputModalities &&
         outputModalities == other.outputModalities &&
         capabilities == other.capabilities &&
-        builtInTools == other.builtInTools &&
         requestBodyOverrideMode == other.requestBodyOverrideMode &&
         rawRequestBodyJSON == other.rawRequestBodyJSON
     }

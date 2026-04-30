@@ -310,23 +310,6 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     }
 }
 
-public enum ModelBuiltInTool: String, Codable, Hashable, CaseIterable, Sendable {
-    case webSearch
-    case urlContext
-    case imageGeneration
-
-    public var localizedName: String {
-        switch self {
-        case .webSearch:
-            return NSLocalizedString("联网搜索", comment: "模型原生工具：联网搜索")
-        case .urlContext:
-            return NSLocalizedString("URL 上下文", comment: "模型原生工具：URL 上下文")
-        case .imageGeneration:
-            return NSLocalizedString("原生生图", comment: "模型原生工具：原生生图")
-        }
-    }
-}
-
 /// 代表一个在提供商下的具体模型
 public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable, Sendable {
@@ -354,7 +337,6 @@ public struct Model: Codable, Identifiable, Hashable {
     public var inputModalities: [ModelModality]
     public var outputModalities: [ModelModality]
     public var capabilities: [ModelCapability]
-    public var builtInTools: [ModelBuiltInTool]
     public var requestBodyOverrideMode: RequestBodyOverrideMode
     public var rawRequestBodyJSON: String?
 
@@ -368,7 +350,6 @@ public struct Model: Codable, Identifiable, Hashable {
         inputModalities: [ModelModality]? = nil,
         outputModalities: [ModelModality]? = nil,
         capabilities: [ModelCapability]? = nil,
-        builtInTools: [ModelBuiltInTool] = [],
         legacyCapabilityRawValues: [String]? = nil,
         requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
         rawRequestBodyJSON: String? = nil
@@ -378,7 +359,6 @@ public struct Model: Codable, Identifiable, Hashable {
             inputModalities: inputModalities,
             outputModalities: outputModalities,
             capabilities: capabilities,
-            builtInTools: builtInTools,
             legacyCapabilityRawValues: legacyCapabilityRawValues
         )
         self.id = id
@@ -390,7 +370,6 @@ public struct Model: Codable, Identifiable, Hashable {
         self.inputModalities = normalized.inputModalities
         self.outputModalities = normalized.outputModalities
         self.capabilities = normalized.capabilities
-        self.builtInTools = normalized.builtInTools
         self.requestBodyOverrideMode = requestBodyOverrideMode
         self.rawRequestBodyJSON = rawRequestBodyJSON
     }
@@ -420,7 +399,7 @@ public struct Model: Codable, Identifiable, Hashable {
     
     enum CodingKeys: String, CodingKey {
         case id, modelName, displayName, isActivated, overrideParameters
-        case kind, inputModalities, outputModalities, capabilities, builtInTools
+        case kind, inputModalities, outputModalities, capabilities
         case requestBodyOverrideMode
         case rawRequestBodyJSON
     }
@@ -440,21 +419,17 @@ public struct Model: Codable, Identifiable, Hashable {
         let rawCapabilityValues = try container.decodeIfPresent([String].self, forKey: .capabilities)
         let decodedCapabilities = rawCapabilityValues
             .map { Self.orderedCapabilities($0.compactMap(ModelCapability.init(rawValue:))) }
-        let decodedBuiltInTools = try container.decodeIfPresent([String].self, forKey: .builtInTools)
-            .map { Self.orderedBuiltInTools($0.compactMap(ModelBuiltInTool.init(rawValue:))) }
         let normalized = Self.normalizedCapabilityShape(
             kind: decodedKind,
             inputModalities: decodedInputModalities,
             outputModalities: decodedOutputModalities,
             capabilities: decodedCapabilities,
-            builtInTools: decodedBuiltInTools,
             legacyCapabilityRawValues: rawCapabilityValues
         )
         self.kind = normalized.kind
         self.inputModalities = normalized.inputModalities
         self.outputModalities = normalized.outputModalities
         self.capabilities = normalized.capabilities
-        self.builtInTools = normalized.builtInTools
         self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .expression
         self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
     }
@@ -481,9 +456,6 @@ public struct Model: Codable, Identifiable, Hashable {
         }
         if capabilities != Self.defaultCapabilities(for: kind) {
             try container.encode(capabilities, forKey: .capabilities)
-        }
-        if !builtInTools.isEmpty {
-            try container.encode(builtInTools, forKey: .builtInTools)
         }
         if requestBodyOverrideMode != .expression {
             try container.encode(requestBodyOverrideMode, forKey: .requestBodyOverrideMode)
@@ -546,11 +518,6 @@ public extension Model {
         return ModelCapability.allCases.filter { capabilitySet.contains($0) }
     }
 
-    static func orderedBuiltInTools(_ builtInTools: [ModelBuiltInTool]) -> [ModelBuiltInTool] {
-        let toolSet = Set(builtInTools)
-        return ModelBuiltInTool.allCases.filter { toolSet.contains($0) }
-    }
-
     static func inferred(
         modelName: String,
         displayName: String? = nil,
@@ -569,8 +536,7 @@ public extension Model {
             kind: profile.kind,
             inputModalities: profile.inputModalities,
             outputModalities: profile.outputModalities,
-            capabilities: profile.capabilities,
-            builtInTools: profile.builtInTools
+            capabilities: profile.capabilities
         )
     }
 
@@ -605,9 +571,6 @@ public extension Model {
         if originalCapabilities == Self.defaultCapabilities(for: originalKind) {
             repaired.capabilities = inferred.capabilities
         }
-        if repaired.builtInTools.isEmpty {
-            repaired.builtInTools = inferred.builtInTools
-        }
         return repaired
     }
 }
@@ -627,7 +590,6 @@ private extension Model {
         var inputModalities: [ModelModality]
         var outputModalities: [ModelModality]
         var capabilities: [ModelCapability]
-        var builtInTools: [ModelBuiltInTool]
     }
 
     static func normalizedCapabilityShape(
@@ -635,7 +597,6 @@ private extension Model {
         inputModalities explicitInputModalities: [ModelModality]? = nil,
         outputModalities explicitOutputModalities: [ModelModality]? = nil,
         capabilities explicitCapabilities: [ModelCapability]? = nil,
-        builtInTools explicitBuiltInTools: [ModelBuiltInTool]? = nil,
         legacyCapabilityRawValues: [String]? = nil
     ) -> CapabilityShape {
         let legacyCapabilities = legacyCapabilityRawValues?.compactMap(LegacyCapability.init(rawValue:)) ?? []
@@ -659,7 +620,6 @@ private extension Model {
         var resolvedInputModalities = explicitInputModalities ?? defaultInputModalities(for: resolvedKind)
         var resolvedOutputModalities = explicitOutputModalities ?? defaultOutputModalities(for: resolvedKind)
         var resolvedCapabilities = explicitCapabilities ?? (legacyCapabilityRawValues == nil ? defaultCapabilities(for: resolvedKind) : [])
-        var resolvedBuiltInTools = explicitBuiltInTools ?? []
 
         if legacySet.contains(.toolCalling), !resolvedCapabilities.contains(.toolCalling) {
             resolvedCapabilities.append(.toolCalling)
@@ -685,9 +645,6 @@ private extension Model {
                 if !resolvedOutputModalities.contains(.image) {
                     resolvedOutputModalities.append(.image)
                 }
-                if !resolvedBuiltInTools.contains(.imageGeneration) {
-                    resolvedBuiltInTools.append(.imageGeneration)
-                }
             }
         }
 
@@ -695,8 +652,7 @@ private extension Model {
             kind: resolvedKind,
             inputModalities: orderedModalities(resolvedInputModalities),
             outputModalities: orderedModalities(resolvedOutputModalities),
-            capabilities: orderedCapabilities(resolvedCapabilities),
-            builtInTools: orderedBuiltInTools(resolvedBuiltInTools)
+            capabilities: orderedCapabilities(resolvedCapabilities)
         )
     }
 
@@ -749,7 +705,6 @@ private extension Model {
         var inputModalities = defaultInputModalities(for: kind)
         let outputModalities = defaultOutputModalities(for: kind)
         var capabilities = defaultCapabilities(for: kind)
-        let builtInTools: [ModelBuiltInTool] = []
 
         if kind == .chat {
             let visionSignals = [
@@ -792,8 +747,7 @@ private extension Model {
             kind: kind,
             inputModalities: orderedModalities(inputModalities),
             outputModalities: orderedModalities(outputModalities),
-            capabilities: orderedCapabilities(capabilities),
-            builtInTools: orderedBuiltInTools(builtInTools)
+            capabilities: orderedCapabilities(capabilities)
         )
     }
 
@@ -929,7 +883,7 @@ public extension Model {
     }
 
     var supportsImageGeneration: Bool {
-        kind == .image || outputModalities.contains(.image) || builtInTools.contains(.imageGeneration)
+        kind == .image || outputModalities.contains(.image)
     }
 
     var isChatModel: Bool {
