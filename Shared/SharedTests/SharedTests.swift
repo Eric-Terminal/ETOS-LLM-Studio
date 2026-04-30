@@ -1449,6 +1449,39 @@ struct OpenAIAdapterTests {
         #expect(provider == "gemini")
     }
 
+    @Test("OpenAI 请求会回传 assistant reasoning_content")
+    func testBuildRequestIncludesAssistantReasoningContent() throws {
+        let toolCall = InternalToolCall(
+            id: "call_reasoning_1",
+            toolName: "save_memory",
+            arguments: #"{"content":"test"}"#
+        )
+        let messages = [
+            ChatMessage(
+                role: .assistant,
+                content: "",
+                reasoningContent: "先判断工具参数。",
+                toolCalls: [toolCall]
+            )
+        ]
+
+        guard let request = adapter.buildChatRequest(for: dummyModel, commonPayload: [:], messages: messages, tools: nil, audioAttachments: [:], imageAttachments: [:], fileAttachments: [:]),
+              let httpBody = request.httpBody,
+              let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+              let payloadMessages = jsonPayload["messages"] as? [[String: Any]],
+              let firstMessage = payloadMessages.first,
+              let reasoningContent = firstMessage["reasoning_content"] as? String,
+              let payloadToolCalls = firstMessage["tool_calls"] as? [[String: Any]],
+              let firstToolCall = payloadToolCalls.first,
+              let toolCallID = firstToolCall["id"] as? String else {
+            Issue.record("OpenAI 请求体中未找到 assistant reasoning_content 或工具调用。")
+            return
+        }
+
+        #expect(reasoningContent == "先判断工具参数。")
+        #expect(toolCallID == "call_reasoning_1")
+    }
+
     @Test("OpenAI 解析 Gemini extra_content 中的 thought_signature")
     func testParseResponsePreservesGeminiExtraContentThoughtSignature() throws {
         let json = """
@@ -1730,6 +1763,8 @@ struct OpenAIAdapterTests {
           "output": [
             {
               "type": "reasoning",
+              "id": "rs_123",
+              "encrypted_content": "enc_123",
               "summary": [
                 {
                   "type": "summary_text",
@@ -1771,9 +1806,18 @@ struct OpenAIAdapterTests {
         let message = try adapter.parseResponse(data: data)
         let toolCall = try #require(message.toolCalls?.first)
         let usage = try #require(message.tokenUsage)
+        let rawReasoningItems = try #require(message.reasoningProviderSpecificFields?["openai_responses_reasoning_items"])
 
         #expect(message.content == "已经帮你记住啦。")
         #expect(message.reasoningContent == "先检查记忆是否已有相同信息。")
+        if case let .array(reasoningItems) = rawReasoningItems,
+           let firstReasoningItem = reasoningItems.first,
+           case let .dictionary(reasoningItem) = firstReasoningItem {
+            #expect(reasoningItem["id"] == .string("rs_123"))
+            #expect(reasoningItem["encrypted_content"] == .string("enc_123"))
+        } else {
+            Issue.record("Responses API 响应未保留 reasoning item。")
+        }
         #expect(toolCall.id == "call_resp_1")
         #expect(toolCall.toolName == "save_memory")
         #expect(toolCall.arguments == "{\"content\":\"你好\"}")
@@ -1784,8 +1828,71 @@ struct OpenAIAdapterTests {
         #expect(usage.totalTokens == 30)
     }
 
+    @Test("OpenAI Responses 请求会回传 reasoning item")
+    func testBuildResponsesAPIRequestIncludesReasoningItems() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses")
+                ]
+            )
+        )
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            reasoningProviderSpecificFields: [
+                "openai_responses_reasoning_items": .array([
+                    .dictionary([
+                        "type": .string("reasoning"),
+                        "id": .string("rs_456"),
+                        "encrypted_content": .string("enc_456")
+                    ])
+                ])
+            ],
+            toolCalls: [
+                InternalToolCall(
+                    id: "call_resp_2",
+                    toolName: "save_memory",
+                    arguments: "{\"content\":\"继续\"}"
+                )
+            ]
+        )
+
+        guard let request = adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: [:],
+            messages: [
+                ChatMessage(role: .user, content: "继续"),
+                assistantMessage
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let inputItems = jsonPayload["input"] as? [[String: Any]],
+        inputItems.count == 3 else {
+            Issue.record("Responses API 请求体未正确生成 input。")
+            return
+        }
+
+        #expect(inputItems[0]["type"] as? String == "message")
+        #expect(inputItems[1]["type"] as? String == "reasoning")
+        #expect(inputItems[1]["id"] as? String == "rs_456")
+        #expect(inputItems[1]["encrypted_content"] as? String == "enc_456")
+        #expect(inputItems[2]["type"] as? String == "function_call")
+        #expect(inputItems[2]["call_id"] as? String == "call_resp_2")
+    }
+
     @Test("OpenAI Responses 流式事件可解析文本、工具参数与用量")
     func testParseResponsesStreamingEvents() throws {
+        let reasoningStart = """
+        data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_stream","encrypted_content":"enc_stream"}}
+        """
         let toolStart = """
         data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_stream_1","name":"save_memory","arguments":""}}
         """
@@ -1799,15 +1906,25 @@ struct OpenAIAdapterTests {
         data: {"type":"response.completed","response":{"usage":{"input_tokens":9,"input_tokens_details":{"cached_tokens":4},"output_tokens":7,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
         """
 
+        let reasoningPart = try #require(adapter.parseStreamingResponse(line: reasoningStart))
         let toolStartPart = try #require(adapter.parseStreamingResponse(line: toolStart))
         let toolDeltaPart = try #require(adapter.parseStreamingResponse(line: toolDelta))
         let textPart = try #require(adapter.parseStreamingResponse(line: textDelta))
         let completedPart = try #require(adapter.parseStreamingResponse(line: completed))
 
+        let rawReasoningItems = try #require(reasoningPart.reasoningProviderSpecificFields?["openai_responses_reasoning_items"])
         let startedTool = try #require(toolStartPart.toolCallDeltas?.first)
         let toolArguments = try #require(toolDeltaPart.toolCallDeltas?.first)
         let usage = try #require(completedPart.tokenUsage)
 
+        if case let .array(reasoningItems) = rawReasoningItems,
+           let firstReasoningItem = reasoningItems.first,
+           case let .dictionary(reasoningItem) = firstReasoningItem {
+            #expect(reasoningItem["id"] == .string("rs_stream"))
+            #expect(reasoningItem["encrypted_content"] == .string("enc_stream"))
+        } else {
+            Issue.record("Responses API 流式事件未保留 reasoning item。")
+        }
         #expect(startedTool.id == "call_stream_1")
         #expect(startedTool.nameFragment == "save_memory")
         #expect(toolArguments.argumentsFragment == "{\"content\":\"你好\"}")
@@ -2293,7 +2410,7 @@ struct GeminiAdapterTests {
         #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-123"))
     }
 
-    @Test("Gemini 请求体保留 thought_signature 并透传 function id")
+    @Test("Gemini 请求体保留 thoughtSignature 并透传 function id")
     func testGeminiBuildRequestPreservesThoughtSignatureAndCallID() throws {
         let assistantCall = InternalToolCall(
             id: "function-call-456",
@@ -2338,12 +2455,12 @@ struct GeminiAdapterTests {
         let firstAssistantPart = assistantParts.first,
         let functionCall = firstAssistantPart["functionCall"] as? [String: Any],
         let callID = functionCall["id"] as? String,
-        let thoughtSignature = firstAssistantPart["thought_signature"] as? String,
+        let thoughtSignature = firstAssistantPart["thoughtSignature"] as? String,
         let toolParts = toolPayload["parts"] as? [[String: Any]],
         let firstToolPart = toolParts.first,
         let functionResponse = firstToolPart["functionResponse"] as? [String: Any],
         let functionResponseID = functionResponse["id"] as? String else {
-            Issue.record("Gemini 请求体未正确包含 function id 或 thought_signature。")
+            Issue.record("Gemini 请求体未正确包含 function id 或 thoughtSignature。")
             return
         }
 
@@ -2445,6 +2562,86 @@ struct AnthropicAdapterTests {
         #expect(usage.cacheWriteTokens == 3)
         #expect(usage.cacheReadTokens == 5)
         #expect(usage.totalTokens == nil)
+    }
+
+    @Test("Anthropic 解析并回传 thinking signature")
+    func testAnthropicThinkingSignatureRoundTrip() throws {
+        let payload = """
+        {
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "先判断工具参数。",
+              "signature": "sig-anthropic"
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_1",
+              "name": "save_memory",
+              "input": {
+                "content": "测试"
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 8
+          }
+        }
+        """
+
+        let message = try adapter.parseResponse(data: Data(payload.utf8))
+        #expect(message.reasoningContent == "先判断工具参数。")
+
+        guard let rawBlocks = message.reasoningProviderSpecificFields?["anthropic_thinking_blocks"],
+              case let .array(blocks) = rawBlocks,
+              let firstRawBlock = blocks.first,
+              case let .dictionary(firstBlock) = firstRawBlock else {
+            Issue.record("Anthropic 响应未保留 thinking block 元数据。")
+            return
+        }
+        #expect(firstBlock["type"] == .string("thinking"))
+        #expect(firstBlock["thinking"] == .string("先判断工具参数。"))
+        #expect(firstBlock["signature"] == .string("sig-anthropic"))
+
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "claude-sonnet-4-5")
+        )
+
+        guard let request = adapter.buildChatRequest(for: model, commonPayload: [:], messages: [message], tools: nil, audioAttachments: [:], imageAttachments: [:], fileAttachments: [:]),
+              let httpBody = request.httpBody,
+              let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+              let payloadMessages = jsonPayload["messages"] as? [[String: Any]],
+              let firstMessage = payloadMessages.first,
+              let content = firstMessage["content"] as? [[String: Any]],
+              content.count == 2 else {
+            Issue.record("Anthropic 请求体未正确回传 thinking block 与工具调用。")
+            return
+        }
+
+        #expect(content[0]["type"] as? String == "thinking")
+        #expect(content[0]["thinking"] as? String == "先判断工具参数。")
+        #expect(content[0]["signature"] as? String == "sig-anthropic")
+        #expect(content[1]["type"] as? String == "tool_use")
+        #expect(content[1]["id"] as? String == "toolu_1")
+    }
+
+    @Test("Anthropic 流式增量保留 thinking signature")
+    func testAnthropicStreamingDeltaPreservesThinkingSignature() throws {
+        let line = """
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-stream"}}
+        """
+
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        #expect(part.reasoningProviderSpecificFields?["anthropic_signature"] == .string("sig-stream"))
     }
 }
 

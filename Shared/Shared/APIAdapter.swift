@@ -102,6 +102,7 @@ public struct ChatMessagePart {
 
     public var content: String?
     public var reasoningContent: String?
+    public var reasoningProviderSpecificFields: [String: JSONValue]?
     public var toolCallDeltas: [ToolCallDelta]?
     public var tokenUsage: MessageTokenUsage?
 }
@@ -218,6 +219,7 @@ public class OpenAIAdapter: APIAdapter {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
     static let streamIncludeUsageControlKey = "openai_stream_include_usage"
+    private static let responsesReasoningItemsKey = "openai_responses_reasoning_items"
     private static let responsesModeSignalKeys: Set<String> = [
         "background",
         "context_management",
@@ -679,6 +681,15 @@ public class OpenAIAdapter: APIAdapter {
         return sanitized
     }
 
+    private func jsonValue(fromJSONObject object: Any) -> JSONValue? {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object),
+              let value = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            return nil
+        }
+        return value
+    }
+
     private func sanitizedPayloadForDebug(_ value: Any) -> Any {
         if let dictionary = value as? [String: Any] {
             var sanitized: [String: Any] = [:]
@@ -792,6 +803,20 @@ public class OpenAIAdapter: APIAdapter {
         ]
     }
 
+    private func buildResponsesReasoningInputItems(from message: ChatMessage) -> [[String: Any]] {
+        guard let rawItems = message.reasoningProviderSpecificFields?[Self.responsesReasoningItemsKey],
+              case let .array(items) = rawItems else {
+            return []
+        }
+        return items.compactMap { item in
+            guard let dictionary = item.toAny() as? [String: Any],
+                  dictionary["type"] as? String == "reasoning" else {
+                return nil
+            }
+            return dictionary
+        }
+    }
+
     private func buildResponsesInputItems(
         from messages: [ChatMessage],
         audioAttachments: [UUID: AudioAttachment],
@@ -802,6 +827,10 @@ public class OpenAIAdapter: APIAdapter {
         items.reserveCapacity(messages.count)
 
         for message in messages {
+            if message.role == .assistant {
+                items.append(contentsOf: buildResponsesReasoningInputItems(from: message))
+            }
+
             if let messageItem = buildResponsesMessageInput(
                 for: message,
                 audioAttachments: audioAttachments,
@@ -904,6 +933,7 @@ public class OpenAIAdapter: APIAdapter {
 
         var textContent = ""
         var reasoningContent: String? = nil
+        var reasoningItems: [JSONValue] = []
         var internalToolCalls: [InternalToolCall] = []
 
         for rawItem in outputItems {
@@ -931,16 +961,24 @@ public class OpenAIAdapter: APIAdapter {
                 if let reasoning = parseResponsesReasoningContent(from: item) {
                     appendSegment(reasoning, to: &reasoningContent)
                 }
+                if let reasoningItem = jsonValue(fromJSONObject: item) {
+                    reasoningItems.append(reasoningItem)
+                }
             default:
                 continue
             }
         }
+
+        let reasoningProviderSpecificFields: [String: JSONValue]? = reasoningItems.isEmpty
+            ? nil
+            : [Self.responsesReasoningItemsKey: .array(reasoningItems)]
 
         return ChatMessage(
             id: UUID(),
             role: .assistant,
             content: textContent,
             reasoningContent: reasoningContent,
+            reasoningProviderSpecificFields: reasoningProviderSpecificFields,
             toolCalls: internalToolCalls.isEmpty ? nil : internalToolCalls,
             tokenUsage: makeResponsesTokenUsage(from: payload["usage"])
         )
@@ -977,10 +1015,16 @@ public class OpenAIAdapter: APIAdapter {
 
         case "response.output_item.added":
             guard let item = payload["item"] as? [String: Any],
-                  let itemType = item["type"] as? String,
-                  itemType == "function_call" else {
+                  let itemType = item["type"] as? String else {
                 return nil
             }
+            if itemType == "reasoning",
+               let reasoningItem = jsonValue(fromJSONObject: item) {
+                return ChatMessagePart(reasoningProviderSpecificFields: [
+                    Self.responsesReasoningItemsKey: .array([reasoningItem])
+                ])
+            }
+            guard itemType == "function_call" else { return nil }
             let callID = (item["call_id"] as? String) ?? (item["id"] as? String)
             let arguments = item["arguments"] as? String
             return ChatMessagePart(
@@ -1263,6 +1307,12 @@ public class OpenAIAdapter: APIAdapter {
                 }
             } else {
                 dict["content"] = msg.content
+            }
+
+            if msg.role == .assistant,
+               let reasoningContent = msg.reasoningContent,
+               !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                dict["reasoning_content"] = reasoningContent
             }
 
             if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
@@ -2597,7 +2647,7 @@ public class GeminiAdapter: APIAdapter {
                     if let rawThoughtSignature = toolCall.providerSpecificFields?["thought_signature"],
                        case let .string(thoughtSignature) = rawThoughtSignature,
                        !thoughtSignature.isEmpty {
-                        functionCallPart["thought_signature"] = thoughtSignature
+                        functionCallPart["thoughtSignature"] = thoughtSignature
                     }
                     parts.append(functionCallPart)
                 }
@@ -3150,8 +3200,9 @@ public class AnthropicAdapter: APIAdapter {
             let id: String?
             let name: String?
             let input: [String: AnyCodable]?
-            // 用于流式响应的 thinking block
             let thinking: String?
+            let signature: String?
+            let data: String?
         }
         
         struct Usage: Decodable {
@@ -3182,6 +3233,7 @@ public class AnthropicAdapter: APIAdapter {
             let text: String?
             let partial_json: String?
             let thinking: String?
+            let signature: String?
             let stop_reason: String?
             let usage: AnthropicResponse.Usage?
         }
@@ -3233,6 +3285,32 @@ public class AnthropicAdapter: APIAdapter {
             let message: String?
         }
         let error: Error?
+    }
+
+    private static let anthropicThinkingBlocksKey = "anthropic_thinking_blocks"
+    private static let anthropicSignatureKey = "anthropic_signature"
+
+    private func anthropicThinkingContentBlocks(for message: ChatMessage) -> [[String: Any]] {
+        if let rawBlocks = message.reasoningProviderSpecificFields?[Self.anthropicThinkingBlocksKey],
+           case let .array(blockValues) = rawBlocks {
+            return blockValues.compactMap { $0.toAny() as? [String: Any] }
+        }
+
+        guard let reasoningContent = message.reasoningContent,
+              !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
+
+        var block: [String: Any] = [
+            "type": "thinking",
+            "thinking": reasoningContent
+        ]
+        if let rawSignature = message.reasoningProviderSpecificFields?[Self.anthropicSignatureKey],
+           case let .string(signature) = rawSignature,
+           !signature.isEmpty {
+            block["signature"] = signature
+        }
+        return [block]
     }
     
     // MARK: - 协议方法实现
@@ -3342,6 +3420,8 @@ public class AnthropicAdapter: APIAdapter {
             } else if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 // assistant 消息中包含工具调用
                 var contentBlocks: [[String: Any]] = []
+
+                contentBlocks.append(contentsOf: anthropicThinkingContentBlocks(for: msg))
                 
                 // 如果有文本内容，先添加
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3371,6 +3451,22 @@ public class AnthropicAdapter: APIAdapter {
                     "role": anthropicRole,
                     "content": contentBlocks
                 ])
+            } else if msg.role == .assistant {
+                var contentBlocks = anthropicThinkingContentBlocks(for: msg)
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if shouldSendText(trimmed) {
+                    contentBlocks.append([
+                        "type": "text",
+                        "text": msg.content
+                    ])
+                }
+
+                if !contentBlocks.isEmpty {
+                    anthropicMessages.append([
+                        "role": anthropicRole,
+                        "content": contentBlocks
+                    ])
+                }
             } else {
                 // 普通文本消息
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3508,6 +3604,7 @@ public class AnthropicAdapter: APIAdapter {
         
         var textContent = ""
         var reasoningContent: String? = nil
+        var reasoningBlocks: [JSONValue] = []
         var internalToolCalls: [InternalToolCall] = []
         
         for block in contentBlocks {
@@ -3519,6 +3616,21 @@ public class AnthropicAdapter: APIAdapter {
             case "thinking":
                 if let thinking = block.thinking ?? block.text {
                     appendSegment(thinking, to: &reasoningContent)
+                    var thinkingBlock: [String: JSONValue] = [
+                        "type": .string("thinking"),
+                        "thinking": .string(thinking)
+                    ]
+                    if let signature = block.signature, !signature.isEmpty {
+                        thinkingBlock["signature"] = .string(signature)
+                    }
+                    reasoningBlocks.append(.dictionary(thinkingBlock))
+                }
+            case "redacted_thinking":
+                if let data = block.data, !data.isEmpty {
+                    reasoningBlocks.append(.dictionary([
+                        "type": .string("redacted_thinking"),
+                        "data": .string(data)
+                    ]))
                 }
             case "tool_use":
                 if let id = block.id, let name = block.name {
@@ -3537,11 +3649,16 @@ public class AnthropicAdapter: APIAdapter {
             }
         }
         
+        let reasoningProviderSpecificFields: [String: JSONValue]? = reasoningBlocks.isEmpty
+            ? nil
+            : [Self.anthropicThinkingBlocksKey: .array(reasoningBlocks)]
+
         return ChatMessage(
             id: UUID(),
             role: .assistant,
             content: textContent,
             reasoningContent: reasoningContent,
+            reasoningProviderSpecificFields: reasoningProviderSpecificFields,
             toolCalls: internalToolCalls.isEmpty ? nil : internalToolCalls,
             tokenUsage: makeTokenUsage(from: apiResponse.usage)
         )
@@ -3582,6 +3699,18 @@ public class AnthropicAdapter: APIAdapter {
                             )]
                         )
                     }
+                    if block.type == "redacted_thinking", let data = block.data, !data.isEmpty {
+                        return ChatMessagePart(
+                            reasoningProviderSpecificFields: [
+                                Self.anthropicThinkingBlocksKey: .array([
+                                    .dictionary([
+                                        "type": .string("redacted_thinking"),
+                                        "data": .string(data)
+                                    ])
+                                ])
+                            ]
+                        )
+                    }
                 }
                 return nil
                 
@@ -3594,6 +3723,11 @@ public class AnthropicAdapter: APIAdapter {
                 }
                 if delta.type == "thinking_delta", let thinking = delta.thinking {
                     return ChatMessagePart(reasoningContent: thinking)
+                }
+                if delta.type == "signature_delta", let signature = delta.signature, !signature.isEmpty {
+                    return ChatMessagePart(reasoningProviderSpecificFields: [
+                        Self.anthropicSignatureKey: .string(signature)
+                    ])
                 }
                 if delta.type == "input_json_delta", let partialJson = delta.partial_json {
                     return ChatMessagePart(

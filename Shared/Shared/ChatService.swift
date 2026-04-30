@@ -4366,6 +4366,22 @@ public class ChatService {
         )
     }
 
+    private func mergeReasoningProviderSpecificFields(
+        existing: [String: JSONValue]?,
+        incoming: [String: JSONValue]
+    ) -> [String: JSONValue] {
+        var merged = existing ?? [:]
+        for (key, value) in incoming {
+            if case let .array(incomingArray) = value,
+               case let .array(existingArray) = merged[key] {
+                merged[key] = .array(existingArray + incomingArray)
+            } else {
+                merged[key] = value
+            }
+        }
+        return merged.isEmpty ? [:] : merged
+    }
+
     /// 流式速度计算：按照“总时长 - 首字时间”得到生成阶段时长，再计算 token/s。
     func streamingTokenPerSecond(
         tokens: Int?,
@@ -5469,6 +5485,12 @@ public class ChatService {
                             }
                         }
                     }
+                    if let reasoningProviderSpecificFields = part.reasoningProviderSpecificFields {
+                        messages[index].reasoningProviderSpecificFields = mergeReasoningProviderSpecificFields(
+                            existing: messages[index].reasoningProviderSpecificFields,
+                            incoming: reasoningProviderSpecificFields
+                        )
+                    }
                     if let toolDeltas = part.toolCallDeltas, !toolDeltas.isEmpty {
                         didReceiveGeneratedDelta = true
                         // 记录工具调用的增量信息
@@ -5825,6 +5847,9 @@ public class ChatService {
             if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
                 targetMessage.reasoningContent = newReasoning
             }
+            if let newReasoningFields = newMessage.reasoningProviderSpecificFields {
+                targetMessage.reasoningProviderSpecificFields = newReasoningFields
+            }
             targetMessage.audioFileName = newMessage.audioFileName
             targetMessage.imageFileNames = newMessage.imageFileNames
             targetMessage.fileFileNames = newMessage.fileFileNames
@@ -5876,6 +5901,7 @@ public class ChatService {
                 content: newMessage.content,
                 requestedAt: messages[index].requestedAt ?? newMessage.requestedAt,
                 reasoningContent: newMessage.reasoningContent,
+                reasoningProviderSpecificFields: newMessage.reasoningProviderSpecificFields ?? messages[index].reasoningProviderSpecificFields,
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
                 tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage,
