@@ -2780,7 +2780,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                         HStack(spacing: 6) {
                             Image(systemName: "wrench.and.screwdriver")
                                 .etFont(.system(size: 12))
-                            Text("结果：\(toolNames.joined(separator: ", "))")
+                            Text(String(format: NSLocalizedString("结果：%@", comment: ""), toolNames.joined(separator: ", ")))
                                 .etFont(.subheadline.weight(.medium))
                                 .lineLimit(1)
                             Spacer()

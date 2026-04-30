@@ -41,7 +41,7 @@ struct ChatExportFormatsView: View {
                     if let url = fileURLs[format] {
                         if #available(watchOS 9.0, *) {
                             ShareLink(item: url) {
-                                Label("导出为\(format.displayName)", systemImage: iconName(for: format))
+                                Label(String(format: NSLocalizedString("导出为%@", comment: ""), format.displayName), systemImage: iconName(for: format))
                             }
                         } else {
                             Text(NSLocalizedString("当前系统暂不支持直接分享导出文件。", comment: ""))
@@ -52,7 +52,7 @@ struct ChatExportFormatsView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.mini)
-                            Text("正在生成 \(format.displayName) 文件…")
+                            Text(String(format: NSLocalizedString("正在生成 %@ 文件…", comment: ""), format.displayName))
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }

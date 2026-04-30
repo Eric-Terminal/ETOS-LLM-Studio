@@ -127,7 +127,7 @@ struct DeviceSyncSettingsView: View {
                 }
 
                 if let uploadResponsePreview, !uploadResponsePreview.isEmpty {
-                    Text("响应：\(uploadResponsePreview)")
+                    Text(String(format: NSLocalizedString("响应：%@", comment: ""), uploadResponsePreview))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
@@ -281,7 +281,7 @@ struct DeviceSyncSettingsView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 if let lastUpdated = syncManager.lastUpdatedAt {
-                    Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                    Text(String(format: NSLocalizedString("上次同步：%@", comment: ""), lastUpdated.formatted(date: .abbreviated, time: .shortened)))
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -324,7 +324,7 @@ struct DeviceSyncSettingsView: View {
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     if let lastUpdated = cloudSyncManager.lastUpdatedAt {
-                        Text("上次同步：\(lastUpdated.formatted(date: .abbreviated, time: .shortened))")
+                        Text(String(format: NSLocalizedString("上次同步：%@", comment: ""), lastUpdated.formatted(date: .abbreviated, time: .shortened)))
                             .etFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }

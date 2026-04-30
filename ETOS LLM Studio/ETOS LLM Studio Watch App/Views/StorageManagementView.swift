@@ -59,7 +59,7 @@ public struct StorageManagementView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text("将清理：\(orphanedDataCount.description)。\n\n此操作不可撤销。")
+            Text(String(format: NSLocalizedString("将清理：%@。\n\n此操作不可撤销。", comment: ""), orphanedDataCount.description))
         }
         .alert(item: $cleanupAlert) { alert in
             Alert(
@@ -533,9 +533,9 @@ private struct WatchJSONPreviewView: View {
 
     private func summaryCard(for page: StorageTextPage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("第 \(page.index + 1) / \(page.totalCount) 页")
+            Text(String(format: NSLocalizedString("第 %d / %d 页", comment: ""), page.index + 1, page.totalCount))
                 .etFont(.footnote.weight(.semibold))
-            Text("第 \(page.startLineNumber)-\(page.endLineNumber) 行")
+            Text(String(format: NSLocalizedString("第 %d-%d 行", comment: ""), page.startLineNumber, page.endLineNumber))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }

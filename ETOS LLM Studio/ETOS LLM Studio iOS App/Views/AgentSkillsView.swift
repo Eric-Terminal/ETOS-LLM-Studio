@@ -90,7 +90,7 @@ struct AgentSkillsView: View {
                 }
             }
 
-            Section("已安装技能 (\(manager.skills.count))") {
+            Section(String(format: NSLocalizedString("已安装技能 (%d)", comment: ""), manager.skills.count)) {
                 if manager.skills.isEmpty {
                     Text(NSLocalizedString("暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地文件导入。", comment: ""))
                         .etFont(.footnote)
@@ -165,7 +165,7 @@ struct AgentSkillsView: View {
                 deleteTarget = nil
             }
         } message: {
-            Text("确认删除“\(deleteTarget?.name ?? "")”？此操作不可撤销。")
+            Text(String(format: NSLocalizedString("确认删除“%@”？此操作不可撤销。", comment: ""), deleteTarget?.name ?? ""))
         }
     }
 }
@@ -286,7 +286,7 @@ description: "技能描述"
                     }
 
                 if !parsedName.isEmpty {
-                    Text("技能名称：\(parsedName)")
+                    Text(String(format: NSLocalizedString("技能名称：%@", comment: ""), parsedName))
                         .etFont(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -405,7 +405,7 @@ private struct SkillDetailView: View {
                 )
             }
 
-            Section("文件 (\(files.count))") {
+            Section(String(format: NSLocalizedString("文件 (%d)", comment: ""), files.count)) {
                 if files.isEmpty {
                     Text(NSLocalizedString("技能目录为空。", comment: ""))
                         .foregroundStyle(.secondary)
@@ -474,7 +474,7 @@ private struct SkillDetailView: View {
                 deleteTarget = nil
             }
         } message: {
-            Text("确认删除“\(deleteTarget?.relativePath ?? "")”？")
+            Text(String(format: NSLocalizedString("确认删除“%@”？", comment: ""), deleteTarget?.relativePath ?? ""))
         }
     }
 

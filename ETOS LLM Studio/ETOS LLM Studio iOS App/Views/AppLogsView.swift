@@ -105,7 +105,7 @@ private struct AppLogDayRunsView: View {
                         }
                     }
                 } header: {
-                    Text("\(dayFolder.day) · \(dayFolder.runs.count) 个日志文件")
+                    Text(String(format: NSLocalizedString("%@ · %d 个日志文件", comment: ""), dayFolder.day, dayFolder.runs.count))
                 } footer: {
                     Text(NSLocalizedString("每次应用运行都会写入一个新的日志文件。", comment: ""))
                 }
@@ -146,7 +146,7 @@ private struct AppLogRunDetailView: View {
                 LabeledContent(NSLocalizedString("日期文件夹", comment: ""), value: runFile.day)
                 LabeledContent(NSLocalizedString("日志文件名", comment: ""), value: runFile.fileName)
                 LabeledContent(NSLocalizedString("记录数", comment: ""), value: "\(runFile.totalEventCount)")
-                LabeledContent(NSLocalizedString("来源分布", comment: ""), value: "开发 \(runFile.developerEventCount) / 用户 \(runFile.userEventCount)")
+                LabeledContent(NSLocalizedString("来源分布", comment: ""), value: String(format: NSLocalizedString("开发 %d / 用户 %d", comment: ""), runFile.developerEventCount, runFile.userEventCount))
                 LabeledContent(NSLocalizedString("文件大小", comment: ""), value: formatByteCount(runFile.fileSizeBytes))
                 LabeledContent(NSLocalizedString("创建时间", comment: ""), value: formatTime(runFile.createdAt))
                 LabeledContent(NSLocalizedString("最后更新", comment: ""), value: formatTime(runFile.updatedAt))
@@ -275,7 +275,7 @@ private struct AppLogDayFolderRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(dayFolder.day)
                     .etFont(.headline)
-                Text("\(dayFolder.runs.count) 个日志文件 · \(dayFolder.totalEventCount) 条记录")
+                Text(String(format: NSLocalizedString("%d 个日志文件 · %d 条记录", comment: ""), dayFolder.runs.count, dayFolder.totalEventCount))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -301,7 +301,7 @@ private struct AppLogRunFileRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("共 \(runFile.totalEventCount) 条 · 开发 \(runFile.developerEventCount) / 用户 \(runFile.userEventCount)")
+            Text(String(format: NSLocalizedString("共 %d 条 · 开发 %d / 用户 %d", comment: ""), runFile.totalEventCount, runFile.developerEventCount, runFile.userEventCount))
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -315,7 +315,7 @@ private struct AppLogDetailRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(entry.channel == .developer ? "开发" : "用户")
+                Text(entry.channel == .developer ? NSLocalizedString("开发", comment: "") : NSLocalizedString("用户", comment: ""))
                     .etFont(.system(size: 10, weight: .semibold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -345,7 +345,7 @@ private struct AppLogDetailRow: View {
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("事件ID：\(entry.id.uuidString)")
+            Text(String(format: NSLocalizedString("事件ID：%@", comment: ""), entry.id.uuidString))
                 .etFont(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)

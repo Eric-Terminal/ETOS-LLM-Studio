@@ -40,7 +40,7 @@ struct ToolPermissionBubble: View {
         HStack(alignment: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("工具：\(toolName)")
+                    Text(String(format: NSLocalizedString("工具：%@", comment: ""), toolName))
                         .etFont(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
 

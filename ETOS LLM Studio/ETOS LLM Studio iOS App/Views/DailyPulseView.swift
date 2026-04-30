@@ -159,7 +159,7 @@ struct DailyPulseView: View {
                 .lineLimit(2...4)
 
             if let pending = pulseManager.pendingCuration {
-                Label("将优先用于 \(pending.targetDayKey) 的每日脉冲", systemImage: "calendar.badge.clock")
+                Label(String(format: NSLocalizedString("将优先用于 %@ 的每日脉冲", comment: ""), pending.targetDayKey), systemImage: "calendar.badge.clock")
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

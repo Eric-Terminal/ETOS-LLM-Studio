@@ -440,7 +440,7 @@ private struct SessionFolderBrowserView: View {
             } message: {
                 if let createFolderParentID,
                    let parentFolder = folderByID[createFolderParentID] {
-                    Text("将在“\(parentFolder.name)”下创建子文件夹。")
+                    Text(String(format: NSLocalizedString("将在“%@”下创建子文件夹。", comment: ""), parentFolder.name))
                 } else {
                     Text(NSLocalizedString("请输入新的文件夹名称。", comment: ""))
                 }
@@ -491,7 +491,7 @@ private struct SessionFolderBrowserView: View {
                         guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
                         return descendantIDs.contains(assignedFolderID)
                     }.count
-                    Text("将删除 \(folderCount) 个文件夹。\(affectedSessions) 个会话将移回未分类。")
+                    Text(String(format: NSLocalizedString("将删除 %d 个文件夹。%d 个会话将移回未分类。", comment: ""), folderCount, affectedSessions))
                 }
             }
     }
@@ -555,7 +555,7 @@ private struct SessionFolderBrowserView: View {
             Text(NSLocalizedString("搜索结果", comment: ""))
         } footer: {
             if !isSearching {
-                Text("匹配 \(searchResultItems.count) 条结果 / \(searchResultSessions.count) 个会话")
+                Text(String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), searchResultItems.count, searchResultSessions.count))
             }
         }
     }
@@ -888,7 +888,7 @@ private struct SessionFolderBrowserView: View {
                 .etFont(.system(size: 16, weight: .medium))
 
                 let count = recursiveSessionCount(in: folder.id)
-                Text("\(count) 个会话")
+                Text(String(format: NSLocalizedString("%d 个会话", comment: ""), count))
                     .etFont(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -1277,7 +1277,7 @@ private struct BatchSelectableFolderRow: View {
                     }
                     .etFont(.system(size: 16, weight: .medium))
 
-                    Text("\(sessionCount) 个会话")
+                    Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
                         .etFont(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }

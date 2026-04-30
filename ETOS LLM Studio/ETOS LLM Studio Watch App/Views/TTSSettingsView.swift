@@ -147,7 +147,7 @@ struct TTSSettingsView: View {
 
             Section(NSLocalizedString("播放参数", comment: "")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("语速 \(String(format: "%.2f", settingsStore.speechRate))")
+                    Text(String(format: NSLocalizedString("语速 %.2f", comment: ""), settingsStore.speechRate))
                     Slider(value: Binding(
                         get: { Double(settingsStore.speechRate) },
                         set: { settingsStore.speechRate = Float($0) }
@@ -155,7 +155,7 @@ struct TTSSettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("音调 \(String(format: "%.2f", settingsStore.pitch))")
+                    Text(String(format: NSLocalizedString("音调 %.2f", comment: ""), settingsStore.pitch))
                     Slider(value: Binding(
                         get: { Double(settingsStore.pitch) },
                         set: { settingsStore.pitch = Float($0) }
@@ -163,7 +163,7 @@ struct TTSSettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("倍速 \(String(format: "%.2f", settingsStore.playbackSpeed))")
+                    Text(String(format: NSLocalizedString("倍速 %.2f", comment: ""), settingsStore.playbackSpeed))
                     Slider(value: Binding(
                         get: { Double(settingsStore.playbackSpeed) },
                         set: { settingsStore.playbackSpeed = Float($0) }

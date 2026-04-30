@@ -216,11 +216,11 @@ struct ShortcutIntegrationView: View {
                     ),
                     in: 1...30
                 ) {
-                    Text("倒计时：\(toolPermissionCenter.autoApproveCountdownSeconds)s")
+                    Text(String(format: NSLocalizedString("倒计时：%ds", comment: ""), toolPermissionCenter.autoApproveCountdownSeconds))
                 }
                 .disabled(!toolPermissionCenter.autoApproveEnabled)
                 let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
-                Text("已禁用自动批准工具：\(disabledCount)")
+                Text(String(format: NSLocalizedString("已禁用自动批准工具：%d", comment: ""), disabledCount))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
                 if disabledCount > 0 {
@@ -255,7 +255,7 @@ struct ShortcutIntegrationView: View {
                 }
             }
 
-            Section("已导入快捷指令 (\(manager.tools.count))") {
+            Section(String(format: NSLocalizedString("已导入快捷指令 (%d)", comment: ""), manager.tools.count)) {
                 if manager.tools.isEmpty {
                     Text(NSLocalizedString("尚未导入任何快捷指令。", comment: ""))
                         .foregroundStyle(.secondary)
@@ -287,7 +287,7 @@ struct ShortcutIntegrationView: View {
                                     .etFont(.footnote)
                                     .foregroundStyle(.secondary)
 
-                                Text("运行模式：\(runModeLabel(for: tool.runModeHint))")
+                                Text(String(format: NSLocalizedString("运行模式：%@", comment: ""), runModeLabel(for: tool.runModeHint)))
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
 

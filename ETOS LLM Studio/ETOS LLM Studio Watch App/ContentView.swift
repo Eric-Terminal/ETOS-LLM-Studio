@@ -643,7 +643,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
 
             if let status = legacyJSONMigrationManager.status {
-                Text(String(format: "预计 %.1f MB，约 %d 个会话", status.estimatedLegacyMegabytes, status.estimatedSessionCount))
+                Text(String(format: NSLocalizedString("预计 %.1f MB，约 %d 个会话", comment: ""), status.estimatedLegacyMegabytes, status.estimatedSessionCount))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -670,10 +670,10 @@ struct ContentView: View {
                 .etFont(.headline)
             if let progress = legacyJSONMigrationManager.progress {
                 ProgressView(value: progress.fractionCompleted)
-                Text("会话 \(progress.processedSessions)/\(max(progress.totalSessions, progress.processedSessions))")
+                Text(String(format: NSLocalizedString("会话 %d/%d", comment: ""), progress.processedSessions, max(progress.totalSessions, progress.processedSessions)))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-                Text("消息 \(progress.importedMessages)")
+                Text(String(format: NSLocalizedString("消息 %d", comment: ""), progress.importedMessages))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {

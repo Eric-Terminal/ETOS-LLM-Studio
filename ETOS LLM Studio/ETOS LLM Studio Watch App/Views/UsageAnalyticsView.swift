@@ -122,10 +122,10 @@ struct UsageAnalyticsView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text("Token \(card.totalTokens) · 错误 \(card.errorCount)")
+                        Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), card.totalTokens, card.errorCount))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
-                        Text("常用模型：\(card.topModelName)")
+                        Text(String(format: NSLocalizedString("常用模型：%@", comment: ""), card.topModelName))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -140,9 +140,9 @@ struct UsageAnalyticsView: View {
                     Text(viewModel.state.detail.subtitle)
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
-                    Text("请求 \(viewModel.state.detail.requestCount) · 成功 \(viewModel.state.detail.successCount) · 错误 \(viewModel.state.detail.failedCount)")
+                    Text(String(format: NSLocalizedString("请求 %d · 成功 %d · 错误 %d", comment: ""), viewModel.state.detail.requestCount, viewModel.state.detail.successCount, viewModel.state.detail.failedCount))
                         .etFont(.caption2)
-                    Text("Token \(viewModel.state.detail.tokenTotals.totalTokens) · 取消 \(viewModel.state.detail.cancelledCount)")
+                    Text(String(format: NSLocalizedString("Token %d · 取消 %d", comment: ""), viewModel.state.detail.tokenTotals.totalTokens, viewModel.state.detail.cancelledCount))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     Text(String(
@@ -165,7 +165,7 @@ struct UsageAnalyticsView: View {
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-                        Text("\(topModel.requestCount) 次 · Token \(topModel.totalTokens)")
+                        Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), topModel.requestCount, topModel.totalTokens))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -177,7 +177,7 @@ struct UsageAnalyticsView: View {
                             .etFont(.caption.weight(.semibold))
                         Text(topSource.title)
                             .etFont(.footnote.weight(.semibold))
-                        Text("\(topSource.requestCount) 次 · 错误 \(topSource.errorCount)")
+                        Text(String(format: NSLocalizedString("%d 次 · 错误 %d", comment: ""), topSource.requestCount, topSource.errorCount))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }

@@ -191,7 +191,7 @@ struct StorageManagementView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text("将清理：\(orphanedDataCount.description)。\n\n此操作不可撤销。")
+            Text(String(format: NSLocalizedString("将清理：%@。\n\n此操作不可撤销。", comment: ""), orphanedDataCount.description))
         }
     }
     

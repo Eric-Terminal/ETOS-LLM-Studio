@@ -124,7 +124,7 @@ struct DeviceSyncSettingsView: View {
                 }
 
                 if let uploadResponsePreview, !uploadResponsePreview.isEmpty {
-                    Text("响应：\(uploadResponsePreview)")
+                    Text(String(format: NSLocalizedString("响应：%@", comment: ""), uploadResponsePreview))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)

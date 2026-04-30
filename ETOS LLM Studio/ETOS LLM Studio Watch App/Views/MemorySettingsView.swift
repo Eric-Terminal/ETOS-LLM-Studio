@@ -582,7 +582,7 @@ struct ConversationMemorySettingsView: View {
                     Text(profile.content)
                         .lineLimit(6)
                         .etFont(.footnote)
-                    Text("更新时间：\(profile.updatedAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))")
+                    Text(String(format: NSLocalizedString("更新时间：%@", comment: ""), profile.updatedAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     Button(NSLocalizedString("编辑用户画像", comment: "")) {

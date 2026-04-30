@@ -1604,7 +1604,7 @@ struct ChatBubble: View {
 
         private var toolHeader: some View {
             HStack(spacing: 4) {
-                Text("调用：\(label)")
+                Text(String(format: NSLocalizedString("调用：%@", comment: ""), label))
                     .etFont(.footnote)
                     .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
                     .lineLimit(1)
@@ -1687,7 +1687,7 @@ struct ChatBubble: View {
                 }) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
-                            Text("结果：\(toolNames.joined(separator: ", "))")
+                            Text(String(format: NSLocalizedString("结果：%@", comment: ""), toolNames.joined(separator: ", ")))
                                 .etFont(.footnote)
                                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
                                 .lineLimit(1)
@@ -1757,7 +1757,7 @@ struct ChatBubble: View {
                     .etFont(.caption2.weight(.medium))
                 if let title = payload.title,
                    !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("标题：\(title)")
+                    Text(String(format: NSLocalizedString("标题：%@", comment: ""), title))
                         .etFont(.caption2)
                 }
                 Text(NSLocalizedString("请在 iPhone 端查看完整渲染效果。", comment: ""))

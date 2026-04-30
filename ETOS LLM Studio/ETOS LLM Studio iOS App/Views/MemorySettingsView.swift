@@ -606,7 +606,7 @@ struct ConversationMemorySettingsView: View {
                 if let profile = viewModel.conversationUserProfile {
                     Text(profile.content)
                         .lineLimit(6)
-                    Text("更新时间：\(profile.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                    Text(String(format: NSLocalizedString("更新时间：%@", comment: ""), profile.updatedAt.formatted(date: .abbreviated, time: .shortened)))
                         .etFont(.caption)
                         .foregroundStyle(.secondary)
                     Button(NSLocalizedString("编辑用户画像", comment: "")) {

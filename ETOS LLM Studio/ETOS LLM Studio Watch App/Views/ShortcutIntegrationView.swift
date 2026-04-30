@@ -109,7 +109,7 @@ struct ShortcutIntegrationView: View {
                 Text(NSLocalizedString("若 iPhone 端 urlshim / URL Scheme 跳转失败，请在 iPhone 的快捷设定页直接复制清单到剪贴板，再使用“从剪贴板导入清单”。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
-                Text("桥接快捷指令：\(bridgeShortcutName)")
+                Text(String(format: NSLocalizedString("桥接快捷指令：%@", comment: ""), bridgeShortcutName))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -193,16 +193,16 @@ struct ShortcutIntegrationView: View {
 
             if let summary = manager.lastImportSummary {
                 Section(NSLocalizedString("最近导入", comment: "")) {
-                    Text("新增 \(summary.importedCount)，跳过 \(summary.skippedCount)")
+                    Text(String(format: NSLocalizedString("新增 %d，跳过 %d", comment: ""), summary.importedCount, summary.skippedCount))
                     if !summary.conflictNames.isEmpty {
-                        Text("冲突：\(summary.conflictNames.joined(separator: "，"))")
+                        Text(String(format: NSLocalizedString("冲突：%@", comment: ""), summary.conflictNames.joined(separator: NSLocalizedString("，", comment: ""))))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            Section("快捷指令工具 (\(manager.tools.count))") {
+            Section(String(format: NSLocalizedString("快捷指令工具 (%d)", comment: ""), manager.tools.count)) {
                 if manager.tools.isEmpty {
                     Text(NSLocalizedString("暂无工具", comment: ""))
                         .foregroundStyle(.secondary)
@@ -232,7 +232,7 @@ struct ShortcutIntegrationView: View {
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
-                                Text("运行模式：\(runModeLabel(for: tool.runModeHint))")
+                                Text(String(format: NSLocalizedString("运行模式：%@", comment: ""), runModeLabel(for: tool.runModeHint)))
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                 if let importStatusText = importStatusText(for: tool) {

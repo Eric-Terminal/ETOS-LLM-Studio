@@ -356,9 +356,9 @@ struct UsageAnalyticsView: View {
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text("\(item.requestCount) 次")
+                            Text(String(format: NSLocalizedString("%d 次", comment: ""), item.requestCount))
                                 .etFont(.subheadline.monospaced())
-                            Text("Token \(item.totalTokens) · 错误 \(item.errorCount)")
+                            Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), item.totalTokens, item.errorCount))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -393,7 +393,7 @@ struct UsageAnalyticsView: View {
                         .stroke(day.dayKey == viewModel.state.selectedDayKey ? Color.accentColor : Color.clear, lineWidth: 1)
                 )
                 .frame(width: side, height: side)
-                .accessibilityLabel("\(day.dayKey)，请求 \(day.requestCount) 次")
+                .accessibilityLabel(String(format: NSLocalizedString("%@，请求 %d 次", comment: ""), day.dayKey, day.requestCount))
         }
         .buttonStyle(.plain)
     }

@@ -77,7 +77,7 @@ struct AgentSkillsView: View {
                 }
             }
 
-            Section("技能 (\(manager.skills.count))") {
+            Section(String(format: NSLocalizedString("技能 (%d)", comment: ""), manager.skills.count)) {
                 if manager.skills.isEmpty {
                     Text(NSLocalizedString("暂无技能", comment: ""))
                         .foregroundStyle(.secondary)
@@ -90,7 +90,7 @@ struct AgentSkillsView: View {
                                 HStack {
                                     Text(skill.name)
                                     Spacer()
-                                    Text(manager.isSkillEnabled(skill.name) ? "已启用" : "已停用")
+                                    Text(manager.isSkillEnabled(skill.name) ? NSLocalizedString("已启用", comment: "") : NSLocalizedString("已停用", comment: ""))
                                         .etFont(.caption2)
                                         .foregroundStyle(manager.isSkillEnabled(skill.name) ? .green : .secondary)
                                 }
@@ -140,7 +140,7 @@ struct AgentSkillsView: View {
                 deleteTarget = nil
             }
         } message: {
-            Text("确认删除“\(deleteTarget?.name ?? "")”？")
+            Text(String(format: NSLocalizedString("确认删除“%@”？", comment: ""), deleteTarget?.name ?? ""))
         }
     }
 }
@@ -485,7 +485,7 @@ private struct WatchSkillDetailView: View {
                 deleteTarget = nil
             }
         } message: {
-            Text("确认删除“\(deleteTarget?.relativePath ?? "")”？")
+            Text(String(format: NSLocalizedString("确认删除“%@”？", comment: ""), deleteTarget?.relativePath ?? ""))
         }
     }
 

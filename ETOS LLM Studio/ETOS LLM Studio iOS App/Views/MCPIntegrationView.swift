@@ -147,7 +147,7 @@ struct MCPIntegrationView: View {
                 .disabled(manager.isBusy || connectedCount == 0)
                 
                 if manager.isBusy {
-                    ProgressView("正在同步…")
+                    ProgressView(NSLocalizedString("正在同步…", comment: ""))
                 }
             }
 
@@ -165,11 +165,11 @@ struct MCPIntegrationView: View {
                     ),
                     in: 1...30
                 ) {
-                    Text("倒计时：\(toolPermissionCenter.autoApproveCountdownSeconds)s")
+                    Text(String(format: NSLocalizedString("倒计时：%ds", comment: ""), toolPermissionCenter.autoApproveCountdownSeconds))
                 }
                 .disabled(!toolPermissionCenter.autoApproveEnabled)
                 let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
-                Text("已禁用自动批准工具：\(disabledCount)")
+                Text(String(format: NSLocalizedString("已禁用自动批准工具：%d", comment: ""), disabledCount))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
                 if disabledCount > 0 {
@@ -214,7 +214,7 @@ struct MCPIntegrationView: View {
                                 .foregroundStyle(.tertiary)
                                 .textSelection(.enabled)
                             if let schemaSummary = schemaSummary(for: available.tool.inputSchema) {
-                                Text("输入 Schema：\(schemaSummary)")
+                                Text(String(format: NSLocalizedString("输入 Schema：%@", comment: ""), schemaSummary))
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                     .textSelection(.enabled)
@@ -241,21 +241,21 @@ struct MCPIntegrationView: View {
                                 if let total = call.latestTotal, total > 0 {
                                     let fraction = min(max(progress / total, 0), 1)
                                     ProgressView(value: fraction)
-                                    Text(String(format: "进度 %.0f / %.0f", progress, total))
+                                    Text(String(format: NSLocalizedString("进度 %.0f / %.0f", comment: ""), progress, total))
                                         .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                 } else {
-                                    Text(String(format: "进度 %.0f", progress))
+                                    Text(String(format: NSLocalizedString("进度 %.0f", comment: ""), progress))
                                         .etFont(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
                             }
                             HStack(spacing: 8) {
                                 if let timeout = call.timeout {
-                                    Text("空闲超时 \(Int(timeout))s")
+                                    Text(String(format: NSLocalizedString("空闲超时 %ds", comment: ""), Int(timeout)))
                                 }
                                 if let totalTimeout = call.maxTotalTimeout {
-                                    Text("总超时 \(Int(totalTimeout))s")
+                                    Text(String(format: NSLocalizedString("总超时 %ds", comment: ""), Int(totalTimeout)))
                                 }
                             }
                             .etFont(.caption2)
@@ -838,7 +838,7 @@ private struct MCPServerDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 if let schemaSummary = schemaSummary(for: tool.inputSchema) {
-                                    Text("输入 Schema：\(schemaSummary)")
+                                    Text(String(format: NSLocalizedString("输入 Schema：%@", comment: ""), schemaSummary))
                                         .etFont(.caption2)
                                         .foregroundStyle(.tertiary)
                                         .lineLimit(3)

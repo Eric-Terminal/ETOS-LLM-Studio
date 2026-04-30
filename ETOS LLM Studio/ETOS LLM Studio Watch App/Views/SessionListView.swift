@@ -439,7 +439,7 @@ private struct SessionFolderBrowserView: View {
                         guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
                         return descendants.contains(assignedFolderID)
                     }.count
-                    Text("将删除 \(folderCount) 个文件夹。\(sessionCount) 个会话将回到未分类。")
+                    Text(String(format: NSLocalizedString("将删除 %d 个文件夹。%d 个会话将回到未分类。", comment: ""), folderCount, sessionCount))
                 }
             }
     }
@@ -449,7 +449,7 @@ private struct SessionFolderBrowserView: View {
             List {
                 if isBatchSelecting {
                     Section {
-                        Text("已选 \(selectedBatchItemCount) 个项目")
+                        Text(String(format: NSLocalizedString("已选 %d 个项目", comment: ""), selectedBatchItemCount))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
 
@@ -645,7 +645,7 @@ private struct SessionFolderBrowserView: View {
                 Text(folder.name)
                     .etFont(.footnote)
                     .lineLimit(1)
-                Text("\(recursiveSessionCount(in: folder.id)) 个会话")
+                Text(String(format: NSLocalizedString("%d 个会话", comment: ""), recursiveSessionCount(in: folder.id)))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -902,7 +902,7 @@ private struct BatchSelectableFolderRow: View {
                         .etFont(.footnote)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text("\(sessionCount) 个会话")
+                    Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1140,7 +1140,7 @@ private struct WatchSessionSearchView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("匹配 \(searchResults.count) 条结果 / \(searchHits.count) 个会话")
+                    Text(String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), searchResults.count, searchHits.count))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }

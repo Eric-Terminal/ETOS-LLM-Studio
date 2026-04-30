@@ -30,7 +30,7 @@ struct WatchAppLogsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(dayFolder.day)
                                 .etFont(.headline)
-                            Text("\(dayFolder.runs.count) 个文件 · \(dayFolder.totalEventCount) 条")
+                            Text(String(format: NSLocalizedString("%d 个文件 · %d 条", comment: ""), dayFolder.runs.count, dayFolder.totalEventCount))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -90,7 +90,7 @@ private struct WatchAppLogDayRunsView: View {
                             Text(runFile.fileName)
                                 .etFont(.caption2)
                                 .lineLimit(1)
-                            Text("\(formatTime(runFile.createdAt)) · \(runFile.totalEventCount) 条")
+                            Text(String(format: NSLocalizedString("%@ · %d 条", comment: ""), formatTime(runFile.createdAt), runFile.totalEventCount))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -124,7 +124,7 @@ private struct WatchAppRunLogDetailView: View {
                 Text(runFile.fileName)
                     .etFont(.caption2)
                     .lineLimit(2)
-                Text("开发 \(runFile.developerEventCount) / 用户 \(runFile.userEventCount)")
+                Text(String(format: NSLocalizedString("开发 %d / 用户 %d", comment: ""), runFile.developerEventCount, runFile.userEventCount))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -146,7 +146,7 @@ private struct WatchAppRunLogDetailView: View {
                     ForEach(displayedEvents) { entry in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text(entry.channel == .developer ? "开发" : "用户")
+                                Text(entry.channel == .developer ? NSLocalizedString("开发", comment: "") : NSLocalizedString("用户", comment: ""))
                                     .etFont(.system(size: 9, weight: .semibold))
                                     .foregroundStyle(entry.channel == .developer ? .purple : .green)
                                 Text(entry.level.displayName)

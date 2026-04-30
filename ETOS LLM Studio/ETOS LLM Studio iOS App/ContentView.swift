@@ -349,8 +349,8 @@ struct ContentView: View {
 
             if let status = legacyJSONMigrationManager.status {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("预计会话数：\(status.estimatedSessionCount)")
-                    Text(String(format: "预计数据量：%.1f MB", status.estimatedLegacyMegabytes))
+                    Text(String(format: NSLocalizedString("预计会话数：%d", comment: ""), status.estimatedSessionCount))
+                    Text(String(format: NSLocalizedString("预计数据量：%.1f MB", comment: ""), status.estimatedLegacyMegabytes))
                 }
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
@@ -384,14 +384,15 @@ struct ContentView: View {
             if let progress = legacyJSONMigrationManager.progress {
                 ProgressView(value: progress.fractionCompleted)
                     .progressViewStyle(.linear)
-                Text("已处理会话 \(progress.processedSessions)/\(max(progress.totalSessions, progress.processedSessions))")
+                Text(String(format: NSLocalizedString("已处理会话 %d/%d", comment: ""), progress.processedSessions, max(progress.totalSessions, progress.processedSessions)))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-                Text("已导入消息 \(progress.importedMessages)")
+                Text(String(format: NSLocalizedString("已导入消息 %d", comment: ""), progress.importedMessages))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 let currentSessionName = progress.currentSessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                Text("当前：\(currentSessionName.isEmpty ? "正在整理会话…" : currentSessionName)")
+                let currentSessionDisplayName = currentSessionName.isEmpty ? NSLocalizedString("正在整理会话…", comment: "") : currentSessionName
+                Text(String(format: NSLocalizedString("当前：%@", comment: ""), currentSessionDisplayName))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
