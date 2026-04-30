@@ -109,39 +109,29 @@ private struct WatchProviderModelOrderContentView: View {
         List {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
-                footer: Text(NSLocalizedString("维护全局模型顺序，模型选择列表会按这里的顺序展示。", comment: ""))
+                footer: Text(NSLocalizedString("拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。", comment: ""))
             ) {
                 if viewModel.configuredModels.isEmpty {
                     Text(NSLocalizedString("暂无可排序模型。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(viewModel.configuredModels.enumerated()), id: \.element.id) { position, runnable in
-                        modelOrderRow(
-                            runnable: runnable,
-                            position: position,
-                            total: viewModel.configuredModels.count
-                        )
+                    ForEach(viewModel.configuredModels, id: \.id) { runnable in
+                        modelOrderRow(runnable: runnable)
+                    }
+                    .onMove { offsets, destination in
+                        ChatService.shared.moveConfiguredModels(fromOffsets: offsets, toOffset: destination)
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("模型顺序", comment: ""))
-    }
-
-    private func moveModelUp(at position: Int) {
-        guard position > 0 else { return }
-        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position - 1)
-    }
-
-    private func moveModelDown(at position: Int, total: Int) {
-        guard position + 1 < total else { return }
-        ChatService.shared.moveConfiguredModel(fromPosition: position, toPosition: position + 1)
+        .environment(\.editMode, .constant(.active))
     }
 
     @ViewBuilder
-    private func modelOrderRow(runnable: RunnableModel, position: Int, total: Int) -> some View {
-        HStack(spacing: 6) {
+    private func modelOrderRow(runnable: RunnableModel) -> some View {
+        HStack(alignment: .top, spacing: 6) {
             MarqueeTitleSubtitleLabel(
                 title: runnable.model.displayName,
                 subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
@@ -154,29 +144,10 @@ private struct WatchProviderModelOrderContentView: View {
             )
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                if !runnable.model.isActivated {
-                    Text(NSLocalizedString("未启用", comment: ""))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            VStack(spacing: 4) {
-                Button {
-                    moveModelUp(at: position)
-                } label: {
-                    Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(position == 0)
-
-                Button {
-                    moveModelDown(at: position, total: total)
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .disabled(position + 1 >= total)
+            if !runnable.model.isActivated {
+                Text(NSLocalizedString("未启用", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
     }

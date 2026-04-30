@@ -2030,6 +2030,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "统计范围" = "Stats Range";
 "继续聊" = "Continue Chat";
 "维护全局模型顺序，模型选择列表会按这里的顺序展示。" = "Maintain the global model order. Model selection lists follow this order.";
+"拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。" = "Drag the handle on the right to adjust global model order. Model pickers follow this order.";
 "绿墙" = "Green Wall";
 "编辑提示词" = "Edit Prompt";
 "编辑方式" = "Edit Mode";
