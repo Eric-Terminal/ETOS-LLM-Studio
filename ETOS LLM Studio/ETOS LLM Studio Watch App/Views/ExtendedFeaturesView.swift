@@ -66,7 +66,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text(NSLocalizedString("统一预览和调整聊天工具启用状态。", comment: "Tool center entry footer"))
+                Text(NSLocalizedString("统一预览和调整聊天工具启用状态。", comment: "工具中心入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -95,7 +95,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("统一管理语音输入与语音朗读。")
+                Text(NSLocalizedString("统一管理语音输入与语音朗读。", comment: "语音能力入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -109,7 +109,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
+                Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "反馈助手入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -124,7 +124,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("让 AI 根据历史偏好与事件持续优化回答。")
+                Text(NSLocalizedString("让 AI 根据历史偏好与事件持续优化回答。", comment: "记忆系统入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -138,7 +138,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("配置 MCP 工具服务器，让助手调用外部能力。")
+                Text(NSLocalizedString("配置 MCP 工具服务器，让助手调用外部能力。", comment: "MCP 入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -152,7 +152,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("导入快捷指令工具并控制 AI 的调用权限。")
+                Text(NSLocalizedString("导入快捷指令工具并控制 AI 的调用权限。", comment: "快捷指令入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -166,7 +166,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("管理可按需加载的技能包，并控制是否向模型暴露 use_skill 工具。")
+                Text(NSLocalizedString("管理可按需加载的技能包，并控制是否向模型暴露 use_skill 工具。", comment: "Agent Skills 入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -180,7 +180,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("管理世界书并绑定到当前会话。")
+                Text(NSLocalizedString("管理世界书并绑定到当前会话。", comment: "世界书入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -194,7 +194,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("通过局域网远程访问和管理 Documents 目录。")
+                Text(NSLocalizedString("通过局域网远程访问和管理 Documents 目录。", comment: "远程文件访问入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -208,7 +208,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("查看并清理本地模型、文件与缓存。")
+                Text(NSLocalizedString("查看并清理本地模型、文件与缓存。", comment: "存储管理入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -222,7 +222,7 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("支持导入 ETOS 数据包，也可通过第三方来源迁移。")
+                Text(NSLocalizedString("支持导入 ETOS 数据包，也可通过第三方来源迁移。", comment: "导入数据入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -237,12 +237,12 @@ public struct ExtendedFeaturesView: View {
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text("生图在独立页面发起，不影响主聊天输入区。")
+                Text(NSLocalizedString("生图在独立页面发起，不影响主聊天输入区。", comment: "图片生成入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
         }
-        .navigationTitle("拓展功能")
+        .navigationTitle(NSLocalizedString("拓展功能", comment: "拓展功能页标题"))
     }
 
     private func settingsIntroCard(
@@ -252,15 +252,15 @@ public struct ExtendedFeaturesView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "设置介绍卡片标题"))
                 .etFont(.footnote.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "设置介绍卡片摘要"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: "设置介绍卡片展开按钮"))
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -270,7 +270,7 @@ public struct ExtendedFeaturesView: View {
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
-                Text(details)
+                Text(NSLocalizedString(details, comment: "设置介绍卡片详情"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -292,11 +292,16 @@ public struct ExtendedFeaturesView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ title: LocalizedStringKey, icon: SettingsListIcon) -> some View {
+    private func settingsNavigationLabel(_ titleKey: String, icon: SettingsListIcon) -> some View {
+        let title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {
-            Label(title, systemImage: icon.legacySystemName)
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: icon.legacySystemName)
+            }
         }
     }
 }
@@ -334,24 +339,24 @@ struct LongTermMemoryFeatureView: View {
             }
 
             Section {
-                Toggle("启用记忆功能", isOn: $enableMemory)
+                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $enableMemory)
             } footer: {
-                Text("启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。")
+                Text(NSLocalizedString("启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。", comment: "启用记忆功能说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
             
             if enableMemory {
                 Section {
-                    Toggle("是否记录新的记忆", isOn: $enableMemoryWrite)
+                    Toggle(NSLocalizedString("是否记录新的记忆", comment: "是否记录新记忆开关"), isOn: $enableMemoryWrite)
                 } footer: {
-                    Text("关闭后仅读取记忆，不保存新内容。")
+                    Text(NSLocalizedString("关闭后仅读取记忆，不保存新内容。", comment: "关闭记忆写入说明"))
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Toggle("启用异步跨对话记忆", isOn: $enableConversationMemoryAsync)
+                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $enableConversationMemoryAsync)
 
                     if enableConversationMemoryAsync {
                         NavigationLink {
@@ -362,9 +367,9 @@ struct LongTermMemoryFeatureView: View {
                         }
                     }
                 } header: {
-                    Text("跨对话记忆")
+                    Text(NSLocalizedString("跨对话记忆", comment: "跨对话记忆分组"))
                 } footer: {
-                    Text("会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。")
+                    Text(NSLocalizedString("会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。", comment: "跨对话记忆说明"))
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }
@@ -381,7 +386,7 @@ struct LongTermMemoryFeatureView: View {
                 }
             }
         }
-        .navigationTitle("记忆系统")
+        .navigationTitle(NSLocalizedString("记忆系统", comment: "记忆系统页标题"))
     }
 
     private func settingsIntroCard(
@@ -391,15 +396,15 @@ struct LongTermMemoryFeatureView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "设置介绍卡片标题"))
                 .etFont(.footnote.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "设置介绍卡片摘要"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: "设置介绍卡片展开按钮"))
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -409,7 +414,7 @@ struct LongTermMemoryFeatureView: View {
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
-                Text(details)
+                Text(NSLocalizedString(details, comment: "设置介绍卡片详情"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -424,11 +429,16 @@ struct LongTermMemoryFeatureView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ title: LocalizedStringKey, icon: SettingsListIcon) -> some View {
+    private func settingsNavigationLabel(_ titleKey: String, icon: SettingsListIcon) -> some View {
+        let title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {
-            Label(title, systemImage: icon.legacySystemName)
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: icon.legacySystemName)
+            }
         }
     }
 }

@@ -238,7 +238,7 @@ struct ToolCenterView: View {
                 )
                 .etFont(.caption2)
                 if currentSessionIsolationActive {
-                    Text("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。")
+                    Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。", comment: "世界书隔离发送提示"))
                         .etFont(.caption2)
                         .foregroundStyle(.orange)
                 }
@@ -354,7 +354,7 @@ struct ToolCenterView: View {
 
             Section(
                 header: Text("Agent Skills"),
-                footer: Text("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。")
+                footer: Text(NSLocalizedString("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。", comment: "Agent Skills 工具中心页脚"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
@@ -367,13 +367,13 @@ struct ToolCenterView: View {
                 )
 
                 if !skillManager.chatToolsEnabled {
-                    Text("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。")
+                    Text(NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示"))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
                 if skillManager.skills.isEmpty {
-                    Text("当前还没有已安装技能，可在 Agent Skills 页面添加。")
+                    Text(NSLocalizedString("当前还没有已安装技能，可在 Agent Skills 页面添加。", comment: "没有已安装技能提示"))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(filteredSkills) { skill in
@@ -455,15 +455,15 @@ struct ToolCenterView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "工具中心介绍卡片标题"))
                 .etFont(.footnote.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "工具中心介绍卡片摘要"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: "工具中心介绍卡片展开按钮"))
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -473,7 +473,7 @@ struct ToolCenterView: View {
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
-                Text(details)
+                Text(NSLocalizedString(details, comment: "工具中心介绍卡片详情"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -627,14 +627,14 @@ struct ToolCenterView: View {
 
     private func skillStatusText(for skill: SkillMetadata) -> String {
         if currentSessionIsolationActive {
-            return "当前会话因世界书隔离发送而不会实际启用该工具。"
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
         }
         if !skillManager.chatToolsEnabled {
-            return "总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。"
+            return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
         }
         return skillManager.isSkillEnabled(skill.name)
-            ? "该技能当前可参与聊天。"
-            : "已停用。"
+            ? NSLocalizedString("该技能当前可参与聊天。", comment: "Agent Skills 可参与聊天状态")
+            : NSLocalizedString("已停用。", comment: "工具已停用状态")
     }
 
     private func skillStatusColor(for skill: SkillMetadata) -> Color {

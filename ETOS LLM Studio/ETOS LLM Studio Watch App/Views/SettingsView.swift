@@ -81,7 +81,7 @@ struct SettingsView: View {
                 Section {
                     let options = viewModel.activatedModels
                     if options.isEmpty {
-                        Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
+                        Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
@@ -95,7 +95,7 @@ struct SettingsView: View {
                                 if usesNativeSettingsIcons {
                                     SettingsListIconView(icon: .currentModel)
                                 }
-                                Text("当前模型")
+                                Text(NSLocalizedString("当前模型", comment: "当前模型入口标题"))
                                 MarqueeText(
                                     content: selectedModelLabel(in: options),
                                     uiFont: .preferredFont(forTextStyle: .footnote)
@@ -114,7 +114,7 @@ struct SettingsView: View {
                         settingsNavigationLabel("开启新对话", icon: .newConversation)
                     }
                 } header: {
-                    Text("当前模型")
+                    Text(NSLocalizedString("当前模型", comment: "设置当前模型分组"))
                 }
 
                 Section {
@@ -259,11 +259,11 @@ struct SettingsView: View {
                             }
                         }
                     } header: {
-                        Text("系统公告")
+                        Text(NSLocalizedString("系统公告", comment: "系统公告分组"))
                     }
                 }
             }
-            .navigationTitle("设置")
+            .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
             .onAppear {
                 ensureSelectedModel(in: viewModel.activatedModels)
                 scheduleSettingsResearchAchievementIfNeeded()
@@ -296,26 +296,36 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func settingsNavigationLabel(_ title: LocalizedStringKey, icon: SettingsListIcon) -> some View {
+    private func settingsNavigationLabel(_ titleKey: String, icon: SettingsListIcon) -> some View {
+        let title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
         if usesNativeSettingsIcons {
             SettingsListIconLabel(title, icon: icon)
         } else {
-            Label(title, systemImage: icon.legacySystemName)
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: icon.legacySystemName)
+            }
         }
     }
 
     private func settingsStatusLabel(
-        _ title: LocalizedStringKey,
+        _ titleKey: String,
         icon: SettingsListIcon,
         status: String?,
         statusColor: Color
     ) -> some View {
+        let title = NSLocalizedString(titleKey, comment: "设置列表状态入口标题")
         HStack(spacing: 8) {
             if usesNativeSettingsIcons {
                 SettingsListIconView(icon: icon)
                 Text(title)
             } else {
-                Label(title, systemImage: icon.legacySystemName)
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(systemName: icon.legacySystemName)
+                }
             }
             Spacer()
             if let status {
@@ -468,10 +478,10 @@ extension SettingsListIcon {
 }
 
 struct SettingsListIconLabel: View {
-    let title: LocalizedStringKey
+    let title: String
     let icon: SettingsListIcon
 
-    init(_ title: LocalizedStringKey, icon: SettingsListIcon) {
+    init(_ title: String, icon: SettingsListIcon) {
         self.title = title
         self.icon = icon
     }
@@ -521,7 +531,7 @@ private struct ModelSelectionView: View {
                 }
             }
         }
-        .navigationTitle("当前模型")
+        .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
     }
 
     private func select(_ model: RunnableModel) {

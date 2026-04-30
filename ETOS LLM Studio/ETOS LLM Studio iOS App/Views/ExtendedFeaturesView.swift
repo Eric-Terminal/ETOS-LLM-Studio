@@ -56,7 +56,7 @@ struct ExtendedFeaturesView: View {
                     SettingsListIconLabel("反馈助手", icon: .feedback)
                 }
             } footer: {
-                Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "In-app feedback description"))
+                Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "反馈助手入口说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -68,7 +68,7 @@ struct ExtendedFeaturesView: View {
                     SettingsListIconLabel("远程文件访问", icon: .remoteFiles)
                 }
             } footer: {
-                Text("通过局域网远程访问和管理 Documents 目录,方便命令行工具操作。")
+                Text(NSLocalizedString("通过局域网远程访问和管理 Documents 目录，方便命令行工具操作。", comment: "远程文件访问入口说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -80,7 +80,7 @@ struct ExtendedFeaturesView: View {
                     SettingsListIconLabel("存储管理", icon: .storage)
                 }
             } footer: {
-                Text("管理本地模型、文件与缓存占用。")
+                Text(NSLocalizedString("管理本地模型、文件与缓存占用。", comment: "存储管理入口说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -92,12 +92,12 @@ struct ExtendedFeaturesView: View {
                     SettingsListIconLabel("导入数据", icon: .importData)
                 }
             } footer: {
-                Text("支持导入 ETOS 数据包，也可从 Cherry Studio 等来源迁移。")
+                Text(NSLocalizedString("支持导入 ETOS 数据包，也可从 Cherry Studio 等来源迁移。", comment: "导入数据入口说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("拓展功能")
+        .navigationTitle(NSLocalizedString("拓展功能", comment: "拓展功能页标题"))
         .listStyle(.insetGrouped)
     }
 
@@ -108,15 +108,15 @@ struct ExtendedFeaturesView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "设置介绍卡片标题"))
                 .etFont(.headline.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "设置介绍卡片摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: "设置介绍卡片展开按钮"))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -127,13 +127,13 @@ struct ExtendedFeaturesView: View {
         .sheet(isPresented: isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(details)
+                    Text(NSLocalizedString(details, comment: "设置介绍卡片详情"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .navigationTitle(title)
+                .navigationTitle(NSLocalizedString(title, comment: "设置介绍卡片详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
@@ -179,24 +179,24 @@ struct LongTermMemoryFeatureView: View {
             }
 
             Section {
-                Toggle("启用记忆功能", isOn: $enableMemory)
+                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $enableMemory)
             } footer: {
-                Text("启用后，AI 会在响应前自动检索相关记忆，并可选择写入新的记忆片段。")
+                Text(NSLocalizedString("启用后，AI 会在响应前自动检索相关记忆，并可选择写入新的记忆片段。", comment: "启用记忆功能说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
             if enableMemory {
                 Section {
-                    Toggle("允许写入新的记忆", isOn: $enableMemoryWrite)
+                    Toggle(NSLocalizedString("允许写入新的记忆", comment: "允许写入新记忆开关"), isOn: $enableMemoryWrite)
                 } footer: {
-                    Text("关闭后仅读取记忆，不会请求保存新内容。")
+                    Text(NSLocalizedString("关闭后仅读取记忆，不会请求保存新内容。", comment: "关闭记忆写入说明"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 Section {
-                    Toggle("启用异步跨对话记忆", isOn: $enableConversationMemoryAsync)
+                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $enableConversationMemoryAsync)
 
                     if enableConversationMemoryAsync {
                         NavigationLink {
@@ -207,9 +207,9 @@ struct LongTermMemoryFeatureView: View {
                         }
                     }
                 } header: {
-                    Text("跨对话记忆")
+                    Text(NSLocalizedString("跨对话记忆", comment: "跨对话记忆分组"))
                 } footer: {
-                    Text("会话摘要会写入会话 JSON；用户画像会保存到 Memory 目录下，并限制为每天最多更新一次。")
+                    Text(NSLocalizedString("会话摘要会写入会话 JSON；用户画像会保存到 Memory 目录下，并限制为每天最多更新一次。", comment: "跨对话记忆说明"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -223,7 +223,7 @@ struct LongTermMemoryFeatureView: View {
                 }
             }
         }
-        .navigationTitle("记忆系统")
+        .navigationTitle(NSLocalizedString("记忆系统", comment: "记忆系统页标题"))
     }
 
     private func settingsIntroCard(
@@ -233,15 +233,15 @@ struct LongTermMemoryFeatureView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "设置介绍卡片标题"))
                 .etFont(.headline.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "设置介绍卡片摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: "设置介绍卡片展开按钮"))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -252,13 +252,13 @@ struct LongTermMemoryFeatureView: View {
         .sheet(isPresented: isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(details)
+                    Text(NSLocalizedString(details, comment: "设置介绍卡片详情"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .navigationTitle(title)
+                .navigationTitle(NSLocalizedString(title, comment: "设置介绍卡片详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
             }
         }

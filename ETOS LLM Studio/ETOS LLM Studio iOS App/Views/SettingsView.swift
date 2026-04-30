@@ -46,10 +46,10 @@ struct SettingsView: View {
     
     var body: some View {
         List {
-            Section("当前模型") {
+            Section(NSLocalizedString("当前模型", comment: "设置当前模型分组")) {
                 let options = viewModel.activatedModels
                 if options.isEmpty {
-                    Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
+                    Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -61,7 +61,7 @@ struct SettingsView: View {
                     } label: {
                         HStack(spacing: 8) {
                             settingsListIcon(.currentModel)
-                            Text("模型")
+                            Text(NSLocalizedString("模型", comment: "模型标签"))
                             Text(selectedModelLabel(in: options))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -81,7 +81,7 @@ struct SettingsView: View {
                 }
             }
             
-            Section("对话行为") {
+            Section(NSLocalizedString("对话行为", comment: "设置对话行为分组")) {
                 NavigationLink {
                     SessionListView().environmentObject(viewModel)
                 } label: {
@@ -130,7 +130,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("拓展能力") {
+            Section(NSLocalizedString("拓展能力", comment: "设置拓展能力分组")) {
                 let speechModelBinding = Binding<RunnableModel?>(
                     get: { viewModel.selectedSpeechModel },
                     set: { viewModel.setSelectedSpeechModel($0) }
@@ -148,7 +148,7 @@ struct SettingsView: View {
                 } label: {
                     HStack(spacing: 8) {
                         settingsListIcon(.dailyPulse)
-                        Text("每日脉冲")
+                        Text(NSLocalizedString("每日脉冲", comment: "每日脉冲入口标题"))
                         Spacer()
                         if let status = dailyPulseEntryStatusText {
                             Text(status)
@@ -224,7 +224,7 @@ struct SettingsView: View {
                 }
             }
             
-            Section("显示与体验") {
+            Section(NSLocalizedString("显示与体验", comment: "设置显示与体验分组")) {
                 NavigationLink {
                     DisplaySettingsView(
                         enableMarkdown: $viewModel.enableMarkdown,
@@ -259,7 +259,7 @@ struct SettingsView: View {
 
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
-                Section("系统公告") {
+                Section(NSLocalizedString("系统公告", comment: "系统公告分组")) {
                     ForEach(announcementManager.currentAnnouncements, id: \.uniqueKey) { announcement in
                         NavigationLink {
                             AnnouncementDetailView(
@@ -277,7 +277,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .navigationTitle("设置")
+        .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
         .onAppear {
             ensureSelectedModel(in: viewModel.activatedModels)
             scheduleSettingsResearchAchievementIfNeeded()
@@ -446,12 +446,12 @@ extension SettingsListIcon {
 }
 
 struct SettingsListIconLabel: View {
-    let title: LocalizedStringKey
+    let title: String
     let icon: SettingsListIcon
     @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
 
-    init(_ title: LocalizedStringKey, icon: SettingsListIcon) {
-        self.title = title
+    init(_ titleKey: String, icon: SettingsListIcon) {
+        self.title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
         self.icon = icon
     }
 
@@ -519,7 +519,7 @@ private struct CurrentModelSelectionView: View {
                 }
             }
         }
-        .navigationTitle("当前模型")
+        .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
     }
 
     private func select(_ model: RunnableModel) {
