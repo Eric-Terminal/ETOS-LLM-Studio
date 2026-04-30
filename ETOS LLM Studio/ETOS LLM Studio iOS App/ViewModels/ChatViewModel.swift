@@ -144,6 +144,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enableConversationProfileDailyUpdate") var enableConversationProfileDailyUpdate: Bool = true
     @AppStorage("enableReasoningSummary") var enableReasoningSummary: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("enableChatTopBlurFade") var enableChatTopBlurFade: Bool = true
     @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false

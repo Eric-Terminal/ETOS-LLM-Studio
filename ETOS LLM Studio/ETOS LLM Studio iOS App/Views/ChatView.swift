@@ -121,7 +121,9 @@ struct ChatView: View {
     private let navBarVerticalPadding: CGFloat = 8
     private let navBarPillVerticalPadding: CGFloat = 6
     private let navBarPillSpacing: CGFloat = 1
-    private let navBarBlurFadeHeightRatio: CGFloat = 0.05
+    private let navBarBlurFadeMinHeight: CGFloat = 72
+    private let navBarBlurFadeMaxHeight: CGFloat = 150
+    private let navBarBlurFadeHeightRatio: CGFloat = 0.1
     private let modelPickerHeightRatio: CGFloat = 0.4
     private let modelPickerCornerRadius: CGFloat = 24
     private let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
@@ -213,6 +215,9 @@ struct ChatView: View {
     }
     private var navBarGlassOverlayColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+    private var navBarFadeTintColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.28)
     }
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
@@ -494,7 +499,9 @@ struct ChatView: View {
                         }
                     }
                     .overlay(alignment: .top) {
-                        navBarFadeBlurOverlay
+                        if viewModel.enableChatTopBlurFade {
+                            navBarFadeBlurOverlay
+                        }
                     }
                     .allowsHitTesting(!isOverlayPanelPresented)
                 }
@@ -967,23 +974,37 @@ struct ChatView: View {
 
     private var navBarFadeBlurOverlay: some View {
         GeometryReader { proxy in
-            let adaptiveHeight = proxy.size.height * navBarBlurFadeHeightRatio
-            BlurView(style: .regular)
-                .mask(
-                    LinearGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color.black, location: 0),
-                            .init(color: Color.black.opacity(0.7), location: 0.35),
-                            .init(color: Color.black.opacity(0), location: 1)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+            let adaptiveHeight = min(
+                navBarBlurFadeMaxHeight,
+                max(navBarBlurFadeMinHeight, proxy.size.height * navBarBlurFadeHeightRatio)
+            )
+            ZStack {
+                BlurView(style: .regular)
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: navBarFadeTintColor, location: 0),
+                        .init(color: navBarFadeTintColor.opacity(0.75), location: 0.42),
+                        .init(color: navBarFadeTintColor.opacity(0), location: 1)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
-                .frame(maxWidth: .infinity)
-                .frame(height: navBarHeight + adaptiveHeight)
-                .ignoresSafeArea(.container, edges: .top)
-                .allowsHitTesting(false)
+            }
+            .mask(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: Color.black, location: 0),
+                        .init(color: Color.black.opacity(0.82), location: 0.42),
+                        .init(color: Color.black.opacity(0), location: 1)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: navBarHeight + adaptiveHeight)
+            .ignoresSafeArea(.container, edges: .top)
+            .allowsHitTesting(false)
         }
     }
 

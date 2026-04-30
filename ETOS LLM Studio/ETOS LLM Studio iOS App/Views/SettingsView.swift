@@ -235,6 +235,7 @@ struct SettingsView: View {
                         currentBackgroundImage: $viewModel.currentBackgroundImage,
                         backgroundContentMode: $viewModel.backgroundContentMode,
                         enableLiquidGlass: $viewModel.enableLiquidGlass,
+                        enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
                         enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
                         enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
                         enableNoBubbleUI: $viewModel.enableNoBubbleUI,

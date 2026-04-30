@@ -20,6 +20,7 @@ struct DisplaySettingsView: View {
     @Binding var currentBackgroundImage: String
     @Binding var backgroundContentMode: String
     @Binding var enableLiquidGlass: Bool
+    @Binding var enableChatTopBlurFade: Bool
     @Binding var enableAdvancedRenderer: Bool
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
@@ -129,8 +130,9 @@ struct DisplaySettingsView: View {
 
             Section {
                 Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
+                Toggle(NSLocalizedString("顶部毛玻璃渐隐", comment: ""), isOn: $enableChatTopBlurFade)
             } footer: {
-                Text(NSLocalizedString("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。", comment: ""))
+                Text(NSLocalizedString("无气泡UI会透明化聊天气泡并放宽消息文本宽度；顶部毛玻璃渐隐会让聊天页顶部向消息区自然过渡。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
