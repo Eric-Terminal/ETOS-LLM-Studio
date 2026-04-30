@@ -77,13 +77,13 @@ struct ToolPermissionBubble: View {
         guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
             return nil
         }
-        return "将在 \(remaining)s 后自动允许"
+        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
     private var autoApproveToggleLabel: String {
         permissionCenter.isAutoApproveDisabled(for: request.toolName)
-            ? "恢复该工具自动批准"
-            : "关闭该工具自动批准"
+            ? NSLocalizedString("恢复该工具自动批准", comment: "")
+            : NSLocalizedString("关闭该工具自动批准", comment: "")
     }
 
     var body: some View {
@@ -213,7 +213,7 @@ private struct ToolPermissionDetailSheet: View {
         guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
             return nil
         }
-        return "将在 \(remaining)s 后自动允许"
+        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
     private var autoApproveBinding: Binding<Bool> {
@@ -308,7 +308,7 @@ private struct ToolPermissionDetailSheet: View {
     @ViewBuilder
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "工具权限详情小节标题"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             content()

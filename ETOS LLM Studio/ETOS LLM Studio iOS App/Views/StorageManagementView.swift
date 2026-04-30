@@ -221,8 +221,8 @@ struct StorageManagementView: View {
             showCleanAllOrphansAlert = true
         } else {
             cleanupResult = CleanupResult(
-                title: "无孤立数据",
-                message: "当前没有需要清理的孤立数据。"
+                title: NSLocalizedString("无孤立数据", comment: ""),
+                message: NSLocalizedString("当前没有需要清理的孤立数据。", comment: "")
             )
         }
     }
@@ -235,8 +235,8 @@ struct StorageManagementView: View {
             
             await MainActor.run {
                 cleanupResult = CleanupResult(
-                    title: "清理完成",
-                    message: "已清理：\(summary.description)"
+                    title: NSLocalizedString("清理完成", comment: ""),
+                    message: String(format: NSLocalizedString("已清理：%@", comment: ""), summary.description)
                 )
             }
             
@@ -252,7 +252,7 @@ struct StorageManagementView: View {
             
             await MainActor.run {
                 cleanupResult = CleanupResult(
-                    title: "清理完成",
+                    title: NSLocalizedString("清理完成", comment: ""),
                     message: String(format: NSLocalizedString("已删除 %d 个语音文件和 %d 个图片文件。", comment: ""), result.audioDeleted, result.imageDeleted)
                 )
             }

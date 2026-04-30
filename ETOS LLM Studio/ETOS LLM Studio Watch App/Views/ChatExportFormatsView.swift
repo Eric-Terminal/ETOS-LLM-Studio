@@ -90,9 +90,9 @@ struct ChatExportFormatsView: View {
             count = messages.count
         }
         if upToMessageID != nil {
-            return "将导出前 \(count) 条消息（包含目标消息与其上文）。"
+            return String(format: NSLocalizedString("将导出前 %d 条消息（包含目标消息与其上文）。", comment: ""), count)
         }
-        return "将导出当前会话全部 \(count) 条消息。"
+        return String(format: NSLocalizedString("将导出当前会话全部 %d 条消息。", comment: ""), count)
     }
 
     private func prepareFiles() {

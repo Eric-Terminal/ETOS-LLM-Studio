@@ -162,7 +162,7 @@ struct TTSFloatingController: View {
     private var chunkText: String {
         let current = max(1, ttsManager.playbackState.currentChunkIndex)
         let total = max(current, ttsManager.playbackState.totalChunks)
-        return "分段 \(current)/\(total)"
+        return String(format: NSLocalizedString("分段 %d/%d", comment: ""), current, total)
     }
 
     private var compactTimeText: String {
@@ -199,11 +199,11 @@ struct TTSFloatingController: View {
     private var statusText: String {
         switch ttsManager.playbackState.status {
         case .error:
-            return "朗读失败"
+            return NSLocalizedString("朗读失败", comment: "")
         case .ended:
-            return "朗读结束"
+            return NSLocalizedString("朗读结束", comment: "")
         default:
-            return "朗读已停"
+            return NSLocalizedString("朗读已停", comment: "")
         }
     }
 

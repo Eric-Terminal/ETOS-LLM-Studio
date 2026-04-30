@@ -407,22 +407,22 @@ struct ThirdPartyImportView: View {
 
     private func syncOptionSummary(_ options: SyncOptions) -> String {
         var items: [String] = []
-        if options.contains(.providers) { items.append("提供商配置") }
-        if options.contains(.sessions) { items.append("会话记录") }
-        if options.contains(.backgrounds) { items.append("背景图片") }
-        if options.contains(.memories) { items.append("记忆") }
-        if options.contains(.mcpServers) { items.append("MCP 服务器") }
-        if options.contains(.audioFiles) { items.append("音频文件") }
-        if options.contains(.imageFiles) { items.append("图片文件") }
+        if options.contains(.providers) { items.append(NSLocalizedString("提供商配置", comment: "")) }
+        if options.contains(.sessions) { items.append(NSLocalizedString("会话记录", comment: "")) }
+        if options.contains(.backgrounds) { items.append(NSLocalizedString("背景图片", comment: "")) }
+        if options.contains(.memories) { items.append(NSLocalizedString("记忆", comment: "")) }
+        if options.contains(.mcpServers) { items.append(NSLocalizedString("MCP 服务器", comment: "")) }
+        if options.contains(.audioFiles) { items.append(NSLocalizedString("音频文件", comment: "")) }
+        if options.contains(.imageFiles) { items.append(NSLocalizedString("图片文件", comment: "")) }
         if options.contains(.skills) { items.append("Agent Skills") }
-        if options.contains(.shortcutTools) { items.append("快捷指令工具") }
-        if options.contains(.worldbooks) { items.append("世界书") }
-        if options.contains(.feedbackTickets) { items.append("反馈工单") }
-        if options.contains(.dailyPulse) { items.append("每日脉冲") }
-        if options.contains(.usageStats) { items.append("用量统计") }
-        if options.contains(.fontFiles) { items.append("字体文件与规则") }
-        if options.contains(.appStorage) { items.append("软件设置") }
-        return items.isEmpty ? "无" : items.joined(separator: "、")
+        if options.contains(.shortcutTools) { items.append(NSLocalizedString("快捷指令工具", comment: "")) }
+        if options.contains(.worldbooks) { items.append(NSLocalizedString("世界书", comment: "")) }
+        if options.contains(.feedbackTickets) { items.append(NSLocalizedString("反馈工单", comment: "")) }
+        if options.contains(.dailyPulse) { items.append(NSLocalizedString("每日脉冲", comment: "")) }
+        if options.contains(.usageStats) { items.append(NSLocalizedString("用量统计", comment: "")) }
+        if options.contains(.fontFiles) { items.append(NSLocalizedString("字体文件与规则", comment: "")) }
+        if options.contains(.appStorage) { items.append(NSLocalizedString("软件设置", comment: "")) }
+        return items.isEmpty ? NSLocalizedString("无", comment: "") : items.joined(separator: NSLocalizedString("、", comment: ""))
     }
 
     private func buildConflictPreview(for package: SyncPackage) -> ConflictPreview {

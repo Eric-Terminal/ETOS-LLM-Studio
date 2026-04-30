@@ -223,9 +223,9 @@ private struct FeatureRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(NSLocalizedString(title, comment: "关于页功能标题"))
                     .etFont(.subheadline.weight(.medium))
-                Text(description)
+                Text(NSLocalizedString(description, comment: "关于页功能说明"))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             }

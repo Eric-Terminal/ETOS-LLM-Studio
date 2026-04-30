@@ -320,7 +320,7 @@ struct ContentView: View {
                 }
             }
         }
-        .navigationTitle(viewModel.currentSession?.name ?? "新对话")
+        .navigationTitle(viewModel.currentSession?.name ?? NSLocalizedString("新对话", comment: ""))
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
         }
@@ -997,7 +997,7 @@ struct ContentView: View {
             if let audio = viewModel.pendingAudioAttachment {
                 attachmentPreviewRow(
                     systemImage: "waveform",
-                    title: "语音文件",
+                    title: NSLocalizedString("语音文件", comment: ""),
                     fileName: audio.fileName,
                     tint: .blue,
                     onRemove: {
@@ -1009,7 +1009,7 @@ struct ContentView: View {
             ForEach(viewModel.pendingImageAttachments) { attachment in
                 attachmentPreviewRow(
                     systemImage: "photo",
-                    title: "图片文件",
+                    title: NSLocalizedString("图片文件", comment: ""),
                     fileName: attachment.fileName,
                     tint: .green,
                     onRemove: {
@@ -1021,7 +1021,7 @@ struct ContentView: View {
             ForEach(viewModel.pendingFileAttachments) { attachment in
                 attachmentPreviewRow(
                     systemImage: "doc",
-                    title: "文件",
+                    title: NSLocalizedString("文件", comment: ""),
                     fileName: attachment.fileName,
                     tint: .cyan,
                     onRemove: {
@@ -1298,12 +1298,12 @@ struct ContentView: View {
             .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: speechErrorBinding) {
                 Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
             } message: {
-                Text(viewModel.speechErrorMessage ?? "发生未知错误，请稍后重试。")
+                Text(viewModel.speechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
             }
             .alert(NSLocalizedString("附件导入失败", comment: ""), isPresented: $viewModel.showAttachmentImportErrorAlert) {
                 Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
             } message: {
-                Text(viewModel.attachmentImportErrorMessage ?? "附件导入失败，请稍后重试。")
+                Text(viewModel.attachmentImportErrorMessage ?? NSLocalizedString("附件导入失败，请稍后重试。", comment: ""))
             }
             .alert(NSLocalizedString("记忆系统需要更新", comment: ""), isPresented: $viewModel.showDimensionMismatchAlert) {
                 Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
@@ -1562,7 +1562,7 @@ private struct WatchAttachmentImportView: View {
                     .disableAutocorrection(true)
 
                 if isImporting {
-                    ProgressView("正在导入...")
+                    ProgressView(NSLocalizedString("正在导入...", comment: ""))
                 }
             }
 
@@ -1879,7 +1879,7 @@ private struct WatchAskUserInputView: View {
         if isLastQuestion(question) {
             return request.submitLabel
         }
-        return isQuestionAnswered(question) ? "下一题" : "跳过"
+        return isQuestionAnswered(question) ? NSLocalizedString("下一题", comment: "") : NSLocalizedString("跳过", comment: "")
     }
 
     private func submit() {

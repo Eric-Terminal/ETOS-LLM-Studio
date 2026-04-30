@@ -334,7 +334,7 @@ public struct MemorySettingsView: View {
     private func selectedEmbeddingModelLabel(in options: [RunnableModel]) -> String {
         guard let selected = viewModel.selectedEmbeddingModel,
               options.contains(where: { $0.id == selected.id }) else {
-            return "未选择"
+            return NSLocalizedString("未选择", comment: "")
         }
         return "\(selected.model.displayName) | \(selected.provider.name)"
     }
@@ -371,7 +371,7 @@ private struct EmbeddingModelSelectionView: View {
             Button {
                 select(nil)
             } label: {
-                selectionRow(title: "未选择", isSelected: selectedEmbeddingModel == nil)
+                selectionRow(title: NSLocalizedString("未选择", comment: ""), isSelected: selectedEmbeddingModel == nil)
             }
             
             ForEach(embeddingModels) { runnable in
@@ -613,7 +613,10 @@ struct ConversationMemorySettingsView: View {
             Button(NSLocalizedString("清空", comment: ""), role: .destructive) {
                 let removed = viewModel.clearAllConversationSummaries()
                 if removed > 0 {
-                    conversationMemoryAlert = .init(title: "已清空会话摘要", message: "共清理 \(removed) 条摘要。")
+                    conversationMemoryAlert = .init(
+                        title: NSLocalizedString("已清空会话摘要", comment: ""),
+                        message: String(format: NSLocalizedString("共清理 %d 条摘要。", comment: ""), removed)
+                    )
                 }
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
@@ -625,9 +628,9 @@ struct ConversationMemorySettingsView: View {
             Button(NSLocalizedString("清空", comment: ""), role: .destructive) {
                 do {
                     try viewModel.clearConversationUserProfile()
-                    conversationMemoryAlert = .init(title: "已清空用户画像", message: "后续可重新生成或手动编辑。")
+                    conversationMemoryAlert = .init(title: NSLocalizedString("已清空用户画像", comment: ""), message: NSLocalizedString("后续可重新生成或手动编辑。", comment: ""))
                 } catch {
-                    conversationMemoryAlert = .init(title: "清空失败", message: error.localizedDescription)
+                    conversationMemoryAlert = .init(title: NSLocalizedString("清空失败", comment: ""), message: error.localizedDescription)
                 }
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
@@ -645,9 +648,9 @@ struct ConversationMemorySettingsView: View {
                 onSave: { newText in
                     do {
                         try viewModel.saveConversationUserProfile(content: newText)
-                        conversationMemoryAlert = .init(title: "保存成功", message: "用户画像已更新。")
+                        conversationMemoryAlert = .init(title: NSLocalizedString("保存成功", comment: ""), message: NSLocalizedString("用户画像已更新。", comment: ""))
                     } catch {
-                        conversationMemoryAlert = .init(title: "保存失败", message: error.localizedDescription)
+                        conversationMemoryAlert = .init(title: NSLocalizedString("保存失败", comment: ""), message: error.localizedDescription)
                     }
                 }
             )
@@ -660,7 +663,7 @@ struct ConversationMemorySettingsView: View {
     private func selectedConversationSummaryModelLabel(in options: [RunnableModel]) -> String {
         guard let selected = viewModel.selectedConversationSummaryModel,
               options.contains(where: { $0.id == selected.id }) else {
-            return "未选择（跟随当前对话模型）"
+            return NSLocalizedString("未选择（跟随当前对话模型）", comment: "")
         }
         return "\(selected.model.displayName) | \(selected.provider.name)"
     }
@@ -710,9 +713,9 @@ private struct MemoryReembedAlert: Identifiable {
     var title: String {
         switch kind {
         case .success:
-            return "重新嵌入完成"
+            return NSLocalizedString("重新嵌入完成", comment: "")
         case .failure:
-            return "重新嵌入失败"
+            return NSLocalizedString("重新嵌入失败", comment: "")
         }
     }
     

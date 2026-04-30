@@ -64,12 +64,12 @@ struct ProviderDetailView: View {
                 }
             } else {
                 modelSection(
-                    title: "已添加",
+                    title: NSLocalizedString("已添加", comment: ""),
                     indices: filteredIndices(forActive: true),
                     isActive: true
                 )
                 modelSection(
-                    title: "未添加",
+                    title: NSLocalizedString("未添加", comment: ""),
                     indices: filteredIndices(forActive: false),
                     isActive: false
                 )
@@ -119,7 +119,7 @@ struct ProviderDetailView: View {
         .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
         } message: {
-            Text(fetchError ?? "发生未知错误。")
+            Text(fetchError ?? NSLocalizedString("发生未知错误。", comment: ""))
         }
     }
 
@@ -157,7 +157,7 @@ struct ProviderDetailView: View {
     private var progressOverlay: some View {
         ZStack {
             Color.black.opacity(0.2).ignoresSafeArea()
-            ProgressView("正在获取…")
+            ProgressView(NSLocalizedString("正在获取…", comment: ""))
                 .padding()
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
@@ -188,7 +188,7 @@ struct ProviderDetailView: View {
 
     private func sections(forActive isActive: Bool) -> [ModelListSection] {
         let indices = filteredIndices(forActive: isActive)
-        let sectionPrefix = isActive ? "已添加" : "未添加"
+        let sectionPrefix = isActive ? NSLocalizedString("已添加", comment: "") : NSLocalizedString("未添加", comment: "")
 
         guard groupByFamilySection else {
             return [ModelListSection(title: sectionPrefix, indices: indices, isActive: isActive)]
@@ -209,7 +209,7 @@ struct ProviderDetailView: View {
             guard let familyIndices = indicesByFamily[family], !familyIndices.isEmpty else { continue }
             result.append(
                 ModelListSection(
-                    title: "\(sectionPrefix) · \(family.displayName)",
+                    title: String(format: NSLocalizedString("%@ · %@", comment: ""), sectionPrefix, family.displayName),
                     indices: familyIndices,
                     isActive: isActive
                 )
@@ -219,7 +219,7 @@ struct ProviderDetailView: View {
         if !otherIndices.isEmpty {
             result.append(
                 ModelListSection(
-                    title: "\(sectionPrefix) · 其他",
+                    title: String(format: NSLocalizedString("%@ · %@", comment: ""), sectionPrefix, NSLocalizedString("其他", comment: "")),
                     indices: otherIndices,
                     isActive: isActive
                 )
@@ -266,7 +266,7 @@ struct ProviderDetailView: View {
 
     @ViewBuilder
     private func modelSection(title: String, indices: [Int], isActive: Bool) -> some View {
-        Section(title) {
+        Section(NSLocalizedString(title, comment: "模型列表分组标题")) {
             if indices.isEmpty {
                 Text(emptyStateText(forActiveSection: isActive))
                     .etFont(.footnote)
@@ -288,9 +288,9 @@ struct ProviderDetailView: View {
 
     private func emptyStateText(forActiveSection isActive: Bool) -> String {
         if isSearching {
-            return isActive ? "没有匹配的已添加模型" : "没有匹配的未添加模型"
+            return isActive ? NSLocalizedString("没有匹配的已添加模型", comment: "") : NSLocalizedString("没有匹配的未添加模型", comment: "")
         }
-        return isActive ? "暂无已添加模型" : "暂无未添加模型"
+        return isActive ? NSLocalizedString("暂无已添加模型", comment: "") : NSLocalizedString("暂无未添加模型", comment: "")
     }
 
     @ViewBuilder

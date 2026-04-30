@@ -391,20 +391,20 @@ struct DeviceSyncSettingsView: View {
             exportFileURL = fileURL
             exportErrorMessage = nil
         } catch {
-            exportErrorMessage = "导出失败：\(error.localizedDescription)"
+            exportErrorMessage = String(format: NSLocalizedString("导出失败：%@", comment: ""), error.localizedDescription)
         }
     }
 
     private func uploadDataPackage() {
         let trimmed = backupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            uploadErrorMessage = "请先输入上传地址。"
+            uploadErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
             return
         }
         guard let endpoint = URL(string: trimmed),
               let scheme = endpoint.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            uploadErrorMessage = "上传地址格式无效，请输入完整的 http/https URL。"
+            uploadErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
             return
         }
 
@@ -419,7 +419,7 @@ struct DeviceSyncSettingsView: View {
                 let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
                 await MainActor.run {
                     isUploading = false
-                    uploadSuccessMessage = "上传成功（HTTP \(result.statusCode)）"
+                    uploadSuccessMessage = String(format: NSLocalizedString("上传成功（HTTP %d）", comment: ""), result.statusCode)
                     uploadResponsePreview = result.responseBodyPreview
                 }
             } catch {

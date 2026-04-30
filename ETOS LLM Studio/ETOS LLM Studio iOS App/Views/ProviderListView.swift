@@ -21,13 +21,13 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .provider:
-            return "提供商管理"
+            return NSLocalizedString("提供商管理", comment: "")
         case .modelOrder:
-            return "模型顺序"
+            return NSLocalizedString("模型顺序", comment: "")
         case .specializedModel:
-            return "专用模型"
+            return NSLocalizedString("专用模型", comment: "")
         case .globalProxy:
-            return "全局代理"
+            return NSLocalizedString("全局代理", comment: "")
         }
     }
 

@@ -650,7 +650,7 @@ private struct ETWatchCollapsibleCodeBlockView<HeaderActions: View, BodyContent:
     }
 
     private var codeBlockTitleLabel: some View {
-        Text(language?.isEmpty == false ? (language ?? "代码") : "代码")
+        Text(language?.isEmpty == false ? (language ?? NSLocalizedString("代码", comment: "")) : NSLocalizedString("代码", comment: ""))
             .etFont(.system(size: 10, weight: .semibold, design: .monospaced))
             .foregroundStyle(headerTextColor)
             .contentShape(Rectangle())
@@ -669,7 +669,7 @@ private struct ETCodeCollapseButton: View {
                 .foregroundStyle(tintColor)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isCollapsed ? "展开代码块" : "折叠代码块")
+        .accessibilityLabel(isCollapsed ? NSLocalizedString("展开代码块", comment: "") : NSLocalizedString("折叠代码块", comment: ""))
     }
 }
 

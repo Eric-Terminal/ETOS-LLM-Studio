@@ -388,11 +388,11 @@ struct ShortcutIntegrationView: View {
     private func runModeLabel(for runModeHint: ShortcutRunModeHint) -> String {
         switch runModeHint {
         case .direct:
-            return "直连优先"
+            return NSLocalizedString("直连优先", comment: "")
         case .bridge:
-            return "桥接优先"
+            return NSLocalizedString("桥接优先", comment: "")
         @unknown default:
-            return "直连优先"
+            return NSLocalizedString("直连优先", comment: "")
         }
     }
 }

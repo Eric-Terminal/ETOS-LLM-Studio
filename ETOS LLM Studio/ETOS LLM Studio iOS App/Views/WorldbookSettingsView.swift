@@ -314,7 +314,7 @@ struct WorldbookSettingsView: View {
 
     private func row(title: String, value: String) -> some View {
         HStack {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "世界书信息行标题"))
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
@@ -328,9 +328,9 @@ struct WorldbookSettingsView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "世界书介绍卡片标题"))
                 .etFont(.headline.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "世界书介绍卡片摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
@@ -347,7 +347,7 @@ struct WorldbookSettingsView: View {
         .sheet(isPresented: isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(details)
+                    Text(NSLocalizedString(details, comment: "世界书介绍卡片详情"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

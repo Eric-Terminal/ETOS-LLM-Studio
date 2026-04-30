@@ -43,9 +43,9 @@ struct LocalDebugView: View {
                 Section(header: Text(NSLocalizedString("连接模式", comment: ""))) {
                     Toggle(isOn: $server.useHTTP) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
+                            Text(server.useHTTP ? NSLocalizedString("HTTP 轮询", comment: "") : "WebSocket")
                                 .etFont(.body)
-                            Text(server.useHTTP ? "稳定但较慢，适合真机" : "快速优先，失败自动回退 HTTP")
+                            Text(server.useHTTP ? NSLocalizedString("稳定但较慢，适合真机", comment: "") : NSLocalizedString("快速优先，失败自动回退 HTTP", comment: ""))
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -66,7 +66,7 @@ struct LocalDebugView: View {
                 } header: {
                     Text(NSLocalizedString("服务器地址", comment: ""))
                 } footer: {
-                    Text(server.useHTTP ? "HTTP 默认端口: 7654" : "WebSocket 默认端口: 8765（可用 host:wsPort:httpPort 显式指定回退端口）")
+                    Text(server.useHTTP ? NSLocalizedString("HTTP 默认端口: 7654", comment: "") : NSLocalizedString("WebSocket 默认端口: 8765（可用 host:wsPort:httpPort 显式指定回退端口）", comment: ""))
                 }
             } else {
                 Section(NSLocalizedString("连接信息", comment: "")) {
@@ -77,7 +77,7 @@ struct LocalDebugView: View {
                     }
                     
                     LabeledContent(NSLocalizedString("模式", comment: "")) {
-                        Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
+                        Text(server.useHTTP ? NSLocalizedString("HTTP 轮询", comment: "") : "WebSocket")
                     }
                     
                     Button(NSLocalizedString("断开", comment: "")) {
@@ -376,15 +376,15 @@ private struct StepRow: View {
                 .background(Circle().fill(.blue))
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text(NSLocalizedString(title, comment: "本地调试步骤标题"))
                     .etFont(.headline)
-                Text(detail)
+                Text(NSLocalizedString(detail, comment: "本地调试步骤详情"))
                     .etFont(.subheadline)
                     .foregroundStyle(.secondary)
                 
                 if let linkTitle, let linkURL {
                     Link(destination: linkURL) {
-                        Label(linkTitle, systemImage: "arrow.up.right.square")
+                        Label(NSLocalizedString(linkTitle, comment: "本地调试步骤链接"), systemImage: "arrow.up.right.square")
                             .etFont(.caption)
                     }
                 }
@@ -407,9 +407,9 @@ private struct FeatureRow: View {
                 .frame(width: 32)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text(NSLocalizedString(title, comment: "本地调试功能标题"))
                     .etFont(.headline)
-                Text(description)
+                Text(NSLocalizedString(description, comment: "本地调试功能说明"))
                     .etFont(.subheadline)
                     .foregroundStyle(.secondary)
             }

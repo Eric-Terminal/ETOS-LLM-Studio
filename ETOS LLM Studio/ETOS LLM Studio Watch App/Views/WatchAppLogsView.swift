@@ -236,7 +236,7 @@ private enum WatchLevelFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all:
-            return "全部"
+            return NSLocalizedString("全部", comment: "")
         case .debug:
             return "DEBUG"
         case .info:

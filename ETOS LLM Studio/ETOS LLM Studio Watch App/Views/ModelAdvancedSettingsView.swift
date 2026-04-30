@@ -274,9 +274,9 @@ struct ModelAdvancedSettingsView: View {
     }
 
     private func displayTitle(for entry: GlobalSystemPromptEntry?) -> String {
-        guard let entry else { return "未选择" }
+        guard let entry else { return NSLocalizedString("未选择", comment: "") }
         let trimmedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedTitle.isEmpty ? "未命名提示词" : trimmedTitle
+        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
     }
 }
 
@@ -353,13 +353,13 @@ private struct GlobalSystemPromptPickerView: View {
 
     private func displayTitle(for entry: GlobalSystemPromptEntry) -> String {
         let trimmedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedTitle.isEmpty ? "未命名提示词" : trimmedTitle
+        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
     }
 
     private func displayPreview(for entry: GlobalSystemPromptEntry) -> String {
         let trimmedContent = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedContent.isEmpty {
-            return "空提示词（不发送）"
+            return NSLocalizedString("空提示词（不发送）", comment: "")
         }
         return trimmedContent.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }

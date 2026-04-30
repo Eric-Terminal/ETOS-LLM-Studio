@@ -217,7 +217,7 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var emptyStateText: String {
-        folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
+        folderID == nil ? NSLocalizedString("暂无文件夹或会话。", comment: "") : NSLocalizedString("当前文件夹暂无内容。", comment: "")
     }
 
     private var canGoToPreviousPage: Bool {
@@ -257,11 +257,11 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var paginationSummaryText: String {
-        "当前显示\(currentPageStartOrdinal)-\(currentPageEndOrdinal)个对话(总共\(totalDirectSessionCount))"
+        String(format: NSLocalizedString("当前显示%d-%d个对话(总共%d)", comment: ""), currentPageStartOrdinal, currentPageEndOrdinal, totalDirectSessionCount)
     }
 
     private var searchPaginationSummaryText: String {
-        "当前显示\(currentSearchResultPageStartOrdinal)-\(currentSearchResultPageEndOrdinal)条结果(总共\(totalSearchResultCount))"
+        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentSearchResultPageStartOrdinal, currentSearchResultPageEndOrdinal, totalSearchResultCount)
     }
 
     private var shouldShowActivePaginationBar: Bool {
@@ -311,7 +311,7 @@ private struct SessionFolderBrowserView: View {
             }
         }
         .listStyle(.plain)
-        .navigationTitle(isRoot ? "会话管理" : (currentFolder?.name ?? "文件夹"))
+        .navigationTitle(isRoot ? NSLocalizedString("会话管理", comment: "") : (currentFolder?.name ?? NSLocalizedString("文件夹", comment: "")))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 sessionListActionsMenu
@@ -600,7 +600,7 @@ private struct SessionFolderBrowserView: View {
         HStack(spacing: 10) {
             paginationButton(
                 systemName: "chevron.left",
-                accessibilityLabel: "上一页",
+                accessibilityLabel: NSLocalizedString("上一页", comment: ""),
                 isEnabled: canGoToPreviousActivePage,
                 action: goToPreviousActivePage
             )
@@ -609,7 +609,7 @@ private struct SessionFolderBrowserView: View {
 
             paginationButton(
                 systemName: "chevron.right",
-                accessibilityLabel: "下一页",
+                accessibilityLabel: NSLocalizedString("下一页", comment: ""),
                 isEnabled: canGoToNextActivePage,
                 action: goToNextActivePage
             )
@@ -766,14 +766,14 @@ private struct SessionFolderBrowserView: View {
             Button {
                 presentCreateFolder(parentID: folderID)
             } label: {
-                Label(folderID == nil ? "新建文件夹" : "新建子文件夹", systemImage: "folder.badge.plus")
+                Label(folderID == nil ? NSLocalizedString("新建文件夹", comment: "") : NSLocalizedString("新建子文件夹", comment: ""), systemImage: "folder.badge.plus")
             }
 
             Button {
                 toggleBatchMode()
             } label: {
                 Label(
-                    isBatchSelecting ? "结束批量选择" : "批量选择",
+                    isBatchSelecting ? NSLocalizedString("结束批量选择", comment: "") : NSLocalizedString("批量选择", comment: ""),
                     systemImage: isBatchSelecting ? "checkmark.circle.fill" : "pencil"
                 )
             }
@@ -958,13 +958,13 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var batchDeleteMessage: String {
-        let folderText = selectedFolderIDs.isEmpty ? "" : "\(selectedFolderIDs.count) 个文件夹"
-        let sessionText = selectedSessionIDs.isEmpty ? "" : "\(selectedSessionIDs.count) 个会话"
+        let folderText = selectedFolderIDs.isEmpty ? "" : String(format: NSLocalizedString("%d 个文件夹", comment: ""), selectedFolderIDs.count)
+        let sessionText = selectedSessionIDs.isEmpty ? "" : String(format: NSLocalizedString("%d 个会话", comment: ""), selectedSessionIDs.count)
         let targetText = [folderText, sessionText]
             .filter { !$0.isEmpty }
-            .joined(separator: "和")
-        let targetSummary = targetText.isEmpty ? "所选项目" : targetText
-        return "将删除 \(targetSummary)。文件夹内的会话会移回未分类，操作不可恢复。"
+            .joined(separator: NSLocalizedString("和", comment: ""))
+        let targetSummary = targetText.isEmpty ? NSLocalizedString("所选项目", comment: "") : targetText
+        return String(format: NSLocalizedString("将删除 %@。文件夹内的会话会移回未分类，操作不可恢复。", comment: ""), targetSummary)
     }
 
     private func normalizeSessionPageIndex() {
@@ -1107,35 +1107,35 @@ private struct SessionFolderBrowserView: View {
     private func folderLocationSummary(for session: ChatSession) -> String {
         guard let folderID = normalizedFolderID(of: session),
               let folder = folderByID[folderID] else {
-            return "位置：未分类"
+            return NSLocalizedString("位置：未分类", comment: "")
         }
-        return "位置：\(folderDisplayPath(folder))"
+        return String(format: NSLocalizedString("位置：%@", comment: ""), folderDisplayPath(folder))
     }
 
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
         switch source {
         case .sessionName:
-            return "标题"
+            return NSLocalizedString("标题", comment: "")
         case .topicPrompt:
-            return "主题提示"
+            return NSLocalizedString("主题提示", comment: "")
         case .enhancedPrompt:
-            return "增强提示词"
+            return NSLocalizedString("增强提示词", comment: "")
         case .userMessage:
-            return "用户消息"
+            return NSLocalizedString("用户消息", comment: "")
         case .assistantMessage:
-            return "助手消息"
+            return NSLocalizedString("助手消息", comment: "")
         case .systemMessage:
-            return "系统消息"
+            return NSLocalizedString("系统消息", comment: "")
         case .toolMessage:
-            return "工具消息"
+            return NSLocalizedString("工具消息", comment: "")
         case .errorMessage:
-            return "错误消息"
+            return NSLocalizedString("错误消息", comment: "")
         }
     }
 
     private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
         if let messageOrdinal = result.messageOrdinal {
-            return "“\(result.sessionName)” 第\(messageOrdinal)条"
+            return String(format: NSLocalizedString("“%@” 第%d条", comment: ""), result.sessionName, messageOrdinal)
         }
         return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
     }
@@ -1558,7 +1558,7 @@ private struct SessionInfoSheet: View {
                         Text(payload.session.name)
                     }
                     LabeledContent(NSLocalizedString("状态", comment: "")) {
-                        Text(payload.isCurrent ? "当前会话" : "历史会话")
+                        Text(payload.isCurrent ? NSLocalizedString("当前会话", comment: "") : NSLocalizedString("历史会话", comment: ""))
                             .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
                     }
                     LabeledContent(NSLocalizedString("消息数量", comment: "")) {

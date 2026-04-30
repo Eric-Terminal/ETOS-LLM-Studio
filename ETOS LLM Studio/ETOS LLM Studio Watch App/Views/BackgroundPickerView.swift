@@ -122,7 +122,7 @@ struct BackgroundPickerView: View {
             try FileManager.default.removeItem(at: url)
         } catch {
             await MainActor.run {
-                deleteErrorMessage = "删除失败：\(error.localizedDescription)"
+                deleteErrorMessage = String(format: NSLocalizedString("删除失败：%@", comment: ""), error.localizedDescription)
             }
             return
         }

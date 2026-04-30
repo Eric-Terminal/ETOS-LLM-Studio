@@ -76,7 +76,7 @@ struct SpeechInputSettingsView: View {
     
     private var selectedSpeechModelLabel: String {
         guard let model = selectedSpeechModel else {
-            return "未选择"
+            return NSLocalizedString("未选择", comment: "")
         }
         return "\(model.model.displayName) | \(model.provider.name)"
     }
@@ -93,7 +93,7 @@ private struct SpeechModelSelectionView: View {
             Button {
                 select(nil)
             } label: {
-                selectionRow(title: "未选择", isSelected: selectedSpeechModel == nil)
+                selectionRow(title: NSLocalizedString("未选择", comment: ""), isSelected: selectedSpeechModel == nil)
             }
             
             ForEach(speechModels) { runnable in

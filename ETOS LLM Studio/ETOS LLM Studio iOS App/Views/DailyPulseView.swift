@@ -90,7 +90,7 @@ struct DailyPulseView: View {
                 Task {
                     await pulseManager.generateNow()
                     if pulseManager.lastErrorMessage == nil {
-                        statusMessage = "已尝试生成最新的每日脉冲。"
+                        statusMessage = NSLocalizedString("已尝试生成最新的每日脉冲。", comment: "")
                     }
                 }
             } label: {
@@ -116,7 +116,7 @@ struct DailyPulseView: View {
 
             if deliveryCoordinator.reminderEnabled {
                 DatePicker(
-                    "提醒时间",
+                    NSLocalizedString("提醒时间", comment: ""),
                     selection: reminderTimeBinding,
                     displayedComponents: .hourAndMinute
                 )
@@ -304,7 +304,7 @@ struct DailyPulseView: View {
             "前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。"
         ]
         if pulseManager.externalSignalPreview.isEmpty {
-            parts.append("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。")
+            parts.append(NSLocalizedString("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。", comment: ""))
         }
         return parts.joined(separator: "\n")
     }
@@ -380,11 +380,11 @@ struct DailyPulseView: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
-                            feedbackButton(title: "喜欢", systemImage: card.feedback == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
+                            feedbackButton(title: NSLocalizedString("喜欢", comment: ""), systemImage: card.feedback == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
                                 pulseManager.applyFeedback(.liked, cardID: card.id, runID: runID)
                             }
 
-                            feedbackButton(title: "暂不感兴趣", systemImage: card.feedback == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown") {
+                            feedbackButton(title: NSLocalizedString("暂不感兴趣", comment: ""), systemImage: card.feedback == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown") {
                                 pulseManager.applyFeedback(.disliked, cardID: card.id, runID: runID)
                             }
                         }
@@ -394,8 +394,8 @@ struct DailyPulseView: View {
                                 let hadSavedSession = card.savedSessionID != nil
                                 viewModel.continueDailyPulseCard(card, from: runID)
                                 statusMessage = hadSavedSession
-                                    ? "已打开这张卡片对应的会话，并为你填好继续追问。"
-                                    : "已为这张卡片创建正式会话，并为你填好继续追问。"
+                                    ? NSLocalizedString("已打开这张卡片对应的会话，并为你填好继续追问。", comment: "")
+                                    : NSLocalizedString("已为这张卡片创建正式会话，并为你填好继续追问。", comment: "")
                             } label: {
                                 Label(NSLocalizedString("继续聊", comment: ""), systemImage: "arrow.up.right.circle")
                             }
@@ -405,11 +405,11 @@ struct DailyPulseView: View {
                         Button {
                             let existing = pulseManager.linkedTask(cardID: card.id, runID: runID)
                             if pulseManager.addTaskFromCard(cardID: card.id, runID: runID) != nil {
-                                statusMessage = existing == nil ? "已加入 Pulse 任务。" : "这张卡片已经在 Pulse 任务列表里。"
+                                statusMessage = existing == nil ? NSLocalizedString("已加入 Pulse 任务。", comment: "") : NSLocalizedString("这张卡片已经在 Pulse 任务列表里。", comment: "")
                             }
                         } label: {
                             Label(
-                                pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "加入 Pulse 任务" : "已在 Pulse 任务中",
+                                pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? NSLocalizedString("加入 Pulse 任务", comment: "") : NSLocalizedString("已在 Pulse 任务中", comment: ""),
                                 systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
                             )
                         }
@@ -427,7 +427,7 @@ struct DailyPulseView: View {
                 .padding(.top, 6)
             } label: {
                 Label(
-                    expandedCardIDs.contains(card.id) ? "收起更多" : "展开更多",
+                    expandedCardIDs.contains(card.id) ? NSLocalizedString("收起更多", comment: "") : NSLocalizedString("展开更多", comment: ""),
                     systemImage: expandedCardIDs.contains(card.id) ? "chevron.up.circle" : "ellipsis.circle"
                 )
                 .etFont(.subheadline)
@@ -438,7 +438,7 @@ struct DailyPulseView: View {
 
     private func feedbackButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
+            Label(NSLocalizedString(title, comment: "每日脉冲反馈按钮"), systemImage: systemImage)
         }
         .buttonStyle(.bordered)
     }
@@ -482,27 +482,27 @@ struct DailyPulseView: View {
 
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
-        return "生成于 \(dateText) · 可见卡片 \(run.visibleCards.count)/\(run.cards.count) · 仅保留当天"
+        return String(format: NSLocalizedString("生成于 %@ · 可见卡片 %d/%d · 仅保留当天", comment: ""), dateText, run.visibleCards.count, run.cards.count)
     }
 
     private var preparationStatusText: String {
         if let startedAt = pulseManager.lastPreparationStartedAt {
             let timeText = startedAt.formatted(date: .omitted, time: .shortened)
-            return "系统已在 \(timeText) 开始准备今天这一期。你可以稍等片刻，或留在这里等待卡片刷新。"
+            return String(format: NSLocalizedString("系统已在 %@ 开始准备今天这一期。你可以稍等片刻，或留在这里等待卡片刷新。", comment: ""), timeText)
         }
-        return "系统正在根据你的聊天、记忆、反馈与外部上下文准备今天这一期。"
+        return NSLocalizedString("系统正在根据你的聊天、记忆、反馈与外部上下文准备今天这一期。", comment: "")
     }
 
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {
         switch event.action {
         case .liked:
-            return "已喜欢 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已喜欢 · %@", comment: ""), event.dayKey)
         case .disliked:
-            return "已降权 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已降权 · %@", comment: ""), event.dayKey)
         case .hidden:
-            return "已隐藏 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已隐藏 · %@", comment: ""), event.dayKey)
         case .saved:
-            return "已保存为会话 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已保存为会话 · %@", comment: ""), event.dayKey)
         }
     }
 
@@ -510,15 +510,15 @@ struct DailyPulseView: View {
         let prefix: String
         switch signal.source {
         case .shortcutResult:
-            prefix = signal.isFailure ? "快捷指令失败" : "快捷指令结果"
+            prefix = signal.isFailure ? NSLocalizedString("快捷指令失败", comment: "") : NSLocalizedString("快捷指令结果", comment: "")
         case .mcpOutput:
-            prefix = "MCP 输出"
+            prefix = NSLocalizedString("MCP 输出", comment: "")
         case .mcpError:
-            prefix = "MCP 错误"
+            prefix = NSLocalizedString("MCP 错误", comment: "")
         case .announcement:
-            prefix = "公告/趋势"
+            prefix = NSLocalizedString("公告/趋势", comment: "")
         }
-        return "\(prefix) · \(signal.capturedAt.formatted(date: .abbreviated, time: .shortened))"
+        return String(format: NSLocalizedString("%@ · %@", comment: ""), prefix, signal.capturedAt.formatted(date: .abbreviated, time: .shortened))
     }
 
     private var alertBinding: Binding<Bool> {

@@ -320,7 +320,7 @@ struct UsageAnalyticsView: View {
     }
 
     private var heatmapWeekdayMarkers: [String] {
-        ["", "一", "", "三", "", "五", ""]
+        ["", NSLocalizedString("一", comment: ""), "", NSLocalizedString("三", comment: ""), "", NSLocalizedString("五", comment: ""), ""]
     }
 
     private func heatmapMonthSegment(_ segment: HeatmapMonthSegment) -> some View {
@@ -343,7 +343,7 @@ struct UsageAnalyticsView: View {
         if month == 1 {
             return String(String(year).suffix(2))
         }
-        return "\(month)月"
+        return String(format: NSLocalizedString("%d月", comment: ""), month)
     }
 
     private func legendHeatColor(level: Int) -> Color {
@@ -368,11 +368,11 @@ struct UsageAnalyticsView: View {
     private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
         switch scope {
         case .day:
-            return "今日"
+            return NSLocalizedString("今日", comment: "")
         case .week:
-            return "本周"
+            return NSLocalizedString("本周", comment: "")
         case .month:
-            return "本月"
+            return NSLocalizedString("本月", comment: "")
         }
     }
 }

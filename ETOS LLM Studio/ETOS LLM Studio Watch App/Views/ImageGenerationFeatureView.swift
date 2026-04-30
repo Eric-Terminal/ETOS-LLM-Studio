@@ -495,7 +495,7 @@ struct ImageGenerationFeatureView: View {
                 parsedExpressions.append(parsed)
                 updatedEntries[index].error = nil
             } catch {
-                let lineError = "第\(index + 1)行：\(error.localizedDescription)"
+                let lineError = String(format: NSLocalizedString("第%d行：%@", comment: ""), index + 1, error.localizedDescription)
                 let message = String(
                     format: NSLocalizedString("生图参数解析失败：%@", comment: "Image generation parameter expression parse failed"),
                     lineError

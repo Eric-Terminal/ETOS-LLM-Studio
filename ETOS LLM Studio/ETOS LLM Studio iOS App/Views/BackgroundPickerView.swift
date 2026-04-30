@@ -198,11 +198,11 @@ struct BackgroundPickerView: View {
         }
         
         guard let data = try? await item.loadTransferable(type: Data.self) else {
-            showSaveError("无法读取图片数据。")
+            showSaveError(NSLocalizedString("无法读取图片数据。", comment: ""))
             return
         }
         guard let image = UIImage(data: data) else {
-            showSaveError("无法解析图片。")
+            showSaveError(NSLocalizedString("无法解析图片。", comment: ""))
             return
         }
 
@@ -224,7 +224,7 @@ struct BackgroundPickerView: View {
         
         let normalized = image.normalizedForBackgroundEditing()
         guard let jpegData = normalized.jpegData(compressionQuality: 0.9) else {
-            showSaveError("无法处理图片格式。")
+            showSaveError(NSLocalizedString("无法处理图片格式。", comment: ""))
             return
         }
         
@@ -235,7 +235,7 @@ struct BackgroundPickerView: View {
         do {
             try jpegData.write(to: url, options: [.atomic])
         } catch {
-            showSaveError("保存失败：\(error.localizedDescription)")
+            showSaveError(String(format: NSLocalizedString("保存失败：%@", comment: ""), error.localizedDescription))
             return
         }
         
@@ -254,7 +254,7 @@ struct BackgroundPickerView: View {
             try FileManager.default.removeItem(at: url)
         } catch {
             await MainActor.run {
-                deleteErrorMessage = "删除失败：\(error.localizedDescription)"
+                deleteErrorMessage = String(format: NSLocalizedString("删除失败：%@", comment: ""), error.localizedDescription)
             }
             return
         }
@@ -287,9 +287,9 @@ private enum BackgroundCropTarget: String, CaseIterable, Identifiable {
     var title: LocalizedStringKey {
         switch self {
         case .phone:
-            return "手机比例"
+            return NSLocalizedString("手机比例", comment: "")
         case .watch:
-            return "手表比例"
+            return NSLocalizedString("手表比例", comment: "")
         }
     }
     

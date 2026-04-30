@@ -613,13 +613,13 @@ struct ChatBubble: View {
         var title: String {
             switch self {
             case .pendingApproval:
-                return "等待审批"
+                return NSLocalizedString("等待审批", comment: "")
             case .running:
-                return "执行中"
+                return NSLocalizedString("执行中", comment: "")
             case .finished:
-                return "已完成"
+                return NSLocalizedString("已完成", comment: "")
             case .rejected:
-                return "已拒绝"
+                return NSLocalizedString("已拒绝", comment: "")
             }
         }
 
@@ -958,7 +958,7 @@ struct ChatBubble: View {
             // 加载指示器
             if showsStreamingIndicators {
                 ShimmeringText(
-                    text: "正在思考...",
+                    text: NSLocalizedString("正在思考...", comment: ""),
                     font: .subheadline,
                     baseColor: resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75),
                     highlightColor: resolvedTextColor(default: Color.primary.opacity(0.85))
@@ -1353,7 +1353,7 @@ struct ChatBubble: View {
                 if permissionRequest == nil {
                     toolDetailSection(title: "工具结果") {
                         if resultText.isEmpty {
-                            Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
+                            Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
                                 .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         } else if enableExperimentalToolResultDisplay {
@@ -1383,7 +1383,7 @@ struct ChatBubble: View {
                             if canToggleRaw {
                                 Divider()
                                 HStack {
-                                    Button(showRawToolResultInDetailSheet ? "显示整理结果" : "显示原文") {
+                                    Button(showRawToolResultInDetailSheet ? NSLocalizedString("显示整理结果", comment: "") : NSLocalizedString("显示原文", comment: "")) {
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             showRawToolResultInDetailSheet.toggle()
                                         }
@@ -1443,7 +1443,7 @@ struct ChatBubble: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "工具详情小节标题"))
                 .etFont(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             content()
@@ -2107,16 +2107,16 @@ private struct TimelineReasoningStepView: View {
 
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
-            baseTitle = "已经思考\(elapsedSeconds)秒"
+            baseTitle = String(format: NSLocalizedString("已经思考%d秒", comment: ""), elapsedSeconds)
         } else {
-            baseTitle = "思考过程"
+            baseTitle = NSLocalizedString("思考过程", comment: "")
         }
 
         guard let summary = reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
               !summary.isEmpty else {
             return baseTitle
         }
-        return "\(baseTitle)：\(summary)"
+        return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, summary)
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
@@ -2477,16 +2477,16 @@ struct ReasoningDisclosureView: View, Equatable {
 
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
-            baseTitle = "已经思考\(elapsedSeconds)秒"
+            baseTitle = String(format: NSLocalizedString("已经思考%d秒", comment: ""), elapsedSeconds)
         } else {
-            baseTitle = "思考过程"
+            baseTitle = NSLocalizedString("思考过程", comment: "")
         }
 
         guard let summary = reasoningSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
               !summary.isEmpty else {
             return baseTitle
         }
-        return "\(baseTitle)：\(summary)"
+        return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, summary)
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
@@ -2597,13 +2597,13 @@ private struct ToolPermissionInlineView: View {
         guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
             return nil
         }
-        return "将在 \(remaining)s 后自动允许"
+        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
     private var autoApproveToggleLabel: String {
         permissionCenter.isAutoApproveDisabled(for: request.toolName)
-            ? "恢复该工具自动批准"
-            : "关闭该工具自动批准"
+            ? NSLocalizedString("恢复该工具自动批准", comment: "")
+            : NSLocalizedString("关闭该工具自动批准", comment: "")
     }
 
     var body: some View {
@@ -2739,9 +2739,9 @@ struct ToolResultsDisclosureView: View, Equatable {
                 if let payload = widgetPayload(for: call) {
                     if let title = payload.title,
                        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        return "可视化 Widget · \(title)"
+                        return String(format: NSLocalizedString("可视化 Widget · %@", comment: ""), title)
                     }
-                    return "可视化 Widget"
+                    return NSLocalizedString("可视化 Widget", comment: "")
                 }
                 return displayModel(for: call).summaryText
             }
@@ -2759,7 +2759,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                     Image(systemName: "wrench.and.screwdriver")
                         .etFont(.system(size: 12))
                     ShimmeringText(
-                        text: "结果：\(toolNames.joined(separator: ", "))",
+                        text: String(format: NSLocalizedString("结果：%@", comment: ""), toolNames.joined(separator: ", ")),
                         font: .subheadline.weight(.medium),
                         baseColor: headerForegroundColor,
                         highlightColor: customTextColor?.opacity(0.95) ?? (isOutgoing ? Color.white : Color.primary.opacity(0.85))
@@ -2941,7 +2941,7 @@ struct ToolResultsDisclosureView: View, Equatable {
         enableSelection: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "工具结果小节标题"))
                 .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(sectionForegroundColor.opacity(0.85))
             CappedScrollableText(
@@ -2969,8 +2969,8 @@ private struct ToolWidgetRendererCard: View {
 
     private var loadingText: String {
         payload.loadingMessages.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            ? (payload.loadingMessages.first ?? "正在渲染 Widget…")
-            : "正在渲染 Widget…"
+            ? (payload.loadingMessages.first ?? NSLocalizedString("正在渲染 Widget…", comment: ""))
+            : NSLocalizedString("正在渲染 Widget…", comment: "")
     }
 
     var body: some View {

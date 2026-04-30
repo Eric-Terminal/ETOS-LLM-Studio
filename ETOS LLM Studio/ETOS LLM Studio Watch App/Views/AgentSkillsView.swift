@@ -195,15 +195,15 @@ private struct WatchImportSkillFromURLSheet: View {
     private func startImportFromURL() {
         let trimmed = fileURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            localError = "链接不能为空。"
+            localError = NSLocalizedString("链接不能为空。", comment: "")
             return
         }
         guard let url = URL(string: trimmed) else {
-            localError = "链接格式无效，请输入完整 URL。"
+            localError = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "")
             return
         }
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            localError = "仅支持 http/https 链接。"
+            localError = NSLocalizedString("仅支持 http/https 链接。", comment: "")
             return
         }
 
@@ -217,7 +217,7 @@ private struct WatchImportSkillFromURLSheet: View {
                 let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
-                        localError = "下载失败：HTTP \(httpResponse.statusCode)"
+                        localError = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
                         isImporting = false
                     }
                     return
@@ -225,7 +225,7 @@ private struct WatchImportSkillFromURLSheet: View {
 
                 guard let content = String(data: data, encoding: .utf8), !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     await MainActor.run {
-                        localError = "下载内容为空或编码不受支持。"
+                        localError = NSLocalizedString("下载内容为空或编码不受支持。", comment: "")
                         isImporting = false
                     }
                     return
@@ -240,7 +240,7 @@ private struct WatchImportSkillFromURLSheet: View {
                     if success {
                         dismiss()
                     } else {
-                        localError = manager.lastErrorMessage ?? "导入失败：SKILL.md 内容无效。"
+                        localError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：SKILL.md 内容无效。", comment: "")
                     }
                 }
             } catch {
@@ -335,7 +335,7 @@ description: "技能描述"
                     if success {
                         dismiss()
                     } else {
-                        localError = manager.lastErrorMessage ?? "保存失败。"
+                        localError = manager.lastErrorMessage ?? NSLocalizedString("保存失败。", comment: "")
                     }
                 }
                 .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -526,7 +526,7 @@ private struct WatchEditSkillFileView: View {
                         onSaved()
                         dismiss()
                     } else {
-                        localError = manager.lastErrorMessage ?? "保存失败。"
+                        localError = manager.lastErrorMessage ?? NSLocalizedString("保存失败。", comment: "")
                     }
                 }
             }
@@ -573,7 +573,7 @@ private struct WatchCreateSkillFileView: View {
                 Button(NSLocalizedString("创建", comment: "")) {
                     let path = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !path.isEmpty else {
-                        localError = "路径不能为空。"
+                        localError = NSLocalizedString("路径不能为空。", comment: "")
                         return
                     }
                     let success = manager.saveSkillFile(skillName: skillName, relativePath: path, content: content)
@@ -581,7 +581,7 @@ private struct WatchCreateSkillFileView: View {
                         onSaved()
                         dismiss()
                     } else {
-                        localError = manager.lastErrorMessage ?? "创建失败。"
+                        localError = manager.lastErrorMessage ?? NSLocalizedString("创建失败。", comment: "")
                     }
                 }
             }

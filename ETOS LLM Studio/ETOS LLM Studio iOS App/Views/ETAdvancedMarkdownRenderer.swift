@@ -468,6 +468,10 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
                 role: .code,
                 fallback: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace"
             )
+            let codeCopyText = Self.javaScriptStringLiteral(NSLocalizedString("复制", comment: ""))
+            let codeCopiedText = Self.javaScriptStringLiteral(NSLocalizedString("已复制", comment: ""))
+            let codeExpandText = Self.javaScriptStringLiteral(NSLocalizedString("展开", comment: ""))
+            let codeCollapseText = Self.javaScriptStringLiteral(NSLocalizedString("收起", comment: ""))
 
             return """
 <!doctype html>
@@ -917,7 +921,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       const button = document.createElement("button");
       button.className = "et-code-copy";
       button.type = "button";
-      button.textContent = "复制";
+      button.textContent = \(codeCopyText);
       button.addEventListener("click", async () => {
         const codeText = codeNode ? (codeNode.textContent || "") : "";
         if (!codeText) {
@@ -926,12 +930,12 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         try {
           await __copyText(codeText);
           button.dataset.copied = "true";
-          button.textContent = "已复制";
+          button.textContent = \(codeCopiedText);
           if (button.__etCopyTimer) {
             clearTimeout(button.__etCopyTimer);
           }
           button.__etCopyTimer = setTimeout(() => {
-            button.textContent = "复制";
+            button.textContent = \(codeCopyText);
             button.dataset.copied = "false";
             button.__etCopyTimer = null;
           }, 1400);
@@ -965,7 +969,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
       const toggleButton = wrapper.querySelector(".et-code-toggle");
       if (toggleButton) {
-        toggleButton.textContent = collapsed ? "展开" : "收起";
+        toggleButton.textContent = collapsed ? \(codeExpandText) : \(codeCollapseText);
         toggleButton.setAttribute("aria-expanded", collapsed ? "false" : "true");
       }
 
@@ -1346,6 +1350,15 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "'", with: "\\'")
             return "'\(escaped)'"
+        }
+
+        nonisolated fileprivate static func javaScriptStringLiteral(_ value: String) -> String {
+            guard let data = try? JSONSerialization.data(withJSONObject: [value]),
+                  let json = String(data: data, encoding: .utf8),
+                  json.count >= 2 else {
+                return "\"\""
+            }
+            return String(json.dropFirst().dropLast())
         }
 
         nonisolated private static func cssRGBA(from hexRGBA: String?, alphaMultiplier: Double) -> String? {
@@ -1759,7 +1772,7 @@ private struct ETCollapsibleCodeBlockView<HeaderActions: View, BodyContent: View
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text(language?.isEmpty == false ? (language ?? "代码") : "代码")
+        Text(language?.isEmpty == false ? (language ?? NSLocalizedString("代码", comment: "")) : NSLocalizedString("代码", comment: ""))
                     .etFont(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(headerTextColor)
 
@@ -1825,7 +1838,7 @@ private struct ETCodeCollapseButton: View {
                 .foregroundStyle(tintColor)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isCollapsed ? "展开代码块" : "折叠代码块")
+        .accessibilityLabel(isCollapsed ? NSLocalizedString("展开代码块", comment: "") : NSLocalizedString("折叠代码块", comment: ""))
     }
 }
 

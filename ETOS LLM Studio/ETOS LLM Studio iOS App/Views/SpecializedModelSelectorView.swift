@@ -179,14 +179,14 @@ struct SpecializedModelSelectorView: View {
             } else {
                 NavigationLink {
                     RunnableModelIdentifierSelectionView(
-                        title: title,
+                        title: NSLocalizedString(title, comment: "专用模型选择标题"),
                         options: options,
                         selectionID: selectionID,
                         allowEmptySelection: allowEmptySelection
                     )
                 } label: {
                     HStack {
-                        Text(title)
+                        Text(NSLocalizedString(title, comment: "专用模型入口标题"))
                         MarqueeText(
                             content: selectedModelLabel(
                                 for: selectionID.wrappedValue,
@@ -202,7 +202,7 @@ struct SpecializedModelSelectorView: View {
                 }
             }
         } footer: {
-            Text(footer)
+            Text(NSLocalizedString(footer, comment: "专用模型说明"))
         }
     }
 
@@ -231,7 +231,7 @@ struct SpecializedModelSelectorView: View {
         }
 
         if allowEmptySelection {
-            return "未选择"
+            return NSLocalizedString("未选择", comment: "")
         }
 
         return options.first.map { "\($0.model.displayName) | \($0.provider.name)" } ?? ""
@@ -252,7 +252,7 @@ private struct RunnableModelIdentifierSelectionView: View {
                 Button {
                     select(nil)
                 } label: {
-                    MarqueeSelectionRow(title: "未选择", isSelected: selectionID.wrappedValue.isEmpty)
+                    MarqueeSelectionRow(title: NSLocalizedString("未选择", comment: ""), isSelected: selectionID.wrappedValue.isEmpty)
                 }
             }
 
@@ -272,7 +272,7 @@ private struct RunnableModelIdentifierSelectionView: View {
                 }
             }
         }
-        .navigationTitle(title)
+        .navigationTitle(NSLocalizedString(title, comment: "专用模型选择标题"))
     }
 
     private func select(_ identifier: String?) {

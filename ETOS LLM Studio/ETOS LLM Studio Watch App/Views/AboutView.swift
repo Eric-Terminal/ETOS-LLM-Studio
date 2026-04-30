@@ -243,7 +243,7 @@ private struct InfoRow: View {
     
     var body: some View {
         HStack {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "关于页信息行标题"))
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -271,9 +271,9 @@ private struct FeatureRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
+                Text(NSLocalizedString(title, comment: "关于页功能标题"))
                     .etFont(.caption2.weight(.medium))
-                Text(description)
+                Text(NSLocalizedString(description, comment: "关于页功能说明"))
                     .etFont(.system(size: 9))
                     .foregroundStyle(.secondary)
             }

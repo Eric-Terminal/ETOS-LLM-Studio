@@ -137,14 +137,14 @@ struct SpecializedModelSelectorView: View {
             } else {
                 NavigationLink {
                     WatchRunnableModelSelectionListView(
-                        title: title,
+                        title: NSLocalizedString(title, comment: "专用模型选择标题"),
                         models: options,
                         selectedModel: selection,
                         allowEmptySelection: allowEmptySelection
                     )
                 } label: {
                     HStack {
-                        Text(title)
+                        Text(NSLocalizedString(title, comment: "专用模型入口标题"))
                         Spacer()
                         MarqueeText(
                             content: selectedModelLabel(selection.wrappedValue, in: options),
@@ -157,7 +157,7 @@ struct SpecializedModelSelectorView: View {
                 }
             }
         } footer: {
-            Text(footer)
+            Text(NSLocalizedString(footer, comment: "专用模型说明"))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -166,7 +166,7 @@ struct SpecializedModelSelectorView: View {
     private func selectedModelLabel(_ selection: RunnableModel?, in options: [RunnableModel]) -> String {
         guard let selection,
               options.contains(where: { $0.id == selection.id }) else {
-            return "未选择"
+            return NSLocalizedString("未选择", comment: "")
         }
         return "\(selection.model.displayName) | \(selection.provider.name)"
     }
@@ -193,7 +193,7 @@ private struct WatchRunnableModelSelectionListView: View {
                 Button {
                     select(nil)
                 } label: {
-                    selectionRow(title: "未选择", isSelected: selectedModel == nil)
+                    selectionRow(title: NSLocalizedString("未选择", comment: ""), isSelected: selectedModel == nil)
                 }
             }
 
@@ -209,7 +209,7 @@ private struct WatchRunnableModelSelectionListView: View {
                 }
             }
         }
-        .navigationTitle(title)
+        .navigationTitle(NSLocalizedString(title, comment: "专用模型选择标题"))
     }
 
     private func select(_ model: RunnableModel?) {

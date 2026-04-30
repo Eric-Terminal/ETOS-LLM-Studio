@@ -374,7 +374,7 @@ private struct WatchColorEditorView: View {
     var body: some View {
         Form {
             Section {
-                Text(LocalizedStringKey(description))
+                Text(NSLocalizedString(description, comment: "颜色编辑说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -416,7 +416,7 @@ private struct WatchColorEditorView: View {
                 }
             }
         }
-        .navigationTitle(LocalizedStringKey(title))
+        .navigationTitle(NSLocalizedString(title, comment: "颜色编辑标题"))
         .onAppear {
             loadFromHex()
         }
@@ -438,7 +438,7 @@ private struct WatchColorEditorView: View {
     private func channelSlider(title: String, value: Binding<Double>, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(LocalizedStringKey(title))
+                Text(NSLocalizedString(title, comment: "颜色通道标题"))
                 Spacer(minLength: 8)
                 Text("\(Int((value.wrappedValue * 255).rounded()))")
                     .foregroundStyle(.secondary)
@@ -559,7 +559,7 @@ private struct WatchFontSettingsView: View {
                 Button {
                     importFontsFromURL()
                 } label: {
-                    Label(isImportingFromURL ? "正在下载并导入..." : "从链接导入", systemImage: "link.badge.plus")
+                    Label(isImportingFromURL ? NSLocalizedString("正在下载并导入...", comment: "") : NSLocalizedString("从链接导入", comment: ""), systemImage: "link.badge.plus")
                 }
                 .disabled(isImportingFromURL || importURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
@@ -724,9 +724,9 @@ private struct WatchFontSettingsView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "显示设置介绍卡片标题"))
                 .etFont(.footnote.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "显示设置介绍卡片摘要"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
@@ -742,7 +742,7 @@ private struct WatchFontSettingsView: View {
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
-                Text(details)
+                Text(NSLocalizedString(details, comment: "显示设置介绍卡片详情"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -855,15 +855,15 @@ private struct WatchFontSettingsView: View {
     private func importFontsFromURL() {
         let trimmed = importURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            importErrorMessage = "链接不能为空。"
+            importErrorMessage = NSLocalizedString("链接不能为空。", comment: "")
             return
         }
         guard let url = URL(string: trimmed) else {
-            importErrorMessage = "链接格式无效，请输入完整 URL。"
+            importErrorMessage = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "")
             return
         }
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            importErrorMessage = "仅支持 http/https 链接。"
+            importErrorMessage = NSLocalizedString("仅支持 http/https 链接。", comment: "")
             return
         }
 
@@ -877,7 +877,7 @@ private struct WatchFontSettingsView: View {
                 let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
-                        importErrorMessage = "下载失败：HTTP \(httpResponse.statusCode)"
+                        importErrorMessage = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
                         isImportingFromURL = false
                     }
                     return

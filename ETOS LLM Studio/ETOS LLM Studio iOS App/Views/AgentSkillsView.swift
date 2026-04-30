@@ -182,7 +182,7 @@ private extension AgentSkillsView {
     func handleLocalImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
-            localImportError = "无法读取本地文件：\(error.localizedDescription)"
+            localImportError = String(format: NSLocalizedString("无法读取本地文件：%@", comment: ""), error.localizedDescription)
         case .success(let urls):
             guard let url = urls.first else { return }
             Task {
@@ -201,12 +201,12 @@ private extension AgentSkillsView {
                         if success {
                             localImportError = nil
                         } else {
-                            localImportError = manager.lastErrorMessage ?? "导入失败：SKILL.md 内容无效。"
+                            localImportError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：SKILL.md 内容无效。", comment: "")
                         }
                     }
                 } catch {
                     await MainActor.run {
-                        localImportError = "导入失败：\(error.localizedDescription)"
+                        localImportError = String(format: NSLocalizedString("导入失败：%@", comment: ""), error.localizedDescription)
                     }
                 }
             }
@@ -310,7 +310,7 @@ description: "技能描述"
                         if success {
                             dismiss()
                         } else {
-                            localError = manager.lastErrorMessage ?? "保存失败。"
+                            localError = manager.lastErrorMessage ?? NSLocalizedString("保存失败。", comment: "")
                         }
                     }
                     .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -530,7 +530,7 @@ private struct EditSkillFileSheet: View {
                             onSaved()
                             dismiss()
                         } else {
-                            localError = manager.lastErrorMessage ?? "保存失败。"
+                            localError = manager.lastErrorMessage ?? NSLocalizedString("保存失败。", comment: "")
                         }
                     }
                 }
@@ -584,7 +584,7 @@ private struct CreateSkillFileSheet: View {
                     Button(NSLocalizedString("创建", comment: "")) {
                         let path = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !path.isEmpty else {
-                            localError = "文件路径不能为空。"
+                            localError = NSLocalizedString("文件路径不能为空。", comment: "")
                             return
                         }
                         let success = manager.saveSkillFile(skillName: skillName, relativePath: path, content: content)
@@ -592,7 +592,7 @@ private struct CreateSkillFileSheet: View {
                             onSaved()
                             dismiss()
                         } else {
-                            localError = manager.lastErrorMessage ?? "创建失败。"
+                            localError = manager.lastErrorMessage ?? NSLocalizedString("创建失败。", comment: "")
                         }
                     }
                 }

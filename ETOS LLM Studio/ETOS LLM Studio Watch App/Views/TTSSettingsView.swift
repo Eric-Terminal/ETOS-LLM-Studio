@@ -261,13 +261,13 @@ struct TTSSettingsView: View {
     private func customOptionLabel(for value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "自定义（当前为空）"
+            return NSLocalizedString("自定义（当前为空）", comment: "")
         }
-        return "自定义（当前：\(trimmed)）"
+        return String(format: NSLocalizedString("自定义（当前：%@）", comment: ""), trimmed)
     }
 
     private var selectedModelText: String {
-        guard let model = viewModel.selectedTTSModel else { return "未选择" }
+        guard let model = viewModel.selectedTTSModel else { return NSLocalizedString("未选择", comment: "") }
         return model.model.displayName
     }
 }
@@ -284,7 +284,7 @@ private struct WatchTTSModelSelectionListView: View {
                 selectedModel = nil
                 dismiss()
             } label: {
-                MarqueeSelectionRow(title: "未选择", isSelected: selectedModel == nil)
+                MarqueeSelectionRow(title: NSLocalizedString("未选择", comment: ""), isSelected: selectedModel == nil)
             }
 
             ForEach(models) { runnable in

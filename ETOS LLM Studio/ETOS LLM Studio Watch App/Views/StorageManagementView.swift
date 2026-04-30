@@ -186,8 +186,8 @@ public struct StorageManagementView: View {
             showCleanAllOrphansConfirmation = true
         } else {
             cleanupAlert = CleanupAlert(
-                title: "无孤立数据",
-                message: "当前没有需要清理的孤立数据。"
+                title: NSLocalizedString("无孤立数据", comment: ""),
+                message: NSLocalizedString("当前没有需要清理的孤立数据。", comment: "")
             )
         }
     }
@@ -200,8 +200,8 @@ public struct StorageManagementView: View {
 
             await MainActor.run {
                 cleanupAlert = CleanupAlert(
-                    title: "清理完成",
-                    message: "已清理：\(summary.description)"
+                    title: NSLocalizedString("清理完成", comment: ""),
+                    message: String(format: NSLocalizedString("已清理：%@", comment: ""), summary.description)
                 )
             }
 
@@ -217,7 +217,7 @@ public struct StorageManagementView: View {
 
             await MainActor.run {
                 cleanupAlert = CleanupAlert(
-                    title: "清理完成",
+                    title: NSLocalizedString("清理完成", comment: ""),
                     message: String(format: NSLocalizedString("已删除 %d 个文件。", comment: ""), result.audioDeleted + result.imageDeleted)
                 )
             }
@@ -308,9 +308,9 @@ public struct WatchFileListView: View {
             }
 
             Section(NSLocalizedString("统计", comment: "")) {
-                infoRow(title: "文件夹", value: "\(folderCount)")
-                infoRow(title: "文件", value: "\(fileCount)")
-                infoRow(title: "总大小", value: StorageUtility.formatSize(totalFileSize))
+                infoRow(title: NSLocalizedString("文件夹", comment: ""), value: "\(folderCount)")
+                infoRow(title: NSLocalizedString("文件", comment: ""), value: "\(fileCount)")
+                infoRow(title: NSLocalizedString("总大小", comment: ""), value: StorageUtility.formatSize(totalFileSize))
             }
 
             Section {
@@ -366,7 +366,7 @@ public struct WatchFileListView: View {
 
     private func infoRow(title: String, value: String) -> some View {
         HStack {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "存储信息行标题"))
                 .etFont(.footnote)
             Spacer()
             Text(value)
@@ -409,7 +409,7 @@ private struct WatchFileRow: View {
     private var subtitle: String {
         let date = file.modificationDate.formatted(date: .abbreviated, time: .omitted)
         if file.isDirectory {
-            return "文件夹 • \(date)"
+            return String(format: NSLocalizedString("文件夹 • %@", comment: ""), date)
         }
         return "\(StorageUtility.formatSize(file.size)) • \(date)"
     }

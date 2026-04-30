@@ -365,7 +365,7 @@ struct MCPIntegrationView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 governanceCategoryIcon(entry.category)
-                                Text(entry.serverDisplayName ?? "全局")
+                                Text(entry.serverDisplayName ?? NSLocalizedString("全局", comment: ""))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
                                 Spacer()
@@ -636,12 +636,12 @@ struct MCPIntegrationView: View {
         let status = manager.status(for: server)
         switch status.connectionState {
         case .idle:
-            return "未连接"
+            return NSLocalizedString("未连接", comment: "")
         case .connecting:
-            return "正在连接..."
+            return NSLocalizedString("正在连接...", comment: "")
         case .reconnecting(let attempt, let scheduledAt, _):
             let remaining = max(0, Int(ceil(scheduledAt.timeIntervalSinceNow)))
-            return "重连中（第\(attempt)次，约 \(remaining)s）"
+            return String(format: NSLocalizedString("重连中（第%d次，约 %ds）", comment: ""), attempt, remaining)
         case .ready:
             return status.isSelectedForChat
                 ? NSLocalizedString("已连接并参与聊天", comment: "")
@@ -649,7 +649,7 @@ struct MCPIntegrationView: View {
         case .failed(let reason):
             return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         @unknown default:
-            return "未知状态"
+            return NSLocalizedString("未知状态", comment: "")
         }
     }
     
@@ -692,20 +692,20 @@ struct MCPIntegrationView: View {
     private func toolCallStateText(_ state: MCPToolCallState) -> String {
         switch state {
         case .running:
-            return "运行中"
+            return NSLocalizedString("运行中", comment: "")
         case .cancelling:
-            return "取消中"
+            return NSLocalizedString("取消中", comment: "")
         case .succeeded:
-            return "成功"
+            return NSLocalizedString("成功", comment: "")
         case .failed(let reason):
-            return "失败：\(reason)"
+            return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         case .cancelled(let reason):
             if let reason, !reason.isEmpty {
-                return "已取消：\(reason)"
+                return String(format: NSLocalizedString("已取消：%@", comment: ""), reason)
             }
-            return "已取消"
+            return NSLocalizedString("已取消", comment: "")
         @unknown default:
-            return "未知状态"
+            return NSLocalizedString("未知状态", comment: "")
         }
     }
 
@@ -1241,7 +1241,7 @@ private struct MCPServerEditor: View {
                 }
             }
         }
-        .navigationTitle(existingServer == nil ? "新增 MCP Server" : "编辑 MCP Server")
+        .navigationTitle(existingServer == nil ? NSLocalizedString("新增 MCP Server", comment: "") : NSLocalizedString("编辑 MCP Server", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) { dismiss() }
@@ -1273,7 +1273,7 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 Streamable HTTP 地址。"
+                validationMessage = NSLocalizedString("请提供合法的 Streamable HTTP 地址。", comment: "")
                 return
             }
             transport = .http(endpoint: url, apiKey: trimmedKey.isEmpty ? nil : trimmedKey, additionalHeaders: additionalHeaders)
@@ -1282,7 +1282,7 @@ private struct MCPServerEditor: View {
             guard let sseURL = URL(string: trimmedSSE),
                   let sseScheme = sseURL.scheme,
                   sseScheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 SSE Endpoint。"
+                validationMessage = NSLocalizedString("请提供合法的 SSE Endpoint。", comment: "")
                 return
             }
             transport = .httpSSE(
@@ -1296,17 +1296,17 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 HTTP 或 HTTPS 地址。"
+                validationMessage = NSLocalizedString("请提供合法的 HTTP 或 HTTPS 地址。", comment: "")
                 return
             }
             let tokenString = tokenEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let tokenURL = URL(string: tokenString) else {
-                validationMessage = "请提供合法的 Token Endpoint。"
+                validationMessage = NSLocalizedString("请提供合法的 Token Endpoint。", comment: "")
                 return
             }
             let clientIDTrimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !clientIDTrimmed.isEmpty else {
-                validationMessage = "Client ID 不能为空。"
+                validationMessage = NSLocalizedString("Client ID 不能为空。", comment: "")
                 return
             }
             let scopeTrimmed = oauthScope.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1316,7 +1316,7 @@ private struct MCPServerEditor: View {
             let codeVerifierTrimmed = oauthCodeVerifier.trimmingCharacters(in: .whitespacesAndNewlines)
             if oauthGrantType == .authorizationCode {
                 guard !authorizationCodeTrimmed.isEmpty, !redirectURITrimmed.isEmpty else {
-                    validationMessage = "授权码模式下，Authorization Code 与 Redirect URI 不能为空。"
+                    validationMessage = NSLocalizedString("授权码模式下，Authorization Code 与 Redirect URI 不能为空。", comment: "")
                     return
                 }
             }

@@ -137,7 +137,7 @@ struct ProviderEditView: View {
                     .disabled(isSaveDisabled)
             }
         }
-        .navigationTitle(isNew ? "添加提供商" : "编辑提供商")
+        .navigationTitle(isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) { dismiss() }

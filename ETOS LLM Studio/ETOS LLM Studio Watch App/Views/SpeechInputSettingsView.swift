@@ -22,7 +22,7 @@ struct SpeechInputSettingsView: View {
         Form {
             Section(
                 header: Text(NSLocalizedString("语音输入", comment: "")),
-                footer: Text(sendSpeechAsAudio ? "录音将直接附带音频给当前模型。" : "识别结果会自动追加到输入框，便于确认和补充。")
+                footer: Text(sendSpeechAsAudio ? NSLocalizedString("录音将直接附带音频给当前模型。", comment: "") : NSLocalizedString("识别结果会自动追加到输入框，便于确认和补充。", comment: ""))
             ) {
                 Toggle(NSLocalizedString("启用语言输入", comment: ""), isOn: $enableSpeechInput)
                 if enableSpeechInput {
@@ -73,7 +73,7 @@ struct SpeechInputSettingsView: View {
     
     private var selectedSpeechModelLabel: String {
         guard let model = selectedSpeechModel else {
-            return "未选择"
+            return NSLocalizedString("未选择", comment: "")
         }
         return "\(model.model.displayName) | \(model.provider.name)"
     }
@@ -90,7 +90,7 @@ private struct SpeechModelSelectionView: View {
             Button {
                 select(nil)
             } label: {
-                selectionRow(title: "未选择", isSelected: selectedSpeechModel == nil)
+                selectionRow(title: NSLocalizedString("未选择", comment: ""), isSelected: selectedSpeechModel == nil)
             }
             
             ForEach(speechModels) { runnable in

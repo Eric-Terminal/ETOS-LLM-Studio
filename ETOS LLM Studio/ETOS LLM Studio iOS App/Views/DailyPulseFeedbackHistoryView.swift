@@ -62,13 +62,13 @@ struct DailyPulseFeedbackHistoryView: View {
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {
         switch event.action {
         case .liked:
-            return "已喜欢 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已喜欢 · %@", comment: ""), event.dayKey)
         case .disliked:
-            return "已降权 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已降权 · %@", comment: ""), event.dayKey)
         case .hidden:
-            return "已隐藏 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已隐藏 · %@", comment: ""), event.dayKey)
         case .saved:
-            return "已保存为会话 · \(event.dayKey)"
+            return String(format: NSLocalizedString("已保存为会话 · %@", comment: ""), event.dayKey)
         }
     }
 }

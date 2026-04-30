@@ -152,7 +152,7 @@ struct DisplaySettingsView: View {
             Section {
                 Toggle(NSLocalizedString("自定义用户气泡颜色", comment: ""), isOn: $enableCustomUserBubbleColor)
                 if enableCustomUserBubbleColor {
-                    ColorPicker("用户气泡颜色", selection: userBubbleColorBinding, supportsOpacity: false)
+                    ColorPicker(NSLocalizedString("用户气泡颜色", comment: ""), selection: userBubbleColorBinding, supportsOpacity: false)
                     bubbleOpacitySlider(
                         title: "用户气泡不透明度",
                         opacity: colorOpacityBinding(hex: $customUserBubbleColorHex, fallback: defaultUserBubbleColor)
@@ -161,7 +161,7 @@ struct DisplaySettingsView: View {
 
                 Toggle(NSLocalizedString("自定义助手气泡颜色（含 Tool）", comment: ""), isOn: $enableCustomAssistantBubbleColor)
                 if enableCustomAssistantBubbleColor {
-                    ColorPicker("助手气泡颜色", selection: assistantBubbleColorBinding, supportsOpacity: false)
+                    ColorPicker(NSLocalizedString("助手气泡颜色", comment: ""), selection: assistantBubbleColorBinding, supportsOpacity: false)
                     bubbleOpacitySlider(
                         title: "助手气泡不透明度",
                         opacity: colorOpacityBinding(hex: $customAssistantBubbleColorHex, fallback: defaultAssistantBubbleColor)
@@ -170,12 +170,12 @@ struct DisplaySettingsView: View {
 
                 Toggle(NSLocalizedString("自定义白天文字颜色", comment: ""), isOn: $enableCustomLightTextColor)
                 if enableCustomLightTextColor {
-                    ColorPicker("白天文字颜色", selection: lightTextColorBinding, supportsOpacity: false)
+                    ColorPicker(NSLocalizedString("白天文字颜色", comment: ""), selection: lightTextColorBinding, supportsOpacity: false)
                 }
 
                 Toggle(NSLocalizedString("自定义夜览文字颜色", comment: ""), isOn: $enableCustomDarkTextColor)
                 if enableCustomDarkTextColor {
-                    ColorPicker("夜览文字颜色", selection: darkTextColorBinding, supportsOpacity: false)
+                    ColorPicker(NSLocalizedString("夜览文字颜色", comment: ""), selection: darkTextColorBinding, supportsOpacity: false)
                 }
 
                 if hasAnyCustomColorOverride {
@@ -291,7 +291,7 @@ struct DisplaySettingsView: View {
     private func bubbleOpacitySlider(title: String, opacity: Binding<Double>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(LocalizedStringKey(title))
+                Text(NSLocalizedString(title, comment: "气泡不透明度标题"))
                 Spacer(minLength: 8)
                 Text("\(Int((opacity.wrappedValue * 100).rounded()))%")
                     .foregroundStyle(.secondary)
@@ -406,7 +406,7 @@ private struct FontSettingsView: View {
         )) {
             Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
-            Text(importErrorMessage ?? "未知错误")
+            Text(importErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
         .alert(NSLocalizedString("删除失败", comment: ""), isPresented: Binding(
             get: { deleteErrorMessage != nil },
@@ -414,7 +414,7 @@ private struct FontSettingsView: View {
         )) {
             Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
-            Text(deleteErrorMessage ?? "未知错误")
+            Text(deleteErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
     }
 
@@ -425,10 +425,10 @@ private struct FontSettingsView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "显示设置介绍卡片标题"))
                 .etFont(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "显示设置介绍卡片摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.primary)
             Button {
@@ -445,13 +445,13 @@ private struct FontSettingsView: View {
         .sheet(isPresented: isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(details)
+                    Text(NSLocalizedString(details, comment: "显示设置介绍卡片详情"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .navigationTitle(title)
+                .navigationTitle(NSLocalizedString(title, comment: "显示设置介绍卡片详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
             }
         }

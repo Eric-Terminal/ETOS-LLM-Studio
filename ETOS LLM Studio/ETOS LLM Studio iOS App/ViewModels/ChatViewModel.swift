@@ -568,7 +568,11 @@ final class ChatViewModel: ObservableObject {
         MemoryManager.shared.dimensionMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] (queryDim, indexDim) in
-                self?.dimensionMismatchMessage = "嵌入维度不匹配！\n查询维度: \(queryDim)\n索引维度: \(indexDim)\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。"
+                self?.dimensionMismatchMessage = String(
+                    format: NSLocalizedString("嵌入维度不匹配！\n查询维度: %d\n索引维度: %d\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。", comment: ""),
+                    queryDim,
+                    indexDim
+                )
                 self?.showDimensionMismatchAlert = true
             }
             .store(in: &cancellables)        
@@ -1326,7 +1330,7 @@ final class ChatViewModel: ObservableObject {
                 return fallbackSession
             }
             logger.error("创建新会话失败，返回临时会话实例作为回退。")
-            return ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+            return ChatSession(id: UUID(), name: NSLocalizedString("新的对话", comment: ""), isTemporary: true)
         }
         return chatService.branchSessionFromMessage(from: session, upToMessage: upToMessage, copyPrompts: copyPrompts)
     }

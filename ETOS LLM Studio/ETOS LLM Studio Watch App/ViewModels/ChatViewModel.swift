@@ -558,7 +558,11 @@ class ChatViewModel: ObservableObject {
         MemoryManager.shared.dimensionMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] (queryDim, indexDim) in
-                self?.dimensionMismatchMessage = "嵌入维度不匹配！\n查询维度: \(queryDim)\n索引维度: \(indexDim)\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。"
+                self?.dimensionMismatchMessage = String(
+                    format: NSLocalizedString("嵌入维度不匹配！\n查询维度: %d\n索引维度: %d\n\n请前往记忆库管理页面，点击“重新生成全部嵌入”按钮。", comment: ""),
+                    queryDim,
+                    indexDim
+                )
                 self?.showDimensionMismatchAlert = true
             }
             .store(in: &cancellables)
@@ -811,7 +815,7 @@ class ChatViewModel: ObservableObject {
     }
 
     private func presentAttachmentImportError(_ message: String) {
-        attachmentImportErrorMessage = message.isEmpty ? "附件导入失败，请稍后重试。" : message
+        attachmentImportErrorMessage = message.isEmpty ? NSLocalizedString("附件导入失败，请稍后重试。", comment: "") : message
         showAttachmentImportErrorAlert = true
     }
 
@@ -1187,16 +1191,16 @@ class ChatViewModel: ObservableObject {
     
     func beginSpeechInputFlow() {
         guard enableSpeechInput else {
-            presentSpeechError("请先在高级设置中开启语言输入功能。")
+            presentSpeechError(NSLocalizedString("请先在高级设置中开启语言输入功能。", comment: ""))
             return
         }
         if !sendSpeechAsAudio {
             guard !speechModels.isEmpty else {
-                presentSpeechError("暂无可用的模型，请先在模型设置中启用。")
+                presentSpeechError(NSLocalizedString("暂无可用的模型，请先在模型设置中启用。", comment: ""))
                 return
             }
             guard selectedSpeechModel != nil else {
-                presentSpeechError("请选择一个语音转文字模型。")
+                presentSpeechError(NSLocalizedString("请选择一个语音转文字模型。", comment: ""))
                 return
             }
         }
@@ -1208,13 +1212,13 @@ class ChatViewModel: ObservableObject {
     func startSpeechRecording() async {
         guard !isRecordingSpeech else { return }
         guard enableSpeechInput else {
-            presentSpeechError("语言输入已被关闭。")
+            presentSpeechError(NSLocalizedString("语言输入已被关闭。", comment: ""))
             isSpeechRecorderPresented = false
             return
         }
         if !sendSpeechAsAudio {
             guard selectedSpeechModel != nil else {
-                presentSpeechError("尚未选择语音转文字模型。")
+                presentSpeechError(NSLocalizedString("尚未选择语音转文字模型。", comment: ""))
                 isSpeechRecorderPresented = false
                 return
             }
@@ -1222,7 +1226,7 @@ class ChatViewModel: ObservableObject {
         
         let permissionGranted = await requestMicrophonePermission()
         guard permissionGranted else {
-            presentSpeechError("麦克风权限被拒绝，请到设置中开启。")
+            presentSpeechError(NSLocalizedString("麦克风权限被拒绝，请到设置中开启。", comment: ""))
             isSpeechRecorderPresented = false
             return
         }
@@ -1231,7 +1235,7 @@ class ChatViewModel: ObservableObject {
         if shouldUseSystemSpeechStreaming {
             let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
             guard speechPermissionGranted else {
-                presentSpeechError("语音识别权限被拒绝，请到设置中开启。")
+                presentSpeechError(NSLocalizedString("语音识别权限被拒绝，请到设置中开启。", comment: ""))
                 isSpeechRecorderPresented = false
                 return
             }
@@ -1311,7 +1315,7 @@ class ChatViewModel: ObservableObject {
             audioRecorder?.isMeteringEnabled = true
             audioRecorder?.prepareToRecord()
             guard audioRecorder?.record() == true else {
-                throw NSError(domain: "SpeechRecorder", code: -1, userInfo: [NSLocalizedDescriptionKey: "录音启动失败。"])
+                throw NSError(domain: "SpeechRecorder", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("录音启动失败。", comment: "")])
             }
             
             speechRecordingURL = targetURL
@@ -1352,7 +1356,7 @@ class ChatViewModel: ObservableObject {
             systemSpeechStreamingSession = nil
             resetRecordingVisuals()
             guard !transcript.isEmpty else {
-                presentSpeechError("未识别到有效语音内容。")
+                presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
                 return
             }
             speechStreamingTranscript = transcript
@@ -1365,7 +1369,7 @@ class ChatViewModel: ObservableObject {
             audioRecorder = nil
             speechRecordingURL = nil
             isSpeechRecorderPresented = false
-            presentSpeechError("录音文件未找到，无法处理。")
+            presentSpeechError(NSLocalizedString("录音文件未找到，无法处理。", comment: ""))
             resetRecordingVisuals()
             return
         }
@@ -1397,7 +1401,7 @@ class ChatViewModel: ObservableObject {
                     }
                 } else {
                     guard let speechModel = selectedSpeechModel else {
-                        throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: "尚未选择语音转文字模型。"])
+                        throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("尚未选择语音转文字模型。", comment: "")])
                     }
                     let transcript = try await chatService.transcribeAudio(
                         using: speechModel,
@@ -1407,7 +1411,7 @@ class ChatViewModel: ObservableObject {
                     )
                     let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedTranscript.isEmpty else {
-                        throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: "未识别到有效语音内容。"])
+                        throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未识别到有效语音内容。", comment: "")])
                     }
                     speechStreamingTranscript = trimmedTranscript
                     appendTranscribedText(trimmedTranscript)
@@ -1653,7 +1657,7 @@ class ChatViewModel: ObservableObject {
                 return fallbackSession
             }
             logger.error("创建新会话失败，返回临时会话实例作为回退。")
-            return ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+            return ChatSession(id: UUID(), name: NSLocalizedString("新的对话", comment: ""), isTemporary: true)
         }
         return chatService.branchSessionFromMessage(from: session, upToMessage: upToMessage, copyPrompts: copyPrompts)
     }
@@ -3259,23 +3263,23 @@ private enum WatchAttachmentImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptySource:
-            return "请输入链接或文件路径。"
+            return NSLocalizedString("请输入链接或文件路径。", comment: "")
         case .unsupportedScheme:
-            return "仅支持 http、https、file 链接或本地文件路径。"
+            return NSLocalizedString("仅支持 http、https、file 链接或本地文件路径。", comment: "")
         case .invalidURL:
-            return "链接格式无效。"
+            return NSLocalizedString("链接格式无效。", comment: "")
         case .invalidPath:
-            return "文件路径无效。"
+            return NSLocalizedString("文件路径无效。", comment: "")
         case .missingLocalFile(let path):
-            return "未找到文件“\(path)”。"
+            return String(format: NSLocalizedString("未找到文件“%@”。", comment: ""), path)
         case .directoryPath(let path):
-            return "路径“\(path)”是目录，不能作为附件发送。"
+            return String(format: NSLocalizedString("路径“%@”是目录，不能作为附件发送。", comment: ""), path)
         case .invalidHTTPStatus(let statusCode):
-            return "下载失败，服务器返回 HTTP \(statusCode)。"
+            return String(format: NSLocalizedString("下载失败，服务器返回 HTTP %d。", comment: ""), statusCode)
         case .emptyData:
-            return "附件内容为空，无法发送。"
+            return NSLocalizedString("附件内容为空，无法发送。", comment: "")
         case .readFailed(let message):
-            return "无法加载文件：\(message)"
+            return String(format: NSLocalizedString("无法加载文件：%@", comment: ""), message)
         }
     }
 }

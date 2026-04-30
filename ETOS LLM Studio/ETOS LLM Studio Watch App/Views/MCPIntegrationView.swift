@@ -127,7 +127,7 @@ struct MCPIntegrationView: View {
                 .disabled(manager.isBusy || connected == 0)
                 
                 if manager.isBusy {
-                    ProgressView("同步中…")
+                    ProgressView(NSLocalizedString("同步中…", comment: ""))
                 }
             }
 
@@ -233,7 +233,7 @@ struct MCPIntegrationView: View {
                                 ProgressView(value: min(max(progress / total, 0), 1))
                             }
                             Button(NSLocalizedString("取消", comment: ""), role: .destructive) {
-                                manager.cancelToolCall(callID: call.id, reason: "用户在手表取消调用")
+                                manager.cancelToolCall(callID: call.id, reason: NSLocalizedString("用户在手表取消调用", comment: ""))
                             }
                             .etFont(.caption2)
                         }
@@ -251,9 +251,9 @@ struct MCPIntegrationView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "MCP 介绍卡片标题"))
                 .etFont(.footnote.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "MCP 介绍卡片摘要"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
@@ -269,7 +269,7 @@ struct MCPIntegrationView: View {
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
-                Text(details)
+                Text(NSLocalizedString(details, comment: "MCP 介绍卡片详情"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -282,18 +282,18 @@ struct MCPIntegrationView: View {
         let status = manager.status(for: server)
         switch status.connectionState {
         case .idle:
-            return "未连接"
+            return NSLocalizedString("未连接", comment: "")
         case .connecting:
-            return "连接中"
+            return NSLocalizedString("连接中", comment: "")
         case .reconnecting(let attempt, let scheduledAt, _):
             let remaining = max(0, Int(ceil(scheduledAt.timeIntervalSinceNow)))
-            return "重连中 \(attempt) 次 (\(remaining)s)"
+            return String(format: NSLocalizedString("重连中 %d 次 (%ds)", comment: ""), attempt, remaining)
         case .ready:
-            return status.isSelectedForChat ? "聊天使用" : "已连接"
+            return status.isSelectedForChat ? NSLocalizedString("聊天使用", comment: "") : NSLocalizedString("已连接", comment: "")
         case .failed(let reason):
             return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         @unknown default:
-            return "未知状态"
+            return NSLocalizedString("未知状态", comment: "")
         }
     }
     
@@ -399,7 +399,7 @@ private struct MCPServerDetailView: View {
                                     HStack(alignment: .firstTextBaseline) {
                                         Text(tool.toolId)
                                         Spacer()
-                                        Text(manager.isToolEnabled(serverID: server.id, toolId: tool.toolId) ? "已启用" : "已停用")
+                                        Text(manager.isToolEnabled(serverID: server.id, toolId: tool.toolId) ? NSLocalizedString("已启用", comment: "") : NSLocalizedString("已停用", comment: ""))
                                             .etFont(.caption2)
                                             .foregroundStyle(
                                                 manager.isToolEnabled(serverID: server.id, toolId: tool.toolId)
@@ -446,7 +446,7 @@ private struct MCPServerDetailView: View {
                 }
             }
         }
-        .navigationTitle(server?.displayName ?? "服务器详情")
+        .navigationTitle(server?.displayName ?? NSLocalizedString("服务器详情", comment: ""))
         .confirmationDialog(NSLocalizedString("确定要删除此服务器？", comment: ""), isPresented: $showingDeleteConfirmation) {
             Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let server {
@@ -462,18 +462,18 @@ private struct MCPServerDetailView: View {
         let status = manager.status(for: server)
         switch status.connectionState {
         case .idle:
-            return "未连接"
+            return NSLocalizedString("未连接", comment: "")
         case .connecting:
-            return "连接中"
+            return NSLocalizedString("连接中", comment: "")
         case .reconnecting(let attempt, let scheduledAt, _):
             let remaining = max(0, Int(ceil(scheduledAt.timeIntervalSinceNow)))
-            return "重连中 \(attempt) 次 (\(remaining)s)"
+            return String(format: NSLocalizedString("重连中 %d 次 (%ds)", comment: ""), attempt, remaining)
         case .ready:
-            return status.isSelectedForChat ? "聊天使用" : "已连接"
+            return status.isSelectedForChat ? NSLocalizedString("聊天使用", comment: "") : NSLocalizedString("已连接", comment: "")
         case .failed(let reason):
             return String(format: NSLocalizedString("失败：%@", comment: ""), reason)
         @unknown default:
-            return "未知状态"
+            return NSLocalizedString("未知状态", comment: "")
         }
     }
 
@@ -692,7 +692,7 @@ private struct MCPGovernanceLogListView: View {
                 ForEach(manager.governanceLogEntries.suffix(80).reversed()) { entry in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 4) {
-                            Text(entry.serverDisplayName ?? "全局")
+                            Text(entry.serverDisplayName ?? NSLocalizedString("全局", comment: ""))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -761,7 +761,7 @@ private struct MCPToolDebuggerView: View {
         do {
             let inputs = try decodeJSONDictionary(from: payloadInput)
             guard let serverID = resolveServerID() else {
-                localError = "请选择已连接服务器。"
+                localError = NSLocalizedString("请选择已连接服务器。", comment: "")
                 return
             }
             manager.executeTool(on: serverID, toolId: toolIdInput.trimmingCharacters(in: .whitespacesAndNewlines), inputs: inputs)
@@ -827,7 +827,7 @@ private struct MCPResourceDebuggerView: View {
             let payload = try decodeJSONDictionary(from: queryInput)
             let query = payload.isEmpty ? nil : payload
             guard let serverID = resolveServerID() else {
-                localError = "请选择已连接服务器。"
+                localError = NSLocalizedString("请选择已连接服务器。", comment: "")
                 return
             }
             manager.readResource(on: serverID, resourceId: resourceIdInput.trimmingCharacters(in: .whitespacesAndNewlines), query: query)
@@ -1053,7 +1053,7 @@ private struct MCPServerEditor: View {
                 }
             }
         }
-        .navigationTitle(existingServer == nil ? "新增服务器" : "编辑服务器")
+        .navigationTitle(existingServer == nil ? NSLocalizedString("新增服务器", comment: "") : NSLocalizedString("编辑服务器", comment: ""))
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(NSLocalizedString("取消", comment: "")) { dismiss() }
@@ -1085,7 +1085,7 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 Streamable HTTP 地址。"
+                validationMessage = NSLocalizedString("请提供合法的 Streamable HTTP 地址。", comment: "")
                 return
             }
             transport = .http(endpoint: url, apiKey: trimmedKey.isEmpty ? nil : trimmedKey, additionalHeaders: additionalHeaders)
@@ -1094,7 +1094,7 @@ private struct MCPServerEditor: View {
             guard let sseURL = URL(string: trimmedSSE),
                   let sseScheme = sseURL.scheme,
                   sseScheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 SSE Endpoint。"
+                validationMessage = NSLocalizedString("请提供合法的 SSE Endpoint。", comment: "")
                 return
             }
             transport = .httpSSE(
@@ -1108,17 +1108,17 @@ private struct MCPServerEditor: View {
             guard let url = URL(string: trimmedEndpoint),
                   let scheme = url.scheme,
                   scheme.lowercased().hasPrefix("http") else {
-                validationMessage = "请提供合法的 HTTP/HTTPS 地址。"
+                validationMessage = NSLocalizedString("请提供合法的 HTTP/HTTPS 地址。", comment: "")
                 return
             }
             let tokenString = tokenEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let tokenURL = URL(string: tokenString) else {
-                validationMessage = "请提供合法的 Token Endpoint。"
+                validationMessage = NSLocalizedString("请提供合法的 Token Endpoint。", comment: "")
                 return
             }
             let clientIDTrimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !clientIDTrimmed.isEmpty else {
-                validationMessage = "Client ID 不能为空。"
+                validationMessage = NSLocalizedString("Client ID 不能为空。", comment: "")
                 return
             }
             let scopeTrimmed = oauthScope.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1128,7 +1128,7 @@ private struct MCPServerEditor: View {
             let codeVerifierTrimmed = oauthCodeVerifier.trimmingCharacters(in: .whitespacesAndNewlines)
             if oauthGrantType == .authorizationCode {
                 guard !authorizationCodeTrimmed.isEmpty, !redirectURITrimmed.isEmpty else {
-                    validationMessage = "授权码模式下，Authorization Code 与 Redirect URI 不能为空。"
+                    validationMessage = NSLocalizedString("授权码模式下，Authorization Code 与 Redirect URI 不能为空。", comment: "")
                     return
                 }
             }

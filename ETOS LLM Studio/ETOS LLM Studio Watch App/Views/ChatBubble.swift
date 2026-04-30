@@ -523,13 +523,13 @@ struct ChatBubble: View {
         var title: String {
             switch self {
             case .pendingApproval:
-                return "等待审批"
+                return NSLocalizedString("等待审批", comment: "")
             case .running:
-                return "执行中"
+                return NSLocalizedString("执行中", comment: "")
             case .finished:
-                return "已完成"
+                return NSLocalizedString("已完成", comment: "")
             case .rejected:
-                return "已拒绝"
+                return NSLocalizedString("已拒绝", comment: "")
             }
         }
 
@@ -1157,7 +1157,7 @@ struct ChatBubble: View {
                 if permissionRequest == nil {
                     toolDetailSection(title: "工具结果") {
                         if resultText.isEmpty {
-                            Text(status == .pendingApproval ? "等待你的审批后继续执行。" : "暂无返回结果。")
+                            Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         } else if enableExperimentalToolResultDisplay {
@@ -1186,7 +1186,7 @@ struct ChatBubble: View {
                                 if canToggleRaw {
                                     Divider()
                                     HStack {
-                                        Button(showRawToolResultInDetailSheet ? "显示整理结果" : "显示原文") {
+                                        Button(showRawToolResultInDetailSheet ? NSLocalizedString("显示整理结果", comment: "") : NSLocalizedString("显示原文", comment: "")) {
                                             withAnimation(.easeInOut(duration: 0.2)) {
                                                 showRawToolResultInDetailSheet.toggle()
                                             }
@@ -1243,7 +1243,7 @@ struct ChatBubble: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "工具详情小节标题"))
                 .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             content()
@@ -1507,13 +1507,13 @@ struct ChatBubble: View {
 
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
-            baseTitle = "已经思考\(elapsedSeconds)秒"
+            baseTitle = String(format: NSLocalizedString("已经思考%d秒", comment: ""), elapsedSeconds)
         } else {
-            baseTitle = "思考过程"
+            baseTitle = NSLocalizedString("思考过程", comment: "")
         }
 
         guard let reasoningSummaryText else { return baseTitle }
-        return "\(baseTitle)：\(reasoningSummaryText)"
+        return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, reasoningSummaryText)
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
@@ -1655,9 +1655,9 @@ struct ChatBubble: View {
                     if let payload = toolWidgetPayload(for: call, resultText: resultText) {
                         if let title = payload.title,
                            !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            return "可视化 Widget · \(title)"
-                        }
-                        return "可视化 Widget"
+                        return String(format: NSLocalizedString("可视化 Widget · %@", comment: ""), title)
+                    }
+                    return NSLocalizedString("可视化 Widget", comment: "")
                     }
                     return toolResultDisplayModel(for: (call.result ?? resultText).trimmingCharacters(in: .whitespacesAndNewlines)).summaryText
                 }
@@ -1667,7 +1667,7 @@ struct ChatBubble: View {
             if isPending {
                 HStack {
                     ShimmeringText(
-                        text: "结果：\(toolNames.joined(separator: ", "))",
+                        text: String(format: NSLocalizedString("结果：%@", comment: ""), toolNames.joined(separator: ", ")),
                         font: .footnote,
                         baseColor: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8),
                         highlightColor: resolvedTextColor(default: .primary.opacity(0.85))
@@ -1835,7 +1835,7 @@ struct ChatBubble: View {
         maxHeight: CGFloat
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "工具结果小节标题"))
                 .etFont(.caption2.weight(.semibold))
                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary.opacity(0.9), customOpacity: 0.9))
             CappedScrollableText(
@@ -2398,16 +2398,16 @@ private struct WatchTimelineReasoningStepView: View {
 
         let baseTitle: String
         if let elapsedSeconds = reasoningElapsedSeconds(referenceDate: referenceDate) {
-            baseTitle = "已经思考\(elapsedSeconds)秒"
+            baseTitle = String(format: NSLocalizedString("已经思考%d秒", comment: ""), elapsedSeconds)
         } else {
-            baseTitle = "思考过程"
+            baseTitle = NSLocalizedString("思考过程", comment: "")
         }
 
         guard let reasoningSummary,
               !reasoningSummary.isEmpty else {
             return baseTitle
         }
-        return "\(baseTitle)：\(reasoningSummary)"
+        return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, reasoningSummary)
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {
@@ -2608,7 +2608,7 @@ private extension ChatBubble {
     
     var currentThinkingText: String {
         guard shouldShowThinkingIndicator else { return "" }
-        return "正在思考..."
+        return NSLocalizedString("正在思考...", comment: "")
     }
 }
 

@@ -219,7 +219,7 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var emptyStateText: String {
-        folderID == nil ? "暂无文件夹或会话。" : "当前文件夹暂无内容。"
+        folderID == nil ? NSLocalizedString("暂无文件夹或会话。", comment: "") : NSLocalizedString("当前文件夹暂无内容。", comment: "")
     }
 
     private var canGoToPreviousPage: Bool {
@@ -241,7 +241,7 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var paginationSummaryText: String {
-        "当前显示\(currentPageStartOrdinal)-\(currentPageEndOrdinal)个对话(总共\(totalDirectSessionCount))"
+        String(format: NSLocalizedString("当前显示%d-%d个对话(总共%d)", comment: ""), currentPageStartOrdinal, currentPageEndOrdinal, totalDirectSessionCount)
     }
 
     private var paginationCapsuleStrokeColor: Color {
@@ -264,7 +264,7 @@ private struct SessionFolderBrowserView: View {
                 mergedEntryRow(entry)
             }
         }
-        .navigationTitle(isRoot ? "历史会话" : (currentFolder?.name ?? "文件夹"))
+        .navigationTitle(isRoot ? NSLocalizedString("历史会话", comment: "") : (currentFolder?.name ?? NSLocalizedString("文件夹", comment: "")))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -337,7 +337,7 @@ private struct SessionFolderBrowserView: View {
                     Form {
                         TextField(NSLocalizedString("文件夹名称", comment: ""), text: $folderEditorName)
                     }
-                    .navigationTitle(folderBeingRenamed == nil ? "新建文件夹" : "重命名文件夹")
+                    .navigationTitle(folderBeingRenamed == nil ? NSLocalizedString("新建文件夹", comment: "") : NSLocalizedString("重命名文件夹", comment: ""))
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button(NSLocalizedString("取消", comment: "")) {
@@ -505,7 +505,7 @@ private struct SessionFolderBrowserView: View {
                                 openCreateFolderEditor(parentID: folderID)
                             }
                         } label: {
-                            Label(folderID == nil ? "新建文件夹" : "新建子文件夹", systemImage: "folder.badge.plus")
+                            Label(folderID == nil ? NSLocalizedString("新建文件夹", comment: "") : NSLocalizedString("新建子文件夹", comment: ""), systemImage: "folder.badge.plus")
                         }
 
                         Button {
@@ -723,13 +723,13 @@ private struct SessionFolderBrowserView: View {
     }
 
     private var batchDeleteMessage: String {
-        let folderText = selectedFolderIDs.isEmpty ? "" : "\(selectedFolderIDs.count) 个文件夹"
-        let sessionText = selectedSessionIDs.isEmpty ? "" : "\(selectedSessionIDs.count) 个会话"
+        let folderText = selectedFolderIDs.isEmpty ? "" : String(format: NSLocalizedString("%d 个文件夹", comment: ""), selectedFolderIDs.count)
+        let sessionText = selectedSessionIDs.isEmpty ? "" : String(format: NSLocalizedString("%d 个会话", comment: ""), selectedSessionIDs.count)
         let targetText = [folderText, sessionText]
             .filter { !$0.isEmpty }
-            .joined(separator: "和")
-        let targetSummary = targetText.isEmpty ? "所选项目" : targetText
-        return "将删除 \(targetSummary)。文件夹内的会话会移回未分类，操作不可恢复。"
+            .joined(separator: NSLocalizedString("和", comment: ""))
+        let targetSummary = targetText.isEmpty ? NSLocalizedString("所选项目", comment: "") : targetText
+        return String(format: NSLocalizedString("将删除 %@。文件夹内的会话会移回未分类，操作不可恢复。", comment: ""), targetSummary)
     }
 
     private func normalizeSessionPageIndex() {
@@ -1091,7 +1091,7 @@ private struct WatchSessionSearchView: View {
     }
 
     private var paginationSummaryText: String {
-        "当前显示\(currentResultPageStartOrdinal)-\(currentResultPageEndOrdinal)条结果(总共\(searchResults.count))"
+        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentResultPageStartOrdinal, currentResultPageEndOrdinal, searchResults.count)
     }
 
     private var paginationStrokeColor: Color {
@@ -1207,7 +1207,7 @@ private struct WatchSessionSearchView: View {
 
     private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
         if let messageOrdinal = result.messageOrdinal {
-            return "“\(result.sessionName)” 第\(messageOrdinal)条"
+            return String(format: NSLocalizedString("“%@” 第%d条", comment: ""), result.sessionName, messageOrdinal)
         }
         return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
     }
@@ -1215,21 +1215,21 @@ private struct WatchSessionSearchView: View {
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
         switch source {
         case .sessionName:
-            return "标题"
+            return NSLocalizedString("标题", comment: "")
         case .topicPrompt:
-            return "主题提示"
+            return NSLocalizedString("主题提示", comment: "")
         case .enhancedPrompt:
-            return "增强提示词"
+            return NSLocalizedString("增强提示词", comment: "")
         case .userMessage:
-            return "用户消息"
+            return NSLocalizedString("用户消息", comment: "")
         case .assistantMessage:
-            return "助手消息"
+            return NSLocalizedString("助手消息", comment: "")
         case .systemMessage:
-            return "系统消息"
+            return NSLocalizedString("系统消息", comment: "")
         case .toolMessage:
-            return "工具消息"
+            return NSLocalizedString("工具消息", comment: "")
         case .errorMessage:
-            return "错误消息"
+            return NSLocalizedString("错误消息", comment: "")
         }
     }
 

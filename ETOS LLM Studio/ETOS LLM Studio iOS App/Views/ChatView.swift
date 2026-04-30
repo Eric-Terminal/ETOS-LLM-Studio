@@ -298,7 +298,12 @@ struct ChatView: View {
         )
     }
     private var sessionPickerSearchPaginationSummaryText: String {
-        "当前显示 \(currentSessionPickerSearchResultPageStartOrdinal)-\(currentSessionPickerSearchResultPageEndOrdinal) 条结果（总共 \(totalSessionPickerSearchResultCount)）"
+        String(
+            format: NSLocalizedString("当前显示 %1$d-%2$d 条结果（总共 %3$d）", comment: "Session picker search pagination summary"),
+            currentSessionPickerSearchResultPageStartOrdinal,
+            currentSessionPickerSearchResultPageEndOrdinal,
+            totalSessionPickerSearchResultCount
+        )
     }
     private var pagedSessionPickerSessions: [ChatSession] {
         guard totalSessionPickerCount > 0 else { return [] }
@@ -613,8 +618,8 @@ struct ChatView: View {
                 }
             } message: {
                 Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
-                     ? "删除后将无法恢复这条消息的所有版本。"
-                     : "删除后无法恢复这条消息。")
+                     ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
+                     : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
             }
             .alert(NSLocalizedString("确认删除当前版本", comment: ""), isPresented: messageVersionDeleteAlertPresented) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
@@ -873,20 +878,20 @@ struct ChatView: View {
                     .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
             )
             .contentShape(Circle())
-            .accessibilityLabel(accessibilityLabel)
+            .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: "导航栏图标无障碍标签"))
     }
 
     private var navBarCenterPill: some View {
         VStack(spacing: navBarPillSpacing) {
             MarqueeText(
-                content: viewModel.currentSession?.name ?? "新的对话",
+                content: viewModel.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""),
                 uiFont: navBarTitleFont
             )
             .foregroundColor(TelegramColors.navBarText)
             .allowsHitTesting(false)
 
             if viewModel.activatedModels.isEmpty {
-                MarqueeText(content: "选择模型以开始", uiFont: navBarSubtitleFont)
+                MarqueeText(content: NSLocalizedString("选择模型以开始", comment: ""), uiFont: navBarSubtitleFont)
                     .foregroundColor(TelegramColors.navBarSubtitle)
                     .allowsHitTesting(false)
             } else {
@@ -957,7 +962,7 @@ struct ChatView: View {
         if let selectedModel = viewModel.selectedModel {
             return "\(selectedModel.model.displayName) · \(selectedModel.provider.name)"
         }
-        return "选择模型"
+        return NSLocalizedString("选择模型", comment: "")
     }
 
     private var navBarFadeBlurOverlay: some View {
@@ -1335,8 +1340,8 @@ struct ChatView: View {
                 if queryActive {
                     Text(
                         isSearching
-                        ? "正在搜索历史会话…"
-                        : "匹配 \(displayedCount) 条结果 / \(sessionPickerSearchHits.count) 个会话"
+                        ? NSLocalizedString("正在搜索历史会话…", comment: "")
+                        : String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), displayedCount, sessionPickerSearchHits.count)
                     )
                         .etFont(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
@@ -1443,10 +1448,10 @@ struct ChatView: View {
 
     private func sessionPickerEmptyState(queryActive: Bool) -> some View {
         VStack(spacing: 8) {
-            Text(queryActive ? "未找到匹配的搜索结果" : "暂无会话")
+            Text(queryActive ? NSLocalizedString("未找到匹配的搜索结果", comment: "") : NSLocalizedString("暂无会话", comment: ""))
                 .etFont(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
-            Text(queryActive ? "换个关键词试试看" : "创建一个新对话开始吧")
+            Text(queryActive ? NSLocalizedString("换个关键词试试看", comment: "") : NSLocalizedString("创建一个新对话开始吧", comment: ""))
                 .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
@@ -1520,7 +1525,7 @@ struct ChatView: View {
             } else {
                 Text(
                     queryActive
-                    ? (isSearching ? "正在搜索…" : "匹配 \(displayedCount) 条结果 / \(sessionPickerSearchHits.count) 个会话")
+                    ? (isSearching ? NSLocalizedString("正在搜索…", comment: "") : String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), displayedCount, sessionPickerSearchHits.count))
                     : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
                 )
                 .etFont(.system(size: 12, weight: .medium))
@@ -1548,7 +1553,7 @@ struct ChatView: View {
                 .background(sessionPickerFooterButtonBackground)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: "会话选择器按钮无障碍标签"))
     }
 
     @ViewBuilder
@@ -1826,29 +1831,29 @@ struct ChatView: View {
     private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
         switch source {
         case .sessionName:
-            return "标题"
+            return NSLocalizedString("标题", comment: "")
         case .topicPrompt:
-            return "主题提示"
+            return NSLocalizedString("主题提示", comment: "")
         case .enhancedPrompt:
-            return "增强提示词"
+            return NSLocalizedString("增强提示词", comment: "")
         case .userMessage:
-            return "用户消息"
+            return NSLocalizedString("用户消息", comment: "")
         case .assistantMessage:
-            return "助手消息"
+            return NSLocalizedString("助手消息", comment: "")
         case .systemMessage:
-            return "系统消息"
+            return NSLocalizedString("系统消息", comment: "")
         case .toolMessage:
-            return "工具消息"
+            return NSLocalizedString("工具消息", comment: "")
         case .errorMessage:
-            return "错误消息"
+            return NSLocalizedString("错误消息", comment: "")
         }
     }
 
     private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
         if let messageOrdinal = result.messageOrdinal {
-            return "“\(result.sessionName)” 第\(messageOrdinal)条"
+            return String(format: NSLocalizedString("“%@” 第%d条", comment: ""), result.sessionName, messageOrdinal)
         }
-        return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
+        return String(format: NSLocalizedString("“%@” %@", comment: ""), result.sessionName, sourceLabel(for: result.match.source))
     }
 
     private func selectSessionFromPicker(_ session: ChatSession, messageOrdinal: Int? = nil) {
@@ -2105,7 +2110,7 @@ struct ChatView: View {
                 }
             } label: {
                 Label(
-                    ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "停止朗读" : "朗读消息",
+                    ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? NSLocalizedString("停止朗读", comment: "") : NSLocalizedString("朗读消息", comment: ""),
                     systemImage: ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "stop.circle" : "speaker.wave.2"
                 )
             }
@@ -2153,7 +2158,7 @@ struct ChatView: View {
         Button(role: .destructive) {
             messageToDelete = message
         } label: {
-            Label(viewModel.hasDisplayVersions(for: message) ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
+            Label(viewModel.hasDisplayVersions(for: message) ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
         }
         
         Divider()
@@ -2783,7 +2788,7 @@ private struct AskUserInputComposerPanel: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(request.title ?? "请补充信息")
+                Text(request.title ?? NSLocalizedString("请补充信息", comment: ""))
                     .etFont(.headline)
                 if let description = request.description, !description.isEmpty {
                     Text(description)
@@ -2992,7 +2997,7 @@ private struct AskUserInputComposerPanel: View {
         if isLastQuestion(question) {
             return request.submitLabel
         }
-        return isQuestionAnswered(question) ? "下一题" : "跳过"
+        return isQuestionAnswered(question) ? NSLocalizedString("下一题", comment: "") : NSLocalizedString("跳过", comment: "")
     }
 
     private func submit() {
@@ -4161,7 +4166,7 @@ private struct AudioRecorderSheet: View {
                 Spacer()
                 
                 if isTranscriptionInProgress {
-                    ProgressView("正在转换…")
+                    ProgressView(NSLocalizedString("正在转换…", comment: ""))
                         .progressViewStyle(.circular)
                     Text(NSLocalizedString("请稍候，正在将语音转换为文本。", comment: ""))
                         .etFont(.callout)
@@ -4196,7 +4201,7 @@ private struct AudioRecorderSheet: View {
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text(isSpeechToTextMode ? "点击开始识别" : "点击开始录音")
+                        Text(isSpeechToTextMode ? NSLocalizedString("点击开始识别", comment: "") : NSLocalizedString("点击开始录音", comment: ""))
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -4224,7 +4229,7 @@ private struct AudioRecorderSheet: View {
                 
                 Spacer()
             }
-            .navigationTitle(isSpeechToTextMode ? "语音输入" : "录制语音")
+            .navigationTitle(isSpeechToTextMode ? NSLocalizedString("语音输入", comment: "") : NSLocalizedString("录制语音", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -4274,7 +4279,7 @@ private struct AudioRecorderSheet: View {
 
                 let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
                 guard speechPermissionGranted else {
-                    processingErrorMessage = "语音识别权限被拒绝，请到设置中开启。"
+                    processingErrorMessage = NSLocalizedString("语音识别权限被拒绝，请到设置中开启。", comment: "")
                     return
                 }
 
@@ -4389,7 +4394,7 @@ private struct AudioRecorderSheet: View {
         if usesSystemStreamingRecognizer {
             let transcript = liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !transcript.isEmpty else {
-                processingErrorMessage = "未识别到有效语音内容。"
+                processingErrorMessage = NSLocalizedString("未识别到有效语音内容。", comment: "")
                 return
             }
             onCompleteTranscript(transcript)
@@ -4443,14 +4448,14 @@ private struct AudioRecorderSheet: View {
                         throw NSError(
                             domain: "AudioRecorderSheet",
                             code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: "当前未配置语音转写处理器。"]
+                            userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前未配置语音转写处理器。", comment: "")]
                         )
                     }
 
                     await MainActor.run {
                         let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmedTranscript.isEmpty else {
-                            processingErrorMessage = "未识别到有效语音内容。"
+                            processingErrorMessage = NSLocalizedString("未识别到有效语音内容。", comment: "")
                             isTranscriptionInProgress = false
                             return
                         }
@@ -4557,7 +4562,7 @@ private struct SessionPickerInfoSheet: View {
                         Text(payload.session.name)
                     }
                     LabeledContent(NSLocalizedString("状态", comment: "")) {
-                        Text(payload.isCurrent ? "当前会话" : "历史会话")
+                        Text(payload.isCurrent ? NSLocalizedString("当前会话", comment: "") : NSLocalizedString("历史会话", comment: ""))
                             .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
                     }
                     LabeledContent(NSLocalizedString("消息数量", comment: "")) {
@@ -4978,17 +4983,17 @@ private struct MessageInfoSheet: View {
         private func roleDescription(_ role: MessageRole) -> String {
             switch role {
             case .system:
-                return "系统"
+                return NSLocalizedString("系统", comment: "")
             case .user:
-                return "用户"
+                return NSLocalizedString("用户", comment: "")
             case .assistant:
-                return "助手"
+                return NSLocalizedString("助手", comment: "")
             case .tool:
-                return "工具"
+                return NSLocalizedString("工具", comment: "")
         case .error:
-            return "错误"
+            return NSLocalizedString("错误", comment: "")
         @unknown default:
-            return "未知"
+            return NSLocalizedString("未知", comment: "")
         }
     }
 

@@ -94,9 +94,9 @@ private struct StorageDirectoryBrowserView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if files.isEmpty {
                 ContentUnavailableView(
-                    emptyTitle,
+                    NSLocalizedString(emptyTitle, comment: "文件列表空状态标题"),
                     systemImage: "folder",
-                    description: Text(emptyDescription)
+                    description: Text(NSLocalizedString(emptyDescription, comment: "文件列表空状态说明"))
                 )
             } else {
                 fileListView
@@ -106,7 +106,7 @@ private struct StorageDirectoryBrowserView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if !files.isEmpty {
-                    Button(isEditing ? "完成" : "编辑") {
+                    Button(isEditing ? NSLocalizedString("完成", comment: "") : NSLocalizedString("编辑", comment: "")) {
                         withAnimation {
                             isEditing.toggle()
                             if !isEditing {
@@ -157,10 +157,10 @@ private struct StorageDirectoryBrowserView: View {
             }
 
             Section(NSLocalizedString("统计", comment: "")) {
-                infoRow(title: "文件夹", value: "\(folderCount)")
-                infoRow(title: "文件", value: "\(fileCount)")
-                infoRow(title: "可见项目", value: "\(files.count)")
-                infoRow(title: "文件总大小", value: StorageUtility.formatSize(totalFileSize))
+                infoRow(title: NSLocalizedString("文件夹", comment: ""), value: "\(folderCount)")
+                infoRow(title: NSLocalizedString("文件", comment: ""), value: "\(fileCount)")
+                infoRow(title: NSLocalizedString("可见项目", comment: ""), value: "\(files.count)")
+                infoRow(title: NSLocalizedString("文件总大小", comment: ""), value: StorageUtility.formatSize(totalFileSize))
             }
 
             Section {
@@ -171,7 +171,7 @@ private struct StorageDirectoryBrowserView: View {
                 Text(NSLocalizedString("内容", comment: ""))
             } footer: {
                 if let footerText {
-                    Text(footerText)
+                    Text(NSLocalizedString(footerText, comment: "文件列表底部说明"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -261,7 +261,7 @@ private struct StorageDirectoryBrowserView: View {
 
     private func infoRow(title: String, value: String) -> some View {
         HStack {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "文件列表统计标题"))
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
@@ -325,7 +325,7 @@ private struct FileRowView: View {
     private var subtitle: String {
         let date = file.modificationDate.formatted(date: .abbreviated, time: .shortened)
         if file.isDirectory {
-            return "文件夹 • \(date)"
+            return String(format: NSLocalizedString("文件夹 • %@", comment: ""), date)
         }
         return "\(StorageUtility.formatSize(file.size)) • \(date)"
     }
@@ -467,12 +467,12 @@ struct OtherFilesView: View {
 
     var body: some View {
         StorageDirectoryBrowserView(
-            title: "其他文件",
+            title: NSLocalizedString("其他文件", comment: ""),
             rootDirectory: rootDirectory,
             currentDirectory: rootDirectory,
-            emptyTitle: "暂无其他文件",
-            emptyDescription: "Documents 根目录下没有其他文件。",
-            footerText: "点击文件夹继续浏览，点击 JSON 文件可预览内容。",
+            emptyTitle: NSLocalizedString("暂无其他文件", comment: ""),
+            emptyDescription: NSLocalizedString("Documents 根目录下没有其他文件。", comment: ""),
+            footerText: NSLocalizedString("点击文件夹继续浏览，点击 JSON 文件可预览内容。", comment: ""),
             itemFilter: { item in
                 if item.isDirectory {
                     return !knownDirectories.contains(item.name)

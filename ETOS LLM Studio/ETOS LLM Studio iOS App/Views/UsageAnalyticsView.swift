@@ -308,13 +308,13 @@ struct UsageAnalyticsView: View {
     }
 
     private func sectionHeader(_ title: String) -> some View {
-        Text(title)
+        Text(NSLocalizedString(title, comment: "用量统计区块标题"))
             .etFont(.title3.weight(.semibold))
     }
 
     private func detailMetric(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "用量统计指标标题"))
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
             Text(value)
@@ -331,7 +331,7 @@ struct UsageAnalyticsView: View {
     private func rankedSection(title: String, emptyText: String, items: [UsageAnalyticsRankItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(title)
+                Text(NSLocalizedString(title, comment: "用量统计榜单标题"))
                     .etFont(.headline)
                 Spacer()
                 Text("Top \(min(items.count, 6))")
@@ -339,7 +339,7 @@ struct UsageAnalyticsView: View {
                     .foregroundStyle(.secondary)
             }
             if items.isEmpty {
-                Text(emptyText)
+                Text(NSLocalizedString(emptyText, comment: "用量统计空状态"))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -400,7 +400,7 @@ struct UsageAnalyticsView: View {
 
     private func overviewMetricCapsule(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "用量统计概览指标标题"))
                 .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(value)
@@ -433,11 +433,11 @@ struct UsageAnalyticsView: View {
     private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
         switch scope {
         case .day:
-            return "今日"
+            return NSLocalizedString("今日", comment: "")
         case .week:
-            return "本周"
+            return NSLocalizedString("本周", comment: "")
         case .month:
-            return "本月"
+            return NSLocalizedString("本月", comment: "")
         }
     }
 
@@ -451,16 +451,16 @@ struct UsageAnalyticsView: View {
     private func overviewSubtitle(for scope: UsageAnalyticsDetailScope) -> String {
         switch scope {
         case .day:
-            return "聚焦今天的模型请求情况"
+            return NSLocalizedString("聚焦今天的模型请求情况", comment: "")
         case .week:
-            return "查看本周整体用量趋势"
+            return NSLocalizedString("查看本周整体用量趋势", comment: "")
         case .month:
-            return "从月度角度回看使用密度"
+            return NSLocalizedString("从月度角度回看使用密度", comment: "")
         }
     }
 
     private var heatmapWeekdayMarkers: [String] {
-        ["", "一", "", "三", "", "五", ""]
+        ["", NSLocalizedString("一", comment: ""), "", NSLocalizedString("三", comment: ""), "", NSLocalizedString("五", comment: ""), ""]
     }
 
     private func heatmapMonthCell(for week: UsageAnalyticsHeatmapWeek) -> some View {
@@ -491,7 +491,7 @@ struct UsageAnalyticsView: View {
         if month == 1, let year = components.year {
             return "\(year)"
         }
-        return "\(month)月"
+        return String(format: NSLocalizedString("%d月", comment: ""), month)
     }
 
     private func legendHeatColor(level: Int) -> Color {

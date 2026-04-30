@@ -14,8 +14,8 @@ struct SpeechRecorderView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        let processingTitle = viewModel.sendSpeechAsAudio ? "正在发送…" : "正在转换…"
-        let processingDescription = viewModel.sendSpeechAsAudio ? "录音会作为音频附件发送给当前模型。" : "请稍候，正在将语音转换为文本。"
+        let processingTitle = viewModel.sendSpeechAsAudio ? NSLocalizedString("正在发送…", comment: "") : NSLocalizedString("正在转换…", comment: "")
+        let processingDescription = viewModel.sendSpeechAsAudio ? NSLocalizedString("录音会作为音频附件发送给当前模型。", comment: "") : NSLocalizedString("请稍候，正在将语音转换为文本。", comment: "")
         return VStack(spacing: 16) {
             if viewModel.speechTranscriptionInProgress {
                 ProgressView(processingTitle)
@@ -51,7 +51,7 @@ struct SpeechRecorderView: View {
                         .etFont(.system(size: 34))
                         .foregroundColor(.accentColor)
                         .padding(.top, 6)
-                    Text(viewModel.sendSpeechAsAudio ? "录音后将直接发送" : "准备录音")
+                    Text(viewModel.sendSpeechAsAudio ? NSLocalizedString("录音后将直接发送", comment: "") : NSLocalizedString("准备录音", comment: ""))
                         .etFont(.headline)
 
                     if !viewModel.speechStreamingTranscript.isEmpty {

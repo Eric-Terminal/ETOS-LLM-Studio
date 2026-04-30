@@ -44,9 +44,9 @@ public struct LocalDebugView: View {
                 Section(header: Text(NSLocalizedString("连接模式", comment: ""))) {
                     Toggle(isOn: $server.useHTTP) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
+                            Text(server.useHTTP ? NSLocalizedString("HTTP 轮询", comment: "") : "WebSocket")
                                 .etFont(.caption)
-                            Text(server.useHTTP ? "稳定但较慢" : "快速优先，失败自动回退 HTTP")
+                            Text(server.useHTTP ? NSLocalizedString("稳定但较慢", comment: "") : NSLocalizedString("快速优先，失败自动回退 HTTP", comment: ""))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -258,7 +258,7 @@ private struct StepItem: View {
                 .foregroundStyle(.white)
                 .frame(width: 16, height: 16)
                 .background(Circle().fill(.blue))
-            Text(text)
+            Text(NSLocalizedString(text, comment: "本地调试步骤文本"))
                 .etFont(.caption2)
         }
     }
@@ -276,9 +276,9 @@ private struct FeatureItem: View {
                 .foregroundStyle(.blue)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(name)
+                Text(NSLocalizedString(name, comment: "本地调试功能标题"))
                     .etFont(.caption.weight(.medium))
-                Text(desc)
+                Text(NSLocalizedString(desc, comment: "本地调试功能说明"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }

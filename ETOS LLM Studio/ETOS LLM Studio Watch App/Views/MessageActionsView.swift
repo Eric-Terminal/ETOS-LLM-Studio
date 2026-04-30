@@ -161,7 +161,7 @@ struct MessageActionsView: View {
                         dismiss()
                     } label: {
                         Label(
-                            ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "停止朗读" : "朗读消息",
+                            ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? NSLocalizedString("停止朗读", comment: "") : NSLocalizedString("朗读消息", comment: ""),
                             systemImage: ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "stop.circle" : "speaker.wave.2"
                         )
                     }
@@ -173,7 +173,7 @@ struct MessageActionsView: View {
                         dismiss()
                     } label: {
                         Label(
-                            isMathRenderingEnabled ? "取消渲染公式" : "渲染公式",
+                            isMathRenderingEnabled ? NSLocalizedString("取消渲染公式", comment: "") : NSLocalizedString("渲染公式", comment: ""),
                             systemImage: isMathRenderingEnabled ? "xmark.circle" : "function"
                         )
                     }
@@ -233,7 +233,7 @@ struct MessageActionsView: View {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Label(hasDisplayVersions ? "删除所有版本" : "删除消息", systemImage: "trash.fill")
+                    Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
                 }
             }
             
@@ -368,7 +368,7 @@ struct MessageActionsView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         } message: {
-            Text(hasDisplayVersions ? "删除后将无法恢复这条消息的所有版本。" : "删除后无法恢复这条消息。")
+            Text(hasDisplayVersions ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "") : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
         }
         .alert(NSLocalizedString("确认删除当前版本", comment: ""), isPresented: $showDeleteVersionConfirm) {
             Button(NSLocalizedString("删除", comment: ""), role: .destructive) {

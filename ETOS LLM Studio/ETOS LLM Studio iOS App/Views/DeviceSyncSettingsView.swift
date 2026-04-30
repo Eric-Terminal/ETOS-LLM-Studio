@@ -218,7 +218,7 @@ struct DeviceSyncSettingsView: View {
         )) {
             Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
         } message: {
-            Text(exportErrorMessage ?? "未知错误")
+            Text(exportErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
         .alert(NSLocalizedString("上传失败", comment: ""), isPresented: Binding(
             get: { uploadErrorMessage != nil },
@@ -226,7 +226,7 @@ struct DeviceSyncSettingsView: View {
         )) {
             Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
         } message: {
-            Text(uploadErrorMessage ?? "未知错误")
+            Text(uploadErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
     }
     
@@ -415,7 +415,7 @@ struct DeviceSyncSettingsView: View {
             exportErrorMessage = nil
         } catch {
             exportErrorMessage = String(
-                format: "导出失败：%@",
+                format: NSLocalizedString("导出失败：%@", comment: ""),
                 error.localizedDescription
             )
         }
@@ -424,13 +424,13 @@ struct DeviceSyncSettingsView: View {
     private func uploadDataPackage() {
         let trimmed = backupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            uploadErrorMessage = "请先输入上传地址。"
+            uploadErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
             return
         }
         guard let endpoint = URL(string: trimmed),
               let scheme = endpoint.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            uploadErrorMessage = "上传地址格式无效，请输入完整的 http/https URL。"
+            uploadErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
             return
         }
 
@@ -445,7 +445,7 @@ struct DeviceSyncSettingsView: View {
                 let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
                 await MainActor.run {
                     isUploading = false
-                    uploadSuccessMessage = "上传成功（HTTP \(result.statusCode)）"
+                    uploadSuccessMessage = String(format: NSLocalizedString("上传成功（HTTP %d）", comment: ""), result.statusCode)
                     uploadResponsePreview = result.responseBodyPreview
                 }
             } catch {
