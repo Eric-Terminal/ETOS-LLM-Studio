@@ -309,6 +309,7 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private func settingsStatusLabel(
         _ titleKey: String,
         icon: SettingsListIcon,
