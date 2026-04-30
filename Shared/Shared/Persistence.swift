@@ -639,9 +639,12 @@ public enum Persistence {
     }
 
     @discardableResult
-    public static func scheduleLaunchBackupPointAfterStartupIfEnabled(
-        delay: TimeInterval = deferredLaunchBackupDelay
-    ) -> Task<Void, Never>? {
+    public static func scheduleLaunchBackupPointAfterStartupIfEnabled() -> Task<Void, Never>? {
+        scheduleLaunchBackupPointAfterStartupIfEnabled(delay: deferredLaunchBackupDelay)
+    }
+
+    @discardableResult
+    public static func scheduleLaunchBackupPointAfterStartupIfEnabled(delay: TimeInterval) -> Task<Void, Never>? {
         guard UserDefaults.standard.bool(forKey: launchBackupEnabledKey) else { return nil }
 
         launchBackupAndRecoveryLock.lock()
