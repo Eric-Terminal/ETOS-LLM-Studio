@@ -196,7 +196,7 @@ struct ImageGenerationFeatureView: View {
                 } else if viewModel.supportsImageGeneration(for: selectedImageModel) {
                     Text(NSLocalizedString("生成结果会写入当前会话，返回聊天页即可查看。", comment: ""))
                 } else {
-                    Text(NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: ""))
+                    Text(NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像、启用图像输出或原生生图。", comment: "模型没有图像输出能力提示"))
                 }
             }
 
@@ -473,7 +473,7 @@ struct ImageGenerationFeatureView: View {
         }
 
         guard viewModel.supportsImageGeneration(for: selectedImageModel) else {
-            viewModel.addErrorMessage(NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability"))
+            viewModel.addErrorMessage(NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像、启用图像输出或原生生图。", comment: "模型没有图像输出能力提示"))
             return
         }
 

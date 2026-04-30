@@ -458,6 +458,25 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.requestBodyOverrideMode == .expression)
         #expect(decoded.rawRequestBodyJSON == nil)
     }
+
+    @Test("旧模型能力解码会迁移到新能力结构")
+    func testLegacyModelCapabilitiesDecodeIntoNewShape() throws {
+        let legacyJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000124",
+          "modelName": "legacy-vision-image",
+          "capabilities": ["chat", "toolCalling", "imageGeneration"]
+        }
+        """
+        let data = Data(legacyJSON.utf8)
+        let decoded = try JSONDecoder().decode(Model.self, from: data)
+
+        #expect(decoded.kind == .chat)
+        #expect(decoded.capabilities.contains(.toolCalling))
+        #expect(decoded.outputModalities.contains(.image))
+        #expect(decoded.builtInTools.contains(.imageGeneration))
+        #expect(decoded.supportsImageGeneration)
+    }
 }
 
 
@@ -951,7 +970,7 @@ struct CloudEmbeddingServiceTests {
             id: modelID,
             modelName: "gemini-embedding-001",
             displayName: "Gemini Embedding",
-            capabilities: [.embedding]
+            kind: .embedding
         )
         let provider = Provider(
             id: providerID,
@@ -1030,9 +1049,42 @@ struct OpenAIAdapterTests {
         let openAIEmbedding = models.first { $0.modelName == "text-embedding-3-large" }
         let chatModel = models.first { $0.modelName == "gpt-4o" }
 
-        #expect(geminiEmbedding?.capabilities == [.embedding])
-        #expect(openAIEmbedding?.capabilities == [.embedding])
+        #expect(geminiEmbedding?.kind == .embedding)
+        #expect(openAIEmbedding?.kind == .embedding)
         #expect(chatModel?.supportsEmbedding == false)
+        #expect(chatModel?.kind == .chat)
+        #expect(chatModel?.supportsVisionInput == true)
+    }
+
+    @Test("OpenAI 兼容模型列表会推断主用途、推理、视觉和生图能力")
+    func testOpenAIModelListInfersNewCapabilityShape() throws {
+        let data = Data("""
+        {
+          "data": [
+            { "id": "bge-reranker-v2" },
+            { "id": "gpt-image-1" },
+            { "id": "deepseek-r1" },
+            { "id": "qwen-vl-max" },
+            { "id": "plain-chat" }
+          ]
+        }
+        """.utf8)
+
+        let models = try adapter.parseModelListResponse(data: data)
+        let rerankModel = models.first { $0.modelName == "bge-reranker-v2" }
+        let imageModel = models.first { $0.modelName == "gpt-image-1" }
+        let reasoningModel = models.first { $0.modelName == "deepseek-r1" }
+        let visionModel = models.first { $0.modelName == "qwen-vl-max" }
+        let chatModel = models.first { $0.modelName == "plain-chat" }
+
+        #expect(rerankModel?.kind == .rerank)
+        #expect(imageModel?.kind == .image)
+        #expect(imageModel?.supportsImageGeneration == true)
+        #expect(reasoningModel?.capabilities.contains(.reasoning) == true)
+        #expect(visionModel?.supportsVisionInput == true)
+        #expect(chatModel?.kind == .chat)
+        #expect(chatModel?.supportsToolCalling == true)
+        #expect(chatModel?.supportsVisionInput == false)
     }
 
     private var saveMemoryTool: InternalToolDefinition {
@@ -2043,9 +2095,10 @@ struct GeminiAdapterTests {
         let embeddingModel = models.first { $0.modelName == "gemini-embedding-001" }
         let chatModel = models.first { $0.modelName == "gemini-2.5-pro" }
 
-        #expect(embeddingModel?.capabilities == [.embedding])
+        #expect(embeddingModel?.kind == .embedding)
         #expect(chatModel?.supportsEmbedding == false)
-        #expect(chatModel?.capabilities.contains(.chat) == true)
+        #expect(chatModel?.kind == .chat)
+        #expect(chatModel?.capabilities.contains(.toolCalling) == true)
     }
 
     @Test("Gemini 嵌入请求使用原生端点并修正官方 OpenAI 兼容基址")
@@ -2059,7 +2112,7 @@ struct GeminiAdapterTests {
         )
         let model = RunnableModel(
             provider: provider,
-            model: Model(modelName: "gemini-embedding-001", capabilities: [.embedding])
+            model: Model(modelName: "gemini-embedding-001", kind: .embedding)
         )
 
         let request = try #require(adapter.buildEmbeddingRequest(for: model, texts: ["第一段", "第二段"]))
@@ -2872,7 +2925,7 @@ fileprivate struct ChatServiceTests {
     }
 
     private func activatedChatModels() -> [RunnableModel] {
-        chatService.activatedRunnableModels.filter { $0.model.capabilities.contains(.chat) }
+        chatService.activatedRunnableModels.filter { $0.model.isChatModel }
     }
 
     @Test("Chat request writes independent request log")

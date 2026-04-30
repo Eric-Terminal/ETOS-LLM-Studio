@@ -200,7 +200,7 @@ struct ChatServiceShortcutToolTests {
                     modelName: "test-model",
                     displayName: "Test Model",
                     isActivated: true,
-                    capabilities: [.chat]
+                    capabilities: [ModelCapability]()
                 )
             ]
         )

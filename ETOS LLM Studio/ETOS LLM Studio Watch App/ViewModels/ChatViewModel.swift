@@ -230,23 +230,23 @@ class ChatViewModel: ObservableObject {
     }
     
     var embeddingModelOptions: [RunnableModel] {
-        configuredModels.filter { $0.model.supportsEmbedding }
+        configuredModels.filter { $0.model.kind == .embedding }
     }
 
     var titleGenerationModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+        activatedModels.filter { $0.model.kind == .chat }
     }
 
     var dailyPulseModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+        activatedModels.filter { $0.model.kind == .chat }
     }
 
     var conversationSummaryModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+        activatedModels.filter { $0.model.kind == .chat }
     }
 
     var reasoningSummaryModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.capabilities.contains(.chat) }
+        activatedModels.filter { $0.model.kind == .chat }
     }
 
     func toggleMathRendering(for messageID: UUID) {
@@ -829,14 +829,7 @@ class ChatViewModel: ObservableObject {
 
     func supportsImageGeneration(for runnableModel: RunnableModel?) -> Bool {
         guard let runnableModel else { return false }
-        if runnableModel.model.supportsImageGeneration {
-            return true
-        }
-        let lowered = runnableModel.model.modelName.lowercased()
-        return lowered.contains("gpt-image")
-            || lowered.contains("imagen")
-            || lowered.contains("image")
-            || lowered.contains("dall")
+        return runnableModel.model.supportsImageGeneration
     }
 
     func imageGenerationModel(with identifier: String) -> RunnableModel? {

@@ -1538,9 +1538,33 @@ public enum SyncEngine {
             changed = true
         }
 
+        let mergedKind = mergeModelKind(merged.kind, incoming.kind)
+        if mergedKind != merged.kind {
+            merged.kind = mergedKind
+            changed = true
+        }
+
+        let mergedInputModalities = mergeModelModalities(merged.inputModalities, incoming.inputModalities)
+        if mergedInputModalities != merged.inputModalities {
+            merged.inputModalities = mergedInputModalities
+            changed = true
+        }
+
+        let mergedOutputModalities = mergeModelModalities(merged.outputModalities, incoming.outputModalities)
+        if mergedOutputModalities != merged.outputModalities {
+            merged.outputModalities = mergedOutputModalities
+            changed = true
+        }
+
         let mergedCapabilities = mergeCapabilities(merged.capabilities, incoming.capabilities)
         if mergedCapabilities != merged.capabilities {
             merged.capabilities = mergedCapabilities
+            changed = true
+        }
+
+        let mergedBuiltInTools = mergeBuiltInTools(merged.builtInTools, incoming.builtInTools)
+        if mergedBuiltInTools != merged.builtInTools {
+            merged.builtInTools = mergedBuiltInTools
             changed = true
         }
 
@@ -2086,9 +2110,33 @@ public enum SyncEngine {
             changed = true
         }
 
+        let mergedKind = mergeModelKind(local.kind, incoming.kind)
+        if mergedKind != local.kind {
+            merged.kind = mergedKind
+            changed = true
+        }
+
+        let mergedInputModalities = mergeModelModalities(local.inputModalities, incoming.inputModalities)
+        if mergedInputModalities != local.inputModalities {
+            merged.inputModalities = mergedInputModalities
+            changed = true
+        }
+
+        let mergedOutputModalities = mergeModelModalities(local.outputModalities, incoming.outputModalities)
+        if mergedOutputModalities != local.outputModalities {
+            merged.outputModalities = mergedOutputModalities
+            changed = true
+        }
+
         let mergedCapabilities = mergeCapabilities(local.capabilities, incoming.capabilities)
         if mergedCapabilities != local.capabilities {
             merged.capabilities = mergedCapabilities
+            changed = true
+        }
+
+        let mergedBuiltInTools = mergeBuiltInTools(local.builtInTools, incoming.builtInTools)
+        if mergedBuiltInTools != local.builtInTools {
+            merged.builtInTools = mergedBuiltInTools
             changed = true
         }
 
@@ -2195,14 +2243,40 @@ public enum SyncEngine {
     }
 
     private static func mergeCapabilities(
-        _ local: [Model.Capability],
-        _ incoming: [Model.Capability]
-    ) -> [Model.Capability] {
+        _ local: [ModelCapability],
+        _ incoming: [ModelCapability]
+    ) -> [ModelCapability] {
         var merged = local
         for capability in incoming where !merged.contains(capability) {
             merged.append(capability)
         }
-        return merged.isEmpty ? Model.defaultCapabilities : merged
+        return Model.orderedCapabilities(merged)
+    }
+
+    private static func mergeModelKind(_ local: ModelKind, _ incoming: ModelKind) -> ModelKind {
+        local == .chat && incoming != .chat ? incoming : local
+    }
+
+    private static func mergeModelModalities(
+        _ local: [ModelModality],
+        _ incoming: [ModelModality]
+    ) -> [ModelModality] {
+        var merged = local
+        for modality in incoming where !merged.contains(modality) {
+            merged.append(modality)
+        }
+        return Model.orderedModalities(merged)
+    }
+
+    private static func mergeBuiltInTools(
+        _ local: [ModelBuiltInTool],
+        _ incoming: [ModelBuiltInTool]
+    ) -> [ModelBuiltInTool] {
+        var merged = local
+        for tool in incoming where !merged.contains(tool) {
+            merged.append(tool)
+        }
+        return Model.orderedBuiltInTools(merged)
     }
 
     private static func mergeRequestBodyOverrideMode(
@@ -2587,10 +2661,20 @@ public enum SyncEngine {
             hasher.combine(model.modelName)
             hasher.combine(model.displayName)
             hasher.combine(model.isActivated)
+            hasher.combine(model.kind.rawValue)
+            for modality in model.inputModalities.sorted(by: { $0.rawValue < $1.rawValue }) {
+                hasher.combine("input:\(modality.rawValue)")
+            }
+            for modality in model.outputModalities.sorted(by: { $0.rawValue < $1.rawValue }) {
+                hasher.combine("output:\(modality.rawValue)")
+            }
             hasher.combine(model.requestBodyOverrideMode.rawValue)
             hasher.combine(model.rawRequestBodyJSON ?? "")
             for capability in model.capabilities.sorted(by: { $0.rawValue < $1.rawValue }) {
                 hasher.combine(capability.rawValue)
+            }
+            for tool in model.builtInTools.sorted(by: { $0.rawValue < $1.rawValue }) {
+                hasher.combine("builtIn:\(tool.rawValue)")
             }
             for (key, value) in model.overrideParameters.sorted(by: { $0.key < $1.key }) {
                 hasher.combine(key)

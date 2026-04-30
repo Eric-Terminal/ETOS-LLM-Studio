@@ -210,7 +210,7 @@ struct DailyPulseTests {
 
     @Test("无当前聊天模型时会回退到首个可用聊天模型")
     func resolveGenerationModelFallsBackToFirstChatModel() {
-        let embeddingOnly = makeRunnableModel(name: "embed-only", capabilities: [.embedding])
+        let embeddingOnly = makeRunnableModel(name: "embed-only", kind: .embedding)
         let chatFallback = makeRunnableModel(name: "chat-fallback")
         let resolved = DailyPulseManager.resolveGenerationModel(
             dedicatedModelIdentifier: "",
@@ -967,13 +967,13 @@ struct DailyPulseTests {
 
     private func makeRunnableModel(
         name: String,
-        capabilities: [Model.Capability] = [.chat]
+        kind: ModelKind = .chat
     ) -> RunnableModel {
         let model = Model(
             modelName: name,
             displayName: name,
             isActivated: true,
-            capabilities: capabilities
+            kind: kind
         )
         let provider = Provider(
             name: "\(name)-provider",

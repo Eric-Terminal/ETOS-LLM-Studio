@@ -1120,14 +1120,14 @@ public final class DailyPulseManager: ObservableObject {
         selectedModel: RunnableModel?,
         activatedModels: [RunnableModel]
     ) -> RunnableModel? {
-        let chatCapableModels = activatedModels.filter { $0.model.capabilities.contains(.chat) }
+        let chatCapableModels = activatedModels.filter { $0.model.isChatModel }
 
         if !dedicatedModelIdentifier.isEmpty,
            let dedicatedModel = chatCapableModels.first(where: { $0.id == dedicatedModelIdentifier }) {
             return dedicatedModel
         }
 
-        if let selectedModel, selectedModel.model.capabilities.contains(.chat) {
+        if let selectedModel, selectedModel.model.isChatModel {
             return selectedModel
         }
 

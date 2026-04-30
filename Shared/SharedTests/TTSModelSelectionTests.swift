@@ -8,7 +8,7 @@ struct TTSModelSelectionTests {
 
     @Test("模型能力支持 textToSpeech")
     func testModelSupportsTextToSpeechCapability() {
-        let model = Model(modelName: "gpt-4o-mini-tts", capabilities: [.chat, .textToSpeech])
+        let model = Model(modelName: "gpt-4o-mini-tts", kind: .textToSpeech)
         #expect(model.supportsTextToSpeech)
     }
 
@@ -27,8 +27,8 @@ struct TTSModelSelectionTests {
 
         clearAllProviders()
 
-        let ttsModel = Model(modelName: "gpt-4o-mini-tts", displayName: "TTS", isActivated: true, capabilities: [.chat, .textToSpeech])
-        let normalModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: true, capabilities: [.chat])
+        let ttsModel = Model(modelName: "gpt-4o-mini-tts", displayName: "TTS", isActivated: true, kind: .textToSpeech)
+        let normalModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: true)
         let provider = Provider(
             name: "TTS Provider",
             baseURL: "https://example.com/v1",
@@ -60,7 +60,7 @@ struct TTSModelSelectionTests {
 
         clearAllProviders()
 
-        let chatModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: true, capabilities: [.chat])
+        let chatModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: true)
         let provider = Provider(
             name: "Chat Provider",
             baseURL: "https://example.com/v1",
@@ -97,15 +97,13 @@ struct TTSModelSelectionTests {
             id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
             modelName: "deleted-model",
             displayName: "待删除模型",
-            isActivated: true,
-            capabilities: [.chat]
+            isActivated: true
         )
         let fallbackModel = Model(
             id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
             modelName: "fallback-model",
             displayName: "备用模型",
-            isActivated: true,
-            capabilities: [.chat]
+            isActivated: true
         )
         let deletedProvider = Provider(
             id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,

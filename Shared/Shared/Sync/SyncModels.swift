@@ -649,7 +649,11 @@ extension Model {
         displayName == other.displayName &&
         isActivated == other.isActivated &&
         overrideParameters == other.overrideParameters &&
+        kind == other.kind &&
+        inputModalities == other.inputModalities &&
+        outputModalities == other.outputModalities &&
         capabilities == other.capabilities &&
+        builtInTools == other.builtInTools &&
         requestBodyOverrideMode == other.requestBodyOverrideMode &&
         rawRequestBodyJSON == other.rawRequestBodyJSON
     }

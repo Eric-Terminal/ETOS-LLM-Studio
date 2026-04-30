@@ -7,7 +7,7 @@ struct SpeechModelSelectionTests {
 
     @Test("模型能力支持 speechToText")
     func testModelSupportsSpeechToTextCapability() {
-        let model = Model(modelName: "gpt-4o-transcribe", capabilities: [.speechToText])
+        let model = Model(modelName: "gpt-4o-transcribe", kind: .speechToText)
         #expect(model.supportsSpeechToText)
     }
 
@@ -36,13 +36,12 @@ struct SpeechModelSelectionTests {
             modelName: "gpt-4o-transcribe",
             displayName: "云端语音",
             isActivated: true,
-            capabilities: [.speechToText]
+            kind: .speechToText
         )
         let chatModel = Model(
             modelName: "gpt-4o",
             displayName: "普通聊天",
-            isActivated: true,
-            capabilities: [.chat]
+            isActivated: true
         )
         let provider = Provider(
             name: "Speech Provider",

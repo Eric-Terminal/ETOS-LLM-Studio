@@ -32,7 +32,7 @@ struct ChatServiceImageRoutingTests {
                     modelName: "test-image-model",
                     displayName: "Test Image Model",
                     isActivated: true,
-                    capabilities: [.chat, .imageGeneration]
+                    kind: .image
                 )
             ]
         )
@@ -87,7 +87,7 @@ struct ChatServiceImageRoutingTests {
                     modelName: "test-image-model",
                     displayName: "Test Image Model",
                     isActivated: true,
-                    capabilities: [.chat, .imageGeneration]
+                    kind: .image
                 )
             ]
         )

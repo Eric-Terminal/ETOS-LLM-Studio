@@ -127,7 +127,7 @@ public class ChatService {
             modelName: "sf-speech-recognizer",
             displayName: "SFSpeechRecognizer",
             isActivated: true,
-            capabilities: [.speechToText]
+            kind: .speechToText
         )
         return RunnableModel(provider: provider, model: model)
     }()
@@ -2447,7 +2447,7 @@ public class ChatService {
             resetConsecutiveRetryTracking()
         }
 
-        // 若当前模型具备生图能力，则主聊天输入直接切到生图请求通道。
+        // 若当前模型具备图像输出能力，则主聊天输入直接切到生图请求通道。
         if let selectedModel = selectedModelSubject.value,
            shouldRouteMessageToImageGeneration(using: selectedModel) {
             if audioAttachment != nil {
@@ -2782,8 +2782,8 @@ public class ChatService {
             return
         }
 
-        guard runnableModel.model.supportsImageGeneration || likelyImageGenerationModelName(runnableModel.model.modelName) else {
-            let reason = NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: "Model has no image generation capability")
+        guard runnableModel.model.supportsImageGeneration else {
+            let reason = NSLocalizedString("当前模型未启用图像输出，请在模型设置中将主用途设为图像、启用图像输出或原生生图。", comment: "模型没有图像输出能力提示")
             addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
@@ -3991,17 +3991,8 @@ public class ChatService {
         )
     }
 
-    private func likelyImageGenerationModelName(_ modelName: String) -> Bool {
-        let lowered = modelName.lowercased()
-        return lowered.contains("gpt-image")
-            || lowered.contains("imagen")
-            || lowered.contains("image")
-            || lowered.contains("dall")
-    }
-
     private func shouldRouteMessageToImageGeneration(using runnableModel: RunnableModel) -> Bool {
         runnableModel.model.supportsImageGeneration
-            || likelyImageGenerationModelName(runnableModel.model.modelName)
     }
 
     private func executeImageGenerationRequest(
@@ -6729,7 +6720,7 @@ public class ChatService {
     }
 
     private func resolvedChatCapableModel(storedIdentifier: String? = nil) -> RunnableModel? {
-        let candidates = activatedRunnableModels.filter { $0.model.capabilities.contains(.chat) }
+        let candidates = activatedRunnableModels.filter { $0.model.isChatModel }
         guard !candidates.isEmpty else { return nil }
 
         if let storedIdentifier, !storedIdentifier.isEmpty,
@@ -6738,7 +6729,7 @@ public class ChatService {
         }
 
         if let selected = selectedModelSubject.value,
-           selected.model.capabilities.contains(.chat) {
+           selected.model.isChatModel {
             return selected
         }
 
@@ -7313,7 +7304,7 @@ public class ChatService {
         let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
         if !dedicatedModelIdentifier.isEmpty,
            let dedicatedModel = activatedRunnableModels.first(
-                where: { $0.id == dedicatedModelIdentifier && $0.model.capabilities.contains(.chat) }
+                where: { $0.id == dedicatedModelIdentifier && $0.model.isChatModel }
            ) {
             return dedicatedModel
         }

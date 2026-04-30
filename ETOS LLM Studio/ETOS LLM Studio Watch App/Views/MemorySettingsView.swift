@@ -143,7 +143,7 @@ public struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("嵌入模型", comment: ""))
             } footer: {
-                Text(NSLocalizedString("这里只列出支持嵌入能力的模型，记忆嵌入会调用所选模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。", comment: ""))
+                Text(NSLocalizedString("这里只列出主用途为嵌入的模型，记忆嵌入会调用所选模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

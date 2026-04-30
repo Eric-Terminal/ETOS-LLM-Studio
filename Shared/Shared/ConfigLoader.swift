@@ -59,6 +59,13 @@ public struct ConfigLoader {
         let didScanProviderDirectory: Bool
     }
 
+    private static let jsonDecoder = JSONDecoder()
+    private static let jsonEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }()
+
     /// 获取用户专属的根目录 URL
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -371,6 +378,10 @@ public struct ConfigLoader {
                         modelName: model.modelName,
                         displayName: model.displayName,
                         isActivated: model.isActivated ? 1 : 0,
+                        kind: model.kind.rawValue,
+                        inputModalitiesJSON: encodeRawValues(model.inputModalities),
+                        outputModalitiesJSON: encodeRawValues(model.outputModalities),
+                        builtInToolsJSON: encodeRawValues(model.builtInTools),
                         requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
                         rawRequestBodyJSON: model.rawRequestBodyJSON,
                         sortIndex: modelIndex,
@@ -487,11 +498,13 @@ public struct ConfigLoader {
                 let modelIDRaw = modelRow.id
                 let modelID = UUID(uuidString: modelIDRaw) ?? UUID()
 
-                let capabilities = try RelationalProviderModelCapabilityRecord
+                let rawCapabilities = try RelationalProviderModelCapabilityRecord
                     .filter(RelationalProviderModelCapabilityRecord.Columns.modelID == modelIDRaw)
                     .fetchAll(db)
                     .sorted { $0.sortIndex < $1.sortIndex }
-                    .compactMap { Model.Capability(rawValue: $0.capability) }
+                    .map(\.capability)
+
+                let capabilities = Model.orderedCapabilities(rawCapabilities.compactMap(ModelCapability.init(rawValue:)))
 
                 let overrideRows = try RelationalProviderModelOverrideParameterRecord
                     .filter(RelationalProviderModelOverrideParameterRecord.Columns.modelID == modelIDRaw)
@@ -518,7 +531,12 @@ public struct ConfigLoader {
                     displayName: modelRow.displayName,
                     isActivated: modelRow.isActivated != 0,
                     overrideParameters: overrideParameters,
+                    kind: modelRow.kind.flatMap(ModelKind.init(rawValue:)),
+                    inputModalities: decodeRawValues(modelRow.inputModalitiesJSON, as: ModelModality.self),
+                    outputModalities: decodeRawValues(modelRow.outputModalitiesJSON, as: ModelModality.self),
                     capabilities: capabilities,
+                    builtInTools: decodeRawValues(modelRow.builtInToolsJSON, as: ModelBuiltInTool.self) ?? [],
+                    legacyCapabilityRawValues: rawCapabilities,
                     requestBodyOverrideMode: requestBodyOverrideMode,
                     rawRequestBodyJSON: modelRow.rawRequestBodyJSON
                 )
@@ -591,18 +609,36 @@ public struct ConfigLoader {
 
     /// 旧版本没有“工具”能力开关，需要在首次迁移时补齐默认值（开启）。
     private static func migrateToolCallingCapabilityIfNeeded(for provider: inout Provider) -> Bool {
-        let orderedCapabilities: [Model.Capability] = [.chat, .toolCalling, .speechToText, .textToSpeech, .embedding, .imageGeneration]
         var didRepair = false
         for index in provider.models.indices {
             var capabilitySet = Set(provider.models[index].capabilities)
+            guard provider.models[index].kind == .chat else { continue }
             guard !capabilitySet.contains(.toolCalling) else { continue }
             capabilitySet.insert(.toolCalling)
-            provider.models[index].capabilities = orderedCapabilities.filter { capabilitySet.contains($0) }
+            provider.models[index].capabilities = Model.orderedCapabilities(Array(capabilitySet))
             didRepair = true
         }
         return didRepair
     }
-    
+
+    private static func encodeRawValues<T: RawRepresentable>(_ values: [T]) -> String where T.RawValue == String {
+        let rawValues = values.map(\.rawValue)
+        guard let data = try? jsonEncoder.encode(rawValues),
+              let text = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return text
+    }
+
+    private static func decodeRawValues<T: RawRepresentable>(_ text: String?, as type: T.Type) -> [T]? where T.RawValue == String {
+        guard let text,
+              let data = text.data(using: .utf8),
+              let rawValues = try? jsonDecoder.decode([String].self, from: data) else {
+            return nil
+        }
+        return rawValues.compactMap(T.init(rawValue:))
+    }
+
     /// 将单个提供商的配置保存（或更新）到其对应的 JSON 文件。
     /// - Parameter provider: 需要保存的 `Provider` 对象。
     public static func saveProvider(_ provider: Provider) {
@@ -844,6 +880,10 @@ public struct ConfigLoader {
             case modelName = "model_name"
             case displayName = "display_name"
             case isActivated = "is_activated"
+            case kind
+            case inputModalitiesJSON = "input_modalities_json"
+            case outputModalitiesJSON = "output_modalities_json"
+            case builtInToolsJSON = "built_in_tools_json"
             case requestBodyOverrideMode = "request_body_override_mode"
             case rawRequestBodyJSON = "raw_request_body_json"
             case sortIndex = "sort_index"
@@ -859,6 +899,10 @@ public struct ConfigLoader {
         var modelName: String
         var displayName: String
         var isActivated: Int
+        var kind: String?
+        var inputModalitiesJSON: String?
+        var outputModalitiesJSON: String?
+        var builtInToolsJSON: String?
         var requestBodyOverrideMode: String?
         var rawRequestBodyJSON: String?
         var sortIndex: Int

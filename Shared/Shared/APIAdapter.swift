@@ -286,21 +286,6 @@ public class OpenAIAdapter: APIAdapter {
         return "\(prefix)_\(hash)"
     }
 
-    private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
-        let lowered = modelName.lowercased()
-        if lowered.contains("embedding") || lowered.contains("embed") {
-            return [.embedding]
-        }
-        var capabilities: [Model.Capability] = Model.defaultCapabilities
-        if lowered.contains("tts") || lowered.contains("text-to-speech") || lowered.contains("speech") {
-            capabilities.append(.textToSpeech)
-        }
-        if lowered.contains("gpt-image") || lowered.contains("image") || lowered.contains("dall") {
-            capabilities.append(.imageGeneration)
-        }
-        return capabilities
-    }
-
     private func normalizedOpenAIToolParameters(_ parameters: [String: Any]) -> [String: Any] {
         normalizedOpenAISchemaValue(parameters) as? [String: Any] ?? parameters
     }
@@ -1590,10 +1575,7 @@ public class OpenAIAdapter: APIAdapter {
     public func parseModelListResponse(data: Data) throws -> [Model] {
         let modelResponse = try JSONDecoder().decode(ModelListResponse.self, from: data)
         return modelResponse.data.map { modelInfo in
-            Model(
-                modelName: modelInfo.id,
-                capabilities: inferredCapabilities(for: modelInfo.id)
-            )
+            Model.inferred(modelName: modelInfo.id)
         }
     }
     
@@ -2002,48 +1984,6 @@ public class GeminiAdapter: APIAdapter {
         let prefixLength = maxLength - 1 - hash.count
         let prefix = name.prefix(prefixLength)
         return "\(prefix)_\(hash)"
-    }
-
-    private func inferredCapabilities(for modelName: String) -> [Model.Capability] {
-        let lowered = modelName.lowercased()
-        if lowered.contains("embedding") || lowered.contains("embed") {
-            return [.embedding]
-        }
-        var capabilities: [Model.Capability] = Model.defaultCapabilities
-        if lowered.contains("tts") || lowered.contains("speech") {
-            capabilities.append(.textToSpeech)
-        }
-        if lowered.contains("imagen") || lowered.contains("image") {
-            capabilities.append(.imageGeneration)
-        }
-        return capabilities
-    }
-
-    private func inferredCapabilities(for modelName: String, supportedGenerationMethods: [String]?) -> [Model.Capability] {
-        guard let supportedGenerationMethods else {
-            return inferredCapabilities(for: modelName)
-        }
-
-        var capabilities: [Model.Capability] = []
-        if supportedGenerationMethods.contains("generateContent") || supportedGenerationMethods.contains("streamGenerateContent") {
-            capabilities.append(contentsOf: Model.defaultCapabilities)
-        }
-        if supportedGenerationMethods.contains("embedContent") ||
-            supportedGenerationMethods.contains("batchEmbedContents") ||
-            supportedGenerationMethods.contains("asyncBatchEmbedContent") {
-            capabilities.append(.embedding)
-        }
-
-        guard !capabilities.isEmpty else {
-            return inferredCapabilities(for: modelName)
-        }
-        return orderedUniqueCapabilities(capabilities)
-    }
-
-    private func orderedUniqueCapabilities(_ capabilities: [Model.Capability]) -> [Model.Capability] {
-        let capabilitySet = Set(capabilities)
-        let orderedCapabilities: [Model.Capability] = [.chat, .toolCalling, .speechToText, .textToSpeech, .embedding, .imageGeneration]
-        return orderedCapabilities.filter { capabilitySet.contains($0) }
     }
 
     private func normalizedGeminiBaseURL(from rawBaseURL: String) -> URL? {
@@ -2814,13 +2754,10 @@ public class GeminiAdapter: APIAdapter {
         return supportedModels.map { info in
             let rawName = info.name
             let normalizedName = rawName.hasPrefix("models/") ? String(rawName.dropFirst("models/".count)) : rawName
-            return Model(
+            return Model.inferred(
                 modelName: normalizedName,
                 displayName: info.displayName,
-                capabilities: inferredCapabilities(
-                    for: normalizedName,
-                    supportedGenerationMethods: info.supportedGenerationMethods
-                )
+                supportedGenerationMethods: info.supportedGenerationMethods
             )
         }
     }

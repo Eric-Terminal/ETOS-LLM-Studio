@@ -4010,6 +4010,10 @@ final class PersistenceAuxiliaryGRDBStore {
                         model_name TEXT NOT NULL,
                         display_name TEXT NOT NULL,
                         is_activated INTEGER NOT NULL,
+                        kind TEXT,
+                        input_modalities_json TEXT,
+                        output_modalities_json TEXT,
+                        built_in_tools_json TEXT,
                         request_body_override_mode TEXT NOT NULL,
                         raw_request_body_json TEXT,
                         sort_index INTEGER NOT NULL,
@@ -4671,6 +4675,29 @@ final class PersistenceAuxiliaryGRDBStore {
                         FOREIGN KEY(selected_entry_id) REFERENCES global_system_prompt_entries(id) ON DELETE SET NULL
                     )
                 """)
+            }
+
+            migrator.registerMigration("v7_add_provider_model_capability_shape") { db in
+                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                    return columns.contains { row in
+                        let name: String = row["name"]
+                        return name == columnName
+                    }
+                }
+
+                if !(try tableHasColumn("provider_models", columnName: "kind")) {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN kind TEXT")
+                }
+                if !(try tableHasColumn("provider_models", columnName: "input_modalities_json")) {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN input_modalities_json TEXT")
+                }
+                if !(try tableHasColumn("provider_models", columnName: "output_modalities_json")) {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN output_modalities_json TEXT")
+                }
+                if !(try tableHasColumn("provider_models", columnName: "built_in_tools_json")) {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN built_in_tools_json TEXT")
+                }
             }
         }
 

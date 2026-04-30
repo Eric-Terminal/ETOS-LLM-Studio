@@ -39,13 +39,36 @@ struct ModelSettingsView: View {
                     .etFont(.caption)
             }
 
-            Section(header: Text(NSLocalizedString("模型能力", comment: ""))) {
-                Toggle(NSLocalizedString("聊天", comment: ""), isOn: capabilityBinding(.chat))
-                Toggle(NSLocalizedString("工具", comment: ""), isOn: capabilityBinding(.toolCalling))
-                Toggle(NSLocalizedString("语音转文字", comment: ""), isOn: capabilityBinding(.speechToText))
-                Toggle(NSLocalizedString("文字转语音", comment: ""), isOn: capabilityBinding(.textToSpeech))
-                Toggle(NSLocalizedString("嵌入", comment: ""), isOn: capabilityBinding(.embedding))
-                Toggle(NSLocalizedString("生图", comment: ""), isOn: capabilityBinding(.imageGeneration))
+            Section(header: Text(NSLocalizedString("主用途", comment: "模型主用途区块标题"))) {
+                Picker(NSLocalizedString("主用途", comment: "模型主用途选择器标题"), selection: $model.kind) {
+                    ForEach(ModelKind.allCases, id: \.self) { kind in
+                        Text(kind.localizedName).tag(kind)
+                    }
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("输入模态", comment: "模型输入模态区块标题"))) {
+                ForEach(ModelModality.allCases, id: \.self) { modality in
+                    Toggle(modality.localizedName, isOn: modalityBinding(modality, keyPath: \.inputModalities))
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("输出模态", comment: "模型输出模态区块标题"))) {
+                ForEach(ModelModality.allCases, id: \.self) { modality in
+                    Toggle(modality.localizedName, isOn: modalityBinding(modality, keyPath: \.outputModalities))
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("协议能力", comment: "模型协议能力区块标题"))) {
+                ForEach(ModelCapability.allCases, id: \.self) { capability in
+                    Toggle(capability.localizedName, isOn: capabilityBinding(capability))
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("原生工具", comment: "模型原生工具区块标题"))) {
+                ForEach(ModelBuiltInTool.allCases, id: \.self) { tool in
+                    Toggle(tool.localizedName, isOn: builtInToolBinding(tool))
+                }
             }
 
             Section(header: Text(NSLocalizedString("请求体编辑方式", comment: ""))) {
@@ -539,7 +562,27 @@ extension ModelSettingsView {
         return string
     }
 
-    private func capabilityBinding(_ capability: Model.Capability) -> Binding<Bool> {
+    private func modalityBinding(
+        _ modality: ModelModality,
+        keyPath: WritableKeyPath<Model, [ModelModality]>
+    ) -> Binding<Bool> {
+        Binding(
+            get: {
+                model[keyPath: keyPath].contains(modality)
+            },
+            set: { isEnabled in
+                var modalities = model[keyPath: keyPath]
+                if isEnabled {
+                    modalities.append(modality)
+                } else {
+                    modalities.removeAll { $0 == modality }
+                }
+                model[keyPath: keyPath] = Model.orderedModalities(modalities)
+            }
+        )
+    }
+
+    private func capabilityBinding(_ capability: ModelCapability) -> Binding<Bool> {
         Binding(
             get: {
                 model.capabilities.contains(capability)
@@ -551,11 +594,24 @@ extension ModelSettingsView {
                 } else {
                     capabilitySet.remove(capability)
                 }
-                if capabilitySet.isEmpty {
-                    capabilitySet.insert(.chat)
+                model.capabilities = Model.orderedCapabilities(Array(capabilitySet))
+            }
+        )
+    }
+
+    private func builtInToolBinding(_ tool: ModelBuiltInTool) -> Binding<Bool> {
+        Binding(
+            get: {
+                model.builtInTools.contains(tool)
+            },
+            set: { isEnabled in
+                var toolSet = Set(model.builtInTools)
+                if isEnabled {
+                    toolSet.insert(tool)
+                } else {
+                    toolSet.remove(tool)
                 }
-                let ordered: [Model.Capability] = [.chat, .toolCalling, .speechToText, .textToSpeech, .embedding, .imageGeneration]
-                model.capabilities = ordered.filter { capabilitySet.contains($0) }
+                model.builtInTools = Model.orderedBuiltInTools(Array(toolSet))
             }
         )
     }

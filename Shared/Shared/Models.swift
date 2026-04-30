@@ -223,8 +223,92 @@ public struct Provider: Codable, Identifiable, Hashable {
 }
 
 /// 代表一个在提供商下的具体模型
+public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
+    case chat
+    case image
+    case embedding
+    case rerank
+    case speechToText
+    case textToSpeech
+
+    public var localizedName: String {
+        switch self {
+        case .chat:
+            return NSLocalizedString("聊天", comment: "模型主用途：聊天")
+        case .image:
+            return NSLocalizedString("图像", comment: "模型主用途：图像")
+        case .embedding:
+            return NSLocalizedString("嵌入", comment: "模型主用途：嵌入")
+        case .rerank:
+            return NSLocalizedString("重排", comment: "模型主用途：重排")
+        case .speechToText:
+            return NSLocalizedString("语音转文字", comment: "模型主用途：语音转文字")
+        case .textToSpeech:
+            return NSLocalizedString("文字转语音", comment: "模型主用途：文字转语音")
+        }
+    }
+}
+
+public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
+    case text
+    case image
+    case audio
+    case file
+
+    public var localizedName: String {
+        switch self {
+        case .text:
+            return NSLocalizedString("文本", comment: "模型模态：文本")
+        case .image:
+            return NSLocalizedString("图像", comment: "模型模态：图像")
+        case .audio:
+            return NSLocalizedString("音频", comment: "模型模态：音频")
+        case .file:
+            return NSLocalizedString("文件", comment: "模型模态：文件")
+        }
+    }
+}
+
+public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
+    case toolCalling
+    case reasoning
+    case streaming
+    case jsonMode
+
+    public var localizedName: String {
+        switch self {
+        case .toolCalling:
+            return NSLocalizedString("工具调用", comment: "模型协议能力：工具调用")
+        case .reasoning:
+            return NSLocalizedString("推理", comment: "模型协议能力：推理")
+        case .streaming:
+            return NSLocalizedString("流式输出", comment: "模型协议能力：流式输出")
+        case .jsonMode:
+            return NSLocalizedString("JSON 模式", comment: "模型协议能力：JSON 模式")
+        }
+    }
+}
+
+public enum ModelBuiltInTool: String, Codable, Hashable, CaseIterable, Sendable {
+    case webSearch
+    case urlContext
+    case imageGeneration
+
+    public var localizedName: String {
+        switch self {
+        case .webSearch:
+            return NSLocalizedString("联网搜索", comment: "模型原生工具：联网搜索")
+        case .urlContext:
+            return NSLocalizedString("URL 上下文", comment: "模型原生工具：URL 上下文")
+        case .imageGeneration:
+            return NSLocalizedString("原生生图", comment: "模型原生工具：原生生图")
+        }
+    }
+}
+
+/// 代表一个在提供商下的具体模型
 public struct Model: Codable, Identifiable, Hashable {
-    public enum Capability: String, Codable, Hashable {
+    public enum Capability: String, Codable, Hashable, Sendable {
         case chat
         case toolCalling
         case speechToText
@@ -233,7 +317,7 @@ public struct Model: Codable, Identifiable, Hashable {
         case imageGeneration
     }
 
-    public static let defaultCapabilities: [Capability] = [.chat, .toolCalling]
+    public static let defaultCapabilities: [ModelCapability] = [.toolCalling]
 
     public enum RequestBodyOverrideMode: String, Codable, Hashable {
         case expression
@@ -245,7 +329,11 @@ public struct Model: Codable, Identifiable, Hashable {
     public var displayName: String
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]
-    public var capabilities: [Capability]
+    public var kind: ModelKind
+    public var inputModalities: [ModelModality]
+    public var outputModalities: [ModelModality]
+    public var capabilities: [ModelCapability]
+    public var builtInTools: [ModelBuiltInTool]
     public var requestBodyOverrideMode: RequestBodyOverrideMode
     public var rawRequestBodyJSON: String?
 
@@ -255,22 +343,63 @@ public struct Model: Codable, Identifiable, Hashable {
         displayName: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
-        capabilities: [Capability] = Model.defaultCapabilities,
+        kind: ModelKind? = .chat,
+        inputModalities: [ModelModality]? = nil,
+        outputModalities: [ModelModality]? = nil,
+        capabilities: [ModelCapability]? = nil,
+        builtInTools: [ModelBuiltInTool] = [],
+        legacyCapabilityRawValues: [String]? = nil,
         requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
         rawRequestBodyJSON: String? = nil
     ) {
+        let normalized = Self.normalizedCapabilityShape(
+            kind: kind,
+            inputModalities: inputModalities,
+            outputModalities: outputModalities,
+            capabilities: capabilities,
+            builtInTools: builtInTools,
+            legacyCapabilityRawValues: legacyCapabilityRawValues
+        )
         self.id = id
         self.modelName = modelName
         self.displayName = displayName ?? modelName
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
-        self.capabilities = capabilities.isEmpty ? Self.defaultCapabilities : capabilities
+        self.kind = normalized.kind
+        self.inputModalities = normalized.inputModalities
+        self.outputModalities = normalized.outputModalities
+        self.capabilities = normalized.capabilities
+        self.builtInTools = normalized.builtInTools
         self.requestBodyOverrideMode = requestBodyOverrideMode
         self.rawRequestBodyJSON = rawRequestBodyJSON
     }
+
+    public init(
+        id: UUID = UUID(),
+        modelName: String,
+        displayName: String? = nil,
+        isActivated: Bool = false,
+        overrideParameters: [String: JSONValue] = [:],
+        capabilities legacyCapabilities: [Capability],
+        requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
+        rawRequestBodyJSON: String? = nil
+    ) {
+        self.init(
+            id: id,
+            modelName: modelName,
+            displayName: displayName,
+            isActivated: isActivated,
+            overrideParameters: overrideParameters,
+            kind: nil,
+            legacyCapabilityRawValues: legacyCapabilities.map(\.rawValue),
+            requestBodyOverrideMode: requestBodyOverrideMode,
+            rawRequestBodyJSON: rawRequestBodyJSON
+        )
+    }
     
     enum CodingKeys: String, CodingKey {
-        case id, modelName, displayName, isActivated, overrideParameters, capabilities
+        case id, modelName, displayName, isActivated, overrideParameters
+        case kind, inputModalities, outputModalities, capabilities, builtInTools
         case requestBodyOverrideMode
         case rawRequestBodyJSON
     }
@@ -282,8 +411,29 @@ public struct Model: Codable, Identifiable, Hashable {
         self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
-        let decodedCapabilities = try container.decodeIfPresent([Capability].self, forKey: .capabilities) ?? Self.defaultCapabilities
-        self.capabilities = decodedCapabilities.isEmpty ? Self.defaultCapabilities : decodedCapabilities
+        let decodedKind = try container.decodeIfPresent(ModelKind.self, forKey: .kind)
+        let decodedInputModalities = try container.decodeIfPresent([String].self, forKey: .inputModalities)
+            .map { Self.orderedModalities($0.compactMap(ModelModality.init(rawValue:))) }
+        let decodedOutputModalities = try container.decodeIfPresent([String].self, forKey: .outputModalities)
+            .map { Self.orderedModalities($0.compactMap(ModelModality.init(rawValue:))) }
+        let rawCapabilityValues = try container.decodeIfPresent([String].self, forKey: .capabilities)
+        let decodedCapabilities = rawCapabilityValues
+            .map { Self.orderedCapabilities($0.compactMap(ModelCapability.init(rawValue:))) }
+        let decodedBuiltInTools = try container.decodeIfPresent([String].self, forKey: .builtInTools)
+            .map { Self.orderedBuiltInTools($0.compactMap(ModelBuiltInTool.init(rawValue:))) }
+        let normalized = Self.normalizedCapabilityShape(
+            kind: decodedKind,
+            inputModalities: decodedInputModalities,
+            outputModalities: decodedOutputModalities,
+            capabilities: decodedCapabilities,
+            builtInTools: decodedBuiltInTools,
+            legacyCapabilityRawValues: rawCapabilityValues
+        )
+        self.kind = normalized.kind
+        self.inputModalities = normalized.inputModalities
+        self.outputModalities = normalized.outputModalities
+        self.capabilities = normalized.capabilities
+        self.builtInTools = normalized.builtInTools
         self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .expression
         self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
     }
@@ -299,8 +449,20 @@ public struct Model: Codable, Identifiable, Hashable {
         if !overrideParameters.isEmpty {
             try container.encode(overrideParameters, forKey: .overrideParameters)
         }
-        if capabilities != Self.defaultCapabilities {
+        if kind != .chat {
+            try container.encode(kind, forKey: .kind)
+        }
+        if inputModalities != Self.defaultInputModalities(for: kind) {
+            try container.encode(inputModalities, forKey: .inputModalities)
+        }
+        if outputModalities != Self.defaultOutputModalities(for: kind) {
+            try container.encode(outputModalities, forKey: .outputModalities)
+        }
+        if capabilities != Self.defaultCapabilities(for: kind) {
             try container.encode(capabilities, forKey: .capabilities)
+        }
+        if !builtInTools.isEmpty {
+            try container.encode(builtInTools, forKey: .builtInTools)
         }
         if requestBodyOverrideMode != .expression {
             try container.encode(requestBodyOverrideMode, forKey: .requestBodyOverrideMode)
@@ -308,6 +470,271 @@ public struct Model: Codable, Identifiable, Hashable {
         if let rawRequestBodyJSON, !rawRequestBodyJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             try container.encode(rawRequestBodyJSON, forKey: .rawRequestBodyJSON)
         }
+    }
+}
+
+public extension Model {
+    static func defaultInputModalities(for kind: ModelKind) -> [ModelModality] {
+        switch kind {
+        case .chat:
+            return [.text]
+        case .image:
+            return [.text, .image]
+        case .embedding, .rerank:
+            return [.text]
+        case .speechToText:
+            return [.audio]
+        case .textToSpeech:
+            return [.text]
+        }
+    }
+
+    static func defaultOutputModalities(for kind: ModelKind) -> [ModelModality] {
+        switch kind {
+        case .chat:
+            return [.text]
+        case .image:
+            return [.image]
+        case .embedding:
+            return []
+        case .rerank:
+            return [.text]
+        case .speechToText:
+            return [.text]
+        case .textToSpeech:
+            return [.audio]
+        }
+    }
+
+    static func defaultCapabilities(for kind: ModelKind) -> [ModelCapability] {
+        switch kind {
+        case .chat:
+            return defaultCapabilities
+        case .image, .embedding, .rerank, .speechToText, .textToSpeech:
+            return []
+        }
+    }
+
+    static func orderedModalities(_ modalities: [ModelModality]) -> [ModelModality] {
+        let modalitySet = Set(modalities)
+        return ModelModality.allCases.filter { modalitySet.contains($0) }
+    }
+
+    static func orderedCapabilities(_ capabilities: [ModelCapability]) -> [ModelCapability] {
+        let capabilitySet = Set(capabilities)
+        return ModelCapability.allCases.filter { capabilitySet.contains($0) }
+    }
+
+    static func orderedBuiltInTools(_ builtInTools: [ModelBuiltInTool]) -> [ModelBuiltInTool] {
+        let toolSet = Set(builtInTools)
+        return ModelBuiltInTool.allCases.filter { toolSet.contains($0) }
+    }
+
+    static func inferred(
+        modelName: String,
+        displayName: String? = nil,
+        isActivated: Bool = false,
+        supportedGenerationMethods: [String]? = nil
+    ) -> Model {
+        let profile = inferredCapabilityShape(
+            modelName: modelName,
+            displayName: displayName,
+            supportedGenerationMethods: supportedGenerationMethods
+        )
+        return Model(
+            modelName: modelName,
+            displayName: displayName,
+            isActivated: isActivated,
+            kind: profile.kind,
+            inputModalities: profile.inputModalities,
+            outputModalities: profile.outputModalities,
+            capabilities: profile.capabilities,
+            builtInTools: profile.builtInTools
+        )
+    }
+}
+
+private extension Model {
+    enum LegacyCapability: String {
+        case chat
+        case toolCalling
+        case speechToText
+        case textToSpeech
+        case embedding
+        case imageGeneration
+    }
+
+    struct CapabilityShape {
+        var kind: ModelKind
+        var inputModalities: [ModelModality]
+        var outputModalities: [ModelModality]
+        var capabilities: [ModelCapability]
+        var builtInTools: [ModelBuiltInTool]
+    }
+
+    static func normalizedCapabilityShape(
+        kind explicitKind: ModelKind? = nil,
+        inputModalities explicitInputModalities: [ModelModality]? = nil,
+        outputModalities explicitOutputModalities: [ModelModality]? = nil,
+        capabilities explicitCapabilities: [ModelCapability]? = nil,
+        builtInTools explicitBuiltInTools: [ModelBuiltInTool]? = nil,
+        legacyCapabilityRawValues: [String]? = nil
+    ) -> CapabilityShape {
+        let legacyCapabilities = legacyCapabilityRawValues?.compactMap(LegacyCapability.init(rawValue:)) ?? []
+        let legacySet = Set(legacyCapabilities)
+
+        let resolvedKind: ModelKind
+        if let explicitKind {
+            resolvedKind = explicitKind
+        } else if legacySet.contains(.embedding) {
+            resolvedKind = .embedding
+        } else if legacySet.contains(.speechToText) {
+            resolvedKind = .speechToText
+        } else if legacySet.contains(.textToSpeech) {
+            resolvedKind = .textToSpeech
+        } else if legacySet.contains(.imageGeneration), !legacySet.contains(.chat) {
+            resolvedKind = .image
+        } else {
+            resolvedKind = .chat
+        }
+
+        var resolvedInputModalities = explicitInputModalities ?? defaultInputModalities(for: resolvedKind)
+        var resolvedOutputModalities = explicitOutputModalities ?? defaultOutputModalities(for: resolvedKind)
+        var resolvedCapabilities = explicitCapabilities ?? (legacyCapabilityRawValues == nil ? defaultCapabilities(for: resolvedKind) : [])
+        var resolvedBuiltInTools = explicitBuiltInTools ?? []
+
+        if legacySet.contains(.toolCalling), !resolvedCapabilities.contains(.toolCalling) {
+            resolvedCapabilities.append(.toolCalling)
+        }
+        if legacySet.contains(.speechToText), !resolvedInputModalities.contains(.audio) {
+            resolvedInputModalities.append(.audio)
+        }
+        if legacySet.contains(.textToSpeech), !resolvedOutputModalities.contains(.audio) {
+            resolvedOutputModalities.append(.audio)
+        }
+        if legacySet.contains(.imageGeneration) {
+            if resolvedKind == .image {
+                if !resolvedOutputModalities.contains(.image) {
+                    resolvedOutputModalities.append(.image)
+                }
+            } else {
+                if !resolvedOutputModalities.contains(.image) {
+                    resolvedOutputModalities.append(.image)
+                }
+                if !resolvedBuiltInTools.contains(.imageGeneration) {
+                    resolvedBuiltInTools.append(.imageGeneration)
+                }
+            }
+        }
+
+        return CapabilityShape(
+            kind: resolvedKind,
+            inputModalities: orderedModalities(resolvedInputModalities),
+            outputModalities: orderedModalities(resolvedOutputModalities),
+            capabilities: orderedCapabilities(resolvedCapabilities),
+            builtInTools: orderedBuiltInTools(resolvedBuiltInTools)
+        )
+    }
+
+    static func inferredCapabilityShape(
+        modelName: String,
+        displayName: String?,
+        supportedGenerationMethods: [String]?
+    ) -> CapabilityShape {
+        let searchableName = [modelName, displayName].compactMap { $0?.lowercased() }.joined(separator: " ")
+        let normalizedName = searchableName
+            .replacingOccurrences(of: "_", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+
+        let supportsGenerateContent = supportedGenerationMethods?.contains(where: { method in
+            method == "generateContent" || method == "streamGenerateContent"
+        }) ?? true
+        let supportsEmbedding = supportedGenerationMethods?.contains(where: { method in
+            method == "embedContent" || method == "batchEmbedContents" || method == "asyncBatchEmbedContent"
+        }) ?? false
+
+        let imageModelSignals = [
+            "dall-e",
+            "gpt-image",
+            "imagen",
+            "flux",
+            "stable-diffusion",
+            "qwen-image"
+        ]
+        let rerankSignals = ["rerank", "re-rank"]
+        let embeddingSignals = ["embedding", "embed"]
+        let speechToTextSignals = ["transcribe", "transcription", "whisper", "speech-to-text", "stt"]
+        let textToSpeechSignals = ["text-to-speech", "tts", "speech"]
+
+        let kind: ModelKind
+        if containsAny(normalizedName, signals: embeddingSignals) || (supportsEmbedding && !supportsGenerateContent) {
+            kind = .embedding
+        } else if containsAny(normalizedName, signals: rerankSignals) {
+            kind = .rerank
+        } else if containsAny(normalizedName, signals: imageModelSignals) {
+            kind = .image
+        } else if containsAny(normalizedName, signals: speechToTextSignals) {
+            kind = .speechToText
+        } else if containsAny(normalizedName, signals: textToSpeechSignals) {
+            kind = .textToSpeech
+        } else {
+            kind = .chat
+        }
+
+        var inputModalities = defaultInputModalities(for: kind)
+        var outputModalities = defaultOutputModalities(for: kind)
+        var capabilities = defaultCapabilities(for: kind)
+        let builtInTools: [ModelBuiltInTool] = []
+
+        if kind == .chat {
+            let visionSignals = [
+                "gpt-4o",
+                "gpt-4.1",
+                "gpt-5",
+                "claude-3",
+                "claude-4",
+                "gemini",
+                "qwen-vl",
+                "qwen2-vl",
+                "qwen2.5-vl",
+                "qwen-omni",
+                "llava",
+                "pixtral"
+            ]
+            if containsAny(normalizedName, signals: visionSignals), !inputModalities.contains(.image) {
+                inputModalities.append(.image)
+            }
+
+            let reasoningSignals = [
+                "o1",
+                "o3",
+                "o4",
+                "gpt-5",
+                "deepseek-r1",
+                "reasoner",
+                "thinking",
+                "qwq"
+            ]
+            if normalizedName == "o" || containsAny(normalizedName, signals: reasoningSignals) {
+                capabilities.append(.reasoning)
+            }
+            if supportedGenerationMethods?.contains("streamGenerateContent") == true {
+                capabilities.append(.streaming)
+            }
+        }
+
+        return CapabilityShape(
+            kind: kind,
+            inputModalities: orderedModalities(inputModalities),
+            outputModalities: orderedModalities(outputModalities),
+            capabilities: orderedCapabilities(capabilities),
+            builtInTools: orderedBuiltInTools(builtInTools)
+        )
+    }
+
+    static func containsAny(_ text: String, signals: [String]) -> Bool {
+        signals.contains { text.contains($0) }
     }
 }
 
@@ -405,20 +832,44 @@ public extension Model {
         capabilities.contains(.toolCalling)
     }
 
+    var supportsReasoning: Bool {
+        capabilities.contains(.reasoning)
+    }
+
+    var supportsStreaming: Bool {
+        capabilities.contains(.streaming)
+    }
+
+    var supportsJSONMode: Bool {
+        capabilities.contains(.jsonMode)
+    }
+
     var supportsSpeechToText: Bool {
-        capabilities.contains(.speechToText)
+        kind == .speechToText
     }
 
     var supportsTextToSpeech: Bool {
-        capabilities.contains(.textToSpeech)
+        kind == .textToSpeech
     }
     
     var supportsEmbedding: Bool {
-        capabilities.contains(.embedding)
+        kind == .embedding
+    }
+
+    var supportsRerank: Bool {
+        kind == .rerank
+    }
+
+    var supportsVisionInput: Bool {
+        inputModalities.contains(.image)
     }
 
     var supportsImageGeneration: Bool {
-        capabilities.contains(.imageGeneration)
+        kind == .image || outputModalities.contains(.image) || builtInTools.contains(.imageGeneration)
+    }
+
+    var isChatModel: Bool {
+        kind == .chat
     }
 
     /// 识别是否属于主流模型家族（用于模型列表分组与筛选）
