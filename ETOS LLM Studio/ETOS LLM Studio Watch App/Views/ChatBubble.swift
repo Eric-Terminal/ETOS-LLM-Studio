@@ -1498,7 +1498,7 @@ struct ChatBubble: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        if reasoningStartedAt == nil,
+        if isReasoningAutoPreview,
            reasoningCompletedAt == nil,
            let thinkingTitle = preparedReasoningMarkdownPayload?.thinkingTitle,
            !thinkingTitle.isEmpty {
@@ -2389,7 +2389,7 @@ private struct WatchTimelineReasoningStepView: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        if reasoningStartedAt == nil,
+        if isPreviewing,
            reasoningCompletedAt == nil,
            let thinkingTitle = preparedReasoningContent?.thinkingTitle,
            !thinkingTitle.isEmpty {

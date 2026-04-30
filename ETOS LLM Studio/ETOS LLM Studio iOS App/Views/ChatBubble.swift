@@ -2098,7 +2098,7 @@ private struct TimelineReasoningStepView: View {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        if reasoningStartedAt == nil,
+        if isPreviewing,
            reasoningCompletedAt == nil,
            let thinkingTitle = preparedReasoningContent?.thinkingTitle,
            !thinkingTitle.isEmpty {
@@ -2468,7 +2468,7 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
-        if reasoningStartedAt == nil,
+        if isPreviewing,
            reasoningCompletedAt == nil,
            let thinkingTitle = preparedReasoningContent?.thinkingTitle,
            !thinkingTitle.isEmpty {
