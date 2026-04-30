@@ -499,3 +499,50 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(finalMessage.content, "New version")
     }
 }
+
+final class ChatQuickRetrySupportTests: XCTestCase {
+    func testLatestErrorMessageCanQuickRetry() {
+        let messages = [
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(role: .error, content: "网络错误")
+        ]
+
+        XCTAssertTrue(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
+    func testStoppedEmptyAssistantCanQuickRetry() {
+        let messages = [
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(role: .assistant, content: "")
+        ]
+
+        XCTAssertTrue(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
+    func testReasoningOnlyAssistantCanQuickRetry() {
+        let messages = [
+            ChatMessage(role: .user, content: "解释一下"),
+            ChatMessage(role: .assistant, content: "", reasoningContent: "正在推理")
+        ]
+
+        XCTAssertTrue(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
+    func testNormalAssistantDoesNotQuickRetry() {
+        let messages = [
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(role: .assistant, content: "你好呀")
+        ]
+
+        XCTAssertFalse(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
+    func testSendingStateDoesNotQuickRetry() {
+        let messages = [
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(role: .assistant, content: "")
+        ]
+
+        XCTAssertFalse(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: true))
+    }
+}

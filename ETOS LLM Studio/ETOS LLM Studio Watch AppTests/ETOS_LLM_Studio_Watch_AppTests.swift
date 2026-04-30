@@ -422,6 +422,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             WatchChatInputActionState.resolve(
                 isSending: true,
                 hasSendableContent: true,
+                canQuickRetry: true,
                 isSpeechInputEnabled: true
             ) == .stop
         )
@@ -429,6 +430,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             WatchChatInputActionState.resolve(
                 isSending: false,
                 hasSendableContent: true,
+                canQuickRetry: true,
                 isSpeechInputEnabled: true
             ) == .send
         )
@@ -436,6 +438,15 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             WatchChatInputActionState.resolve(
                 isSending: false,
                 hasSendableContent: false,
+                canQuickRetry: true,
+                isSpeechInputEnabled: true
+            ) == .quickRetry
+        )
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: false,
+                hasSendableContent: false,
+                canQuickRetry: false,
                 isSpeechInputEnabled: true
             ) == .speechInput
         )
@@ -443,6 +454,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             WatchChatInputActionState.resolve(
                 isSending: false,
                 hasSendableContent: false,
+                canQuickRetry: false,
                 isSpeechInputEnabled: false
             ) == .inactive
         )

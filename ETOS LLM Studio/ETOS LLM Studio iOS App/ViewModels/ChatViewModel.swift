@@ -751,6 +751,13 @@ final class ChatViewModel: ObservableObject {
         return (hasText || hasAttachments) && !isSendingMessage
     }
 
+    var canQuickRetryLatestMessage: Bool {
+        ChatQuickRetrySupport.canRetryLatestMessage(
+            in: allMessagesForSession,
+            isSending: isSendingMessage
+        )
+    }
+
     var imageGenerationModelOptions: [RunnableModel] {
         activatedModels.filter { supportsImageGeneration(for: $0) }
     }

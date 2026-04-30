@@ -1353,6 +1353,59 @@ public struct ChatResponseAttemptVersionInfo: Equatable, Sendable {
     public let totalCount: Int
 }
 
+public enum ChatQuickRetrySupport {
+    public static func canRetryLatestMessage(in messages: [ChatMessage], isSending: Bool) -> Bool {
+        guard !isSending else { return false }
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        guard visibleMessages.contains(where: { $0.role == .user }),
+              let latestMessage = visibleMessages.last else {
+            return false
+        }
+
+        switch latestMessage.role {
+        case .error:
+            return true
+        case .assistant:
+            return isAbnormalStoppedAssistantMessage(latestMessage)
+        case .system, .user, .tool:
+            return false
+        }
+    }
+
+    public static func isAbnormalStoppedAssistantMessage(_ message: ChatMessage) -> Bool {
+        guard message.role == .assistant else { return false }
+        guard !hasVisibleAssistantBodyContent(message) else { return false }
+        guard !hasAssistantMediaContent(message) else { return false }
+
+        let hasReasoning = !(message.reasoningContent ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        if hasReasoning {
+            return true
+        }
+
+        let hasToolCalls = !(message.toolCalls ?? []).isEmpty
+        return !hasToolCalls
+    }
+
+    private static func hasVisibleAssistantBodyContent(_ message: ChatMessage) -> Bool {
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return false }
+        switch trimmedContent {
+        case "[图片]", "[圖片]", "[Image]", "[画像]":
+            return false
+        default:
+            return true
+        }
+    }
+
+    private static func hasAssistantMediaContent(_ message: ChatMessage) -> Bool {
+        message.audioFileName != nil
+            || !(message.imageFileNames ?? []).isEmpty
+            || !(message.fileFileNames ?? []).isEmpty
+    }
+}
+
 public enum ChatResponseAttemptSupport {
     public static func shouldMergeAdjacentAssistantTurnMessages(_ message: ChatMessage, _ nextMessage: ChatMessage) -> Bool {
         guard isAssistantTurnMessage(message),

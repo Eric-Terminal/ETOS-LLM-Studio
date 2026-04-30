@@ -951,8 +951,7 @@ class ChatViewModel: ObservableObject {
     }
     
     func retryLastMessage() {
-        // 移除 isSendingMessage 保护，允许中断当前正在发送的请求。
-        // ChatService 中的 retryLastMessage 会处理重置消息历史的逻辑。
+        // ChatService 中的 retryLastMessage 会处理取消当前请求和重置消息历史的逻辑。
         Task {
             await chatService.retryLastMessage(
                 aiTemperature: aiTemperature,
@@ -971,6 +970,13 @@ class ChatViewModel: ObservableObject {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
         }
+    }
+
+    var canQuickRetryLatestMessage: Bool {
+        ChatQuickRetrySupport.canRetryLatestMessage(
+            in: allMessagesForSession,
+            isSending: isSendingMessage
+        )
     }
     
     // MARK: 语音输入

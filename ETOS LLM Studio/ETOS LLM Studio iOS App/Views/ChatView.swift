@@ -3278,6 +3278,8 @@ private struct TelegramMessageComposer: View {
                 stopAction()
             } else if hasContent {
                 sendAction()
+            } else if canQuickRetry {
+                viewModel.retryLastMessage()
             } else if viewModel.enableSpeechInput {
                 audioRecorderEntryMode = .speechInput
                 showAudioRecorder = true
@@ -3503,6 +3505,10 @@ private struct TelegramMessageComposer: View {
         return hasText || hasAttachments
     }
 
+    private var canQuickRetry: Bool {
+        !hasContent && viewModel.canQuickRetryLatestMessage
+    }
+
     private func importAudioAttachment(from url: URL) {
         Task.detached {
             let needsAccess = url.startAccessingSecurityScopedResource()
@@ -3585,6 +3591,9 @@ private struct TelegramMessageComposer: View {
         if hasContent {
             return "arrow.up"
         }
+        if canQuickRetry {
+            return "arrow.clockwise"
+        }
         if viewModel.enableSpeechInput {
             return "mic.fill"
         }
@@ -3598,6 +3607,9 @@ private struct TelegramMessageComposer: View {
         if hasContent {
             return viewModel.canSendMessage ? .white : Color.primary.opacity(0.55)
         }
+        if canQuickRetry {
+            return .white
+        }
         return TelegramColors.attachButtonColor
     }
     
@@ -3610,6 +3622,8 @@ private struct TelegramMessageComposer: View {
                 ? TelegramColors.sendButtonColor
                 : Color.primary.opacity(0.12)
             actionCircleBackground(fill: fillColor)
+        } else if canQuickRetry {
+            actionCircleBackground(fill: TelegramColors.sendButtonColor)
         } else {
             glassCircleBackground
         }

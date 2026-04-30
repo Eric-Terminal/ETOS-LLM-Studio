@@ -23,15 +23,19 @@ import CoreText
 enum WatchChatInputActionState: Equatable {
     case stop
     case send
+    case quickRetry
     case speechInput
     case inactive
 
-    static func resolve(isSending: Bool, hasSendableContent: Bool, isSpeechInputEnabled: Bool) -> Self {
+    static func resolve(isSending: Bool, hasSendableContent: Bool, canQuickRetry: Bool, isSpeechInputEnabled: Bool) -> Self {
         if isSending {
             return .stop
         }
         if hasSendableContent {
             return .send
+        }
+        if canQuickRetry {
+            return .quickRetry
         }
         if isSpeechInputEnabled {
             return .speechInput
@@ -45,6 +49,8 @@ enum WatchChatInputActionState: Equatable {
             return "stop.circle.fill"
         case .send, .inactive:
             return "arrow.up"
+        case .quickRetry:
+            return "arrow.clockwise"
         case .speechInput:
             return "mic.fill"
         }
@@ -947,6 +953,10 @@ struct ContentView: View {
             viewModel.cancelSending()
         case .send:
             sendMessage()
+        case .quickRetry:
+            shouldForceScrollToBottom = true
+            shouldKeepBottomPinned = true
+            viewModel.retryLastMessage()
         case .speechInput:
             viewModel.beginSpeechInputFlow()
         case .inactive:
@@ -1094,6 +1104,7 @@ struct ContentView: View {
         let inputActionState = WatchChatInputActionState.resolve(
             isSending: viewModel.isSendingMessage,
             hasSendableContent: canSend,
+            canQuickRetry: viewModel.canQuickRetryLatestMessage,
             isSpeechInputEnabled: viewModel.enableSpeechInput
         )
         
