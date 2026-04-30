@@ -3584,8 +3584,11 @@ private struct TelegramMessageComposer: View {
     }
     
     private var actionForegroundColor: Color {
-        if isSending || hasContent {
+        if isSending {
             return .white
+        }
+        if hasContent {
+            return viewModel.canSendMessage ? .white : Color.primary.opacity(0.55)
         }
         return TelegramColors.attachButtonColor
     }
@@ -3597,7 +3600,7 @@ private struct TelegramMessageComposer: View {
         } else if hasContent {
             let fillColor = viewModel.canSendMessage
                 ? TelegramColors.sendButtonColor
-                : Color.gray.opacity(0.3)
+                : Color.primary.opacity(0.12)
             actionCircleBackground(fill: fillColor)
         } else {
             glassCircleBackground
