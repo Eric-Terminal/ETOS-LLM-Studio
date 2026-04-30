@@ -69,6 +69,7 @@ public enum SyncPackageTransferError: LocalizedError {
 
 public enum SyncPackageTransferService {
     public static let currentSchemaVersion: Int = 2
+    private static let temporaryExportFileMarker = "-ETOS-数据导出-"
 
     /// 导出同步包为 ETOS JSON 信封（schema v2）。
     /// - 注意：导出包始终使用 manifest + delta 结构，不再写出旧版纯 SyncPackage。
@@ -125,6 +126,8 @@ public enum SyncPackageTransferService {
         exportedAt: Date = Date(),
         fileManager: FileManager = .default
     ) throws -> SyncPackageExportFileOutput {
+        cleanupTemporaryExportFiles(fileManager: fileManager)
+
         let fileName = suggestedFileName(exportedAt: exportedAt)
         let fileURL = destinationDirectory
             .appendingPathComponent("\(UUID().uuidString)-\(fileName)", isDirectory: false)
@@ -157,6 +160,27 @@ public enum SyncPackageTransferService {
         } catch {
             try? fileManager.removeItem(at: temporaryURL)
             throw error
+        }
+    }
+
+    /// 清理陈旧的临时导出文件，用于兜底处理分享未完成或 App 异常退出后的残留。
+    public static func cleanupTemporaryExportFiles(
+        olderThan age: TimeInterval = 24 * 60 * 60,
+        now: Date = Date(),
+        fileManager: FileManager = .default
+    ) {
+        guard let fileURLs = try? fileManager.contentsOfDirectory(
+            at: fileManager.temporaryDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else {
+            return
+        }
+
+        for fileURL in fileURLs where isTemporaryExportFile(fileURL) {
+            let modifiedAt = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                ?? .distantPast
+            guard now.timeIntervalSince(modifiedAt) >= age else { continue }
+            try? fileManager.removeItem(at: fileURL)
         }
     }
 
@@ -546,6 +570,12 @@ public enum SyncPackageTransferService {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return encoder
+    }
+
+    private static func isTemporaryExportFile(_ fileURL: URL) -> Bool {
+        let fileName = fileURL.lastPathComponent
+        guard fileName.contains(temporaryExportFileMarker) else { return false }
+        return fileName.hasSuffix(".json") || fileName.hasSuffix(".json.tmp")
     }
 }
 

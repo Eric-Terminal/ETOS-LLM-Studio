@@ -211,7 +211,11 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
-        .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
+        .onAppear {
+            migrateLegacyAppStorageOptionIfNeeded()
+            SyncPackageTransferService.cleanupTemporaryExportFiles()
+        }
+        .onDisappear(perform: cleanupExportFile)
     }
     
     private var selectedSyncOptions: SyncOptions {
@@ -390,6 +394,12 @@ struct DeviceSyncSettingsView: View {
         } catch {
             exportErrorMessage = String(format: NSLocalizedString("导出失败：%@", comment: ""), error.localizedDescription)
         }
+    }
+
+    private func cleanupExportFile() {
+        guard let fileURL = exportFileURL else { return }
+        try? FileManager.default.removeItem(at: fileURL)
+        exportFileURL = nil
     }
 
     private func uploadDataPackage() {

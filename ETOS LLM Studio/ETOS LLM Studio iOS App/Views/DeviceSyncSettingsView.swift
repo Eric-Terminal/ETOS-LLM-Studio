@@ -208,8 +208,12 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
-        .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
-        .sheet(item: $exportSharePayload) { payload in
+        .onAppear {
+            migrateLegacyAppStorageOptionIfNeeded()
+            SyncPackageTransferService.cleanupTemporaryExportFiles()
+        }
+        .onDisappear(perform: cleanupExportSharePayload)
+        .sheet(item: $exportSharePayload, onDismiss: cleanupExportSharePayload) { payload in
             DeviceSyncActivityShareSheet(activityItems: [payload.fileURL])
         }
         .alert(NSLocalizedString("导出失败", comment: ""), isPresented: Binding(
@@ -416,6 +420,12 @@ struct DeviceSyncSettingsView: View {
                 error.localizedDescription
             )
         }
+    }
+
+    private func cleanupExportSharePayload() {
+        guard let fileURL = exportSharePayload?.fileURL else { return }
+        try? FileManager.default.removeItem(at: fileURL)
+        exportSharePayload = nil
     }
 
     private func uploadDataPackage() {

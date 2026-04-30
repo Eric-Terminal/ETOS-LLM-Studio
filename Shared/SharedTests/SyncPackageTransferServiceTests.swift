@@ -77,6 +77,45 @@ struct SyncPackageTransferServiceTests {
         #expect(decoded.appStorageSnapshot == Data([0x04, 0x05, 0x06]))
     }
 
+    @Test("清理临时导出文件只删除过期 ETOS 导出包")
+    func testCleanupTemporaryExportFilesRemovesOnlyStaleExports() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+        let staleURL = temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-ETOS-数据导出-stale.json")
+        let freshURL = temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-ETOS-数据导出-fresh.json")
+        let unrelatedURL = temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-other.json")
+        defer {
+            try? FileManager.default.removeItem(at: staleURL)
+            try? FileManager.default.removeItem(at: freshURL)
+            try? FileManager.default.removeItem(at: unrelatedURL)
+        }
+
+        try Data("stale".utf8).write(to: staleURL)
+        try Data("fresh".utf8).write(to: freshURL)
+        try Data("other".utf8).write(to: unrelatedURL)
+        let now = Date(timeIntervalSince1970: 2_000)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 0)],
+            ofItemAtPath: staleURL.path
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: now],
+            ofItemAtPath: freshURL.path
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 0)],
+            ofItemAtPath: unrelatedURL.path
+        )
+
+        SyncPackageTransferService.cleanupTemporaryExportFiles(olderThan: 60, now: now)
+
+        #expect(!FileManager.default.fileExists(atPath: staleURL.path))
+        #expect(FileManager.default.fileExists(atPath: freshURL.path))
+        #expect(FileManager.default.fileExists(atPath: unrelatedURL.path))
+    }
+
     @Test("旧版纯 SyncPackage JSON 会被拒绝")
     func testDecodeLegacyRawSyncPackageJSONThrowsInvalidEnvelope() throws {
         let session = ChatSession(
