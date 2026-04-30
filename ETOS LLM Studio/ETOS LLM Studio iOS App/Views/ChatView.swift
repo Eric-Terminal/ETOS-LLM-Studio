@@ -3186,7 +3186,7 @@ private struct TelegramMessageComposer: View {
                     viewModel.setAudioAttachment(attachment)
                 },
                 onCompleteTranscript: { transcript in
-                    viewModel.appendTranscribedText(transcript)
+                    appendTranscribedTextToComposer(transcript)
                 }
             )
             .presentationDetents([.fraction(0.5), .large], selection: $audioRecorderSheetDetent)
@@ -3324,6 +3324,11 @@ private struct TelegramMessageComposer: View {
             return .speechToText(model: model)
         }
         return .audioAttachment
+    }
+
+    private func appendTranscribedTextToComposer(_ transcript: String) {
+        viewModel.appendTranscribedText(transcript)
+        text = viewModel.userInput
     }
 
     private func handleAutoExpand(for newValue: String) {
@@ -3927,7 +3932,7 @@ private struct MessageComposerView: View {
                     viewModel.setAudioAttachment(attachment)
                 },
                 onCompleteTranscript: { transcript in
-                    viewModel.appendTranscribedText(transcript)
+                    appendTranscribedTextToComposer(transcript)
                 }
             )
             .presentationDetents([.fraction(0.5), .large], selection: $audioRecorderSheetDetent)
@@ -3960,6 +3965,11 @@ private struct MessageComposerView: View {
             return .speechToText(model: model)
         }
         return .audioAttachment
+    }
+
+    private func appendTranscribedTextToComposer(_ transcript: String) {
+        viewModel.appendTranscribedText(transcript)
+        text = viewModel.userInput
     }
     
     @ViewBuilder
