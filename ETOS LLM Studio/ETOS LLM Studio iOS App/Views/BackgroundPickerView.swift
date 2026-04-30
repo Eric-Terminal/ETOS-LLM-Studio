@@ -284,7 +284,7 @@ private enum BackgroundCropTarget: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var title: LocalizedStringKey {
+    var title: String {
         switch self {
         case .phone:
             return NSLocalizedString("手机比例", comment: "")
