@@ -81,6 +81,7 @@ public final class AppLaunchStateMachine: ObservableObject {
                 self?.bootstrapTask = nil
                 self?.logger.info("启动状态机已完成持久化与服务预热。")
             }
+            Persistence.scheduleLaunchBackupPointAfterStartupIfEnabled()
         }
     }
 }

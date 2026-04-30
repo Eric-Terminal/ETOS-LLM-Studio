@@ -143,6 +143,15 @@ public enum Persistence {
     private static var hasPreparedLaunchDatabases = false
     private static var launchPreparationResult = LaunchPreparationResult()
     private static var hasCreatedLaunchBackupPoint = false
+    private static var hasScheduledLaunchBackupPoint = false
+
+    private static var deferredLaunchBackupDelay: TimeInterval {
+        #if os(watchOS)
+        120
+        #else
+        30
+        #endif
+    }
 
     private struct LaunchPreparationResult {
         var restoredKinds: [LaunchDatabaseKind] = []
@@ -530,7 +539,6 @@ public enum Persistence {
         if launchPreparation.needsChatFTSRebuild {
             grdbStore?.rebuildMessagesFTSIndex()
         }
-        createLaunchBackupPointIfEnabled()
     }
 
     public static func legacyJSONMigrationStatus() -> LegacyJSONMigrationStatus {
@@ -598,6 +606,7 @@ public enum Persistence {
         hasPreparedLaunchDatabases = false
         launchPreparationResult = LaunchPreparationResult()
         hasCreatedLaunchBackupPoint = false
+        hasScheduledLaunchBackupPoint = false
         launchBackupAndRecoveryLock.unlock()
         UserDefaults.standard.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
     }
@@ -626,6 +635,29 @@ public enum Persistence {
             } catch {
                 logger.error("创建启动备份失败(\(kind.displayName)): \(error.localizedDescription)")
             }
+        }
+    }
+
+    @discardableResult
+    public static func scheduleLaunchBackupPointAfterStartupIfEnabled(
+        delay: TimeInterval = deferredLaunchBackupDelay
+    ) -> Task<Void, Never>? {
+        guard UserDefaults.standard.bool(forKey: launchBackupEnabledKey) else { return nil }
+
+        launchBackupAndRecoveryLock.lock()
+        if hasScheduledLaunchBackupPoint || hasCreatedLaunchBackupPoint {
+            launchBackupAndRecoveryLock.unlock()
+            return nil
+        }
+        hasScheduledLaunchBackupPoint = true
+        launchBackupAndRecoveryLock.unlock()
+
+        return Task.detached(priority: .background) {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return }
+            createLaunchBackupPointIfEnabled()
         }
     }
 

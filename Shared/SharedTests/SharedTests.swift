@@ -5709,6 +5709,7 @@ fileprivate struct PersistenceTests {
         Persistence.saveChatSessions([session])
         Persistence.saveMessages(messages, for: session.id)
         Persistence.bootstrapGRDBStoreOnLaunch()
+        Persistence.createLaunchBackupPointIfEnabled()
 
         #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
         #expect(!sqliteExists(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
@@ -5748,6 +5749,7 @@ fileprivate struct PersistenceTests {
         Persistence.saveChatSessions([session])
         Persistence.saveMessages(messages, for: session.id)
         Persistence.bootstrapGRDBStoreOnLaunch()
+        Persistence.createLaunchBackupPointIfEnabled()
         #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
 
         removeIfExists(chatStoreSQLiteWALURL)
@@ -5765,6 +5767,76 @@ fileprivate struct PersistenceTests {
         #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ai'"))
         #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_ad'"))
         #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"))
+    }
+
+    @Test("启动预热不会立即创建还原点")
+    func testBootstrapGRDBDoesNotCreateLaunchBackupImmediately() {
+        cleanup(sessions: [])
+
+        let defaults = UserDefaults.standard
+        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "Deferred Backup Session", isTemporary: false)
+        let messages = [
+            ChatMessage(role: .user, content: "deferred-backup-user")
+        ]
+
+        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            if let previousBackupEnabled = previousBackupEnabled as? Bool {
+                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
+            }
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+        Persistence.bootstrapGRDBStoreOnLaunch()
+
+        #expect(FileManager.default.fileExists(atPath: chatStoreSQLiteURL.path))
+        #expect(!FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
+    }
+
+    @Test("启动后调度任务会延迟创建还原点")
+    func testScheduleLaunchBackupAfterStartupCreatesBackup() async {
+        cleanup(sessions: [])
+
+        let defaults = UserDefaults.standard
+        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "Scheduled Backup Session", isTemporary: false)
+        let messages = [
+            ChatMessage(role: .assistant, content: "scheduled-backup-assistant")
+        ]
+
+        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            if let previousBackupEnabled = previousBackupEnabled as? Bool {
+                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
+            }
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+        Persistence.bootstrapGRDBStoreOnLaunch()
+        let task = Persistence.scheduleLaunchBackupPointAfterStartupIfEnabled(delay: 0)
+        await task?.value
+
+        #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
     }
 
     @Test("旧 JSON 快照消息为零且数据库已有消息时不会覆盖与清理")
