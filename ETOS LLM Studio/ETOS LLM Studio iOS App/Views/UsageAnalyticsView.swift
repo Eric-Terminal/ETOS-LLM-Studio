@@ -2,6 +2,7 @@ import SwiftUI
 import Shared
 
 struct UsageAnalyticsView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()
     private let calendarColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
     private let detailMetricColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
@@ -412,8 +413,15 @@ struct UsageAnalyticsView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.62))
+                .fill(overviewMetricCapsuleBackground)
         )
+    }
+
+    private var overviewMetricCapsuleBackground: Color {
+        if colorScheme == .dark {
+            return Color(.secondarySystemBackground).opacity(0.72)
+        }
+        return Color.white.opacity(0.62)
     }
 
     private var overviewCardBackground: some View {
@@ -504,13 +512,21 @@ struct UsageAnalyticsView: View {
     private func heatColor(level: Int) -> Color {
         switch level {
         case 1:
-            return Color(red: 0.82, green: 0.93, blue: 0.84)
+            return colorScheme == .dark
+                ? Color(red: 0.05, green: 0.24, blue: 0.15)
+                : Color(red: 0.82, green: 0.93, blue: 0.84)
         case 2:
-            return Color(red: 0.60, green: 0.84, blue: 0.63)
+            return colorScheme == .dark
+                ? Color(red: 0.00, green: 0.43, blue: 0.20)
+                : Color(red: 0.60, green: 0.84, blue: 0.63)
         case 3:
-            return Color(red: 0.33, green: 0.69, blue: 0.39)
+            return colorScheme == .dark
+                ? Color(red: 0.15, green: 0.65, blue: 0.25)
+                : Color(red: 0.33, green: 0.69, blue: 0.39)
         case 4:
-            return Color(red: 0.11, green: 0.47, blue: 0.20)
+            return colorScheme == .dark
+                ? Color(red: 0.22, green: 0.83, blue: 0.33)
+                : Color(red: 0.11, green: 0.47, blue: 0.20)
         default:
             return Color(.tertiarySystemFill)
         }
