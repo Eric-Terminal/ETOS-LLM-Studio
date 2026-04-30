@@ -1842,8 +1842,13 @@ struct OpenAIAdapterTests {
         let assistantMessage = ChatMessage(
             role: .assistant,
             content: "",
+            reasoningContent: "先检查工具参数。",
             reasoningProviderSpecificFields: [
                 "openai_responses_reasoning_items": .array([
+                    .dictionary([
+                        "type": .string("reasoning"),
+                        "id": .string("rs_456")
+                    ]),
                     .dictionary([
                         "type": .string("reasoning"),
                         "id": .string("rs_456"),
@@ -1884,6 +1889,9 @@ struct OpenAIAdapterTests {
         #expect(inputItems[1]["type"] as? String == "reasoning")
         #expect(inputItems[1]["id"] as? String == "rs_456")
         #expect(inputItems[1]["encrypted_content"] as? String == "enc_456")
+        let summary = try #require(inputItems[1]["summary"] as? [[String: Any]])
+        #expect(summary.first?["type"] as? String == "summary_text")
+        #expect(summary.first?["text"] as? String == "先检查工具参数。")
         #expect(inputItems[2]["type"] as? String == "function_call")
         #expect(inputItems[2]["call_id"] as? String == "call_resp_2")
     }
@@ -1891,7 +1899,10 @@ struct OpenAIAdapterTests {
     @Test("OpenAI Responses 流式事件可解析文本、工具参数与用量")
     func testParseResponsesStreamingEvents() throws {
         let reasoningStart = """
-        data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_stream","encrypted_content":"enc_stream"}}
+        data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_stream"}}
+        """
+        let reasoningDone = """
+        data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_stream","encrypted_content":"enc_stream"}}
         """
         let toolStart = """
         data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_stream_1","name":"save_memory","arguments":""}}
@@ -1907,12 +1918,14 @@ struct OpenAIAdapterTests {
         """
 
         let reasoningPart = try #require(adapter.parseStreamingResponse(line: reasoningStart))
+        let reasoningDonePart = try #require(adapter.parseStreamingResponse(line: reasoningDone))
         let toolStartPart = try #require(adapter.parseStreamingResponse(line: toolStart))
         let toolDeltaPart = try #require(adapter.parseStreamingResponse(line: toolDelta))
         let textPart = try #require(adapter.parseStreamingResponse(line: textDelta))
         let completedPart = try #require(adapter.parseStreamingResponse(line: completed))
 
         let rawReasoningItems = try #require(reasoningPart.reasoningProviderSpecificFields?["openai_responses_reasoning_items"])
+        let rawDoneReasoningItems = try #require(reasoningDonePart.reasoningProviderSpecificFields?["openai_responses_reasoning_items"])
         let startedTool = try #require(toolStartPart.toolCallDeltas?.first)
         let toolArguments = try #require(toolDeltaPart.toolCallDeltas?.first)
         let usage = try #require(completedPart.tokenUsage)
@@ -1921,9 +1934,16 @@ struct OpenAIAdapterTests {
            let firstReasoningItem = reasoningItems.first,
            case let .dictionary(reasoningItem) = firstReasoningItem {
             #expect(reasoningItem["id"] == .string("rs_stream"))
-            #expect(reasoningItem["encrypted_content"] == .string("enc_stream"))
         } else {
             Issue.record("Responses API 流式事件未保留 reasoning item。")
+        }
+        if case let .array(doneReasoningItems) = rawDoneReasoningItems,
+           let firstDoneReasoningItem = doneReasoningItems.first,
+           case let .dictionary(doneReasoningItem) = firstDoneReasoningItem {
+            #expect(doneReasoningItem["id"] == .string("rs_stream"))
+            #expect(doneReasoningItem["encrypted_content"] == .string("enc_stream"))
+        } else {
+            Issue.record("Responses API 流式完成事件未保留 reasoning item。")
         }
         #expect(startedTool.id == "call_stream_1")
         #expect(startedTool.nameFragment == "save_memory")

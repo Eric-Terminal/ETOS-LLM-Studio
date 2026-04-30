@@ -808,13 +808,40 @@ public class OpenAIAdapter: APIAdapter {
               case let .array(items) = rawItems else {
             return []
         }
-        return items.compactMap { item in
+        var result: [[String: Any]] = []
+        var indexByID: [String: Int] = [:]
+        for item in items {
             guard let dictionary = item.toAny() as? [String: Any],
                   dictionary["type"] as? String == "reasoning" else {
-                return nil
+                continue
             }
-            return dictionary
+
+            var reasoningItem = dictionary
+            let summaryItems = reasoningItem["summary"] as? [[String: Any]]
+            let hasSummaryText = summaryItems?.contains {
+                (($0["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            } == true
+            if !hasSummaryText,
+               let reasoningContent = message.reasoningContent,
+               !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                reasoningItem["summary"] = [
+                    [
+                        "type": "summary_text",
+                        "text": reasoningContent
+                    ]
+                ]
+            }
+
+            if let id = reasoningItem["id"] as? String, let existingIndex = indexByID[id] {
+                result[existingIndex] = reasoningItem
+            } else {
+                if let id = reasoningItem["id"] as? String {
+                    indexByID[id] = result.count
+                }
+                result.append(reasoningItem)
+            }
         }
+        return result
     }
 
     private func buildResponsesInputItems(
@@ -1037,6 +1064,16 @@ public class OpenAIAdapter: APIAdapter {
                     )
                 ]
             )
+
+        case "response.output_item.done":
+            guard let item = payload["item"] as? [String: Any],
+                  item["type"] as? String == "reasoning",
+                  let reasoningItem = jsonValue(fromJSONObject: item) else {
+                return nil
+            }
+            return ChatMessagePart(reasoningProviderSpecificFields: [
+                Self.responsesReasoningItemsKey: .array([reasoningItem])
+            ])
 
         case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
             if let delta = payload["delta"] as? String {
