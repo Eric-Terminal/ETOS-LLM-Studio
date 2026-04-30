@@ -179,23 +179,13 @@ struct DisplaySettingsView: View {
                     )
                 }
 
-                Toggle(NSLocalizedString("自定义白天文字颜色", comment: ""), isOn: $enableCustomLightTextColor)
-                if enableCustomLightTextColor {
+                Toggle(NSLocalizedString("自定义文字颜色", comment: ""), isOn: customTextColorEnabledBinding)
+                if customTextColorEnabledBinding.wrappedValue {
                     colorEditorLink(
-                        title: "白天文字颜色",
-                        hex: $customLightTextColorHex,
-                        fallback: defaultLightTextColor,
-                        description: "在浅色模式下覆盖聊天文本颜色。"
-                    )
-                }
-
-                Toggle(NSLocalizedString("自定义夜览文字颜色", comment: ""), isOn: $enableCustomDarkTextColor)
-                if enableCustomDarkTextColor {
-                    colorEditorLink(
-                        title: "夜览文字颜色",
-                        hex: $customDarkTextColorHex,
-                        fallback: defaultDarkTextColor,
-                        description: "在深色模式下覆盖聊天文本颜色。"
+                        title: "文字颜色",
+                        hex: customTextColorHexBinding,
+                        fallback: defaultTextColor,
+                        description: "覆盖聊天文本颜色。"
                     )
                 }
 
@@ -242,12 +232,12 @@ struct DisplaySettingsView: View {
         .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
     }
 
-    private var defaultLightTextColor: Color {
-        .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1)
-    }
-
     private var defaultDarkTextColor: Color {
         .white
+    }
+
+    private var defaultTextColor: Color {
+        defaultDarkTextColor
     }
 
     private var normalizedBackgroundOpacity: Double {
@@ -258,6 +248,26 @@ struct DisplaySettingsView: View {
         Binding(
             get: { normalizedBackgroundOpacity },
             set: { backgroundOpacity = WatchBackgroundOpacitySetting.normalized($0) }
+        )
+    }
+
+    private var customTextColorEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { enableCustomLightTextColor || enableCustomDarkTextColor },
+            set: { isEnabled in
+                enableCustomLightTextColor = isEnabled
+                enableCustomDarkTextColor = isEnabled
+            }
+        )
+    }
+
+    private var customTextColorHexBinding: Binding<String> {
+        Binding(
+            get: { enableCustomDarkTextColor ? customDarkTextColorHex : customLightTextColorHex },
+            set: { newValue in
+                customLightTextColorHex = newValue
+                customDarkTextColorHex = newValue
+            }
         )
     }
 
