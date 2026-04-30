@@ -747,7 +747,7 @@ private extension Model {
         }
 
         var inputModalities = defaultInputModalities(for: kind)
-        var outputModalities = defaultOutputModalities(for: kind)
+        let outputModalities = defaultOutputModalities(for: kind)
         var capabilities = defaultCapabilities(for: kind)
         let builtInTools: [ModelBuiltInTool] = []
 

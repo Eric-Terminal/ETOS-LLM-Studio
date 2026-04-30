@@ -2067,7 +2067,7 @@ private final class MCPFailureNotificationCenter: NSObject, UNUserNotificationCe
         pendingNotificationTask = Task { [weak self] in
             let delay = UInt64(MCPConnectionFailureNotificationBatch.aggregationDelay * 1_000_000_000)
             try? await Task.sleep(nanoseconds: delay)
-            await self?.flushPendingConnectionFailures()
+            self?.flushPendingConnectionFailures()
         }
     }
 
