@@ -541,8 +541,7 @@ struct ToolCenterView: View {
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         ) {
-            Toggle(
-                "向模型暴露 Agent Skills（use_skill）",
+            Toggle(NSLocalizedString("向模型暴露 Agent Skills（use_skill）", comment: ""),
                 isOn: Binding(
                     get: { skillManager.chatToolsEnabled },
                     set: { skillManager.setChatToolsEnabled($0) }

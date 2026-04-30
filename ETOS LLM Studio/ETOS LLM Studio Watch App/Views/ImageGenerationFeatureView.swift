@@ -126,7 +126,7 @@ struct ImageGenerationFeatureView: View {
                 )
                 .lineLimit(3...6)
             } footer: {
-                Text("输入提示词，独立发起生图请求。")
+                Text(NSLocalizedString("输入提示词，独立发起生图请求。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -141,7 +141,7 @@ struct ImageGenerationFeatureView: View {
                 }
                 .onDelete(perform: deleteParameterExpressionEntries)
 
-                Button("添加表达式") {
+                Button(NSLocalizedString("添加表达式", comment: "")) {
                     addParameterExpressionEntry()
                 }
             } header: {
@@ -173,11 +173,11 @@ struct ImageGenerationFeatureView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else if viewModel.supportsImageGeneration(for: selectedImageModel) {
-                    Text("生成结果会写入当前会话，返回聊天页即可查看。")
+                    Text(NSLocalizedString("生成结果会写入当前会话，返回聊天页即可查看。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("当前模型未启用生图能力，请在模型设置中开启“生图”。")
+                    Text(NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -240,7 +240,7 @@ struct ImageGenerationFeatureView: View {
         }
         .toolbar {
             if !prompt.isEmpty {
-                Button("清空") {
+                Button(NSLocalizedString("清空", comment: "")) {
                     prompt = ""
                 }
             }

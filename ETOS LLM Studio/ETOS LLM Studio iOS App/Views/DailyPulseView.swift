@@ -38,10 +38,10 @@ struct DailyPulseView: View {
                 todayPulseSection
             }
         }
-        .navigationTitle("每日脉冲")
+        .navigationTitle(NSLocalizedString("每日脉冲", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
-        .alert("每日脉冲", isPresented: alertBinding) {
-            Button("知道了", role: .cancel) {
+        .alert(NSLocalizedString("每日脉冲", comment: ""), isPresented: alertBinding) {
+            Button(NSLocalizedString("知道了", comment: ""), role: .cancel) {
                 statusMessage = nil
                 pulseManager.clearError()
             }
@@ -60,7 +60,7 @@ struct DailyPulseView: View {
 
     private var generationSection: some View {
         Section {
-            Toggle("每日首次打开自动补生成", isOn: $pulseManager.autoGenerateEnabled)
+            Toggle(NSLocalizedString("每日首次打开自动补生成", comment: ""), isOn: $pulseManager.autoGenerateEnabled)
 
             if let run = pulseManager.latestRun {
                 VStack(alignment: .leading, spacing: 6) {
@@ -73,7 +73,7 @@ struct DailyPulseView: View {
                 .padding(.vertical, 4)
             } else if pulseManager.isPreparingTodayPulse {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("今天这一期正在准备中", systemImage: "hourglass")
+                    Label(NSLocalizedString("今天这一期正在准备中", comment: ""), systemImage: "hourglass")
                         .etFont(.headline)
                     Text(preparationStatusText)
                         .etFont(.footnote)
@@ -81,7 +81,7 @@ struct DailyPulseView: View {
                 }
                 .padding(.vertical, 4)
             } else {
-                Text("还没有每日脉冲记录。你可以先手动生成一份今天的主动情报卡片。")
+                Text(NSLocalizedString("还没有每日脉冲记录。你可以先手动生成一份今天的主动情报卡片。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -95,7 +95,7 @@ struct DailyPulseView: View {
                 }
             } label: {
                 HStack {
-                    Label("立即生成", systemImage: "sparkles")
+                    Label(NSLocalizedString("立即生成", comment: ""), systemImage: "sparkles")
                     Spacer()
                     if pulseManager.isGenerating {
                         ProgressView()
@@ -104,15 +104,15 @@ struct DailyPulseView: View {
             }
             .disabled(pulseManager.isGenerating)
         } header: {
-            Text("生成")
+            Text(NSLocalizedString("生成", comment: ""))
         } footer: {
-            Text("当前会优先使用最近聊天、记忆系统、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。为了更接近 Pulse，主界面现在只保留今天这一期。")
+            Text(NSLocalizedString("当前会优先使用最近聊天、记忆系统、请求日志、反馈历史、明日策展和你的关注焦点，并可选结合外部上下文生成约 3 张卡片。为了更接近 Pulse，主界面现在只保留今天这一期。", comment: ""))
         }
     }
 
     private var deliverySection: some View {
         Section {
-            Toggle("晨间提醒", isOn: $deliveryCoordinator.reminderEnabled)
+            Toggle(NSLocalizedString("晨间提醒", comment: ""), isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
                 DatePicker(
@@ -122,13 +122,13 @@ struct DailyPulseView: View {
                 )
 
                 if notificationCenter.authorizationStatus == .denied {
-                    Button("打开系统通知设置") {
+                    Button(NSLocalizedString("打开系统通知设置", comment: "")) {
                         viewModel.openSystemNotificationSettings()
                     }
                 }
             }
         } header: {
-            Text("主动送达")
+            Text(NSLocalizedString("主动送达", comment: ""))
         } footer: {
             Text(deliveryCoordinator.reminderStatusText)
         }
@@ -136,26 +136,26 @@ struct DailyPulseView: View {
 
     private var focusSection: some View {
         Section {
-            TextField("例如：继续推进某个项目、帮我整理下一步、关注最近反复提到的话题", text: $pulseManager.focusText, axis: .vertical)
+            TextField(NSLocalizedString("例如：继续推进某个项目、帮我整理下一步、关注最近反复提到的话题", comment: ""), text: $pulseManager.focusText, axis: .vertical)
                 .lineLimit(2...4)
 
             if !pulseManager.focusText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button(role: .destructive) {
                     pulseManager.focusText = ""
                 } label: {
-                    Label("清空关注焦点", systemImage: "xmark.circle")
+                    Label(NSLocalizedString("清空关注焦点", comment: ""), systemImage: "xmark.circle")
                 }
             }
         } header: {
-            Text("当前关注焦点")
+            Text(NSLocalizedString("当前关注焦点", comment: ""))
         } footer: {
-            Text("这里的内容会参与下一次每日脉冲生成，用来告诉 AI 你最近最想优先看的方向。")
+            Text(NSLocalizedString("这里的内容会参与下一次每日脉冲生成，用来告诉 AI 你最近最想优先看的方向。", comment: ""))
         }
     }
 
     private var tomorrowCurationSection: some View {
         Section {
-            TextField("例如：明天优先帮我跟进 PR、安排会议、看某个项目的下一步", text: $pulseManager.tomorrowCurationText, axis: .vertical)
+            TextField(NSLocalizedString("例如：明天优先帮我跟进 PR、安排会议、看某个项目的下一步", comment: ""), text: $pulseManager.tomorrowCurationText, axis: .vertical)
                 .lineLimit(2...4)
 
             if let pending = pulseManager.pendingCuration {
@@ -168,13 +168,13 @@ struct DailyPulseView: View {
                 Button(role: .destructive) {
                     pulseManager.clearTomorrowCuration()
                 } label: {
-                    Label("清空明日策展", systemImage: "xmark.circle")
+                    Label(NSLocalizedString("清空明日策展", comment: ""), systemImage: "xmark.circle")
                 }
             }
         } header: {
-            Text("明日想看什么")
+            Text(NSLocalizedString("明日想看什么", comment: ""))
         } footer: {
-            Text("这里更像 Pulse 的“明天想看什么”。下一次到达目标日期并生成每日脉冲时，会优先纳入这段策展输入。")
+            Text(NSLocalizedString("这里更像 Pulse 的“明天想看什么”。下一次到达目标日期并生成每日脉冲时，会优先纳入这段策展输入。", comment: ""))
         }
     }
 
@@ -182,7 +182,7 @@ struct DailyPulseView: View {
     private var pulseTasksSection: some View {
         Section {
             if pulseManager.pendingTasks.isEmpty && pulseManager.completedTasksPreview.isEmpty {
-                Text("还没有 Pulse 任务。你可以把下方卡片转成待跟进任务，后续生成时也会参考这些未完成项。")
+                Text(NSLocalizedString("还没有 Pulse 任务。你可以把下方卡片转成待跟进任务，后续生成时也会参考这些未完成项。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -199,14 +199,14 @@ struct DailyPulseView: View {
                             Button {
                                 pulseManager.toggleTaskCompletion(id: task.id)
                             } label: {
-                                Label("标记完成", systemImage: "checkmark.circle")
+                                Label(NSLocalizedString("标记完成", comment: ""), systemImage: "checkmark.circle")
                             }
                             .buttonStyle(.bordered)
 
                             Button(role: .destructive) {
                                 pulseManager.removeTask(id: task.id)
                             } label: {
-                                Label("移除", systemImage: "trash")
+                                Label(NSLocalizedString("移除", comment: ""), systemImage: "trash")
                             }
                             .buttonStyle(.bordered)
                         }
@@ -224,14 +224,14 @@ struct DailyPulseView: View {
                     Button(role: .destructive) {
                         pulseManager.clearCompletedTasks()
                     } label: {
-                        Label("清理已完成任务", systemImage: "checkmark.circle.trianglebadge.exclamationmark")
+                        Label(NSLocalizedString("清理已完成任务", comment: ""), systemImage: "checkmark.circle.trianglebadge.exclamationmark")
                     }
                 }
             }
         } header: {
-            Text("Pulse 任务")
+            Text(NSLocalizedString("Pulse 任务", comment: ""))
         } footer: {
-            Text("Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。")
+            Text(NSLocalizedString("Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。", comment: ""))
         }
     }
 
@@ -239,7 +239,7 @@ struct DailyPulseView: View {
     private var feedbackHistorySection: some View {
         Section {
             if pulseManager.feedbackHistoryPreview.isEmpty {
-                Text("还没有反馈历史。你对卡片点赞、降权、隐藏或保存后，这些信号会参与后续每日脉冲生成。")
+                Text(NSLocalizedString("还没有反馈历史。你对卡片点赞、降权、隐藏或保存后，这些信号会参与后续每日脉冲生成。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -257,22 +257,22 @@ struct DailyPulseView: View {
                 NavigationLink {
                     DailyPulseFeedbackHistoryView()
                 } label: {
-                    Label("查看完整反馈历史", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                    Label(NSLocalizedString("查看完整反馈历史", comment: ""), systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 }
             }
         } header: {
-            Text("反馈历史")
+            Text(NSLocalizedString("反馈历史", comment: ""))
         } footer: {
-            Text("反馈历史会作为长期偏好信号保留；进入完整历史页后，你可以逐条删除或整体清空。")
+            Text(NSLocalizedString("反馈历史会作为长期偏好信号保留；进入完整历史页后，你可以逐条删除或整体清空。", comment: ""))
         }
     }
 
     private var externalSourcesSection: some View {
         Section {
-            Toggle("纳入 MCP 服务器能力", isOn: $pulseManager.includeMCPContext)
-            Toggle("纳入快捷指令能力", isOn: $pulseManager.includeShortcutContext)
-            Toggle("纳入最近外部结果", isOn: $pulseManager.includeRecentExternalResults)
-            Toggle("纳入公告与趋势信号", isOn: $pulseManager.includeTrendContext)
+            Toggle(NSLocalizedString("纳入 MCP 服务器能力", comment: ""), isOn: $pulseManager.includeMCPContext)
+            Toggle(NSLocalizedString("纳入快捷指令能力", comment: ""), isOn: $pulseManager.includeShortcutContext)
+            Toggle(NSLocalizedString("纳入最近外部结果", comment: ""), isOn: $pulseManager.includeRecentExternalResults)
+            Toggle(NSLocalizedString("纳入公告与趋势信号", comment: ""), isOn: $pulseManager.includeTrendContext)
 
             if !pulseManager.externalSignalPreview.isEmpty {
                 ForEach(pulseManager.externalSignalPreview) { signal in
@@ -289,11 +289,11 @@ struct DailyPulseView: View {
                 Button(role: .destructive) {
                     pulseManager.clearExternalSignals()
                 } label: {
-                    Label("清空外部信号历史", systemImage: "trash")
+                    Label(NSLocalizedString("清空外部信号历史", comment: ""), systemImage: "trash")
                 }
             }
         } header: {
-            Text("外部上下文")
+            Text(NSLocalizedString("外部上下文", comment: ""))
         } footer: {
             Text(externalSourcesFooterText)
         }
@@ -315,7 +315,7 @@ struct DailyPulseView: View {
             let visibleCards = run.visibleCards
             Section {
                 if visibleCards.isEmpty {
-                    Text("这次生成的卡片都被你隐藏了。你可以重新生成一份新的每日脉冲。")
+                    Text(NSLocalizedString("这次生成的卡片都被你隐藏了。你可以重新生成一份新的每日脉冲。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -324,14 +324,14 @@ struct DailyPulseView: View {
                     }
                 }
             } header: {
-                Text("今天的卡片")
+                Text(NSLocalizedString("今天的卡片", comment: ""))
             } footer: {
                 Text(summaryText(for: run))
             }
         } else if pulseManager.isPreparingTodayPulse {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("正在为你准备今天的每日脉冲", systemImage: "sparkles")
+                    Label(NSLocalizedString("正在为你准备今天的每日脉冲", comment: ""), systemImage: "sparkles")
                         .etFont(.subheadline.weight(.medium))
                     Text(preparationStatusText)
                         .etFont(.footnote)
@@ -340,15 +340,15 @@ struct DailyPulseView: View {
                 }
                 .padding(.vertical, 6)
             } header: {
-                Text("今天的卡片")
+                Text(NSLocalizedString("今天的卡片", comment: ""))
             }
         } else {
             Section {
-                Text("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。")
+                Text(NSLocalizedString("今天还没有生成新的每日脉冲。你可以立即生成，或者先写一点“明日想看什么”再回来。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } header: {
-                Text("今天的卡片")
+                Text(NSLocalizedString("今天的卡片", comment: ""))
             }
         }
     }
@@ -397,7 +397,7 @@ struct DailyPulseView: View {
                                     ? "已打开这张卡片对应的会话，并为你填好继续追问。"
                                     : "已为这张卡片创建正式会话，并为你填好继续追问。"
                             } label: {
-                                Label("继续聊", systemImage: "arrow.up.right.circle")
+                                Label(NSLocalizedString("继续聊", comment: ""), systemImage: "arrow.up.right.circle")
                             }
                             .buttonStyle(.borderedProminent)
                         }
@@ -419,7 +419,7 @@ struct DailyPulseView: View {
                         Button(role: .destructive) {
                             pulseManager.applyFeedback(.hidden, cardID: card.id, runID: runID)
                         } label: {
-                            Label("隐藏这张卡片", systemImage: "eye.slash")
+                            Label(NSLocalizedString("隐藏这张卡片", comment: ""), systemImage: "eye.slash")
                         }
                         .buttonStyle(.borderless)
                     }
@@ -447,20 +447,20 @@ struct DailyPulseView: View {
     private func feedbackBadge(for card: DailyPulseCard) -> some View {
         switch card.feedback {
         case .liked:
-            Label("已喜欢", systemImage: "heart.fill")
+            Label(NSLocalizedString("已喜欢", comment: ""), systemImage: "heart.fill")
                 .etFont(.caption)
                 .foregroundStyle(.pink)
         case .disliked:
-            Label("已降权", systemImage: "hand.thumbsdown.fill")
+            Label(NSLocalizedString("已降权", comment: ""), systemImage: "hand.thumbsdown.fill")
                 .etFont(.caption)
                 .foregroundStyle(.orange)
         case .hidden:
-            Label("已隐藏", systemImage: "eye.slash.fill")
+            Label(NSLocalizedString("已隐藏", comment: ""), systemImage: "eye.slash.fill")
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
         case .none:
             if card.savedSessionID != nil {
-                Label("已保存", systemImage: "bookmark.fill")
+                Label(NSLocalizedString("已保存", comment: ""), systemImage: "bookmark.fill")
                     .etFont(.caption)
                     .foregroundStyle(.blue)
             }

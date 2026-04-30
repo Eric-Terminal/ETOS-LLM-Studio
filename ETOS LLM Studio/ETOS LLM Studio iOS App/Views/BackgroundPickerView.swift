@@ -42,7 +42,7 @@ struct BackgroundPickerView: View {
     
     var body: some View {
         contentView
-            .navigationTitle("选择背景")
+            .navigationTitle(NSLocalizedString("选择背景", comment: ""))
             .toolbar { addBackgroundToolbar }
             .photosPicker(isPresented: $isShowingPhotoPicker, selection: $selectedItem, matching: .images)
             .onChange(of: selectedItem) { _, newItem in
@@ -57,26 +57,26 @@ struct BackgroundPickerView: View {
             }) {
                 cropEditorSheetContent
             }
-            .alert("无法保存背景", isPresented: saveErrorAlertPresentedBinding) {
-                Button("确定", role: .cancel) {}
+            .alert(NSLocalizedString("无法保存背景", comment: ""), isPresented: saveErrorAlertPresentedBinding) {
+                Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
             } message: {
                 Text(saveErrorMessage ?? "")
             }
-            .alert("删除背景", isPresented: $isShowingDeleteConfirmation, presenting: deleteCandidate) { name in
-                Button("删除", role: .destructive) {
+            .alert(NSLocalizedString("删除背景", comment: ""), isPresented: $isShowingDeleteConfirmation, presenting: deleteCandidate) { name in
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     deleteCandidate = nil
                     Task {
                         await deleteBackground(named: name)
                     }
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     deleteCandidate = nil
                 }
             } message: { _ in
-                Text("确定删除这张背景吗？")
+                Text(NSLocalizedString("确定删除这张背景吗？", comment: ""))
             }
-            .alert("无法删除背景", isPresented: deleteErrorAlertPresentedBinding) {
-                Button("确定", role: .cancel) {}
+            .alert(NSLocalizedString("无法删除背景", comment: ""), isPresented: deleteErrorAlertPresentedBinding) {
+                Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
             } message: {
                 Text(deleteErrorMessage ?? "")
             }
@@ -118,7 +118,7 @@ struct BackgroundPickerView: View {
                                 deleteCandidate = name
                                 isShowingDeleteConfirmation = true
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
@@ -334,7 +334,7 @@ private struct BackgroundCropEditorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                Picker("裁切比例", selection: $selectedTarget) {
+                Picker(NSLocalizedString("裁切比例", comment: ""), selection: $selectedTarget) {
                     ForEach(BackgroundCropTarget.allCases) { target in
                         Text(target.title).tag(target)
                     }
@@ -343,7 +343,7 @@ private struct BackgroundCropEditorView: View {
                 .tint(.blue)
                 .padding(.horizontal)
                 
-                Text("拖动和缩放以调整取景范围")
+                Text(NSLocalizedString("拖动和缩放以调整取景范围", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
                 
@@ -395,10 +395,10 @@ private struct BackgroundCropEditorView: View {
                     }
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button("取消", action: onCancel)
+                            Button(NSLocalizedString("取消", comment: ""), action: onCancel)
                         }
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button("保存") {
+                            Button(NSLocalizedString("保存", comment: "")) {
                                 guard let output = makeCroppedImage(cropRect: cropRect, renderedSize: renderedSize, offset: effectiveOffset) else {
                                     return
                                 }
@@ -408,7 +408,7 @@ private struct BackgroundCropEditorView: View {
                     }
                 }
             }
-            .navigationTitle("裁切背景")
+            .navigationTitle(NSLocalizedString("裁切背景", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .background(editorPageBackground.ignoresSafeArea())
         }

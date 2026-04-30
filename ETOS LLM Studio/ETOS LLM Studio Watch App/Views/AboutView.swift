@@ -66,7 +66,7 @@ struct AboutView: View {
                     VStack(spacing: 2) {
                         Text("ETOS LLM Studio")
                             .etFont(.headline)
-                        Text("原生 AI 聊天客户端")
+                        Text(NSLocalizedString("原生 AI 聊天客户端", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -78,7 +78,7 @@ struct AboutView: View {
                 // MARK: - App Info
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("版本")
+                        Text(NSLocalizedString("版本", comment: ""))
                             .etFont(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -98,7 +98,7 @@ struct AboutView: View {
                 
                 // MARK: - Features
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("核心功能")
+                    Text(NSLocalizedString("核心功能", comment: ""))
                         .etFont(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     
@@ -164,7 +164,7 @@ struct AboutView: View {
                         }
                     } label: {
                         HStack {
-                            Text("隐私政策")
+                            Text(NSLocalizedString("隐私政策", comment: ""))
                                 .etFont(.caption)
                             Spacer()
                             Text(privacyHost)
@@ -190,7 +190,7 @@ struct AboutView: View {
             }
             .padding(.horizontal)
         }
-        .navigationTitle("关于")
+        .navigationTitle(NSLocalizedString("关于", comment: ""))
         .sheet(isPresented: $showAppLogs) {
             NavigationStack {
                 WatchAppLogsView()

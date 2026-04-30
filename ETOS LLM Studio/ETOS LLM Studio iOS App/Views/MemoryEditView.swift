@@ -21,7 +21,7 @@ struct MemoryEditView: View {
     
     var body: some View {
         Form {
-            Section("记忆内容") {
+            Section(NSLocalizedString("记忆内容", comment: "")) {
                 TextEditor(text: $memory.content)
                     .frame(minHeight: 180)
                     .onChange(of: memory.content) { _, _ in
@@ -42,21 +42,21 @@ struct MemoryEditView: View {
                     hasChanges = true
                 }
             } header: {
-                Text("状态")
+                Text(NSLocalizedString("状态", comment: ""))
             }
             
             Section {
-                LabeledContent("更新时间") {
+                LabeledContent(NSLocalizedString("更新时间", comment: "")) {
                     Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .navigationTitle("编辑记忆")
+        .navigationTitle(NSLocalizedString("编辑记忆", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     Task {
                         await viewModel.updateMemory(item: memory)
                         dismiss()

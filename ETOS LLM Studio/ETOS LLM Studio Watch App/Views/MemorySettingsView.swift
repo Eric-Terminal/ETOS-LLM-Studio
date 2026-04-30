@@ -78,7 +78,7 @@ public struct MemorySettingsView: View {
 
     public var body: some View {
         memoryListView
-            .navigationTitle("记忆库管理")
+            .navigationTitle(NSLocalizedString("记忆库管理", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { isAddingMemory = true }) {
@@ -90,23 +90,22 @@ public struct MemorySettingsView: View {
                 AddMemorySheet()
                     .environmentObject(viewModel)
             }
-            .confirmationDialog(
-                "重新嵌入全部记忆？",
+            .confirmationDialog(NSLocalizedString("重新嵌入全部记忆？", comment: ""),
                 isPresented: $showReembedConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("重新嵌入", role: .destructive) {
+                Button(NSLocalizedString("重新嵌入", comment: ""), role: .destructive) {
                     triggerFullReembed()
                 }
-                Button("取消", role: .cancel) {}
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
             } message: {
-                Text("将删除旧的 SQLite 向量数据库，并根据当前记忆重新生成嵌入。")
+                Text(NSLocalizedString("将删除旧的 SQLite 向量数据库，并根据当前记忆重新生成嵌入。", comment: ""))
             }
             .alert(item: $reembedAlert) { alert in
                 Alert(
                     title: Text(alert.title),
                     message: Text(alert.message),
-                    dismissButton: .default(Text("好的"))
+                    dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
                 )
             }
             .task {
@@ -119,7 +118,7 @@ public struct MemorySettingsView: View {
             Section {
                 let options = viewModel.embeddingModelOptions
                 if options.isEmpty {
-                    Text("暂无可用模型，请先在“提供商与模型管理”中启用。")
+                    Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -130,7 +129,7 @@ public struct MemorySettingsView: View {
                         )
                     } label: {
                         HStack {
-                            Text("嵌入模型")
+                            Text(NSLocalizedString("嵌入模型", comment: ""))
                             MarqueeText(
                                 content: selectedEmbeddingModelLabel(in: options),
                                 uiFont: .preferredFont(forTextStyle: .footnote)
@@ -142,18 +141,18 @@ public struct MemorySettingsView: View {
                     }
                 }
             } header: {
-                Text("嵌入模型")
+                Text(NSLocalizedString("嵌入模型", comment: ""))
             } footer: {
-                Text("这里只列出支持嵌入能力的模型，记忆嵌入会调用所选模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。")
+                Text(NSLocalizedString("这里只列出支持嵌入能力的模型，记忆嵌入会调用所选模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 HStack {
-                    Text("检索数量 (Top K)")
+                    Text(NSLocalizedString("检索数量 (Top K)", comment: ""))
                     Spacer()
-                    TextField("数量", value: $memoryTopK, formatter: numberFormatter)
+                    TextField(NSLocalizedString("数量", comment: ""), value: $memoryTopK, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                         .onChange(of: memoryTopK) { _, newValue in
@@ -175,23 +174,23 @@ public struct MemorySettingsView: View {
                     .foregroundStyle(.secondary)
                 }
             } header: {
-                Text("检索设置")
+                Text(NSLocalizedString("检索设置", comment: ""))
             } footer: {
-                Text("设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。")
+                Text(NSLocalizedString("设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section(
-                header: Text("数据维护"),
-                footer: Text("将清空旧向量数据库，并按当前记忆重算所有嵌入。")
+                header: Text(NSLocalizedString("数据维护", comment: "")),
+                footer: Text(NSLocalizedString("将清空旧向量数据库，并按当前记忆重算所有嵌入。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 Button(role: .destructive) {
                     showReembedConfirmation = true
                 } label: {
-                    Label("重新生成全部嵌入", systemImage: "arrow.triangle.2.circlepath")
+                    Label(NSLocalizedString("重新生成全部嵌入", comment: ""), systemImage: "arrow.triangle.2.circlepath")
                 }
                 .disabled(isEmbeddingBusy)
                 
@@ -387,7 +386,7 @@ private struct EmbeddingModelSelectionView: View {
                 }
             }
         }
-        .navigationTitle("嵌入模型")
+        .navigationTitle(NSLocalizedString("嵌入模型", comment: ""))
     }
     
     private func select(_ model: RunnableModel?) {
@@ -419,14 +418,14 @@ public struct AddMemorySheet: View {
 
     public var body: some View {
         VStack {
-            Text("添加新记忆")
+            Text(NSLocalizedString("添加新记忆", comment: ""))
                 .etFont(.headline)
                 .padding()
 
-            TextField("输入记忆内容...", text: $memoryContent.watchKeyboardNewlineBinding())
+            TextField(NSLocalizedString("输入记忆内容...", comment: ""), text: $memoryContent.watchKeyboardNewlineBinding())
                 .padding()
 
-            Button("保存") {
+            Button(NSLocalizedString("保存", comment: "")) {
                 Task {
                     await viewModel.addMemory(content: memoryContent)
                     dismiss()
@@ -466,13 +465,13 @@ struct ConversationMemorySettingsView: View {
     var body: some View {
         List {
             Section(
-                header: Text("跨对话记忆"),
-                footer: Text("这里管理跨对话记忆的触发门槛、注入数量和画像日更策略。")
+                header: Text(NSLocalizedString("跨对话记忆", comment: "")),
+                footer: Text(NSLocalizedString("这里管理跨对话记忆的触发门槛、注入数量和画像日更策略。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 HStack {
-                    Text("注入最近摘要数")
+                    Text(NSLocalizedString("注入最近摘要数", comment: ""))
                     Spacer()
                     TextField("5", value: $conversationMemoryRecentLimit, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
@@ -483,7 +482,7 @@ struct ConversationMemorySettingsView: View {
                 }
 
                 HStack {
-                    Text("摘要触发轮次阈值")
+                    Text(NSLocalizedString("摘要触发轮次阈值", comment: ""))
                     Spacer()
                     TextField("6", value: $conversationMemoryRoundThreshold, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
@@ -494,7 +493,7 @@ struct ConversationMemorySettingsView: View {
                 }
 
                 HStack {
-                    Text("摘要最小间隔(分钟)")
+                    Text(NSLocalizedString("摘要最小间隔(分钟)", comment: ""))
                     Spacer()
                     TextField("120", value: $conversationMemorySummaryMinIntervalMinutes, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
@@ -504,11 +503,11 @@ struct ConversationMemorySettingsView: View {
                         }
                 }
 
-                Toggle("用户画像每天自动更新一次", isOn: $enableConversationProfileDailyUpdate)
+                Toggle(NSLocalizedString("用户画像每天自动更新一次", comment: ""), isOn: $enableConversationProfileDailyUpdate)
 
                 let options = viewModel.conversationSummaryModelOptions
                 if options.isEmpty {
-                    Text("暂无可用聊天模型。")
+                    Text(NSLocalizedString("暂无可用聊天模型。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -519,7 +518,7 @@ struct ConversationMemorySettingsView: View {
                         )
                     } label: {
                         HStack {
-                            Text("摘要专用模型")
+                            Text(NSLocalizedString("摘要专用模型", comment: ""))
                             MarqueeText(
                                 content: selectedConversationSummaryModelLabel(in: options),
                                 uiFont: .preferredFont(forTextStyle: .footnote)
@@ -533,14 +532,14 @@ struct ConversationMemorySettingsView: View {
             }
 
             Section(
-                header: Text("会话摘要管理"),
-                footer: Text("这里展示跨会话注入用的摘要，可按条删除或一键清空。")
+                header: Text(NSLocalizedString("会话摘要管理", comment: "")),
+                footer: Text(NSLocalizedString("这里展示跨会话注入用的摘要，可按条删除或一键清空。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
                 let summaries = viewModel.conversationSessionSummaries
                 if summaries.isEmpty {
-                    Text("暂无会话摘要。")
+                    Text(NSLocalizedString("暂无会话摘要。", comment: ""))
                         .foregroundStyle(.secondary)
                         .etFont(.footnote)
                 } else {
@@ -560,7 +559,7 @@ struct ConversationMemorySettingsView: View {
                             Button(role: .destructive) {
                                 viewModel.deleteConversationSummary(for: item.sessionID)
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
@@ -568,14 +567,14 @@ struct ConversationMemorySettingsView: View {
                     Button(role: .destructive) {
                         showClearConversationSummariesConfirmation = true
                     } label: {
-                        Label("清空全部会话摘要", systemImage: "trash.slash")
+                        Label(NSLocalizedString("清空全部会话摘要", comment: ""), systemImage: "trash.slash")
                     }
                 }
             }
 
             Section(
-                header: Text("用户画像"),
-                footer: Text("用户画像用于补充稳定偏好和长期背景。即使自动更新关闭，你仍可在这里手动编辑。")
+                header: Text(NSLocalizedString("用户画像", comment: "")),
+                footer: Text(NSLocalizedString("用户画像用于补充稳定偏好和长期背景。即使自动更新关闭，你仍可在这里手动编辑。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
@@ -586,46 +585,44 @@ struct ConversationMemorySettingsView: View {
                     Text("更新时间：\(profile.updatedAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))")
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
-                    Button("编辑用户画像") {
+                    Button(NSLocalizedString("编辑用户画像", comment: "")) {
                         conversationProfileDraft = profile.content
                         isEditingConversationProfile = true
                     }
                     Button(role: .destructive) {
                         showClearConversationProfileConfirmation = true
                     } label: {
-                        Label("清空用户画像", systemImage: "trash")
+                        Label(NSLocalizedString("清空用户画像", comment: ""), systemImage: "trash")
                     }
                 } else {
-                    Text("暂无用户画像。")
+                    Text(NSLocalizedString("暂无用户画像。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
-                    Button("新建用户画像") {
+                    Button(NSLocalizedString("新建用户画像", comment: "")) {
                         conversationProfileDraft = ""
                         isEditingConversationProfile = true
                     }
                 }
             }
         }
-        .navigationTitle("跨对话记忆与画像")
-        .confirmationDialog(
-            "清空全部会话摘要？",
+        .navigationTitle(NSLocalizedString("跨对话记忆与画像", comment: ""))
+        .confirmationDialog(NSLocalizedString("清空全部会话摘要？", comment: ""),
             isPresented: $showClearConversationSummariesConfirmation,
             titleVisibility: .visible
         ) {
-            Button("清空", role: .destructive) {
+            Button(NSLocalizedString("清空", comment: ""), role: .destructive) {
                 let removed = viewModel.clearAllConversationSummaries()
                 if removed > 0 {
                     conversationMemoryAlert = .init(title: "已清空会话摘要", message: "共清理 \(removed) 条摘要。")
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
-        .confirmationDialog(
-            "清空用户画像？",
+        .confirmationDialog(NSLocalizedString("清空用户画像？", comment: ""),
             isPresented: $showClearConversationProfileConfirmation,
             titleVisibility: .visible
         ) {
-            Button("清空", role: .destructive) {
+            Button(NSLocalizedString("清空", comment: ""), role: .destructive) {
                 do {
                     try viewModel.clearConversationUserProfile()
                     conversationMemoryAlert = .init(title: "已清空用户画像", message: "后续可重新生成或手动编辑。")
@@ -633,13 +630,13 @@ struct ConversationMemorySettingsView: View {
                     conversationMemoryAlert = .init(title: "清空失败", message: error.localizedDescription)
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
         .alert(item: $conversationMemoryAlert) { alert in
             Alert(
                 title: Text(alert.title),
                 message: Text(alert.message),
-                dismissButton: .default(Text("好的"))
+                dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
             )
         }
         .sheet(isPresented: $isEditingConversationProfile) {
@@ -681,11 +678,11 @@ private struct ConversationProfileEditorSheet: View {
 
     var body: some View {
         List {
-            Section("用户画像内容") {
-                TextField("请输入画像内容", text: $draft.watchKeyboardNewlineBinding())
+            Section(NSLocalizedString("用户画像内容", comment: "")) {
+                TextField(NSLocalizedString("请输入画像内容", comment: ""), text: $draft.watchKeyboardNewlineBinding())
             }
             Section {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     onSave(draft)
                     dismiss()
                 }

@@ -30,36 +30,36 @@ struct ModelSettingsView: View {
 
         Form {
             Section(
-                header: Text("基础信息"),
-                footer: Text("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。")
+                header: Text(NSLocalizedString("基础信息", comment: "")),
+                footer: Text(NSLocalizedString("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。", comment: ""))
             ) {
-                TextField("模型名称", text: $model.displayName)
-                TextField("模型ID", text: $model.modelName)
+                TextField(NSLocalizedString("模型名称", comment: ""), text: $model.displayName)
+                TextField(NSLocalizedString("模型ID", comment: ""), text: $model.modelName)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .etFont(.footnote.monospaced())
             }
 
-            Section("模型能力") {
-                Toggle("聊天", isOn: capabilityBinding(.chat))
-                Toggle("工具", isOn: capabilityBinding(.toolCalling))
-                Toggle("语音转文字", isOn: capabilityBinding(.speechToText))
-                Toggle("文字转语音", isOn: capabilityBinding(.textToSpeech))
-                Toggle("嵌入", isOn: capabilityBinding(.embedding))
-                Toggle("生图", isOn: capabilityBinding(.imageGeneration))
+            Section(NSLocalizedString("模型能力", comment: "")) {
+                Toggle(NSLocalizedString("聊天", comment: ""), isOn: capabilityBinding(.chat))
+                Toggle(NSLocalizedString("工具", comment: ""), isOn: capabilityBinding(.toolCalling))
+                Toggle(NSLocalizedString("语音转文字", comment: ""), isOn: capabilityBinding(.speechToText))
+                Toggle(NSLocalizedString("文字转语音", comment: ""), isOn: capabilityBinding(.textToSpeech))
+                Toggle(NSLocalizedString("嵌入", comment: ""), isOn: capabilityBinding(.embedding))
+                Toggle(NSLocalizedString("生图", comment: ""), isOn: capabilityBinding(.imageGeneration))
             }
 
-            Section("请求体编辑方式") {
-                Picker("编辑方式", selection: $requestBodyMode) {
-                    Text("参数表达式").tag(Model.RequestBodyOverrideMode.expression)
-                    Text("原始 JSON").tag(Model.RequestBodyOverrideMode.rawJSON)
+            Section(NSLocalizedString("请求体编辑方式", comment: "")) {
+                Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
+                    Text(NSLocalizedString("参数表达式", comment: "")).tag(Model.RequestBodyOverrideMode.expression)
+                    Text(NSLocalizedString("原始 JSON", comment: "")).tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
                 .pickerStyle(.segmented)
                 .tint(.blue)
             }
 
             if requestBodyMode == .expression {
-                Section("参数表达式") {
+                Section(NSLocalizedString("参数表达式", comment: "")) {
                     ForEach($expressionEntries) { $entry in
                         ExpressionRow(entry: $entry)
                             .onChange(of: entry.text) { _, _ in
@@ -71,19 +71,19 @@ struct ModelSettingsView: View {
                     Button {
                         addEmptyEntry()
                     } label: {
-                        Label("添加表达式", systemImage: "plus")
+                        Label(NSLocalizedString("添加表达式", comment: ""), systemImage: "plus")
                     }
                 }
                 
-                Section("表达式说明") {
-                    Label("用 = 指定参数，比如: thinking_budget = 128", systemImage: "character.cursor.ibeam")
-                    Label("嵌套结构使用 {}，例如: chat_template_kwargs = {thinking = false}", systemImage: "curlybraces")
-                    Label("重复 key 会自动合并字典，方便拆分输入", systemImage: "square.stack.3d.up")
+                Section(NSLocalizedString("表达式说明", comment: "")) {
+                    Label(NSLocalizedString("用 = 指定参数，比如: thinking_budget = 128", comment: ""), systemImage: "character.cursor.ibeam")
+                    Label(NSLocalizedString("嵌套结构使用 {}，例如: chat_template_kwargs = {thinking = false}", comment: ""), systemImage: "curlybraces")
+                    Label(NSLocalizedString("重复 key 会自动合并字典，方便拆分输入", comment: ""), systemImage: "square.stack.3d.up")
                 }
             } else {
                 Section(
-                    header: Text("原始 JSON"),
-                    footer: Text("填写 JSON 对象并与默认请求体合并。示例：{\"extra_body\": {\"abc\": \"123\"}}")
+                    header: Text(NSLocalizedString("原始 JSON", comment: "")),
+                    footer: Text(NSLocalizedString("填写 JSON 对象并与默认请求体合并。示例：{\"extra_body\": {\"abc\": \"123\"}}", comment: ""))
                 ) {
                     TextEditor(text: $rawJSONInput)
                         .etFont(.footnote.monospaced())
@@ -102,14 +102,14 @@ struct ModelSettingsView: View {
                 }
             }
 
-            Section("请求体预览") {
+            Section(NSLocalizedString("请求体预览", comment: "")) {
                 Text(preview.text)
                     .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
                     .textSelection(.enabled)
             }
         }
-        .navigationTitle("模型信息")
+        .navigationTitle(NSLocalizedString("模型信息", comment: ""))
         .onAppear(perform: loadEditorState)
         .onDisappear(perform: saveEditorState)
     }
@@ -573,7 +573,7 @@ private struct ExpressionRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField("参数表达式，比如 temperature = 0.8", text: $entry.text)
+            TextField(NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""), text: $entry.text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .etFont(.body.monospaced())

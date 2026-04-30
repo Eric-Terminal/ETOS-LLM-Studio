@@ -249,24 +249,23 @@ struct ContentView: View {
             }
             .interactiveDismissDisabled(true)
         }
-        .alert(
-            "是否清理旧版 JSON 文件？",
+        .alert(NSLocalizedString("是否清理旧版 JSON 文件？", comment: ""),
             isPresented: $legacyJSONMigrationManager.isCleanupPromptPresented
         ) {
-            Button("保留", role: .cancel) {
+            Button(NSLocalizedString("保留", comment: ""), role: .cancel) {
                 legacyJSONMigrationManager.keepLegacyJSONForNow()
             }
-            Button("删除") {
+            Button(NSLocalizedString("删除", comment: "")) {
                 legacyJSONMigrationManager.cleanupLegacyJSONArtifacts()
             }
         } message: {
-            Text("SQLite 迁移完成后，建议删除旧 JSON 释放空间。")
+            Text(NSLocalizedString("SQLite 迁移完成后，建议删除旧 JSON 释放空间。", comment: ""))
         }
-        .alert("迁移失败", isPresented: Binding(
+        .alert(NSLocalizedString("迁移失败", comment: ""), isPresented: Binding(
             get: { legacyMigrationErrorMessage != nil },
             set: { if !$0 { legacyMigrationErrorMessage = nil } }
         )) {
-            Button("好的", role: .cancel) {}
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {}
         } message: {
             Text(legacyMigrationErrorMessage ?? "")
         }
@@ -291,7 +290,7 @@ struct ContentView: View {
                 Color.clear
             }
         }
-            .navigationTitle("历史会话")
+            .navigationTitle(NSLocalizedString("历史会话", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if nativeDestination == nil {
@@ -396,7 +395,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("关闭提示")
+            .accessibilityLabel(NSLocalizedString("关闭提示", comment: ""))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -424,7 +423,7 @@ struct ContentView: View {
         case .settings:
             SettingsView(viewModel: viewModel)
         @unknown default:
-            Text("未知视图")
+            Text(NSLocalizedString("未知视图", comment: ""))
         }
     }
     
@@ -637,9 +636,9 @@ struct ContentView: View {
 
     private var legacyJSONMigrationPromptSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("检测到旧版 JSON 数据")
+            Text(NSLocalizedString("检测到旧版 JSON 数据", comment: ""))
                 .etFont(.headline)
-            Text("建议立即迁移到 SQLite，后续版本可能不再支持旧格式。迁移会在后台分批执行，尽量避免卡顿。")
+            Text(NSLocalizedString("建议立即迁移到 SQLite，后续版本可能不再支持旧格式。迁移会在后台分批执行，尽量避免卡顿。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -651,23 +650,23 @@ struct ContentView: View {
 
             Spacer(minLength: 4)
 
-            Button("立即迁移（推荐）") {
+            Button(NSLocalizedString("立即迁移（推荐）", comment: "")) {
                 legacyJSONMigrationManager.startMigration()
             }
             .buttonStyle(.borderedProminent)
 
-            Button("稍后再说") {
+            Button(NSLocalizedString("稍后再说", comment: "")) {
                 legacyJSONMigrationManager.postponeMigrationPrompt()
             }
             .buttonStyle(.bordered)
         }
         .padding(14)
-        .navigationTitle("数据迁移")
+        .navigationTitle(NSLocalizedString("数据迁移", comment: ""))
     }
 
     private var legacyJSONMigrationProgressSheet: some View {
         VStack(spacing: 10) {
-            Text("正在迁移")
+            Text(NSLocalizedString("正在迁移", comment: ""))
                 .etFont(.headline)
             if let progress = legacyJSONMigrationManager.progress {
                 ProgressView(value: progress.fractionCompleted)
@@ -680,13 +679,13 @@ struct ContentView: View {
             } else {
                 ProgressView()
             }
-            Text("迁移完成后会再询问是否删除旧 JSON。")
+            Text(NSLocalizedString("迁移完成后会再询问是否删除旧 JSON。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding(14)
-        .navigationTitle("迁移中")
+        .navigationTitle(NSLocalizedString("迁移中", comment: ""))
     }
     
     /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
@@ -819,7 +818,7 @@ struct ContentView: View {
                 totalMessages: viewModel.allMessagesForSession.count
             )
         } label: {
-            Label("更多", systemImage: "ellipsis")
+            Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis")
         }
         .tint(.gray)
     }
@@ -1081,7 +1080,7 @@ struct ContentView: View {
             TextField("", text: $viewModel.userInput.watchKeyboardNewlineBinding())
                 .textFieldStyle(.plain)
                 .opacity(0.01)
-                .accessibilityLabel("输入...")
+                .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
         }
         .etFont(.body)
         .padding(.horizontal, 12)
@@ -1206,7 +1205,7 @@ struct ContentView: View {
                         .contentShape(Circle())
                 }
                 .labelStyle(.iconOnly)
-                .accessibilityLabel("添加附件")
+                .accessibilityLabel(NSLocalizedString("添加附件", comment: ""))
                 .tint(.blue)
                 .disabled(viewModel.attachmentImportInProgress)
 
@@ -1221,7 +1220,7 @@ struct ContentView: View {
                             .contentShape(Circle())
                     }
                     .labelStyle(.iconOnly)
-                    .accessibilityLabel("清空输入")
+                    .accessibilityLabel(NSLocalizedString("清空输入", comment: ""))
                 }
             }
 
@@ -1238,7 +1237,7 @@ struct ContentView: View {
                                 .frame(width: inputControlHeight, height: inputControlHeight)
                         }
                         .labelStyle(.iconOnly)
-                        .accessibilityLabel("切换模型")
+                        .accessibilityLabel(NSLocalizedString("切换模型", comment: ""))
                         .tint(.blue)
                     }
             )
@@ -1254,7 +1253,7 @@ struct ContentView: View {
                                 .frame(width: inputControlHeight, height: inputControlHeight)
                         }
                         .labelStyle(.iconOnly)
-                        .accessibilityLabel("历史会话")
+                        .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
                         .tint(.blue)
                     }
             )
@@ -1296,26 +1295,26 @@ struct ContentView: View {
             .sheet(isPresented: speechSheetBinding) {
                 SpeechRecorderView(viewModel: viewModel)
             }
-            .alert("语音输入错误", isPresented: speechErrorBinding) {
-                Button("好的", role: .cancel) { }
+            .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: speechErrorBinding) {
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
             } message: {
                 Text(viewModel.speechErrorMessage ?? "发生未知错误，请稍后重试。")
             }
-            .alert("附件导入失败", isPresented: $viewModel.showAttachmentImportErrorAlert) {
-                Button("好的", role: .cancel) { }
+            .alert(NSLocalizedString("附件导入失败", comment: ""), isPresented: $viewModel.showAttachmentImportErrorAlert) {
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
             } message: {
                 Text(viewModel.attachmentImportErrorMessage ?? "附件导入失败，请稍后重试。")
             }
-            .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
-                Button("好的", role: .cancel) { }
+            .alert(NSLocalizedString("记忆系统需要更新", comment: ""), isPresented: $viewModel.showDimensionMismatchAlert) {
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
             } message: {
                 Text(viewModel.dimensionMismatchMessage)
             }
-            .alert("数据库已自动恢复", isPresented: Binding(
+            .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: Binding(
                 get: { launchRecoveryNoticeMessage != nil },
                 set: { if !$0 { launchRecoveryNoticeMessage = nil } }
             )) {
-                Button("好的", role: .cancel) { }
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
             } message: {
                 Text(launchRecoveryNoticeMessage ?? "")
             }
@@ -1558,7 +1557,7 @@ private struct WatchAttachmentImportView: View {
     var body: some View {
         Form {
             Section {
-                TextField("链接或文件路径", text: $source)
+                TextField(NSLocalizedString("链接或文件路径", comment: ""), text: $source)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
 
@@ -1568,7 +1567,7 @@ private struct WatchAttachmentImportView: View {
             }
 
             if !history.isEmpty {
-                Section("最近链接") {
+                Section(NSLocalizedString("最近链接", comment: "")) {
                     ForEach(history, id: \.self) { item in
                         Button {
                             source = item
@@ -1589,14 +1588,14 @@ private struct WatchAttachmentImportView: View {
                 }
             }
         }
-        .navigationTitle("添加附件")
+        .navigationTitle(NSLocalizedString("添加附件", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消", action: onCancel)
+                Button(NSLocalizedString("取消", comment: ""), action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("导入", action: onImport)
+                Button(NSLocalizedString("导入", comment: ""), action: onImport)
                     .disabled(!canImport)
             }
         }
@@ -1612,7 +1611,7 @@ private struct WatchQuickModelSelectorView: View {
     var body: some View {
         List {
             if models.isEmpty {
-                Text("暂无可用模型，请先在设置中启用模型。")
+                Text(NSLocalizedString("暂无可用模型，请先在设置中启用模型。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(models, id: \.id) { model in
@@ -1639,7 +1638,7 @@ private struct WatchQuickModelSelectorView: View {
                 }
             }
         }
-        .navigationTitle("切换模型")
+        .navigationTitle(NSLocalizedString("切换模型", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -1680,7 +1679,7 @@ private struct WatchAskUserInputView: View {
                         Text(title)
                             .etFont(.headline)
                     } else {
-                        Text("请补充信息")
+                        Text(NSLocalizedString("请补充信息", comment: ""))
                             .etFont(.headline)
                     }
                     if let description = request.description, !description.isEmpty {
@@ -1733,8 +1732,7 @@ private struct WatchAskUserInputView: View {
 
                     Section {
                         HStack(spacing: 6) {
-                            TextField(
-                                "请输入自定义偏好",
+                            TextField(NSLocalizedString("请输入自定义偏好", comment: ""),
                                 text: Binding(
                                     get: { otherTextByQuestion[question.id, default: ""] },
                                     set: { newValue in
@@ -1757,12 +1755,12 @@ private struct WatchAskUserInputView: View {
                     }
                 } else {
                     Section {
-                        Text("暂无可填写问题")
+                        Text(NSLocalizedString("暂无可填写问题", comment: ""))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("结构化问答")
+            .navigationTitle(NSLocalizedString("结构化问答", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -1775,7 +1773,7 @@ private struct WatchAskUserInputView: View {
                     .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         handleCancelAndDismiss()
                     }
                 }
@@ -1948,11 +1946,11 @@ private struct FullErrorContentView: View {
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle("完整响应")
+            .navigationTitle(NSLocalizedString("完整响应", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
                 }
             }
         }

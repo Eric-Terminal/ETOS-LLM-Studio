@@ -22,7 +22,7 @@ struct ProviderDetailView: View {
 
     var body: some View {
         List {
-            Section("提供商信息") {
+            Section(NSLocalizedString("提供商信息", comment: "")) {
                 MarqueeTitleSubtitleLabel(
                     title: provider.name,
                     subtitle: provider.baseURL,
@@ -31,14 +31,14 @@ struct ProviderDetailView: View {
                 )
             }
 
-            Section("列表设置") {
-                Toggle("按模型家族分组", isOn: $groupByFamilySection)
+            Section(NSLocalizedString("列表设置", comment: "")) {
+                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
                 if groupByFamilySection {
-                    Text("将按模型家族拆分显示。")
+                    Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("将按已添加/未添加展示。")
+                    Text(NSLocalizedString("将按已添加/未添加展示。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -98,14 +98,14 @@ struct ProviderDetailView: View {
                     Image(systemName: "icloud.and.arrow.down")
                 }
                 .disabled(isFetchingModels)
-                .accessibilityLabel("从云端获取")
+                .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
 
                 Button {
                     isAddingModel = true
                 } label: {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("添加模型")
+                .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
             }
         }
         .sheet(isPresented: $isAddingModel) {
@@ -116,8 +116,8 @@ struct ProviderDetailView: View {
         .onChange(of: provider) { _, _ in
             saveChanges()
         }
-        .alert("获取模型失败", isPresented: $showErrorAlert) {
-            Button("好的", role: .cancel) { }
+        .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
         } message: {
             Text(fetchError ?? "发生未知错误。")
         }
@@ -237,7 +237,7 @@ struct ProviderDetailView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("搜索模型（名称或ID）", text: $searchText)
+            TextField(NSLocalizedString("搜索模型（名称或ID）", comment: ""), text: $searchText)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
 
@@ -249,7 +249,7 @@ struct ProviderDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("清空搜索关键词")
+                .accessibilityLabel(NSLocalizedString("清空搜索关键词", comment: ""))
             }
         }
         .padding(.horizontal, 14)
@@ -313,7 +313,7 @@ struct ProviderDetailView: View {
                     Image(systemName: "plus.circle.fill")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("激活模型")
+                .accessibilityLabel(NSLocalizedString("激活模型", comment: ""))
             }
         }
     }
@@ -349,18 +349,18 @@ private struct ModelAddView: View {
 
     var body: some View {
         Form {
-            Section("新模型信息") {
-                TextField("模型ID", text: $modelName)
-                TextField("模型名称", text: $displayName)
+            Section(NSLocalizedString("新模型信息", comment: "")) {
+                TextField(NSLocalizedString("模型ID", comment: ""), text: $modelName)
+                TextField(NSLocalizedString("模型名称", comment: ""), text: $displayName)
             }
         }
-        .navigationTitle("添加模型")
+        .navigationTitle(NSLocalizedString("添加模型", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("添加") {
+                Button(NSLocalizedString("添加", comment: "")) {
                     addModel()
                 }
                 .disabled(modelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

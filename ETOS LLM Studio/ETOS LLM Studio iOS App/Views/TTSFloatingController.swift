@@ -110,7 +110,7 @@ struct TTSFloatingController: View {
             Spacer(minLength: 4)
 
             if ttsManager.canReplayLastRequest {
-                Button("重试") {
+                Button(NSLocalizedString("重试", comment: "")) {
                     ttsManager.replayLastRequest()
                     keepVisibleAfterFinished = true
                 }

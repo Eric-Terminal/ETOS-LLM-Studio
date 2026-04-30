@@ -57,7 +57,7 @@ struct SessionActionsView: View {
                     sessionToEdit = session
                     dismiss()
                 } label: {
-                    Label("编辑话题", systemImage: "pencil")
+                    Label(NSLocalizedString("编辑话题", comment: ""), systemImage: "pencil")
                 }
 
                 Button {
@@ -65,23 +65,23 @@ struct SessionActionsView: View {
                     showBranchOptions = true
                     dismiss()
                 } label: {
-                    Label("创建分支", systemImage: "arrow.branch")
+                    Label(NSLocalizedString("创建分支", comment: ""), systemImage: "arrow.branch")
                 }
 
                 Button {
                     onSendSessionToCompanion()
                     dismiss()
                 } label: {
-                    Label("发送到 iPhone", systemImage: "iphone")
+                    Label(NSLocalizedString("发送到 iPhone", comment: ""), systemImage: "iphone")
                 }
             }
 
-            Section("移动到文件夹") {
+            Section(NSLocalizedString("移动到文件夹", comment: "")) {
                 Button {
                     onMoveSessionToFolder(nil)
                     dismiss()
                 } label: {
-                    Label("未分类", systemImage: session.folderID == nil ? "checkmark" : "tray")
+                    Label(NSLocalizedString("未分类", comment: ""), systemImage: session.folderID == nil ? "checkmark" : "tray")
                 }
 
                 ForEach(moveTargets) { target in
@@ -94,7 +94,7 @@ struct SessionActionsView: View {
                 }
             }
 
-            Section("导出") {
+            Section(NSLocalizedString("导出", comment: "")) {
                 NavigationLink {
                     ChatExportFormatsView(
                         session: session,
@@ -102,7 +102,7 @@ struct SessionActionsView: View {
                         upToMessageID: nil
                     )
                 } label: {
-                    Label("导出整个会话", systemImage: "square.and.arrow.up")
+                    Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
                 }
             }
 
@@ -111,7 +111,7 @@ struct SessionActionsView: View {
                     onDeleteLastMessage()
                     dismiss()
                 } label: {
-                    Label("删除最后一条消息", systemImage: "delete.backward.fill")
+                    Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward.fill")
                 }
             }
 
@@ -121,13 +121,13 @@ struct SessionActionsView: View {
                     showDeleteSessionConfirm = true
                     dismiss()
                 } label: {
-                    Label("删除会话", systemImage: "trash.fill")
+                    Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash.fill")
                 }
             }
 
-            Section(header: Text("详细信息")) {
+            Section(header: Text(NSLocalizedString("详细信息", comment: ""))) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("会话 ID")
+                    Text(NSLocalizedString("会话 ID", comment: ""))
                         .etFont(.caption)
                         .foregroundColor(.secondary)
                     Text(session.id.uuidString)

@@ -51,15 +51,14 @@ struct AgentSkillsView: View {
             }
 
             Section {
-                Toggle(
-                    "向模型暴露 Agent Skills（use_skill）",
+                Toggle(NSLocalizedString("向模型暴露 Agent Skills（use_skill）", comment: ""),
                     isOn: Binding(
                         get: { manager.chatToolsEnabled },
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
             } footer: {
-                Text("关闭后不会向模型提供 use_skill 工具，技能文件仍会保留。")
+                Text(NSLocalizedString("关闭后不会向模型提供 use_skill 工具，技能文件仍会保留。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -68,20 +67,20 @@ struct AgentSkillsView: View {
                 Button {
                     showAddSheet = true
                 } label: {
-                    Label("新增技能（粘贴 SKILL.md）", systemImage: "plus")
+                    Label(NSLocalizedString("新增技能（粘贴 SKILL.md）", comment: ""), systemImage: "plus")
                 }
 
                 Button {
                     showImportSheet = true
                 } label: {
-                    Label("从 GitHub 导入", systemImage: "square.and.arrow.down")
+                    Label(NSLocalizedString("从 GitHub 导入", comment: ""), systemImage: "square.and.arrow.down")
                 }
 
                 Button {
                     localImportError = nil
                     showLocalImporter = true
                 } label: {
-                    Label("从本地文件导入", systemImage: "tray.and.arrow.down")
+                    Label(NSLocalizedString("从本地文件导入", comment: ""), systemImage: "tray.and.arrow.down")
                 }
 
                 if let localImportError {
@@ -93,7 +92,7 @@ struct AgentSkillsView: View {
 
             Section("已安装技能 (\(manager.skills.count))") {
                 if manager.skills.isEmpty {
-                    Text("暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地文件导入。")
+                    Text(NSLocalizedString("暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地文件导入。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -131,7 +130,7 @@ struct AgentSkillsView: View {
                             Button(role: .destructive) {
                                 deleteTarget = skill
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
@@ -154,12 +153,12 @@ struct AgentSkillsView: View {
             allowsMultipleSelection: false,
             onCompletion: handleLocalImportResult
         )
-        .alert("删除技能", isPresented: Binding(
+        .alert(NSLocalizedString("删除技能", comment: ""), isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }
         )) {
-            Button("取消", role: .cancel) { deleteTarget = nil }
-            Button("删除", role: .destructive) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { deleteTarget = nil }
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let target = deleteTarget {
                     _ = manager.deleteSkill(target.name)
                 }
@@ -230,7 +229,7 @@ private extension AgentSkillsView {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -274,7 +273,7 @@ description: "技能描述"
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("请粘贴完整的 SKILL.md 内容。")
+                Text(NSLocalizedString("请粘贴完整的 SKILL.md 内容。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -300,13 +299,13 @@ description: "技能描述"
                 Spacer(minLength: 0)
             }
             .padding()
-            .navigationTitle("新增技能")
+            .navigationTitle(NSLocalizedString("新增技能", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") {
+                    Button(NSLocalizedString("保存", comment: "")) {
                         let success = manager.saveSkillFromContent(content)
                         if success {
                             dismiss()
@@ -336,16 +335,16 @@ private struct ImportSkillSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } header: {
-                    Text("仓库地址")
+                    Text(NSLocalizedString("仓库地址", comment: ""))
                 } footer: {
-                    Text("支持 /tree/branch 或子目录路径。")
+                    Text(NSLocalizedString("支持 /tree/branch 或子目录路径。", comment: ""))
                 }
 
                 if isImporting {
                     Section {
                         HStack(spacing: 10) {
                             ProgressView()
-                            Text("正在导入，请稍候…")
+                            Text(NSLocalizedString("正在导入，请稍候…", comment: ""))
                                 .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -353,21 +352,21 @@ private struct ImportSkillSheet: View {
                 }
 
                 if let localError {
-                    Section("错误") {
+                    Section(NSLocalizedString("错误", comment: "")) {
                         Text(localError)
                             .foregroundStyle(.red)
                             .etFont(.footnote)
                     }
                 }
             }
-            .navigationTitle("GitHub 导入")
+            .navigationTitle(NSLocalizedString("GitHub 导入", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                         .disabled(isImporting)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("导入") {
+                    Button(NSLocalizedString("导入", comment: "")) {
                         Task {
                             isImporting = true
                             localError = nil
@@ -398,8 +397,7 @@ private struct SkillDetailView: View {
     var body: some View {
         List {
             Section {
-                Toggle(
-                    "在聊天中启用该技能",
+                Toggle(NSLocalizedString("在聊天中启用该技能", comment: ""),
                     isOn: Binding(
                         get: { manager.isSkillEnabled(skillName) },
                         set: { manager.setSkillEnabled(name: skillName, isEnabled: $0) }
@@ -409,7 +407,7 @@ private struct SkillDetailView: View {
 
             Section("文件 (\(files.count))") {
                 if files.isEmpty {
-                    Text("技能目录为空。")
+                    Text(NSLocalizedString("技能目录为空。", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(files) { file in
@@ -434,7 +432,7 @@ private struct SkillDetailView: View {
                                 Button(role: .destructive) {
                                     deleteTarget = file
                                 } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                                 }
                             }
                         }
@@ -463,12 +461,12 @@ private struct SkillDetailView: View {
                 reload()
             }
         }
-        .alert("删除文件", isPresented: Binding(
+        .alert(NSLocalizedString("删除文件", comment: ""), isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }
         )) {
-            Button("取消", role: .cancel) { deleteTarget = nil }
-            Button("删除", role: .destructive) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { deleteTarget = nil }
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let target = deleteTarget {
                     _ = manager.deleteSkillFile(skillName: skillName, relativePath: target.relativePath)
                     reload()
@@ -519,10 +517,10 @@ private struct EditSkillFileSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") {
+                    Button(NSLocalizedString("保存", comment: "")) {
                         let success = manager.saveSkillFile(
                             skillName: skillName,
                             relativePath: file.relativePath,
@@ -557,33 +555,33 @@ private struct CreateSkillFileSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("路径") {
-                    TextField("例如 refs/checklist.md", text: $relativePath)
+                Section(NSLocalizedString("路径", comment: "")) {
+                    TextField(NSLocalizedString("例如 refs/checklist.md", comment: ""), text: $relativePath)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
 
-                Section("内容") {
+                Section(NSLocalizedString("内容", comment: "")) {
                     TextEditor(text: $content)
                         .etFont(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 220)
                 }
 
                 if let localError {
-                    Section("错误") {
+                    Section(NSLocalizedString("错误", comment: "")) {
                         Text(localError)
                             .foregroundStyle(.red)
                             .etFont(.footnote)
                     }
                 }
             }
-            .navigationTitle("新建文件")
+            .navigationTitle(NSLocalizedString("新建文件", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("创建") {
+                    Button(NSLocalizedString("创建", comment: "")) {
                         let path = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !path.isEmpty else {
                             localError = "文件路径不能为空。"

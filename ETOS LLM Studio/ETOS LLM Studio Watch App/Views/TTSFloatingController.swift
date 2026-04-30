@@ -117,7 +117,7 @@ struct TTSFloatingController: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityLabel("重试朗读")
+                .accessibilityLabel(NSLocalizedString("重试朗读", comment: ""))
             }
 
             Button {
@@ -127,7 +127,7 @@ struct TTSFloatingController: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityLabel("关闭朗读控制")
+            .accessibilityLabel(NSLocalizedString("关闭朗读控制", comment: ""))
         }
     }
 

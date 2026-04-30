@@ -35,7 +35,7 @@ struct SpeechRecorderView: View {
                         .etFont(.system(.title3, design: .monospaced))
                         .monospacedDigit()
                     
-                    Text("正在录音…")
+                    Text(NSLocalizedString("正在录音…", comment: ""))
                         .etFont(.headline)
 
                     if !viewModel.speechStreamingTranscript.isEmpty {
@@ -66,7 +66,7 @@ struct SpeechRecorderView: View {
             }
             
             HStack(spacing: 12) {
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     viewModel.cancelSpeechRecording()
                     dismiss()
                 }
@@ -74,7 +74,7 @@ struct SpeechRecorderView: View {
                 .disabled(viewModel.speechTranscriptionInProgress)
                 .frame(maxWidth: .infinity)
                 
-                Button("完成录音") {
+                Button(NSLocalizedString("完成录音", comment: "")) {
                     viewModel.finishSpeechRecording()
                 }
                 .buttonStyle(.borderedProminent)

@@ -18,19 +18,19 @@ struct AchievementJournalView: View {
         List {
             if achievementCenter.journalEntries.isEmpty {
                 Section {
-                    Text("这里还没有留下记录。")
+                    Text(NSLocalizedString("这里还没有留下记录。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Section("已点亮") {
+                Section(NSLocalizedString("已点亮", comment: "")) {
                     ForEach(achievementCenter.journalEntries) { entry in
                         AchievementJournalRow(entry: entry)
                     }
                 }
             }
         }
-        .navigationTitle("成就日记")
+        .navigationTitle(NSLocalizedString("成就日记", comment: ""))
         .onAppear {
             achievementCenter.refreshFromStorage()
         }

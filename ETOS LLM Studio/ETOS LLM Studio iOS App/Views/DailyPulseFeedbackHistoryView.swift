@@ -18,10 +18,9 @@ struct DailyPulseFeedbackHistoryView: View {
     var body: some View {
         List {
             if pulseManager.feedbackHistory.isEmpty {
-                ContentUnavailableView(
-                    "还没有反馈历史",
+                ContentUnavailableView(NSLocalizedString("还没有反馈历史", comment: ""),
                     systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                    description: Text("你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。")
+                    description: Text(NSLocalizedString("你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。", comment: ""))
                 )
             } else {
                 ForEach(pulseManager.feedbackHistory) { event in
@@ -41,18 +40,18 @@ struct DailyPulseFeedbackHistoryView: View {
                         Button(role: .destructive) {
                             pulseManager.removeFeedbackHistoryEvent(id: event.id)
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                         }
                     }
                 }
             }
         }
-        .navigationTitle("反馈历史")
+        .navigationTitle(NSLocalizedString("反馈历史", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !pulseManager.feedbackHistory.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("清空", role: .destructive) {
+                    Button(NSLocalizedString("清空", comment: ""), role: .destructive) {
                         pulseManager.clearFeedbackHistory()
                     }
                 }

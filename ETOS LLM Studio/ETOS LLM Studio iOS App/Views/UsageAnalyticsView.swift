@@ -12,7 +12,7 @@ struct UsageAnalyticsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if viewModel.state.isEmpty && !viewModel.state.isLoading {
-                    Text("当前还没有可展示的统计数据。用量会从升级到此版本后开始累计。")
+                    Text(NSLocalizedString("当前还没有可展示的统计数据。用量会从升级到此版本后开始累计。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(14)
@@ -31,7 +31,7 @@ struct UsageAnalyticsView: View {
             .padding(16)
         }
         .background(Color(.secondarySystemGroupedBackground))
-        .navigationTitle("用量统计")
+        .navigationTitle(NSLocalizedString("用量统计", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -40,7 +40,7 @@ struct UsageAnalyticsView: View {
             HStack {
                 sectionHeader("概览")
                 Spacer()
-                Text("核心数字")
+                Text(NSLocalizedString("核心数字", comment: ""))
                     .etFont(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -56,7 +56,7 @@ struct UsageAnalyticsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text("请求")
+                        Text(NSLocalizedString("请求", comment: ""))
                             .etFont(.caption.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                             .padding(.horizontal, 10)
@@ -71,7 +71,7 @@ struct UsageAnalyticsView: View {
                         Text("\(card.requestCount)")
                             .etFont(.system(size: 34, weight: .bold, design: .rounded))
                             .foregroundStyle(.primary)
-                        Text("次")
+                        Text(NSLocalizedString("次", comment: ""))
                             .etFont(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 5)
@@ -95,16 +95,16 @@ struct UsageAnalyticsView: View {
             HStack {
                 sectionHeader("绿墙")
                 Spacer()
-                Text("最近 52 周")
+                Text(NSLocalizedString("最近 52 周", comment: ""))
                     .etFont(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("请求热力图")
+                Text(NSLocalizedString("请求热力图", comment: ""))
                     .etFont(.headline)
 
-                Text("按请求次数着色，点按任意日期会联动下方详情。")
+                Text(NSLocalizedString("按请求次数着色，点按任意日期会联动下方详情。", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
 
@@ -143,7 +143,7 @@ struct UsageAnalyticsView: View {
                 }
 
                 HStack(spacing: 6) {
-                    Text("少")
+                    Text(NSLocalizedString("少", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -153,7 +153,7 @@ struct UsageAnalyticsView: View {
                             .frame(width: heatmapCellSide, height: heatmapCellSide)
                     }
 
-                    Text("多")
+                    Text(NSLocalizedString("多", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -169,7 +169,7 @@ struct UsageAnalyticsView: View {
             HStack {
                 sectionHeader("日历面板")
                 Spacer()
-                Text("按月查看")
+                Text(NSLocalizedString("按月查看", comment: ""))
                     .etFont(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
@@ -370,7 +370,7 @@ struct UsageAnalyticsView: View {
     }
 
     private var scopeSwitcher: some View {
-        Picker("统计范围", selection: Binding(
+        Picker(NSLocalizedString("统计范围", comment: ""), selection: Binding(
             get: { viewModel.state.selectedScope },
             set: { viewModel.selectScope($0) }
         )) {

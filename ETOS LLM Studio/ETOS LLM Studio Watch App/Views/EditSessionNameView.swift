@@ -40,21 +40,21 @@ struct EditSessionNameView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                TextField("输入新名称", text: $newName.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("输入新名称", comment: ""), text: $newName.watchKeyboardNewlineBinding())
                     .textFieldStyle(.plain)
                     .padding()
 
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     session.name = newName
                     onSave(session)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }
-            .navigationTitle("编辑话题")
+            .navigationTitle(NSLocalizedString("编辑话题", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         dismiss()
                     }
                 }

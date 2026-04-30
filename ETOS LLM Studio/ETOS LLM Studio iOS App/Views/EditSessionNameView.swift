@@ -23,17 +23,17 @@ struct EditSessionNameView: View {
     
     var body: some View {
         Form {
-            Section("会话名称") {
-                TextField("输入新名称", text: $name)
+            Section(NSLocalizedString("会话名称", comment: "")) {
+                TextField(NSLocalizedString("输入新名称", comment: ""), text: $name)
             }
         }
-        .navigationTitle("编辑话题")
+        .navigationTitle(NSLocalizedString("编辑话题", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     session.name = name
                     onSave()
                     dismiss()

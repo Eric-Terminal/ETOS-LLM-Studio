@@ -35,31 +35,29 @@ public struct StorageManagementView: View {
             storageCategoriesSection
             cleanupToolsSection
         }
-        .navigationTitle("存储管理")
+        .navigationTitle(NSLocalizedString("存储管理", comment: ""))
         .task {
             await refreshData()
         }
-        .confirmationDialog(
-            "清理缓存",
+        .confirmationDialog(NSLocalizedString("清理缓存", comment: ""),
             isPresented: $showClearCacheConfirmation,
             titleVisibility: .visible
         ) {
-            Button("清理", role: .destructive) {
+            Button(NSLocalizedString("清理", comment: ""), role: .destructive) {
                 performCacheCleanup()
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text("将删除所有语音和图片缓存文件。")
+            Text(NSLocalizedString("将删除所有语音和图片缓存文件。", comment: ""))
         }
-        .confirmationDialog(
-            "确认清理孤立数据",
+        .confirmationDialog(NSLocalizedString("确认清理孤立数据", comment: ""),
             isPresented: $showCleanAllOrphansConfirmation,
             titleVisibility: .visible
         ) {
-            Button("清理", role: .destructive) {
+            Button(NSLocalizedString("清理", comment: ""), role: .destructive) {
                 performAllOrphanCleanup()
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
             Text("将清理：\(orphanedDataCount.description)。\n\n此操作不可撤销。")
         }
@@ -67,7 +65,7 @@ public struct StorageManagementView: View {
             Alert(
                 title: Text(alert.title),
                 message: Text(alert.message),
-                dismissButton: .default(Text("好的"))
+                dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
             )
         }
     }
@@ -89,7 +87,7 @@ public struct StorageManagementView: View {
                     Text(StorageUtility.formatSize(storageBreakdown.totalSize))
                         .etFont(.headline)
 
-                    Text("总使用空间")
+                    Text(NSLocalizedString("总使用空间", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -100,7 +98,7 @@ public struct StorageManagementView: View {
     }
 
     private var storageCategoriesSection: some View {
-        Section("存储分类") {
+        Section(NSLocalizedString("存储分类", comment: "")) {
             ForEach(StorageCategory.allCases) { category in
                 NavigationLink {
                     WatchFileListView(category: category)
@@ -132,7 +130,7 @@ public struct StorageManagementView: View {
                 HStack {
                     Image(systemName: "trash.slash")
                         .foregroundStyle(.orange)
-                    Text("清理孤立数据")
+                    Text(NSLocalizedString("清理孤立数据", comment: ""))
                         .etFont(.footnote)
                     Spacer()
                     if orphanedDataCount.total > 0 {
@@ -148,7 +146,7 @@ public struct StorageManagementView: View {
             } label: {
                 HStack {
                     Image(systemName: "trash")
-                    Text("清理所有缓存")
+                    Text(NSLocalizedString("清理所有缓存", comment: ""))
                         .etFont(.footnote)
                     Spacer()
                     Text(StorageUtility.formatSize(storageBreakdown.cacheSize))
@@ -157,9 +155,9 @@ public struct StorageManagementView: View {
                 }
             }
         } header: {
-            Text("清理工具")
+            Text(NSLocalizedString("清理工具", comment: ""))
         } footer: {
-            Text("孤立数据包括幽灵会话、孤立音频/图片、无效音频引用。")
+            Text(NSLocalizedString("孤立数据包括幽灵会话、孤立音频/图片、无效音频引用。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -272,7 +270,7 @@ public struct WatchFileListView: View {
                     Image(systemName: "folder")
                         .etFont(.title2)
                         .foregroundStyle(.secondary)
-                    Text("暂无内容")
+                    Text(NSLocalizedString("暂无内容", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -284,17 +282,16 @@ public struct WatchFileListView: View {
         .task {
             await loadFiles()
         }
-        .confirmationDialog(
-            "删除项目",
+        .confirmationDialog(NSLocalizedString("删除项目", comment: ""),
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("删除", role: .destructive) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let file = fileToDelete {
                     deleteFile(file)
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
             if let file = fileToDelete {
                 Text(String(format: NSLocalizedString("删除 \"%@\"？", comment: ""), file.name))
@@ -304,13 +301,13 @@ public struct WatchFileListView: View {
 
     private var fileListView: some View {
         List {
-            Section("当前位置") {
+            Section(NSLocalizedString("当前位置", comment: "")) {
                 Text(relativePath)
                     .etFont(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
-            Section("统计") {
+            Section(NSLocalizedString("统计", comment: "")) {
                 infoRow(title: "文件夹", value: "\(folderCount)")
                 infoRow(title: "文件", value: "\(fileCount)")
                 infoRow(title: "总大小", value: StorageUtility.formatSize(totalFileSize))
@@ -321,9 +318,9 @@ public struct WatchFileListView: View {
                     row(for: file)
                 }
             } header: {
-                Text("内容")
+                Text(NSLocalizedString("内容", comment: ""))
             } footer: {
-                Text("点击文件夹继续浏览，点击 JSON 文件打开分页阅读。")
+                Text(NSLocalizedString("点击文件夹继续浏览，点击 JSON 文件打开分页阅读。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -520,9 +517,9 @@ private struct WatchJSONPreviewView: View {
                     Image(systemName: "doc.questionmark")
                         .etFont(.title3)
                         .foregroundStyle(.secondary)
-                    Text("无法预览")
+                    Text(NSLocalizedString("无法预览", comment: ""))
                         .etFont(.footnote)
-                    Text("无法读取此 JSON 文件。")
+                    Text(NSLocalizedString("无法读取此 JSON 文件。", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -552,12 +549,12 @@ private struct WatchJSONPreviewView: View {
 
     private var pageControls: some View {
         HStack(spacing: 8) {
-            Button("上一页") {
+            Button(NSLocalizedString("上一页", comment: "")) {
                 selectedPageIndex = max(selectedPageIndex - 1, 0)
             }
             .disabled(selectedPageIndex == 0)
 
-            Button("下一页") {
+            Button(NSLocalizedString("下一页", comment: "")) {
                 selectedPageIndex = min(selectedPageIndex + 1, max(0, pages.count - 1))
             }
             .disabled(selectedPageIndex >= pages.count - 1)

@@ -19,9 +19,9 @@ struct DailyPulseFeedbackHistoryView: View {
         List {
             if pulseManager.feedbackHistory.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("还没有反馈历史")
+                    Text(NSLocalizedString("还没有反馈历史", comment: ""))
                         .etFont(.footnote.weight(.semibold))
-                    Text("你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。")
+                    Text(NSLocalizedString("你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -43,7 +43,7 @@ struct DailyPulseFeedbackHistoryView: View {
                         Button(role: .destructive) {
                             pulseManager.removeFeedbackHistoryEvent(id: event.id)
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                         }
                     }
                 }
@@ -51,11 +51,11 @@ struct DailyPulseFeedbackHistoryView: View {
                 Button(role: .destructive) {
                     pulseManager.clearFeedbackHistory()
                 } label: {
-                    Label("清空历史", systemImage: "trash")
+                    Label(NSLocalizedString("清空历史", comment: ""), systemImage: "trash")
                 }
             }
         }
-        .navigationTitle("反馈历史")
+        .navigationTitle(NSLocalizedString("反馈历史", comment: ""))
     }
 
     private func historyTitle(for event: DailyPulseFeedbackEvent) -> String {

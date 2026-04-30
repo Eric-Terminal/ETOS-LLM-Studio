@@ -964,7 +964,7 @@ struct ChatBubble: View {
                     highlightColor: resolvedTextColor(default: Color.primary.opacity(0.85))
                 )
             } else {
-                Text("正在思考...")
+                Text(NSLocalizedString("正在思考...", comment: ""))
                     .etFont(.subheadline)
                     .foregroundStyle(resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.75))
             }
@@ -1333,7 +1333,7 @@ struct ChatBubble: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 8)
-                    Button("关闭") {
+                    Button(NSLocalizedString("关闭", comment: "")) {
                         selectedToolCallDetailSheetItem = nil
                     }
                     .buttonStyle(.bordered)
@@ -1407,7 +1407,7 @@ struct ChatBubble: View {
 
                 if let permissionRequest {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("审批操作")
+                        Text(NSLocalizedString("审批操作", comment: ""))
                             .etFont(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         ToolPermissionInlineView(
@@ -1733,7 +1733,7 @@ private struct AttachmentImageView: View {
                             Image(systemName: "photo")
                                 .etFont(.system(size: 20))
                                 .foregroundStyle(.secondary)
-                            Text("图片丢失")
+                            Text(NSLocalizedString("图片丢失", comment: ""))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -2609,31 +2609,31 @@ private struct ToolPermissionInlineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Button("允许") {
+                Button(NSLocalizedString("允许", comment: "")) {
                     onDecision(.allowOnce)
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button("拒绝", role: .destructive) {
+                Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
                     onDecision(.deny)
                 }
                 .buttonStyle(.bordered)
             }
 
             HStack(spacing: 8) {
-                Button("补充提示") {
+                Button(NSLocalizedString("补充提示", comment: "")) {
                     onDecision(.supplement)
                 }
                 .buttonStyle(.bordered)
 
-                Button("保持允许") {
+                Button(NSLocalizedString("保持允许", comment: "")) {
                     onDecision(.allowForTool)
                 }
                 .buttonStyle(.bordered)
             }
 
             HStack(spacing: 8) {
-                Button("完全权限") {
+                Button(NSLocalizedString("完全权限", comment: "")) {
                     onDecision(.allowAll)
                 }
                 .buttonStyle(.bordered)

@@ -1873,7 +1873,7 @@ private struct ETCodeCopyButton: View {
                 .foregroundStyle(didCopy ? successColor : normalColor)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("复制代码")
+        .accessibilityLabel(NSLocalizedString("复制代码", comment: ""))
     }
 }
 
@@ -2031,7 +2031,7 @@ private struct ETCodePreviewButton: View {
                 .foregroundStyle(tintColor)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("预览代码")
+        .accessibilityLabel(NSLocalizedString("预览代码", comment: ""))
         .fullScreenCover(isPresented: $showingPreview) {
             ETCodePreviewSheet(
                 content: content,

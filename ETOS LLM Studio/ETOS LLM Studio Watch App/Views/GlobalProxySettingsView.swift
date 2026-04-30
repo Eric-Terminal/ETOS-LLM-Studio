@@ -16,23 +16,23 @@ struct GlobalProxySettingsView: View {
     var body: some View {
         Form {
             Section(
-                header: Text("全局代理"),
+                header: Text(NSLocalizedString("全局代理", comment: "")),
                 footer: Text(globalFooterText)
             ) {
-                Toggle("启用全局代理", isOn: $proxyStore.isEnabled)
+                Toggle(NSLocalizedString("启用全局代理", comment: ""), isOn: $proxyStore.isEnabled)
 
                 if proxyStore.isEnabled {
-                    Picker("代理类型", selection: $proxyStore.type) {
+                    Picker(NSLocalizedString("代理类型", comment: ""), selection: $proxyStore.type) {
                         Text("HTTP / HTTPS").tag(NetworkProxyType.http)
                         Text("SOCKS5").tag(NetworkProxyType.socks5)
                     }
 
-                    TextField("代理地址", text: $proxyStore.host.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("代理地址", comment: ""), text: $proxyStore.host.watchKeyboardNewlineBinding())
                         .etFont(.caption)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    TextField("端口", value: $proxyStore.port, formatter: numberFormatter)
+                    TextField(NSLocalizedString("端口", comment: ""), value: $proxyStore.port, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .onChange(of: proxyStore.port) { _, newValue in
                             let clamped = max(1, min(65535, newValue))
@@ -41,31 +41,31 @@ struct GlobalProxySettingsView: View {
                             }
                         }
 
-                    TextField("用户名（可选）", text: $proxyStore.username.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("用户名（可选）", comment: ""), text: $proxyStore.username.watchKeyboardNewlineBinding())
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
                     Group {
                         if showPassword {
-                            TextField("密码（可选）", text: $proxyStore.password.watchKeyboardNewlineBinding())
+                            TextField(NSLocalizedString("密码（可选）", comment: ""), text: $proxyStore.password.watchKeyboardNewlineBinding())
                         } else {
-                            SecureField("密码（可选）", text: $proxyStore.password.watchKeyboardNewlineBinding())
+                            SecureField(NSLocalizedString("密码（可选）", comment: ""), text: $proxyStore.password.watchKeyboardNewlineBinding())
                         }
                     }
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                    Toggle("显示代理密码", isOn: $showPassword)
+                    Toggle(NSLocalizedString("显示代理密码", comment: ""), isOn: $showPassword)
                 }
             }
 
-            Section("优先级说明") {
-                Text("提供商设置中开启“独立代理”后，将优先使用提供商代理；未开启时才使用这里的全局代理。")
+            Section(NSLocalizedString("优先级说明", comment: "")) {
+                Text(NSLocalizedString("提供商设置中开启“独立代理”后，将优先使用提供商代理；未开启时才使用这里的全局代理。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("全局代理设置")
+        .navigationTitle(NSLocalizedString("全局代理设置", comment: ""))
     }
 
     private var globalFooterText: String {

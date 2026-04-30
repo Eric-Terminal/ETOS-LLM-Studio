@@ -112,9 +112,9 @@ struct ImageGenerationFeatureView: View {
                 TextEditor(text: $prompt)
                     .frame(minHeight: 120)
             } header: {
-                Text("提示词")
+                Text(NSLocalizedString("提示词", comment: ""))
             } footer: {
-                Text("输入提示词，独立发起生图请求。")
+                Text(NSLocalizedString("输入提示词，独立发起生图请求。", comment: ""))
             }
 
             Section {
@@ -130,7 +130,7 @@ struct ImageGenerationFeatureView: View {
                 Button {
                     addParameterExpressionEntry()
                 } label: {
-                    Label("添加表达式", systemImage: "plus")
+                    Label(NSLocalizedString("添加表达式", comment: ""), systemImage: "plus")
                 }
             } header: {
                 Text(NSLocalizedString("生图参数（表达式）", comment: "Image generation parameter expression section title"))
@@ -145,11 +145,11 @@ struct ImageGenerationFeatureView: View {
 
             Section {
                 PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 4, matching: .images) {
-                    Label("选择参考图", systemImage: "photo")
+                    Label(NSLocalizedString("选择参考图", comment: ""), systemImage: "photo")
                 }
 
                 if referenceImages.isEmpty {
-                    Text("暂未添加参考图")
+                    Text(NSLocalizedString("暂未添加参考图", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -175,9 +175,9 @@ struct ImageGenerationFeatureView: View {
                     }
                 }
             } header: {
-                Text("参考图片（可选）")
+                Text(NSLocalizedString("参考图片（可选）", comment: ""))
             } footer: {
-                Text("图片会和提示词一起发送，作为图生图参考。")
+                Text(NSLocalizedString("图片会和提示词一起发送，作为图生图参考。", comment: ""))
             }
 
             Section {
@@ -194,9 +194,9 @@ struct ImageGenerationFeatureView: View {
                 if selectedImageModel == nil {
                     Text(NSLocalizedString("请先在模型管理中启用至少一个生图模型。", comment: "No image generation model is available"))
                 } else if viewModel.supportsImageGeneration(for: selectedImageModel) {
-                    Text("生成结果会写入当前会话，返回聊天页即可查看。")
+                    Text(NSLocalizedString("生成结果会写入当前会话，返回聊天页即可查看。", comment: ""))
                 } else {
-                    Text("当前模型未启用生图能力，请在模型设置中开启“生图”。")
+                    Text(NSLocalizedString("当前模型未启用生图能力，请在模型设置中开启“生图”。", comment: ""))
                 }
             }
 
@@ -256,7 +256,7 @@ struct ImageGenerationFeatureView: View {
         }
         .toolbar {
             if !prompt.isEmpty || !referenceImages.isEmpty {
-                Button("清空") {
+                Button(NSLocalizedString("清空", comment: "")) {
                     prompt = ""
                     referenceImages = []
                     selectedPhotos = []

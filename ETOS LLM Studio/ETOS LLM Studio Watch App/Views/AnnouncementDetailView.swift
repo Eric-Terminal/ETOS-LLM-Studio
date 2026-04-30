@@ -43,11 +43,11 @@ struct AnnouncementDetailView: View {
                 } label: {
                     HStack {
                         Image(systemName: "eye.slash")
-                        Text("不再显示此通知")
+                        Text(NSLocalizedString("不再显示此通知", comment: ""))
                     }
                 }
             } footer: {
-                Text("隐藏后，此通知将不会在设置中显示；其他新通知仍会正常显示。")
+                Text(NSLocalizedString("隐藏后，此通知将不会在设置中显示；其他新通知仍会正常显示。", comment: ""))
                     .etFont(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -65,19 +65,19 @@ struct AnnouncementDetailView: View {
             case .info:
                 Image(systemName: "info.circle.fill")
                     .foregroundColor(.blue)
-                Text("通知")
+                Text(NSLocalizedString("通知", comment: ""))
             case .warning:
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
-                Text("重要通知")
+                Text(NSLocalizedString("重要通知", comment: ""))
             case .blocking:
                 Image(systemName: "exclamationmark.octagon.fill")
                     .foregroundColor(.red)
-                Text("紧急通知")
+                Text(NSLocalizedString("紧急通知", comment: ""))
             @unknown default:
                 Image(systemName: "bell.fill")
                     .foregroundColor(.gray)
-                Text("通知")
+                Text(NSLocalizedString("通知", comment: ""))
             }
         }
         .etFont(.caption)
@@ -116,7 +116,7 @@ struct AnnouncementAlertView: View {
                 
                 // 确认按钮
                 Button(action: onDismiss) {
-                    Text("我知道了")
+                    Text(NSLocalizedString("我知道了", comment: ""))
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                 }

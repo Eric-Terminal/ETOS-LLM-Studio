@@ -22,13 +22,12 @@ struct AppLogsView: View {
     var body: some View {
         List {
             if logCenter.logDayFolders.isEmpty {
-                ContentUnavailableView(
-                    "暂无日志目录",
+                ContentUnavailableView(NSLocalizedString("暂无日志目录", comment: ""),
                     systemImage: "folder",
-                    description: Text("应用运行并产生日志后，这里会按日期生成文件夹。")
+                    description: Text(NSLocalizedString("应用运行并产生日志后，这里会按日期生成文件夹。", comment: ""))
                 )
             } else {
-                Section("按日期查看") {
+                Section(NSLocalizedString("按日期查看", comment: "")) {
                     ForEach(logCenter.logDayFolders) { dayFolder in
                         NavigationLink {
                             AppLogDayRunsView(logCenter: logCenter, dayFolderID: dayFolder.id)
@@ -36,7 +35,7 @@ struct AppLogsView: View {
                             AppLogDayFolderRow(dayFolder: dayFolder)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("删除", role: .destructive) {
+                            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                                 logCenter.deleteDayFolder(dayFolder)
                             }
                         }
@@ -44,7 +43,7 @@ struct AppLogsView: View {
                 }
             }
         }
-        .navigationTitle("应用日志")
+        .navigationTitle(NSLocalizedString("应用日志", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await logCenter.refreshLogFolders()
@@ -54,30 +53,29 @@ struct AppLogsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("刷新") {
+                Button(NSLocalizedString("刷新", comment: "")) {
                     Task {
                         await logCenter.refreshLogFolders()
                     }
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("清空全部") {
+                Button(NSLocalizedString("清空全部", comment: "")) {
                     showClearAllConfirm = true
                 }
                 .disabled(logCenter.logDayFolders.isEmpty)
             }
         }
-        .confirmationDialog(
-            "确认清空所有日志？",
+        .confirmationDialog(NSLocalizedString("确认清空所有日志？", comment: ""),
             isPresented: $showClearAllConfirm,
             titleVisibility: .visible
         ) {
-            Button("清空所有日志", role: .destructive) {
+            Button(NSLocalizedString("清空所有日志", comment: ""), role: .destructive) {
                 logCenter.clearAll()
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text("该操作不可撤销，会删除全部日期文件夹和运行日志文件。")
+            Text(NSLocalizedString("该操作不可撤销，会删除全部日期文件夹和运行日志文件。", comment: ""))
         }
     }
 }
@@ -101,7 +99,7 @@ private struct AppLogDayRunsView: View {
                             AppLogRunFileRow(runFile: runFile)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("删除", role: .destructive) {
+                            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                                 logCenter.deleteRunFile(runFile)
                             }
                         }
@@ -109,13 +107,12 @@ private struct AppLogDayRunsView: View {
                 } header: {
                     Text("\(dayFolder.day) · \(dayFolder.runs.count) 个日志文件")
                 } footer: {
-                    Text("每次应用运行都会写入一个新的日志文件。")
+                    Text(NSLocalizedString("每次应用运行都会写入一个新的日志文件。", comment: ""))
                 }
             } else {
-                ContentUnavailableView(
-                    "日志目录已更新",
+                ContentUnavailableView(NSLocalizedString("日志目录已更新", comment: ""),
                     systemImage: "arrow.clockwise",
-                    description: Text("请返回上级列表重新进入。")
+                    description: Text(NSLocalizedString("请返回上级列表重新进入。", comment: ""))
                 )
             }
         }
@@ -123,7 +120,7 @@ private struct AppLogDayRunsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("刷新") {
+                Button(NSLocalizedString("刷新", comment: "")) {
                     Task {
                         await logCenter.refreshLogFolders()
                     }
@@ -145,33 +142,33 @@ private struct AppLogRunDetailView: View {
 
     var body: some View {
         List {
-            Section("日志文件信息") {
-                LabeledContent("日期文件夹", value: runFile.day)
-                LabeledContent("日志文件名", value: runFile.fileName)
-                LabeledContent("记录数", value: "\(runFile.totalEventCount)")
-                LabeledContent("来源分布", value: "开发 \(runFile.developerEventCount) / 用户 \(runFile.userEventCount)")
-                LabeledContent("文件大小", value: formatByteCount(runFile.fileSizeBytes))
-                LabeledContent("创建时间", value: formatTime(runFile.createdAt))
-                LabeledContent("最后更新", value: formatTime(runFile.updatedAt))
+            Section(NSLocalizedString("日志文件信息", comment: "")) {
+                LabeledContent(NSLocalizedString("日期文件夹", comment: ""), value: runFile.day)
+                LabeledContent(NSLocalizedString("日志文件名", comment: ""), value: runFile.fileName)
+                LabeledContent(NSLocalizedString("记录数", comment: ""), value: "\(runFile.totalEventCount)")
+                LabeledContent(NSLocalizedString("来源分布", comment: ""), value: "开发 \(runFile.developerEventCount) / 用户 \(runFile.userEventCount)")
+                LabeledContent(NSLocalizedString("文件大小", comment: ""), value: formatByteCount(runFile.fileSizeBytes))
+                LabeledContent(NSLocalizedString("创建时间", comment: ""), value: formatTime(runFile.createdAt))
+                LabeledContent(NSLocalizedString("最后更新", comment: ""), value: formatTime(runFile.updatedAt))
             }
 
-            Section("筛选") {
-                TextField("关键词（消息 / 动作 / payload）", text: $keywordFilter)
+            Section(NSLocalizedString("筛选", comment: "")) {
+                TextField(NSLocalizedString("关键词（消息 / 动作 / payload）", comment: ""), text: $keywordFilter)
                     .textInputAutocapitalization(.never)
-                TextField("分类（category）", text: $categoryFilter)
+                TextField(NSLocalizedString("分类（category）", comment: ""), text: $categoryFilter)
                     .textInputAutocapitalization(.never)
 
-                Picker("等级", selection: $levelFilter) {
+                Picker(NSLocalizedString("等级", comment: ""), selection: $levelFilter) {
                     ForEach(LevelFilter.allCases) { option in
                         Text(option.title).tag(option)
                     }
                 }
                 .pickerStyle(.menu)
 
-                Toggle("仅看配置变更", isOn: $configChangesOnly)
+                Toggle(NSLocalizedString("仅看配置变更", comment: ""), isOn: $configChangesOnly)
 
                 if hasActiveFilters {
-                    Button("重置筛选") {
+                    Button(NSLocalizedString("重置筛选", comment: "")) {
                         keywordFilter = ""
                         categoryFilter = ""
                         levelFilter = .all
@@ -180,12 +177,11 @@ private struct AppLogRunDetailView: View {
                 }
             }
 
-            Section("日志记录") {
+            Section(NSLocalizedString("日志记录", comment: "")) {
                 if displayedEvents.isEmpty {
-                    ContentUnavailableView(
-                        "没有匹配的日志",
+                    ContentUnavailableView(NSLocalizedString("没有匹配的日志", comment: ""),
                         systemImage: "doc.text.magnifyingglass",
-                        description: Text("调整筛选条件或等待新日志写入。")
+                        description: Text(NSLocalizedString("调整筛选条件或等待新日志写入。", comment: ""))
                     )
                 } else {
                     ForEach(displayedEvents) { entry in
@@ -194,21 +190,21 @@ private struct AppLogRunDetailView: View {
                 }
             }
         }
-        .navigationTitle("运行日志")
+        .navigationTitle(NSLocalizedString("运行日志", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: runFile.id) {
             await reload()
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("刷新") {
+                Button(NSLocalizedString("刷新", comment: "")) {
                     Task {
                         await reload()
                     }
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("复制") {
+                Button(NSLocalizedString("复制", comment: "")) {
                     copyLogsToClipboard()
                 }
                 .disabled(displayedEvents.isEmpty)

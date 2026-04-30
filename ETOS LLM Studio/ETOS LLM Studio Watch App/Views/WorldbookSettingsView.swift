@@ -222,7 +222,7 @@ struct WorldbookSettingsView: View {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -725,7 +725,7 @@ private struct WatchWorldbookEntryEditView: View {
                 HStack {
                     Text(String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order))
                     Spacer()
-                    TextField("数量", value: orderBinding, formatter: numberFormatter)
+                    TextField(NSLocalizedString("数量", comment: ""), value: orderBinding, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 60)
                 }
@@ -733,7 +733,7 @@ private struct WatchWorldbookEntryEditView: View {
                     HStack {
                         Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
                         Spacer()
-                        TextField("数量", value: depthBinding, formatter: numberFormatter)
+                        TextField(NSLocalizedString("数量", comment: ""), value: depthBinding, formatter: numberFormatter)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 60)
                     }

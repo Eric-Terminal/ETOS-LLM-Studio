@@ -392,7 +392,7 @@ private struct SessionFolderBrowserView: View {
 
     private func applySessionAlerts<Content: View>(to content: Content) -> some View {
         content
-            .alert("确认删除会话", isPresented: Binding(
+            .alert(NSLocalizedString("确认删除会话", comment: ""), isPresented: Binding(
                 get: { sessionToDelete != nil },
                 set: { isPresented in
                     if !isPresented {
@@ -400,23 +400,23 @@ private struct SessionFolderBrowserView: View {
                     }
                 }
             )) {
-                Button("删除", role: .destructive) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let session = sessionToDelete {
                         viewModel.deleteSessions([session])
                     }
                     sessionToDelete = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     sessionToDelete = nil
                 }
             } message: {
-                Text("删除后所有消息也将被移除，操作不可恢复。")
+                Text(NSLocalizedString("删除后所有消息也将被移除，操作不可恢复。", comment: ""))
             }
-            .alert("确认批量删除", isPresented: $showBatchDeleteConfirm) {
-                Button("删除", role: .destructive) {
+            .alert(NSLocalizedString("确认批量删除", comment: ""), isPresented: $showBatchDeleteConfirm) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     performBatchDelete()
                 }
-                Button("取消", role: .cancel) {}
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
             } message: {
                 Text(batchDeleteMessage)
             }
@@ -424,16 +424,16 @@ private struct SessionFolderBrowserView: View {
 
     private func applyFolderEditingAlerts<Content: View>(to content: Content) -> some View {
         content
-            .alert("新建文件夹", isPresented: $isShowingCreateFolderAlert) {
-                TextField("文件夹名称", text: $createFolderName)
-                Button("创建") {
+            .alert(NSLocalizedString("新建文件夹", comment: ""), isPresented: $isShowingCreateFolderAlert) {
+                TextField(NSLocalizedString("文件夹名称", comment: ""), text: $createFolderName)
+                Button(NSLocalizedString("创建", comment: "")) {
                     let trimmed = createFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { return }
                     _ = viewModel.createSessionFolder(name: trimmed, parentID: createFolderParentID)
                     createFolderName = ""
                     createFolderParentID = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     createFolderName = ""
                     createFolderParentID = nil
                 }
@@ -442,12 +442,12 @@ private struct SessionFolderBrowserView: View {
                    let parentFolder = folderByID[createFolderParentID] {
                     Text("将在“\(parentFolder.name)”下创建子文件夹。")
                 } else {
-                    Text("请输入新的文件夹名称。")
+                    Text(NSLocalizedString("请输入新的文件夹名称。", comment: ""))
                 }
             }
-            .alert("重命名文件夹", isPresented: $isShowingRenameFolderAlert) {
-                TextField("文件夹名称", text: $renameFolderName)
-                Button("保存") {
+            .alert(NSLocalizedString("重命名文件夹", comment: ""), isPresented: $isShowingRenameFolderAlert) {
+                TextField(NSLocalizedString("文件夹名称", comment: ""), text: $renameFolderName)
+                Button(NSLocalizedString("保存", comment: "")) {
                     guard let folderToRename else { return }
                     let trimmed = renameFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { return }
@@ -455,18 +455,18 @@ private struct SessionFolderBrowserView: View {
                     self.folderToRename = nil
                     renameFolderName = ""
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     folderToRename = nil
                     renameFolderName = ""
                 }
             } message: {
-                Text("请输入新的文件夹名称。")
+                Text(NSLocalizedString("请输入新的文件夹名称。", comment: ""))
             }
     }
 
     private func applyDeleteFolderAlert<Content: View>(to content: Content) -> some View {
         content
-            .alert("确认删除文件夹", isPresented: Binding(
+            .alert(NSLocalizedString("确认删除文件夹", comment: ""), isPresented: Binding(
                 get: { folderToDelete != nil },
                 set: { isPresented in
                     if !isPresented {
@@ -474,13 +474,13 @@ private struct SessionFolderBrowserView: View {
                     }
                 }
             )) {
-                Button("删除", role: .destructive) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let folderToDelete {
                         viewModel.deleteSessionFolder(folderToDelete)
                     }
                     folderToDelete = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     folderToDelete = nil
                 }
             } message: {
@@ -501,18 +501,18 @@ private struct SessionFolderBrowserView: View {
             .sheet(item: $sessionInfo) { info in
                 SessionInfoSheet(payload: info)
             }
-            .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
-                Button("删除幽灵", role: .destructive) {
+            .alert(NSLocalizedString("发现幽灵会话", comment: ""), isPresented: $showGhostSessionAlert) {
+                Button(NSLocalizedString("删除幽灵", comment: ""), role: .destructive) {
                     if let session = ghostSession {
                         viewModel.deleteSessions([session])
                     }
                     ghostSession = nil
                 }
-                Button("稍后处理", role: .cancel) {
+                Button(NSLocalizedString("稍后处理", comment: ""), role: .cancel) {
                     ghostSession = nil
                 }
             } message: {
-                Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
+                Text(NSLocalizedString("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？", comment: ""))
             }
     }
 
@@ -523,7 +523,7 @@ private struct SessionFolderBrowserView: View {
                     .searchable(
                         text: $searchText,
                         placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: Text("搜索会话标题或消息")
+                        prompt: Text(NSLocalizedString("搜索会话标题或消息", comment: ""))
                     )
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -538,11 +538,11 @@ private struct SessionFolderBrowserView: View {
             if isSearching {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("正在搜索历史会话…")
+                    Text(NSLocalizedString("正在搜索历史会话…", comment: ""))
                         .foregroundStyle(.secondary)
                 }
             } else if searchResultSessions.isEmpty {
-                Text("未找到匹配的搜索结果。")
+                Text(NSLocalizedString("未找到匹配的搜索结果。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(pagedSearchResultItems) { result in
@@ -552,7 +552,7 @@ private struct SessionFolderBrowserView: View {
                 }
             }
         } header: {
-            Text("搜索结果")
+            Text(NSLocalizedString("搜索结果", comment: ""))
         } footer: {
             if !isSearching {
                 Text("匹配 \(searchResultItems.count) 条结果 / \(searchResultSessions.count) 个会话")
@@ -566,7 +566,7 @@ private struct SessionFolderBrowserView: View {
                 Button {
                     applyBatchMove(toFolderID: nil)
                 } label: {
-                    Label("未分类", systemImage: "tray")
+                    Label(NSLocalizedString("未分类", comment: ""), systemImage: "tray")
                 }
 
                 ForEach(batchMoveFolderOptions) { option in
@@ -577,7 +577,7 @@ private struct SessionFolderBrowserView: View {
                     }
                 }
             } label: {
-                Label("移动", systemImage: "folder")
+                Label(NSLocalizedString("移动", comment: ""), systemImage: "folder")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -586,7 +586,7 @@ private struct SessionFolderBrowserView: View {
             Button(role: .destructive) {
                 showBatchDeleteConfirm = true
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -708,7 +708,7 @@ private struct SessionFolderBrowserView: View {
                             Button(role: .destructive) {
                                 sessionToDelete = session
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
@@ -741,13 +741,13 @@ private struct SessionFolderBrowserView: View {
                 Button {
                     startRenaming(folder)
                 } label: {
-                    Label("重命名文件夹", systemImage: "pencil")
+                    Label(NSLocalizedString("重命名文件夹", comment: ""), systemImage: "pencil")
                 }
 
                 Button(role: .destructive) {
                     folderToDelete = folder
                 } label: {
-                    Label("删除文件夹", systemImage: "trash")
+                    Label(NSLocalizedString("删除文件夹", comment: ""), systemImage: "trash")
                 }
             }
         }
@@ -759,7 +759,7 @@ private struct SessionFolderBrowserView: View {
                 Button {
                     createConversationAction()
                 } label: {
-                    Label("新建对话", systemImage: "plus.message")
+                    Label(NSLocalizedString("新建对话", comment: ""), systemImage: "plus.message")
                 }
             }
 
@@ -1347,7 +1347,7 @@ private struct SessionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isEditing {
-                TextField("会话名称", text: $draftName)
+                TextField(NSLocalizedString("会话名称", comment: ""), text: $draftName)
                     .textFieldStyle(.roundedBorder)
                     .focused($focused)
                     .onSubmit {
@@ -1356,12 +1356,12 @@ private struct SessionRow: View {
                     .onAppear { focused = true }
 
                 HStack {
-                    Button("保存") {
+                    Button(NSLocalizedString("保存", comment: "")) {
                         commit()
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         onCancelRename()
                     }
                     .buttonStyle(.bordered)
@@ -1387,20 +1387,20 @@ private struct SessionRow: View {
             Button {
                 onSelect()
             } label: {
-                Label("切换到此会话", systemImage: "checkmark.circle")
+                Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
             }
 
             Button {
                 onRename()
             } label: {
-                Label("重命名", systemImage: "pencil")
+                Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
             }
 
             Menu {
                 Button {
                     onMoveToFolder(nil)
                 } label: {
-                    Label("未分类", systemImage: currentFolderID == nil ? "checkmark" : "tray")
+                    Label(NSLocalizedString("未分类", comment: ""), systemImage: currentFolderID == nil ? "checkmark" : "tray")
                 }
 
                 ForEach(moveOptions) { option in
@@ -1411,44 +1411,44 @@ private struct SessionRow: View {
                     }
                 }
             } label: {
-                Label("移动到文件夹", systemImage: "folder")
+                Label(NSLocalizedString("移动到文件夹", comment: ""), systemImage: "folder")
             }
 
             Button {
                 onBranch(false)
             } label: {
-                Label("创建提示词分支", systemImage: "arrow.branch")
+                Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
             }
 
             Button {
                 onBranch(true)
             } label: {
-                Label("复制历史创建分支", systemImage: "arrow.triangle.branch")
+                Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
             }
 
             Button {
                 onDeleteLastMessage()
             } label: {
-                Label("删除最后一条消息", systemImage: "delete.backward")
+                Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
             }
 
             Button {
                 onInfo()
             } label: {
-                Label("查看会话信息", systemImage: "info.circle")
+                Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
             }
 
             Button {
                 onSendToCompanion()
             } label: {
-                Label("发送到 Apple Watch", systemImage: "applewatch")
+                Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
             }
             .disabled(session.isTemporary)
 
             Button(role: .destructive) {
                 onDelete()
             } label: {
-                Label("删除会话", systemImage: "trash")
+                Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
             }
         }
     }
@@ -1553,21 +1553,21 @@ private struct SessionInfoSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("会话概览") {
-                    LabeledContent("名称") {
+                Section(NSLocalizedString("会话概览", comment: "")) {
+                    LabeledContent(NSLocalizedString("名称", comment: "")) {
                         Text(payload.session.name)
                     }
-                    LabeledContent("状态") {
+                    LabeledContent(NSLocalizedString("状态", comment: "")) {
                         Text(payload.isCurrent ? "当前会话" : "历史会话")
                             .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
                     }
-                    LabeledContent("消息数量") {
+                    LabeledContent(NSLocalizedString("消息数量", comment: "")) {
                         Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
                     }
                 }
 
                 if let topic = payload.session.topicPrompt, !topic.isEmpty {
-                    Section("主题提示") {
+                    Section(NSLocalizedString("主题提示", comment: "")) {
                         Text(topic)
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
@@ -1575,23 +1575,23 @@ private struct SessionInfoSheet: View {
                 }
 
                 if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
-                    Section("增强提示词") {
+                    Section(NSLocalizedString("增强提示词", comment: "")) {
                         Text(enhanced)
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("唯一标识") {
+                Section(NSLocalizedString("唯一标识", comment: "")) {
                     Text(payload.session.id.uuidString)
                         .etFont(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
             }
-            .navigationTitle("会话信息")
+            .navigationTitle(NSLocalizedString("会话信息", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
                 }
             }
         }

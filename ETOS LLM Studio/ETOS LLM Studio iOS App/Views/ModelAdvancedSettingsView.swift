@@ -56,8 +56,8 @@ struct ModelAdvancedSettingsView: View {
 
     var body: some View {
         Form {
-            Section("全局系统提示词") {
-                TextField("自定义全局系统提示词", text: selectedGlobalPromptContentBinding, axis: .vertical)
+            Section(NSLocalizedString("全局系统提示词", comment: "")) {
+                TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding, axis: .vertical)
                     .lineLimit(3...8)
                     .disabled(selectedGlobalPromptEntry == nil)
 
@@ -71,19 +71,19 @@ struct ModelAdvancedSettingsView: View {
                         deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
                     )
                 } label: {
-                    LabeledContent("提示词列表") {
+                    LabeledContent(NSLocalizedString("提示词列表", comment: "")) {
                         Text(displayTitle(for: selectedGlobalPromptEntry))
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Text("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。")
+                Text(NSLocalizedString("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            Section("当前会话提示词") {
-                TextField("话题提示词", text: Binding(
+            Section(NSLocalizedString("当前会话提示词", comment: "")) {
+                TextField(NSLocalizedString("话题提示词", comment: ""), text: Binding(
                     get: { currentSession?.topicPrompt ?? "" },
                     set: { newValue in
                         if var session = currentSession {
@@ -95,7 +95,7 @@ struct ModelAdvancedSettingsView: View {
                 ), axis: .vertical)
                 .lineLimit(2...6)
 
-                TextField("增强提示词", text: Binding(
+                TextField(NSLocalizedString("增强提示词", comment: ""), text: Binding(
                     get: { currentSession?.enhancedPrompt ?? "" },
                     set: { newValue in
                         if var session = currentSession {
@@ -109,9 +109,9 @@ struct ModelAdvancedSettingsView: View {
             }
 
             Section {
-                Toggle("发送系统时间", isOn: $includeSystemTimeInPrompt)
+                Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
                 if includeSystemTimeInPrompt {
-                    Picker("发送位置", selection: $systemTimeInjectionPosition) {
+                    Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
                         ForEach(SystemTimeInjectionPosition.allCases) { position in
                             Text(position.displayName).tag(position)
                         }
@@ -119,23 +119,23 @@ struct ModelAdvancedSettingsView: View {
                     .pickerStyle(.segmented)
                 }
             } header: {
-                Text("系统时间注入")
+                Text(NSLocalizedString("系统时间注入", comment: ""))
             } footer: {
-                Text("开启后可选择在前置系统提示词中插入 <time>，或在消息末尾追加一条 system 时间提示。")
+                Text(NSLocalizedString("开启后可选择在前置系统提示词中插入 <time>，或在消息末尾追加一条 system 时间提示。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Toggle("周期性时间路标", isOn: $enablePeriodicTimeLandmark)
-                LabeledContent("路标时间（分钟）") {
-                    TextField("分钟", value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
+                Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
+                LabeledContent(NSLocalizedString("路标时间（分钟）", comment: "")) {
+                    TextField(NSLocalizedString("分钟", comment: ""), value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                         .disabled(!enablePeriodicTimeLandmark)
                 }
             } footer: {
-                Text("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。")
+                Text(NSLocalizedString("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -145,23 +145,23 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
 
-            Section("会话设置") {
-                Toggle("启动时打开历史会话", isOn: $restoreLastSessionOnLaunch)
-                Toggle("自动生成话题标题", isOn: $enableAutoSessionNaming)
+            Section(NSLocalizedString("会话设置", comment: "")) {
+                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $restoreLastSessionOnLaunch)
+                Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
             }
 
             Section {
-                Toggle("启用思考摘要", isOn: $enableReasoningSummary)
+                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
             } header: {
-                Text("思考内容")
+                Text(NSLocalizedString("思考内容", comment: ""))
             } footer: {
-                Text("开启后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。")
+                Text(NSLocalizedString("开启后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            Section("输出样式") {
-                Toggle("启用流式输出", isOn: $enableStreaming)
+            Section(NSLocalizedString("输出样式", comment: "")) {
+                Toggle(NSLocalizedString("启用流式输出", comment: ""), isOn: $enableStreaming)
             }
 
             Section {
@@ -177,7 +177,7 @@ struct ModelAdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("采样参数") {
+            Section(NSLocalizedString("采样参数", comment: "")) {
                 VStack(alignment: .leading) {
                     Text("Temperature \(String(format: "%.2f", aiTemperature))")
                         .etFont(.subheadline)
@@ -197,25 +197,25 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
 
-            Section("上下文与懒加载") {
-                LabeledContent("最大上下文消息数") {
-                    TextField("数量", value: $maxChatHistory, formatter: numberFormatter)
+            Section(NSLocalizedString("上下文与懒加载", comment: "")) {
+                LabeledContent(NSLocalizedString("最大上下文消息数", comment: "")) {
+                    TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                 }
 
-                LabeledContent("懒加载轮次") {
-                    TextField("数量", value: $lazyLoadMessageCount, formatter: numberFormatter)
+                LabeledContent(NSLocalizedString("懒加载轮次", comment: "")) {
+                    TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
                 }
 
-                Text("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。")
+                Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("偏好设置")
+        .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
     }
 
     private func handleTemperatureChange(_ value: Double) {
@@ -266,11 +266,11 @@ private struct GlobalSystemPromptPickerView: View {
                 Button {
                     addGlobalSystemPromptEntry()
                 } label: {
-                    Label("新增提示词", systemImage: "plus")
+                    Label(NSLocalizedString("新增提示词", comment: ""), systemImage: "plus")
                 }
             }
 
-            Section("全局系统提示词") {
+            Section(NSLocalizedString("全局系统提示词", comment: "")) {
                 ForEach(entries) { entry in
                     Button {
                         selectGlobalSystemPromptEntry(entry.id)
@@ -299,14 +299,14 @@ private struct GlobalSystemPromptPickerView: View {
                         Button(role: .destructive) {
                             deleteGlobalSystemPromptEntry(entry.id)
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                         }
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         Button {
                             editingEntry = entry
                         } label: {
-                            Label("更多", systemImage: "ellipsis.circle")
+                            Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis.circle")
                         }
                         .tint(.blue)
                     }
@@ -314,18 +314,18 @@ private struct GlobalSystemPromptPickerView: View {
                         Button {
                             editingEntry = entry
                         } label: {
-                            Label("编辑", systemImage: "square.and.pencil")
+                            Label(NSLocalizedString("编辑", comment: ""), systemImage: "square.and.pencil")
                         }
                         Button(role: .destructive) {
                             deleteGlobalSystemPromptEntry(entry.id)
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                         }
                     }
                 }
             }
         }
-        .navigationTitle("全局提示词")
+        .navigationTitle(NSLocalizedString("全局提示词", comment: ""))
         .sheet(item: $editingEntry) { entry in
             GlobalSystemPromptEditorView(entry: entry) { title, content in
                 updateGlobalSystemPromptEntry(entry.id, title, content)
@@ -365,19 +365,19 @@ private struct GlobalSystemPromptEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("提示词名称", text: $title)
-                TextField("提示词内容", text: $content, axis: .vertical)
+                TextField(NSLocalizedString("提示词名称", comment: ""), text: $title)
+                TextField(NSLocalizedString("提示词内容", comment: ""), text: $content, axis: .vertical)
                     .lineLimit(4...10)
             }
-            .navigationTitle("编辑提示词")
+            .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    Button(NSLocalizedString("保存", comment: "")) {
                         onSave(title, content)
                         dismiss()
                     }

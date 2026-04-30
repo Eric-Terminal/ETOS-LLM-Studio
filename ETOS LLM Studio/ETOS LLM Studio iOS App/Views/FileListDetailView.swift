@@ -123,9 +123,9 @@ private struct StorageDirectoryBrowserView: View {
         .refreshable {
             await loadFiles()
         }
-        .alert("删除文件", isPresented: $showDeleteAlert) {
-            Button("取消", role: .cancel) {}
-            Button("删除", role: .destructive) {
+        .alert(NSLocalizedString("删除文件", comment: ""), isPresented: $showDeleteAlert) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let file = fileToDelete {
                     deleteFile(file)
                 }
@@ -135,8 +135,8 @@ private struct StorageDirectoryBrowserView: View {
                 Text(String(format: NSLocalizedString("确定要删除 \"%@\" 吗？此操作不可撤销。", comment: ""), file.name))
             }
         }
-        .alert("批量删除", isPresented: $showBatchDeleteAlert) {
-            Button("取消", role: .cancel) {}
+        .alert(NSLocalizedString("批量删除", comment: ""), isPresented: $showBatchDeleteAlert) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
             Button(String(format: NSLocalizedString("删除 %d 个项目", comment: ""), selectedFiles.count), role: .destructive) {
                 deleteSelectedFiles()
             }
@@ -150,13 +150,13 @@ private struct StorageDirectoryBrowserView: View {
 
     private var fileListView: some View {
         List(selection: $selectedFiles) {
-            Section("当前位置") {
+            Section(NSLocalizedString("当前位置", comment: "")) {
                 Text(relativePath)
                     .etFont(.footnote.monospaced())
                     .foregroundStyle(.secondary)
             }
 
-            Section("统计") {
+            Section(NSLocalizedString("统计", comment: "")) {
                 infoRow(title: "文件夹", value: "\(folderCount)")
                 infoRow(title: "文件", value: "\(fileCount)")
                 infoRow(title: "可见项目", value: "\(files.count)")
@@ -168,7 +168,7 @@ private struct StorageDirectoryBrowserView: View {
                     row(for: file)
                 }
             } header: {
-                Text("内容")
+                Text(NSLocalizedString("内容", comment: ""))
             } footer: {
                 if let footerText {
                     Text(footerText)
@@ -255,7 +255,7 @@ private struct StorageDirectoryBrowserView: View {
             fileToDelete = file
             showDeleteAlert = true
         } label: {
-            Label("删除", systemImage: "trash")
+            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
         }
     }
 
@@ -417,13 +417,13 @@ private struct FilePreviewSheet: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("文件名")
+                                Text(NSLocalizedString("文件名", comment: ""))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
                                 Text(file.name)
                                     .etFont(.footnote.monospaced())
 
-                                Text("总行数")
+                                Text(NSLocalizedString("总行数", comment: ""))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
                                 Text("\(lineCount)")
@@ -438,18 +438,17 @@ private struct FilePreviewSheet: View {
                         .padding()
                     }
                 } else {
-                    ContentUnavailableView(
-                        "无法预览",
+                    ContentUnavailableView(NSLocalizedString("无法预览", comment: ""),
                         systemImage: "doc.questionmark",
-                        description: Text("无法读取此文件的内容。")
+                        description: Text(NSLocalizedString("无法读取此文件的内容。", comment: ""))
                     )
                 }
             }
-            .navigationTitle("JSON 预览")
+            .navigationTitle(NSLocalizedString("JSON 预览", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") {
+                    Button(NSLocalizedString("完成", comment: "")) {
                         dismiss()
                     }
                 }

@@ -13,17 +13,17 @@ struct UsageAnalyticsView: View {
         List {
             if viewModel.state.isEmpty && !viewModel.state.isLoading {
                 Section {
-                    Text("统计会从升级到此版本后开始累计。")
+                    Text(NSLocalizedString("统计会从升级到此版本后开始累计。", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("绿墙") {
+            Section(NSLocalizedString("绿墙", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("请求热力图")
+                    Text(NSLocalizedString("请求热力图", comment: ""))
                         .etFont(.footnote.weight(.semibold))
-                    Text("最近 52 周")
+                    Text(NSLocalizedString("最近 52 周", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -62,7 +62,7 @@ struct UsageAnalyticsView: View {
                     }
 
                     HStack(spacing: 4) {
-                        Text("少")
+                        Text(NSLocalizedString("少", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         ForEach(0..<5, id: \.self) { level in
@@ -70,7 +70,7 @@ struct UsageAnalyticsView: View {
                                 .fill(legendHeatColor(level: level))
                                 .frame(width: heatmapCellSide, height: heatmapCellSide)
                         }
-                        Text("多")
+                        Text(NSLocalizedString("多", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -78,7 +78,7 @@ struct UsageAnalyticsView: View {
                 }
             }
 
-            Section("当前月") {
+            Section(NSLocalizedString("当前月", comment: "")) {
                 HStack {
                     Button {
                         viewModel.showPreviousMonth()
@@ -103,11 +103,11 @@ struct UsageAnalyticsView: View {
                 calendarGrid
             }
 
-            Section("统计范围") {
+            Section(NSLocalizedString("统计范围", comment: "")) {
                 scopeSwitcher
             }
 
-            Section("概览") {
+            Section(NSLocalizedString("概览", comment: "")) {
                 if let card = viewModel.state.activeOverviewCard {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(card.title)
@@ -117,7 +117,7 @@ struct UsageAnalyticsView: View {
                         HStack(alignment: .lastTextBaseline, spacing: 6) {
                             Text("\(card.requestCount)")
                                 .etFont(.title2.monospaced().weight(.bold))
-                            Text("次请求")
+                            Text(NSLocalizedString("次请求", comment: ""))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -133,7 +133,7 @@ struct UsageAnalyticsView: View {
                 }
             }
 
-            Section("详情") {
+            Section(NSLocalizedString("详情", comment: "")) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(viewModel.state.detail.title)
                         .etFont(.headline)
@@ -156,7 +156,7 @@ struct UsageAnalyticsView: View {
 
                 if let topModel = viewModel.state.detail.topModels.first {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("模型 Top")
+                        Text(NSLocalizedString("模型 Top", comment: ""))
                             .etFont(.caption.weight(.semibold))
                         Text(topModel.title)
                             .etFont(.footnote.weight(.semibold))
@@ -173,7 +173,7 @@ struct UsageAnalyticsView: View {
 
                 if let topSource = viewModel.state.detail.sourceBreakdown.first {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("来源 Top")
+                        Text(NSLocalizedString("来源 Top", comment: ""))
                             .etFont(.caption.weight(.semibold))
                         Text(topSource.title)
                             .etFont(.footnote.weight(.semibold))
@@ -184,7 +184,7 @@ struct UsageAnalyticsView: View {
                 }
             }
         }
-        .navigationTitle("用量统计")
+        .navigationTitle(NSLocalizedString("用量统计", comment: ""))
     }
 
     private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {

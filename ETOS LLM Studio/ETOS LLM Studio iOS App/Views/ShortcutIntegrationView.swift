@@ -58,30 +58,29 @@ struct ShortcutIntegrationView: View {
             }
 
             Section {
-                Toggle(
-                    "向模型暴露快捷指令工具",
+                Toggle(NSLocalizedString("向模型暴露快捷指令工具", comment: ""),
                     isOn: Binding(
                         get: { manager.chatToolsEnabled },
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
             } header: {
-                Text("聊天工具总开关")
+                Text(NSLocalizedString("聊天工具总开关", comment: ""))
             } footer: {
-                Text("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。")
+                Text(NSLocalizedString("关闭后不会再把任何快捷指令工具提供给模型，也不会响应聊天中的快捷指令工具调用。导入、编辑和单项启用状态仍会保留。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            Section("官方导入快捷指令") {
-                Text("内置官方快捷指令，可一键下载并触发导入流程。")
+            Section(NSLocalizedString("官方导入快捷指令", comment: "")) {
+                Text(NSLocalizedString("内置官方快捷指令，可一键下载并触发导入流程。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
 
                 Button {
                     openURL(manager.officialImportShortcutShareURL)
                 } label: {
-                    Label("下载官方导入快捷指令", systemImage: "square.and.arrow.down")
+                    Label(NSLocalizedString("下载官方导入快捷指令", comment: ""), systemImage: "square.and.arrow.down")
                 }
 
                 Button {
@@ -92,7 +91,7 @@ struct ShortcutIntegrationView: View {
                         }
                     }
                 } label: {
-                    Label("检测并运行导入快捷指令", systemImage: "play.circle")
+                    Label(NSLocalizedString("检测并运行导入快捷指令", comment: ""), systemImage: "play.circle")
                 }
 
                 TextField(
@@ -117,14 +116,14 @@ struct ShortcutIntegrationView: View {
 
             if let officialStatus = manager.lastOfficialTemplateStatusMessage,
                !officialStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Section("当前官方导入状态") {
+                Section(NSLocalizedString("当前官方导入状态", comment: "")) {
                     Text(officialStatus)
                         .etFont(.footnote)
                         .foregroundStyle((manager.lastOfficialTemplateRunSucceeded == false) ? .orange : .secondary)
                 }
             }
 
-            Section("导入与执行设置") {
+            Section(NSLocalizedString("导入与执行设置", comment: "")) {
                 Button {
                     Task {
                         _ = await manager.importFromClipboard(triggerURL: nil)
@@ -140,13 +139,13 @@ struct ShortcutIntegrationView: View {
                 }
                 .disabled(manager.isImporting)
 
-                Text("常见问题：如果 urlshim / URL Scheme 跳转失败，请先把清单内容复制到剪贴板，再点上面的“从剪贴板导入清单”。")
+                Text(NSLocalizedString("常见问题：如果 urlshim / URL Scheme 跳转失败，请先把清单内容复制到剪贴板，再点上面的“从剪贴板导入清单”。", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
 
                 if manager.isImporting {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("导入进行中")
+                        Text(NSLocalizedString("导入进行中", comment: ""))
                             .etFont(.caption)
                             .foregroundStyle(.secondary)
                         if manager.isCancellingImport {
@@ -187,25 +186,24 @@ struct ShortcutIntegrationView: View {
                         Button(role: .destructive) {
                             manager.cancelOngoingImport()
                         } label: {
-                            Text("取消导入")
+                            Text(NSLocalizedString("取消导入", comment: ""))
                         }
                         .etFont(.caption)
                         .disabled(manager.isCancellingImport)
                     }
                 }
 
-                TextField("桥接快捷指令名称", text: $bridgeShortcutName)
+                TextField(NSLocalizedString("桥接快捷指令名称", comment: ""), text: $bridgeShortcutName)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                Text("默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。")
+                Text(NSLocalizedString("默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("审批自动化") {
-                Toggle(
-                    "启用倒计时自动批准",
+            Section(NSLocalizedString("审批自动化", comment: "")) {
+                Toggle(NSLocalizedString("启用倒计时自动批准", comment: ""),
                     isOn: Binding(
                         get: { toolPermissionCenter.autoApproveEnabled },
                         set: { toolPermissionCenter.setAutoApproveEnabled($0) }
@@ -226,20 +224,20 @@ struct ShortcutIntegrationView: View {
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
                 if disabledCount > 0 {
-                    Button("清空禁用列表", role: .destructive) {
+                    Button(NSLocalizedString("清空禁用列表", comment: ""), role: .destructive) {
                         toolPermissionCenter.clearDisabledAutoApproveTools()
                     }
                 }
             }
 
             if let summary = manager.lastImportSummary {
-                Section("最近导入结果") {
+                Section(NSLocalizedString("最近导入结果", comment: "")) {
                     row(title: "新增", value: "\(summary.importedCount)")
                     row(title: "跳过", value: "\(summary.skippedCount)")
                     row(title: "无效", value: "\(summary.invalidCount)")
                     if !summary.conflictNames.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("重名冲突")
+                            Text(NSLocalizedString("重名冲突", comment: ""))
                                 .etFont(.subheadline)
                             Text(summary.conflictNames.joined(separator: "，"))
                                 .etFont(.caption)
@@ -250,7 +248,7 @@ struct ShortcutIntegrationView: View {
             }
 
             if let error = localError {
-                Section("错误") {
+                Section(NSLocalizedString("错误", comment: "")) {
                     Text(error)
                         .foregroundStyle(.red)
                         .etFont(.footnote)
@@ -259,11 +257,11 @@ struct ShortcutIntegrationView: View {
 
             Section("已导入快捷指令 (\(manager.tools.count))") {
                 if manager.tools.isEmpty {
-                    Text("尚未导入任何快捷指令。")
+                    Text(NSLocalizedString("尚未导入任何快捷指令。", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     if !manager.chatToolsEnabled {
-                        Text("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。")
+                        Text(NSLocalizedString("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。", comment: ""))
                             .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -305,14 +303,14 @@ struct ShortcutIntegrationView: View {
                             Button(role: .destructive) {
                                 manager.deleteTool(id: tool.id)
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
                 }
             }
         }
-        .navigationTitle("快捷指令工具箱")
+        .navigationTitle(NSLocalizedString("快捷指令工具箱", comment: ""))
     }
 
     private func row(title: String, value: String) -> some View {
@@ -340,7 +338,7 @@ struct ShortcutIntegrationView: View {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -412,7 +410,7 @@ private struct ShortcutToolDetailView: View {
     var body: some View {
         List {
             if let tool {
-                Section("工具信息") {
+                Section(NSLocalizedString("工具信息", comment: "")) {
                     Text(tool.displayName)
                         .etFont(.headline)
                     Text(tool.name)
@@ -435,22 +433,21 @@ private struct ShortcutToolDetailView: View {
                     )
                 }
 
-                Section("运行设置") {
-                    Picker(
-                        "运行模式",
+                Section(NSLocalizedString("运行设置", comment: "")) {
+                    Picker(NSLocalizedString("运行模式", comment: ""),
                         selection: Binding(
                             get: { tool.runModeHint },
                             set: { manager.setRunModeHint(id: tool.id, runModeHint: $0) }
                         )
                     ) {
-                        Text("直连优先").tag(ShortcutRunModeHint.direct)
-                        Text("桥接优先").tag(ShortcutRunModeHint.bridge)
+                        Text(NSLocalizedString("直连优先", comment: "")).tag(ShortcutRunModeHint.direct)
+                        Text(NSLocalizedString("桥接优先", comment: "")).tag(ShortcutRunModeHint.bridge)
                     }
                     .pickerStyle(.segmented)
                     .tint(.blue)
                 }
 
-                Section("工具描述") {
+                Section(NSLocalizedString("工具描述", comment: "")) {
                     Text(tool.effectiveDescription)
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
@@ -459,7 +456,7 @@ private struct ShortcutToolDetailView: View {
                         descriptionDraft = tool.userDescription ?? ""
                         isEditingDescription = true
                     } label: {
-                        Label("编辑描述", systemImage: "square.and.pencil")
+                        Label(NSLocalizedString("编辑描述", comment: ""), systemImage: "square.and.pencil")
                     }
 
                     Button {
@@ -467,40 +464,40 @@ private struct ShortcutToolDetailView: View {
                             await manager.regenerateDescriptionWithLLM(for: tool.id)
                         }
                     } label: {
-                        Label("重新生成", systemImage: "arrow.clockwise")
+                        Label(NSLocalizedString("重新生成", comment: ""), systemImage: "arrow.clockwise")
                     }
                 }
             } else {
-                Text("快捷指令不存在或已被删除。")
+                Text(NSLocalizedString("快捷指令不存在或已被删除。", comment: ""))
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("工具设置")
+        .navigationTitle(NSLocalizedString("工具设置", comment: ""))
         .sheet(isPresented: $isEditingDescription) {
             if let tool {
                 NavigationStack {
                     Form {
-                        Section("工具") {
+                        Section(NSLocalizedString("工具", comment: "")) {
                             Text(tool.displayName)
                             Text(tool.name)
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
 
-                        Section("自定义描述") {
+                        Section(NSLocalizedString("自定义描述", comment: "")) {
                             TextEditor(text: $descriptionDraft)
                                 .frame(minHeight: 180)
                         }
                     }
-                    .navigationTitle("编辑描述")
+                    .navigationTitle(NSLocalizedString("编辑描述", comment: ""))
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") {
+                            Button(NSLocalizedString("取消", comment: "")) {
                                 isEditingDescription = false
                             }
                         }
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("保存") {
+                            Button(NSLocalizedString("保存", comment: "")) {
                                 manager.updateUserDescription(id: tool.id, description: descriptionDraft)
                                 isEditingDescription = false
                             }

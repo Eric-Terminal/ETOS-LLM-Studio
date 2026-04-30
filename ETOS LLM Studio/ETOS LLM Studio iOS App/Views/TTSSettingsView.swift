@@ -10,23 +10,23 @@ struct TTSSettingsView: View {
 
     var body: some View {
         Form {
-            Section("播放模式") {
-                Picker("模式", selection: $settingsStore.playbackMode) {
-                    Text("系统").tag(TTSPlaybackMode.system)
-                    Text("云端").tag(TTSPlaybackMode.cloud)
-                    Text("自动").tag(TTSPlaybackMode.auto)
+            Section(NSLocalizedString("播放模式", comment: "")) {
+                Picker(NSLocalizedString("模式", comment: ""), selection: $settingsStore.playbackMode) {
+                    Text(NSLocalizedString("系统", comment: "")).tag(TTSPlaybackMode.system)
+                    Text(NSLocalizedString("云端", comment: "")).tag(TTSPlaybackMode.cloud)
+                    Text(NSLocalizedString("自动", comment: "")).tag(TTSPlaybackMode.auto)
                 }
                 .pickerStyle(.segmented)
                 .tint(.blue)
 
-                Text("自动模式会优先系统 TTS，失败后自动回退云端。")
+                Text(NSLocalizedString("自动模式会优先系统 TTS，失败后自动回退云端。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            Section("专用模型") {
+            Section(NSLocalizedString("专用模型", comment: "")) {
                 if viewModel.ttsModels.isEmpty {
-                    Text("暂无可用模型，请先在“提供商与模型管理”中给模型开启“文字转语音”能力。")
+                    Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中给模型开启“文字转语音”能力。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -40,7 +40,7 @@ struct TTSSettingsView: View {
                         )
                     } label: {
                         HStack {
-                            Text("TTS 模型")
+                            Text(NSLocalizedString("TTS 模型", comment: ""))
                             Spacer()
                             Text(selectedModelText)
                                 .foregroundStyle(.secondary)
@@ -50,9 +50,9 @@ struct TTSSettingsView: View {
                 }
             }
 
-            Section("云端提供商") {
-                Picker("提供商类型", selection: $settingsStore.providerKind) {
-                    Text("OpenAI 兼容").tag(TTSProviderKind.openAICompatible)
+            Section(NSLocalizedString("云端提供商", comment: "")) {
+                Picker(NSLocalizedString("提供商类型", comment: ""), selection: $settingsStore.providerKind) {
+                    Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag(TTSProviderKind.openAICompatible)
                     Text("Gemini").tag(TTSProviderKind.gemini)
                     Text("Qwen").tag(TTSProviderKind.qwen)
                     Text("MiniMax").tag(TTSProviderKind.miniMax)
@@ -62,7 +62,7 @@ struct TTSSettingsView: View {
                 Button {
                     applyRecommendedCloudPreset()
                 } label: {
-                    Label("套用当前提供商推荐参数", systemImage: "wand.and.stars")
+                    Label(NSLocalizedString("套用当前提供商推荐参数", comment: ""), systemImage: "wand.and.stars")
                 }
             }
 
@@ -75,7 +75,7 @@ struct TTSSettingsView: View {
                 }
 
                 if supportsResponseFormat {
-                    Picker("格式", selection: responseFormatPresetBinding) {
+                    Picker(NSLocalizedString("格式", comment: ""), selection: responseFormatPresetBinding) {
                         ForEach(providerResponseFormatOptions, id: \.self) { option in
                             Text(option).tag(option)
                         }
@@ -84,7 +84,7 @@ struct TTSSettingsView: View {
                 }
 
                 if supportsLanguageType {
-                    Picker("语言", selection: languageTypePresetBinding) {
+                    Picker(NSLocalizedString("语言", comment: ""), selection: languageTypePresetBinding) {
                         ForEach(providerLanguageTypeOptions, id: \.self) { option in
                             Text(option).tag(option)
                         }
@@ -93,7 +93,7 @@ struct TTSSettingsView: View {
                 }
 
                 if supportsMiniMaxEmotion {
-                    Picker("情感", selection: miniMaxEmotionPresetBinding) {
+                    Picker(NSLocalizedString("情感", comment: ""), selection: miniMaxEmotionPresetBinding) {
                         ForEach(providerMiniMaxEmotionOptions, id: \.self) { option in
                             Text(option).tag(option)
                         }
@@ -101,48 +101,48 @@ struct TTSSettingsView: View {
                     }
                 }
             } header: {
-                Text("云端快捷预设")
+                Text(NSLocalizedString("云端快捷预设", comment: ""))
             } footer: {
-                Text("预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。")
+                Text(NSLocalizedString("预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。", comment: ""))
             }
 
-            Section("云端高级参数") {
-                DisclosureGroup("手动覆盖参数（可选）", isExpanded: $showCustomCloudParameters) {
+            Section(NSLocalizedString("云端高级参数", comment: "")) {
+                DisclosureGroup(NSLocalizedString("手动覆盖参数（可选）", comment: ""), isExpanded: $showCustomCloudParameters) {
                     TextField("Voice", text: $settingsStore.voice)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
                     if supportsResponseFormat {
-                        TextField("响应格式（mp3/wav）", text: $settingsStore.responseFormat)
+                        TextField(NSLocalizedString("响应格式（mp3/wav）", comment: ""), text: $settingsStore.responseFormat)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
 
                     if supportsLanguageType {
-                        TextField("语言类型（Qwen）", text: $settingsStore.languageType)
+                        TextField(NSLocalizedString("语言类型（Qwen）", comment: ""), text: $settingsStore.languageType)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
 
                     if supportsMiniMaxEmotion {
-                        TextField("情感（MiniMax）", text: $settingsStore.miniMaxEmotion)
+                        TextField(NSLocalizedString("情感（MiniMax）", comment: ""), text: $settingsStore.miniMaxEmotion)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
                 }
             }
 
-            Section("朗读行为") {
-                Toggle("回复完成后自动朗读", isOn: $settingsStore.autoPlayAfterAssistantResponse)
-                Toggle("仅朗读引号内容", isOn: $settingsStore.onlyReadQuotedContent)
+            Section(NSLocalizedString("朗读行为", comment: "")) {
+                Toggle(NSLocalizedString("回复完成后自动朗读", comment: ""), isOn: $settingsStore.autoPlayAfterAssistantResponse)
+                Toggle(NSLocalizedString("仅朗读引号内容", comment: ""), isOn: $settingsStore.onlyReadQuotedContent)
             }
 
             Section {
-                Toggle("watchOS 使用轻量预处理（推荐）", isOn: $settingsStore.watchUseLightweightPreprocess)
+                Toggle(NSLocalizedString("watchOS 使用轻量预处理（推荐）", comment: ""), isOn: $settingsStore.watchUseLightweightPreprocess)
 
                 Stepper(value: $settingsStore.watchSpeechMaxCharacters, in: 500...6_000, step: 250) {
                     HStack {
-                        Text("watchOS 最大朗读字符")
+                        Text(NSLocalizedString("watchOS 最大朗读字符", comment: ""))
                         Spacer()
                         Text("\(settingsStore.watchSpeechMaxCharacters)")
                             .foregroundStyle(.secondary)
@@ -150,15 +150,15 @@ struct TTSSettingsView: View {
                     }
                 }
             } header: {
-                Text("watchOS 兼容与性能")
+                Text(NSLocalizedString("watchOS 兼容与性能", comment: ""))
             } footer: {
-                Text("手表端朗读卡顿时，建议保持轻量预处理开启，并适当降低最大朗读字符。")
+                Text(NSLocalizedString("手表端朗读卡顿时，建议保持轻量预处理开启，并适当降低最大朗读字符。", comment: ""))
             }
 
-            Section("播放参数") {
+            Section(NSLocalizedString("播放参数", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("系统语速")
+                        Text(NSLocalizedString("系统语速", comment: ""))
                         Spacer()
                         Text(String(format: "%.2f", settingsStore.speechRate))
                             .foregroundStyle(.secondary)
@@ -172,7 +172,7 @@ struct TTSSettingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("系统音调")
+                        Text(NSLocalizedString("系统音调", comment: ""))
                         Spacer()
                         Text(String(format: "%.2f", settingsStore.pitch))
                             .foregroundStyle(.secondary)
@@ -186,7 +186,7 @@ struct TTSSettingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("默认倍速")
+                        Text(NSLocalizedString("默认倍速", comment: ""))
                         Spacer()
                         Text(String(format: "%.2f", settingsStore.playbackSpeed))
                             .foregroundStyle(.secondary)
@@ -199,7 +199,7 @@ struct TTSSettingsView: View {
                 }
             }
         }
-        .navigationTitle("TTS 设置")
+        .navigationTitle(NSLocalizedString("TTS 设置", comment: ""))
     }
 
     private var providerVoiceOptions: [String] {
@@ -332,6 +332,6 @@ private struct TTSModelSelectionView: View {
                 }
             }
         }
-        .navigationTitle("TTS 模型")
+        .navigationTitle(NSLocalizedString("TTS 模型", comment: ""))
     }
 }

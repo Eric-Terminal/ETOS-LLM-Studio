@@ -107,7 +107,7 @@ struct ThirdPartyImportView: View {
 
                 Section {
                     if preparedResult.source == .etosBackup {
-                        Text("ETOS 数据包会按导出时勾选的同步项执行全量导入。")
+                        Text(NSLocalizedString("ETOS 数据包会按导出时勾选的同步项执行全量导入。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
@@ -139,7 +139,7 @@ struct ThirdPartyImportView: View {
                     Text(NSLocalizedString("导入范围", comment: "Import scope section title"))
                 } footer: {
                     if preparedResult.source == .etosBackup {
-                        Text("导入后会立即执行与“同步与备份”一致的合并策略。")
+                        Text(NSLocalizedString("导入后会立即执行与“同步与备份”一致的合并策略。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {

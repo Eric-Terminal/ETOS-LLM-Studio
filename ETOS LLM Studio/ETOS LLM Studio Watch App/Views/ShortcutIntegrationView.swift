@@ -56,13 +56,12 @@ struct ShortcutIntegrationView: View {
             }
 
             Section(
-                header: Text("聊天工具总开关"),
-                footer: Text("关闭后不会向模型暴露任何快捷指令工具，但导入和单项配置仍会保留。")
+                header: Text(NSLocalizedString("聊天工具总开关", comment: "")),
+                footer: Text(NSLocalizedString("关闭后不会向模型暴露任何快捷指令工具，但导入和单项配置仍会保留。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
-                Toggle(
-                    "向模型暴露快捷指令工具",
+                Toggle(NSLocalizedString("向模型暴露快捷指令工具", comment: ""),
                     isOn: Binding(
                         get: { manager.chatToolsEnabled },
                         set: { manager.setChatToolsEnabled($0) }
@@ -70,18 +69,18 @@ struct ShortcutIntegrationView: View {
                 )
             }
 
-            Section("官方导入快捷指令") {
-                Text("内置官方快捷指令，可一键下载并触发导入流程。")
+            Section(NSLocalizedString("官方导入快捷指令", comment: "")) {
+                Text(NSLocalizedString("内置官方快捷指令，可一键下载并触发导入流程。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
-                Text("在 iPhone 上点击“检测并运行导入快捷指令”，手表端会自动同步结果。")
+                Text(NSLocalizedString("在 iPhone 上点击“检测并运行导入快捷指令”，手表端会自动同步结果。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
                 Button {
                     openURL(manager.officialImportShortcutShareURL)
                 } label: {
-                    Label("下载官方导入快捷指令", systemImage: "square.and.arrow.down")
+                    Label(NSLocalizedString("下载官方导入快捷指令", comment: ""), systemImage: "square.and.arrow.down")
                 }
 
                 Text(
@@ -96,18 +95,18 @@ struct ShortcutIntegrationView: View {
 
             if let officialStatus = manager.lastOfficialTemplateStatusMessage,
                !officialStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Section("当前官方导入状态") {
+                Section(NSLocalizedString("当前官方导入状态", comment: "")) {
                     Text(officialStatus)
                         .etFont(.caption2)
                         .foregroundStyle((manager.lastOfficialTemplateRunSucceeded == false) ? .orange : .secondary)
                 }
             }
 
-            Section("导入") {
-                Text("watchOS 不支持直接读取剪贴板，请在 iPhone 端导入后通过“同步与备份”同步到手表。")
+            Section(NSLocalizedString("导入", comment: "")) {
+                Text(NSLocalizedString("watchOS 不支持直接读取剪贴板，请在 iPhone 端导入后通过“同步与备份”同步到手表。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
-                Text("若 iPhone 端 urlshim / URL Scheme 跳转失败，请在 iPhone 的快捷设定页直接复制清单到剪贴板，再使用“从剪贴板导入清单”。")
+                Text(NSLocalizedString("若 iPhone 端 urlshim / URL Scheme 跳转失败，请在 iPhone 的快捷设定页直接复制清单到剪贴板，再使用“从剪贴板导入清单”。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text("桥接快捷指令：\(bridgeShortcutName)")
@@ -115,7 +114,7 @@ struct ShortcutIntegrationView: View {
                     .foregroundStyle(.secondary)
 
                 if manager.isImporting {
-                    Text("导入进行中")
+                    Text(NSLocalizedString("导入进行中", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     if manager.isCancellingImport {
@@ -156,7 +155,7 @@ struct ShortcutIntegrationView: View {
                     Button(role: .destructive) {
                         manager.cancelOngoingImport()
                     } label: {
-                        Text("取消导入")
+                        Text(NSLocalizedString("取消导入", comment: ""))
                     }
                     .etFont(.caption2)
                     .disabled(manager.isCancellingImport)
@@ -164,13 +163,12 @@ struct ShortcutIntegrationView: View {
             }
 
             Section(
-                header: Text("审批自动化"),
-                footer: Text("倒计时范围 1-30 秒，超出会自动修正。")
+                header: Text(NSLocalizedString("审批自动化", comment: "")),
+                footer: Text(NSLocalizedString("倒计时范围 1-30 秒，超出会自动修正。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
-                Toggle(
-                    "自动批准",
+                Toggle(NSLocalizedString("自动批准", comment: ""),
                     isOn: Binding(
                         get: { toolPermissionCenter.autoApproveEnabled },
                         set: { toolPermissionCenter.setAutoApproveEnabled($0) }
@@ -178,10 +176,9 @@ struct ShortcutIntegrationView: View {
                 )
 
                 HStack {
-                    Text("倒计时秒数")
+                    Text(NSLocalizedString("倒计时秒数", comment: ""))
                     Spacer()
-                    TextField(
-                        "数量",
+                    TextField(NSLocalizedString("数量", comment: ""),
                         value: Binding(
                             get: { toolPermissionCenter.autoApproveCountdownSeconds },
                             set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
@@ -195,7 +192,7 @@ struct ShortcutIntegrationView: View {
             }
 
             if let summary = manager.lastImportSummary {
-                Section("最近导入") {
+                Section(NSLocalizedString("最近导入", comment: "")) {
                     Text("新增 \(summary.importedCount)，跳过 \(summary.skippedCount)")
                     if !summary.conflictNames.isEmpty {
                         Text("冲突：\(summary.conflictNames.joined(separator: "，"))")
@@ -207,11 +204,11 @@ struct ShortcutIntegrationView: View {
 
             Section("快捷指令工具 (\(manager.tools.count))") {
                 if manager.tools.isEmpty {
-                    Text("暂无工具")
+                    Text(NSLocalizedString("暂无工具", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     if !manager.chatToolsEnabled {
-                        Text("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。")
+                        Text(NSLocalizedString("当前总开关已关闭，以下快捷指令仅用于管理，不会参与聊天调用。", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -250,14 +247,14 @@ struct ShortcutIntegrationView: View {
                             Button(role: .destructive) {
                                 manager.deleteTool(id: tool.id)
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
                 }
             }
         }
-        .navigationTitle("快捷指令")
+        .navigationTitle(NSLocalizedString("快捷指令", comment: ""))
     }
 
     private func settingsIntroCard(
@@ -275,7 +272,7 @@ struct ShortcutIntegrationView: View {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -341,7 +338,7 @@ private struct ShortcutToolDetailView: View {
     var body: some View {
         List {
             if let tool {
-                Section("工具信息") {
+                Section(NSLocalizedString("工具信息", comment: "")) {
                     Text(tool.displayName)
                         .etFont(.headline)
                     Text(tool.name)
@@ -354,7 +351,7 @@ private struct ShortcutToolDetailView: View {
                     }
                 }
 
-                Section("启用状态") {
+                Section(NSLocalizedString("启用状态", comment: "")) {
                     Toggle(
                         NSLocalizedString("启用", comment: "Enable"),
                         isOn: Binding(
@@ -364,20 +361,19 @@ private struct ShortcutToolDetailView: View {
                     )
                 }
 
-                Section("运行设置") {
-                    Picker(
-                        "运行模式",
+                Section(NSLocalizedString("运行设置", comment: "")) {
+                    Picker(NSLocalizedString("运行模式", comment: ""),
                         selection: Binding(
                             get: { tool.runModeHint },
                             set: { manager.setRunModeHint(id: tool.id, runModeHint: $0) }
                         )
                     ) {
-                        Text("直连优先").tag(ShortcutRunModeHint.direct)
-                        Text("桥接优先").tag(ShortcutRunModeHint.bridge)
+                        Text(NSLocalizedString("直连优先", comment: "")).tag(ShortcutRunModeHint.direct)
+                        Text(NSLocalizedString("桥接优先", comment: "")).tag(ShortcutRunModeHint.bridge)
                     }
                 }
 
-                Section("工具描述") {
+                Section(NSLocalizedString("工具描述", comment: "")) {
                     Text(tool.effectiveDescription)
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
@@ -387,15 +383,15 @@ private struct ShortcutToolDetailView: View {
                             await manager.regenerateDescriptionWithLLM(for: tool.id)
                         }
                     } label: {
-                        Label("重新生成", systemImage: "arrow.clockwise")
+                        Label(NSLocalizedString("重新生成", comment: ""), systemImage: "arrow.clockwise")
                     }
                 }
             } else {
-                Text("快捷指令不存在或已被删除。")
+                Text(NSLocalizedString("快捷指令不存在或已被删除。", comment: ""))
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("工具设置")
+        .navigationTitle(NSLocalizedString("工具设置", comment: ""))
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {

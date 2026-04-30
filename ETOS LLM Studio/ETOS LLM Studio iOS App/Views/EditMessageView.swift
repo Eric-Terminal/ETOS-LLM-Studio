@@ -25,25 +25,25 @@ struct EditMessageView: View {
     
     var body: some View {
         Form {
-            Section("消息内容") {
+            Section(NSLocalizedString("消息内容", comment: "")) {
                 TextEditor(text: $content)
                     .frame(minHeight: 160)
             }
             
             if message.role == .assistant {
-                Section("思考过程") {
+                Section(NSLocalizedString("思考过程", comment: "")) {
                     TextEditor(text: $reasoning)
                         .frame(minHeight: 120)
                 }
             }
         }
-        .navigationTitle("编辑消息")
+        .navigationTitle(NSLocalizedString("编辑消息", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     var updated = message
                     updated.content = content
                     updated.reasoningContent = reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : reasoning

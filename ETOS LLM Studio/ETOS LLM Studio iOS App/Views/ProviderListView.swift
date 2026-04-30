@@ -79,14 +79,14 @@ struct ProviderListView: View {
                 }
                 .tag(ProviderManagementTab.globalProxy)
         }
-        .navigationTitle("提供商与模型管理")
+        .navigationTitle(NSLocalizedString("提供商与模型管理", comment: ""))
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if selectedTab == .provider {
                     Button {
                         isAddingProvider = true
                     } label: {
-                        Label("添加提供商", systemImage: "plus")
+                        Label(NSLocalizedString("添加提供商", comment: ""), systemImage: "plus")
                     }
                 }
             }
@@ -127,14 +127,14 @@ private struct ProviderManagementContentView: View {
                         Button {
                             providerToEdit = provider
                         } label: {
-                            Label("编辑提供商", systemImage: "pencil")
+                            Label(NSLocalizedString("编辑提供商", comment: ""), systemImage: "pencil")
                         }
 
                         Button(role: .destructive) {
                             providerToDelete = provider
                             showDeleteAlert = true
                         } label: {
-                            Label("删除提供商", systemImage: "trash")
+                            Label(NSLocalizedString("删除提供商", comment: ""), systemImage: "trash")
                         }
                     }
                 }
@@ -146,21 +146,21 @@ private struct ProviderManagementContentView: View {
                     .environmentObject(viewModel)
             }
         }
-        .alert("确认删除提供商", isPresented: $showDeleteAlert) {
-            Button("删除", role: .destructive) {
+        .alert(NSLocalizedString("确认删除提供商", comment: ""), isPresented: $showDeleteAlert) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let target = providerToDelete {
                     ChatService.shared.deleteProvider(target)
                 }
                 providerToDelete = nil
             }
-            Button("取消", role: .cancel) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                 providerToDelete = nil
             }
         } message: {
             if let target = providerToDelete {
                 Text(String(format: NSLocalizedString("删除“%@”后无法恢复。", comment: ""), target.name))
             } else {
-                Text("此操作无法撤销。")
+                Text(NSLocalizedString("此操作无法撤销。", comment: ""))
             }
         }
     }
@@ -172,11 +172,11 @@ private struct ProviderModelOrderContentView: View {
     var body: some View {
         List {
             Section(
-                header: Text("模型顺序"),
-                footer: Text("拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。")
+                header: Text(NSLocalizedString("模型顺序", comment: "")),
+                footer: Text(NSLocalizedString("拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。", comment: ""))
             ) {
                 if viewModel.configuredModels.isEmpty {
-                    Text("暂无可排序模型。")
+                    Text(NSLocalizedString("暂无可排序模型。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -207,7 +207,7 @@ private struct ProviderModelOrderContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if !runnable.model.isActivated {
-                Text("未启用")
+                Text(NSLocalizedString("未启用", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }

@@ -14,36 +14,36 @@ struct ProviderListView: View {
 
     var body: some View {
         List {
-            Section("管理入口") {
+            Section(NSLocalizedString("管理入口", comment: "")) {
                 NavigationLink {
                     WatchProviderManagementContentView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("提供商管理", systemImage: "shippingbox")
+                    Label(NSLocalizedString("提供商管理", comment: ""), systemImage: "shippingbox")
                 }
 
                 NavigationLink {
                     WatchProviderModelOrderContentView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("模型顺序", systemImage: "arrow.up.arrow.down")
+                    Label(NSLocalizedString("模型顺序", comment: ""), systemImage: "arrow.up.arrow.down")
                 }
 
                 NavigationLink {
                     SpecializedModelSelectorView()
                         .environmentObject(viewModel)
                 } label: {
-                    Label("专用模型", systemImage: "slider.horizontal.3")
+                    Label(NSLocalizedString("专用模型", comment: ""), systemImage: "slider.horizontal.3")
                 }
 
                 NavigationLink {
                     GlobalProxySettingsView()
                 } label: {
-                    Label("全局代理设置", systemImage: "network")
+                    Label(NSLocalizedString("全局代理设置", comment: ""), systemImage: "network")
                 }
             }
         }
-        .navigationTitle("提供商与模型管理")
+        .navigationTitle(NSLocalizedString("提供商与模型管理", comment: ""))
     }
 }
 
@@ -65,7 +65,7 @@ private struct WatchProviderManagementContentView: View {
                 }
                 .swipeActions(edge: .leading) {
                     NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
-                        Label("编辑", systemImage: "pencil")
+                        Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
                     }
                     .tint(.blue)
                 }
@@ -73,12 +73,12 @@ private struct WatchProviderManagementContentView: View {
                     Button(role: .destructive) {
                         deleteProvider(provider)
                     } label: {
-                        Label("删除", systemImage: "trash")
+                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                     }
                 }
             }
         }
-        .navigationTitle("提供商管理")
+        .navigationTitle(NSLocalizedString("提供商管理", comment: ""))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { isAddingProvider = true }) {
@@ -108,11 +108,11 @@ private struct WatchProviderModelOrderContentView: View {
     var body: some View {
         List {
             Section(
-                header: Text("模型顺序"),
-                footer: Text("维护全局模型顺序，模型选择列表会按这里的顺序展示。")
+                header: Text(NSLocalizedString("模型顺序", comment: "")),
+                footer: Text(NSLocalizedString("维护全局模型顺序，模型选择列表会按这里的顺序展示。", comment: ""))
             ) {
                 if viewModel.configuredModels.isEmpty {
-                    Text("暂无可排序模型。")
+                    Text(NSLocalizedString("暂无可排序模型。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -126,7 +126,7 @@ private struct WatchProviderModelOrderContentView: View {
                 }
             }
         }
-        .navigationTitle("模型顺序")
+        .navigationTitle(NSLocalizedString("模型顺序", comment: ""))
     }
 
     private func moveModelUp(at position: Int) {
@@ -156,7 +156,7 @@ private struct WatchProviderModelOrderContentView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 if !runnable.model.isActivated {
-                    Text("未启用")
+                    Text(NSLocalizedString("未启用", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }

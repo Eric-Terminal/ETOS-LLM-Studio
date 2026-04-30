@@ -44,22 +44,22 @@ struct EditMessageView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("回复内容")) {
-                    TextField("编辑消息", text: $newContent.watchKeyboardNewlineBinding(), axis: .vertical)
+                Section(header: Text(NSLocalizedString("回复内容", comment: ""))) {
+                    TextField(NSLocalizedString("编辑消息", comment: ""), text: $newContent.watchKeyboardNewlineBinding(), axis: .vertical)
                         .lineLimit(5...15)
                         .listRowBackground(Color.clear)
                 }
                 
                 // 重构: 使用 MessageRole 枚举进行判断
                 if message.role == .assistant {
-                    Section(header: Text("思考过程 (可选)")) {
-                        TextField("编辑思考过程", text: $newReasoning.watchKeyboardNewlineBinding(), axis: .vertical)
+                    Section(header: Text(NSLocalizedString("思考过程 (可选)", comment: ""))) {
+                        TextField(NSLocalizedString("编辑思考过程", comment: ""), text: $newReasoning.watchKeyboardNewlineBinding(), axis: .vertical)
                             .lineLimit(5...10)
                             .listRowBackground(Color.clear)
                     }
                 }
                 
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     // 重构: 创建一个 message 的新副本并修改它
                     var updatedMessage = message
                     updatedMessage.content = newContent
@@ -72,10 +72,10 @@ struct EditMessageView: View {
                 .buttonStyle(.borderedProminent)
                 .listRowBackground(Color.clear)
             }
-            .navigationTitle("编辑消息")
+            .navigationTitle(NSLocalizedString("编辑消息", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         dismiss()
                     }
                 }

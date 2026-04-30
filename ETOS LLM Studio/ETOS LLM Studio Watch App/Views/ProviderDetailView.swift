@@ -28,7 +28,7 @@ struct ProviderDetailView: View {
     var body: some View {
         ZStack {
             List {
-                Section("提供商信息") {
+                Section(NSLocalizedString("提供商信息", comment: "")) {
                     MarqueeTitleSubtitleLabel(
                         title: provider.name,
                         subtitle: provider.baseURL,
@@ -43,7 +43,7 @@ struct ProviderDetailView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundColor(.secondary)
-                            TextField("输入关键词", text: $searchText.watchKeyboardNewlineBinding())
+                            TextField(NSLocalizedString("输入关键词", comment: ""), text: $searchText.watchKeyboardNewlineBinding())
                                 .focused($isSearchFieldFocused)
                             if !searchText.isEmpty {
                                 Button {
@@ -58,14 +58,14 @@ struct ProviderDetailView: View {
                     }
                 }
 
-                Section("列表设置") {
-                    Toggle("按模型家族分组", isOn: $groupByFamilySection)
+                Section(NSLocalizedString("列表设置", comment: "")) {
+                    Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
                     if groupByFamilySection {
-                        Text("将按模型家族拆分显示。")
+                        Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
                             .etFont(.footnote)
                             .foregroundColor(.secondary)
                     } else {
-                        Text("将按已添加/未添加展示。")
+                        Text(NSLocalizedString("将按已添加/未添加展示。", comment: ""))
                             .etFont(.footnote)
                             .foregroundColor(.secondary)
                     }
@@ -144,8 +144,8 @@ struct ProviderDetailView: View {
         .onChange(of: provider) {
             saveChanges()
         }
-        .alert("获取模型失败", isPresented: $showErrorAlert) {
-            Button("好的") { }
+        .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {
+            Button(NSLocalizedString("好的", comment: "")) { }
         } message: {
             Text(fetchError ?? "发生未知错误。")
         }
@@ -315,7 +315,7 @@ struct ProviderDetailView: View {
                     Image(systemName: "plus.circle.fill")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("激活模型")
+                .accessibilityLabel(NSLocalizedString("激活模型", comment: ""))
             }
         }
     }
@@ -354,21 +354,21 @@ private struct ModelAddView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("新模型信息")) {
-                    TextField("模型ID (e.g., gpt-4o)", text: $modelName.watchKeyboardNewlineBinding())
-                    TextField("模型名称 (可选)", text: $displayName.watchKeyboardNewlineBinding())
+                Section(header: Text(NSLocalizedString("新模型信息", comment: ""))) {
+                    TextField(NSLocalizedString("模型ID (e.g., gpt-4o)", comment: ""), text: $modelName.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("模型名称 (可选)", comment: ""), text: $displayName.watchKeyboardNewlineBinding())
                 }
                 Section {
-                    Button("添加模型") {
+                    Button(NSLocalizedString("添加模型", comment: "")) {
                         addModel()
                     }
                     .disabled(modelName.isEmpty)
                 }
             }
-            .navigationTitle("添加模型")
+            .navigationTitle(NSLocalizedString("添加模型", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                 }
             }
         }

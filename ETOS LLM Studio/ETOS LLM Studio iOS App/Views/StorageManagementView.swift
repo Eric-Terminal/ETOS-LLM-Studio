@@ -37,26 +37,26 @@ struct StorageManagementView: View {
             // 清理工具
             cleanupToolsSection
         }
-        .navigationTitle("存储管理")
+        .navigationTitle(NSLocalizedString("存储管理", comment: ""))
         .refreshable {
             await refreshData()
         }
         .task {
             await refreshData()
         }
-        .alert("清理缓存", isPresented: $showClearCacheAlert) {
-            Button("取消", role: .cancel) {}
-            Button("清理", role: .destructive) {
+        .alert(NSLocalizedString("清理缓存", comment: ""), isPresented: $showClearCacheAlert) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+            Button(NSLocalizedString("清理", comment: ""), role: .destructive) {
                 performCacheCleanup()
             }
         } message: {
-            Text("将删除所有语音和图片缓存文件。此操作不可撤销。")
+            Text(NSLocalizedString("将删除所有语音和图片缓存文件。此操作不可撤销。", comment: ""))
         }
         .alert(item: $cleanupResult) { result in
             Alert(
                 title: Text(result.title),
                 message: Text(result.message),
-                dismissButton: .default(Text("好的"))
+                dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
             )
         }
     }
@@ -79,7 +79,7 @@ struct StorageManagementView: View {
                         .foregroundStyle(.blue)
                     
                     VStack(spacing: 4) {
-                        Text("总使用空间")
+                        Text(NSLocalizedString("总使用空间", comment: ""))
                             .etFont(.subheadline)
                             .foregroundStyle(.secondary)
                         Text(StorageUtility.formatSize(storageBreakdown.totalSize))
@@ -123,7 +123,7 @@ struct StorageManagementView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("其他文件")
+                            Text(NSLocalizedString("其他文件", comment: ""))
                                 .etFont(.subheadline.weight(.medium))
                             Text(StorageUtility.formatSize(storageBreakdown.otherSize))
                                 .etFont(.caption)
@@ -136,9 +136,9 @@ struct StorageManagementView: View {
                 }
             }
         } header: {
-            Text("存储分类")
+            Text(NSLocalizedString("存储分类", comment: ""))
         } footer: {
-            Text("点击类别可查看详细文件列表。")
+            Text(NSLocalizedString("点击类别可查看详细文件列表。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -153,7 +153,7 @@ struct StorageManagementView: View {
                 checkAllOrphanedData()
             } label: {
                 HStack {
-                    Label("清理孤立数据", systemImage: "trash.slash")
+                    Label(NSLocalizedString("清理孤立数据", comment: ""), systemImage: "trash.slash")
                     Spacer()
                     if orphanedDataCount.total > 0 {
                         Text(String(format: NSLocalizedString("%d 项", comment: ""), orphanedDataCount.total))
@@ -168,7 +168,7 @@ struct StorageManagementView: View {
                 showClearCacheAlert = true
             } label: {
                 HStack {
-                    Label("清理所有缓存", systemImage: "trash")
+                    Label(NSLocalizedString("清理所有缓存", comment: ""), systemImage: "trash")
                     Spacer()
                     Text(StorageUtility.formatSize(storageBreakdown.cacheSize))
                         .etFont(.caption)
@@ -176,21 +176,20 @@ struct StorageManagementView: View {
                 }
             }
         } header: {
-            Text("清理工具")
+            Text(NSLocalizedString("清理工具", comment: ""))
         } footer: {
-            Text("孤立数据包括：幽灵会话（消息文件丢失）、孤立音频/图片文件（无会话引用）、无效音频引用（文件已删除）。")
+            Text(NSLocalizedString("孤立数据包括：幽灵会话（消息文件丢失）、孤立音频/图片文件（无会话引用）、无效音频引用（文件已删除）。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .confirmationDialog(
-            "确认清理孤立数据",
+        .confirmationDialog(NSLocalizedString("确认清理孤立数据", comment: ""),
             isPresented: $showCleanAllOrphansAlert,
             titleVisibility: .visible
         ) {
-            Button("清理", role: .destructive) {
+            Button(NSLocalizedString("清理", comment: ""), role: .destructive) {
                 performAllOrphanCleanup()
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
             Text("将清理：\(orphanedDataCount.description)。\n\n此操作不可撤销。")
         }

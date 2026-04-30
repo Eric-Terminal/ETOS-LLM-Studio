@@ -72,7 +72,7 @@ struct BackgroundPickerView: View {
                 .padding(.vertical, gridPadding)
             }
         }
-        .navigationTitle("选择背景")
+        .navigationTitle(NSLocalizedString("选择背景", comment: ""))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -84,27 +84,27 @@ struct BackgroundPickerView: View {
                 .disabled(selectedBackground.isEmpty)
             }
         }
-        .alert("删除背景", isPresented: $isShowingDeleteConfirmation, presenting: deleteCandidate) { name in
-            Button("删除", role: .destructive) {
+        .alert(NSLocalizedString("删除背景", comment: ""), isPresented: $isShowingDeleteConfirmation, presenting: deleteCandidate) { name in
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 deleteCandidate = nil
                 Task {
                     await deleteBackground(named: name)
                 }
             }
-            Button("取消", role: .cancel) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                 deleteCandidate = nil
             }
         } message: { _ in
-            Text("确定删除这张背景吗？")
+            Text(NSLocalizedString("确定删除这张背景吗？", comment: ""))
         }
-        .alert("无法删除背景", isPresented: Binding(get: {
+        .alert(NSLocalizedString("无法删除背景", comment: ""), isPresented: Binding(get: {
             deleteErrorMessage != nil
         }, set: { newValue in
             if !newValue {
                 deleteErrorMessage = nil
             }
         })) {
-            Button("确定", role: .cancel) {}
+            Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
             Text(deleteErrorMessage ?? "")
         }

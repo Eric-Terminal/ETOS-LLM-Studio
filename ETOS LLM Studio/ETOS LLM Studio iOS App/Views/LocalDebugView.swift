@@ -35,12 +35,12 @@ struct LocalDebugView: View {
                         .etFont(.footnote)
                 }
             } header: {
-                Text("状态")
+                Text(NSLocalizedString("状态", comment: ""))
             }
             
             // 连接配置
             if !server.isRunning {
-                Section(header: Text("连接模式")) {
+                Section(header: Text(NSLocalizedString("连接模式", comment: ""))) {
                     Toggle(isOn: $server.useHTTP) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
@@ -53,34 +53,34 @@ struct LocalDebugView: View {
                 }
                 
                 Section {
-                    TextField("输入地址", text: $serverURL, prompt: Text(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"))
+                    TextField(NSLocalizedString("输入地址", comment: ""), text: $serverURL, prompt: Text(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                         .etFont(.body.monospaced())
                     
-                    Button("连接") {
+                    Button(NSLocalizedString("连接", comment: "")) {
                         connectToServer()
                     }
                     .disabled(serverURL.isEmpty)
                 } header: {
-                    Text("服务器地址")
+                    Text(NSLocalizedString("服务器地址", comment: ""))
                 } footer: {
                     Text(server.useHTTP ? "HTTP 默认端口: 7654" : "WebSocket 默认端口: 8765（可用 host:wsPort:httpPort 显式指定回退端口）")
                 }
             } else {
-                Section("连接信息") {
-                    LabeledContent("服务器") {
+                Section(NSLocalizedString("连接信息", comment: "")) {
+                    LabeledContent(NSLocalizedString("服务器", comment: "")) {
                         Text(server.serverURL)
                             .etFont(.body.monospaced())
                             .textSelection(.enabled)
                     }
                     
-                    LabeledContent("模式") {
+                    LabeledContent(NSLocalizedString("模式", comment: "")) {
                         Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
                     }
                     
-                    Button("断开") {
+                    Button(NSLocalizedString("断开", comment: "")) {
                         disconnectServer()
                     }
                     .tint(.red)
@@ -92,14 +92,14 @@ struct LocalDebugView: View {
                         showLogs = true
                     } label: {
                         HStack {
-                            Label("调试日志", systemImage: "doc.text")
+                            Label(NSLocalizedString("调试日志", comment: ""), systemImage: "doc.text")
                             Spacer()
                             Text("\(server.debugLogs.count)")
                                 .foregroundStyle(.secondary)
                         }
                     }
                 } header: {
-                    Text("调试")
+                    Text(NSLocalizedString("调试", comment: ""))
                 }
             }
 
@@ -115,19 +115,19 @@ struct LocalDebugView: View {
                                 .foregroundStyle(.secondary)
                         }
                         HStack {
-                            Button("保存日志") {
+                            Button(NSLocalizedString("保存日志", comment: "")) {
                                 server.resolvePendingOpenAIRequest(save: true)
                             }
                             .buttonStyle(.borderedProminent)
                             
-                            Button("忽略") {
+                            Button(NSLocalizedString("忽略", comment: "")) {
                                 server.resolvePendingOpenAIRequest(save: false)
                             }
                             .buttonStyle(.bordered)
                         }
                     }
                 } header: {
-                    Text("API 流量分析")
+                    Text(NSLocalizedString("API 流量分析", comment: ""))
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
                         Text(String(format: NSLocalizedString("队列中还有 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
@@ -136,23 +136,23 @@ struct LocalDebugView: View {
             }
             
             // 使用说明
-            Section(header: Text("文档"), footer: Text("远程诊断模式 · 主动连接调试端")) {
+            Section(header: Text(NSLocalizedString("文档", comment: "")), footer: Text(NSLocalizedString("远程诊断模式 · 主动连接调试端", comment: ""))) {
                 Button {
                     showAPIDoc = true
                 } label: {
-                    Label("使用说明", systemImage: "book")
+                    Label(NSLocalizedString("使用说明", comment: ""), systemImage: "book")
                 }
             }
             
             // 安全提示
-            Section(header: Text("提示")) {
-                Label("仅在可信网络中使用", systemImage: "wifi")
-                Label("用完后请及时断开连接", systemImage: "hand.raised")
+            Section(header: Text(NSLocalizedString("提示", comment: ""))) {
+                Label(NSLocalizedString("仅在可信网络中使用", comment: ""), systemImage: "wifi")
+                Label(NSLocalizedString("用完后请及时断开连接", comment: ""), systemImage: "hand.raised")
             }
             .foregroundStyle(.secondary)
             .etFont(.footnote)
         }
-        .navigationTitle("高级诊断")
+        .navigationTitle(NSLocalizedString("高级诊断", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(server.isRunning)
         .interactiveDismissDisabled(server.isRunning)
@@ -200,7 +200,7 @@ private struct DebugLogsView: View {
     var body: some View {
         List {
             if server.debugLogs.isEmpty {
-                ContentUnavailableView("暂无日志", systemImage: "doc.text", description: Text("连接后会显示调试信息"))
+                ContentUnavailableView(NSLocalizedString("暂无日志", comment: ""), systemImage: "doc.text", description: Text(NSLocalizedString("连接后会显示调试信息", comment: "")))
             } else {
                 ForEach(server.debugLogs) { log in
                     HStack(alignment: .top, spacing: 8) {
@@ -219,17 +219,17 @@ private struct DebugLogsView: View {
                 }
             }
         }
-        .navigationTitle("调试日志")
+        .navigationTitle(NSLocalizedString("调试日志", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("清空") {
+                Button(NSLocalizedString("清空", comment: "")) {
                     server.clearLogs()
                 }
                 .disabled(server.debugLogs.isEmpty)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") {
+                Button(NSLocalizedString("完成", comment: "")) {
                     dismiss()
                 }
             }
@@ -273,7 +273,7 @@ private struct DocumentationView: View {
     
     var body: some View {
         List {
-            Section("工作原理") {
+            Section(NSLocalizedString("工作原理", comment: "")) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
                         Image(systemName: "iphone")
@@ -286,13 +286,13 @@ private struct DocumentationView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     
-                    Text("设备主动连接电脑端 WebSocket 服务器，接收命令并执行文件操作。")
+                    Text(NSLocalizedString("设备主动连接电脑端 WebSocket 服务器，接收命令并执行文件操作。", comment: ""))
                         .etFont(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
             
-            Section("启动步骤") {
+            Section(NSLocalizedString("启动步骤", comment: "")) {
                 StepRow(
                     number: 1,
                     title: "电脑端下载并运行",
@@ -305,19 +305,19 @@ private struct DocumentationView: View {
                 StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")
             }
             
-            Section("功能") {
+            Section(NSLocalizedString("功能", comment: "")) {
                 FeatureRow(icon: "folder", title: "文件管理", description: "管理应用沙盒内的文件和目录")
                 FeatureRow(icon: "tray.and.arrow.down", title: "API 分析", description: "查看并分析 API 请求日志")
                 FeatureRow(icon: "menucard", title: "远程控制", description: "通过电脑端菜单进行辅助操作")
             }
             
-            Section("API 代理设置") {
+            Section(NSLocalizedString("API 代理设置", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("将 API Base URL 设置为：")
+                    Text(NSLocalizedString("将 API Base URL 设置为：", comment: ""))
                         .etFont(.subheadline)
                         .foregroundStyle(.secondary)
                     
-                    Text("http://电脑IP:8080")
+                    Text(NSLocalizedString("http://电脑IP:8080", comment: ""))
                         .etFont(.body.monospaced())
                         .foregroundStyle(.blue)
                         .padding(8)
@@ -325,26 +325,26 @@ private struct DocumentationView: View {
                         .background(Color.blue.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     
-                    Text("请求将被重定向到调试端进行记录和分析。")
+                    Text(NSLocalizedString("请求将被重定向到调试端进行记录和分析。", comment: ""))
                         .etFont(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             
-            Section("特性") {
-                Label("局域网直连，无中间服务器", systemImage: "checkmark.circle.fill")
+            Section(NSLocalizedString("特性", comment: "")) {
+                Label(NSLocalizedString("局域网直连，无中间服务器", comment: ""), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Label("实时日志流", systemImage: "checkmark.circle.fill")
+                Label(NSLocalizedString("实时日志流", comment: ""), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Label("可视化菜单操作", systemImage: "checkmark.circle.fill")
+                Label(NSLocalizedString("可视化菜单操作", comment: ""), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             }
         }
-        .navigationTitle("使用说明")
+        .navigationTitle(NSLocalizedString("使用说明", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") {
+                Button(NSLocalizedString("完成", comment: "")) {
                     dismiss()
                 }
             }

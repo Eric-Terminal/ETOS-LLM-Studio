@@ -336,7 +336,7 @@ struct WorldbookSettingsView: View {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }

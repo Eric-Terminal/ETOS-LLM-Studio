@@ -375,7 +375,7 @@ private struct ETWatchMarkdownImageThumbnail: View {
                     onActivate(.init(url: url))
                 }
                 .accessibilityAddTraits(.isButton)
-                .accessibilityHint("点按后可使用数码表冠缩放图片")
+                .accessibilityHint(NSLocalizedString("点按后可使用数码表冠缩放图片", comment: ""))
             } else {
                 failurePlaceholder
             }
@@ -405,7 +405,7 @@ private struct ETWatchMarkdownImageThumbnail: View {
                     Image(systemName: "photo")
                         .etFont(.system(size: 14))
                         .foregroundStyle(.secondary)
-                    Text("图片载入失败")
+                    Text(NSLocalizedString("图片载入失败", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -479,7 +479,7 @@ private struct ETWatchMarkdownImagePreviewSheet: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(.white)
-            Text("正在载入图片")
+            Text(NSLocalizedString("正在载入图片", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(Color.white.opacity(0.72))
         }
@@ -490,7 +490,7 @@ private struct ETWatchMarkdownImagePreviewSheet: View {
             Image(systemName: "photo")
                 .etFont(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.78))
-            Text("图片载入失败")
+            Text(NSLocalizedString("图片载入失败", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(Color.white.opacity(0.72))
         }
@@ -717,7 +717,7 @@ private struct ETCodeCopyButton: View {
                 .foregroundStyle(didCopy ? successColor : normalColor)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("复制代码")
+        .accessibilityLabel(NSLocalizedString("复制代码", comment: ""))
     }
 }
 

@@ -41,7 +41,7 @@ public struct LocalDebugView: View {
             
             // 连接配置
             if !server.isRunning {
-                Section(header: Text("连接模式")) {
+                Section(header: Text(NSLocalizedString("连接模式", comment: ""))) {
                     Toggle(isOn: $server.useHTTP) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.useHTTP ? "HTTP 轮询" : "WebSocket")
@@ -53,28 +53,28 @@ public struct LocalDebugView: View {
                     }
                 }
                 
-                Section(header: Text("服务器地址")) {
+                Section(header: Text(NSLocalizedString("服务器地址", comment: ""))) {
                     TextField(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765", text: $serverURL.watchKeyboardNewlineBinding())
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    Button("连接") {
+                    Button(NSLocalizedString("连接", comment: "")) {
                         connectToServer()
                     }
                     .foregroundStyle(.blue)
                     .disabled(serverURL.isEmpty)
                 }
             } else {
-                Section("连接信息") {
+                Section(NSLocalizedString("连接信息", comment: "")) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("服务器")
+                        Text(NSLocalizedString("服务器", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                         Text(server.serverURL)
                             .etFont(.caption.monospaced())
                     }
                     
-                    Button("断开") {
+                    Button(NSLocalizedString("断开", comment: "")) {
                         disconnectServer()
                     }
                     .foregroundStyle(.red)
@@ -86,7 +86,7 @@ public struct LocalDebugView: View {
                         showingLogs = true
                     } label: {
                         HStack {
-                            Text("调试日志")
+                            Text(NSLocalizedString("调试日志", comment: ""))
                                 .etFont(.caption)
                             Spacer()
                             Text("\(server.debugLogs.count)")
@@ -106,17 +106,17 @@ public struct LocalDebugView: View {
                         Text(formatPendingTime(pending.receivedAt))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
-                        Button("保存日志") {
+                        Button(NSLocalizedString("保存日志", comment: "")) {
                             server.resolvePendingOpenAIRequest(save: true)
                         }
                         .etFont(.caption)
-                        Button("忽略") {
+                        Button(NSLocalizedString("忽略", comment: "")) {
                             server.resolvePendingOpenAIRequest(save: false)
                         }
                         .etFont(.caption)
                     }
                 } header: {
-                    Text("API 流量分析")
+                    Text(NSLocalizedString("API 流量分析", comment: ""))
                 } footer: {
                     if server.pendingOpenAIQueueCount > 1 {
                         Text(String(format: NSLocalizedString("剩余 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
@@ -131,16 +131,16 @@ public struct LocalDebugView: View {
                 Button {
                     showingDocs = true
                 } label: {
-                    Label("使用说明", systemImage: "book")
+                    Label(NSLocalizedString("使用说明", comment: ""), systemImage: "book")
                         .etFont(.caption)
                 }
             } footer: {
-                Text("远程诊断模式 · 主动连接调试端")
+                Text(NSLocalizedString("远程诊断模式 · 主动连接调试端", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("诊断")
+        .navigationTitle(NSLocalizedString("诊断", comment: ""))
         .navigationBarBackButtonHidden(server.isRunning)
         .sheet(isPresented: $showingDocs) {
             NavigationStack {
@@ -185,34 +185,34 @@ private struct WatchDocumentationView: View {
     
     var body: some View {
         List {
-            Section("工作原理") {
+            Section(NSLocalizedString("工作原理", comment: "")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("WebSocket 模式")
+                    Text(NSLocalizedString("WebSocket 模式", comment: ""))
                         .etFont(.caption)
                         .fontWeight(.semibold)
-                    Text("设备主动连接电脑端服务器（端口 8765），实时接收命令")
+                    Text(NSLocalizedString("设备主动连接电脑端服务器（端口 8765），实时接收命令", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     
-                    Text("HTTP 轮询模式")
+                    Text(NSLocalizedString("HTTP 轮询模式", comment: ""))
                         .etFont(.caption)
                         .fontWeight(.semibold)
                         .padding(.top, 4)
-                    Text("设备每秒向服务器（端口 7654）请求一次，获取待执行命令")
+                    Text(NSLocalizedString("设备每秒向服务器（端口 7654）请求一次，获取待执行命令", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
             
-            Section("启动步骤") {
+            Section(NSLocalizedString("启动步骤", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
                     StepItem(num: 1, text: "电脑端下载并运行:")
-                    Text("在 GitHub Release 下载最新调试工具（Go 版）")
+                    Text(NSLocalizedString("在 GitHub Release 下载最新调试工具（Go 版）", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.leading)
                     Link(destination: debugToolReleaseURL) {
-                        Label("前往下载页面", systemImage: "arrow.up.right.square")
+                        Label(NSLocalizedString("前往下载页面", comment: ""), systemImage: "arrow.up.right.square")
                             .etFont(.caption2)
                     }
                     .padding(.leading)
@@ -225,24 +225,24 @@ private struct WatchDocumentationView: View {
                 }
             }
             
-            Section("功能") {
+            Section(NSLocalizedString("功能", comment: "")) {
                 FeatureItem(icon: "folder", name: "文件管理", desc: "管理应用内数据")
                 FeatureItem(icon: "tray.and.arrow.down", name: "流量分析", desc: "API 请求日志记录")
                 FeatureItem(icon: "menucard", name: "远程控制", desc: "通过调试端辅助操作")
             }
             
-            Section("API 代理") {
-                Text("设置 API Base URL 为:")
+            Section(NSLocalizedString("API 代理", comment: "")) {
+                Text(NSLocalizedString("设置 API Base URL 为:", comment: ""))
                     .etFont(.caption2)
-                Text("http://电脑IP:8080")
+                Text(NSLocalizedString("http://电脑IP:8080", comment: ""))
                     .etFont(.system(size: 10).monospaced())
                     .foregroundStyle(.blue)
-                Text("请求将重定向至调试端进行记录。")
+                Text(NSLocalizedString("请求将重定向至调试端进行记录。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("使用说明")
+        .navigationTitle(NSLocalizedString("使用说明", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -296,7 +296,7 @@ private struct WatchDebugLogsView: View {
     var body: some View {
         List {
             if server.debugLogs.isEmpty {
-                Text("暂无日志")
+                Text(NSLocalizedString("暂无日志", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -317,10 +317,10 @@ private struct WatchDebugLogsView: View {
                 }
             }
         }
-        .navigationTitle("日志")
+        .navigationTitle(NSLocalizedString("日志", comment: ""))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("清空") {
+                Button(NSLocalizedString("清空", comment: "")) {
                     server.clearLogs()
                 }
                 .etFont(.caption2)

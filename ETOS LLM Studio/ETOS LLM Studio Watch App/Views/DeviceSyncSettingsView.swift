@@ -43,24 +43,24 @@ struct DeviceSyncSettingsView: View {
     
     var body: some View {
         List {
-            Section("同步内容") {
-                Toggle("提供商", isOn: $syncProviders)
-                Toggle("会话", isOn: $syncSessions)
-                Toggle("背景", isOn: $syncBackgrounds)
-                Toggle("记忆", isOn: $syncMemories)
+            Section(NSLocalizedString("同步内容", comment: "")) {
+                Toggle(NSLocalizedString("提供商", comment: ""), isOn: $syncProviders)
+                Toggle(NSLocalizedString("会话", comment: ""), isOn: $syncSessions)
+                Toggle(NSLocalizedString("背景", comment: ""), isOn: $syncBackgrounds)
+                Toggle(NSLocalizedString("记忆", comment: ""), isOn: $syncMemories)
                 Toggle("MCP", isOn: $syncMCPServers)
-                Toggle("图片", isOn: $syncImageFiles)
+                Toggle(NSLocalizedString("图片", comment: ""), isOn: $syncImageFiles)
                 Toggle("Skills", isOn: $syncSkills)
-                Toggle("快捷指令", isOn: $syncShortcutTools)
-                Toggle("世界书", isOn: $syncWorldbooks)
-                Toggle("反馈工单", isOn: $syncFeedbackTickets)
-                Toggle("每日脉冲", isOn: $syncDailyPulse)
-                Toggle("用量统计", isOn: $syncUsageStats)
-                Toggle("字体文件与规则", isOn: $syncFontFiles)
-                Toggle("软件设置", isOn: $syncAppStorage)
+                Toggle(NSLocalizedString("快捷指令", comment: ""), isOn: $syncShortcutTools)
+                Toggle(NSLocalizedString("世界书", comment: ""), isOn: $syncWorldbooks)
+                Toggle(NSLocalizedString("反馈工单", comment: ""), isOn: $syncFeedbackTickets)
+                Toggle(NSLocalizedString("每日脉冲", comment: ""), isOn: $syncDailyPulse)
+                Toggle(NSLocalizedString("用量统计", comment: ""), isOn: $syncUsageStats)
+                Toggle(NSLocalizedString("字体文件与规则", comment: ""), isOn: $syncFontFiles)
+                Toggle(NSLocalizedString("软件设置", comment: ""), isOn: $syncAppStorage)
             }
 
-            Section("导出备份") {
+            Section(NSLocalizedString("导出备份", comment: "")) {
                 Button {
                     exportDataPackage()
                 } label: {
@@ -70,7 +70,7 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label("生成导出文件", systemImage: "square.and.arrow.up")
+                        Label(NSLocalizedString("生成导出文件", comment: ""), systemImage: "square.and.arrow.up")
                         Spacer()
                     }
                 }
@@ -81,23 +81,23 @@ struct DeviceSyncSettingsView: View {
                         ShareLink(item: exportFileURL) {
                             HStack {
                                 Spacer()
-                                Label("分享导出文件", systemImage: "square.and.arrow.up")
+                                Label(NSLocalizedString("分享导出文件", comment: ""), systemImage: "square.and.arrow.up")
                                 Spacer()
                             }
                         }
                     } else {
-                        Text("当前系统暂不支持直接分享导出文件。")
+                        Text(NSLocalizedString("当前系统暂不支持直接分享导出文件。", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Text("导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。")
+                Text(NSLocalizedString("导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
-            Section("上传备份（POST）") {
+            Section(NSLocalizedString("上传备份（POST）", comment: "")) {
                 TextField("https://example.com/backup", text: $backupUploadEndpoint.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -111,7 +111,7 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label("上传到地址", systemImage: "icloud.and.arrow.up")
+                        Label(NSLocalizedString("上传到地址", comment: ""), systemImage: "icloud.and.arrow.up")
                         Spacer()
                     }
                 }
@@ -130,13 +130,13 @@ struct DeviceSyncSettingsView: View {
                         .lineLimit(3)
                 }
 
-                Text("会向输入地址发送 POST(JSON)，请确认地址可信。")
+                Text(NSLocalizedString("会向输入地址发送 POST(JSON)，请确认地址可信。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Apple Watch 同步") {
-                Toggle("启动时自动同步", isOn: $autoSyncEnabled)
+            Section(NSLocalizedString("Apple Watch 同步", comment: "")) {
+                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $autoSyncEnabled)
 
                 Button {
                     syncManager.performSync(options: selectedSyncOptions)
@@ -147,21 +147,21 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label("同步", systemImage: "arrow.triangle.2.circlepath")
+                        Label(NSLocalizedString("同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
                         Spacer()
                     }
                 }
                 .disabled(selectedSyncOptions.isEmpty || isSyncing)
             }
             
-            Section("Apple Watch 状态") {
+            Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
                 syncStatusView
             }
 
-            Section("iCloud 同步") {
-                Toggle("启用 iCloud 同步", isOn: $cloudSyncEnabled)
+            Section(NSLocalizedString("iCloud 同步", comment: "")) {
+                Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $cloudSyncEnabled)
 
-                Toggle("启动时自动同步", isOn: $cloudAutoSyncEnabled)
+                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $cloudAutoSyncEnabled)
                     .disabled(!cloudSyncEnabled)
 
                 Button {
@@ -175,27 +175,27 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label("同步到 iCloud", systemImage: "icloud")
+                        Label(NSLocalizedString("同步到 iCloud", comment: ""), systemImage: "icloud")
                         Spacer()
                     }
                 }
                 .disabled(!cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
             }
 
-            Section("iCloud 状态") {
+            Section(NSLocalizedString("iCloud 状态", comment: "")) {
                 cloudSyncStatusView
             }
 
-            Section("启动保护备份") {
-                Toggle("启动时创建数据库备份点", isOn: $launchBackupEnabled)
+            Section(NSLocalizedString("启动保护备份", comment: "")) {
+                Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $launchBackupEnabled)
 
-                Text("用于防止 SQLite 数据库损坏。开启后每次启动会额外 dump 一份可恢复备份并落盘，可能占用更多空间；若检测到数据库损坏，会按这份备份自动重建并恢复检索索引。")
+                Text(NSLocalizedString("用于防止 SQLite 数据库损坏。开启后每次启动会额外 dump 一份可恢复备份并落盘，可能占用更多空间；若检测到数据库损坏，会按这份备份自动重建并恢复检索索引。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             if let exportErrorMessage, !exportErrorMessage.isEmpty {
-                Section("导出错误") {
+                Section(NSLocalizedString("导出错误", comment: "")) {
                     Text(exportErrorMessage)
                         .etFont(.caption2)
                         .foregroundStyle(.red)
@@ -203,14 +203,14 @@ struct DeviceSyncSettingsView: View {
             }
 
             if let uploadErrorMessage, !uploadErrorMessage.isEmpty {
-                Section("上传错误") {
+                Section(NSLocalizedString("上传错误", comment: "")) {
                     Text(uploadErrorMessage)
                         .etFont(.caption2)
                         .foregroundStyle(.red)
                 }
             }
         }
-        .navigationTitle("同步与备份")
+        .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
         .onAppear(perform: migrateLegacyAppStorageOptionIfNeeded)
     }
     
@@ -251,7 +251,7 @@ struct DeviceSyncSettingsView: View {
     private var syncStatusView: some View {
         switch syncManager.state {
         case .idle:
-            Text("未同步").etFont(.caption).foregroundStyle(.secondary)
+            Text(NSLocalizedString("未同步", comment: "")).etFont(.caption).foregroundStyle(.secondary)
         case .syncing(let message):
             HStack {
                 ProgressView()
@@ -259,7 +259,7 @@ struct DeviceSyncSettingsView: View {
             }
         case .success(let summary):
             VStack(alignment: .leading, spacing: 2) {
-                Label("成功", systemImage: "checkmark.circle")
+                Label(NSLocalizedString("成功", comment: ""), systemImage: "checkmark.circle")
                     .foregroundStyle(.green)
                 Text(summaryDescription(summary))
                     .etFont(.caption2)
@@ -267,14 +267,14 @@ struct DeviceSyncSettingsView: View {
             }
         case .failed(let reason):
             VStack(alignment: .leading, spacing: 2) {
-                Label("失败", systemImage: "xmark.circle")
+                Label(NSLocalizedString("失败", comment: ""), systemImage: "xmark.circle")
                     .foregroundStyle(.red)
                 Text(reason)
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         @unknown default:
-            Text("未知状态")
+            Text(NSLocalizedString("未知状态", comment: ""))
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -283,13 +283,13 @@ struct DeviceSyncSettingsView: View {
     @ViewBuilder
     private var cloudSyncStatusView: some View {
         if !cloudSyncEnabled {
-            Text("iCloud 同步已关闭")
+            Text(NSLocalizedString("iCloud 同步已关闭", comment: ""))
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
         } else {
             switch cloudSyncManager.state {
             case .idle:
-                Text("未同步")
+                Text(NSLocalizedString("未同步", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             case .syncing(let message):
@@ -300,7 +300,7 @@ struct DeviceSyncSettingsView: View {
                 }
             case .success(let summary):
                 VStack(alignment: .leading, spacing: 2) {
-                    Label("成功", systemImage: "checkmark.circle")
+                    Label(NSLocalizedString("成功", comment: ""), systemImage: "checkmark.circle")
                         .foregroundStyle(.green)
                     Text(summaryDescription(summary))
                         .etFont(.caption2)
@@ -308,14 +308,14 @@ struct DeviceSyncSettingsView: View {
                 }
             case .failed(let reason):
                 VStack(alignment: .leading, spacing: 2) {
-                    Label("失败", systemImage: "xmark.circle")
+                    Label(NSLocalizedString("失败", comment: ""), systemImage: "xmark.circle")
                         .foregroundStyle(.red)
                     Text(reason)
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             @unknown default:
-                Text("未知状态")
+                Text(NSLocalizedString("未知状态", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             }

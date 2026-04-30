@@ -45,7 +45,7 @@ struct ToolPermissionBubble: View {
                         .foregroundStyle(Color.primary)
 
                     if !trimmedArguments.isEmpty {
-                        Text("参数：")
+                        Text(NSLocalizedString("参数：", comment: ""))
                             .etFont(.caption.weight(.medium))
                             .foregroundStyle(Color.secondary)
 
@@ -61,26 +61,26 @@ struct ToolPermissionBubble: View {
                 }
 
                 HStack(spacing: 8) {
-                    Button("允许") {
+                    Button(NSLocalizedString("允许", comment: "")) {
                         onDecision(.allowOnce)
                     }
                     .buttonStyle(.borderedProminent)
 
                     Menu {
-                        Button("拒绝", role: .destructive) {
+                        Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
                             onDecision(.deny)
                         }
-                        Button("补充提示") {
+                        Button(NSLocalizedString("补充提示", comment: "")) {
                             onDecision(.supplement)
                         }
-                        Button("保持允许") {
+                        Button(NSLocalizedString("保持允许", comment: "")) {
                             onDecision(.allowForTool)
                         }
-                        Button("完全权限") {
+                        Button(NSLocalizedString("完全权限", comment: "")) {
                             onDecision(.allowAll)
                         }
                     } label: {
-                        Label("更多", systemImage: "ellipsis")
+                        Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis")
                     }
                     .buttonStyle(.bordered)
                 }

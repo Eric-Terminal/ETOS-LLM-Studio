@@ -67,7 +67,7 @@ struct AboutView: View {
                     VStack(spacing: 4) {
                         Text("ETOS LLM Studio")
                             .etFont(.title2.weight(.bold))
-                        Text("原生 AI 聊天客户端")
+                        Text(NSLocalizedString("原生 AI 聊天客户端", comment: ""))
                             .etFont(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -78,9 +78,9 @@ struct AboutView: View {
             }
             
             // MARK: - App Info
-            Section(header: Text("应用信息")) {
+            Section(header: Text(NSLocalizedString("应用信息", comment: ""))) {
                 HStack {
-                    Text("版本")
+                    Text(NSLocalizedString("版本", comment: ""))
                     Spacer()
                     Text(appVersion)
                         .foregroundStyle(.secondary)
@@ -89,16 +89,16 @@ struct AboutView: View {
                 .onTapGesture {
                     handleVersionTap()
                 }
-                LabeledContent("Git 提交") {
+                LabeledContent(NSLocalizedString("Git 提交", comment: "")) {
                     Text(appCommitHashShort)
                         .foregroundStyle(.secondary)
                 }
-                LabeledContent("开发者", value: "Eric-Terminal")
-                LabeledContent("平台支持", value: "iOS / watchOS")
+                LabeledContent(NSLocalizedString("开发者", comment: ""), value: "Eric-Terminal")
+                LabeledContent(NSLocalizedString("平台支持", comment: ""), value: "iOS / watchOS")
             }
             
             // MARK: - Features
-            Section(header: Text("核心功能")) {
+            Section(header: Text(NSLocalizedString("核心功能", comment: ""))) {
                 FeatureRow(icon: "gearshape.2", color: .blue, title: "完全可定制", description: "动态配置 API 提供商和模型")
                 FeatureRow(icon: "brain", color: .purple, title: "智能记忆", description: "离线 RAG 系统，设备端向量化")
                 FeatureRow(icon: "hammer", color: .orange, title: "工具调用", description: "AI 智能体自主使用内置工具")
@@ -107,7 +107,7 @@ struct AboutView: View {
             }
             
             // MARK: - Links
-            Section(header: Text("链接")) {
+            Section(header: Text(NSLocalizedString("链接", comment: ""))) {
                 Button {
                     openURL(githubURL)
                 } label: {
@@ -139,8 +139,8 @@ struct AboutView: View {
             }
             
             // MARK: - Legal
-            Section(header: Text("法律信息")) {
-                LabeledContent("开源协议", value: "GPLv3")
+            Section(header: Text(NSLocalizedString("法律信息", comment: ""))) {
+                LabeledContent(NSLocalizedString("开源协议", comment: ""), value: "GPLv3")
                 Button {
                     openURL(privacyURL)
                     Task {
@@ -149,7 +149,7 @@ struct AboutView: View {
                         await AchievementCenter.shared.unlock(id: .privacyReader)
                     }
                 } label: {
-                    LabeledContent("隐私政策") {
+                    LabeledContent(NSLocalizedString("隐私政策", comment: "")) {
                         Text(privacyHost)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -173,7 +173,7 @@ struct AboutView: View {
                 .listRowBackground(Color.clear)
             }
         }
-        .navigationTitle("关于")
+        .navigationTitle(NSLocalizedString("关于", comment: ""))
         .sheet(isPresented: $showAppLogs) {
             NavigationStack {
                 AppLogsView()

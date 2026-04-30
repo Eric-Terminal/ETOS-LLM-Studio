@@ -101,13 +101,13 @@ struct ContentView: View {
                 openDailyPulseContinuationIfNeeded()
             }
         }
-        .alert("记忆系统需要更新", isPresented: $viewModel.showDimensionMismatchAlert) {
-            Button("确定", role: .cancel) {}
+        .alert(NSLocalizedString("记忆系统需要更新", comment: ""), isPresented: $viewModel.showDimensionMismatchAlert) {
+            Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
             Text(viewModel.dimensionMismatchMessage)
         }
-        .alert("数据库已自动恢复", isPresented: launchRecoveryNoticePresented) {
-            Button("好的", role: .cancel) {}
+        .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: launchRecoveryNoticePresented) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {}
         } message: {
             Text(launchRecoveryNoticeMessage ?? "")
         }
@@ -132,7 +132,7 @@ struct ContentView: View {
                     pushNativeChatIfNeeded()
                 }
             )
-                .navigationTitle("历史会话")
+                .navigationTitle(NSLocalizedString("历史会话", comment: ""))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -166,21 +166,20 @@ struct ContentView: View {
                 }
                 .interactiveDismissDisabled(true)
             }
-            .alert(
-                "是否清理旧版 JSON 文件？",
+            .alert(NSLocalizedString("是否清理旧版 JSON 文件？", comment: ""),
                 isPresented: $legacyJSONMigrationManager.isCleanupPromptPresented
             ) {
-                Button("保留 JSON（稍后再说）", role: .cancel) {
+                Button(NSLocalizedString("保留 JSON（稍后再说）", comment: ""), role: .cancel) {
                     legacyJSONMigrationManager.keepLegacyJSONForNow()
                 }
-                Button("删除 JSON") {
+                Button(NSLocalizedString("删除 JSON", comment: "")) {
                     legacyJSONMigrationManager.cleanupLegacyJSONArtifacts()
                 }
             } message: {
-                Text("SQLite 迁移已完成。建议删除旧 JSON 文件释放空间，后续版本可能不再支持旧格式。")
+                Text(NSLocalizedString("SQLite 迁移已完成。建议删除旧 JSON 文件释放空间，后续版本可能不再支持旧格式。", comment: ""))
             }
-            .alert("迁移失败", isPresented: $isLegacyMigrationErrorPresented) {
-                Button("好的", role: .cancel) {
+            .alert(NSLocalizedString("迁移失败", comment: ""), isPresented: $isLegacyMigrationErrorPresented) {
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
                     legacyMigrationErrorMessage = nil
                 }
             } message: {
@@ -343,9 +342,9 @@ struct ContentView: View {
 
     private var legacyJSONMigrationPromptSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("检测到旧版 JSON 聊天数据")
+            Text(NSLocalizedString("检测到旧版 JSON 聊天数据", comment: ""))
                 .etFont(.title3.bold())
-            Text("为避免后续兼容风险，强烈建议现在迁移到 SQLite。迁移会在后台分批进行，不会阻塞当前界面。")
+            Text(NSLocalizedString("为避免后续兼容风险，强烈建议现在迁移到 SQLite。迁移会在后台分批进行，不会阻塞当前界面。", comment: ""))
                 .foregroundStyle(.secondary)
 
             if let status = legacyJSONMigrationManager.status {
@@ -360,13 +359,13 @@ struct ContentView: View {
             Spacer()
 
             VStack(spacing: 10) {
-                Button("立即迁移（推荐）") {
+                Button(NSLocalizedString("立即迁移（推荐）", comment: "")) {
                     legacyJSONMigrationManager.startMigration()
                 }
                 .buttonStyle(.borderedProminent)
                 .frame(maxWidth: .infinity)
 
-                Button("稍后再说") {
+                Button(NSLocalizedString("稍后再说", comment: "")) {
                     legacyJSONMigrationManager.postponeMigrationPrompt()
                 }
                 .buttonStyle(.bordered)
@@ -374,13 +373,13 @@ struct ContentView: View {
             }
         }
         .padding(20)
-        .navigationTitle("数据迁移")
+        .navigationTitle(NSLocalizedString("数据迁移", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var legacyJSONMigrationProgressSheet: some View {
         VStack(spacing: 16) {
-            Text("正在迁移聊天数据")
+            Text(NSLocalizedString("正在迁移聊天数据", comment: ""))
                 .etFont(.title3.bold())
             if let progress = legacyJSONMigrationManager.progress {
                 ProgressView(value: progress.fractionCompleted)
@@ -398,17 +397,17 @@ struct ContentView: View {
                     .lineLimit(1)
             } else {
                 ProgressView()
-                Text("当前：正在准备迁移…")
+                Text(NSLocalizedString("当前：正在准备迁移…", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Text("迁移完成后会再次询问是否删除旧 JSON 文件。")
+            Text(NSLocalizedString("迁移完成后会再次询问是否删除旧 JSON 文件。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding(20)
-        .navigationTitle("迁移中")
+        .navigationTitle(NSLocalizedString("迁移中", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

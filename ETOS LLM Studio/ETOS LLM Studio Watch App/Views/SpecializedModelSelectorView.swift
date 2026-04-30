@@ -114,7 +114,7 @@ struct SpecializedModelSelectorView: View {
                 footer: "用于图片生成，也可在图片生成功能中修改。"
             )
         }
-        .navigationTitle("专用模型")
+        .navigationTitle(NSLocalizedString("专用模型", comment: ""))
         .onAppear(perform: syncImageGenerationSelection)
         .onChange(of: viewModel.activatedModelListVersion) { _, _ in
             syncImageGenerationSelection()
@@ -131,7 +131,7 @@ struct SpecializedModelSelectorView: View {
     ) -> some View {
         Section {
             if options.isEmpty {
-                Text("暂无可用模型，请先启用。")
+                Text(NSLocalizedString("暂无可用模型，请先启用。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {

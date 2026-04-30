@@ -43,18 +43,18 @@ struct ProviderEditView: View {
         let preview = headerOverridesPreview
 
         Form {
-            Section(header: Text("基础信息"), footer: Text(apiBaseURLHint)) {
-                TextField("提供商名称", text: $provider.name.watchKeyboardNewlineBinding())
-                TextField("API 地址", text: $provider.baseURL.watchKeyboardNewlineBinding())
+            Section(header: Text(NSLocalizedString("基础信息", comment: "")), footer: Text(apiBaseURLHint)) {
+                TextField(NSLocalizedString("提供商名称", comment: ""), text: $provider.name.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("API 地址", comment: ""), text: $provider.baseURL.watchKeyboardNewlineBinding())
                     .etFont(.caption)
-                Picker("API 格式", selection: $provider.apiFormat) {
-                    Text("OpenAI 兼容").tag("openai-compatible")
+                Picker(NSLocalizedString("API 格式", comment: ""), selection: $provider.apiFormat) {
+                    Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag("openai-compatible")
                     Text("Gemini").tag("gemini")
                     Text("Anthropic").tag("anthropic")
                 }
             }
             
-            Section(header: Text("认证"), footer: Text(apiKeysHint)) {
+            Section(header: Text(NSLocalizedString("认证", comment: "")), footer: Text(apiKeysHint)) {
                 Group {
                     if showApiKeys {
                         TextField("API Key", text: $apiKeysText.watchKeyboardNewlineBinding())
@@ -63,29 +63,29 @@ struct ProviderEditView: View {
                     }
                 }
                 
-                Toggle("显示明文", isOn: $showApiKeys)
+                Toggle(NSLocalizedString("显示明文", comment: ""), isOn: $showApiKeys)
             }
 
             Section(
-                header: Text("代理（提供商级）"),
+                header: Text(NSLocalizedString("代理（提供商级）", comment: "")),
                 footer: Text(providerProxyFooterText)
             ) {
-                Toggle("使用独立代理（优先于全局）", isOn: $useProviderProxyOverride)
+                Toggle(NSLocalizedString("使用独立代理（优先于全局）", comment: ""), isOn: $useProviderProxyOverride)
 
                 if useProviderProxyOverride {
-                    Toggle("启用代理", isOn: $providerProxyConfiguration.isEnabled)
+                    Toggle(NSLocalizedString("启用代理", comment: ""), isOn: $providerProxyConfiguration.isEnabled)
 
-                    Picker("代理类型", selection: $providerProxyConfiguration.type) {
+                    Picker(NSLocalizedString("代理类型", comment: ""), selection: $providerProxyConfiguration.type) {
                         Text("HTTP / HTTPS").tag(NetworkProxyType.http)
                         Text("SOCKS5").tag(NetworkProxyType.socks5)
                     }
 
-                    TextField("代理地址", text: $providerProxyConfiguration.host.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("代理地址", comment: ""), text: $providerProxyConfiguration.host.watchKeyboardNewlineBinding())
                         .etFont(.caption)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    TextField("端口", value: $providerProxyConfiguration.port, formatter: numberFormatter)
+                    TextField(NSLocalizedString("端口", comment: ""), value: $providerProxyConfiguration.port, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .onChange(of: providerProxyConfiguration.port) { _, newValue in
                             let clamped = max(1, min(65535, newValue))
@@ -94,25 +94,25 @@ struct ProviderEditView: View {
                             }
                         }
 
-                    TextField("用户名（可选）", text: $providerProxyConfiguration.username.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("用户名（可选）", comment: ""), text: $providerProxyConfiguration.username.watchKeyboardNewlineBinding())
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
                     Group {
                         if showProxyPassword {
-                            TextField("密码（可选）", text: $providerProxyConfiguration.password.watchKeyboardNewlineBinding())
+                            TextField(NSLocalizedString("密码（可选）", comment: ""), text: $providerProxyConfiguration.password.watchKeyboardNewlineBinding())
                         } else {
-                            SecureField("密码（可选）", text: $providerProxyConfiguration.password.watchKeyboardNewlineBinding())
+                            SecureField(NSLocalizedString("密码（可选）", comment: ""), text: $providerProxyConfiguration.password.watchKeyboardNewlineBinding())
                         }
                     }
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                    Toggle("显示代理密码", isOn: $showProxyPassword)
+                    Toggle(NSLocalizedString("显示代理密码", comment: ""), isOn: $showProxyPassword)
                 }
             }
 
-            Section(header: Text("请求头覆盖"), footer: Text(headerOverridesHint)) {
+            Section(header: Text(NSLocalizedString("请求头覆盖", comment: "")), footer: Text(headerOverridesHint)) {
                 ForEach($headerOverrideEntries) { $entry in
                     HeaderOverrideRow(entry: $entry)
                         .onChange(of: entry.text) { _, _ in
@@ -121,26 +121,26 @@ struct ProviderEditView: View {
                 }
                 .onDelete(perform: deleteHeaderOverrideEntries)
 
-                Button("添加表达式") {
+                Button(NSLocalizedString("添加表达式", comment: "")) {
                     addHeaderOverrideEntry()
                 }
             }
 
-            Section(header: Text("请求头预览")) {
+            Section(header: Text(NSLocalizedString("请求头预览", comment: ""))) {
                 Text(preview.text)
                     .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
             }
             
             Section {
-                Button("保存", action: saveProvider)
+                Button(NSLocalizedString("保存", comment: ""), action: saveProvider)
                     .disabled(isSaveDisabled)
             }
         }
         .navigationTitle(isNew ? "添加提供商" : "编辑提供商")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
             }
         }
     }
@@ -364,7 +364,7 @@ private struct HeaderOverrideRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text.watchKeyboardNewlineBinding())
+            TextField(NSLocalizedString("请求头表达式，例如 User-Agent=Mozilla/5.0", comment: ""), text: $entry.text.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .etFont(.footnote.monospaced())

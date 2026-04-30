@@ -46,41 +46,40 @@ struct AgentSkillsView: View {
             }
 
             Section {
-                Toggle(
-                    "向模型暴露 Agent Skills",
+                Toggle(NSLocalizedString("向模型暴露 Agent Skills", comment: ""),
                     isOn: Binding(
                         get: { manager.chatToolsEnabled },
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
-                Text("关闭后不会向模型提供 use_skill 工具。")
+                Text(NSLocalizedString("关闭后不会向模型提供 use_skill 工具。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
-            Section("操作") {
+            Section(NSLocalizedString("操作", comment: "")) {
                 Button {
                     showAddSheet = true
                 } label: {
-                    Label("新增技能", systemImage: "plus")
+                    Label(NSLocalizedString("新增技能", comment: ""), systemImage: "plus")
                 }
 
                 Button {
                     showImportSheet = true
                 } label: {
-                    Label("GitHub 导入", systemImage: "square.and.arrow.down")
+                    Label(NSLocalizedString("GitHub 导入", comment: ""), systemImage: "square.and.arrow.down")
                 }
 
                 Button {
                     showURLImportSheet = true
                 } label: {
-                    Label("链接导入 SKILL.md", systemImage: "link.badge.plus")
+                    Label(NSLocalizedString("链接导入 SKILL.md", comment: ""), systemImage: "link.badge.plus")
                 }
             }
 
             Section("技能 (\(manager.skills.count))") {
                 if manager.skills.isEmpty {
-                    Text("暂无技能")
+                    Text(NSLocalizedString("暂无技能", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(manager.skills) { skill in
@@ -106,7 +105,7 @@ struct AgentSkillsView: View {
                             Button(role: .destructive) {
                                 deleteTarget = skill
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                         }
                     }
@@ -133,8 +132,8 @@ struct AgentSkillsView: View {
                 set: { if !$0 { deleteTarget = nil } }
             )
         ) {
-            Button("取消", role: .cancel) { deleteTarget = nil }
-            Button("删除", role: .destructive) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { deleteTarget = nil }
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let target = deleteTarget {
                     _ = manager.deleteSkill(target.name)
                 }
@@ -155,11 +154,11 @@ private struct WatchImportSkillFromURLSheet: View {
 
     var body: some View {
         List {
-            Section("SKILL.md 链接") {
+            Section(NSLocalizedString("SKILL.md 链接", comment: "")) {
                 TextField("https://example.com/SKILL.md", text: $fileURLText.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                Text("支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。")
+                Text(NSLocalizedString("支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -168,7 +167,7 @@ private struct WatchImportSkillFromURLSheet: View {
                 Section {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("导入中…")
+                        Text(NSLocalizedString("导入中…", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -176,7 +175,7 @@ private struct WatchImportSkillFromURLSheet: View {
             }
 
             if let localError {
-                Section("错误") {
+                Section(NSLocalizedString("错误", comment: "")) {
                     Text(localError)
                         .etFont(.caption2)
                         .foregroundStyle(.red)
@@ -184,13 +183,13 @@ private struct WatchImportSkillFromURLSheet: View {
             }
 
             Section {
-                Button("导入") {
+                Button(NSLocalizedString("导入", comment: "")) {
                     startImportFromURL()
                 }
                 .disabled(isImporting || fileURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .navigationTitle("链接导入")
+        .navigationTitle(NSLocalizedString("链接导入", comment: ""))
     }
 
     private func startImportFromURL() {
@@ -270,7 +269,7 @@ private extension AgentSkillsView {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.caption2.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -310,12 +309,12 @@ description: "技能描述"
     var body: some View {
         List {
             Section {
-                TextField("SKILL.md 内容", text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
+                TextField(NSLocalizedString("SKILL.md 内容", comment: ""), text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(8...20)
             }
 
             if !parsedName.isEmpty {
-                Section("名称") {
+                Section(NSLocalizedString("名称", comment: "")) {
                     Text(parsedName)
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
@@ -323,7 +322,7 @@ description: "技能描述"
             }
 
             if let localError {
-                Section("错误") {
+                Section(NSLocalizedString("错误", comment: "")) {
                     Text(localError)
                         .foregroundStyle(.red)
                         .etFont(.caption2)
@@ -331,7 +330,7 @@ description: "技能描述"
             }
 
             Section {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     let success = manager.saveSkillFromContent(content)
                     if success {
                         dismiss()
@@ -342,7 +341,7 @@ description: "技能描述"
                 .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .navigationTitle("新增技能")
+        .navigationTitle(NSLocalizedString("新增技能", comment: ""))
     }
 }
 
@@ -355,11 +354,11 @@ private struct WatchImportSkillSheet: View {
 
     var body: some View {
         List {
-            Section("仓库地址") {
+            Section(NSLocalizedString("仓库地址", comment: "")) {
                 TextField("https://github.com/owner/repo", text: $repoURL.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                Text("支持 /tree/branch 或子目录。")
+                Text(NSLocalizedString("支持 /tree/branch 或子目录。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -368,7 +367,7 @@ private struct WatchImportSkillSheet: View {
                 Section {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("导入中…")
+                        Text(NSLocalizedString("导入中…", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -376,7 +375,7 @@ private struct WatchImportSkillSheet: View {
             }
 
             if let localError {
-                Section("错误") {
+                Section(NSLocalizedString("错误", comment: "")) {
                     Text(localError)
                         .etFont(.caption2)
                         .foregroundStyle(.red)
@@ -384,7 +383,7 @@ private struct WatchImportSkillSheet: View {
             }
 
             Section {
-                Button("导入") {
+                Button(NSLocalizedString("导入", comment: "")) {
                     Task {
                         isImporting = true
                         localError = nil
@@ -400,7 +399,7 @@ private struct WatchImportSkillSheet: View {
                 .disabled(isImporting || repoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .navigationTitle("GitHub 导入")
+        .navigationTitle(NSLocalizedString("GitHub 导入", comment: ""))
     }
 }
 
@@ -415,8 +414,7 @@ private struct WatchSkillDetailView: View {
     var body: some View {
         List {
             Section {
-                Toggle(
-                    "在聊天中启用",
+                Toggle(NSLocalizedString("在聊天中启用", comment: ""),
                     isOn: Binding(
                         get: { manager.isSkillEnabled(skillName) },
                         set: { manager.setSkillEnabled(name: skillName, isEnabled: $0) }
@@ -424,9 +422,9 @@ private struct WatchSkillDetailView: View {
                 )
             }
 
-            Section("文件") {
+            Section(NSLocalizedString("文件", comment: "")) {
                 if files.isEmpty {
-                    Text("目录为空")
+                    Text(NSLocalizedString("目录为空", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(files) { file in
@@ -448,7 +446,7 @@ private struct WatchSkillDetailView: View {
                                 Button(role: .destructive) {
                                     deleteTarget = file
                                 } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                                 }
                             }
                         }
@@ -460,7 +458,7 @@ private struct WatchSkillDetailView: View {
                 Button {
                     showCreateFileSheet = true
                 } label: {
-                    Label("新建文件", systemImage: "doc.badge.plus")
+                    Label(NSLocalizedString("新建文件", comment: ""), systemImage: "doc.badge.plus")
                 }
             }
         }
@@ -478,8 +476,8 @@ private struct WatchSkillDetailView: View {
                 set: { if !$0 { deleteTarget = nil } }
             )
         ) {
-            Button("取消", role: .cancel) { deleteTarget = nil }
-            Button("删除", role: .destructive) {
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { deleteTarget = nil }
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 if let target = deleteTarget {
                     _ = manager.deleteSkillFile(skillName: skillName, relativePath: target.relativePath)
                     reload()
@@ -509,12 +507,12 @@ private struct WatchEditSkillFileView: View {
     var body: some View {
         List {
             Section {
-                TextField("文件内容", text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
+                TextField(NSLocalizedString("文件内容", comment: ""), text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(8...20)
             }
 
             if let localError {
-                Section("错误") {
+                Section(NSLocalizedString("错误", comment: "")) {
                     Text(localError)
                         .foregroundStyle(.red)
                         .etFont(.caption2)
@@ -522,7 +520,7 @@ private struct WatchEditSkillFileView: View {
             }
 
             Section {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     let success = manager.saveSkillFile(skillName: skillName, relativePath: file.relativePath, content: content)
                     if success {
                         onSaved()
@@ -552,19 +550,19 @@ private struct WatchCreateSkillFileView: View {
 
     var body: some View {
         List {
-            Section("路径") {
-                TextField("例如 refs/checklist.md", text: $relativePath.watchKeyboardNewlineBinding())
+            Section(NSLocalizedString("路径", comment: "")) {
+                TextField(NSLocalizedString("例如 refs/checklist.md", comment: ""), text: $relativePath.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
 
-            Section("内容") {
-                TextField("文件内容", text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
+            Section(NSLocalizedString("内容", comment: "")) {
+                TextField(NSLocalizedString("文件内容", comment: ""), text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(6...20)
             }
 
             if let localError {
-                Section("错误") {
+                Section(NSLocalizedString("错误", comment: "")) {
                     Text(localError)
                         .foregroundStyle(.red)
                         .etFont(.caption2)
@@ -572,7 +570,7 @@ private struct WatchCreateSkillFileView: View {
             }
 
             Section {
-                Button("创建") {
+                Button(NSLocalizedString("创建", comment: "")) {
                     let path = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !path.isEmpty else {
                         localError = "路径不能为空。"
@@ -588,6 +586,6 @@ private struct WatchCreateSkillFileView: View {
                 }
             }
         }
-        .navigationTitle("新建文件")
+        .navigationTitle(NSLocalizedString("新建文件", comment: ""))
     }
 }

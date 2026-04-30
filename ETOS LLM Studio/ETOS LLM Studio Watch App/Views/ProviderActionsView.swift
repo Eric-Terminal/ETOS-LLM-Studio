@@ -22,7 +22,7 @@ struct ProviderActionsView: View {
 
     var body: some View {
         Form {
-            Section("当前提供商") {
+            Section(NSLocalizedString("当前提供商", comment: "")) {
                 MarqueeTitleSubtitleLabel(
                     title: provider.name,
                     subtitle: provider.baseURL,
@@ -35,7 +35,7 @@ struct ProviderActionsView: View {
             Section {
                 // 编辑按钮
                 NavigationLink(destination: ProviderEditView(provider: provider, isNew: false).environmentObject(viewModel)) {
-                    Label("编辑提供商", systemImage: "pencil")
+                    Label(NSLocalizedString("编辑提供商", comment: ""), systemImage: "pencil")
                 }
             }
 
@@ -44,16 +44,16 @@ struct ProviderActionsView: View {
                 Button(role: .destructive, action: {
                     isShowingDeleteConfirm = true
                 }) {
-                    Label("删除提供商", systemImage: "trash.fill")
+                    Label(NSLocalizedString("删除提供商", comment: ""), systemImage: "trash.fill")
                 }
             }
         }
         .navigationTitle(provider.name)
-        .alert("确认删除", isPresented: $isShowingDeleteConfirm, actions: {
-            Button("删除", role: .destructive) {
+        .alert(NSLocalizedString("确认删除", comment: ""), isPresented: $isShowingDeleteConfirm, actions: {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 deleteProvider()
             }
-            Button("取消", role: .cancel) { }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         }, message: {
             Text(
                 String(

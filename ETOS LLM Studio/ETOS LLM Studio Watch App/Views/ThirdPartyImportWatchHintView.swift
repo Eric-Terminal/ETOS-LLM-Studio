@@ -24,8 +24,8 @@ struct ThirdPartyImportWatchHintView: View {
 
     var body: some View {
         List {
-            Section("导入来源") {
-                Picker("数据来源", selection: $selectedSource) {
+            Section(NSLocalizedString("导入来源", comment: "")) {
+                Picker(NSLocalizedString("数据来源", comment: ""), selection: $selectedSource) {
                     ForEach(ThirdPartyImportSource.allCases, id: \.self) { source in
                         Text(source.displayName)
                             .tag(source)
@@ -38,15 +38,15 @@ struct ThirdPartyImportWatchHintView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("导入操作") {
-                TextField("导入文件链接", text: $importURLText.watchKeyboardNewlineBinding())
+            Section(NSLocalizedString("导入操作", comment: "")) {
+                TextField(NSLocalizedString("导入文件链接", comment: ""), text: $importURLText.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
                 Button {
                     startURLPreparation()
                 } label: {
-                    Label("下载并解析", systemImage: "arrow.down.doc")
+                    Label(NSLocalizedString("下载并解析", comment: ""), systemImage: "arrow.down.doc")
                 }
                 .disabled(isBusy || importURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
@@ -62,13 +62,13 @@ struct ThirdPartyImportWatchHintView: View {
                     progressRow(text: "正在导入并合并数据...")
                 }
 
-                Text("支持 http/https 的 JSON 链接。")
+                Text(NSLocalizedString("支持 http/https 的 JSON 链接。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             if let preparedResult {
-                Section("解析预览") {
+                Section(NSLocalizedString("解析预览", comment: "")) {
                     if preparedResult.source == .etosBackup {
                         row(title: "导出同步项", value: syncOptionSummary(preparedResult.package.options))
                     }
@@ -82,31 +82,31 @@ struct ThirdPartyImportWatchHintView: View {
                     }
                 }
 
-                Section("导入范围") {
+                Section(NSLocalizedString("导入范围", comment: "")) {
                     if preparedResult.source == .etosBackup {
-                        Text("ETOS 数据包会按导出时勾选的同步项全量导入。")
+                        Text(NSLocalizedString("ETOS 数据包会按导出时勾选的同步项全量导入。", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     } else {
                         if preparedResult.parsedProvidersCount > 0 {
-                            Toggle("导入提供商配置", isOn: $includeProviders)
+                            Toggle(NSLocalizedString("导入提供商配置", comment: ""), isOn: $includeProviders)
                         }
 
                         if preparedResult.parsedSessionsCount > 0 {
-                            Toggle("导入会话记录", isOn: $includeSessions)
+                            Toggle(NSLocalizedString("导入会话记录", comment: ""), isOn: $includeSessions)
                         }
                     }
 
                     Button {
                         startImport()
                     } label: {
-                        Label("确认导入", systemImage: "square.and.arrow.down.on.square")
+                        Label(NSLocalizedString("确认导入", comment: ""), systemImage: "square.and.arrow.down.on.square")
                     }
                     .disabled(isBusy || !canStartImport)
                 }
 
                 if !preparedResult.warnings.isEmpty {
-                    Section("解析提示") {
+                    Section(NSLocalizedString("解析提示", comment: "")) {
                         ForEach(preparedResult.warnings, id: \.self) { warning in
                             Text("• \(warning)")
                                 .etFont(.caption2)
@@ -117,7 +117,7 @@ struct ThirdPartyImportWatchHintView: View {
             }
 
             if let importReport {
-                Section("最近导入结果") {
+                Section(NSLocalizedString("最近导入结果", comment: "")) {
                     row(title: "本次解析提供商", value: "\(importReport.parsedProvidersCount)")
                     row(title: "本次解析会话", value: "\(importReport.parsedSessionsCount)")
                     row(title: "新增提供商", value: "\(importReport.summary.importedProviders)")
@@ -127,7 +127,7 @@ struct ThirdPartyImportWatchHintView: View {
                 }
 
                 if !importReport.warnings.isEmpty {
-                    Section("导入提示") {
+                    Section(NSLocalizedString("导入提示", comment: "")) {
                         ForEach(importReport.warnings, id: \.self) { warning in
                             Text("• \(warning)")
                                 .etFont(.caption2)
@@ -138,14 +138,14 @@ struct ThirdPartyImportWatchHintView: View {
             }
 
             if let importError, !importError.isEmpty {
-                Section("导入错误") {
+                Section(NSLocalizedString("导入错误", comment: "")) {
                     Text(importError)
                         .etFont(.caption2)
                         .foregroundStyle(.red)
                 }
             }
         }
-        .navigationTitle("导入数据")
+        .navigationTitle(NSLocalizedString("导入数据", comment: ""))
         .onChange(of: selectedSource) { _, _ in
             resetPreparedState()
         }

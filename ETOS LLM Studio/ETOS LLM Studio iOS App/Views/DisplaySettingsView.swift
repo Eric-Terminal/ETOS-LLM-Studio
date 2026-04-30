@@ -40,13 +40,13 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
-            Section("背景") {
-                Toggle("显示背景", isOn: $enableBackground)
+            Section(NSLocalizedString("背景", comment: "")) {
+                Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
                 
                 if enableBackground {
-                    Picker("填充模式", selection: $backgroundContentMode) {
-                        Text("填充 (居中裁剪)").tag("fill")
-                        Text("适应 (完整显示)").tag("fit")
+                    Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
+                        Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
+                        Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -59,62 +59,62 @@ struct DisplaySettingsView: View {
                         Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
                     }
                     
-                    Toggle("自动轮换背景", isOn: $enableAutoRotateBackground)
+                    Toggle(NSLocalizedString("自动轮换背景", comment: ""), isOn: $enableAutoRotateBackground)
                     
                     NavigationLink {
                         BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
                     } label: {
-                        Label("选择背景图", systemImage: "photo.on.rectangle")
+                        Label(NSLocalizedString("选择背景图", comment: ""), systemImage: "photo.on.rectangle")
                     }
                 }
             }
 
             Section {
-                Toggle("渲染 Markdown", isOn: $enableMarkdown)
+                Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
                 if enableMarkdown {
-                    Toggle("使用高级渲染器", isOn: $enableAdvancedRenderer)
+                    Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
                 }
             } header: {
-                Text("内容表现")
+                Text(NSLocalizedString("内容表现", comment: ""))
             } footer: {
                 if enableMarkdown {
-                    Text("启用后可使用更强的 Markdown/LaTeX 渲染能力。")
+                    Text(NSLocalizedString("启用后可使用更强的 Markdown/LaTeX 渲染能力。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
 
             Section {
-                Picker("App 语言", selection: appLanguageBinding) {
+                Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
                     ForEach(AppLanguagePreference.allCases) { language in
                         appLanguageLabel(language)
                             .tag(language.rawValue)
                     }
                 }
             } header: {
-                Text("语言")
+                Text(NSLocalizedString("语言", comment: ""))
             } footer: {
-                Text("手动选择 App 界面语言；跟随系统时会使用设备当前语言。")
+                Text(NSLocalizedString("手动选择 App 界面语言；跟随系统时会使用设备当前语言。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Picker("界面架构", selection: chatNavigationModeBinding) {
-                    Text("沉浸浮层").tag(ChatNavigationMode.legacyOverlay)
-                    Text("原生导航").tag(ChatNavigationMode.nativeNavigation)
+                Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
+                    Text(NSLocalizedString("沉浸浮层", comment: "")).tag(ChatNavigationMode.legacyOverlay)
+                    Text(NSLocalizedString("原生导航", comment: "")).tag(ChatNavigationMode.nativeNavigation)
                 }
                 .pickerStyle(.segmented)
             } footer: {
-                Text("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。")
+                Text(NSLocalizedString("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Toggle("彩色设置图标", isOn: $useColorfulSettingsIcons)
+                Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $useColorfulSettingsIcons)
             } footer: {
-                Text("开启后，设置入口会使用彩色圆形图标；关闭后恢复单色线条图标。")
+                Text(NSLocalizedString("开启后，设置入口会使用彩色圆形图标；关闭后恢复单色线条图标。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -123,34 +123,34 @@ struct DisplaySettingsView: View {
                 NavigationLink {
                     FontSettingsView()
                 } label: {
-                    Label("字体设置", systemImage: "textformat.alt")
+                    Label(NSLocalizedString("字体设置", comment: ""), systemImage: "textformat.alt")
                 }
             }
 
             Section {
-                Toggle("无气泡UI", isOn: $enableNoBubbleUI)
+                Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
             } footer: {
-                Text("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。")
+                Text(NSLocalizedString("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Toggle("自动预览思考过程", isOn: $enableAutoReasoningPreview)
+                Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
             } footer: {
-                Text("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。")
+                Text(NSLocalizedString("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             if #available(iOS 26.0, *) {
                 Section {
-                    Toggle("液态玻璃效果", isOn: $enableLiquidGlass)
+                    Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $enableLiquidGlass)
                 }
             }
 
             Section {
-                Toggle("自定义用户气泡颜色", isOn: $enableCustomUserBubbleColor)
+                Toggle(NSLocalizedString("自定义用户气泡颜色", comment: ""), isOn: $enableCustomUserBubbleColor)
                 if enableCustomUserBubbleColor {
                     ColorPicker("用户气泡颜色", selection: userBubbleColorBinding, supportsOpacity: false)
                     bubbleOpacitySlider(
@@ -159,7 +159,7 @@ struct DisplaySettingsView: View {
                     )
                 }
 
-                Toggle("自定义助手气泡颜色（含 Tool）", isOn: $enableCustomAssistantBubbleColor)
+                Toggle(NSLocalizedString("自定义助手气泡颜色（含 Tool）", comment: ""), isOn: $enableCustomAssistantBubbleColor)
                 if enableCustomAssistantBubbleColor {
                     ColorPicker("助手气泡颜色", selection: assistantBubbleColorBinding, supportsOpacity: false)
                     bubbleOpacitySlider(
@@ -168,30 +168,30 @@ struct DisplaySettingsView: View {
                     )
                 }
 
-                Toggle("自定义白天文字颜色", isOn: $enableCustomLightTextColor)
+                Toggle(NSLocalizedString("自定义白天文字颜色", comment: ""), isOn: $enableCustomLightTextColor)
                 if enableCustomLightTextColor {
                     ColorPicker("白天文字颜色", selection: lightTextColorBinding, supportsOpacity: false)
                 }
 
-                Toggle("自定义夜览文字颜色", isOn: $enableCustomDarkTextColor)
+                Toggle(NSLocalizedString("自定义夜览文字颜色", comment: ""), isOn: $enableCustomDarkTextColor)
                 if enableCustomDarkTextColor {
                     ColorPicker("夜览文字颜色", selection: darkTextColorBinding, supportsOpacity: false)
                 }
 
                 if hasAnyCustomColorOverride {
-                    Button("恢复默认聊天颜色") {
+                    Button(NSLocalizedString("恢复默认聊天颜色", comment: "")) {
                         resetCustomChatColors()
                     }
                 }
             } header: {
-                Text("聊天颜色自定义")
+                Text(NSLocalizedString("聊天颜色自定义", comment: ""))
             } footer: {
-                Text("默认全部关闭时，聊天配色与当前版本完全一致。")
+                Text(NSLocalizedString("默认全部关闭时，聊天配色与当前版本完全一致。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("显示设置")
+        .navigationTitle(NSLocalizedString("显示设置", comment: ""))
         .onChange(of: enableMarkdown) { _, isEnabled in
             if !isEnabled, enableAdvancedRenderer {
                 enableAdvancedRenderer = false
@@ -281,7 +281,7 @@ struct DisplaySettingsView: View {
     @ViewBuilder
     private func appLanguageLabel(_ language: AppLanguagePreference) -> some View {
         if language == .system {
-            Text("跟随系统")
+            Text(NSLocalizedString("跟随系统", comment: ""))
         } else {
             Text(verbatim: language.nativeDisplayName)
         }
@@ -350,9 +350,9 @@ private struct FontSettingsView: View {
             }
 
             Section {
-                Toggle("启用自定义字体", isOn: $isCustomFontEnabled)
+                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: $isCustomFontEnabled)
             } footer: {
-                Text("关闭后全局回退为系统字体；已导入字体与优先级配置会保留。")
+                Text(NSLocalizedString("关闭后全局回退为系统字体；已导入字体与优先级配置会保留。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -364,7 +364,7 @@ private struct FontSettingsView: View {
             stylePrioritySection
             previewSection
         }
-        .navigationTitle("字体设置")
+        .navigationTitle(NSLocalizedString("字体设置", comment: ""))
         .toolbar {
             EditButton()
         }
@@ -400,19 +400,19 @@ private struct FontSettingsView: View {
         ) { result in
             handleImportResult(result)
         }
-        .alert("导入失败", isPresented: Binding(
+        .alert(NSLocalizedString("导入失败", comment: ""), isPresented: Binding(
             get: { importErrorMessage != nil },
             set: { if !$0 { importErrorMessage = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
             Text(importErrorMessage ?? "未知错误")
         }
-        .alert("删除失败", isPresented: Binding(
+        .alert(NSLocalizedString("删除失败", comment: ""), isPresented: Binding(
             get: { deleteErrorMessage != nil },
             set: { if !$0 { deleteErrorMessage = nil } }
         )) {
-            Button("确定", role: .cancel) {}
+            Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
             Text(deleteErrorMessage ?? "未知错误")
         }
@@ -434,7 +434,7 @@ private struct FontSettingsView: View {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -497,7 +497,7 @@ private struct FontSettingsView: View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("字号比例")
+                    Text(NSLocalizedString("字号比例", comment: ""))
                     Spacer(minLength: 8)
                     Text("\(Int((fontScaleBinding.wrappedValue * 100).rounded()))%")
                         .foregroundStyle(.secondary)
@@ -509,14 +509,14 @@ private struct FontSettingsView: View {
                     step: FontLibrary.fontScaleStep
                 )
             }
-            Button("恢复默认字号") {
+            Button(NSLocalizedString("恢复默认字号", comment: "")) {
                 fontScaleBinding.wrappedValue = FontLibrary.defaultFontScale
             }
             .disabled(abs(fontScaleBinding.wrappedValue - FontLibrary.defaultFontScale) < 0.001)
         } header: {
-            Text("字体大小")
+            Text(NSLocalizedString("字体大小", comment: ""))
         } footer: {
-            Text("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。")
+            Text(NSLocalizedString("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -531,7 +531,7 @@ private struct FontSettingsView: View {
                 )
             } label: {
                 HStack {
-                    Text("字体回退范围")
+                    Text(NSLocalizedString("字体回退范围", comment: ""))
                     Text(fallbackScope.title)
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
@@ -540,7 +540,7 @@ private struct FontSettingsView: View {
                 }
             }
         } header: {
-            Text("回退范围")
+            Text(NSLocalizedString("回退范围", comment: ""))
         } footer: {
             Text(fallbackScope.summary)
                 .etFont(.footnote)
@@ -549,14 +549,14 @@ private struct FontSettingsView: View {
     }
 
     private var fontFilesSection: some View {
-        Section("字体文件") {
+        Section(NSLocalizedString("字体文件", comment: "")) {
             Button {
                 showImporter = true
             } label: {
-                Label("上传字体文件", systemImage: "square.and.arrow.down")
+                Label(NSLocalizedString("上传字体文件", comment: ""), systemImage: "square.and.arrow.down")
             }
             if assets.isEmpty {
-                Text("还没有导入字体。支持 TTF / OTF / TTC / WOFF / WOFF2。")
+                Text(NSLocalizedString("还没有导入字体。支持 TTF / OTF / TTC / WOFF / WOFF2。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -575,16 +575,16 @@ private struct FontSettingsView: View {
 
     private var stylePrioritySection: some View {
         Section(
-            header: Text("样式优先级"),
-            footer: Text("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。")
+            header: Text(NSLocalizedString("样式优先级", comment: "")),
+            footer: Text(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。", comment: ""))
         ) {
-            Picker("样式槽位", selection: $selectedRole) {
+            Picker(NSLocalizedString("样式槽位", comment: ""), selection: $selectedRole) {
                 ForEach(FontSemanticRole.allCases) { role in
                     Text(role.title).tag(role)
                 }
             }
             if chainRecords.isEmpty {
-                Text("当前槽位没有可用字体，将使用系统默认字体。")
+                Text(NSLocalizedString("当前槽位没有可用字体，将使用系统默认字体。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -603,7 +603,7 @@ private struct FontSettingsView: View {
                         Button(role: .destructive) {
                             removeAssetFromSelectedRole(asset.id)
                         } label: {
-                            Label("移除", systemImage: "trash")
+                            Label(NSLocalizedString("移除", comment: ""), systemImage: "trash")
                         }
                     }
                 }
@@ -613,7 +613,7 @@ private struct FontSettingsView: View {
 
             if isEditing {
                 if availableAssetsForSelectedRole.isEmpty {
-                    Text("当前槽位没有可添加字体。")
+                    Text(NSLocalizedString("当前槽位没有可添加字体。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -626,7 +626,7 @@ private struct FontSettingsView: View {
                             }
                         }
                     } label: {
-                        Label("添加字体到当前槽位", systemImage: "plus.circle")
+                        Label(NSLocalizedString("添加字体到当前槽位", comment: ""), systemImage: "plus.circle")
                     }
                 }
             }
@@ -634,15 +634,15 @@ private struct FontSettingsView: View {
     }
 
     private var previewSection: some View {
-        Section("预览") {
+        Section(NSLocalizedString("预览", comment: "")) {
             Text("The quick brown fox jumps over the lazy dog.")
                 .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
-            Text("中文：风来疏竹，风过而竹不留声。")
+            Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
                 .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
-            Text("斜体预览 / Emphasis")
+            Text(NSLocalizedString("斜体预览 / Emphasis", comment: ""))
                 .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))
                 .italic()
-            Text("粗体预览 / Strong")
+            Text(NSLocalizedString("粗体预览 / Strong", comment: ""))
                 .font(FontRoutePreview.font(for: .strong, sample: "粗体预览 Strong"))
                 .fontWeight(.bold)
             Text("let message = \"Code Preview\"")
@@ -798,7 +798,7 @@ private struct FontFallbackScopeSelectionView: View {
                 .buttonStyle(.plain)
             }
         }
-        .navigationTitle("字体回退范围")
+        .navigationTitle(NSLocalizedString("字体回退范围", comment: ""))
     }
 }
 

@@ -19,7 +19,7 @@ struct WatchAppLogsView: View {
     var body: some View {
         List {
             if logCenter.logDayFolders.isEmpty {
-                Text("暂无日志目录")
+                Text(NSLocalizedString("暂无日志目录", comment: ""))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -36,14 +36,14 @@ struct WatchAppLogsView: View {
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button("删除", role: .destructive) {
+                        Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                             logCenter.deleteDayFolder(dayFolder)
                         }
                     }
                 }
             }
         }
-        .navigationTitle("应用日志")
+        .navigationTitle(NSLocalizedString("应用日志", comment: ""))
         .task {
             await logCenter.refreshLogFolders()
         }
@@ -57,17 +57,16 @@ struct WatchAppLogsView: View {
                 .disabled(logCenter.logDayFolders.isEmpty)
             }
         }
-        .confirmationDialog(
-            "确认清空所有日志？",
+        .confirmationDialog(NSLocalizedString("确认清空所有日志？", comment: ""),
             isPresented: $showClearAllConfirm,
             titleVisibility: .visible
         ) {
-            Button("清空所有日志", role: .destructive) {
+            Button(NSLocalizedString("清空所有日志", comment: ""), role: .destructive) {
                 logCenter.clearAll()
             }
-            Button("取消", role: .cancel) {}
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text("该操作不可撤销。")
+            Text(NSLocalizedString("该操作不可撤销。", comment: ""))
         }
     }
 }
@@ -97,13 +96,13 @@ private struct WatchAppLogDayRunsView: View {
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button("删除", role: .destructive) {
+                        Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                             logCenter.deleteRunFile(runFile)
                         }
                     }
                 }
             } else {
-                Text("目录已更新，请返回重进。")
+                Text(NSLocalizedString("目录已更新，请返回重进。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -121,7 +120,7 @@ private struct WatchAppRunLogDetailView: View {
 
     var body: some View {
         List {
-            Section("文件") {
+            Section(NSLocalizedString("文件", comment: "")) {
                 Text(runFile.fileName)
                     .etFont(.caption2)
                     .lineLimit(2)
@@ -130,17 +129,17 @@ private struct WatchAppRunLogDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("筛选") {
-                Picker("等级", selection: $levelFilter) {
+            Section(NSLocalizedString("筛选", comment: "")) {
+                Picker(NSLocalizedString("等级", comment: ""), selection: $levelFilter) {
                     ForEach(WatchLevelFilter.allCases) { option in
                         Text(option.title).tag(option)
                     }
                 }
             }
 
-            Section("记录") {
+            Section(NSLocalizedString("记录", comment: "")) {
                 if displayedEvents.isEmpty {
-                    Text("暂无匹配日志")
+                    Text(NSLocalizedString("暂无匹配日志", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
@@ -180,7 +179,7 @@ private struct WatchAppRunLogDetailView: View {
                 }
             }
         }
-        .navigationTitle("运行日志")
+        .navigationTitle(NSLocalizedString("运行日志", comment: ""))
         .task(id: runFile.id) {
             let loaded = await logCenter.loadEvents(for: runFile)
             events = loaded.sorted { lhs, rhs in

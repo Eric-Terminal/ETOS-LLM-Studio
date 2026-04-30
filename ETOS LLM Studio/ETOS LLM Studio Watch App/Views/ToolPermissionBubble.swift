@@ -104,35 +104,35 @@ struct ToolPermissionBubble: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Button("允许一次") {
+                Button(NSLocalizedString("允许一次", comment: "")) {
                     onDecision(.allowOnce)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
 
-                Button("拒绝", role: .destructive) {
+                Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
                     onDecision(.deny)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
 
-                Button("补充提示") {
+                Button(NSLocalizedString("补充提示", comment: "")) {
                     onDecision(.supplement)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
 
-                Button("保持允许") {
+                Button(NSLocalizedString("保持允许", comment: "")) {
                     onDecision(.allowForTool)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
 
-                Button("完全权限") {
+                Button(NSLocalizedString("完全权限", comment: "")) {
                     onDecision(.allowAll)
                 }
                 .buttonStyle(.bordered)
@@ -165,7 +165,7 @@ struct ToolPermissionBubble: View {
                 .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("工具审批")
+                Text(NSLocalizedString("工具审批", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Text(toolName)
@@ -252,25 +252,25 @@ private struct ToolPermissionDetailSheet: View {
 
                 detailSection(title: "更多权限") {
                     VStack(spacing: 8) {
-                        Button("拒绝", role: .destructive) {
+                        Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
                             resolve(.deny)
                         }
                         .buttonStyle(.bordered)
                         .frame(maxWidth: .infinity)
 
-                        Button("保持允许") {
+                        Button(NSLocalizedString("保持允许", comment: "")) {
                             resolve(.allowForTool)
                         }
                         .buttonStyle(.borderedProminent)
                         .frame(maxWidth: .infinity)
 
-                        Button("完全权限") {
+                        Button(NSLocalizedString("完全权限", comment: "")) {
                             resolve(.allowAll)
                         }
                         .buttonStyle(.bordered)
                         .frame(maxWidth: .infinity)
 
-                        Button("补充提示") {
+                        Button(NSLocalizedString("补充提示", comment: "")) {
                             resolve(.supplement)
                         }
                         .buttonStyle(.bordered)
@@ -279,21 +279,21 @@ private struct ToolPermissionDetailSheet: View {
                 }
 
                 detailSection(title: "自动批准") {
-                    Toggle("允许该工具自动批准", isOn: autoApproveBinding)
+                    Toggle(NSLocalizedString("允许该工具自动批准", comment: ""), isOn: autoApproveBinding)
                         .disabled(!permissionCenter.autoApproveEnabled)
 
                     if !permissionCenter.autoApproveEnabled {
-                        Text("全局自动批准当前未开启。")
+                        Text(NSLocalizedString("全局自动批准当前未开启。", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     } else if permissionCenter.isAutoApproveDisabled(for: request.toolName) {
-                        Text("该工具已从自动批准名单中排除。")
+                        Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Button("关闭") {
+                Button(NSLocalizedString("关闭", comment: "")) {
                     dismiss()
                 }
                 .buttonStyle(.bordered)

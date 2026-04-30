@@ -1209,7 +1209,7 @@ struct ChatBubble: View {
 
                 if let permissionRequest {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("审批操作")
+                        Text(NSLocalizedString("审批操作", comment: ""))
                             .etFont(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                         toolPermissionInlineView(
@@ -1357,7 +1357,7 @@ struct ChatBubble: View {
     @ViewBuilder
     private func widgetInlineSummaryView(payload: ToolWidgetPayload) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("可视化 Widget")
+            Text(NSLocalizedString("可视化 Widget", comment: ""))
                 .etFont(.caption2.weight(.semibold))
                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
             if let title = payload.title,
@@ -1366,7 +1366,7 @@ struct ChatBubble: View {
                     .etFont(.caption2)
                     .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
             }
-            Text("已生成 HTML 卡片，请在 iPhone 端查看完整渲染。")
+            Text(NSLocalizedString("已生成 HTML 卡片，请在 iPhone 端查看完整渲染。", comment: ""))
                 .etFont(.caption2)
                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
         }
@@ -1753,14 +1753,14 @@ struct ChatBubble: View {
                 .etFont(.caption2.weight(.semibold))
                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
             VStack(alignment: .leading, spacing: 3) {
-                Text("检测到可视化 Widget")
+                Text(NSLocalizedString("检测到可视化 Widget", comment: ""))
                     .etFont(.caption2.weight(.medium))
                 if let title = payload.title,
                    !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("标题：\(title)")
                         .etFont(.caption2)
                 }
-                Text("请在 iPhone 端查看完整渲染效果。")
+                Text(NSLocalizedString("请在 iPhone 端查看完整渲染效果。", comment: ""))
                     .etFont(.caption2)
             }
             .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82))

@@ -122,7 +122,7 @@ struct MessageActionsView: View {
                         onEdit()
                         dismiss()
                     } label: {
-                        Label("编辑消息", systemImage: "pencil")
+                        Label(NSLocalizedString("编辑消息", comment: ""), systemImage: "pencil")
                     }
                 }
 
@@ -131,7 +131,7 @@ struct MessageActionsView: View {
                         pendingRetryMessage = message
                         dismiss()
                     } label: {
-                        Label("重试", systemImage: "arrow.clockwise")
+                        Label(NSLocalizedString("重试", comment: ""), systemImage: "arrow.clockwise")
                     }
                 }
                 
@@ -141,14 +141,14 @@ struct MessageActionsView: View {
                         onShowFullError(fullContent)
                         dismiss()
                     } label: {
-                        Label("查看完整响应", systemImage: "doc.text.magnifyingglass")
+                        Label(NSLocalizedString("查看完整响应", comment: ""), systemImage: "doc.text.magnifyingglass")
                     }
                 }
                 
                 Button {
                     showBranchOptions = true
                 } label: {
-                    Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+                    Label(NSLocalizedString("从此处创建分支", comment: ""), systemImage: "arrow.triangle.branch")
                 }
 
                 if message.role == .assistant || message.role == .tool || message.role == .system {
@@ -180,7 +180,7 @@ struct MessageActionsView: View {
                 }
             }
 
-            Section("导出") {
+            Section(NSLocalizedString("导出", comment: "")) {
                 NavigationLink {
                     ChatExportFormatsView(
                         session: session,
@@ -188,7 +188,7 @@ struct MessageActionsView: View {
                         upToMessageID: nil
                     )
                 } label: {
-                    Label("导出整个会话", systemImage: "square.and.arrow.up")
+                    Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
                 }
 
                 NavigationLink {
@@ -198,14 +198,14 @@ struct MessageActionsView: View {
                         upToMessageID: message.id
                     )
                 } label: {
-                    Label("导出到此消息（含上文）", systemImage: "arrow.up.doc")
+                    Label(NSLocalizedString("导出到此消息（含上文）", comment: ""), systemImage: "arrow.up.doc")
                 }
             }
             
             // 版本管理菜单
             if hasDisplayVersions {
-                Section("版本管理") {
-                    Picker("选择版本", selection: Binding(
+                Section(NSLocalizedString("版本管理", comment: "")) {
+                    Picker(NSLocalizedString("选择版本", comment: ""), selection: Binding(
                         get: { displayCurrentVersionIndex },
                         set: { newIndex in
                             onSwitchVersion(newIndex)
@@ -223,7 +223,7 @@ struct MessageActionsView: View {
                         Button(role: .destructive) {
                             showDeleteVersionConfirm = true
                         } label: {
-                            Label("删除当前版本", systemImage: "trash")
+                            Label(NSLocalizedString("删除当前版本", comment: ""), systemImage: "trash")
                         }
                     }
                 }
@@ -237,10 +237,10 @@ struct MessageActionsView: View {
                 }
             }
             
-            Section(header: Text("详细信息")) {
+            Section(header: Text(NSLocalizedString("详细信息", comment: ""))) {
                 if let index = messageIndex {
                     VStack(alignment: .leading) {
-                        Text("会话位置")
+                        Text(NSLocalizedString("会话位置", comment: ""))
                             .etFont(.caption)
                             .foregroundColor(.secondary)
                         Text(String(format: NSLocalizedString("第 %d / %d 条", comment: ""), index + 1, totalMessages))
@@ -250,7 +250,7 @@ struct MessageActionsView: View {
                 
                 if hasDisplayVersions {
                     VStack(alignment: .leading) {
-                        Text("版本信息")
+                        Text(NSLocalizedString("版本信息", comment: ""))
                             .etFont(.caption)
                             .foregroundColor(.secondary)
                         Text(
@@ -265,7 +265,7 @@ struct MessageActionsView: View {
                 }
                 
                 VStack(alignment: .leading) {
-                    Text("消息 ID")
+                    Text(NSLocalizedString("消息 ID", comment: ""))
                         .etFont(.caption)
                         .foregroundColor(.secondary)
                     Text(message.id.uuidString)
@@ -302,12 +302,12 @@ struct MessageActionsView: View {
             }
             
             if let usage = message.tokenUsage, usage.hasData {
-                Section("Token 用量") {
+                Section(NSLocalizedString("Token 用量", comment: "")) {
                     if let prompt = usage.promptTokens {
-                        LabeledContent("发送 Tokens", value: "\(prompt)")
+                        LabeledContent(NSLocalizedString("发送 Tokens", comment: ""), value: "\(prompt)")
                     }
                     if let completion = usage.completionTokens {
-                        LabeledContent("接收 Tokens", value: "\(completion)")
+                        LabeledContent(NSLocalizedString("接收 Tokens", comment: ""), value: "\(completion)")
                     }
                     if let thinking = usage.thinkingTokens {
                         LabeledContent(NSLocalizedString("思考 Tokens", comment: "Thinking tokens label"), value: "\(thinking)")
@@ -319,9 +319,9 @@ struct MessageActionsView: View {
                         LabeledContent(NSLocalizedString("缓存读取 Tokens", comment: "Cache read tokens label"), value: "\(cacheRead)")
                     }
                     if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {
-                        LabeledContent("总计", value: "\(total)")
+                        LabeledContent(NSLocalizedString("总计", comment: ""), value: "\(total)")
                     } else if let totalOnly = usage.totalTokens, usage.promptTokens == nil && usage.completionTokens == nil {
-                        LabeledContent("总计", value: "\(totalOnly)")
+                        LabeledContent(NSLocalizedString("总计", comment: ""), value: "\(totalOnly)")
                     }
                 }
             }
@@ -359,36 +359,36 @@ struct MessageActionsView: View {
                 }
             }
         }
-        .navigationTitle("操作")
+        .navigationTitle(NSLocalizedString("操作", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
-        .alert("确认删除消息", isPresented: $showDeleteConfirm) {
-            Button("删除", role: .destructive) {
+        .alert(NSLocalizedString("确认删除消息", comment: ""), isPresented: $showDeleteConfirm) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 onDelete()
                 dismiss()
             }
-            Button("取消", role: .cancel) { }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         } message: {
             Text(hasDisplayVersions ? "删除后将无法恢复这条消息的所有版本。" : "删除后无法恢复这条消息。")
         }
-        .alert("确认删除当前版本", isPresented: $showDeleteVersionConfirm) {
-            Button("删除", role: .destructive) {
+        .alert(NSLocalizedString("确认删除当前版本", comment: ""), isPresented: $showDeleteVersionConfirm) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 onDeleteCurrentVersion()
                 dismiss()
             }
-            Button("取消", role: .cancel) { }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         } message: {
-            Text("删除后将无法恢复此版本的内容。")
+            Text(NSLocalizedString("删除后将无法恢复此版本的内容。", comment: ""))
         }
-        .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
-            Button("仅复制消息历史") {
+        .confirmationDialog(NSLocalizedString("创建分支选项", comment: ""), isPresented: $showBranchOptions, titleVisibility: .visible) {
+            Button(NSLocalizedString("仅复制消息历史", comment: "")) {
                 onBranch(false)
                 dismiss()
             }
-            Button("复制消息历史和提示词") {
+            Button(NSLocalizedString("复制消息历史和提示词", comment: "")) {
                 onBranch(true)
                 dismiss()
             }
-            Button("取消", role: .cancel) { }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         } message: {
             if let index = messageIndex {
                 Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))

@@ -578,22 +578,22 @@ struct ChatView: View {
             .sheet(item: $exportSharePayload) { payload in
                 ActivityShareSheet(activityItems: [payload.fileURL])
             }
-            .confirmationDialog("创建分支选项", isPresented: $showBranchOptions, titleVisibility: .visible) {
-                Button("仅复制消息历史") {
+            .confirmationDialog(NSLocalizedString("创建分支选项", comment: ""), isPresented: $showBranchOptions, titleVisibility: .visible) {
+                Button(NSLocalizedString("仅复制消息历史", comment: "")) {
                     if let message = messageToBranch {
                         let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: false)
                         viewModel.setCurrentSession(newSession)
                     }
                     messageToBranch = nil
                 }
-                Button("复制消息历史和提示词") {
+                Button(NSLocalizedString("复制消息历史和提示词", comment: "")) {
                     if let message = messageToBranch {
                         let newSession = viewModel.branchSessionFromMessage(upToMessage: message, copyPrompts: true)
                         viewModel.setCurrentSession(newSession)
                     }
                     messageToBranch = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     messageToBranch = nil
                 }
             } message: {
@@ -601,14 +601,14 @@ struct ChatView: View {
                     Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
             }
-            .alert("确认删除消息", isPresented: messageDeleteAlertPresented) {
-                Button("删除", role: .destructive) {
+            .alert(NSLocalizedString("确认删除消息", comment: ""), isPresented: messageDeleteAlertPresented) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let message = messageToDelete {
                         viewModel.deleteAllVersions(of: message)
                     }
                     messageToDelete = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     messageToDelete = nil
                 }
             } message: {
@@ -616,47 +616,47 @@ struct ChatView: View {
                      ? "删除后将无法恢复这条消息的所有版本。"
                      : "删除后无法恢复这条消息。")
             }
-            .alert("确认删除当前版本", isPresented: messageVersionDeleteAlertPresented) {
-                Button("删除", role: .destructive) {
+            .alert(NSLocalizedString("确认删除当前版本", comment: ""), isPresented: messageVersionDeleteAlertPresented) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let message = messageVersionToDelete {
                         viewModel.deleteCurrentVersion(of: message)
                     }
                     messageVersionToDelete = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     messageVersionToDelete = nil
                 }
             } message: {
-                Text("删除后将无法恢复此版本的内容。")
+                Text(NSLocalizedString("删除后将无法恢复此版本的内容。", comment: ""))
             }
-            .alert("确认删除会话", isPresented: sessionDeleteAlertPresented) {
-                Button("删除", role: .destructive) {
+            .alert(NSLocalizedString("确认删除会话", comment: ""), isPresented: sessionDeleteAlertPresented) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let session = sessionToDelete {
                         viewModel.deleteSessions([session])
                     }
                     sessionToDelete = nil
                 }
-                Button("取消", role: .cancel) {
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                     sessionToDelete = nil
                 }
             } message: {
-                Text("删除后所有消息也将被移除，操作不可恢复。")
+                Text(NSLocalizedString("删除后所有消息也将被移除，操作不可恢复。", comment: ""))
             }
-            .alert("发现幽灵会话", isPresented: $showGhostSessionAlert) {
-                Button("删除幽灵", role: .destructive) {
+            .alert(NSLocalizedString("发现幽灵会话", comment: ""), isPresented: $showGhostSessionAlert) {
+                Button(NSLocalizedString("删除幽灵", comment: ""), role: .destructive) {
                     if let session = ghostSession {
                         viewModel.deleteSessions([session])
                     }
                     ghostSession = nil
                 }
-                Button("稍后处理", role: .cancel) {
+                Button(NSLocalizedString("稍后处理", comment: ""), role: .cancel) {
                     ghostSession = nil
                 }
             } message: {
-                Text("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？")
+                Text(NSLocalizedString("这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？", comment: ""))
             }
-            .alert("导出失败", isPresented: exportErrorAlertPresented) {
-                Button("确定", role: .cancel) {
+            .alert(NSLocalizedString("导出失败", comment: ""), isPresented: exportErrorAlertPresented) {
+                Button(NSLocalizedString("确定", comment: ""), role: .cancel) {
                     exportErrorMessage = nil
                 }
             } message: {
@@ -711,7 +711,7 @@ struct ChatView: View {
                     )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("关闭提示")
+            .accessibilityLabel(NSLocalizedString("关闭提示", comment: ""))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -829,7 +829,7 @@ struct ChatView: View {
                 Button {
                     navigationDestination = nil
                 } label: {
-                    Label("返回对话", systemImage: "chevron.left")
+                    Label(NSLocalizedString("返回对话", comment: ""), systemImage: "chevron.left")
                 }
             }
         }
@@ -857,7 +857,7 @@ struct ChatView: View {
                     .stroke(showSessionPickerPanel ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
             )
             .contentShape(Circle())
-            .accessibilityLabel("会话列表")
+            .accessibilityLabel(NSLocalizedString("会话列表", comment: ""))
     }
 
     private func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
@@ -1068,10 +1068,10 @@ struct ChatView: View {
     private var modelPickerHeader: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("选择模型")
+                Text(NSLocalizedString("选择模型", comment: ""))
                     .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
-                Text("切换当前对话的模型")
+                Text(NSLocalizedString("切换当前对话的模型", comment: ""))
                     .etFont(.system(size: 12))
                     .foregroundColor(TelegramColors.navBarSubtitle)
             }
@@ -1091,10 +1091,10 @@ struct ChatView: View {
 
     private var modelPickerEmptyState: some View {
         VStack(spacing: 8) {
-            Text("暂无可用模型")
+            Text(NSLocalizedString("暂无可用模型", comment: ""))
                 .etFont(.system(size: 14, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarText)
-            Text("请先在设置中启用模型")
+            Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
                 .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
@@ -1329,7 +1329,7 @@ struct ChatView: View {
     private func sessionPickerHeader(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("会话")
+                Text(NSLocalizedString("会话", comment: ""))
                     .etFont(.system(size: 16, weight: .semibold))
                     .foregroundColor(TelegramColors.navBarText)
                 if queryActive {
@@ -1341,7 +1341,7 @@ struct ChatView: View {
                         .etFont(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 } else {
-                    Text("快速切换与管理")
+                    Text(NSLocalizedString("快速切换与管理", comment: ""))
                         .etFont(.system(size: 12))
                         .foregroundColor(TelegramColors.navBarSubtitle)
                 }
@@ -1386,7 +1386,7 @@ struct ChatView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("搜索会话标题或消息", text: $sessionPickerSearchText)
+            TextField(NSLocalizedString("搜索会话标题或消息", comment: ""), text: $sessionPickerSearchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .focused($sessionPickerSearchFocused)
@@ -1433,7 +1433,7 @@ struct ChatView: View {
     private var sessionPickerSearchingState: some View {
         VStack(spacing: 10) {
             ProgressView()
-            Text("正在搜索历史会话…")
+            Text(NSLocalizedString("正在搜索历史会话…", comment: ""))
                 .etFont(.system(size: 12))
                 .foregroundColor(TelegramColors.navBarSubtitle)
         }
@@ -1944,7 +1944,7 @@ struct ChatView: View {
                     .foregroundColor(scrollToBottomButtonIconColor)
             }
         }
-        .accessibilityLabel("滚动到底部")
+        .accessibilityLabel(NSLocalizedString("滚动到底部", comment: ""))
     }
     
     /// Telegram 风格历史加载提示
@@ -1990,7 +1990,7 @@ struct ChatView: View {
             Button {
                 editingMessage = message
             } label: {
-                Label("编辑", systemImage: "pencil")
+                Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
             }
         }
         
@@ -1998,7 +1998,7 @@ struct ChatView: View {
             Button {
                 performDeferredRetry(message)
             } label: {
-                Label("重试", systemImage: "arrow.clockwise")
+                Label(NSLocalizedString("重试", comment: ""), systemImage: "arrow.clockwise")
             }
         }
         
@@ -2007,7 +2007,7 @@ struct ChatView: View {
             Button {
                 fullErrorContent = FullErrorContentPayload(content: fullContent)
             } label: {
-                Label("查看完整响应", systemImage: "doc.text.magnifyingglass")
+                Label(NSLocalizedString("查看完整响应", comment: ""), systemImage: "doc.text.magnifyingglass")
             }
         }
         
@@ -2015,11 +2015,11 @@ struct ChatView: View {
             messageToBranch = message
             showBranchOptions = true
         } label: {
-            Label("从此处创建分支", systemImage: "arrow.triangle.branch")
+            Label(NSLocalizedString("从此处创建分支", comment: ""), systemImage: "arrow.triangle.branch")
         }
 
         Menu {
-            Menu("包含思考") {
+            Menu(NSLocalizedString("包含思考", comment: "")) {
                 Button {
                     exportConversation(format: .pdf, includeReasoning: true, upToMessage: nil)
                 } label: {
@@ -2036,7 +2036,7 @@ struct ChatView: View {
                     Label("TXT", systemImage: "doc.plaintext")
                 }
             }
-            Menu("不包含思考") {
+            Menu(NSLocalizedString("不包含思考", comment: "")) {
                 Button {
                     exportConversation(format: .pdf, includeReasoning: false, upToMessage: nil)
                 } label: {
@@ -2054,11 +2054,11 @@ struct ChatView: View {
                 }
             }
         } label: {
-            Label("导出整个会话", systemImage: "square.and.arrow.up")
+            Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
         }
 
         Menu {
-            Menu("包含思考") {
+            Menu(NSLocalizedString("包含思考", comment: "")) {
                 Button {
                     exportConversation(format: .pdf, includeReasoning: true, upToMessage: message)
                 } label: {
@@ -2075,7 +2075,7 @@ struct ChatView: View {
                     Label("TXT", systemImage: "doc.plaintext")
                 }
             }
-            Menu("不包含思考") {
+            Menu(NSLocalizedString("不包含思考", comment: "")) {
                 Button {
                     exportConversation(format: .pdf, includeReasoning: false, upToMessage: message)
                 } label: {
@@ -2093,7 +2093,7 @@ struct ChatView: View {
                 }
             }
         } label: {
-            Label("导出到此消息（含上文）", systemImage: "arrow.up.doc")
+            Label(NSLocalizedString("导出到此消息（含上文）", comment: ""), systemImage: "arrow.up.doc")
         }
 
         if message.role == .assistant || message.role == .tool || message.role == .system {
@@ -2143,7 +2143,7 @@ struct ChatView: View {
                 Button(role: .destructive) {
                     messageVersionToDelete = message
                 } label: {
-                    Label("删除当前版本", systemImage: "trash")
+                    Label(NSLocalizedString("删除当前版本", comment: ""), systemImage: "trash")
                 }
             }
             
@@ -2171,7 +2171,7 @@ struct ChatView: View {
         Button {
             UIPasteboard.general.string = message.content
         } label: {
-            Label("复制内容", systemImage: "doc.on.doc")
+            Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
         }
         
         if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
@@ -2182,7 +2182,7 @@ struct ChatView: View {
                     totalCount: viewModel.allMessagesForSession.count
                 )
             } label: {
-                Label("查看消息信息", systemImage: "info.circle")
+                Label(NSLocalizedString("查看消息信息", comment: ""), systemImage: "info.circle")
             }
         }
     }
@@ -2730,7 +2730,7 @@ private struct AskUserInputComposerPanel: View {
                 navigationInputBar(for: question)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("暂无可填写问题")
+                    Text(NSLocalizedString("暂无可填写问题", comment: ""))
                         .etFont(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -2776,7 +2776,7 @@ private struct AskUserInputComposerPanel: View {
                     Text(progressText)
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
-                    Button("取消", action: cancelAction)
+                    Button(NSLocalizedString("取消", comment: ""), action: cancelAction)
                         .etFont(.footnote)
                         .buttonStyle(.bordered)
                 }
@@ -2868,8 +2868,7 @@ private struct AskUserInputComposerPanel: View {
             Image(systemName: "square.and.pencil")
                 .foregroundStyle(.secondary)
 
-            TextField(
-                "请输入自定义偏好",
+            TextField(NSLocalizedString("请输入自定义偏好", comment: ""),
                 text: Binding(
                     get: { otherTextByQuestion[question.id, default: ""] },
                     set: { newValue in
@@ -3222,13 +3221,13 @@ private struct TelegramMessageComposer: View {
             Button {
                 showImagePicker = true
             } label: {
-                Label("选择图片", systemImage: "photo")
+                Label(NSLocalizedString("选择图片", comment: ""), systemImage: "photo")
             }
 
             Button {
                 showCamera = true
             } label: {
-                Label("拍照", systemImage: "camera")
+                Label(NSLocalizedString("拍照", comment: ""), systemImage: "camera")
             }
             .disabled(!isCameraAvailable)
 
@@ -3236,19 +3235,19 @@ private struct TelegramMessageComposer: View {
                 audioRecorderEntryMode = .attachment
                 showAudioRecorder = true
             } label: {
-                Label("录制语音", systemImage: "waveform")
+                Label(NSLocalizedString("录制语音", comment: ""), systemImage: "waveform")
             }
 
             Button {
                 showAudioImporter = true
             } label: {
-                Label("从录音备忘录上传", systemImage: "music.note.list")
+                Label(NSLocalizedString("从录音备忘录上传", comment: ""), systemImage: "music.note.list")
             }
 
             Button {
                 showFileImporter = true
             } label: {
-                Label("选择文件", systemImage: "doc")
+                Label(NSLocalizedString("选择文件", comment: ""), systemImage: "doc")
             }
         } label: {
             Image(systemName: "paperclip")
@@ -3415,7 +3414,7 @@ private struct TelegramMessageComposer: View {
                             .foregroundColor(TelegramColors.attachButtonColor)
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("语音消息")
+                            Text(NSLocalizedString("语音消息", comment: ""))
                                 .etFont(.system(size: 13, weight: .medium))
                             Text(audio.fileName)
                                 .etFont(.system(size: 11))
@@ -3447,7 +3446,7 @@ private struct TelegramMessageComposer: View {
                             .foregroundColor(TelegramColors.attachButtonColor)
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("文件")
+                            Text(NSLocalizedString("文件", comment: ""))
                                 .etFont(.system(size: 13, weight: .medium))
                             Text(attachment.fileName)
                                 .etFont(.system(size: 11))
@@ -3801,15 +3800,15 @@ private struct MessageComposerView: View {
                             .foregroundStyle(.secondary)
                     }
                     .glassEffect(.clear, in: Circle())
-                    .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
-                        Button("选择图片") {
+                    .confirmationDialog(NSLocalizedString("添加附件", comment: ""), isPresented: $showAttachmentMenu) {
+                        Button(NSLocalizedString("选择图片", comment: "")) {
                             showImagePicker = true
                         }
-                        Button("录制语音") {
+                        Button(NSLocalizedString("录制语音", comment: "")) {
                             audioRecorderEntryMode = .attachment
                             showAudioRecorder = true
                         }
-                        Button("选择文件") {
+                        Button(NSLocalizedString("选择文件", comment: "")) {
                             showFileImporter = true
                         }
                     }
@@ -3822,15 +3821,15 @@ private struct MessageComposerView: View {
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
                     }
-                    .confirmationDialog("添加附件", isPresented: $showAttachmentMenu) {
-                        Button("选择图片") {
+                    .confirmationDialog(NSLocalizedString("添加附件", comment: ""), isPresented: $showAttachmentMenu) {
+                        Button(NSLocalizedString("选择图片", comment: "")) {
                             showImagePicker = true
                         }
-                        Button("录制语音") {
+                        Button(NSLocalizedString("录制语音", comment: "")) {
                             audioRecorderEntryMode = .attachment
                             showAudioRecorder = true
                         }
-                        Button("选择文件") {
+                        Button(NSLocalizedString("选择文件", comment: "")) {
                             showFileImporter = true
                         }
                     }
@@ -4164,7 +4163,7 @@ private struct AudioRecorderSheet: View {
                 if isTranscriptionInProgress {
                     ProgressView("正在转换…")
                         .progressViewStyle(.circular)
-                    Text("请稍候，正在将语音转换为文本。")
+                    Text(NSLocalizedString("请稍候，正在将语音转换为文本。", comment: ""))
                         .etFont(.callout)
                         .foregroundStyle(.secondary)
                 } else {
@@ -4193,7 +4192,7 @@ private struct AudioRecorderSheet: View {
                     }
                     
                     if isRecording {
-                        Text("正在录音...")
+                        Text(NSLocalizedString("正在录音...", comment: ""))
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
                     } else {
@@ -4229,14 +4228,14 @@ private struct AudioRecorderSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         cancelRecording()
                         dismiss()
                     }
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button(NSLocalizedString("完成", comment: "")) {
                         finishRecording()
                     }
                     .disabled(doneButtonDisabled)
@@ -4553,21 +4552,21 @@ private struct SessionPickerInfoSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("会话概览") {
-                    LabeledContent("名称") {
+                Section(NSLocalizedString("会话概览", comment: "")) {
+                    LabeledContent(NSLocalizedString("名称", comment: "")) {
                         Text(payload.session.name)
                     }
-                    LabeledContent("状态") {
+                    LabeledContent(NSLocalizedString("状态", comment: "")) {
                         Text(payload.isCurrent ? "当前会话" : "历史会话")
                             .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
                     }
-                    LabeledContent("消息数量") {
+                    LabeledContent(NSLocalizedString("消息数量", comment: "")) {
                         Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
                     }
                 }
 
                 if let topic = payload.session.topicPrompt, !topic.isEmpty {
-                    Section("主题提示") {
+                    Section(NSLocalizedString("主题提示", comment: "")) {
                         Text(topic)
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
@@ -4575,23 +4574,23 @@ private struct SessionPickerInfoSheet: View {
                 }
 
                 if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
-                    Section("增强提示词") {
+                    Section(NSLocalizedString("增强提示词", comment: "")) {
                         Text(enhanced)
                             .etFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("唯一标识") {
+                Section(NSLocalizedString("唯一标识", comment: "")) {
                     Text(payload.session.id.uuidString)
                         .etFont(.footnote.monospaced())
                         .textSelection(.enabled)
                 }
             }
-            .navigationTitle("会话信息")
+            .navigationTitle(NSLocalizedString("会话信息", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
                 }
             }
         }
@@ -4621,7 +4620,7 @@ private struct SessionPickerRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isEditing {
-                TextField("会话名称", text: $draftName)
+                TextField(NSLocalizedString("会话名称", comment: ""), text: $draftName)
                     .textFieldStyle(.roundedBorder)
                     .focused($focused)
                     .onSubmit {
@@ -4630,12 +4629,12 @@ private struct SessionPickerRow: View {
                     .onAppear { focused = true }
 
                 HStack {
-                    Button("保存") {
+                    Button(NSLocalizedString("保存", comment: "")) {
                         commit()
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("取消") {
+                    Button(NSLocalizedString("取消", comment: "")) {
                         onCancelRename()
                     }
                     .buttonStyle(.bordered)
@@ -4683,41 +4682,41 @@ private struct SessionPickerRow: View {
             Button {
                 onSelect()
             } label: {
-                Label("切换到此会话", systemImage: "checkmark.circle")
+                Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
             }
 
             Button {
                 onRename()
             } label: {
-                Label("重命名", systemImage: "pencil")
+                Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
             }
 
             Button {
                 onBranch(false)
             } label: {
-                Label("创建提示词分支", systemImage: "arrow.branch")
+                Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
             }
 
             Button {
                 onBranch(true)
             } label: {
-                Label("复制历史创建分支", systemImage: "arrow.triangle.branch")
+                Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
             }
 
             Button {
                 onDeleteLastMessage()
             } label: {
-                Label("删除最后一条消息", systemImage: "delete.backward")
+                Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
             }
 
             Button {
                 onInfo()
             } label: {
-                Label("查看会话信息", systemImage: "info.circle")
+                Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
             }
 
             Menu {
-                Menu("包含思考") {
+                Menu(NSLocalizedString("包含思考", comment: "")) {
                     Button {
                         onExport(.pdf, true)
                     } label: {
@@ -4734,7 +4733,7 @@ private struct SessionPickerRow: View {
                         Label("TXT", systemImage: "doc.plaintext")
                     }
                 }
-                Menu("不包含思考") {
+                Menu(NSLocalizedString("不包含思考", comment: "")) {
                     Button {
                         onExport(.pdf, false)
                     } label: {
@@ -4752,13 +4751,13 @@ private struct SessionPickerRow: View {
                     }
                 }
             } label: {
-                Label("导出会话", systemImage: "square.and.arrow.up")
+                Label(NSLocalizedString("导出会话", comment: ""), systemImage: "square.and.arrow.up")
             }
 
             Button(role: .destructive) {
                 onDelete()
             } label: {
-                Label("删除会话", systemImage: "trash")
+                Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
             }
         }
     }
@@ -4800,11 +4799,11 @@ private struct FullErrorContentSheet: View {
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle("完整响应")
+            .navigationTitle(NSLocalizedString("完整响应", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -4829,11 +4828,11 @@ private struct MessageInfoSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("基础信息") {
-                    LabeledContent("角色") {
+                Section(NSLocalizedString("基础信息", comment: "")) {
+                    LabeledContent(NSLocalizedString("角色", comment: "")) {
                         Text(roleDescription(payload.message.role))
                     }
-                    LabeledContent("列表位置") {
+                    LabeledContent(NSLocalizedString("列表位置", comment: "")) {
                         Text(
                             String(
                                 format: NSLocalizedString("第 %d / %d 条", comment: ""),
@@ -4872,7 +4871,7 @@ private struct MessageInfoSheet: View {
                     }
                 }
                 
-                Section("唯一标识") {
+                Section(NSLocalizedString("唯一标识", comment: "")) {
                     Text(payload.message.id.uuidString)
                         .etFont(.footnote.monospaced())
                         .textSelection(.enabled)
@@ -4966,10 +4965,10 @@ private struct MessageInfoSheet: View {
                     }
                 }
             }
-            .navigationTitle("消息信息")
+            .navigationTitle(NSLocalizedString("消息信息", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
                 }
             }
         }

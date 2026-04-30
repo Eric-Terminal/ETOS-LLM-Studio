@@ -69,24 +69,23 @@ struct MCPIntegrationView: View {
             }
 
             Section {
-                Toggle(
-                    "向模型暴露 MCP 工具",
+                Toggle(NSLocalizedString("向模型暴露 MCP 工具", comment: ""),
                     isOn: Binding(
                         get: { manager.chatToolsEnabled },
                         set: { manager.setChatToolsEnabled($0) }
                     )
                 )
             } header: {
-                Text("聊天工具总开关")
+                Text(NSLocalizedString("聊天工具总开关", comment: ""))
             } footer: {
-                Text("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。")
+                Text(NSLocalizedString("关闭后不会再把任何 MCP 工具提供给模型，也不会响应聊天中的 MCP 工具调用。服务器连接、调试和单项配置仍可继续使用。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
-            Section("已配置服务器") {
+            Section(NSLocalizedString("已配置服务器", comment: "")) {
                 if manager.servers.isEmpty {
-                    Text("尚未添加任何 MCP Server。点击右上角“＋”创建。")
+                    Text(NSLocalizedString("尚未添加任何 MCP Server。点击右上角“＋”创建。", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(manager.servers) { server in
@@ -117,13 +116,13 @@ struct MCPIntegrationView: View {
                             Button(role: .destructive) {
                                 manager.delete(server: server)
                             } label: {
-                                Label("删除", systemImage: "trash")
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                             }
                             Button {
                                 serverToEdit = server
                                 isPresentingEditor = true
                             } label: {
-                                Label("编辑", systemImage: "pencil")
+                                Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
                             }
                             .tint(.blue)
                         }
@@ -131,7 +130,7 @@ struct MCPIntegrationView: View {
                 }
             }
             
-            Section("连接概览") {
+            Section(NSLocalizedString("连接概览", comment: "")) {
                 let connectedCount = manager.connectedServers().count
                 let selectedCount = manager.selectedServers().count
                 Text(
@@ -142,7 +141,7 @@ struct MCPIntegrationView: View {
                     )
                 )
                     .etFont(.footnote)
-                Button("刷新已连接服务器") {
+                Button(NSLocalizedString("刷新已连接服务器", comment: "")) {
                     manager.refreshMetadata()
                 }
                 .disabled(manager.isBusy || connectedCount == 0)
@@ -152,9 +151,8 @@ struct MCPIntegrationView: View {
                 }
             }
 
-            Section("审批自动化") {
-                Toggle(
-                    "启用倒计时自动批准",
+            Section(NSLocalizedString("审批自动化", comment: "")) {
+                Toggle(NSLocalizedString("启用倒计时自动批准", comment: ""),
                     isOn: Binding(
                         get: { toolPermissionCenter.autoApproveEnabled },
                         set: { toolPermissionCenter.setAutoApproveEnabled($0) }
@@ -175,7 +173,7 @@ struct MCPIntegrationView: View {
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
                 if disabledCount > 0 {
-                    Button("清空禁用列表", role: .destructive) {
+                    Button(NSLocalizedString("清空禁用列表", comment: ""), role: .destructive) {
                         toolPermissionCenter.clearDisabledAutoApproveTools()
                     }
                 }
@@ -186,7 +184,7 @@ struct MCPIntegrationView: View {
                     String(format: NSLocalizedString("已公布工具 (%d)", comment: ""), manager.tools.count)
                 ) {
                     if !manager.chatToolsEnabled {
-                        Text("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。")
+                        Text(NSLocalizedString("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。", comment: ""))
                             .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -228,7 +226,7 @@ struct MCPIntegrationView: View {
             }
 
             if !manager.activeToolCalls.isEmpty {
-                Section("活跃调用") {
+                Section(NSLocalizedString("活跃调用", comment: "")) {
                     ForEach(manager.activeToolCalls.values.sorted(by: { $0.startedAt > $1.startedAt }), id: \.id) { call in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
@@ -262,7 +260,7 @@ struct MCPIntegrationView: View {
                             }
                             .etFont(.caption2)
                             .foregroundStyle(.tertiary)
-                            Button("取消调用", role: .destructive) {
+                            Button(NSLocalizedString("取消调用", comment: ""), role: .destructive) {
                                 manager.cancelToolCall(callID: call.id, reason: "用户在 MCP 工具箱取消")
                             }
                             .buttonStyle(.bordered)
@@ -353,11 +351,11 @@ struct MCPIntegrationView: View {
                             }
                         }
                     }
-                    Button("清空日志", role: .destructive) {
+                    Button(NSLocalizedString("清空日志", comment: ""), role: .destructive) {
                         manager.clearLogEntries()
                     }
                 } header: {
-                    Text("服务器日志 (最近 20 条)")
+                    Text(NSLocalizedString("服务器日志 (最近 20 条)", comment: ""))
                 }
             }
 
@@ -386,33 +384,33 @@ struct MCPIntegrationView: View {
                         }
                         .padding(.vertical, 2)
                     }
-                    Button("清空治理日志", role: .destructive) {
+                    Button(NSLocalizedString("清空治理日志", comment: ""), role: .destructive) {
                         manager.clearGovernanceLogEntries()
                     }
                 } header: {
-                    Text("治理日志 (最近 40 条)")
+                    Text(NSLocalizedString("治理日志 (最近 40 条)", comment: ""))
                 }
             }
             
-            Section("快速调试") {
+            Section(NSLocalizedString("快速调试", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("调用工具")
+                    Text(NSLocalizedString("调用工具", comment: ""))
                         .etFont(.subheadline)
                         .bold()
-                    Picker("目标服务器", selection: $selectedToolServerID) {
-                        Text("请选择").tag(Optional<UUID>.none)
+                    Picker(NSLocalizedString("目标服务器", comment: ""), selection: $selectedToolServerID) {
+                        Text(NSLocalizedString("请选择", comment: "")).tag(Optional<UUID>.none)
                         ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
                             Text(server.displayName).tag(Optional(server.id))
                         }
                     }
-                    TextField("工具 ID", text: $toolIdInput)
+                    TextField(NSLocalizedString("工具 ID", comment: ""), text: $toolIdInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextEditor(text: $toolPayloadInput)
                         .etFont(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 80)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
-                    Button("执行工具") {
+                    Button(NSLocalizedString("执行工具", comment: "")) {
                         triggerToolExecution()
                     }
                     .disabled(manager.isBusy)
@@ -421,23 +419,23 @@ struct MCPIntegrationView: View {
                 Divider()
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("读取资源")
+                    Text(NSLocalizedString("读取资源", comment: ""))
                         .etFont(.subheadline)
                         .bold()
-                    Picker("目标服务器", selection: $selectedResourceServerID) {
-                        Text("请选择").tag(Optional<UUID>.none)
+                    Picker(NSLocalizedString("目标服务器", comment: ""), selection: $selectedResourceServerID) {
+                        Text(NSLocalizedString("请选择", comment: "")).tag(Optional<UUID>.none)
                         ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
                             Text(server.displayName).tag(Optional(server.id))
                         }
                     }
-                    TextField("资源 ID", text: $resourceIdInput)
+                    TextField(NSLocalizedString("资源 ID", comment: ""), text: $resourceIdInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextEditor(text: $resourceQueryInput)
                         .etFont(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 80)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
-                    Button("读取资源") {
+                    Button(NSLocalizedString("读取资源", comment: "")) {
                         triggerResourceRead()
                     }
                     .disabled(manager.isBusy)
@@ -451,7 +449,7 @@ struct MCPIntegrationView: View {
             }
             
             if let output = manager.lastOperationOutput {
-                Section("最新响应") {
+                Section(NSLocalizedString("最新响应", comment: "")) {
                     ScrollView(.vertical) {
                         Text(output)
                             .etFont(.system(.caption, design: .monospaced))
@@ -463,13 +461,13 @@ struct MCPIntegrationView: View {
             }
             
             if let error = manager.lastOperationError {
-                Section("错误信息") {
+                Section(NSLocalizedString("错误信息", comment: "")) {
                     Text(error)
                         .foregroundStyle(.red)
                 }
             }
         }
-        .navigationTitle("MCP 工具箱")
+        .navigationTitle(NSLocalizedString("MCP 工具箱", comment: ""))
         .toolbar {
             Button {
                 serverToEdit = nil
@@ -503,7 +501,7 @@ struct MCPIntegrationView: View {
             Button {
                 isExpanded.wrappedValue = true
             } label: {
-                Text("进一步了解…")
+                Text(NSLocalizedString("进一步了解…", comment: ""))
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -760,36 +758,36 @@ private struct MCPServerDetailView: View {
     
     var body: some View {
         Form {
-            Section("服务器信息") {
-                LabeledContent("名称", value: server.displayName)
+            Section(NSLocalizedString("服务器信息", comment: "")) {
+                LabeledContent(NSLocalizedString("名称", comment: ""), value: server.displayName)
                 LabeledContent("Endpoint", value: server.humanReadableEndpoint)
                 if let notes = server.notes {
-                    LabeledContent("备注", value: notes)
+                    LabeledContent(NSLocalizedString("备注", comment: ""), value: notes)
                 }
             }
             
-            Section("连接控制") {
-                Button("连接") {
+            Section(NSLocalizedString("连接控制", comment: "")) {
+                Button(NSLocalizedString("连接", comment: "")) {
                     manager.connect(to: server)
                 }
                 .disabled(status.connectionState == .ready || status.connectionState == .connecting || isReconnecting(status.connectionState))
                 
-                Button("断开连接") {
+                Button(NSLocalizedString("断开连接", comment: "")) {
                     manager.disconnect(server: server)
                 }
                 .disabled(status.connectionState == .idle)
 
-                Button("终止远端会话") {
+                Button(NSLocalizedString("终止远端会话", comment: "")) {
                     Task {
                         await manager.terminateRemoteSession(for: server.id)
                     }
                 }
                 .disabled(status.connectionState == .idle)
                 
-                Toggle("用于聊天", isOn: bindingForSelection())
+                Toggle(NSLocalizedString("用于聊天", comment: ""), isOn: bindingForSelection())
                     .disabled(status.connectionState == .connecting || isReconnecting(status.connectionState))
                 
-                Button("刷新元数据") {
+                Button(NSLocalizedString("刷新元数据", comment: "")) {
                     manager.refreshMetadata(for: server)
                 }
                 .disabled(status.connectionState != .ready || status.isBusy)
@@ -800,7 +798,7 @@ private struct MCPServerDetailView: View {
             }
             
             if let info = status.info {
-                Section("服务器能力") {
+                Section(NSLocalizedString("服务器能力", comment: "")) {
                     Text(info.name + (info.version.map { " \($0)" } ?? ""))
                     if let capabilities = info.capabilities, !capabilities.isEmpty {
                         Text("Capabilities: \(capabilities.keys.joined(separator: ", "))")
@@ -871,7 +869,7 @@ private struct MCPServerDetailView: View {
         .navigationTitle(server.displayName)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button("编辑") {
+                Button(NSLocalizedString("编辑", comment: "")) {
                     isEditing = true
                 }
                 Button(role: .destructive) {
@@ -888,12 +886,12 @@ private struct MCPServerDetailView: View {
                 }
             }
         }
-        .confirmationDialog("确定要删除此服务器？", isPresented: $showingDeleteConfirmation) {
-            Button("删除", role: .destructive) {
+        .confirmationDialog(NSLocalizedString("确定要删除此服务器？", comment: ""), isPresented: $showingDeleteConfirmation) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                 manager.delete(server: server)
                 dismiss()
             }
-            Button("取消", role: .cancel) { }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
         }
     }
     
@@ -953,7 +951,7 @@ private struct MCPToolSettingsDetailView: View {
 
     var body: some View {
         List {
-            Section("工具信息") {
+            Section(NSLocalizedString("工具信息", comment: "")) {
                 Text(tool.toolId)
                     .etFont(.headline)
                 if let desc = tool.description, !desc.isEmpty {
@@ -974,12 +972,12 @@ private struct MCPToolSettingsDetailView: View {
             }
 
             Section(
-                header: Text("审批策略"),
-                footer: Text("默认“每次询问”，可按工具单独设置。")
+                header: Text(NSLocalizedString("审批策略", comment: "")),
+                footer: Text(NSLocalizedString("默认“每次询问”，可按工具单独设置。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
-                Picker("审批策略", selection: toolApprovalPolicyBinding) {
+                Picker(NSLocalizedString("审批策略", comment: ""), selection: toolApprovalPolicyBinding) {
                     ForEach(MCPToolApprovalPolicy.allCases, id: \.self) { policy in
                         Text(policy.displayName).tag(policy)
                     }
@@ -987,7 +985,7 @@ private struct MCPToolSettingsDetailView: View {
                 .pickerStyle(.menu)
             }
         }
-        .navigationTitle("工具设置")
+        .navigationTitle(NSLocalizedString("工具设置", comment: ""))
     }
 
     private var toolBinding: Binding<Bool> {
@@ -1153,9 +1151,9 @@ private struct MCPServerEditor: View {
     
     var body: some View {
         Form {
-            Section("基本信息") {
-                TextField("显示名称", text: $displayName)
-                Picker("传输类型", selection: $transportOption) {
+            Section(NSLocalizedString("基本信息", comment: "")) {
+                TextField(NSLocalizedString("显示名称", comment: ""), text: $displayName)
+                Picker(NSLocalizedString("传输类型", comment: ""), selection: $transportOption) {
                     ForEach(TransportOption.allCases) { option in
                         Text(option.label).tag(option)
                     }
@@ -1172,12 +1170,12 @@ private struct MCPServerEditor: View {
                         .autocorrectionDisabled()
                 }
                 if transportOption.requiresAPIKey {
-                    TextField("Bearer API Key (可选)", text: $apiKey)
+                    TextField(NSLocalizedString("Bearer API Key (可选)", comment: ""), text: $apiKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
                 if transportOption == .oauth {
-                    Picker("授权类型", selection: $oauthGrantType) {
+                    Picker(NSLocalizedString("授权类型", comment: ""), selection: $oauthGrantType) {
                         Text("Client Credentials").tag(MCPOAuthGrantType.clientCredentials)
                         Text("Authorization Code").tag(MCPOAuthGrantType.authorizationCode)
                     }
@@ -1188,8 +1186,8 @@ private struct MCPServerEditor: View {
                     TextField("Client ID", text: $clientID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    SecureField("Client Secret (可选)", text: $clientSecret)
-                    TextField("Scope (可选)", text: $oauthScope)
+                    SecureField(NSLocalizedString("Client Secret (可选)", comment: ""), text: $clientSecret)
+                    TextField(NSLocalizedString("Scope (可选)", comment: ""), text: $oauthScope)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     if oauthGrantType == .authorizationCode {
@@ -1200,7 +1198,7 @@ private struct MCPServerEditor: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
-                        TextField("PKCE Code Verifier (可选)", text: $oauthCodeVerifier)
+                        TextField(NSLocalizedString("PKCE Code Verifier (可选)", comment: ""), text: $oauthCodeVerifier)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
@@ -1211,7 +1209,7 @@ private struct MCPServerEditor: View {
             }
 
             if transportOption.requiresAPIKey {
-                Section(header: Text("请求头覆盖"), footer: Text(headerOverridesHint)) {
+                Section(header: Text(NSLocalizedString("请求头覆盖", comment: "")), footer: Text(headerOverridesHint)) {
                     ForEach($headerOverrideEntries) { $entry in
                         HeaderOverrideRow(entry: $entry)
                             .onChange(of: entry.text) { _, _ in
@@ -1223,11 +1221,11 @@ private struct MCPServerEditor: View {
                     Button {
                         addHeaderOverrideEntry()
                     } label: {
-                        Label("添加表达式", systemImage: "plus")
+                        Label(NSLocalizedString("添加表达式", comment: ""), systemImage: "plus")
                     }
                 }
 
-                Section(header: Text("请求头预览")) {
+                Section(header: Text(NSLocalizedString("请求头预览", comment: ""))) {
                     Text(headerOverridesPreview.text)
                         .etFont(.footnote.monospaced())
                         .foregroundStyle(headerOverridesPreview.isPlaceholder ? .secondary : .primary)
@@ -1246,10 +1244,10 @@ private struct MCPServerEditor: View {
         .navigationTitle(existingServer == nil ? "新增 MCP Server" : "编辑 MCP Server")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
+                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
+                Button(NSLocalizedString("保存", comment: "")) {
                     saveServer()
                 }
                 .disabled(isSaveDisabled)
@@ -1528,7 +1526,7 @@ private struct HeaderOverrideRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField("请求头表达式，例如 User-Agent=Mozilla/5.0", text: $entry.text)
+            TextField(NSLocalizedString("请求头表达式，例如 User-Agent=Mozilla/5.0", comment: ""), text: $entry.text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .etFont(.body.monospaced())

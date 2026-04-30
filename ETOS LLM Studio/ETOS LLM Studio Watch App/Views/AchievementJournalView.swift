@@ -17,7 +17,7 @@ struct AchievementJournalView: View {
     var body: some View {
         List {
             if achievementCenter.journalEntries.isEmpty {
-                Text("这里还没有留下记录。")
+                Text(NSLocalizedString("这里还没有留下记录。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -26,7 +26,7 @@ struct AchievementJournalView: View {
                 }
             }
         }
-        .navigationTitle("成就日记")
+        .navigationTitle(NSLocalizedString("成就日记", comment: ""))
         .onAppear {
             achievementCenter.refreshFromStorage()
         }

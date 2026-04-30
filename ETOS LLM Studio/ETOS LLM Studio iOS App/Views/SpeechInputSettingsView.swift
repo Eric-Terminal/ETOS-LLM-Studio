@@ -18,17 +18,17 @@ struct SpeechInputSettingsView: View {
     
     var body: some View {
         Form {
-            Section("语音输入") {
-                Toggle("启用语言输入", isOn: $enableSpeechInput)
+            Section(NSLocalizedString("语音输入", comment: "")) {
+                Toggle(NSLocalizedString("启用语言输入", comment: ""), isOn: $enableSpeechInput)
                 if enableSpeechInput {
-                    Toggle("直接发送音频给模型", isOn: $sendSpeechAsAudio)
+                    Toggle(NSLocalizedString("直接发送音频给模型", comment: ""), isOn: $sendSpeechAsAudio)
                     
                     if sendSpeechAsAudio {
-                        Text("语音会直接附带音频给当前模型。")
+                        Text(NSLocalizedString("语音会直接附带音频给当前模型。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                         
-                        Picker("音频录制格式", selection: $audioRecordingFormat) {
+                        Picker(NSLocalizedString("音频录制格式", comment: ""), selection: $audioRecordingFormat) {
                             ForEach(AudioRecordingFormat.allCases, id: \.self) { format in
                                 Text(format.displayName).tag(format)
                             }
@@ -38,7 +38,7 @@ struct SpeechInputSettingsView: View {
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else if speechModels.isEmpty {
-                        Text("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。")
+                        Text(NSLocalizedString("暂无已激活的模型可用于语音识别，请先在模型列表中启用模型。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
@@ -49,7 +49,7 @@ struct SpeechInputSettingsView: View {
                             )
                         } label: {
                             HStack {
-                                Text("语音识别模型")
+                                Text(NSLocalizedString("语音识别模型", comment: ""))
                                 MarqueeText(
                                     content: selectedSpeechModelLabel,
                                     uiFont: .preferredFont(forTextStyle: .body)
@@ -60,18 +60,18 @@ struct SpeechInputSettingsView: View {
                             }
                         }
                         
-                        Text("语音内容会先发送到该模型转写，识别结果会自动补到输入框。")
+                        Text(NSLocalizedString("语音内容会先发送到该模型转写，识别结果会自动补到输入框。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     
-                    Text("也可以在“提供商与模型管理 > 专用模型”中统一设置。")
+                    Text(NSLocalizedString("也可以在“提供商与模型管理 > 专用模型”中统一设置。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .navigationTitle("语音输入")
+        .navigationTitle(NSLocalizedString("语音输入", comment: ""))
     }
     
     private var selectedSpeechModelLabel: String {
@@ -109,7 +109,7 @@ private struct SpeechModelSelectionView: View {
                 }
             }
         }
-        .navigationTitle("语音识别模型")
+        .navigationTitle(NSLocalizedString("语音识别模型", comment: ""))
     }
     
     private func select(_ model: RunnableModel?) {

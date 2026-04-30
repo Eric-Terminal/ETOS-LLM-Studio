@@ -23,15 +23,15 @@ public struct MemoryEditView: View {
     
     public var body: some View {
         Form {
-            Section(header: Text("记忆内容")) {
-                TextField("在此输入多行记忆内容...", text: $memory.content.watchKeyboardNewlineBinding(), axis: .vertical)
+            Section(header: Text(NSLocalizedString("记忆内容", comment: ""))) {
+                TextField(NSLocalizedString("在此输入多行记忆内容...", comment: ""), text: $memory.content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(5...20)
                     .onChange(of: memory.content) { _, _ in
                         hasChanges = true
                     }
             }
             
-            Section(header: Text("状态")) {
+            Section(header: Text(NSLocalizedString("状态", comment: ""))) {
                 Toggle(isOn: $memory.isArchived) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(memory.isArchived ? NSLocalizedString("已归档", comment: "") : NSLocalizedString("激活中", comment: ""))
@@ -48,7 +48,7 @@ public struct MemoryEditView: View {
             
             Section {
                 HStack {
-                    Text("更新时间")
+                    Text(NSLocalizedString("更新时间", comment: ""))
                         .etFont(.footnote)
                     Spacer()
                     Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
@@ -58,11 +58,11 @@ public struct MemoryEditView: View {
             }
             
             Section {
-                Button("保存更改", action: saveMemory)
+                Button(NSLocalizedString("保存更改", comment: ""), action: saveMemory)
                     .disabled(!hasChanges || memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .navigationTitle("编辑记忆")
+        .navigationTitle(NSLocalizedString("编辑记忆", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
     

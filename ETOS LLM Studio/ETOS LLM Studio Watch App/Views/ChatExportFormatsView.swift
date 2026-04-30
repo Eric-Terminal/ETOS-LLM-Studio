@@ -29,10 +29,10 @@ struct ChatExportFormatsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("导出范围") {
-                Picker("思考内容", selection: $includeReasoning) {
-                    Text("包含思考").tag(true)
-                    Text("不包含思考").tag(false)
+            Section(NSLocalizedString("导出范围", comment: "")) {
+                Picker(NSLocalizedString("思考内容", comment: ""), selection: $includeReasoning) {
+                    Text(NSLocalizedString("包含思考", comment: "")).tag(true)
+                    Text(NSLocalizedString("不包含思考", comment: "")).tag(false)
                 }
             }
 
@@ -44,7 +44,7 @@ struct ChatExportFormatsView: View {
                                 Label("导出为\(format.displayName)", systemImage: iconName(for: format))
                             }
                         } else {
-                            Text("当前系统暂不支持直接分享导出文件。")
+                            Text(NSLocalizedString("当前系统暂不支持直接分享导出文件。", comment: ""))
                                 .etFont(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -61,18 +61,18 @@ struct ChatExportFormatsView: View {
             }
 
             if let prepareError, !prepareError.isEmpty {
-                Section("导出错误") {
+                Section(NSLocalizedString("导出错误", comment: "")) {
                     Text(prepareError)
                         .etFont(.caption)
                         .foregroundStyle(.red)
 
-                    Button("重新生成") {
+                    Button(NSLocalizedString("重新生成", comment: "")) {
                         prepareFiles()
                     }
                 }
             }
         }
-        .navigationTitle("导出")
+        .navigationTitle(NSLocalizedString("导出", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             prepareFiles()

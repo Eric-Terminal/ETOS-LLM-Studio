@@ -31,33 +31,33 @@ struct ModelSettingsView: View {
 
         Form {
             Section(
-                header: Text("基础信息"),
-                footer: Text("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。")
+                header: Text(NSLocalizedString("基础信息", comment: "")),
+                footer: Text(NSLocalizedString("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。", comment: ""))
             ) {
-                TextField("模型名称", text: $model.displayName.watchKeyboardNewlineBinding())
-                TextField("模型ID", text: $model.modelName.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("模型名称", comment: ""), text: $model.displayName.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("模型ID", comment: ""), text: $model.modelName.watchKeyboardNewlineBinding())
                     .etFont(.caption)
             }
 
-            Section(header: Text("模型能力")) {
-                Toggle("聊天", isOn: capabilityBinding(.chat))
-                Toggle("工具", isOn: capabilityBinding(.toolCalling))
-                Toggle("语音转文字", isOn: capabilityBinding(.speechToText))
-                Toggle("文字转语音", isOn: capabilityBinding(.textToSpeech))
-                Toggle("嵌入", isOn: capabilityBinding(.embedding))
-                Toggle("生图", isOn: capabilityBinding(.imageGeneration))
+            Section(header: Text(NSLocalizedString("模型能力", comment: ""))) {
+                Toggle(NSLocalizedString("聊天", comment: ""), isOn: capabilityBinding(.chat))
+                Toggle(NSLocalizedString("工具", comment: ""), isOn: capabilityBinding(.toolCalling))
+                Toggle(NSLocalizedString("语音转文字", comment: ""), isOn: capabilityBinding(.speechToText))
+                Toggle(NSLocalizedString("文字转语音", comment: ""), isOn: capabilityBinding(.textToSpeech))
+                Toggle(NSLocalizedString("嵌入", comment: ""), isOn: capabilityBinding(.embedding))
+                Toggle(NSLocalizedString("生图", comment: ""), isOn: capabilityBinding(.imageGeneration))
             }
 
-            Section(header: Text("请求体编辑方式")) {
-                Picker("编辑方式", selection: $requestBodyMode) {
-                    Text("表达式").tag(Model.RequestBodyOverrideMode.expression)
-                    Text("原始 JSON").tag(Model.RequestBodyOverrideMode.rawJSON)
+            Section(header: Text(NSLocalizedString("请求体编辑方式", comment: ""))) {
+                Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
+                    Text(NSLocalizedString("表达式", comment: "")).tag(Model.RequestBodyOverrideMode.expression)
+                    Text(NSLocalizedString("原始 JSON", comment: "")).tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
                 .pickerStyle(.navigationLink)
             }
 
             if requestBodyMode == .expression {
-                Section(header: Text("参数表达式")) {
+                Section(header: Text(NSLocalizedString("参数表达式", comment: ""))) {
                     ForEach($expressionEntries) { $entry in
                         ExpressionRow(entry: $entry)
                             .onChange(of: entry.text, initial: false) { _, _ in
@@ -69,18 +69,17 @@ struct ModelSettingsView: View {
                     Button {
                         addEmptyEntry()
                     } label: {
-                        Label("添加", systemImage: "plus")
+                        Label(NSLocalizedString("添加", comment: ""), systemImage: "plus")
                     }
                 }
                 
-                Section(header: Text("写法提示")) {
-                    Text("使用 key = value 格式，例如 thinking_budget = 128")
-                    Text("嵌套用 { }，例如 chat_template_kwargs = {thinking = false}")
+                Section(header: Text(NSLocalizedString("写法提示", comment: ""))) {
+                    Text(NSLocalizedString("使用 key = value 格式，例如 thinking_budget = 128", comment: ""))
+                    Text(NSLocalizedString("嵌套用 { }，例如 chat_template_kwargs = {thinking = false}", comment: ""))
                 }
             } else {
-                Section(header: Text("原始 JSON")) {
-                    TextField(
-                        "填写 JSON 对象",
+                Section(header: Text(NSLocalizedString("原始 JSON", comment: ""))) {
+                    TextField(NSLocalizedString("填写 JSON 对象", comment: ""),
                         text: $rawJSONInput.watchKeyboardNewlineBinding(),
                         axis: .vertical
                     )
@@ -92,7 +91,7 @@ struct ModelSettingsView: View {
                         validateRawJSON(newValue)
                     }
 
-                    Text("示例：{\"extra_body\":{\"abc\":\"123\"}}")
+                    Text(NSLocalizedString("示例：{\"extra_body\":{\"abc\":\"123\"}}", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
 
@@ -104,13 +103,13 @@ struct ModelSettingsView: View {
                 }
             }
 
-            Section(header: Text("请求体预览")) {
+            Section(header: Text(NSLocalizedString("请求体预览", comment: ""))) {
                 Text(preview.text)
                     .etFont(.footnote.monospaced())
                     .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
             }
         }
-        .navigationTitle("编辑模型信息")
+        .navigationTitle(NSLocalizedString("编辑模型信息", comment: ""))
         .onAppear(perform: loadEditorState)
         .onDisappear(perform: saveEditorState)
     }
@@ -574,7 +573,7 @@ private struct ExpressionRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            TextField("比如 temperature = 0.8", text: $entry.text.watchKeyboardNewlineBinding())
+            TextField(NSLocalizedString("比如 temperature = 0.8", comment: ""), text: $entry.text.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             
