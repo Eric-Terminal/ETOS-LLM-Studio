@@ -216,9 +216,6 @@ struct ChatView: View {
     private var navBarGlassOverlayColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
-    private var navBarFadeTintColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.28)
-    }
     private var modelPickerPanelBaseTint: Color {
         colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
@@ -978,23 +975,13 @@ struct ChatView: View {
                 navBarBlurFadeMaxHeight,
                 max(navBarBlurFadeMinHeight, proxy.size.height * navBarBlurFadeHeightRatio)
             )
-            ZStack {
-                BlurView(style: .regular)
-                LinearGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: navBarFadeTintColor, location: 0),
-                        .init(color: navBarFadeTintColor.opacity(0.75), location: 0.42),
-                        .init(color: navBarFadeTintColor.opacity(0), location: 1)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
+            BlurView(style: .systemThinMaterial)
             .mask(
                 LinearGradient(
                     gradient: Gradient(stops: [
                         .init(color: Color.black, location: 0),
-                        .init(color: Color.black.opacity(0.82), location: 0.42),
+                        .init(color: Color.black.opacity(0.92), location: 0.44),
+                        .init(color: Color.black.opacity(0.38), location: 0.78),
                         .init(color: Color.black.opacity(0), location: 1)
                     ]),
                     startPoint: .top,
