@@ -978,6 +978,14 @@ class ChatViewModel: ObservableObject {
             isSending: isSendingMessage
         )
     }
+
+    func quickRetryLatestMessage() {
+        guard canQuickRetryLatestMessage,
+              let latestMessage = ChatResponseAttemptSupport.visibleMessages(from: allMessagesForSession).last else {
+            return
+        }
+        retryMessage(latestMessage)
+    }
     
     // MARK: 语音输入
     

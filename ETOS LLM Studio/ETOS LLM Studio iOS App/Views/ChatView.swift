@@ -3279,7 +3279,7 @@ private struct TelegramMessageComposer: View {
             } else if hasContent {
                 sendAction()
             } else if canQuickRetry {
-                viewModel.retryLastMessage()
+                viewModel.quickRetryLatestMessage()
             } else if viewModel.enableSpeechInput {
                 audioRecorderEntryMode = .speechInput
                 showAudioRecorder = true

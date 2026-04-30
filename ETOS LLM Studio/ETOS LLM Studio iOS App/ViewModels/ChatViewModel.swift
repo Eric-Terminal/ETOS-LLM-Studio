@@ -758,6 +758,14 @@ final class ChatViewModel: ObservableObject {
         )
     }
 
+    func quickRetryLatestMessage() {
+        guard canQuickRetryLatestMessage,
+              let latestMessage = ChatResponseAttemptSupport.visibleMessages(from: allMessagesForSession).last else {
+            return
+        }
+        retryMessage(latestMessage)
+    }
+
     var imageGenerationModelOptions: [RunnableModel] {
         activatedModels.filter { supportsImageGeneration(for: $0) }
     }

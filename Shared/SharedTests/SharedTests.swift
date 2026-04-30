@@ -3589,76 +3589,55 @@ fileprivate struct ChatServiceTests {
         await cleanup()
     }
 
-    @Test("重试尾部 assistant 流式出首字后断开会在断点后续跑并追加错误气泡")
-    func testRetryTailAssistantStreamingFailureAfterFirstTokenContinuesFromTail() async {
+    @Test("重试尾部 assistant 会重新生成同轮版本且请求以 user 结尾")
+    func testRetryTailAssistantRegeneratesAttemptFromUser() async {
         await cleanup()
 
-        RetryStreamingFailureURLProtocol.reset()
-        defer { RetryStreamingFailureURLProtocol.reset() }
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证尾部 assistant 重试行为。")
+            await cleanup()
+            return
+        }
 
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [RetryStreamingFailureURLProtocol.self]
-        let session = URLSession(configuration: config)
-        let streamingService = ChatService(
-            adapters: ["openai-compatible": RetryStreamingMockAdapter()],
-            memoryManager: memoryManager,
-            urlSession: session
-        )
-        streamingService.setSelectedModel(dummyModel)
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "新版本回复")
 
-        let testSession = streamingService.createSavedSession(name: "重试半路断开测试")
-        defer { streamingService.deleteSessions([testSession]) }
-        streamingService.setCurrentSession(testSession)
-
-        let userMessage = ChatMessage(role: .user, content: "retry-stream-partial")
+        let userMessage = ChatMessage(role: .user, content: "retry-tail-assistant")
         let assistantMessage = ChatMessage(role: .assistant, content: "旧版本回复")
-        streamingService.updateMessages([userMessage, assistantMessage], for: testSession.id)
+        chatService.updateMessages([userMessage, assistantMessage], for: sessionID)
 
-        RetryStreamingFailureURLProtocol.register(
-            marker: "retry-stream-partial",
-            chunks: ["新版本半截回复\n"],
-            errorMessage: "网络连接已经断开。"
-        )
-
-        await streamingService.retryMessage(
+        await chatService.retryMessage(
             assistantMessage,
             aiTemperature: 0,
             aiTopP: 1,
             systemPrompt: "",
             maxChatHistory: 5,
-            enableStreaming: true,
+            enableStreaming: false,
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
             includeSystemTime: false
         )
 
-        let messages = streamingService.messagesForSessionSubject.value
-        #expect(messages.count == 4)
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        #expect(sentMessages.map(\.content) == ["retry-tail-assistant"])
+        #expect(sentMessages.last?.role == .user)
 
-        guard let originalAssistant = messages.first(where: { $0.id == assistantMessage.id }) else {
-            Issue.record("未找到原始 assistant 消息。")
-            await cleanup()
-            return
-        }
-        #expect(originalAssistant.role == .assistant)
-        #expect(originalAssistant.content == "旧版本回复")
-        #expect(originalAssistant.getAllVersions().count == 1)
-
-        let continuedAssistant = messages.dropFirst(2).first { $0.role == .assistant }
-        #expect(continuedAssistant?.content == "新版本半截回复")
-        #expect(continuedAssistant?.getAllVersions().count == 1)
-
-        let errorMessage = messages.last
-        #expect(errorMessage?.role == .error)
-        #expect(errorMessage?.content.contains("重试失败") == true)
-        #expect(errorMessage?.content.contains("网络连接已经断开。") == true)
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.map(\.content) == ["retry-tail-assistant", "旧版本回复", "新版本回复"])
+        #expect(messages[0].selectedResponseAttemptID == messages[2].responseAttemptID)
+        #expect(messages[1].responseAttemptIndex == 0)
+        #expect(messages[2].responseAttemptIndex == 1)
+        #expect(ChatResponseAttemptSupport.visibleMessages(from: messages).map(\.content) == [
+            "retry-tail-assistant",
+            "新版本回复"
+        ])
 
         await cleanup()
     }
 
-    @Test("重试 error 时会复用同轮 assistant 而不是额外生成新气泡")
-    func testRetryErrorReusesPreviousAssistantMessage() async {
+    @Test("重试普通 error 失败时会保留旧回复并把错误作为新尝试")
+    func testRetryErrorFailurePreservesPreviousAssistantMessage() async {
         await cleanup()
 
         guard let sessionID = chatService.currentSessionSubject.value?.id else {
@@ -3690,7 +3669,7 @@ fileprivate struct ChatServiceTests {
         )
 
         let messages = chatService.messagesForSessionSubject.value
-        #expect(messages.count == 3)
+        #expect(messages.count == 4)
 
         let assistantMessages = messages.filter { $0.role == .assistant }
         #expect(assistantMessages.count == 1)
@@ -3702,6 +3681,55 @@ fileprivate struct ChatServiceTests {
         #expect(latestError?.role == .error)
         #expect(latestError?.content.contains("重试失败") == true)
         #expect(latestError?.content.contains("HTTP 500") == true)
+        #expect(messages[0].selectedResponseAttemptID == latestError?.responseAttemptID)
+        #expect(messages[1].responseAttemptIndex == 0)
+        #expect(messages[2].responseAttemptIndex == 0)
+        #expect(latestError?.responseAttemptIndex == 1)
+
+        await cleanup()
+    }
+
+    @Test("重试普通尾部 error 会重新生成同轮版本且请求以 user 结尾")
+    func testRetryTailErrorAfterAssistantRegeneratesAttemptFromUser() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证普通尾部 error 重试行为。")
+            await cleanup()
+            return
+        }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "错误后的新回复")
+
+        let userMessage = ChatMessage(role: .user, content: "retry-tail-error")
+        let assistantMessage = ChatMessage(role: .assistant, content: "半截回复")
+        let errorMessage = ChatMessage(role: .error, content: "网络连接已经断开。")
+        chatService.updateMessages([userMessage, assistantMessage, errorMessage], for: sessionID)
+
+        await chatService.retryMessage(
+            errorMessage,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        #expect(sentMessages.map(\.content) == ["retry-tail-error"])
+        #expect(sentMessages.last?.role == .user)
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.map(\.content) == ["retry-tail-error", "半截回复", "网络连接已经断开。", "错误后的新回复"])
+        #expect(messages[0].selectedResponseAttemptID == messages[3].responseAttemptID)
+        #expect(messages[1].responseAttemptIndex == 0)
+        #expect(messages[2].responseAttemptIndex == 0)
+        #expect(messages[3].responseAttemptIndex == 1)
 
         await cleanup()
     }

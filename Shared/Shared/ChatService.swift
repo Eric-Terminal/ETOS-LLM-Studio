@@ -2260,9 +2260,13 @@ public class ChatService {
     }
 
     private func isTailContinuationRetryTarget(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
-        guard message.role == .assistant || message.role == .error else { return false }
+        guard message.role == .error else { return false }
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
         guard let visibleIndex = visibleMessages.firstIndex(where: { $0.id == message.id }) else { return false }
+        let precedingMessages = visibleMessages[..<visibleIndex]
+        guard precedingMessages.last(where: { $0.role != .system })?.role == .tool else {
+            return false
+        }
         let trailingMessages = visibleMessages[visibleMessages.index(after: visibleIndex)...]
         return !trailingMessages.contains { trailingMessage in
             switch trailingMessage.role {

@@ -956,7 +956,7 @@ struct ContentView: View {
         case .quickRetry:
             shouldForceScrollToBottom = true
             shouldKeepBottomPinned = true
-            viewModel.retryLastMessage()
+            viewModel.quickRetryLatestMessage()
         case .speechInput:
             viewModel.beginSpeechInputFlow()
         case .inactive:
