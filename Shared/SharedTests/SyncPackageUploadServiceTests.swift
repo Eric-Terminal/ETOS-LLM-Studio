@@ -42,6 +42,39 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedBody == Data("{}".utf8))
     }
 
+    @Test("文件上传会从导出文件读取请求体")
+    func testUploadFileSuccess() async throws {
+        let endpoint = try #require(URL(string: "https://example.com/backup"))
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sync-upload-\(UUID().uuidString).json")
+        try Data("{\"ok\":true}".utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        var capturedRequest: URLRequest?
+        var capturedFileURL: URL?
+
+        let result = try await SyncPackageUploadService.upload(
+            exportFileURL: fileURL,
+            suggestedFileName: "ETOS-数据导出.json",
+            to: endpoint,
+            transport: { request, bodyFileURL in
+                capturedRequest = request
+                capturedFileURL = bodyFileURL
+                let response = try #require(
+                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (Data("received".utf8), response)
+            }
+        )
+
+        #expect(result.statusCode == 200)
+        #expect(result.responseBodyPreview == "received")
+        #expect(capturedRequest?.httpBody == nil)
+        #expect(capturedRequest?.httpMethod == "POST")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-FileName") == "ETOS-数据导出.json")
+        #expect(capturedFileURL == fileURL)
+    }
+
     @Test("非 2xx 响应会抛出状态码错误")
     func testUploadThrowsForUnexpectedStatusCode() async throws {
         let endpoint = try #require(URL(string: "https://example.com/backup"))

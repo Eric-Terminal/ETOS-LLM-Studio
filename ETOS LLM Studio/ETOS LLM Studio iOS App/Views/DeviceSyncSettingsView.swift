@@ -402,16 +402,13 @@ struct DeviceSyncSettingsView: View {
 
         do {
             let package = SyncEngine.buildPackage(options: selectedSyncOptions)
-            let output = try SyncPackageTransferService.exportPackage(package)
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
-            try output.data.write(to: fileURL, options: .atomic)
+            let output = try SyncPackageTransferService.exportPackageToTemporaryFile(package)
 
             if let existing = exportSharePayload?.fileURL {
                 try? FileManager.default.removeItem(at: existing)
             }
 
-            exportSharePayload = DeviceSyncExportSharePayload(fileURL: fileURL)
+            exportSharePayload = DeviceSyncExportSharePayload(fileURL: output.fileURL)
             exportErrorMessage = nil
         } catch {
             exportErrorMessage = String(

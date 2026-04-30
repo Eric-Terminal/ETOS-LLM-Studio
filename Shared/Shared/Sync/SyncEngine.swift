@@ -84,7 +84,7 @@ public enum SyncEngine {
             let fileManager = FileManager.default
             if let fileURLs = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
                 backgrounds = fileURLs.compactMap { url in
-                    guard let data = try? Data(contentsOf: url) else { return nil }
+                    guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { return nil }
                     return SyncedBackground(filename: url.lastPathComponent, data: data)
                 }
             }

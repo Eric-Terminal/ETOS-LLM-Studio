@@ -46,6 +46,37 @@ struct SyncPackageTransferServiceTests {
         #expect(decoded.appStorageSnapshot == snapshot)
     }
 
+    @Test("ETOS 导出信封可直接写入文件并解码")
+    func testExportEnvelopeToFile() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sync-export-file-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let package = SyncPackage(
+            options: [.backgrounds, .appStorage],
+            backgrounds: [
+                SyncedBackground(filename: "background.png", data: Data([0x01, 0x02, 0x03]))
+            ],
+            appStorageSnapshot: Data([0x04, 0x05, 0x06])
+        )
+
+        let exported = try SyncPackageTransferService.exportPackageToFile(
+            package,
+            destinationDirectory: directory,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let decoded = try SyncPackageTransferService.decodePackage(
+            from: Data(contentsOf: exported.fileURL)
+        )
+
+        #expect(FileManager.default.fileExists(atPath: exported.fileURL.path))
+        #expect(exported.suggestedFileName.hasPrefix("ETOS-数据导出-"))
+        #expect(decoded.backgrounds.count == 1)
+        #expect(decoded.backgrounds[0].data == Data([0x01, 0x02, 0x03]))
+        #expect(decoded.appStorageSnapshot == Data([0x04, 0x05, 0x06]))
+    }
+
     @Test("旧版纯 SyncPackage JSON 会被拒绝")
     func testDecodeLegacyRawSyncPackageJSONThrowsInvalidEnvelope() throws {
         let session = ChatSession(

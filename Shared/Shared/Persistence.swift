@@ -2612,7 +2612,7 @@ public enum Persistence {
         logger.info("Loading audio file: \(fileName)")
         
         do {
-            let data = try Data(contentsOf: fileURL)
+            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
             logger.info("Audio file loaded successfully: \(fileName)")
             return data
         } catch {
@@ -2710,7 +2710,7 @@ public enum Persistence {
         let fileURL = getImageDirectory().appendingPathComponent(fileName)
         
         do {
-            let data = try Data(contentsOf: fileURL)
+            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
             return data
         } catch {
             logger.warning("Failed to load image file \(fileName): \(error.localizedDescription)")
@@ -2906,7 +2906,7 @@ public enum Persistence {
         let fileURL = getFontDirectory().appendingPathComponent(fileName)
 
         do {
-            return try Data(contentsOf: fileURL)
+            return try Data(contentsOf: fileURL, options: [.mappedIfSafe])
         } catch {
             logger.warning("Failed to load font file \(fileName): \(error.localizedDescription)")
             return nil

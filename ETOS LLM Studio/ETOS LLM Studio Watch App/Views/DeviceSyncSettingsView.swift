@@ -379,16 +379,13 @@ struct DeviceSyncSettingsView: View {
 
         do {
             let package = SyncEngine.buildPackage(options: selectedSyncOptions)
-            let output = try SyncPackageTransferService.exportPackage(package)
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
-            try output.data.write(to: fileURL, options: .atomic)
+            let output = try SyncPackageTransferService.exportPackageToTemporaryFile(package)
 
             if let existing = exportFileURL {
                 try? FileManager.default.removeItem(at: existing)
             }
 
-            exportFileURL = fileURL
+            exportFileURL = output.fileURL
             exportErrorMessage = nil
         } catch {
             exportErrorMessage = String(format: NSLocalizedString("导出失败：%@", comment: ""), error.localizedDescription)

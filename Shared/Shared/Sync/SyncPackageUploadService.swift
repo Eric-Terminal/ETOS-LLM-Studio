@@ -37,6 +37,7 @@ public enum SyncPackageUploadError: LocalizedError {
 
 public enum SyncPackageUploadService {
     public typealias Transport = (_ request: URLRequest, _ body: Data) async throws -> (Data, URLResponse)
+    public typealias FileTransport = (_ request: URLRequest, _ fileURL: URL) async throws -> (Data, URLResponse)
 
     /// 直接上传导出数据。
     public static func upload(
@@ -46,13 +47,11 @@ public enum SyncPackageUploadService {
         timeout: TimeInterval = 30,
         transport: Transport? = nil
     ) async throws -> SyncPackageUploadResult {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = timeout
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(suggestedFileName, forHTTPHeaderField: "X-ETOS-Backup-FileName")
-        request.setValue("\(SyncPackageTransferService.currentSchemaVersion)", forHTTPHeaderField: "X-ETOS-Backup-Schema")
+        let request = makeUploadRequest(
+            suggestedFileName: suggestedFileName,
+            endpoint: endpoint,
+            timeout: timeout
+        )
 
         let sender = transport ?? { request, body in
             var req = request
@@ -76,6 +75,40 @@ public enum SyncPackageUploadService {
         )
     }
 
+    /// 直接从导出文件上传，避免把完整备份包放入 HTTP body 内存。
+    public static func upload(
+        exportFileURL: URL,
+        suggestedFileName: String,
+        to endpoint: URL,
+        timeout: TimeInterval = 30,
+        transport: FileTransport? = nil
+    ) async throws -> SyncPackageUploadResult {
+        let request = makeUploadRequest(
+            suggestedFileName: suggestedFileName,
+            endpoint: endpoint,
+            timeout: timeout
+        )
+
+        let sender = transport ?? { request, fileURL in
+            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+        }
+        let (responseData, response) = try await sender(request, exportFileURL)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncPackageUploadError.invalidHTTPResponse
+        }
+
+        let preview = responsePreview(from: responseData)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
+        }
+
+        return SyncPackageUploadResult(
+            statusCode: httpResponse.statusCode,
+            responseBodyPreview: preview
+        )
+    }
+
     /// 从同步包导出后直接上传。
     public static func upload(
         package: SyncPackage,
@@ -83,18 +116,44 @@ public enum SyncPackageUploadService {
         timeout: TimeInterval = 30,
         transport: Transport? = nil
     ) async throws -> SyncPackageUploadResult {
-        let output = try SyncPackageTransferService.exportPackage(package)
+        if let transport {
+            let output = try SyncPackageTransferService.exportPackage(package)
+            return try await upload(
+                exportData: output.data,
+                suggestedFileName: output.suggestedFileName,
+                to: endpoint,
+                timeout: timeout,
+                transport: transport
+            )
+        }
+
+        let output = try SyncPackageTransferService.exportPackageToTemporaryFile(package)
+        defer { try? FileManager.default.removeItem(at: output.fileURL) }
         return try await upload(
-            exportData: output.data,
+            exportFileURL: output.fileURL,
             suggestedFileName: output.suggestedFileName,
             to: endpoint,
-            timeout: timeout,
-            transport: transport
+            timeout: timeout
         )
     }
 }
 
 private extension SyncPackageUploadService {
+    static func makeUploadRequest(
+        suggestedFileName: String,
+        endpoint: URL,
+        timeout: TimeInterval
+    ) -> URLRequest {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(suggestedFileName, forHTTPHeaderField: "X-ETOS-Backup-FileName")
+        request.setValue("\(SyncPackageTransferService.currentSchemaVersion)", forHTTPHeaderField: "X-ETOS-Backup-Schema")
+        return request
+    }
+
     static func responsePreview(from data: Data, maxBytes: Int = 256) -> String? {
         guard !data.isEmpty else { return nil }
         let clipped = data.prefix(maxBytes)
