@@ -151,7 +151,7 @@ struct TTSFloatingController: View {
             Image(systemName: systemName)
                 .etFont(.system(size: 13, weight: .semibold))
                 .frame(width: 30, height: 30)
-                .foregroundStyle(prominent ? Color.white : Color.primary)
+                .foregroundStyle(prominent ? Color(uiColor: .systemBackground) : Color.primary)
                 .background {
                     Circle()
                         .fill(prominent ? Color.accentColor : Color.primary.opacity(0.12))
