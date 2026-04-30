@@ -47,7 +47,7 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     private let headers: [String: String]
     private var protocolVersion: String? = MCPProtocolVersion.current
     private let endpointWaitTimeout: TimeInterval = 0.8
-    private let sseReconnectMaxAttempts = 5
+    private let sseReconnectMaxAttempts = MCPRuntimeDefaults.maxRetryAttempts
     private let sseReconnectBaseDelay: TimeInterval = 1.0
     private let sseReconnectMaxDelay: TimeInterval = 30.0
     

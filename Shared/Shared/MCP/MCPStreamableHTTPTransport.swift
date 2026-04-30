@@ -23,7 +23,7 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
     private var protocolVersion: String?
     private let dynamicHeadersProvider: (@Sendable () async throws -> [String: String])?
     private let responseExecutor: StreamableHTTPResponseExecutor?
-    private let sseReconnectMaxAttempts = 5
+    private let sseReconnectMaxAttempts = MCPRuntimeDefaults.maxRetryAttempts
     private let sseReconnectBaseDelay: TimeInterval = 1.0
     private let sseReconnectMaxDelay: TimeInterval = 30.0
     private let sseSuspensionInterval: TimeInterval = 15.0

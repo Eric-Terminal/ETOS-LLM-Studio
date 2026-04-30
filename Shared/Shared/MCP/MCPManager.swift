@@ -329,14 +329,14 @@ public final class MCPManager: ObservableObject {
     private var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     private var autoConnectRetryAttempts: [UUID: Int] = [:]
     private var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
-    // 启动阶段连接失败后最多自动重试 2 次（含首次请求共 3 次）
-    private let autoConnectMaxRetries = 2
+    // 启动阶段连接失败后最多自动重试 3 次。
+    private let autoConnectMaxRetries = MCPRuntimeDefaults.maxRetryAttempts
     private let autoConnectBaseDelay: TimeInterval = 1.0
     private let autoConnectMaxDelay: TimeInterval = 30.0
-    private let autoConnectHandshakeTimeout: TimeInterval = 120.0
+    private let autoConnectHandshakeTimeout: TimeInterval = MCPRuntimeDefaults.requestTimeout
     private let autoConnectFailureNotificationCooldown: TimeInterval = 120.0
-    private let defaultToolCallTimeout: TimeInterval = 60
-    private let defaultChatToolCallTimeout: TimeInterval = 120
+    private let defaultToolCallTimeout: TimeInterval = MCPRuntimeDefaults.requestTimeout
+    private let defaultChatToolCallTimeout: TimeInterval = MCPRuntimeDefaults.requestTimeout
     private let toolCallWatchdogInterval: TimeInterval = 0.25
     private let metadataCacheTTL: TimeInterval = 300
     private let governanceLogLimit = 1200
@@ -1525,7 +1525,7 @@ public final class MCPManager: ObservableObject {
     private func defaultManagedToolCallOptions(timeout: TimeInterval, reason: String) -> MCPManagedToolCallOptions {
         MCPManagedToolCallOptions(
             timeout: timeout,
-            maxTotalTimeout: timeout * 2,
+            maxTotalTimeout: timeout,
             resetTimeoutOnProgress: true,
             cancellationReason: reason,
             includeTimeoutInMeta: true

@@ -13,6 +13,12 @@ import Foundation
 @Suite("MCP 管理器工具暴露测试")
 struct MCPManagerToolExposureTests {
 
+    @Test("MCP 默认超时为三分钟且最多重试三次")
+    func testMCPRuntimeDefaultsUseThreeMinutesAndThreeRetries() {
+        #expect(MCPRuntimeDefaults.requestTimeout == 180)
+        #expect(MCPRuntimeDefaults.maxRetryAttempts == 3)
+    }
+
     @MainActor
     @Test("MCP 聊天总开关关闭时 chatToolsForLLM 返回空数组")
     func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() {

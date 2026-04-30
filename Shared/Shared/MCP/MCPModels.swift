@@ -78,6 +78,11 @@ public enum MCPProtocolVersion {
     }
 }
 
+enum MCPRuntimeDefaults {
+    static let requestTimeout: TimeInterval = 180
+    static let maxRetryAttempts = 3
+}
+
 public struct MCPServerInfo: Codable, Hashable {
     public var name: String
     public var version: String?
