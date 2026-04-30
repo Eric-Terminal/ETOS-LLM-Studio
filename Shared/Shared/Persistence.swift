@@ -957,11 +957,31 @@ public enum Persistence {
             ])
         }
 
-        try removeItemIfExists(at: backupURL)
-        try fileManager.moveItem(at: tempBackupURL, to: backupURL)
+        try installVerifiedLaunchBackup(
+            temporaryURL: tempBackupURL,
+            backupURL: backupURL,
+            fileManager: fileManager
+        )
         removeSQLiteSidecars(at: backupURL)
         removeSQLiteSidecars(at: tempBackupURL)
         logger.info("启动备份已更新(\(kind.displayName)): \(backupURL.path)")
+    }
+
+    private static func installVerifiedLaunchBackup(
+        temporaryURL: URL,
+        backupURL: URL,
+        fileManager: FileManager
+    ) throws {
+        if fileManager.fileExists(atPath: backupURL.path) {
+            _ = try fileManager.replaceItemAt(
+                backupURL,
+                withItemAt: temporaryURL,
+                backupItemName: nil,
+                options: []
+            )
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: backupURL)
+        }
     }
 
     private static func createChatLaunchBackupWithoutFTS(sourceURL: URL, destinationURL: URL) throws {

@@ -5769,6 +5769,64 @@ fileprivate struct PersistenceTests {
         #expect(sqliteExists(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"))
     }
 
+    @Test("创建新还原点失败时会保留旧备份")
+    func testLaunchBackupKeepsPreviousBackupWhenNewBackupFails() throws {
+        cleanup(sessions: [])
+
+        let defaults = UserDefaults.standard
+        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let oldSession = ChatSession(id: UUID(), name: "Old Backup Session", isTemporary: false)
+        let oldMessages = [
+            ChatMessage(role: .user, content: "stable-old-backup")
+        ]
+        let newSession = ChatSession(id: UUID(), name: "New Backup Session", isTemporary: false)
+        let newMessages = [
+            ChatMessage(role: .assistant, content: "should-not-replace-old-backup")
+        ]
+        var didRestrictBackupDirectory = false
+
+        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            if didRestrictBackupDirectory {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o755],
+                    ofItemAtPath: chatStoreBackupDirectory.path
+                )
+            }
+            if let previousBackupEnabled = previousBackupEnabled as? Bool {
+                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
+            } else {
+                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
+            }
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [oldSession, newSession])
+        }
+
+        Persistence.saveChatSessions([oldSession])
+        Persistence.saveMessages(oldMessages, for: oldSession.id)
+        Persistence.createLaunchBackupPointIfEnabled()
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages WHERE content = 'stable-old-backup'") == 1)
+
+        Persistence.saveChatSessions([newSession])
+        Persistence.saveMessages(newMessages, for: newSession.id)
+        Persistence.resetGRDBStoreForTests()
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555],
+            ofItemAtPath: chatStoreBackupDirectory.path
+        )
+        didRestrictBackupDirectory = true
+
+        Persistence.createLaunchBackupPointIfEnabled()
+
+        #expect(FileManager.default.fileExists(atPath: chatStoreBackupSQLiteURL.path))
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages WHERE content = 'stable-old-backup'") == 1)
+        #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages WHERE content = 'should-not-replace-old-backup'") == 0)
+    }
+
     @Test("启动预热不会立即创建还原点")
     func testBootstrapGRDBDoesNotCreateLaunchBackupImmediately() {
         cleanup(sessions: [])
