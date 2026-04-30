@@ -65,7 +65,6 @@
 "复制历史创建分支" = "Branch from history copy";
 "复制消息历史和提示词" = "Copy message history & prompts";
 "好的" = "OK";
-"完成" = "Done";
 "对话行为" = "Chat behavior";
 "将从第 %d 条消息处创建新的分支会话。" = "Create a new branch from message %d.";
 "工具" = "Tools";
@@ -101,7 +100,6 @@
 "更多" = "More";
 "未同步" = "Not synced";
 "未知" = "Unknown";
-"未知状态" = "Unknown status";
 "未知视图" = "Unknown view";
 "查看会话信息" = "View session info";
 "查看消息信息" = "View message info";
@@ -120,30 +118,24 @@
 "渲染 Markdown" = "Render Markdown";
 "滚动到底部" = "Scroll to bottom";
 "点击开始录音" = "Tap to record";
-"版本 %d" = "Version %d";
 "版本信息" = "Version info";
 "版本管理" = "Version control";
 "特效" = "Effects";
-"状态" = "Status";
 "用户" = "User";
 "用户气泡不透明度" = "User bubble opacity";
 "助手气泡不透明度" = "Assistant bubble opacity";
 "透明度" = "Opacity";
 "不透明度" = "Opacity";
 "确认删除" = "Confirm delete";
-"API 地址应为基础地址，例如: https://api.openai.com/v1" = "API base URL example: https://api.openai.com/v1";
 "API 地址应为基础地址，例如: https://api.anthropic.com/v1" = "API base URL example: https://api.anthropic.com/v1";
 "API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta" = "API base URL example: https://generativelanguage.googleapis.com/v1beta";
 "确认删除会话" = "Confirm delete session";
 "确认删除当前版本" = "Confirm delete current version";
 "确认删除消息" = "Confirm delete message";
-"第 %d / %d 条" = "Item %d / %d";
 "系统" = "System";
-"编辑" = "Edit";
 "编辑后" = "After edit";
 "编辑消息" = "Edit message";
 "编辑话题" = "Edit topic";
-"聊天" = "Chat";
 "背景" = "Background";
 "背景 +%d" = "Backgrounds +%d";
 "背景不透明度: %.2f" = "Background opacity: %.2f";
@@ -196,7 +188,6 @@
 "服务器运行时屏幕将保持常亮，需先停止服务器才能离开本页" = "Keep screen on while server runs; stop it before leaving this page.";
 "OpenAI 捕获" = "OpenAI Capture";
 "保存到本地" = "Save locally";
-"忽略" = "Ignore";
 "收到请求：模型 %@ · 消息数 %d" = "Request received: model %@ · messages %d";
 "队列中还有 %d 条未处理请求" = "%d request(s) still pending in queue";
 "OpenAI 兼容请求 (免 PIN，支持捕获保存)" = "OpenAI-compatible request (no PIN, capture supported)";
@@ -244,7 +235,6 @@
 "下载文件" = "Download file";
 "下载文件 (Base64)" = "Download file (Base64)";
 "下载文件:" = "Download file:";
-"仅在可信网络中使用" = "Use only on trusted networks";
 "仅在可信网络使用 · PIN 随机生成 · 用完及时停止" = "Trusted networks only · PIN is random · Stop when done";
 "仅对当前对话生效。" = "Applies to the current chat only.";
 "从云端获取" = "Fetch from cloud";
@@ -270,7 +260,6 @@
 "全局系统提示词" = "Global system prompt";
 "关于" = "About";
 "关于 MCP" = "About MCP";
-"关闭后仅读取记忆，不会请求保存新内容。" = "When off, memories are read only; no new saves are requested.";
 "关闭后仅读取记忆，不保存新内容。" = "When off, memories are read-only and new content isn’t saved.";
 "内容类型" = "Content type";
 "内容表现" = "Content presentation";
@@ -309,7 +298,6 @@
 "启动后可通过局域网访问 Documents 目录" = "After starting, you can access the Documents directory over LAN.";
 "启用 MCP 代理" = "Enable MCP proxy";
 "启用代理" = "Enable proxy";
-"启用后，AI 会在响应前自动检索相关记忆，并可选择写入新的记忆片段。" = "When enabled, AI retrieves related memories before responding and can save new snippets.";
 "启用后，AI 将拥有长期记忆能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。" = "When enabled, AI gains long-term memory, retrieving before each chat and learning via tools.";
 "启用流式输出" = "Enable streaming";
 "启用记忆功能" = "Enable memory";
@@ -395,8 +383,6 @@
 "数据收集" = "Data collection";
 "数据维护" = "Data maintenance";
 "数量" = "Count";
-"文档" = "Documentation";
-"断开" = "Disconnect";
 "断开连接" = "Disconnect";
 "新增 MCP Server" = "Add MCP Server";
 "新增服务器" = "Add server";
@@ -535,7 +521,6 @@
 "请选择已连接服务器。" = "Please select a connected server.";
 "读取资源" = "Read resource";
 "调用工具" = "Call tool";
-"调试" = "Debug";
 "调试面板" = "Debug Panel";
 "资源 ID" = "Resource ID";
 "资源列表" = "Resource list";
@@ -546,9 +531,7 @@
 "输出设置" = "Output settings";
 "运行中" = "Running";
 "还没有任何记忆。" = "No memories yet.";
-"连接" = "Connect";
 "连接中" = "Connecting";
-"连接信息" = "Connection Info";
 "连接控制" = "Connection control";
 "连接概览" = "Connection overview";
 "连接状态" = "Connection status";
@@ -606,7 +589,6 @@
 "幽灵会话" = "Ghost Sessions";
 "清理幽灵会话" = "Clean Ghost Sessions";
 "驱鬼成功" = "Exorcism Complete";
-"孤立文件是指不再被任何会话引用的语音和图片文件。清理缓存将删除所有语音和图片文件。" = "Orphaned files are audio and image files no longer referenced by any session. Clearing cache removes all audio and image files.";
 "幽灵会话是指会话记录存在但消息文件已丢失的异常情况。" = "Ghost sessions are session records that exist but their message files are missing.";
 "一切正常！没有发现幽灵会话。" = "All clear! No ghost sessions found.";
 "发现 1 个幽灵会话！看起来有人删除了消息文件但忘记清理会话记录了..." = "Found 1 ghost session! Someone deleted the message file but forgot to clean up the record...";
@@ -631,7 +613,6 @@
 "无法读取此文件的内容。" = "Cannot read the content of this file.";
 "暂无其他文件" = "No Other Files";
 "Documents 根目录下没有其他文件。" = "No other files in the Documents root.";
-"状态" = "Status";
 "连接模式" = "Connection Mode";
 "HTTP 轮询" = "HTTP Polling";
 "WebSocket" = "WebSocket";
@@ -725,7 +706,6 @@
 "流量分析" = "Traffic analytics";
 "电脑端下载并运行:" = "Download and run on your computer:";
 "电脑端菜单操作文件" = "Use the computer-side menu to manage files";
-"确定要删除 \"%@\" 吗？此操作不可撤销。" = "Delete \"%@\"? This action can't be undone.";
 "确定要删除选中的 %d 个文件吗？此操作不可撤销。" = "Delete the selected %d files? This action can't be undone.";
 "稳定但较慢" = "Stable but slower";
 "管理应用内数据" = "Manage in-app data";
@@ -1309,7 +1289,6 @@
 "启用异步跨对话记忆" = "Enable Async Cross-Session Memory";
 "跨对话记忆与画像" = "Cross-Session Memory & Profile";
 "跨对话记忆" = "Cross-Session Memory";
-"会话摘要会写入会话 JSON；用户画像会保存到 Memory 目录下，并限制为每天最多更新一次。" = "Session summaries are written to session JSON; user profile is saved to Memory directory and limited to one update per day.";
 "注入最近摘要数" = "Inject Recent Summary Count";
 "摘要触发轮次阈值" = "Summary Trigger Round Threshold";
 "摘要最小间隔(分钟)" = "Summary Minimum Interval (minutes)";
@@ -1682,14 +1661,10 @@
 "watchOS 兼容" = "watchOS Compatible";
 "上传到地址" = "Upload to Address";
 "上传备份（POST）" = "Upload Backup (POST)";
-"上传失败" = "Upload Failed";
 "上传字体文件" = "Upload Font File";
-"上传错误" = "Upload Error";
-"下载并解析" = "Download and Parse";
 "不包含思考" = "Exclude Reasoning";
 "专用模型选择器" = "Dedicated Model Selector";
 "世界书 +%d" = "Worldbooks +%d";
-"世界书描述" = "Worldbook Description";
 "中文：风来疏竹，风过而竹不留声。" = "Chinese: Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "风来疏竹，风过而竹不留声。" = "Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。" = "When empty, no global system prompt is sent. In the selector, swipe right to delete, swipe left for more actions (edit), and tap an entry to return automatically.";

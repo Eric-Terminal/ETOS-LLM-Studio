@@ -102,7 +102,6 @@
 "更多" = "More";
 "未同步" = "Not synced";
 "未知" = "Unknown";
-"未知状态" = "Unknown status";
 "未知视图" = "Unknown view";
 "查看会话信息" = "View session info";
 "查看消息信息" = "View message info";
@@ -121,11 +120,9 @@
 "渲染 Markdown" = "Render Markdown";
 "滚动到底部" = "Scroll to bottom";
 "点击开始录音" = "Tap to record";
-"版本 %d" = "Version %d";
 "版本信息" = "Version info";
 "版本管理" = "Version control";
 "特效" = "Effects";
-"状态" = "Status";
 "用户" = "User";
 "用户气泡不透明度" = "User bubble opacity";
 "助手气泡不透明度" = "Assistant bubble opacity";
@@ -135,13 +132,11 @@
 "确认删除会话" = "Confirm delete session";
 "确认删除当前版本" = "Confirm delete current version";
 "确认删除消息" = "Confirm delete message";
-"第 %d / %d 条" = "Item %d / %d";
 "系统" = "System";
 "编辑" = "Edit";
 "编辑后" = "After edit";
 "编辑消息" = "Edit message";
 "编辑话题" = "Edit topic";
-"聊天" = "Chat";
 "背景" = "Background";
 "背景 +%d" = "Backgrounds +%d";
 "背景不透明度: %.2f" = "Background opacity: %.2f";
@@ -210,7 +205,6 @@
 "0 表示不限制" = "0 means no limit";
 "AI 智能体自主使用内置工具" = "AI agent uses built-in tools autonomously";
 "API 地址" = "API Address";
-"API 地址应为基础地址，例如: https://api.openai.com/v1" = "API address should be the base URL, e.g., https://api.openai.com/v1";
 "API 文档" = "API Docs";
 "API 格式" = "API Format";
 "API 端点" = "API Endpoint";
@@ -269,7 +263,6 @@
 "关于" = "About";
 "关于 MCP" = "About MCP";
 "关闭后仅读取记忆，不会请求保存新内容。" = "When off, memories are read only; no new saves are requested.";
-"关闭后仅读取记忆，不保存新内容。" = "When off, memories are read-only and new content isn’t saved.";
 "内容类型" = "Content type";
 "内容表现" = "Content presentation";
 "写法提示" = "Writing tips";
@@ -625,7 +618,6 @@
 "保存更改" = "Save changes";
 "关闭" = "Close";
 "创建时间" = "Created at";
-"删除 \"%@\"？" = "Delete \"%@\"?";
 "删除 %d 个文件" = "Delete %d files";
 "剩余 %d 条记录" = "Remaining %d records";
 "在本界面输入 IP 并连接" = "Enter IP here and connect";
@@ -770,7 +762,6 @@
 "确认删除这张图片？" = "Delete this image?";
 "图片已删除。" = "Image deleted.";
 "提示" = "Notice";
-"确定" = "OK";
 "启用响应测速" = "Enable response speed metrics";
 "响应测速" = "Response metrics";
 "开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。" = "When enabled, records total time for each API request; streaming also tracks time to first token and token/s.";
@@ -1525,14 +1516,10 @@
 "watchOS 兼容" = "watchOS Compatible";
 "上传到地址" = "Upload to Address";
 "上传备份（POST）" = "Upload Backup (POST)";
-"上传失败" = "Upload Failed";
 "上传字体文件" = "Upload Font File";
-"上传错误" = "Upload Error";
-"下载并解析" = "Download and Parse";
 "不包含思考" = "Exclude Reasoning";
 "专用模型选择器" = "Dedicated Model Selector";
 "世界书 +%d" = "Worldbooks +%d";
-"世界书描述" = "Worldbook Description";
 "中文：风来疏竹，风过而竹不留声。" = "Chinese: Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "风来疏竹，风过而竹不留声。" = "Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。" = "When empty, no global system prompt is sent. In the selector, swipe right to delete, swipe left for more actions (edit), and tap an entry to return automatically.";
