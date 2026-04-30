@@ -116,17 +116,21 @@ private struct WatchProviderModelOrderContentView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(viewModel.configuredModels, id: \.id) { runnable in
+                    ForEach(configuredModelsBinding, id: \.id, editActions: .move) { $runnable in
                         modelOrderRow(runnable: runnable)
-                    }
-                    .onMove { offsets, destination in
-                        ChatService.shared.moveConfiguredModels(fromOffsets: offsets, toOffset: destination)
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("模型顺序", comment: ""))
-        .environment(\.editMode, .constant(.active))
+    }
+
+    private var configuredModelsBinding: Binding<[RunnableModel]> {
+        Binding {
+            viewModel.configuredModels
+        } set: { orderedModels in
+            ChatService.shared.setConfiguredModelOrder(orderedModels.map(\.id))
+        }
     }
 
     @ViewBuilder
