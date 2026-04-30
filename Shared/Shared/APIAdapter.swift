@@ -1023,8 +1023,18 @@ public class OpenAIAdapter: APIAdapter {
         } else {
             reasoningTokens = nil
         }
+        let cacheReadTokens: Int?
+        if let details = usage["input_tokens_details"] as? [String: Any] {
+            cacheReadTokens = details["cached_tokens"] as? Int
+        } else {
+            cacheReadTokens = nil
+        }
 
-        if promptTokens == nil && completionTokens == nil && totalTokens == nil && reasoningTokens == nil {
+        if promptTokens == nil
+            && completionTokens == nil
+            && totalTokens == nil
+            && reasoningTokens == nil
+            && cacheReadTokens == nil {
             return nil
         }
 
@@ -1032,7 +1042,9 @@ public class OpenAIAdapter: APIAdapter {
             promptTokens: promptTokens,
             completionTokens: completionTokens,
             totalTokens: totalTokens,
-            thinkingTokens: reasoningTokens
+            thinkingTokens: reasoningTokens,
+            cacheWriteTokens: nil,
+            cacheReadTokens: cacheReadTokens
         )
     }
 
@@ -1096,9 +1108,17 @@ public class OpenAIAdapter: APIAdapter {
         }
         let choices: [Choice]
         struct Usage: Decodable {
+            struct PromptTokensDetails: Decodable {
+                let cached_tokens: Int?
+            }
+            struct CompletionTokensDetails: Decodable {
+                let reasoning_tokens: Int?
+            }
             let prompt_tokens: Int?
             let completion_tokens: Int?
             let total_tokens: Int?
+            let prompt_tokens_details: PromptTokensDetails?
+            let completion_tokens_details: CompletionTokensDetails?
         }
         let usage: Usage?
     }
@@ -1819,16 +1839,20 @@ public class OpenAIAdapter: APIAdapter {
 
     private func makeTokenUsage(from usage: OpenAIResponse.Usage?) -> MessageTokenUsage? {
         guard let usage = usage else { return nil }
-        if usage.prompt_tokens == nil && usage.completion_tokens == nil && usage.total_tokens == nil {
+        if usage.prompt_tokens == nil
+            && usage.completion_tokens == nil
+            && usage.total_tokens == nil
+            && usage.prompt_tokens_details?.cached_tokens == nil
+            && usage.completion_tokens_details?.reasoning_tokens == nil {
             return nil
         }
         return MessageTokenUsage(
             promptTokens: usage.prompt_tokens,
             completionTokens: usage.completion_tokens,
             totalTokens: usage.total_tokens,
-            thinkingTokens: nil,
+            thinkingTokens: usage.completion_tokens_details?.reasoning_tokens,
             cacheWriteTokens: nil,
-            cacheReadTokens: nil
+            cacheReadTokens: usage.prompt_tokens_details?.cached_tokens
         )
     }
 }
@@ -2353,6 +2377,7 @@ public class GeminiAdapter: APIAdapter {
             let candidatesTokenCount: Int?
             let totalTokenCount: Int?
             let thoughtsTokenCount: Int?
+            let cachedContentTokenCount: Int?
         }
         let usageMetadata: UsageMetadata?
         struct Error: Decodable {
@@ -3055,7 +3080,8 @@ public class GeminiAdapter: APIAdapter {
         if usage.promptTokenCount == nil
             && usage.candidatesTokenCount == nil
             && usage.totalTokenCount == nil
-            && usage.thoughtsTokenCount == nil {
+            && usage.thoughtsTokenCount == nil
+            && usage.cachedContentTokenCount == nil {
             return nil
         }
         return MessageTokenUsage(
@@ -3064,7 +3090,7 @@ public class GeminiAdapter: APIAdapter {
             totalTokens: usage.totalTokenCount,
             thinkingTokens: usage.thoughtsTokenCount,
             cacheWriteTokens: nil,
-            cacheReadTokens: nil
+            cacheReadTokens: usage.cachedContentTokenCount
         )
     }
     

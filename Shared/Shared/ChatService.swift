@@ -4614,6 +4614,8 @@ public class ChatService {
             payload["输入Token"] = tokenUsage.promptTokens.map { "\($0)" } ?? "未知"
             payload["输出Token"] = tokenUsage.completionTokens.map { "\($0)" } ?? "未知"
             payload["思考Token"] = tokenUsage.thinkingTokens.map { "\($0)" } ?? "未知"
+            payload["缓存写入Token"] = tokenUsage.cacheWriteTokens.map { "\($0)" } ?? "未知"
+            payload["缓存读取Token"] = tokenUsage.cacheReadTokens.map { "\($0)" } ?? "未知"
             payload["总Token"] = tokenUsage.totalTokens.map { "\($0)" } ?? "未知"
         }
 

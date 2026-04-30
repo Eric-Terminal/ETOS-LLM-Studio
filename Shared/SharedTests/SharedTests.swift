@@ -1485,6 +1485,43 @@ struct OpenAIAdapterTests {
         #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-extra-1"))
     }
 
+    @Test("OpenAI 响应可解析缓存与思考 Token 字段")
+    func testParseResponseParsesTokenUsageDetails() throws {
+        let json = """
+        {
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "完成"
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "total_tokens": 150,
+            "prompt_tokens_details": {
+              "cached_tokens": 64
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 7
+            }
+          }
+        }
+        """
+
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let usage = try #require(message.tokenUsage)
+
+        #expect(usage.promptTokens == 120)
+        #expect(usage.completionTokens == 30)
+        #expect(usage.totalTokens == 150)
+        #expect(usage.cacheReadTokens == 64)
+        #expect(usage.thinkingTokens == 7)
+    }
+
     @Test("OpenAI 请求会镜像 thought_signature 到 Gemini extra_content")
     func testBuildRequestIncludesGeminiExtraContentThoughtSignature() throws {
         let toolCall = InternalToolCall(
@@ -1537,13 +1574,15 @@ struct OpenAIAdapterTests {
     @Test("OpenAI 流式 usage-only 片段可解析 token 用量")
     func testStreamingUsageOnlyChunkParsesTokenUsage() throws {
         let line = """
-        data: {"id":"chatcmpl-usage","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":29,"total_tokens":40}}
+        data: {"id":"chatcmpl-usage","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":29,"total_tokens":40,"prompt_tokens_details":{"cached_tokens":6},"completion_tokens_details":{"reasoning_tokens":3}}}
         """
         let part = try #require(adapter.parseStreamingResponse(line: line))
         let usage = try #require(part.tokenUsage)
         #expect(usage.promptTokens == 11)
         #expect(usage.completionTokens == 29)
         #expect(usage.totalTokens == 40)
+        #expect(usage.cacheReadTokens == 6)
+        #expect(usage.thinkingTokens == 3)
         #expect(part.content == nil)
         #expect(part.reasoningContent == nil)
     }
@@ -1717,6 +1756,9 @@ struct OpenAIAdapterTests {
           ],
           "usage": {
             "input_tokens": 12,
+            "input_tokens_details": {
+              "cached_tokens": 6
+            },
             "output_tokens": 18,
             "output_tokens_details": {
               "reasoning_tokens": 5
@@ -1738,6 +1780,7 @@ struct OpenAIAdapterTests {
         #expect(usage.promptTokens == 12)
         #expect(usage.completionTokens == 18)
         #expect(usage.thinkingTokens == 5)
+        #expect(usage.cacheReadTokens == 6)
         #expect(usage.totalTokens == 30)
     }
 
@@ -1753,7 +1796,7 @@ struct OpenAIAdapterTests {
         data: {"type":"response.output_text.delta","output_index":2,"item_id":"msg_1","content_index":0,"delta":"已经完成"}
         """
         let completed = """
-        data: {"type":"response.completed","response":{"usage":{"input_tokens":9,"output_tokens":7,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
+        data: {"type":"response.completed","response":{"usage":{"input_tokens":9,"input_tokens_details":{"cached_tokens":4},"output_tokens":7,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
         """
 
         let toolStartPart = try #require(adapter.parseStreamingResponse(line: toolStart))
@@ -1772,6 +1815,7 @@ struct OpenAIAdapterTests {
         #expect(usage.promptTokens == 9)
         #expect(usage.completionTokens == 7)
         #expect(usage.thinkingTokens == 2)
+        #expect(usage.cacheReadTokens == 4)
         #expect(usage.totalTokens == 16)
     }
 
@@ -2200,7 +2244,8 @@ struct GeminiAdapterTests {
             "promptTokenCount": 12,
             "candidatesTokenCount": 34,
             "totalTokenCount": 46,
-            "thoughtsTokenCount": 7
+            "thoughtsTokenCount": 7,
+            "cachedContentTokenCount": 5
           }
         }
         """
@@ -2212,6 +2257,7 @@ struct GeminiAdapterTests {
         #expect(usage.completionTokens == 34)
         #expect(usage.totalTokens == 46)
         #expect(usage.thinkingTokens == 7)
+        #expect(usage.cacheReadTokens == 5)
     }
 
     @Test("Gemini 响应解析保留函数调用 ID 与 thought_signature")

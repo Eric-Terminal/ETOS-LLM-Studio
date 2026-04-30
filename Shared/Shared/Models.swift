@@ -1054,7 +1054,7 @@ public struct MessageTokenUsage: Codable, Hashable, Sendable {
     }
     
     public var hasData: Bool {
-        promptTokens != nil || completionTokens != nil || totalTokens != nil
+        hasAnyData
     }
 
     public var hasAnyData: Bool {

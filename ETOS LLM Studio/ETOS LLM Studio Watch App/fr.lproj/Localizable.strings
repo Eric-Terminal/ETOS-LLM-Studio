@@ -83,6 +83,13 @@
 "您确定要删除这个会话及其所有消息吗？此操作无法撤销。" = "Supprimer cette session et tous les messages ? Cette action est irréversible.";
 "拓展功能" = "Extensions";
 "接收 Tokens" = "Recevoir des tokens";
+"思考 Tokens" = "Tokens de raisonnement";
+"缓存写入 Tokens" = "Tokens d’écriture cache";
+"缓存读取 Tokens" = "Tokens de lecture cache";
+"思考" = "Raisonnement";
+"缓存写入" = "Écriture cache";
+"缓存读取" = "Lecture cache";
+"缓存读取 %d · 缓存写入 %d" = "Lecture cache %d · écriture cache %d";
 "推送到手机" = "Envoyer à iPhone";
 "提供商 +%d" = "Fournisseurs +%d";
 "提供商与模型管理" = "Fournisseurs et modèles";

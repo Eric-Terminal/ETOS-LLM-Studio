@@ -150,6 +150,10 @@ public struct StorageManagementView: View {
                     Image(systemName: "trash")
                     Text("清理所有缓存")
                         .etFont(.footnote)
+                    Spacer()
+                    Text(StorageUtility.formatSize(storageBreakdown.cacheSize))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
         } header: {

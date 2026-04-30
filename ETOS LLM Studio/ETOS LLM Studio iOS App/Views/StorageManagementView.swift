@@ -167,7 +167,13 @@ struct StorageManagementView: View {
             Button(role: .destructive) {
                 showClearCacheAlert = true
             } label: {
-                Label("清理所有缓存", systemImage: "trash")
+                HStack {
+                    Label("清理所有缓存", systemImage: "trash")
+                    Spacer()
+                    Text(StorageUtility.formatSize(storageBreakdown.cacheSize))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         } header: {
             Text("清理工具")

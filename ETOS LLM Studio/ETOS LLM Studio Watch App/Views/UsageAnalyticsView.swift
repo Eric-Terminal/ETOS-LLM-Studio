@@ -145,6 +145,13 @@ struct UsageAnalyticsView: View {
                     Text("Token \(viewModel.state.detail.tokenTotals.totalTokens) · 取消 \(viewModel.state.detail.cancelledCount)")
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
+                    Text(String(
+                        format: NSLocalizedString("缓存读取 %d · 缓存写入 %d", comment: "Cache token totals summary"),
+                        viewModel.state.detail.tokenTotals.cacheReadTokens,
+                        viewModel.state.detail.tokenTotals.cacheWriteTokens
+                    ))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let topModel = viewModel.state.detail.topModels.first {

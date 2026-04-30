@@ -4890,6 +4890,21 @@ private struct MessageInfoSheet: View {
                                 Text("\(completion)")
                             }
                         }
+                        if let thinking = usage.thinkingTokens {
+                            LabeledContent(NSLocalizedString("思考 Tokens", comment: "Thinking tokens label")) {
+                                Text("\(thinking)")
+                            }
+                        }
+                        if let cacheWrite = usage.cacheWriteTokens {
+                            LabeledContent(NSLocalizedString("缓存写入 Tokens", comment: "Cache write tokens label")) {
+                                Text("\(cacheWrite)")
+                            }
+                        }
+                        if let cacheRead = usage.cacheReadTokens {
+                            LabeledContent(NSLocalizedString("缓存读取 Tokens", comment: "Cache read tokens label")) {
+                                Text("\(cacheRead)")
+                            }
+                        }
                         if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {
                             LabeledContent(NSLocalizedString("总计", comment: "Total tokens label")) {
                                 Text("\(total)")

@@ -104,6 +104,9 @@ public struct StorageBreakdown {
     public var totalSize: Int64 = 0
     public var categorySize: [StorageCategory: Int64] = [:]
     public var otherSize: Int64 = 0
+    public var cacheSize: Int64 {
+        (categorySize[.audio] ?? 0) + (categorySize[.images] ?? 0)
+    }
     
     public init() {
         for category in StorageCategory.allCases {

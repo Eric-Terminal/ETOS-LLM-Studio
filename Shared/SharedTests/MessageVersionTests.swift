@@ -371,6 +371,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedUsage.cacheWriteTokens, 3)
         XCTAssertEqual(decodedUsage.cacheReadTokens, 5)
         XCTAssertNil(decodedUsage.totalTokens)
+        XCTAssertTrue(decodedUsage.hasData)
         XCTAssertTrue(decodedUsage.hasAnyData)
     }
 

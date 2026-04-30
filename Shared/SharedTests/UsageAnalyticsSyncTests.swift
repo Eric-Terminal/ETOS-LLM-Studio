@@ -79,6 +79,8 @@ struct UsageAnalyticsSyncTests {
         #expect(dailyTotals[0].cancelledCount == 0)
         #expect(dailyTotals[0].tokenTotals.totalTokens == 140)
         #expect(dailyTotals[0].tokenTotals.thinkingTokens == 8)
+        #expect(dailyTotals[0].tokenTotals.cacheWriteTokens == 3)
+        #expect(dailyTotals[0].tokenTotals.cacheReadTokens == 1)
         #expect(dailyTotals[1].dayKey == "2025-04-13")
         #expect(dailyTotals[1].cancelledCount == 1)
 
@@ -87,6 +89,8 @@ struct UsageAnalyticsSyncTests {
         let chatBucket = modelTotals.first(where: { $0.requestSource == .chat })
         #expect(chatBucket?.requestCount == 1)
         #expect(chatBucket?.tokenTotals.totalTokens == 140)
+        #expect(chatBucket?.tokenTotals.cacheWriteTokens == 3)
+        #expect(chatBucket?.tokenTotals.cacheReadTokens == 1)
         let summaryBucket = modelTotals.first(where: { $0.requestSource == .reasoningSummary })
         #expect(summaryBucket?.failedCount == 1)
     }

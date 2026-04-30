@@ -309,6 +309,15 @@ struct MessageActionsView: View {
                     if let completion = usage.completionTokens {
                         LabeledContent("接收 Tokens", value: "\(completion)")
                     }
+                    if let thinking = usage.thinkingTokens {
+                        LabeledContent(NSLocalizedString("思考 Tokens", comment: "Thinking tokens label"), value: "\(thinking)")
+                    }
+                    if let cacheWrite = usage.cacheWriteTokens {
+                        LabeledContent(NSLocalizedString("缓存写入 Tokens", comment: "Cache write tokens label"), value: "\(cacheWrite)")
+                    }
+                    if let cacheRead = usage.cacheReadTokens {
+                        LabeledContent(NSLocalizedString("缓存读取 Tokens", comment: "Cache read tokens label"), value: "\(cacheRead)")
+                    }
                     if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {
                         LabeledContent("总计", value: "\(total)")
                     } else if let totalOnly = usage.totalTokens, usage.promptTokens == nil && usage.completionTokens == nil {

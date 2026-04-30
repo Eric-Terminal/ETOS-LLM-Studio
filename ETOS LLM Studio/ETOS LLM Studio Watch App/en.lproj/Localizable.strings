@@ -83,6 +83,13 @@
 "您确定要删除这个会话及其所有消息吗？此操作无法撤销。" = "Delete this session and all messages? This can’t be undone.";
 "拓展功能" = "Extensions";
 "接收 Tokens" = "Receive Tokens";
+"思考 Tokens" = "Thinking Tokens";
+"缓存写入 Tokens" = "Cache Write Tokens";
+"缓存读取 Tokens" = "Cache Read Tokens";
+"思考" = "Thinking";
+"缓存写入" = "Cache Write";
+"缓存读取" = "Cache Read";
+"缓存读取 %d · 缓存写入 %d" = "Cache read %d · cache write %d";
 "推送到手机" = "Push to iPhone";
 "提供商 +%d" = "Providers +%d";
 "提供商与模型管理" = "Providers & models";

@@ -51,4 +51,14 @@ struct StorageBrowserSupportTests {
         #expect(pages[0].endLineNumber == 1)
         #expect(pages[0].content.isEmpty)
     }
+
+    @Test("存储统计会汇总可清理缓存大小")
+    func testStorageBreakdownCacheSize() {
+        var breakdown = StorageBreakdown()
+        breakdown.categorySize[.audio] = 12
+        breakdown.categorySize[.images] = 30
+        breakdown.categorySize[.sessions] = 100
+
+        #expect(breakdown.cacheSize == 42)
+    }
 }

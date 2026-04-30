@@ -281,6 +281,9 @@ struct UsageAnalyticsView: View {
                     detailMetric("总 Token", value: "\(viewModel.state.detail.tokenTotals.totalTokens)")
                     detailMetric("输入", value: "\(viewModel.state.detail.tokenTotals.sentTokens)")
                     detailMetric("输出", value: "\(viewModel.state.detail.tokenTotals.receivedTokens)")
+                    detailMetric(NSLocalizedString("思考", comment: "Thinking tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.thinkingTokens)")
+                    detailMetric(NSLocalizedString("缓存写入", comment: "Cache write tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.cacheWriteTokens)")
+                    detailMetric(NSLocalizedString("缓存读取", comment: "Cache read tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.cacheReadTokens)")
                 }
                 .padding(.top, 2)
 
