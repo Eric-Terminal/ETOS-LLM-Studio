@@ -263,6 +263,8 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
     case audio
     case file
 
+    public static let outputCases: [ModelModality] = [.text, .image, .audio]
+
     public var localizedName: String {
         switch self {
         case .text:
@@ -415,7 +417,7 @@ public struct Model: Codable, Identifiable, Hashable {
         let decodedInputModalities = try container.decodeIfPresent([String].self, forKey: .inputModalities)
             .map { Self.orderedModalities($0.compactMap(ModelModality.init(rawValue:))) }
         let decodedOutputModalities = try container.decodeIfPresent([String].self, forKey: .outputModalities)
-            .map { Self.orderedModalities($0.compactMap(ModelModality.init(rawValue:))) }
+            .map { Self.orderedOutputModalities($0.compactMap(ModelModality.init(rawValue:))) }
         let rawCapabilityValues = try container.decodeIfPresent([String].self, forKey: .capabilities)
         let decodedCapabilities = rawCapabilityValues
             .map { Self.orderedCapabilities($0.compactMap(ModelCapability.init(rawValue:))) }
@@ -511,6 +513,11 @@ public extension Model {
     static func orderedModalities(_ modalities: [ModelModality]) -> [ModelModality] {
         let modalitySet = Set(modalities)
         return ModelModality.allCases.filter { modalitySet.contains($0) }
+    }
+
+    static func orderedOutputModalities(_ modalities: [ModelModality]) -> [ModelModality] {
+        let modalitySet = Set(modalities)
+        return ModelModality.outputCases.filter { modalitySet.contains($0) }
     }
 
     static func orderedCapabilities(_ capabilities: [ModelCapability]) -> [ModelCapability] {
@@ -651,7 +658,7 @@ private extension Model {
         return CapabilityShape(
             kind: resolvedKind,
             inputModalities: orderedModalities(resolvedInputModalities),
-            outputModalities: orderedModalities(resolvedOutputModalities),
+            outputModalities: orderedOutputModalities(resolvedOutputModalities),
             capabilities: orderedCapabilities(resolvedCapabilities)
         )
     }
@@ -746,7 +753,7 @@ private extension Model {
         return CapabilityShape(
             kind: kind,
             inputModalities: orderedModalities(inputModalities),
-            outputModalities: orderedModalities(outputModalities),
+            outputModalities: orderedOutputModalities(outputModalities),
             capabilities: orderedCapabilities(capabilities)
         )
     }

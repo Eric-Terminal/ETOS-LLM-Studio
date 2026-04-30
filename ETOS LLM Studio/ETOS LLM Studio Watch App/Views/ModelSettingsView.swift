@@ -54,7 +54,7 @@ struct ModelSettingsView: View {
             }
 
             Section(header: Text(NSLocalizedString("输出模态", comment: "模型输出模态区块标题"))) {
-                ForEach(ModelModality.allCases, id: \.self) { modality in
+                ForEach(ModelModality.outputCases, id: \.self) { modality in
                     Toggle(modality.localizedName, isOn: modalityBinding(modality, keyPath: \.outputModalities))
                 }
             }

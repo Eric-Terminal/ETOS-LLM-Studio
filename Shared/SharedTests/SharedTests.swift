@@ -512,6 +512,25 @@ struct RequestBodyOverrideModeTests {
         #expect(ttsModel.outputModalities.contains(.audio))
     }
 
+    @Test("模型输出模态不会保留文件")
+    func testModelOutputModalitiesDropFile() throws {
+        let model = Model(
+            modelName: "file-output-test",
+            outputModalities: [.text, .file]
+        )
+        #expect(model.outputModalities == [.text])
+
+        let json = """
+        {
+          "id": "00000000-0000-0000-0000-000000000127",
+          "modelName": "legacy-file-output",
+          "outputModalities": ["text", "file"]
+        }
+        """
+        let decoded = try JSONDecoder().decode(Model.self, from: Data(json.utf8))
+        #expect(decoded.outputModalities == [.text])
+    }
+
     @Test("旧模型可用名称推断补齐新能力结构")
     func testLegacyModelCanApplyInferredCapabilityHints() throws {
         let legacyImage = Model(modelName: "gpt-image-1").applyingInferredCapabilityHints()
