@@ -61,6 +61,48 @@ struct SpeechModelSelectionTests {
         #expect(!activated.contains(where: { $0.model.modelName == "gpt-4o" }))
     }
 
+    @Test("OCR 模型列表仅包含支持图像输入的聊天模型")
+    func testActivatedOCRModelsIncludesVisionChatModelsOnly() {
+        let backupProviders = ConfigLoader.loadProviders()
+        defer { restoreProviders(backupProviders) }
+
+        clearAllProviders()
+
+        let visionChatModel = Model(
+            modelName: "qwen-vl-max",
+            displayName: "视觉聊天",
+            isActivated: true,
+            kind: .chat,
+            inputModalities: [.text, .image]
+        )
+        let textChatModel = Model(
+            modelName: "text-chat",
+            displayName: "文本聊天",
+            isActivated: true,
+            kind: .chat
+        )
+        let imageGenerationModel = Model(
+            modelName: "gpt-image-1",
+            displayName: "生图",
+            isActivated: true,
+            kind: .image
+        )
+        let provider = Provider(
+            name: "OCR Provider",
+            baseURL: "https://example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [visionChatModel, textChatModel, imageGenerationModel]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        let service = ChatService()
+        let activated = service.activatedOCRModels
+
+        #expect(activated.count == 1)
+        #expect(activated.first?.model.modelName == "qwen-vl-max")
+    }
+
     private func clearAllProviders() {
         let current = ConfigLoader.loadProviders()
         current.forEach { ConfigLoader.deleteProvider($0) }

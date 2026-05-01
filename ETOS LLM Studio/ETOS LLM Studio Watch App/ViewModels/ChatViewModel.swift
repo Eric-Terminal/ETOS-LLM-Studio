@@ -92,6 +92,7 @@ class ChatViewModel: ObservableObject {
     @Published var selectedDailyPulseModel: RunnableModel?
     @Published var selectedConversationSummaryModel: RunnableModel?
     @Published var selectedReasoningSummaryModel: RunnableModel?
+    @Published var selectedOCRModel: RunnableModel?
     @Published var isSpeechRecorderPresented: Bool = false
     @Published var isRecordingSpeech: Bool = false
     @Published var speechTranscriptionInProgress: Bool = false
@@ -185,6 +186,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
     @AppStorage("conversationSummaryModelIdentifier") var conversationSummaryModelIdentifier: String = ""
     @AppStorage("reasoningSummaryModelIdentifier") var reasoningSummaryModelIdentifier: String = ""
+    @AppStorage(ChatService.ocrModelStorageKey) var ocrModelIdentifier: String = ""
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
     @AppStorage("systemTimeInjectionPosition") private var systemTimeInjectionPositionRawValue: String = SystemTimeInjectionPosition.front.rawValue
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
@@ -247,6 +249,10 @@ class ChatViewModel: ObservableObject {
 
     var reasoningSummaryModelOptions: [RunnableModel] {
         activatedModels.filter { $0.model.kind == .chat }
+    }
+
+    var ocrModelOptions: [RunnableModel] {
+        chatService.activatedOCRModels
     }
 
     func toggleMathRendering(for messageID: UUID) {
@@ -493,6 +499,7 @@ class ChatViewModel: ObservableObject {
                 self.syncDailyPulseModelSelection()
                 self.syncConversationSummaryModelSelection()
                 self.syncReasoningSummaryModelSelection()
+                self.syncOCRModelSelection()
             }
             .store(in: &cancellables)
 
@@ -646,6 +653,7 @@ class ChatViewModel: ObservableObject {
         syncDailyPulseModelSelection()
         syncConversationSummaryModelSelection()
         syncReasoningSummaryModelSelection()
+        syncOCRModelSelection()
         reloadConversationMemoryState()
     }
 
@@ -1043,6 +1051,14 @@ class ChatViewModel: ObservableObject {
         let newIdentifier = model?.id ?? ""
         if reasoningSummaryModelIdentifier != newIdentifier {
             reasoningSummaryModelIdentifier = newIdentifier
+        }
+    }
+
+    func setSelectedOCRModel(_ model: RunnableModel?) {
+        selectedOCRModel = model
+        let newIdentifier = model?.id ?? ""
+        if ocrModelIdentifier != newIdentifier {
+            ocrModelIdentifier = newIdentifier
         }
     }
 
@@ -2164,6 +2180,26 @@ class ChatViewModel: ObservableObject {
 
         selectedReasoningSummaryModel = nil
         reasoningSummaryModelIdentifier = ""
+    }
+
+    private func syncOCRModelSelection() {
+        guard !ocrModelIdentifier.isEmpty else {
+            selectedOCRModel = nil
+            return
+        }
+        guard !ocrModelOptions.isEmpty else {
+            selectedOCRModel = nil
+            ocrModelIdentifier = ""
+            return
+        }
+        if let match = ocrModelOptions.first(where: { $0.id == ocrModelIdentifier }) {
+            if selectedOCRModel?.id != match.id {
+                selectedOCRModel = match
+            }
+            return
+        }
+        selectedOCRModel = nil
+        ocrModelIdentifier = ""
     }
 
     private func refreshCurrentSessionSendingState() {

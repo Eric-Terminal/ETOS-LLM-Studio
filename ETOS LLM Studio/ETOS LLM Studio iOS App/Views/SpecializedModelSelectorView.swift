@@ -58,6 +58,14 @@ struct SpecializedModelSelectorView: View {
             )
 
             modelPickerSection(
+                title: "OCR 模型",
+                options: viewModel.ocrModelOptions,
+                selectionID: ocrModelIdentifierBinding,
+                allowEmptySelection: false,
+                footer: "当当前对话模型不支持图片输入时，用于先把图片识别为文字；默认使用系统 OCR。"
+            )
+
+            modelPickerSection(
                 title: "生图模型",
                 options: viewModel.imageGenerationModelOptions,
                 selectionID: imageGenerationModelIdentifierBinding,
@@ -159,6 +167,16 @@ struct SpecializedModelSelectorView: View {
                 }
                 let selected = viewModel.reasoningSummaryModelOptions.first(where: { $0.id == newIdentifier })
                 viewModel.setSelectedReasoningSummaryModel(selected)
+            }
+        )
+    }
+
+    private var ocrModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedOCRModel?.id ?? ChatService.systemOCRRunnableModel.id },
+            set: { newIdentifier in
+                let selected = viewModel.ocrModelOptions.first(where: { $0.id == newIdentifier })
+                viewModel.setSelectedOCRModel(selected ?? ChatService.systemOCRRunnableModel)
             }
         )
     }

@@ -55,6 +55,13 @@ struct SpecializedModelSelectorView: View {
         )
     }
 
+    private var ocrModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: { viewModel.selectedOCRModel },
+            set: { viewModel.setSelectedOCRModel($0) }
+        )
+    }
+
     private var imageGenerationModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) },
@@ -104,6 +111,13 @@ struct SpecializedModelSelectorView: View {
                 options: viewModel.reasoningSummaryModelOptions,
                 selection: reasoningSummaryModelBinding,
                 footer: "用于为思考内容生成摘要；留空时跟随当前对话模型。"
+            )
+
+            modelSelectionSection(
+                title: "OCR 模型",
+                options: viewModel.ocrModelOptions,
+                selection: ocrModelBinding,
+                footer: "当前对话模型不支持图片输入时，用于先把图片识别为文字；手表端默认不选择。"
             )
 
             modelSelectionSection(

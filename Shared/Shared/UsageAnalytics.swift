@@ -8,6 +8,7 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
     case conversationSummary
     case conversationProfile
     case shortcutDescription
+    case imageOCR
 
     public var displayName: String {
         switch self {
@@ -25,6 +26,8 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
             return "用户画像"
         case .shortcutDescription:
             return "快捷指令描述"
+        case .imageOCR:
+            return NSLocalizedString("图片 OCR", comment: "Image OCR usage source")
         }
     }
 }

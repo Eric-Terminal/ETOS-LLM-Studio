@@ -1678,6 +1678,16 @@
 "上传字体文件" = "Upload Font File";
 "不包含思考" = "Exclude Reasoning";
 "专用模型选择器" = "Dedicated Model Selector";
+"OCR 模型" = "OCR Model";
+"当当前对话模型不支持图片输入时，用于先把图片识别为文字；默认使用系统 OCR。" = "When the current chat model does not support image input, this is used to extract text from images first; System OCR is used by default.";
+"当前模型不支持图片输入，请先在专用模型里选择 OCR 模型。" = "The current model does not support image input. Please choose an OCR model in Dedicated Models first.";
+"当前平台不支持系统 OCR。" = "System OCR is not supported on this platform.";
+"系统 OCR 识别失败：%@" = "System OCR failed to recognize text: %@";
+"系统 OCR 未识别到有效文字。" = "System OCR did not find any readable text.";
+"以下内容来自图片 OCR 提取：\n\n%@" = "The following content was extracted from the image by OCR:\n\n%@";
+"执行图片 OCR" = "Run image OCR";
+"图片 OCR" = "Image OCR";
+"系统 OCR" = "System OCR";
 "世界书 +%d" = "Worldbooks +%d";
 "中文：风来疏竹，风过而竹不留声。" = "Chinese: Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";
 "风来疏竹，风过而竹不留声。" = "Wind passes through sparse bamboo; when it is gone, the bamboo keeps no sound.";

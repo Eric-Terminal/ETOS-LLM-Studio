@@ -94,6 +94,7 @@ public class ChatService {
     private static let modelOrderStorageKey = "modelOrder.runnableModels"
     private static let selectedRunnableModelStorageKey = "selectedRunnableModelID"
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
+    public static let ocrModelStorageKey = "ocrModelIdentifier"
     private static let ttsModelStorageKey = "ttsModelIdentifier"
     private static let conversationSummaryModelStorageKey = "conversationSummaryModelIdentifier"
     private static let reasoningSummaryModelStorageKey = "reasoningSummaryModelIdentifier"
@@ -114,6 +115,8 @@ public class ChatService {
     private var consecutiveRetryCount = 0
     public static let systemSpeechRecognizerProviderID = UUID(uuidString: "2FB43D6B-8E40-4D65-9EA6-C13AB41D8A2E")!
     public static let systemSpeechRecognizerModelID = UUID(uuidString: "EE2F84DF-F640-47B8-9A83-BE438905C4F3")!
+    public static let systemOCRProviderID = UUID(uuidString: "4301D30F-D7C6-4A4F-A45B-F8721CD68099")!
+    public static let systemOCRModelID = UUID(uuidString: "40B2DA2B-3E72-4A29-954E-29FECAD1C1DF")!
     public static let systemSpeechRecognizerRunnableModel: RunnableModel = {
         let provider = Provider(
             id: systemSpeechRecognizerProviderID,
@@ -134,6 +137,31 @@ public class ChatService {
 
     public static func isSystemSpeechRecognizerModel(_ model: RunnableModel?) -> Bool {
         model?.id == systemSpeechRecognizerRunnableModel.id
+    }
+
+    public static let systemOCRRunnableModel: RunnableModel = {
+        let provider = Provider(
+            id: systemOCRProviderID,
+            name: NSLocalizedString("系统 OCR", comment: "System OCR provider name"),
+            baseURL: "local://system-ocr",
+            apiKeys: [],
+            apiFormat: "local-ocr"
+        )
+        let model = Model(
+            id: systemOCRModelID,
+            modelName: "vision-ocr",
+            displayName: NSLocalizedString("系统 OCR", comment: "System OCR model display name"),
+            isActivated: true,
+            kind: .chat,
+            inputModalities: [.text, .image],
+            outputModalities: [.text],
+            capabilities: []
+        )
+        return RunnableModel(provider: provider, model: model)
+    }()
+
+    public static func isSystemOCRModel(_ model: RunnableModel?) -> Bool {
+        model?.id == systemOCRRunnableModel.id
     }
 
     // MARK: - 单例
@@ -274,6 +302,12 @@ public class ChatService {
         let groupID: UUID
         let attemptID: UUID
         let attemptIndex: Int
+    }
+
+    private struct ImageOCRPreprocessingResult {
+        let messages: [ChatMessage]
+        let imageAttachments: [UUID: [ImageAttachment]]
+        let errorMessage: String?
     }
 
     private struct RequestLogContext {
@@ -527,6 +561,10 @@ public class ChatService {
     public var activatedTTSModels: [RunnableModel] {
         let ttsCapable = activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
         return ttsCapable
+    }
+
+    public var activatedOCRModels: [RunnableModel] {
+        activatedRunnableModels.filter { $0.model.isChatModel && $0.model.supportsVisionInput }
     }
     
     private func resolveSelectedSpeechModel() -> RunnableModel? {
@@ -3593,6 +3631,28 @@ public class ChatService {
             }
         }
 
+        let imagePreprocessing = await preprocessImageAttachmentsIfNeeded(
+            messages: messagesToSend,
+            imageAttachments: imageAttachments,
+            targetModel: runnableModel,
+            sessionID: currentSessionID
+        )
+        if let errorMessage = imagePreprocessing.errorMessage {
+            addErrorMessage(errorMessage, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "ocr_model_missing"
+            )
+            return
+        }
+        messagesToSend = imagePreprocessing.messages
+        imageAttachments = imagePreprocessing.imageAttachments
+
         // 构建文件附件字典：从历史消息中加载已保存的文件
         var fileAttachments: [UUID: [FileAttachment]] = [:]
         for msg in messagesToSend {
@@ -3704,6 +3764,209 @@ public class ChatService {
         }
         #endif
         return "application/octet-stream"
+    }
+
+    private func preprocessImageAttachmentsIfNeeded(
+        messages: [ChatMessage],
+        imageAttachments: [UUID: [ImageAttachment]],
+        targetModel: RunnableModel,
+        sessionID: UUID
+    ) async -> ImageOCRPreprocessingResult {
+        guard !imageAttachments.isEmpty else {
+            return ImageOCRPreprocessingResult(messages: messages, imageAttachments: imageAttachments, errorMessage: nil)
+        }
+        guard !targetModel.model.supportsVisionInput else {
+            return ImageOCRPreprocessingResult(messages: messages, imageAttachments: imageAttachments, errorMessage: nil)
+        }
+
+        guard let ocrModel = resolveSelectedOCRModel() else {
+            let errorMessage = NSLocalizedString("当前模型不支持图片输入，请先在专用模型里选择 OCR 模型。", comment: "Missing OCR model error")
+            logger.warning("当前模型不支持图片输入，且未选择 OCR 模型。")
+            return ImageOCRPreprocessingResult(messages: messages, imageAttachments: imageAttachments, errorMessage: errorMessage)
+        }
+
+        var updatedMessages = messages
+        let orderedMessageIDs = updatedMessages.map(\.id)
+        let sortedPairs = imageAttachments.sorted { lhs, rhs in
+            let lhsIndex = orderedMessageIDs.firstIndex(of: lhs.key) ?? Int.max
+            let rhsIndex = orderedMessageIDs.firstIndex(of: rhs.key) ?? Int.max
+            return lhsIndex < rhsIndex
+        }
+
+        for (messageID, attachments) in sortedPairs {
+            guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else { continue }
+            var ocrBlocks: [String] = []
+            for (index, attachment) in attachments.enumerated() {
+                do {
+                    let text = try await recognizeImageText(
+                        attachment,
+                        using: ocrModel,
+                        sessionID: sessionID
+                    )
+                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { continue }
+                    let title = String(
+                        format: NSLocalizedString("图片 %d（%@）", comment: "OCR extracted image block title"),
+                        index + 1,
+                        attachment.fileName
+                    )
+                    ocrBlocks.append("\(title)：\n\(trimmed)")
+                } catch {
+                    logger.error("图片 OCR 失败: \(error.localizedDescription)")
+                    let title = String(
+                        format: NSLocalizedString("图片 %d（%@）", comment: "OCR failed image block title"),
+                        index + 1,
+                        attachment.fileName
+                    )
+                    let fallback = String(
+                        format: NSLocalizedString("%@：\nOCR 失败：%@", comment: "OCR failed block"),
+                        title,
+                        error.localizedDescription
+                    )
+                    ocrBlocks.append(fallback)
+                }
+            }
+
+            guard !ocrBlocks.isEmpty else { continue }
+            let ocrText = makeOCRAppendixText(ocrBlocks)
+            if updatedMessages[messageIndex].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                updatedMessages[messageIndex].content = ocrText
+            } else {
+                updatedMessages[messageIndex].content += "\n\n\(ocrText)"
+            }
+        }
+
+        logger.info("当前模型不支持图片输入，已将图片附件转换为 OCR 文本。")
+        return ImageOCRPreprocessingResult(messages: updatedMessages, imageAttachments: [:], errorMessage: nil)
+    }
+
+    private func makeOCRAppendixText(_ blocks: [String]) -> String {
+        let joinedBlocks = blocks.joined(separator: "\n\n")
+        return String(
+            format: NSLocalizedString("以下内容来自图片 OCR 提取：\n\n%@", comment: "OCR appendix sent to chat model"),
+            joinedBlocks
+        )
+    }
+
+    private func resolveSelectedOCRModel() -> RunnableModel? {
+        let identifier = UserDefaults.standard.string(forKey: Self.ocrModelStorageKey) ?? ""
+#if canImport(Vision) && !os(watchOS)
+        guard !identifier.isEmpty else {
+            return Self.systemOCRRunnableModel
+        }
+        if identifier == Self.systemOCRRunnableModel.id {
+            return Self.systemOCRRunnableModel
+        }
+#else
+        if identifier == Self.systemOCRRunnableModel.id {
+            return nil
+        }
+#endif
+        guard !identifier.isEmpty else { return nil }
+        return activatedOCRModels.first(where: { $0.id == identifier })
+    }
+
+    private func recognizeImageText(
+        _ attachment: ImageAttachment,
+        using ocrModel: RunnableModel,
+        sessionID: UUID
+    ) async throws -> String {
+        if Self.isSystemOCRModel(ocrModel) {
+            return try await SystemImageOCRService.recognizeText(in: attachment.data)
+        }
+        return try await recognizeImageTextWithRemoteModel(
+            attachment,
+            using: ocrModel,
+            sessionID: sessionID
+        )
+    }
+
+    private func recognizeImageTextWithRemoteModel(
+        _ attachment: ImageAttachment,
+        using ocrModel: RunnableModel,
+        sessionID: UUID
+    ) async throws -> String {
+        guard let adapter = adapters[ocrModel.provider.apiFormat] else {
+            throw DetachedCompletionError.unsupportedAdapter
+        }
+        if let configurationError = providerConfigurationValidationErrorMessage(
+            for: ocrModel.provider,
+            action: NSLocalizedString("执行图片 OCR", comment: "Execute image OCR action")
+        ) {
+            throw NetworkError.invalidProviderConfiguration(message: configurationError)
+        }
+
+        let prompt = NSLocalizedString(
+            "请识别这张图片中的所有可见文字，并只返回识别到的文字。不要解释、不要总结、不要使用 Markdown；如果没有可识别文字，请返回“未识别到文字”。",
+            comment: "Remote OCR prompt"
+        )
+        let message = ChatMessage(role: .user, content: prompt)
+        let payload: [String: Any] = [
+            "temperature": 0,
+            "stream": false
+        ]
+        guard let request = adapter.buildChatRequest(
+            for: ocrModel,
+            commonPayload: payload,
+            messages: [message],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [message.id: [attachment]],
+            fileAttachments: [:]
+        ) else {
+            throw DetachedCompletionError.buildRequestFailed
+        }
+
+        let requestContext = RequestLogContext(
+            requestID: UUID(),
+            sessionID: sessionID,
+            providerID: ocrModel.provider.id,
+            providerName: ocrModel.provider.name,
+            modelID: ocrModel.model.modelName,
+            requestSource: .imageOCR,
+            isStreaming: false,
+            requestedAt: Date()
+        )
+
+        do {
+            let data = try await fetchData(for: request, provider: ocrModel.provider)
+            let responseMessage = try adapter.parseResponse(data: data)
+            persistRequestLog(
+                context: requestContext,
+                status: .success,
+                tokenUsage: responseMessage.tokenUsage,
+                finishedAt: Date()
+            )
+            return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch is CancellationError {
+            persistRequestLog(
+                context: requestContext,
+                status: .cancelled,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "cancelled"
+            )
+            throw CancellationError()
+        } catch NetworkError.badStatusCode(let code, let bodyData) {
+            persistRequestLog(
+                context: requestContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                httpStatusCode: code,
+                errorKind: "bad_status_code"
+            )
+            throw NetworkError.badStatusCode(code: code, responseBody: bodyData)
+        } catch {
+            persistRequestLog(
+                context: requestContext,
+                status: isCancellationError(error) ? .cancelled : .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: isCancellationError(error) ? "cancelled" : "ocr_failed"
+            )
+            throw error
+        }
     }
 
     /// 重试指定消息，支持任意位置的消息重试
