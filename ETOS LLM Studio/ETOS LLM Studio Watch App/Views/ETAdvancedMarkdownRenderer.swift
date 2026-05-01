@@ -299,6 +299,7 @@ private extension View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
                             .relativeLineSpacing(.em(0.12))
+                            .fixedSize(horizontal: true, vertical: true)
                             .markdownTextStyle {
                                 if !usesCharacterFallback,
                                    let codeFontName,
