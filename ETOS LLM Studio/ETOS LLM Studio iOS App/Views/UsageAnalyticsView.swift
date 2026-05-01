@@ -522,7 +522,7 @@ struct UsageAnalyticsView: View {
             .etFont(.caption2)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
-            .frame(width: heatmapMonthSegmentWidth(segment.weekCount), height: 16, alignment: .center)
+            .frame(width: heatmapMonthSegmentWidth(segment.weekCount), height: 16, alignment: .leading)
     }
 
     private func heatmapMonthSegmentWidth(_ weekCount: Int) -> CGFloat {
@@ -530,7 +530,7 @@ struct UsageAnalyticsView: View {
     }
 
     private func heatmapMonthDate(for week: UsageAnalyticsHeatmapWeek, calendar: Calendar) -> Date? {
-        week.days.first(where: { calendar.component(.day, from: $0.date) == 1 })?.date ?? week.days.first?.date
+        week.days.first(where: { calendar.component(.weekday, from: $0.date) == calendar.firstWeekday })?.date ?? week.days.first?.date
     }
 
     private func cacheHitRateText(_ rate: Double?) -> String {
