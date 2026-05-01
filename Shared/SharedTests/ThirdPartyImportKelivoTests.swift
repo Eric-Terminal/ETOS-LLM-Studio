@@ -140,7 +140,7 @@ struct ThirdPartyImportKelivoTests {
                         ["key": "secondary-key", "isEnabled": true, "status": "active"],
                         ["key": "disabled-key", "isEnabled": false, "status": "disabled"]
                     ],
-                    "models": ["logical-vision"],
+                    "models": ["logical-vision", "extra-embedding"],
                     "modelOverrides": [
                         "logical-vision": [
                             "apiModelId": "gpt-4o",
@@ -190,6 +190,93 @@ struct ThirdPartyImportKelivoTests {
         let embeddingModel = try #require(provider.models.first { $0.modelName == "text-embedding-3-small" })
         #expect(embeddingModel.kind == .embedding)
         #expect(embeddingModel.capabilities == [])
+    }
+
+    @Test("Kelivo 导入会忽略已从 models 移除的覆盖项")
+    func testPrepareKelivoImportIgnoresStaleOverrideOnlyModels() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let settings: [String: Any] = [
+            "provider_configs": [
+                "kelivo-provider-stale": [
+                    "name": "Kelivo OpenAI",
+                    "providerType": "openai",
+                    "baseUrl": "https://example.com/v1",
+                    "apiKey": "kelivo-key",
+                    "enabled": true,
+                    "models": ["active-model"],
+                    "modelOverrides": [
+                        "active-model": [
+                            "apiModelId": "gpt-4o"
+                        ],
+                        "removed-model": [
+                            "apiModelId": "gpt-4.1"
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        try JSONSerialization.data(withJSONObject: settings)
+            .write(to: sandbox.appendingPathComponent("settings.json"))
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .kelivo,
+            fileURL: sandbox
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.models.map(\.modelName) == ["gpt-4o"])
+    }
+
+    @Test("Kelivo 导入在 apiModelId 重复时保留逻辑模型 ID")
+    func testPrepareKelivoImportPreservesLogicalModelIDsWhenAPIModelIDRepeats() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let settings: [String: Any] = [
+            "provider_configs": [
+                "kelivo-provider-duplicates": [
+                    "name": "Kelivo OpenAI",
+                    "providerType": "openai",
+                    "baseUrl": "https://example.com/v1",
+                    "apiKey": "kelivo-key",
+                    "enabled": true,
+                    "models": ["gpt-4o", "gpt-4o#1"],
+                    "modelOverrides": [
+                        "gpt-4o": [
+                            "apiModelId": "gpt-4o",
+                            "name": "默认 4o",
+                            "body": [["key": "temperature", "value": "0.2"]]
+                        ],
+                        "gpt-4o#1": [
+                            "apiModelId": "gpt-4o",
+                            "name": "低温 4o",
+                            "body": [["key": "temperature", "value": "0.8"]]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        try JSONSerialization.data(withJSONObject: settings)
+            .write(to: sandbox.appendingPathComponent("settings.json"))
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .kelivo,
+            fileURL: sandbox
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.models.map(\.modelName).sorted() == ["gpt-4o", "gpt-4o#1"])
+
+        let baseModel = try #require(provider.models.first { $0.modelName == "gpt-4o" })
+        let duplicateModel = try #require(provider.models.first { $0.modelName == "gpt-4o#1" })
+        #expect(baseModel.overrideParameters["model"] == .string("gpt-4o"))
+        #expect(duplicateModel.overrideParameters["model"] == .string("gpt-4o"))
+        #expect(baseModel.overrideParameters["temperature"] == .double(0.2))
+        #expect(duplicateModel.overrideParameters["temperature"] == .double(0.8))
     }
 
     @Test("Kelivo 导入不会合并带有不同模型覆盖的同名 provider")

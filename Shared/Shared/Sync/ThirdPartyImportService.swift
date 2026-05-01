@@ -685,10 +685,15 @@ private extension ThirdPartyImportService {
             guard let config = dictionary(configAny) else { continue }
 
             let typeHint = nonEmpty(string(config["providerType"]))?.lowercased()
-            var modelKeys = normalizeStringArray(config["models"])
+            let modelKeys = normalizeStringArray(config["models"])
             let modelOverrides = dictionary(config["modelOverrides"]) ?? [:]
-            for key in modelOverrides.keys.sorted() where !modelKeys.contains(key) {
-                modelKeys.append(key)
+            var apiModelIDCounts: [String: Int] = [:]
+            for modelKey in modelKeys {
+                guard let override = dictionary(modelOverrides[modelKey]),
+                      let apiModelID = kelivoAPIModelID(from: override) else {
+                    continue
+                }
+                apiModelIDCounts[apiModelID, default: 0] += 1
             }
 
             let format = normalizeProviderFormat(typeHint: typeHint, modelIDs: modelKeys)
@@ -718,15 +723,18 @@ private extension ThirdPartyImportService {
 
             let modelList: [Model] = modelKeys.map { modelKey in
                 let override = dictionary(modelOverrides[modelKey]) ?? [:]
-                let modelName = nonEmpty(string(override["apiModelId"]))
-                    ?? nonEmpty(string(override["api_model_id"]))
-                    ?? modelKey
+                let apiModelID = kelivoAPIModelID(from: override)
+                let shouldKeepLogicalModelName = apiModelID.map { (apiModelIDCounts[$0] ?? 0) > 1 } ?? false
+                let modelName = shouldKeepLogicalModelName ? modelKey : (apiModelID ?? modelKey)
                 let displayName = nonEmpty(string(override["name"])) ?? modelKey
                 let capabilityShape = kelivoModelCapabilityShape(override)
-                let customBody = customBodyOverrideParameters(
+                var customBody = customBodyOverrideParameters(
                     from: override["body"],
                     parseStringValues: true
                 )
+                if shouldKeepLogicalModelName, let apiModelID {
+                    customBody["model"] = .string(apiModelID)
+                }
 
                 return importedModel(
                     modelName: modelName,
@@ -1239,20 +1247,34 @@ private extension ThirdPartyImportService {
             inputModalities = [.text, .image]
         }
 
-        var capabilities = Set<ModelCapability>()
-        if capabilityTypes.contains("function-calling") || capabilityTypes.contains("tool-calling") {
-            capabilities.insert(.toolCalling)
-        }
-        if capabilityTypes.contains("reasoning") {
-            capabilities.insert(.reasoning)
+        let functionCallingSelection = cherryCapabilitySelection(
+            from: model["capabilities"],
+            legacyTypes: model["type"],
+            matching: ["function-calling", "tool-calling"]
+        )
+        let reasoningSelection = cherryCapabilitySelection(
+            from: model["capabilities"],
+            legacyTypes: model["type"],
+            matching: ["reasoning"]
+        )
+
+        var capabilities: [ModelCapability]?
+        if functionCallingSelection != nil || reasoningSelection != nil {
+            var capabilitySet = Set<ModelCapability>()
+            if functionCallingSelection != false {
+                capabilitySet.insert(.toolCalling)
+            }
+            if reasoningSelection == true {
+                capabilitySet.insert(.reasoning)
+            }
+            capabilities = Model.orderedCapabilities(Array(capabilitySet))
         }
 
-        let hasCapabilityField = model.keys.contains("capabilities") || model.keys.contains("type")
         return ImportedModelCapabilityShape(
             kind: .chat,
             inputModalities: inputModalities,
             outputModalities: nil,
-            capabilities: capabilities.isEmpty ? (hasCapabilityField ? [] : nil) : Model.orderedCapabilities(Array(capabilities))
+            capabilities: capabilities
         )
     }
 
@@ -1282,6 +1304,11 @@ private extension ThirdPartyImportService {
                 ? []
                 : modelCapabilities(from: override["abilities"], fieldPresent: override.keys.contains("abilities"))
         )
+    }
+
+    static func kelivoAPIModelID(from override: [String: Any]) -> String? {
+        nonEmpty(string(override["apiModelId"]))
+            ?? nonEmpty(string(override["api_model_id"]))
     }
 
     static func modelKind(from raw: String?) -> ModelKind? {
@@ -1351,6 +1378,34 @@ private extension ThirdPartyImportService {
             }
             return normalizedTypeString(string(item))
         }.filter { !$0.isEmpty })
+    }
+
+    static func cherryCapabilitySelection(
+        from raw: Any?,
+        legacyTypes: Any?,
+        matching targets: Set<String>
+    ) -> Bool? {
+        var result: Bool?
+        for item in normalizeJSONArray(raw) {
+            let rawType: String?
+            let enabled: Bool
+            if let map = dictionary(item) {
+                rawType = string(map["type"])
+                enabled = bool(map["isUserSelected"], defaultValue: true)
+            } else {
+                rawType = string(item)
+                enabled = true
+            }
+
+            let type = normalizedTypeString(rawType)
+            guard targets.contains(type) else { continue }
+            result = enabled
+        }
+        if result == nil,
+           !targets.isDisjoint(with: cherryLegacyTypeValues(from: legacyTypes)) {
+            return true
+        }
+        return result
     }
 
     static func cherryLegacyTypeValues(from raw: Any?) -> Set<String> {

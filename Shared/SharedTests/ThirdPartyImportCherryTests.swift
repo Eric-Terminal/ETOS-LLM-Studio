@@ -169,6 +169,18 @@ struct ThirdPartyImportCherryTests {
                             ]
                         ],
                         [
+                            "id": "legacy-vision",
+                            "name": "Legacy Vision",
+                            "type": ["vision"]
+                        ],
+                        [
+                            "id": "capability-vision",
+                            "name": "Capability Vision",
+                            "capabilities": [
+                                ["type": "vision", "isUserSelected": true]
+                            ]
+                        ],
+                        [
                             "id": "gpt-image-1",
                             "name": "Image",
                             "endpoint_type": "image-generation"
@@ -204,6 +216,14 @@ struct ThirdPartyImportCherryTests {
         #expect(visionModel.kind == .chat)
         #expect(visionModel.inputModalities == [.text, .image])
         #expect(visionModel.capabilities == [.reasoning])
+
+        let legacyVisionModel = try #require(provider.models.first { $0.modelName == "legacy-vision" })
+        #expect(legacyVisionModel.inputModalities == [.text, .image])
+        #expect(legacyVisionModel.capabilities == [.toolCalling])
+
+        let capabilityVisionModel = try #require(provider.models.first { $0.modelName == "capability-vision" })
+        #expect(capabilityVisionModel.inputModalities == [.text, .image])
+        #expect(capabilityVisionModel.capabilities == [.toolCalling])
 
         let imageModel = try #require(provider.models.first { $0.modelName == "gpt-image-1" })
         #expect(imageModel.kind == .image)

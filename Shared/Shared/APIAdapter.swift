@@ -40,6 +40,16 @@ private func shouldSendText(_ text: String) -> Bool {
     return true
 }
 
+private func resolvedRequestModelName(for model: RunnableModel, overrides: [String: Any]) -> String {
+    if let overrideModel = overrides["model"] as? String {
+        let trimmed = overrideModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+    }
+    return model.model.modelName
+}
+
 private func inferredImageMimeType(from data: Data) -> String {
     guard data.count >= 12 else { return "image/png" }
     let bytes = [UInt8](data.prefix(12))
@@ -1373,7 +1383,7 @@ public class OpenAIAdapter: APIAdapter {
         var finalPayload = overrides
         finalPayload.merge(commonPayload) { _, new in new }
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
-        finalPayload["model"] = model.model.modelName
+        finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["messages"] = apiMessages
 
         if let shouldStream = finalPayload["stream"] as? Bool, shouldStream {
@@ -1506,7 +1516,7 @@ public class OpenAIAdapter: APIAdapter {
         var finalPayload = overrides
         finalPayload.merge(commonPayload) { _, new in new }
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
-        finalPayload["model"] = model.model.modelName
+        finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["input"] = inputItems
 
         if let tools, !tools.isEmpty {
@@ -1693,6 +1703,10 @@ public class OpenAIAdapter: APIAdapter {
             return nil
         }
         let transcriptionURL = baseURL.appendingPathComponent("audio/transcriptions")
+        let requestModelName = resolvedRequestModelName(
+            for: model,
+            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+        )
         
         guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
             logger.error("构建语音转文字请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
@@ -1709,7 +1723,7 @@ public class OpenAIAdapter: APIAdapter {
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         var body = Data()
-        body.appendMultipartField(name: "model", value: model.model.modelName, boundary: boundary)
+        body.appendMultipartField(name: "model", value: requestModelName, boundary: boundary)
         if let language, !language.isEmpty {
             body.appendMultipartField(name: "language", value: language, boundary: boundary)
         }
@@ -1738,6 +1752,10 @@ public class OpenAIAdapter: APIAdapter {
             return nil
         }
         let embeddingsURL = baseURL.appendingPathComponent("embeddings")
+        let requestModelName = resolvedRequestModelName(
+            for: model,
+            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+        )
         
         guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
             logger.error("构建嵌入请求失败: 提供商 '\(model.provider.name)' 缺少有效的 API Key")
@@ -1752,7 +1770,7 @@ public class OpenAIAdapter: APIAdapter {
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
         
         var payload: [String: Any] = [
-            "model": model.model.modelName,
+            "model": requestModelName,
             "input": texts
         ]
         let overrides = sanitizedOpenAIControlOverrides(model.model.overrideParameters.mapValues { $0.toAny() })
@@ -1793,6 +1811,10 @@ public class OpenAIAdapter: APIAdapter {
         let overrides = sanitizedImageGenerationOverrides(
             model.model.overrideParameters.mapValues { $0.toAny() }
         )
+        let requestModelName = resolvedRequestModelName(
+            for: model,
+            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+        )
         if referenceImages.isEmpty {
             let imagesURL = baseURL.appendingPathComponent("images/generations")
             var request = URLRequest(url: imagesURL)
@@ -1803,7 +1825,7 @@ public class OpenAIAdapter: APIAdapter {
             applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
 
             var payload = overrides
-            payload["model"] = model.model.modelName
+            payload["model"] = requestModelName
             payload["prompt"] = prompt
             if payload["n"] == nil {
                 payload["n"] = 1
@@ -1831,7 +1853,7 @@ public class OpenAIAdapter: APIAdapter {
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
 
         var body = Data()
-        body.appendMultipartField(name: "model", value: model.model.modelName, boundary: boundary)
+        body.appendMultipartField(name: "model", value: requestModelName, boundary: boundary)
         body.appendMultipartField(name: "prompt", value: prompt, boundary: boundary)
 
         let responseFormat = (overrides["response_format"] as? String) ?? "b64_json"
@@ -2481,7 +2503,11 @@ public class GeminiAdapter: APIAdapter {
         // Gemini 端点格式: /models/{model}:generateContent 或 :streamGenerateContent
         let isStreaming = commonPayload["stream"] as? Bool ?? false
         let action = isStreaming ? "streamGenerateContent" : "generateContent"
-        var chatURL = baseURL.appendingPathComponent("models/\(model.model.modelName):\(action)")
+        let requestModelName = resolvedRequestModelName(
+            for: model,
+            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+        )
+        var chatURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
         
         // Gemini 使用 URL 参数传递 API Key
         var urlComponents = URLComponents(url: chatURL, resolvingAgainstBaseURL: false)!
@@ -2920,7 +2946,11 @@ public class GeminiAdapter: APIAdapter {
         
         // Gemini 嵌入端点
         let action = texts.count == 1 ? "embedContent" : "batchEmbedContents"
-        var embeddingsURL = baseURL.appendingPathComponent("models/\(model.model.modelName):\(action)")
+        let requestModelName = resolvedRequestModelName(
+            for: model,
+            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+        )
+        var embeddingsURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
         var urlComponents = URLComponents(url: embeddingsURL, resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         embeddingsURL = urlComponents.url!
@@ -2934,13 +2964,13 @@ public class GeminiAdapter: APIAdapter {
         var payload: [String: Any]
         if texts.count == 1 {
             payload = [
-                "model": "models/\(model.model.modelName)",
+                "model": "models/\(requestModelName)",
                 "content": ["parts": [["text": texts[0]]]]
             ]
         } else {
             let requests = texts.map { text in
                 [
-                    "model": "models/\(model.model.modelName)",
+                    "model": "models/\(requestModelName)",
                     "content": ["parts": [["text": text]]]
                 ]
             }
@@ -2985,7 +3015,11 @@ public class GeminiAdapter: APIAdapter {
             return nil
         }
 
-        var imageURL = baseURL.appendingPathComponent("models/\(model.model.modelName):generateContent")
+        let requestModelName = resolvedRequestModelName(
+            for: model,
+            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+        )
+        var imageURL = baseURL.appendingPathComponent("models/\(requestModelName):generateContent")
         var urlComponents = URLComponents(url: imageURL, resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         imageURL = urlComponents.url!
@@ -3458,8 +3492,9 @@ public class AnthropicAdapter: APIAdapter {
         
         // 应用模型覆盖参数
         let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let requestModelName = resolvedRequestModelName(for: model, overrides: overrides)
         
-        payload["model"] = model.model.modelName
+        payload["model"] = requestModelName
         payload["messages"] = anthropicMessages
         
         // 设置 system
