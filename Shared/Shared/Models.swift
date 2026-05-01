@@ -1362,7 +1362,9 @@ public enum ChatQuickRetrySupport {
             return true
         case .assistant:
             return isAbnormalStoppedAssistantMessage(latestMessage)
-        case .system, .user, .tool:
+        case .user:
+            return true
+        case .system, .tool:
             return false
         }
     }

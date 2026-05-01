@@ -501,6 +501,14 @@ final class MessageVersionTests: XCTestCase {
 }
 
 final class ChatQuickRetrySupportTests: XCTestCase {
+    func testLatestUserMessageCanQuickRetry() {
+        let messages = [
+            ChatMessage(role: .user, content: "继续这个问题")
+        ]
+
+        XCTAssertTrue(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: false))
+    }
+
     func testLatestErrorMessageCanQuickRetry() {
         let messages = [
             ChatMessage(role: .user, content: "你好"),
