@@ -111,7 +111,12 @@ struct ContentView: View {
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
     @AppStorage("watch.attachment.sourceHistory") private var attachmentSourceHistoryRawValue: String = "[]"
-    private let inputControlHeight: CGFloat = 38
+    private var normalizedFontScale: CGFloat {
+        CGFloat(FontLibrary.normalizedFontScale(customFontScale))
+    }
+    private var inputControlHeight: CGFloat {
+        max(38, 38 * normalizedFontScale)
+    }
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120
     private let bottomAnchorID = "inputBubble"
@@ -1112,7 +1117,7 @@ struct ContentView: View {
                 .opacity(0.01)
                 .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
         }
-        .etFont(.body)
+        .etFont(.body, sampleText: viewModel.userInput.isEmpty ? inputPlaceholderText : viewModel.userInput)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
         .layoutPriority(1)
