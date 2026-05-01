@@ -114,7 +114,6 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
-    @State private var availableWidth: CGFloat = 0
     @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State private var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
@@ -276,7 +275,7 @@ struct ChatBubble: View {
     }
 
     private var bubbleMaxWidth: CGFloat {
-        let baseWidth = availableWidth > 0 ? availableWidth : UIScreen.main.bounds.width
+        let baseWidth = max(UIScreen.main.bounds.width, 1)
         let rowChromeWidth = rowHorizontalPadding * 2 + (usesNoBubbleStyle ? 0 : rowSideSpacerMinLength)
         let availableBubbleWidth = max(1, baseWidth - rowChromeWidth)
         let widthRatio: CGFloat
@@ -553,16 +552,6 @@ struct ChatBubble: View {
         .padding(.horizontal, rowHorizontalPadding)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
-            }
-        )
-        .onPreferenceChange(RowWidthKey.self) { newValue in
-            if availableWidth != newValue {
-                availableWidth = newValue
-            }
-        }
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -585,14 +574,6 @@ struct ChatBubble: View {
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
-        }
-    }
-
-    private struct RowWidthKey: PreferenceKey {
-        static var defaultValue: CGFloat = 0
-
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-            value = max(value, nextValue())
         }
     }
 

@@ -99,7 +99,6 @@ struct ChatBubble: View {
     
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
-    @State private var availableWidth: CGFloat = 0
     @State private var toolCallResultExpandedState: [String: Bool] = [:]
     @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State private var showRawToolResultInDetailSheet: Bool = false
@@ -390,8 +389,7 @@ struct ChatBubble: View {
     }
 
     private var bubbleMaxWidth: CGFloat {
-        let screenWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
-        let rowWidth = availableWidth > 0 ? min(availableWidth, screenWidth) : screenWidth
+        let rowWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
         if usesNoBubbleStyle {
             let availableBubbleWidth = max(1, rowWidth - noBubbleRowHorizontalPadding * 2)
             return min(max(rowWidth * 0.92, 1), availableBubbleWidth)
@@ -465,16 +463,6 @@ struct ChatBubble: View {
         .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(key: RowWidthKey.self, value: proxy.size.width)
-            }
-        )
-        .onPreferenceChange(RowWidthKey.self) { newValue in
-            if abs(availableWidth - newValue) > 0.5 {
-                availableWidth = newValue
-            }
-        }
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -495,14 +483,6 @@ struct ChatBubble: View {
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
-        }
-    }
-
-    private struct RowWidthKey: PreferenceKey {
-        static var defaultValue: CGFloat = 0
-
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-            value = max(value, nextValue())
         }
     }
 
