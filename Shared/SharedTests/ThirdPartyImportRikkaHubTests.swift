@@ -55,6 +55,42 @@ struct ThirdPartyImportRikkaHubTests {
         #expect(prepared.warnings.contains(where: { $0.contains("会话内容暂未解析") }))
     }
 
+    @Test("RikkaHub 的 useResponseApi 会保留为模型请求参数")
+    func testPrepareRikkaImportPreservesResponsesAPIFlag() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let settings: [String: Any] = [
+            "providers": [
+                [
+                    "id": "rikka-responses-provider",
+                    "name": "OpenAI Responses",
+                    "type": "openai",
+                    "baseUrl": "https://api.openai.com/v1",
+                    "apiKey": "rk-test-key",
+                    "enabled": true,
+                    "useResponseApi": true,
+                    "models": [
+                        ["modelId": "gpt-5", "displayName": "GPT-5"]
+                    ]
+                ]
+            ]
+        ]
+
+        let fileURL = sandbox.appendingPathComponent("settings.json")
+        try JSONSerialization.data(withJSONObject: settings).write(to: fileURL)
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .rikkahub,
+            fileURL: fileURL
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.apiFormat == "openai-compatible")
+        let model = try #require(provider.models.first)
+        #expect(model.overrideParameters["use_responses_api"] == .bool(true))
+    }
+
     private func makeTemporaryDirectory() -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

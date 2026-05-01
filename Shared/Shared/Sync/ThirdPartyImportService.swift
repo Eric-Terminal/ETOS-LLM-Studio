@@ -424,6 +424,7 @@ private extension ThirdPartyImportService {
             let rawApiKey = string(provider["apiKey"]) ?? ""
             let apiKeys = splitAPIKeys(rawApiKey)
             let modelEntries = normalizeJSONArray(provider["models"])
+            let providerUsesResponsesAPI = isOpenAIResponsesType(type)
 
             let modelList: [Model] = modelEntries.compactMap { modelAny in
                 guard let modelMap = dictionary(modelAny) else { return nil }
@@ -433,11 +434,13 @@ private extension ThirdPartyImportService {
                 let displayName = nonEmpty(string(modelMap["name"]))
                     ?? nonEmpty(string(modelMap["displayName"]))
                     ?? modelID
-                return Model(
+                let modelUsesResponsesAPI = providerUsesResponsesAPI
+                    || isOpenAIResponsesType(string(modelMap["endpoint_type"]))
+                return importedModel(
                     modelName: modelID,
                     displayName: displayName,
                     isActivated: true,
-                    capabilities: Model.defaultCapabilities
+                    useResponsesAPI: modelUsesResponsesAPI
                 )
             }
 
@@ -557,15 +560,16 @@ private extension ThirdPartyImportService {
             let apiKey = nonEmpty(string(provider["apiKey"])) ?? ""
             let baseURL = normalizeBaseURL(string(provider["baseUrl"]), for: format)
             let enabled = bool(provider["enabled"], defaultValue: true)
+            let providerUsesResponsesAPI = bool(provider["useResponseApi"], defaultValue: false)
 
             let modelsRaw = normalizeJSONArray(provider["models"])
             let models: [Model] = modelsRaw.compactMap { modelAny in
                 if let modelName = nonEmpty(string(modelAny)) {
-                    return Model(
+                    return importedModel(
                         modelName: modelName,
                         displayName: modelName,
                         isActivated: enabled,
-                        capabilities: Model.defaultCapabilities
+                        useResponsesAPI: providerUsesResponsesAPI
                     )
                 }
 
@@ -576,11 +580,13 @@ private extension ThirdPartyImportService {
                 let displayName = nonEmpty(string(model["displayName"]))
                     ?? nonEmpty(string(model["name"]))
                     ?? modelID
-                return Model(
+                let modelUsesResponsesAPI = providerUsesResponsesAPI
+                    || bool(model["useResponseApi"], defaultValue: false)
+                return importedModel(
                     modelName: modelID,
                     displayName: displayName,
                     isActivated: enabled,
-                    capabilities: Model.defaultCapabilities
+                    useResponsesAPI: modelUsesResponsesAPI
                 )
             }
 
@@ -1125,6 +1131,33 @@ private extension ThirdPartyImportService {
             return "gemini"
         }
         return "openai-compatible"
+    }
+
+    static func isOpenAIResponsesType(_ raw: String?) -> Bool {
+        let normalized = (raw ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+        return normalized == "openai-response" || normalized == "openai-responses"
+    }
+
+    static func importedModel(
+        modelName: String,
+        displayName: String,
+        isActivated: Bool,
+        useResponsesAPI: Bool = false
+    ) -> Model {
+        let overrideParameters: [String: JSONValue] = useResponsesAPI
+            ? ["use_responses_api": .bool(true)]
+            : [:]
+        return Model(
+            modelName: modelName,
+            displayName: displayName,
+            isActivated: isActivated,
+            overrideParameters: overrideParameters,
+            capabilities: Model.defaultCapabilities
+        )
     }
 
     static func normalizeBaseURL(_ raw: String?, for apiFormat: String) -> String {

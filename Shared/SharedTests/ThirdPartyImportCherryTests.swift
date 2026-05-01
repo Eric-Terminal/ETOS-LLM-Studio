@@ -92,6 +92,55 @@ struct ThirdPartyImportCherryTests {
         #expect(session.messages[1].content == "你好，这里是 Cherry")
     }
 
+    @Test("Cherry 的 openai-response 模式会保留为模型请求参数")
+    func testPrepareCherryImportPreservesOpenAIResponsesMode() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let llm: [String: Any] = [
+            "providers": [
+                [
+                    "id": "provider-responses",
+                    "name": "Responses Provider",
+                    "type": "openai",
+                    "apiHost": "https://api.openai.com",
+                    "apiKey": "test-key",
+                    "models": [
+                        ["id": "gpt-5", "name": "GPT-5", "endpoint_type": "openai-response"],
+                        ["id": "gpt-4.1", "name": "GPT-4.1", "endpoint_type": "openai"]
+                    ]
+                ]
+            ]
+        ]
+
+        let persist: [String: Any] = [
+            "llm": try encodeJSONString(llm)
+        ]
+        let root: [String: Any] = [
+            "localStorage": [
+                "persist:cherry-studio": try encodeJSONString(persist)
+            ],
+            "indexedDB": [:]
+        ]
+
+        let fileURL = sandbox.appendingPathComponent("cherry-responses.json")
+        try JSONSerialization.data(withJSONObject: root).write(to: fileURL)
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .cherryStudio,
+            fileURL: fileURL
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.apiFormat == "openai-compatible")
+
+        let responsesModel = try #require(provider.models.first { $0.modelName == "gpt-5" })
+        #expect(responsesModel.overrideParameters["use_responses_api"] == .bool(true))
+
+        let chatModel = try #require(provider.models.first { $0.modelName == "gpt-4.1" })
+        #expect(chatModel.overrideParameters["use_responses_api"] == nil)
+    }
+
     @Test("Cherry 压缩包会提示先解压")
     func testPrepareCherryImportWithCompressedFileShowsHint() throws {
         let sandbox = makeTemporaryDirectory()
