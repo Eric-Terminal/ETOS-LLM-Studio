@@ -96,6 +96,7 @@ struct ChatBubble: View {
     let hasAutoOpenedPendingToolCall: (String) -> Bool
     let markPendingToolCallAutoOpened: (String) -> Void
     let onCodeBlockHeaderTap: ((String) -> Void)?
+    let onOpenMore: (() -> Void)?
     
     @StateObject private var audioPlayer = WatchAudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
@@ -135,7 +136,8 @@ struct ChatBubble: View {
         connectsTimelineToNext: Bool = false,
         hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
         markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
-        onCodeBlockHeaderTap: ((String) -> Void)? = nil
+        onCodeBlockHeaderTap: ((String) -> Void)? = nil,
+        onOpenMore: (() -> Void)? = nil
     ) {
         self.messageState = messageState
         self.preparedMarkdownPayload = preparedMarkdownPayload
@@ -158,6 +160,7 @@ struct ChatBubble: View {
         self.hasAutoOpenedPendingToolCall = hasAutoOpenedPendingToolCall
         self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
+        self.onOpenMore = onOpenMore
     }
     
     private var message: ChatMessage {
@@ -463,6 +466,7 @@ struct ChatBubble: View {
         .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
+        .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: onOpenMore))
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -2658,6 +2662,22 @@ private struct AttachmentImageView: View {
         ChatAttachmentImageCache.store(uiImage, for: fileName)
         await MainActor.run {
             image = uiImage
+        }
+    }
+}
+
+private struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
+    let onOpenMore: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onOpenMore {
+            content
+                .contentShape(Rectangle())
+                .onLongPressGesture(minimumDuration: 0.45) {
+                    onOpenMore()
+                }
+        } else {
+            content
         }
     }
 }

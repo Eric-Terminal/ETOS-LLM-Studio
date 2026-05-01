@@ -68,6 +68,10 @@ private enum WatchNativeNavigationDestination: String, Identifiable {
     var id: String { rawValue }
 }
 
+private struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
+    let id: UUID
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     
@@ -85,6 +89,7 @@ struct ContentView: View {
     @State private var isSettingsPresented = false
     @State private var settingsDestination: WatchSettingsNavigationDestination?
     @State private var isSessionListPresented = false
+    @State private var messageActionsTarget: WatchMessageActionsNavigationTarget?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var shouldForceScrollToBottom = false
     @State private var shouldKeepBottomPinned = true
@@ -349,6 +354,9 @@ struct ContentView: View {
                     viewModel.cancelAskUserInputRequest(using: request)
                 }
             )
+        }
+        .navigationDestination(item: $messageActionsTarget) { target in
+            messageActionsView(for: target.id)
         }
     }
 
@@ -704,7 +712,6 @@ struct ContentView: View {
         connectsTimelineToNext: Bool
     ) -> some View {
         let message = state.message
-        let preparedPayload = viewModel.preparedMarkdownByMessageID[message.id]
         let isReasoningExpandedBinding = Binding<Bool>(
             get: { viewModel.reasoningExpandedState[message.id, default: false] },
             set: { viewModel.setReasoningExpanded($0, for: message.id) }
@@ -744,6 +751,9 @@ struct ContentView: View {
             },
             onCodeBlockHeaderTap: { content in
                 viewModel.appendCodeBlockContentToInput(content)
+            },
+            onOpenMore: hasActivePermission ? nil : {
+                openMessageActions(for: message)
             }
         )
         .id(state.id)
@@ -755,7 +765,7 @@ struct ContentView: View {
         } else {
             bubble
                 .swipeActions(edge: .leading) {
-                    messageActionsNavigationLink(for: message, preparedPayload: preparedPayload)
+                    messageActionsSwipeAction(for: message)
                 }
         }
     }
@@ -773,12 +783,13 @@ struct ContentView: View {
         }
     }
 
+    private func openMessageActions(for message: ChatMessage) {
+        messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
+    }
+
     @ViewBuilder
-    private func messageActionsNavigationLink(
-        for message: ChatMessage,
-        preparedPayload: ETPreparedMarkdownRenderPayload?
-    ) -> some View {
-        NavigationLink {
+    private func messageActionsView(for messageID: UUID) -> some View {
+        if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
             MessageActionsView(
                 message: message,
                 canRetry: viewModel.canRetry(message: message),
@@ -810,7 +821,7 @@ struct ContentView: View {
                 onShowFullError: { content in
                     fullErrorContent = content
                 },
-                supportsMathRenderToggle: viewModel.enableAdvancedRenderer && (preparedPayload?.containsMathContent ?? false),
+                supportsMathRenderToggle: viewModel.enableAdvancedRenderer && (viewModel.preparedMarkdownByMessageID[message.id]?.containsMathContent ?? false),
                 isMathRenderingEnabled: viewModel.isMathRenderingEnabled(for: message.id),
                 onToggleMathRendering: {
                     viewModel.toggleMathRendering(for: message.id)
@@ -823,6 +834,15 @@ struct ContentView: View {
                 messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                 totalMessages: viewModel.allMessagesForSession.count
             )
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func messageActionsSwipeAction(for message: ChatMessage) -> some View {
+        Button {
+            openMessageActions(for: message)
         } label: {
             Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis")
         }
