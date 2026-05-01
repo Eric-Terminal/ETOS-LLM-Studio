@@ -1554,9 +1554,9 @@ struct ContentView: View {
 }
 
 enum WatchImportSourceHistory {
-    static let limit = 5
+    nonisolated static let limit = 5
 
-    static func values(from rawValue: String, fallback: String = "") -> [String] {
+    nonisolated static func values(from rawValue: String, fallback: String = "") -> [String] {
         guard let data = rawValue.data(using: .utf8),
               let decoded = try? JSONDecoder().decode([String].self, from: data) else {
             return normalized([fallback])
@@ -1565,11 +1565,11 @@ enum WatchImportSourceHistory {
         return history.isEmpty ? normalized([fallback]) : history
     }
 
-    static func appending(_ source: String, to history: [String]) -> [String] {
+    nonisolated static func appending(_ source: String, to history: [String]) -> [String] {
         normalized([source] + history)
     }
 
-    static func rawValue(for history: [String]) -> String {
+    nonisolated static func rawValue(for history: [String]) -> String {
         let normalizedHistory = normalized(history)
         guard let data = try? JSONEncoder().encode(normalizedHistory),
               let rawValue = String(data: data, encoding: .utf8) else {
@@ -1578,7 +1578,7 @@ enum WatchImportSourceHistory {
         return rawValue
     }
 
-    static func normalized(_ sources: [String]) -> [String] {
+    nonisolated static func normalized(_ sources: [String]) -> [String] {
         var seen: Set<String> = []
         var result: [String] = []
         for source in sources {
