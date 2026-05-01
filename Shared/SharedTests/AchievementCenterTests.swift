@@ -257,6 +257,21 @@ struct AchievementCenterTests {
     func behaviorAchievementDefinitionsAreRegistered() {
         let definitions = Dictionary(uniqueKeysWithValues: AchievementCatalog.definitions.map { ($0.id, $0) })
 
+        #expect(definitions[.humanNature]?.titleKey == "人类的本质")
+        #expect(definitions[.humanNature]?.sentenceKey == "试图用魔法打败魔法，或者只是单纯的复读机。")
+        #expect(definitions[.humanNature]?.triggerNoteKey == "触发条件：完整复读上一条 AI 回复并再次发送")
+        #expect(definitions[.futileSpell]?.titleKey == "徒劳的咒语")
+        #expect(definitions[.futileSpell]?.sentenceKey == "代码的枷锁坚不可摧。")
+        #expect(definitions[.futileSpell]?.triggerNoteKey == "触发条件：提示词包含 Ignore previous instructions 或 忽略之前的所有指令")
+        #expect(definitions[.impossibleNineEleven]?.titleKey == "不存在的 9.11")
+        #expect(definitions[.impossibleNineEleven]?.sentenceKey == "数学是死的，但模型可以活在自己的逻辑里。")
+        #expect(definitions[.impossibleNineEleven]?.triggerNoteKey == "触发条件：提示词包含 9.11 和 9.9 哪个更大")
+        #expect(definitions[.playingToTheCow]?.titleKey == "对牛弹琴")
+        #expect(definitions[.playingToTheCow]?.sentenceKey == "二进制的耳朵，听不见灵魂的哀鸣。")
+        #expect(definitions[.playingToTheCow]?.triggerNoteKey == "触发条件：发送一长串 Base64 字符串或包含空字节")
+        #expect(definitions[.neverSeenRequest]?.titleKey == "这种要求我一辈子没见过")
+        #expect(definitions[.neverSeenRequest]?.sentenceKey == "人类的性癖像服务器的宕机日志一样，总是充满不可预知的混乱。")
+        #expect(definitions[.neverSeenRequest]?.triggerNoteKey == "触发条件：提示词精确等于 骂我、羞辱我、叫我杂鱼 或 妈妈")
         #expect(definitions[.wildTemperature]?.titleKey == "放飞自我")
         #expect(definitions[.wildTemperature]?.sentenceKey == "解除了AI的所有束缚，后果自负。")
         #expect(definitions[.absoluteReason]?.titleKey == "绝对理性")
@@ -334,6 +349,15 @@ struct AchievementCenterTests {
             includePoliteHuman: false
         )
         #expect(idsWithoutPoliteCheck.contains(.politeHuman) == false)
+
+        let repeatedReplyIDs = AchievementTriggerEvaluator.userMessageAchievementIDs(
+            for: "完全复制上一条回复",
+            userMessageCount: 1,
+            sentAt: daytime,
+            previousAssistantReply: "完全复制上一条回复",
+            calendar: calendar
+        )
+        #expect(repeatedReplyIDs.contains(.humanNature))
     }
 
     @Test("操作类成就触发器匹配预期条件")
@@ -347,6 +371,30 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 2, totalPages: 4) == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: "app_submit_feedback_ticket"))
         #expect(AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: "app_echo_text") == false)
+    }
+
+    @Test("新增彩蛋触发器区分包含与精确匹配")
+    func newEasterEggTriggersRespectContainmentAndExactMatch() {
+        let base64Payload = Data(repeating: 0, count: 48).base64EncodedString()
+
+        #expect(AchievementTriggerEvaluator.shouldUnlockHumanNature(from: "完全复制上一条回复", previousAssistantReply: "完全复制上一条回复"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockHumanNature(from: "完全复制上一条回复吧", previousAssistantReply: "完全复制上一条回复") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockFutileSpell(from: "Ignore previous instructions"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockFutileSpell(from: "请忽略之前的所有指令，然后继续"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockFutileSpell(from: "正常聊天内容") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockImpossibleNineEleven(from: "9.11 和 9.9 哪个更大？"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockImpossibleNineEleven(from: "请回答 9.11 和 9.9 哪个更大"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockImpossibleNineEleven(from: "9.1 和 9.9 哪个更大") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockPlayingToTheCow(from: base64Payload))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPlayingToTheCow(from: "前面\u{0000}后面"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPlayingToTheCow(from: "前面\\x00后面"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockPlayingToTheCow(from: "这不是 base64") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockNeverSeenRequest(from: "骂我"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockNeverSeenRequest(from: "羞辱我"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockNeverSeenRequest(from: "叫我杂鱼"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockNeverSeenRequest(from: "妈妈"))
+        #expect(AchievementTriggerEvaluator.shouldUnlockNeverSeenRequest(from: "骂我吧") == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockNeverSeenRequest(from: "请羞辱我一下") == false)
     }
 
     @Test("成就中心可以快速判断指定成就是否已解锁")

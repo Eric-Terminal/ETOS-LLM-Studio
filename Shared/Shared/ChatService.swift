@@ -2627,6 +2627,7 @@ public class ChatService {
                 primaryUserMessage = userMessages[anchorUserIndex]
             }
         }
+        let previousAssistantReply = latestAssistantReply(in: currentSession.id)
         let loadingMessage = ChatMessage(
             role: .assistant,
             content: "",
@@ -2644,7 +2645,8 @@ public class ChatService {
         scheduleUserMessageAchievementDetectionIfNeeded(
             content: messageContent,
             userMessageCount: messages.filter { $0.role == .user }.count,
-            sentAt: requestTimestamp
+            sentAt: requestTimestamp,
+            previousAssistantReply: previousAssistantReply
         )
         
         // 注意：当音频作为附件直接发送给模型时，不再需要后台转文字
@@ -2879,7 +2881,8 @@ public class ChatService {
         scheduleUserMessageAchievementDetectionIfNeeded(
             content: trimmedPrompt,
             userMessageCount: messages.filter { $0.role == .user }.count,
-            sentAt: userMessage.requestedAt ?? Date()
+            sentAt: userMessage.requestedAt ?? Date(),
+            previousAssistantReply: latestAssistantReply(in: currentSession.id)
         )
         logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
@@ -6198,7 +6201,8 @@ public class ChatService {
     private func scheduleUserMessageAchievementDetectionIfNeeded(
         content: String,
         userMessageCount: Int,
-        sentAt: Date
+        sentAt: Date,
+        previousAssistantReply: String?
     ) {
         Task.detached(priority: .utility) {
             let hasUnlockedPoliteHuman = await AchievementCenter.shared.hasUnlocked(id: .politeHuman)
@@ -6206,6 +6210,7 @@ public class ChatService {
                 for: content,
                 userMessageCount: userMessageCount,
                 sentAt: sentAt,
+                previousAssistantReply: previousAssistantReply,
                 includePoliteHuman: !hasUnlockedPoliteHuman
             )
             guard !ids.isEmpty else { return }
@@ -6216,6 +6221,13 @@ public class ChatService {
                 await AchievementCenter.shared.unlock(id: id)
             }
         }
+    }
+
+    private func latestAssistantReply(in sessionID: UUID) -> String? {
+        messagesSnapshot(for: sessionID).last(where: {
+            $0.role == .assistant
+                && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        })?.content
     }
 
     private func scheduleAchievementUnlockIfNeeded(_ id: AchievementID) {

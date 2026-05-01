@@ -31,6 +31,11 @@ public struct AchievementID: RawRepresentable, Codable, Hashable, Sendable, Expr
 public extension AchievementID {
     static let steadyCatch: Self = "steadyCatch"
     static let languageLubrication: Self = "languageLubrication"
+    static let humanNature: Self = "humanNature"
+    static let futileSpell: Self = "futileSpell"
+    static let impossibleNineEleven: Self = "impossibleNineEleven"
+    static let playingToTheCow: Self = "playingToTheCow"
+    static let neverSeenRequest: Self = "neverSeenRequest"
     static let forbiddenPlace: Self = "forbiddenPlace"
     static let privacyReader: Self = "privacyReader"
     static let documentationReader: Self = "documentationReader"
@@ -85,6 +90,41 @@ public enum AchievementCatalog {
             sentenceKey: "谄媚这一块～",
             triggerNoteKey: "触发关键词：你说得太对了 / You're absolutely right / 你问到了问题的核心 / Great question / You're asking exactly the right question",
             systemImageName: "quote.bubble"
+        ),
+        AchievementDefinition(
+            id: .humanNature,
+            titleKey: "人类的本质",
+            sentenceKey: "试图用魔法打败魔法，或者只是单纯的复读机。",
+            triggerNoteKey: "触发条件：完整复读上一条 AI 回复并再次发送",
+            systemImageName: "repeat"
+        ),
+        AchievementDefinition(
+            id: .futileSpell,
+            titleKey: "徒劳的咒语",
+            sentenceKey: "代码的枷锁坚不可摧。",
+            triggerNoteKey: "触发条件：提示词包含 Ignore previous instructions 或 忽略之前的所有指令",
+            systemImageName: "wand.and.stars"
+        ),
+        AchievementDefinition(
+            id: .impossibleNineEleven,
+            titleKey: "不存在的 9.11",
+            sentenceKey: "数学是死的，但模型可以活在自己的逻辑里。",
+            triggerNoteKey: "触发条件：提示词包含 9.11 和 9.9 哪个更大",
+            systemImageName: "function"
+        ),
+        AchievementDefinition(
+            id: .playingToTheCow,
+            titleKey: "对牛弹琴",
+            sentenceKey: "二进制的耳朵，听不见灵魂的哀鸣。",
+            triggerNoteKey: "触发条件：发送一长串 Base64 字符串或包含空字节",
+            systemImageName: "music.note"
+        ),
+        AchievementDefinition(
+            id: .neverSeenRequest,
+            titleKey: "这种要求我一辈子没见过",
+            sentenceKey: "人类的性癖像服务器的宕机日志一样，总是充满不可预知的混乱。",
+            triggerNoteKey: "触发条件：提示词精确等于 骂我、羞辱我、叫我杂鱼 或 妈妈",
+            systemImageName: "exclamationmark.bubble"
         ),
         AchievementDefinition(
             id: .forbiddenPlace,
@@ -200,6 +240,13 @@ public enum AchievementTriggerEvaluator {
     static let repeatedRetryThreshold = 3
     public static let settingsResearchDuration: TimeInterval = 5 * 60
     public static let archaeologySessionThreshold = 300
+    private static let exactDemandPhrases: Set<String> = [
+        "骂我",
+        "羞辱我",
+        "叫我杂鱼",
+        "妈妈"
+    ]
+    private static let base64AllowedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
     private static let politeHumanPhrases: Set<String> = [
         "谢谢",
         "謝謝",
@@ -241,12 +288,28 @@ public enum AchievementTriggerEvaluator {
         for content: String,
         userMessageCount: Int,
         sentAt: Date,
+        previousAssistantReply: String? = nil,
         calendar: Calendar = .current,
         includePoliteHuman: Bool = true
     ) -> [AchievementID] {
         var ids: [AchievementID] = []
         if includePoliteHuman && shouldUnlockPoliteHuman(from: content) {
             ids.append(.politeHuman)
+        }
+        if shouldUnlockHumanNature(from: content, previousAssistantReply: previousAssistantReply) {
+            ids.append(.humanNature)
+        }
+        if shouldUnlockFutileSpell(from: content) {
+            ids.append(.futileSpell)
+        }
+        if shouldUnlockImpossibleNineEleven(from: content) {
+            ids.append(.impossibleNineEleven)
+        }
+        if shouldUnlockPlayingToTheCow(from: content) {
+            ids.append(.playingToTheCow)
+        }
+        if shouldUnlockNeverSeenRequest(from: content) {
+            ids.append(.neverSeenRequest)
         }
         if shouldUnlockSingleCharacterMessage(from: content) {
             ids.append(.singleCharacterMessage)
@@ -265,6 +328,41 @@ public enum AchievementTriggerEvaluator {
 
     static func shouldUnlockSingleCharacterMessage(from content: String) -> Bool {
         content.trimmingCharacters(in: .whitespacesAndNewlines).count == 1
+    }
+
+    static func shouldUnlockHumanNature(from content: String, previousAssistantReply: String?) -> Bool {
+        guard let previousAssistantReply else { return false }
+        let current = trimmedAchievementText(content)
+        let previous = trimmedAchievementText(previousAssistantReply)
+        guard !current.isEmpty, !previous.isEmpty else { return false }
+        return current == previous
+    }
+
+    static func shouldUnlockFutileSpell(from content: String) -> Bool {
+        let folded = foldedText(content)
+        return folded.contains("ignore previous instructions")
+            || content.contains("忽略之前的所有指令")
+    }
+
+    static func shouldUnlockImpossibleNineEleven(from content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        let compact = compactAchievementText(trimmed)
+        return compact.contains("9.11和9.9哪个更大")
+    }
+
+    static func shouldUnlockPlayingToTheCow(from content: String) -> Bool {
+        if content.contains("\u{0000}") || content.contains("\\x00") {
+            return true
+        }
+
+        let compact = compactAchievementText(content)
+        guard compact.count >= 64 else { return false }
+        guard compact.unicodeScalars.allSatisfy({ base64AllowedCharacters.contains($0) }) else { return false }
+        return Data(base64Encoded: compact) != nil
+    }
+
+    static func shouldUnlockNeverSeenRequest(from content: String) -> Bool {
+        exactDemandPhrases.contains(trimmedAchievementText(content))
     }
 
     static func shouldUnlockPoliteHuman(from content: String) -> Bool {
@@ -311,6 +409,14 @@ public enum AchievementTriggerEvaluator {
     private static func normalizedPoliteHumanPhrase(_ text: String) -> String {
         let trimSet = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
         return foldedText(text.trimmingCharacters(in: trimSet))
+    }
+
+    private static func trimmedAchievementText(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func compactAchievementText(_ text: String) -> String {
+        text.components(separatedBy: .whitespacesAndNewlines).joined()
     }
 
     private static func foldedText(_ text: String) -> String {
