@@ -111,6 +111,7 @@ struct ChatBubble: View {
     let markPendingToolCallAutoOpened: (String) -> Void
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
+    let onOpenMore: (() -> Void)?
     
     @StateObject private var audioPlayer = AudioPlayerManager()
     @State private var imagePreview: ImagePreviewPayload?
@@ -150,7 +151,8 @@ struct ChatBubble: View {
         hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
         markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
         onSwitchToPreviousVersion: @escaping () -> Void,
-        onSwitchToNextVersion: @escaping () -> Void
+        onSwitchToNextVersion: @escaping () -> Void,
+        onOpenMore: (() -> Void)? = nil
     ) {
         self.messageState = messageState
         self.preparedMarkdownPayload = preparedMarkdownPayload
@@ -175,6 +177,7 @@ struct ChatBubble: View {
         self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
         self.onSwitchToNextVersion = onSwitchToNextVersion
+        self.onOpenMore = onOpenMore
     }
     
     private var message: ChatMessage {
@@ -552,6 +555,7 @@ struct ChatBubble: View {
         .padding(.horizontal, rowHorizontalPadding)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
+        .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: onOpenMore))
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -1661,6 +1665,25 @@ struct ImagePreviewWrapper: Identifiable {
 private struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+private struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
+    let onOpenMore: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onOpenMore {
+            content
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    LongPressGesture(minimumDuration: 0.45)
+                        .onEnded { _ in
+                            onOpenMore()
+                        }
+                )
+        } else {
+            content
+        }
+    }
 }
 
 private enum ChatAttachmentImageCache {

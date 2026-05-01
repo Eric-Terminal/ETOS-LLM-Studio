@@ -73,9 +73,7 @@ private extension View {
         @ViewBuilder contextMenuContent: @escaping () -> MenuContent
     ) -> some View {
         if usesBottomSheet {
-            self.onLongPressGesture {
-                onPresentSheet()
-            }
+            self.contentShape(Rectangle())
         } else {
             self.contextMenu {
                 contextMenuContent()
@@ -452,7 +450,10 @@ struct ChatView: View {
                                         },
                                         onSwitchToNextVersion: {
                                             viewModel.switchToNextVersion(of: message)
-                                        }
+                                        },
+                                        onOpenMore: usesBottomSheetMessageActionStyle ? {
+                                            messageActionSheetPayload = MessageActionSheetPayload(message: message)
+                                        } : nil
                                     )
                                     .id(state.id)
                                     .messageActionPresentation(
