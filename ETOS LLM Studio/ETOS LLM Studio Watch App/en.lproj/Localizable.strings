@@ -89,7 +89,12 @@
 "思考" = "Thinking";
 "缓存写入" = "Cache Write";
 "缓存读取" = "Cache Read";
+"缓存命中率" = "Cache Hit Rate";
 "缓存读取 %d · 缓存写入 %d" = "Cache read %d · cache write %d";
+"缓存读取 %d · 缓存写入 %d · 命中 %@" = "Cache read %d · cache write %d · hit %@";
+"输入 %d · 输出 %d" = "Input %d · output %d";
+"缓存读 %d · 写 %d · 命中 %@" = "Cache read %d · write %d · hit %@";
+"暂无" = "N/A";
 "推送到手机" = "Push to iPhone";
 "提供商 +%d" = "Providers +%d";
 "提供商与模型管理" = "Providers & models";
@@ -2315,5 +2320,5 @@
 "自定义Body有误，无法预览" = "Custom Body is invalid, cannot preview";
 "Key" = "Key";
 "Value" = "Value";
-"值里用 \n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "Use \n in values to enter line breaks. For straight quotes, long-press the directional quotes in the keyboard.";
-"用 \n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "Use \n to enter line breaks. For straight quotes, long-press the directional quotes in the keyboard.";
+"值里用 \\n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "Use \\n in values to enter line breaks. For straight quotes, long-press the directional quotes in the keyboard.";
+"用 \\n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "Use \\n to enter line breaks. For straight quotes, long-press the directional quotes in the keyboard.";

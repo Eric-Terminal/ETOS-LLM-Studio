@@ -87,7 +87,12 @@
 "思考" = "Razonamiento";
 "缓存写入" = "Escritura de caché";
 "缓存读取" = "Lectura de caché";
+"缓存命中率" = "Tasa de acierto de caché";
 "缓存读取 %d · 缓存写入 %d" = "Lectura de caché %d · escritura de caché %d";
+"缓存读取 %d · 缓存写入 %d · 命中 %@" = "Lectura de caché %d · escritura de caché %d · acierto %@";
+"输入 %d · 输出 %d" = "Entrada %d · salida %d";
+"缓存读 %d · 写 %d · 命中 %@" = "Lectura caché %d · escritura %d · acierto %@";
+"暂无" = "N/D";
 "推送到手机" = "Enviar a iPhone";
 "提供商 +%d" = "Proveedores +%d";
 "提供商与模型管理" = "Proveedores y modelos";

@@ -32,7 +32,7 @@ public enum ChatPickerPresentationStyle: String, CaseIterable, Identifiable {
     case bottomSheet = "bottomSheet"
 
     public static let storageKey = "ui.chatPickerPresentationStyle"
-    public static let defaultStyle: ChatPickerPresentationStyle = .legacyOverlay
+    public static let defaultStyle: ChatPickerPresentationStyle = .bottomSheet
 
     public var id: String { rawValue }
 

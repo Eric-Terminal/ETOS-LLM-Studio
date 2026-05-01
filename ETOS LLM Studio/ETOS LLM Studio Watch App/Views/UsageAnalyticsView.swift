@@ -146,9 +146,10 @@ struct UsageAnalyticsView: View {
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     Text(String(
-                        format: NSLocalizedString("缓存读取 %d · 缓存写入 %d", comment: "Cache token totals summary"),
+                        format: NSLocalizedString("缓存读取 %d · 缓存写入 %d · 命中 %@", comment: "Cache token totals summary"),
                         viewModel.state.detail.tokenTotals.cacheReadTokens,
-                        viewModel.state.detail.tokenTotals.cacheWriteTokens
+                        viewModel.state.detail.tokenTotals.cacheWriteTokens,
+                        cacheHitRateText(viewModel.state.detail.cacheHitRate)
                     ))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
@@ -188,6 +189,25 @@ struct UsageAnalyticsView: View {
                                         .lineLimit(1)
                                 }
                                 Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), model.requestCount, model.totalTokens))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(
+                                    String(
+                                        format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
+                                        model.tokenTotals.sentTokens,
+                                        model.tokenTotals.receivedTokens
+                                    )
+                                )
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(
+                                    String(
+                                        format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
+                                        model.tokenTotals.cacheReadTokens,
+                                        model.tokenTotals.cacheWriteTokens,
+                                        cacheHitRateText(model.cacheHitRate)
+                                    )
+                                )
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -365,6 +385,17 @@ struct UsageAnalyticsView: View {
 
     private func heatmapMonthTitle(month: Int) -> String {
         return String(format: NSLocalizedString("%d月", comment: ""), month)
+    }
+
+    private func cacheHitRateText(_ rate: Double?) -> String {
+        guard let rate else {
+            return NSLocalizedString("暂无", comment: "No usage analytics metric value")
+        }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: rate)) ?? String(format: "%.1f%%", rate * 100)
     }
 
     private func legendHeatColor(level: Int) -> Color {

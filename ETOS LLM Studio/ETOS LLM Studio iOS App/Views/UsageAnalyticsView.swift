@@ -285,19 +285,22 @@ struct UsageAnalyticsView: View {
                     detailMetric(NSLocalizedString("思考", comment: "Thinking tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.thinkingTokens)")
                     detailMetric(NSLocalizedString("缓存写入", comment: "Cache write tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.cacheWriteTokens)")
                     detailMetric(NSLocalizedString("缓存读取", comment: "Cache read tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.cacheReadTokens)")
+                    detailMetric(NSLocalizedString("缓存命中率", comment: "Cache hit rate metric label"), value: cacheHitRateText(viewModel.state.detail.cacheHitRate))
                 }
                 .padding(.top, 2)
 
                 rankedSection(
                     title: "模型榜单",
                     emptyText: "当前范围内还没有模型请求。",
-                    items: viewModel.state.detail.topModels
+                    items: viewModel.state.detail.topModels,
+                    showsTokenDetails: true
                 )
 
                 rankedSection(
                     title: "来源分布",
                     emptyText: "当前范围内还没有来源统计。",
-                    items: viewModel.state.detail.sourceBreakdown
+                    items: viewModel.state.detail.sourceBreakdown,
+                    showsTokenDetails: false
                 )
             }
             .padding(14)
@@ -329,7 +332,7 @@ struct UsageAnalyticsView: View {
         )
     }
 
-    private func rankedSection(title: String, emptyText: String, items: [UsageAnalyticsRankItem]) -> some View {
+    private func rankedSection(title: String, emptyText: String, items: [UsageAnalyticsRankItem], showsTokenDetails: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(NSLocalizedString(title, comment: "用量统计榜单标题"))
@@ -362,6 +365,27 @@ struct UsageAnalyticsView: View {
                             Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), item.totalTokens, item.errorCount))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
+                            if showsTokenDetails {
+                                Text(
+                                    String(
+                                        format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
+                                        item.tokenTotals.sentTokens,
+                                        item.tokenTotals.receivedTokens
+                                    )
+                                )
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(
+                                    String(
+                                        format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
+                                        item.tokenTotals.cacheReadTokens,
+                                        item.tokenTotals.cacheWriteTokens,
+                                        cacheHitRateText(item.cacheHitRate)
+                                    )
+                                )
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .padding(.vertical, 2)
@@ -507,6 +531,17 @@ struct UsageAnalyticsView: View {
 
     private func heatmapMonthDate(for week: UsageAnalyticsHeatmapWeek, calendar: Calendar) -> Date? {
         week.days.first(where: { calendar.component(.day, from: $0.date) == 1 })?.date ?? week.days.first?.date
+    }
+
+    private func cacheHitRateText(_ rate: Double?) -> String {
+        guard let rate else {
+            return NSLocalizedString("暂无", comment: "No usage analytics metric value")
+        }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: rate)) ?? String(format: "%.1f%%", rate * 100)
     }
 
     private func legendHeatColor(level: Int) -> Color {
