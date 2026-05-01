@@ -362,7 +362,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             isEmpty: dailyTotals.isEmpty,
             selectedScope: selectedScope,
             selectedDayKey: effectiveSelectedDayKey,
-            displayedMonthTitle: monthTitle(for: effectiveDisplayedMonthAnchor, calendar: calendar),
+            displayedMonthTitle: compactMonthTitle(for: effectiveDisplayedMonthAnchor, calendar: calendar),
             weekdaySymbols: weekdaySymbols(calendar: calendar),
             overviewCards: overviewCards,
             heatmapWeeks: heatmapWeeks,
@@ -525,7 +525,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         case .month:
             interval = UsageAnalyticsRuntimeContext.monthInterval(containing: anchorDate, calendar: calendar)
             title = "月详情"
-            subtitle = monthTitle(for: anchorDate, calendar: calendar)
+            subtitle = compactMonthTitle(for: anchorDate, calendar: calendar)
         }
 
         let dayKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar))
@@ -655,12 +655,12 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         }
     }
 
-    private nonisolated static func monthTitle(for date: Date, calendar: Calendar) -> String {
+    private nonisolated static func compactMonthTitle(for date: Date, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_Hans_CN")
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "yyyy年M月"
+        formatter.dateFormat = "M月"
         return formatter.string(from: date)
     }
 

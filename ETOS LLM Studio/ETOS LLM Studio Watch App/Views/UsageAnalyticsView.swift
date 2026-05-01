@@ -205,7 +205,7 @@ struct UsageAnalyticsView: View {
                 segments.append(
                     HeatmapMonthSegment(
                         id: id,
-                        title: heatmapMonthTitle(year: year, month: month),
+                        title: heatmapMonthTitle(month: month),
                         weekCount: 1
                     )
                 )
@@ -339,10 +339,7 @@ struct UsageAnalyticsView: View {
         week.days.first(where: { calendar.component(.day, from: $0.date) == 1 })?.date ?? week.days.first?.date
     }
 
-    private func heatmapMonthTitle(year: Int, month: Int) -> String {
-        if month == 1 {
-            return String(String(year).suffix(2))
-        }
+    private func heatmapMonthTitle(month: Int) -> String {
         return String(format: NSLocalizedString("%d月", comment: ""), month)
     }
 
