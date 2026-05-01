@@ -301,7 +301,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         displayedMonthAnchor: Date,
         calendar: Calendar
     ) async -> UsageAnalyticsDashboardState {
-        await Task.detached(priority: .utility) {
+        await Task.detached(priority: .userInitiated) {
             let dailyTotals = Persistence.loadUsageDailyTotals()
             let dailyModelTotals = Persistence.loadUsageDailyModelTotals()
             return Self.buildState(

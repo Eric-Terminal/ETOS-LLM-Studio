@@ -51,7 +51,7 @@ public final class AppLaunchStateMachine: ObservableObject {
         phase = .preparingPersistence
 
         bootstrapTask = Task { [weak self] in
-            await Task.detached(priority: .utility) {
+            await Task.detached(priority: .userInitiated) {
                 Persistence.bootstrapGRDBStoreOnLaunch()
             }.value
 
@@ -65,7 +65,7 @@ public final class AppLaunchStateMachine: ObservableObject {
                 self?.phase = .warmingServices
             }
 
-            await Task.detached(priority: .utility) {
+            await Task.detached(priority: .userInitiated) {
                 let chatService = ChatService.shared
                 await chatService.waitForInitialPersistenceStateIfNeeded()
             }.value

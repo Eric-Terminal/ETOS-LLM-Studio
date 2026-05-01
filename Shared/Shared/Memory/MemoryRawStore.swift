@@ -18,7 +18,7 @@ struct MemoryRawStore {
     }
     private static let sqliteWriteQueue = DispatchQueue(
         label: "com.etos.memory.sqlite.incremental.write.queue",
-        qos: .utility
+        qos: .userInitiated
     )
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder

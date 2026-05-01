@@ -561,7 +561,7 @@ public enum Persistence {
         throttleInterval: TimeInterval = 0.02,
         progressHandler: (@Sendable (LegacyJSONMigrationProgress) -> Void)? = nil
     ) async throws -> LegacyJSONMigrationResult {
-        try await Task.detached(priority: .utility) {
+        try await Task.detached(priority: .userInitiated) {
             guard let store = activeGRDBStore() else {
                 throw LegacyJSONMigrationError.grdbUnavailable
             }
@@ -579,7 +579,7 @@ public enum Persistence {
 
     @discardableResult
     public static func cleanupLegacyJSONArtifactsAfterImport() async throws -> Bool {
-        try await Task.detached(priority: .utility) {
+        try await Task.detached(priority: .userInitiated) {
             guard let store = activeGRDBStore() else {
                 throw LegacyJSONMigrationError.grdbUnavailable
             }

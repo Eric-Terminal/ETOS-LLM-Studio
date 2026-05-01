@@ -154,7 +154,7 @@ public class MemoryManager {
         self.storageRootDirectory = storageRootDirectory ?? Self.defaultStorageRootDirectory(forTests: Self.isRunningUnitTests)
         self.rawStore = MemoryRawStore(rootDirectory: self.storageRootDirectory)
         logger.info("MemoryManager 正在初始化...")
-        self.initializationTask = Task.detached(priority: .utility) { [weak self] in
+        self.initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             await self.setup()
         }
@@ -175,7 +175,7 @@ public class MemoryManager {
         self.storageRootDirectory = storageRootDirectory ?? Self.defaultStorageRootDirectory(forTests: Self.isRunningUnitTests)
         self.rawStore = MemoryRawStore(rootDirectory: self.storageRootDirectory)
         self.similarityIndex = testIndex
-        self.initializationTask = Task.detached(priority: .utility) { [weak self] in
+        self.initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             do {
                 let loadedItems = (try self.similarityIndex.loadIndex()) ?? self.similarityIndex.indexItems

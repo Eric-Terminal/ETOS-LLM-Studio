@@ -1872,7 +1872,7 @@ final class PersistenceGRDBStore {
     }
 
     private func scheduleDatabaseMaintenanceIfNeeded() {
-        Task.detached(priority: .utility) { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let delay = DatabaseMaintenanceLaunchDeferral.delayNanoseconds
             if delay > 0 {
@@ -4738,7 +4738,7 @@ final class PersistenceAuxiliaryGRDBStore {
     }
 
     private func scheduleDatabaseMaintenanceIfNeeded() {
-        Task.detached(priority: .utility) { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let delay = DatabaseMaintenanceLaunchDeferral.delayNanoseconds
             if delay > 0 {

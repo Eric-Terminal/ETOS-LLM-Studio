@@ -338,7 +338,7 @@ final class ChatViewModel: ObservableObject {
         guard !isPersistingGlobalSystemPrompts else { return }
         globalSystemPromptReloadTask?.cancel()
         globalSystemPromptReloadTask = Task { [weak self] in
-            let snapshot = await Task.detached(priority: .utility) {
+            let snapshot = await Task.detached(priority: .userInitiated) {
                 GlobalSystemPromptStore.load()
             }.value
 
