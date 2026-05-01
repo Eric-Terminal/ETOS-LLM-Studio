@@ -27,6 +27,7 @@ struct DisplaySettingsView: View {
 
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
+    @AppStorage(ChatMessageActionPresentationStyle.storageKey) private var chatMessageActionPresentationStyleRawValue: String = ChatMessageActionPresentationStyle.defaultStyle.rawValue
     @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
@@ -112,6 +113,13 @@ struct DisplaySettingsView: View {
                 Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
                     Text(NSLocalizedString("悬浮面板", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
                     Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
+                }
+            }
+
+            Section(footer: Text(NSLocalizedString("设定长按消息后的操作列表呈现方式。「系统菜单」保留原生长按体验；「底部抽屉」会从屏幕底部展开完整操作列表。", comment: ""))) {
+                Picker(NSLocalizedString("消息操作菜单", comment: ""), selection: chatMessageActionPresentationStyleBinding) {
+                    Text(NSLocalizedString("系统菜单", comment: "")).tag(ChatMessageActionPresentationStyle.nativeContextMenu)
+                    Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatMessageActionPresentationStyle.bottomSheet)
                 }
             }
 
@@ -277,6 +285,13 @@ struct DisplaySettingsView: View {
         Binding(
             get: { ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue) },
             set: { chatPickerPresentationStyleRawValue = $0.rawValue }
+        )
+    }
+
+    private var chatMessageActionPresentationStyleBinding: Binding<ChatMessageActionPresentationStyle> {
+        Binding(
+            get: { ChatMessageActionPresentationStyle.resolvedStyle(rawValue: chatMessageActionPresentationStyleRawValue) },
+            set: { chatMessageActionPresentationStyleRawValue = $0.rawValue }
         )
     }
 

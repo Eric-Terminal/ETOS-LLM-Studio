@@ -51,6 +51,24 @@ struct ChatPickerPresentationStyleTests {
     }
 }
 
+@Suite("聊天消息操作菜单呈现样式测试")
+struct ChatMessageActionPresentationStyleTests {
+    @Test("默认保留系统长按菜单")
+    func defaultStyleUsesNativeContextMenu() {
+        #expect(ChatMessageActionPresentationStyle.defaultStyle == .nativeContextMenu)
+    }
+
+    @Test("底部抽屉配置可正确解析")
+    func bottomSheetResolvesToBottomSheet() {
+        #expect(ChatMessageActionPresentationStyle.resolvedStyle(rawValue: ChatMessageActionPresentationStyle.bottomSheet.rawValue) == .bottomSheet)
+    }
+
+    @Test("未知配置回退到系统长按菜单")
+    func unknownStyleFallsBackToDefault() {
+        #expect(ChatMessageActionPresentationStyle.resolvedStyle(rawValue: "unknown") == .nativeContextMenu)
+    }
+}
+
 @Suite("模型提示词语言适配测试")
 struct ModelPromptLanguageTests {
     @Test("根据语言标识解析模型提示词目标语言")

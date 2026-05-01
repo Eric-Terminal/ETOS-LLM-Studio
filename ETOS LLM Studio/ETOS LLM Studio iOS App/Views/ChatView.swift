@@ -65,9 +65,40 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
+private extension View {
+    @ViewBuilder
+    func messageActionPresentation<MenuContent: View>(
+        usesBottomSheet: Bool,
+        onPresentSheet: @escaping () -> Void,
+        @ViewBuilder contextMenuContent: @escaping () -> MenuContent
+    ) -> some View {
+        if usesBottomSheet {
+            self.onLongPressGesture {
+                onPresentSheet()
+            }
+        } else {
+            self.contextMenu {
+                contextMenuContent()
+            }
+        }
+    }
+}
+
 private enum ChatPickerSheet: String, Identifiable {
     case session
     case model
+
+    var id: String { rawValue }
+}
+
+private struct MessageActionSheetPayload: Identifiable {
+    let id = UUID()
+    let message: ChatMessage
+}
+
+private enum MessageActionExportScope: String, CaseIterable, Identifiable {
+    case fullSession
+    case upToMessage
 
     var id: String { rawValue }
 }
@@ -87,6 +118,7 @@ struct ChatView: View {
     @State private var messageToBranch: ChatMessage?
     @State private var messageToDelete: ChatMessage?
     @State private var messageVersionToDelete: ChatMessage?
+    @State private var messageActionSheetPayload: MessageActionSheetPayload?
     @State private var fullErrorContent: FullErrorContentPayload?
     @State private var showModelPickerPanel = false
     @State private var showSessionPickerPanel = false
@@ -121,6 +153,7 @@ struct ChatView: View {
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
+    @AppStorage(ChatMessageActionPresentationStyle.storageKey) private var chatMessageActionPresentationStyleRawValue: String = ChatMessageActionPresentationStyle.defaultStyle.rawValue
     @Namespace private var modelPickerNamespace
     @Namespace private var sessionPickerNamespace
     
@@ -179,6 +212,9 @@ struct ChatView: View {
     }
     private var usesBottomSheetPickerStyle: Bool {
         chatPickerPresentationStyle == .bottomSheet
+    }
+    private var usesBottomSheetMessageActionStyle: Bool {
+        ChatMessageActionPresentationStyle.resolvedStyle(rawValue: chatMessageActionPresentationStyleRawValue) == .bottomSheet
     }
     private var isModelPickerPresented: Bool {
         usesBottomSheetPickerStyle ? activeChatPickerSheet == .model : showModelPickerPanel
@@ -419,9 +455,15 @@ struct ChatView: View {
                                         }
                                     )
                                     .id(state.id)
-                                    .contextMenu {
-                                        contextMenu(for: message)
-                                    }
+                                    .messageActionPresentation(
+                                        usesBottomSheet: usesBottomSheetMessageActionStyle,
+                                        onPresentSheet: {
+                                            messageActionSheetPayload = MessageActionSheetPayload(message: message)
+                                        },
+                                        contextMenuContent: {
+                                            contextMenu(for: message)
+                                        }
+                                    )
                                 }
                             }
 
@@ -604,6 +646,82 @@ struct ChatView: View {
                         jumpToMessage(displayIndex: displayIndex)
                     }
                 )
+            }
+            .sheet(item: $messageActionSheetPayload) { payload in
+                MessageActionSheet(
+                    payload: payload,
+                    hasDisplayVersions: viewModel.hasDisplayVersions(for: payload.message),
+                    displayVersionCount: viewModel.displayVersionCount(for: payload.message),
+                    displayCurrentVersionIndex: viewModel.displayCurrentVersionIndex(for: payload.message),
+                    canRetry: viewModel.canRetry(message: payload.message),
+                    allMessages: viewModel.allMessagesForSession,
+                    ttsManager: ttsManager,
+                    onEdit: { message in
+                        dismissMessageActionSheet {
+                            editingMessage = message
+                        }
+                    },
+                    onRetry: { message in
+                        messageActionSheetPayload = nil
+                        performDeferredRetry(message)
+                    },
+                    onShowFullError: { content in
+                        dismissMessageActionSheet {
+                            fullErrorContent = FullErrorContentPayload(content: content)
+                        }
+                    },
+                    onBranch: { message in
+                        dismissMessageActionSheet {
+                            messageToBranch = message
+                            showBranchOptions = true
+                        }
+                    },
+                    onExport: { format, includeReasoning, upToMessage in
+                        dismissMessageActionSheet {
+                            exportConversation(format: format, includeReasoning: includeReasoning, upToMessage: upToMessage)
+                        }
+                    },
+                    onSpeak: { message in
+                        messageActionSheetPayload = nil
+                        toggleSpeaking(message)
+                    },
+                    onSwitchVersion: { index, message in
+                        viewModel.switchToVersion(index, of: message)
+                        messageActionSheetPayload = nil
+                    },
+                    onDeleteCurrentVersion: { message in
+                        dismissMessageActionSheet {
+                            messageVersionToDelete = message
+                        }
+                    },
+                    onDelete: { message in
+                        dismissMessageActionSheet {
+                            messageToDelete = message
+                        }
+                    },
+                    onDownloadImages: { fileNames in
+                        dismissMessageActionSheet {
+                            Task {
+                                await downloadImagesToPhotoLibrary(fileNames: fileNames)
+                            }
+                        }
+                    },
+                    onCopy: { message in
+                        UIPasteboard.general.string = message.content
+                        messageActionSheetPayload = nil
+                    },
+                    onInfo: { message, index in
+                        dismissMessageActionSheet {
+                            messageInfo = MessageInfoPayload(
+                                message: message,
+                                displayIndex: index + 1,
+                                totalCount: viewModel.allMessagesForSession.count
+                            )
+                        }
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(item: $fullErrorContent) { payload in
                 FullErrorContentSheet(payload: payload)
@@ -2332,11 +2450,7 @@ struct ChatView: View {
 
         if message.role == .assistant || message.role == .tool || message.role == .system {
             Button {
-                if ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking {
-                    viewModel.stopSpeakingMessage()
-                } else {
-                    viewModel.speakMessage(message)
-                }
+                toggleSpeaking(message)
             } label: {
                 Label(
                     ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? NSLocalizedString("停止朗读", comment: "") : NSLocalizedString("朗读消息", comment: ""),
@@ -2418,6 +2532,21 @@ struct ChatView: View {
             } label: {
                 Label(NSLocalizedString("查看消息信息", comment: ""), systemImage: "info.circle")
             }
+        }
+    }
+
+    private func toggleSpeaking(_ message: ChatMessage) {
+        if ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking {
+            viewModel.stopSpeakingMessage()
+        } else {
+            viewModel.speakMessage(message)
+        }
+    }
+
+    private func dismissMessageActionSheet(then action: @escaping () -> Void) {
+        messageActionSheetPayload = nil
+        DispatchQueue.main.async {
+            action()
         }
     }
 
@@ -4803,6 +4932,204 @@ private struct SessionPickerInfoPayload: Identifiable {
     let session: ChatSession
     let messageCount: Int
     let isCurrent: Bool
+}
+
+private struct MessageActionSheet: View {
+    let payload: MessageActionSheetPayload
+    let hasDisplayVersions: Bool
+    let displayVersionCount: Int
+    let displayCurrentVersionIndex: Int
+    let canRetry: Bool
+    let allMessages: [ChatMessage]
+    @ObservedObject var ttsManager: TTSManager
+    let onEdit: (ChatMessage) -> Void
+    let onRetry: (ChatMessage) -> Void
+    let onShowFullError: (String) -> Void
+    let onBranch: (ChatMessage) -> Void
+    let onExport: (ChatTranscriptExportFormat, Bool, ChatMessage?) -> Void
+    let onSpeak: (ChatMessage) -> Void
+    let onSwitchVersion: (Int, ChatMessage) -> Void
+    let onDeleteCurrentVersion: (ChatMessage) -> Void
+    let onDelete: (ChatMessage) -> Void
+    let onDownloadImages: ([String]) -> Void
+    let onCopy: (ChatMessage) -> Void
+    let onInfo: (ChatMessage, Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var includeReasoning = true
+
+    private var message: ChatMessage {
+        payload.message
+    }
+
+    private var hasAttachments: Bool {
+        message.audioFileName != nil || (message.imageFileNames?.isEmpty == false)
+    }
+
+    private var messageIndex: Int? {
+        allMessages.firstIndex(where: { $0.id == message.id })
+    }
+
+    private var isSpeakingThisMessage: Bool {
+        ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if !hasAttachments {
+                        Button {
+                            onEdit(message)
+                        } label: {
+                            Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
+                        }
+                    }
+
+                    if canRetry {
+                        Button {
+                            onRetry(message)
+                        } label: {
+                            Label(NSLocalizedString("重试", comment: ""), systemImage: "arrow.clockwise")
+                        }
+                    }
+
+                    if message.role == .error, let fullContent = message.fullErrorContent {
+                        Button {
+                            onShowFullError(fullContent)
+                        } label: {
+                            Label(NSLocalizedString("查看完整响应", comment: ""), systemImage: "doc.text.magnifyingglass")
+                        }
+                    }
+
+                    Button {
+                        onBranch(message)
+                    } label: {
+                        Label(NSLocalizedString("从此处创建分支", comment: ""), systemImage: "arrow.triangle.branch")
+                    }
+
+                    if message.role == .assistant || message.role == .tool || message.role == .system {
+                        Button {
+                            onSpeak(message)
+                        } label: {
+                            Label(
+                                isSpeakingThisMessage ? NSLocalizedString("停止朗读", comment: "") : NSLocalizedString("朗读消息", comment: ""),
+                                systemImage: isSpeakingThisMessage ? "stop.circle" : "speaker.wave.2"
+                            )
+                        }
+                    }
+                }
+
+                Section(NSLocalizedString("导出", comment: "")) {
+                    Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
+
+                    ForEach(MessageActionExportScope.allCases) { scope in
+                        Menu {
+                            ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
+                                Button {
+                                    onExport(format, includeReasoning, scope == .upToMessage ? message : nil)
+                                } label: {
+                                    Label(format.displayName, systemImage: iconName(for: format))
+                                }
+                            }
+                        } label: {
+                            Label(
+                                exportScopeTitle(scope),
+                                systemImage: scope == .upToMessage ? "arrow.up.doc" : "square.and.arrow.up"
+                            )
+                        }
+                    }
+                }
+
+                if hasDisplayVersions {
+                    Section(NSLocalizedString("版本管理", comment: "")) {
+                        Picker(NSLocalizedString("选择版本", comment: ""), selection: versionSelection) {
+                            ForEach(0..<displayVersionCount, id: \.self) { index in
+                                Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
+                                    .tag(index)
+                            }
+                        }
+
+                        if displayVersionCount > 1 {
+                            Button(role: .destructive) {
+                                onDeleteCurrentVersion(message)
+                            } label: {
+                                Label(NSLocalizedString("删除当前版本", comment: ""), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+                        Button {
+                            onDownloadImages(imageFileNames)
+                        } label: {
+                            Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+                        }
+                    }
+
+                    Button {
+                        onCopy(message)
+                    } label: {
+                        Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
+                    }
+
+                    if let messageIndex {
+                        Button {
+                            onInfo(message, messageIndex)
+                        } label: {
+                            Label(NSLocalizedString("查看消息信息", comment: ""), systemImage: "info.circle")
+                        }
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        onDelete(message)
+                    } label: {
+                        Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("消息操作", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("完成", comment: "")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var versionSelection: Binding<Int> {
+        Binding(
+            get: { displayCurrentVersionIndex },
+            set: { onSwitchVersion($0, message) }
+        )
+    }
+
+    private func exportScopeTitle(_ scope: MessageActionExportScope) -> String {
+        switch scope {
+        case .fullSession:
+            return NSLocalizedString("导出整个会话", comment: "")
+        case .upToMessage:
+            return NSLocalizedString("导出到此消息（含上文）", comment: "")
+        }
+    }
+
+    private func iconName(for format: ChatTranscriptExportFormat) -> String {
+        switch format {
+        case .pdf:
+            return "doc.richtext"
+        case .markdown:
+            return "number.square"
+        case .text:
+            return "doc.plaintext"
+        }
+    }
 }
 
 /// 会话信息弹窗，展示基础状态与唯一标识
