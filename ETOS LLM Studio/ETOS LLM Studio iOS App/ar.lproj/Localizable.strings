@@ -2313,3 +2313,10 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "此模型接收音频并输出文字。" = "This model accepts audio and outputs text.";
 "此模型接收文字并输出语音。" = "This model accepts text and outputs speech.";
 "当前模型不可用于生图，请在模型设置中将用途设为图片生成，或在模型能力中开启可生成图片。" = "Current model cannot be used for image generation. In model settings, set Purpose to Image Generation or enable Can generate images under Model Capabilities.";
+"自定义Body" = "Custom Body";
+"键值对" = "Key-Value";
+"添加键值对" = "إضافة Key-Value";
+"键值对有误，无法预览" = "أزواج Key-Value غير صالحة، لا يمكن المعاينة";
+"自定义Body有误，无法预览" = "Custom Body غير صالح، لا يمكن المعاينة";
+"Key" = "Key";
+"Value" = "Value";

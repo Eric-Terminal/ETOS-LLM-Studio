@@ -9,16 +9,14 @@
 import SwiftUI
 import Foundation
 import Shared
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct ModelSettingsView: View {
     @Binding var model: Model
     let provider: Provider
     let onSave: () -> Void
+    @State private var keyValueEntries: [KeyValueEntry] = []
     @State private var expressionEntries: [ExpressionEntry] = []
-    @State private var requestBodyMode: Model.RequestBodyOverrideMode = .expression
+    @State private var requestBodyMode: Model.RequestBodyOverrideMode = .keyValue
     @State private var rawJSONInput: String = "{}"
     @State private var rawJSONError: String?
 
@@ -61,16 +59,35 @@ struct ModelSettingsView: View {
                 modelCapabilityRows
             }
 
-            Section(NSLocalizedString("请求体编辑方式", comment: "")) {
+            Section(NSLocalizedString("自定义Body", comment: "")) {
                 Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
+                    Text(NSLocalizedString("键值对", comment: "")).tag(Model.RequestBodyOverrideMode.keyValue)
                     Text(NSLocalizedString("参数表达式", comment: "")).tag(Model.RequestBodyOverrideMode.expression)
                     Text(NSLocalizedString("原始 JSON", comment: "")).tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
                 .pickerStyle(.segmented)
-                .tint(.blue)
             }
 
-            if requestBodyMode == .expression {
+            if requestBodyMode == .keyValue {
+                Section(NSLocalizedString("键值对", comment: "")) {
+                    ForEach($keyValueEntries) { $entry in
+                        KeyValueRow(entry: $entry)
+                            .onChange(of: entry.key) { _, _ in
+                                validateKeyValueEntry(withId: entry.id)
+                            }
+                            .onChange(of: entry.value) { _, _ in
+                                validateKeyValueEntry(withId: entry.id)
+                            }
+                    }
+                    .onDelete(perform: deleteKeyValueEntries)
+
+                    Button {
+                        addKeyValueEntry()
+                    } label: {
+                        Label(NSLocalizedString("添加键值对", comment: ""), systemImage: "plus")
+                    }
+                }
+            } else if requestBodyMode == .expression {
                 Section(NSLocalizedString("参数表达式", comment: "")) {
                     ForEach($expressionEntries) { $entry in
                         ExpressionRow(entry: $entry)
@@ -115,21 +132,7 @@ struct ModelSettingsView: View {
             }
 
             Section(NSLocalizedString("请求体预览", comment: "")) {
-                NavigationLink {
-                    RequestBodyPreviewDetailView(
-                        preview: preview,
-                        modelName: model.displayName,
-                        modelID: model.modelName,
-                        providerName: provider.name,
-                        apiFormat: provider.apiFormat,
-                        editMode: requestBodyModeDisplayName
-                    )
-                } label: {
-                    PreviewNavigationRow(
-                        text: preview.text,
-                        isPlaceholder: preview.isPlaceholder
-                    )
-                }
+                RequestBodyPreviewInlineView(preview: preview)
             }
         }
         .navigationTitle(NSLocalizedString("模型信息", comment: ""))
@@ -141,6 +144,20 @@ struct ModelSettingsView: View {
 // MARK: - 内部状态
 
 extension ModelSettingsView {
+    struct KeyValueEntry: Identifiable, Equatable {
+        let id: UUID
+        var key: String
+        var value: String
+        var error: String?
+
+        init(id: UUID = UUID(), key: String, value: String, error: String? = nil) {
+            self.id = id
+            self.key = key
+            self.value = value
+            self.error = error
+        }
+    }
+
     struct ExpressionEntry: Identifiable, Equatable {
         let id: UUID
         var text: String
@@ -155,6 +172,7 @@ extension ModelSettingsView {
     
     private func loadEditorState() {
         requestBodyMode = model.requestBodyOverrideMode
+        loadKeyValueEntriesFromModel()
         loadExpressionEntriesFromModel()
         if let savedRawJSON = model.rawRequestBodyJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
            !savedRawJSON.isEmpty {
@@ -165,6 +183,13 @@ extension ModelSettingsView {
         validateRawJSON(rawJSONInput)
     }
 
+    private func loadKeyValueEntriesFromModel() {
+        let entries = model.overrideParameters
+            .sorted(by: { $0.key < $1.key })
+            .map { KeyValueEntry(key: $0.key, value: keyValueString(for: $0.value)) }
+        keyValueEntries = entries.isEmpty ? [KeyValueEntry(key: "", value: "")] : entries
+    }
+
     private func loadExpressionEntriesFromModel() {
         let serialized = ParameterExpressionParser.serialize(parameters: model.overrideParameters)
         if serialized.isEmpty {
@@ -172,6 +197,29 @@ extension ModelSettingsView {
         } else {
             expressionEntries = serialized.map { ExpressionEntry(text: $0) }
         }
+    }
+
+    private func addKeyValueEntry() {
+        keyValueEntries.append(KeyValueEntry(key: "", value: ""))
+    }
+
+    private func deleteKeyValueEntries(at offsets: IndexSet) {
+        keyValueEntries.remove(atOffsets: offsets)
+        if keyValueEntries.isEmpty {
+            addKeyValueEntry()
+        }
+    }
+
+    private func validateKeyValueEntry(withId id: UUID) {
+        guard let index = keyValueEntries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = keyValueEntries[index]
+        do {
+            _ = try parseKeyValueEntry(entry)
+            entry.error = nil
+        } catch {
+            entry.error = error.localizedDescription
+        }
+        keyValueEntries[index] = entry
     }
     
     private func addEmptyEntry() {
@@ -209,6 +257,13 @@ extension ModelSettingsView {
         model.rawRequestBodyJSON = rawJSONInput
 
         switch requestBodyMode {
+        case .keyValue:
+            let result = parseKeyValueEntries(entries: keyValueEntries, shouldAnnotateErrors: true)
+            keyValueEntries = result.entries
+            rawJSONError = nil
+            if !result.hasError {
+                model.overrideParameters = result.parameters
+            }
         case .expression:
             let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: true)
             expressionEntries = result.entries
@@ -224,8 +279,8 @@ extension ModelSettingsView {
                 rawJSONError = error.localizedDescription
             }
         @unknown default:
-            let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: true)
-            expressionEntries = result.entries
+            let result = parseKeyValueEntries(entries: keyValueEntries, shouldAnnotateErrors: true)
+            keyValueEntries = result.entries
             rawJSONError = nil
             if !result.hasError {
                 model.overrideParameters = result.parameters
@@ -238,10 +293,18 @@ extension ModelSettingsView {
     private var requestBodyPreview: RequestBodyPreview {
         let result = previewOverrideParameters()
         if result.hasError {
+            let text = switch requestBodyMode {
+            case .keyValue:
+                NSLocalizedString("键值对有误，无法预览", comment: "")
+            case .expression:
+                NSLocalizedString("表达式有误，无法预览", comment: "")
+            case .rawJSON:
+                NSLocalizedString("JSON 有误，无法预览", comment: "")
+            @unknown default:
+                NSLocalizedString("自定义Body有误，无法预览", comment: "")
+            }
             return RequestBodyPreview(
-                text: requestBodyMode == .expression
-                    ? NSLocalizedString("表达式有误，无法预览", comment: "")
-                    : NSLocalizedString("JSON 有误，无法预览", comment: ""),
+                text: text,
                 isPlaceholder: true
             )
         }
@@ -258,19 +321,11 @@ extension ModelSettingsView {
         )
     }
 
-    private var requestBodyModeDisplayName: String {
-        switch requestBodyMode {
-        case .expression:
-            return NSLocalizedString("参数表达式", comment: "")
-        case .rawJSON:
-            return NSLocalizedString("原始 JSON", comment: "")
-        @unknown default:
-            return NSLocalizedString("未知", comment: "")
-        }
-    }
-
     private func previewOverrideParameters() -> (parameters: [String: JSONValue], hasError: Bool) {
         switch requestBodyMode {
+        case .keyValue:
+            let result = parseKeyValueEntries(entries: keyValueEntries, shouldAnnotateErrors: false)
+            return (parameters: result.parameters, hasError: result.hasError)
         case .expression:
             let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: false)
             return (parameters: result.parameters, hasError: result.hasError)
@@ -285,6 +340,52 @@ extension ModelSettingsView {
             let result = parseExpressionEntries(entries: expressionEntries, shouldAnnotateErrors: false)
             return (parameters: result.parameters, hasError: result.hasError)
         }
+    }
+
+    private func parseKeyValueEntries(
+        entries: [KeyValueEntry],
+        shouldAnnotateErrors: Bool
+    ) -> (parameters: [String: JSONValue], hasError: Bool, entries: [KeyValueEntry]) {
+        var updatedEntries = entries
+        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
+        var hasError = false
+
+        for index in updatedEntries.indices {
+            do {
+                if let parsed = try parseKeyValueEntry(updatedEntries[index]) {
+                    parsedExpressions.append(parsed)
+                }
+                if shouldAnnotateErrors {
+                    updatedEntries[index].error = nil
+                }
+            } catch {
+                hasError = true
+                if shouldAnnotateErrors {
+                    updatedEntries[index].error = error.localizedDescription
+                }
+            }
+        }
+
+        return (
+            parameters: ParameterExpressionParser.buildParameters(from: parsedExpressions),
+            hasError: hasError,
+            entries: updatedEntries
+        )
+    }
+
+    private func parseKeyValueEntry(_ entry: KeyValueEntry) throws -> ParameterExpressionParser.ParsedExpression? {
+        let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty && value.isEmpty {
+            return nil
+        }
+        guard !key.isEmpty else {
+            throw ParameterExpressionParser.ParserError.invalidKey
+        }
+        if value.isEmpty {
+            return ParameterExpressionParser.ParsedExpression(key: key, value: .string(""))
+        }
+        return try ParameterExpressionParser.parse("\(key) = \(entry.value)")
     }
 
     private func parseExpressionEntries(
@@ -324,6 +425,21 @@ extension ModelSettingsView {
 
     private func parseRawJSONInput(_ rawJSON: String) throws -> [String: JSONValue] {
         try ParameterExpressionParser.parseRawJSONObject(rawJSON)
+    }
+
+    private func keyValueString(for value: JSONValue) -> String {
+        switch value {
+        case .string(let string):
+            return string
+        case .int(let int):
+            return String(int)
+        case .double(let double):
+            return String(double)
+        case .bool(let bool):
+            return bool ? "true" : "false"
+        case .dictionary, .array, .null:
+            return value.prettyPrintedCompact()
+        }
     }
 
     private func validateRawJSON(_ rawJSON: String) {
@@ -690,61 +806,45 @@ private struct RequestBodyPreview {
     let isPlaceholder: Bool
 }
 
-private struct PreviewNavigationRow: View {
-    let text: String
-    let isPlaceholder: Bool
-
-    private var summary: String {
-        let firstLine = text
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .first
-            .map(String.init) ?? text
-        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+private struct RequestBodyPreviewInlineView: View {
+    let preview: RequestBodyPreview
 
     var body: some View {
-        Text(summary.isEmpty ? NSLocalizedString("详情", comment: "") : summary)
-            .etFont(.footnote.monospaced())
-            .foregroundStyle(isPlaceholder ? .secondary : .primary)
-            .lineLimit(3)
-        .padding(.vertical, 2)
+        ScrollView(.horizontal, showsIndicators: true) {
+            Text(preview.text)
+                .etFont(.footnote.monospaced())
+                .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: true, vertical: false)
+                .textSelection(.enabled)
+                .padding(.vertical, 2)
+        }
     }
 }
 
-private struct RequestBodyPreviewDetailView: View {
-    let preview: RequestBodyPreview
-    let modelName: String
-    let modelID: String
-    let providerName: String
-    let apiFormat: String
-    let editMode: String
+private struct KeyValueRow: View {
+    @Binding var entry: ModelSettingsView.KeyValueEntry
 
     var body: some View {
-        List {
-            Section(NSLocalizedString("基础信息", comment: "")) {
-                LabeledContent(NSLocalizedString("模型名称", comment: ""), value: modelName)
-                LabeledContent(NSLocalizedString("模型ID", comment: ""), value: modelID)
-                LabeledContent(NSLocalizedString("提供商名称", comment: ""), value: providerName)
-                LabeledContent(NSLocalizedString("API 格式", comment: ""), value: apiFormat)
-                LabeledContent(NSLocalizedString("请求体编辑方式", comment: ""), value: editMode)
-            }
+        VStack(spacing: 8) {
+            TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .etFont(.body.monospaced())
 
-            Section(NSLocalizedString("请求体预览", comment: "")) {
-                Text(preview.text)
-                    .etFont(.footnote.monospaced())
-                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
-                    .textSelection(.enabled)
+            TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .lineLimit(1...4)
+                .etFont(.body.monospaced())
+
+            if let error = entry.error {
+                Text(error)
+                    .etFont(.footnote)
+                    .foregroundStyle(.red)
             }
         }
-        .navigationTitle(NSLocalizedString("请求体预览", comment: ""))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("复制", comment: "")) {
-                    UIPasteboard.general.string = preview.text
-                }
-                .disabled(preview.text.isEmpty)
-            }
-        }
+        .padding(.vertical, 2)
     }
 }
 

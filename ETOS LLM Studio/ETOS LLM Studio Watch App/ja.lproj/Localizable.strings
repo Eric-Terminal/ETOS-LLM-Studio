@@ -2073,3 +2073,11 @@
 "此模型接收音频并输出文字。" = "This model accepts audio and outputs text.";
 "此模型接收文字并输出语音。" = "This model accepts text and outputs speech.";
 "当前模型不可用于生图，请在模型设置中将用途设为图片生成，或在模型能力中开启可生成图片。" = "Current model cannot be used for image generation. In model settings, set Purpose to Image Generation or enable Can generate images under Model Capabilities.";
+"自定义Body" = "Custom Body";
+"键值对" = "Key-Value";
+"键值对有误，无法预览" = "Key-Value が正しくないためプレビューできません";
+"自定义Body有误，无法预览" = "Custom Body が正しくないためプレビューできません";
+"Key" = "Key";
+"Value" = "Value";
+"值里用 \n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "値には \n で改行を入力できます。直線の引用符はキーボードの方向付き引用符を長押ししてください。";
+"用 \n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "\n で改行を入力できます。直線の引用符はキーボードの方向付き引用符を長押ししてください。";
