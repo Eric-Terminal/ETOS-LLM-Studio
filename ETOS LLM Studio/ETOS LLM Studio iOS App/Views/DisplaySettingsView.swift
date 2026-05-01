@@ -115,12 +115,12 @@ struct DisplaySettingsView: View {
 
             Section {
                 Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
-                    Text(NSLocalizedString("保留现状", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
+                    Text(NSLocalizedString("悬浮面板", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
                     Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
                 }
                 .pickerStyle(.segmented)
             } footer: {
-                Text(NSLocalizedString("保留现状会继续沿用顶部悬浮面板；底部抽屉会改用系统 sheet 从屏幕底部弹出，并支持中号与大号高度。", comment: ""))
+                Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
