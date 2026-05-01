@@ -20,6 +20,7 @@ struct ProviderDetailView: View {
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
     @State private var isFetchingModels = false
+    @State private var isShowingFetchProgress = false
     @State private var fetchError: String?
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
@@ -98,7 +99,7 @@ struct ProviderDetailView: View {
         }
         .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
         .overlay {
-            if isFetchingModels {
+            if isShowingFetchProgress {
                 progressOverlay
             }
         }
@@ -109,13 +110,13 @@ struct ProviderDetailView: View {
         .task {
             guard !hasAutoFetchedModels, !isFetchingModels else { return }
             hasAutoFetchedModels = true
-            await fetchAndMergeModels()
+            await fetchAndMergeModels(showsProgress: false)
         }
         .toolbar {
             if showsToolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
-                        Task { await fetchAndMergeModels() }
+                        Task { await fetchAndMergeModels(showsProgress: true) }
                     } label: {
                         Image(systemName: "icloud.and.arrow.down")
                     }
@@ -147,7 +148,7 @@ struct ProviderDetailView: View {
             isAddingModel = true
         }
         .onChange(of: fetchModelsRequest) { _, _ in
-            Task { await fetchAndMergeModels() }
+            Task { await fetchAndMergeModels(showsProgress: true) }
         }
         .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
@@ -156,10 +157,12 @@ struct ProviderDetailView: View {
         }
     }
 
-    private func fetchAndMergeModels() async {
+    private func fetchAndMergeModels(showsProgress: Bool) async {
         guard !isFetchingModels else { return }
         isFetchingModels = true
+        isShowingFetchProgress = showsProgress
         defer { isFetchingModels = false }
+        defer { isShowingFetchProgress = false }
 
         do {
             let fetchedModels = try await ChatService.shared.fetchModels(for: provider)

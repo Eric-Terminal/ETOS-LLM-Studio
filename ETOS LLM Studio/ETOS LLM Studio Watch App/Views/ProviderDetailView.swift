@@ -20,6 +20,7 @@ struct ProviderDetailView: View {
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
     @State private var isFetchingModels = false
+    @State private var isShowingFetchProgress = false
     @State private var fetchError: String?
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
@@ -35,85 +36,84 @@ struct ProviderDetailView: View {
     }
     
     var body: some View {
-        ZStack {
-            List {
-                Section(NSLocalizedString("提供商信息", comment: "")) {
-                    MarqueeTitleSubtitleLabel(
-                        title: provider.name,
-                        subtitle: provider.baseURL,
-                        titleUIFont: .preferredFont(forTextStyle: .body),
-                        subtitleUIFont: .preferredFont(forTextStyle: .caption2),
-                        spacing: 2
-                    )
-                }
+        List {
+            Section(NSLocalizedString("提供商信息", comment: "")) {
+                MarqueeTitleSubtitleLabel(
+                    title: provider.name,
+                    subtitle: provider.baseURL,
+                    titleUIFont: .preferredFont(forTextStyle: .body),
+                    subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                    spacing: 2
+                )
+            }
 
-                if isSearchPresented {
-                    Section {
-                        HStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.secondary)
-                            TextField(NSLocalizedString("输入关键词", comment: ""), text: $searchText.watchKeyboardNewlineBinding())
-                                .focused($isSearchFieldFocused)
-                            if !searchText.isEmpty {
-                                Button {
-                                    searchText = ""
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(.plain)
+            if isSearchPresented {
+                Section {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                        TextField(NSLocalizedString("输入关键词", comment: ""), text: $searchText.watchKeyboardNewlineBinding())
+                            .focused($isSearchFieldFocused)
+                        if !searchText.isEmpty {
+                            Button {
+                                searchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.secondary)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
+            }
 
-                Section(NSLocalizedString("列表设置", comment: "")) {
-                    Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
-                    if groupByFamilySection {
-                        Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
-                            .etFont(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text(NSLocalizedString("将按已添加/未添加展示。", comment: ""))
-                            .etFont(.footnote)
-                            .foregroundColor(.secondary)
-                    }
-                }
+            Section(NSLocalizedString("列表设置", comment: "")) {
+                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
                 if groupByFamilySection {
-                    let activeSections = sections(forActive: true)
-                    let inactiveSections = sections(forActive: false)
-
-                    ForEach(activeSections) { section in
-                        modelSection(
-                            title: section.title,
-                            indices: section.indices,
-                            isActive: section.isActive
-                        )
-                    }
-
-                    ForEach(inactiveSections) { section in
-                        modelSection(
-                            title: section.title,
-                            indices: section.indices,
-                            isActive: section.isActive
-                        )
-                    }
+                    Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundColor(.secondary)
                 } else {
-                    modelSection(
-                        title: NSLocalizedString("已添加", comment: ""),
-                        indices: filteredIndices(forActive: true),
-                        isActive: true
-                    )
-                    modelSection(
-                        title: NSLocalizedString("未添加", comment: ""),
-                        indices: filteredIndices(forActive: false),
-                        isActive: false
-                    )
+                    Text(NSLocalizedString("将按已添加/未添加展示。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundColor(.secondary)
                 }
             }
-            .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
-            
-            if isFetchingModels {
+            if groupByFamilySection {
+                let activeSections = sections(forActive: true)
+                let inactiveSections = sections(forActive: false)
+
+                ForEach(activeSections) { section in
+                    modelSection(
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
+                    )
+                }
+
+                ForEach(inactiveSections) { section in
+                    modelSection(
+                        title: section.title,
+                        indices: section.indices,
+                        isActive: section.isActive
+                    )
+                }
+            } else {
+                modelSection(
+                    title: NSLocalizedString("已添加", comment: ""),
+                    indices: filteredIndices(forActive: true),
+                    isActive: true
+                )
+                modelSection(
+                    title: NSLocalizedString("未添加", comment: ""),
+                    indices: filteredIndices(forActive: false),
+                    isActive: false
+                )
+            }
+        }
+        .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
+        .overlay {
+            if isShowingFetchProgress {
                 ProgressView(NSLocalizedString("正在获取...", comment: ""))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black.opacity(0.4))
@@ -124,7 +124,7 @@ struct ProviderDetailView: View {
         .task {
             guard !hasAutoFetchedModels, !isFetchingModels else { return }
             hasAutoFetchedModels = true
-            await fetchAndMergeModels()
+            await fetchAndMergeModels(showsProgress: false)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -135,7 +135,7 @@ struct ProviderDetailView: View {
             
             ToolbarItem(placement: .bottomBar) {
                 HStack {
-                    Button(action: { Task { await fetchAndMergeModels() } }) {
+                    Button(action: { Task { await fetchAndMergeModels(showsProgress: true) } }) {
                         Image(systemName: "icloud.and.arrow.down")
                     }
                     .disabled(isFetchingModels)
@@ -164,9 +164,11 @@ struct ProviderDetailView: View {
         }
     }
     
-    private func fetchAndMergeModels() async {
+    private func fetchAndMergeModels(showsProgress: Bool) async {
         isFetchingModels = true
+        isShowingFetchProgress = showsProgress
         defer { isFetchingModels = false }
+        defer { isShowingFetchProgress = false }
         
         do {
             let fetchedModels = try await ChatService.shared.fetchModels(for: provider)
