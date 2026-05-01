@@ -9,9 +9,6 @@
 import SwiftUI
 import Foundation
 import Shared
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct ProviderEditView: View {
     @Environment(\.dismiss) private var dismiss
@@ -146,18 +143,12 @@ struct ProviderEditView: View {
             }
 
             Section(header: Text(NSLocalizedString("请求头预览", comment: ""))) {
-                NavigationLink {
-                    HeaderOverridesPreviewDetailView(
-                        preview: preview,
-                        providerName: provider.name,
-                        apiFormat: provider.apiFormat
-                    )
-                } label: {
-                    PreviewNavigationRow(
-                        text: preview.text,
-                        isPlaceholder: preview.isPlaceholder
-                    )
-                }
+                Text(preview.text)
+                    .etFont(.footnote.monospaced())
+                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .navigationTitle(navigationTitle)
@@ -379,58 +370,6 @@ struct ProviderEditView: View {
 private struct HeaderOverridesPreview {
     let text: String
     let isPlaceholder: Bool
-}
-
-private struct PreviewNavigationRow: View {
-    let text: String
-    let isPlaceholder: Bool
-
-    private var summary: String {
-        let firstLine = text
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .first
-            .map(String.init) ?? text
-        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    var body: some View {
-        Text(summary.isEmpty ? NSLocalizedString("详情", comment: "") : summary)
-            .etFont(.footnote.monospaced())
-            .foregroundStyle(isPlaceholder ? .secondary : .primary)
-            .lineLimit(3)
-            .padding(.vertical, 2)
-    }
-}
-
-private struct HeaderOverridesPreviewDetailView: View {
-    let preview: HeaderOverridesPreview
-    let providerName: String
-    let apiFormat: String
-
-    var body: some View {
-        List {
-            Section(NSLocalizedString("基础信息", comment: "")) {
-                LabeledContent(NSLocalizedString("提供商名称", comment: ""), value: providerName)
-                LabeledContent(NSLocalizedString("API 格式", comment: ""), value: apiFormat)
-            }
-
-            Section(NSLocalizedString("请求头预览", comment: "")) {
-                Text(preview.text)
-                    .etFont(.footnote.monospaced())
-                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
-                    .textSelection(.enabled)
-            }
-        }
-        .navigationTitle(NSLocalizedString("请求头预览", comment: ""))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("复制", comment: "")) {
-                    UIPasteboard.general.string = preview.text
-                }
-                .disabled(preview.text.isEmpty)
-            }
-        }
-    }
 }
 
 private struct HeaderOverrideEntry: Identifiable, Equatable {
