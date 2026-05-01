@@ -693,17 +693,22 @@ public final class MCPManager: ObservableObject {
                 $0.connectionState = .failed(reason: error.localizedDescription)
                 $0.isBusy = false
             }
-            if retryOnFailure || keepReadyStateDuringHandshake {
-                notifyAutoConnectFailureIfNeeded(for: server, error: error)
-            }
             lastOperationError = error.localizedDescription
             lastOperationOutput = nil
             clients[server.id] = nil
             streamingTransports[server.id]?.disconnect()
             streamingTransports[server.id] = nil
             notificationRelays[server.id] = nil
+            var didScheduleRetry = false
             if retryOnFailure, server.isSelectedForChat {
-                scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
+                didScheduleRetry = scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
+            }
+            if Self.shouldNotifyAutoConnectFailure(
+                retryWasScheduled: didScheduleRetry,
+                retryOnFailure: retryOnFailure,
+                keepReadyStateDuringHandshake: keepReadyStateDuringHandshake
+            ) {
+                notifyAutoConnectFailureIfNeeded(for: server, error: error)
             }
             appendGovernanceLog(level: .error, category: .lifecycle, serverID: server.id, message: "服务器连接失败：\(error.localizedDescription)")
             throw error
@@ -740,11 +745,13 @@ public final class MCPManager: ObservableObject {
         }
     }
 
-    private func scheduleAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) {
+    @discardableResult
+    private func scheduleAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) -> Bool {
         let attempt = (autoConnectRetryAttempts[serverID] ?? 0) + 1
         if attempt > autoConnectMaxRetries {
             autoConnectRetryAttempts[serverID] = nil
-            return
+            appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: "自动重连已达到上限，停止继续重试。")
+            return false
         }
         autoConnectRetryAttempts[serverID] = attempt
         autoConnectRetryTasks[serverID]?.cancel()
@@ -769,6 +776,7 @@ public final class MCPManager: ObservableObject {
             guard let self else { return }
             self.performAutoConnectRetry(for: serverID, preserveSelection: preserveSelection)
         }
+        return true
     }
 
     private func performAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) {
@@ -822,6 +830,14 @@ public final class MCPManager: ObservableObject {
                 isTimeout: isHandshakeTimeout
             )
         }
+    }
+
+    nonisolated static func shouldNotifyAutoConnectFailure(
+        retryWasScheduled: Bool,
+        retryOnFailure: Bool,
+        keepReadyStateDuringHandshake: Bool
+    ) -> Bool {
+        (retryOnFailure || keepReadyStateDuringHandshake) && !retryWasScheduled
     }
 
     private func isInitializeTimeoutError(_ error: Error) -> Bool {

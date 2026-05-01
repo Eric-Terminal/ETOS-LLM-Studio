@@ -41,6 +41,20 @@ struct MCPManagerToolExposureTests {
         #expect(batch.body.contains("服务器A"))
     }
 
+    @Test("MCP 自动连接失败通知会等重试耗尽后再发送")
+    func testAutoConnectFailureNotificationWaitsUntilRetriesExhausted() {
+        #expect(MCPManager.shouldNotifyAutoConnectFailure(
+            retryWasScheduled: true,
+            retryOnFailure: true,
+            keepReadyStateDuringHandshake: false
+        ) == false)
+        #expect(MCPManager.shouldNotifyAutoConnectFailure(
+            retryWasScheduled: false,
+            retryOnFailure: true,
+            keepReadyStateDuringHandshake: false
+        ) == true)
+    }
+
     @MainActor
     @Test("MCP 聊天总开关关闭时 chatToolsForLLM 返回空数组")
     func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() {
