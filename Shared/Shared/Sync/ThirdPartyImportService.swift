@@ -1106,12 +1106,22 @@ private extension ThirdPartyImportService {
 
     static func normalizeProviderFormat(typeHint: String?, modelIDs: [String]) -> String {
         let hint = (typeHint ?? "").lowercased()
-        let joinedModels = modelIDs.joined(separator: " ").lowercased()
 
-        if hint.contains("anthropic") || hint.contains("claude") || joinedModels.contains("claude") {
+        if !hint.isEmpty {
+            if hint.contains("anthropic") || hint.contains("claude") {
+                return "anthropic"
+            }
+            if hint.contains("gemini") || hint.contains("google") || hint.contains("vertex") {
+                return "gemini"
+            }
+            return "openai-compatible"
+        }
+
+        let joinedModels = modelIDs.joined(separator: " ").lowercased()
+        if joinedModels.contains("claude") {
             return "anthropic"
         }
-        if hint.contains("gemini") || hint.contains("google") || hint.contains("vertex") || joinedModels.contains("gemini") {
+        if joinedModels.contains("gemini") {
             return "gemini"
         }
         return "openai-compatible"

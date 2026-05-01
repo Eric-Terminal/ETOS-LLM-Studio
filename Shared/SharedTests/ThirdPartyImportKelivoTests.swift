@@ -85,6 +85,39 @@ struct ThirdPartyImportKelivoTests {
         #expect(session.messages[1].tokenUsage?.totalTokens == 42)
     }
 
+    @Test("Kelivo 的显式 providerType 优先于模型名推断")
+    func testPrepareKelivoImportRespectsExplicitProviderType() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let settings: [String: Any] = [
+            "provider_configs": [
+                "kelivo-provider-2": [
+                    "name": "OpenAI 兼容提供商",
+                    "providerType": "openai",
+                    "baseUrl": "https://example.com/v1",
+                    "apiKey": "kelivo-key",
+                    "enabled": true,
+                    "models": ["claude-3-5-sonnet"]
+                ]
+            ]
+        ]
+
+        try JSONSerialization.data(withJSONObject: settings)
+            .write(to: sandbox.appendingPathComponent("settings.json"))
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .kelivo,
+            fileURL: sandbox
+        )
+
+        #expect(prepared.package.providers.count == 1)
+        let provider = prepared.package.providers[0]
+        #expect(provider.apiFormat == "openai-compatible")
+        #expect(provider.baseURL == "https://example.com/v1")
+        #expect(provider.models.map(\.modelName) == ["claude-3-5-sonnet"])
+    }
+
     private func makeTemporaryDirectory() -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
