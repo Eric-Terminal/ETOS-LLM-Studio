@@ -108,24 +108,17 @@ struct DisplaySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
+            Section(footer: Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))) {
                 Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
                     Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
                     Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
                 }
-            } footer: {
-                Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                .pickerStyle(.automatic)
             }
 
-            Section {
+            Section(footer: Text(NSLocalizedString("需要先将界面架构切换为“独立页面”才可开启彩色设置图标；沉浸视窗会继续使用单色线条图标。", comment: ""))) {
                 Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: colorfulSettingsIconsBinding)
                     .disabled(!canUseColorfulSettingsIcons)
-            } footer: {
-                Text(NSLocalizedString("需要先将界面架构切换为“独立页面”才可开启彩色设置图标；沉浸视窗会继续使用单色线条图标。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
