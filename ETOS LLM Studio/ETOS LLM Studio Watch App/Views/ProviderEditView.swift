@@ -26,8 +26,19 @@ struct ProviderEditView: View {
     @State private var showProxyPassword: Bool = false
     
     var isNew: Bool
+    let dismissAfterSave: Bool
+    let showsCancelButton: Bool
+    let navigationTitleOverride: String?
+    let onSave: (Provider) -> Void
     
-    init(provider: Provider, isNew: Bool = false) {
+    init(
+        provider: Provider,
+        isNew: Bool = false,
+        dismissAfterSave: Bool = true,
+        showsCancelButton: Bool = true,
+        navigationTitleOverride: String? = nil,
+        onSave: @escaping (Provider) -> Void = { _ in }
+    ) {
         self._provider = State(initialValue: provider)
         self._apiKeysText = State(initialValue: provider.apiKeys.joined(separator: ","))
         let serializedHeaders = HeaderExpressionParser.serialize(headers: provider.headerOverrides)
@@ -37,6 +48,10 @@ struct ProviderEditView: View {
         self._useProviderProxyOverride = State(initialValue: provider.proxyConfiguration != nil)
         self._providerProxyConfiguration = State(initialValue: provider.proxyConfiguration ?? NetworkProxyConfiguration())
         self.isNew = isNew
+        self.dismissAfterSave = dismissAfterSave
+        self.showsCancelButton = showsCancelButton
+        self.navigationTitleOverride = navigationTitleOverride
+        self.onSave = onSave
     }
     
     var body: some View {
@@ -146,10 +161,12 @@ struct ProviderEditView: View {
                     .disabled(isSaveDisabled)
             }
         }
-        .navigationTitle(isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
+        .navigationTitle(navigationTitle)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+            if showsCancelButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                }
             }
         }
     }
@@ -166,8 +183,15 @@ struct ProviderEditView: View {
         
         // 重新加载服务以更新整个应用的 UI
         ChatService.shared.reloadProviders()
+        onSave(provider)
         
-        dismiss()
+        if dismissAfterSave {
+            dismiss()
+        }
+    }
+
+    private var navigationTitle: String {
+        navigationTitleOverride ?? (isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
     }
 
     private var apiBaseURLHint: String {

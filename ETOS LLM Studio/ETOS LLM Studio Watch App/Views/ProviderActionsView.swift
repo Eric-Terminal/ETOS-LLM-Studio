@@ -5,7 +5,7 @@
 // ETOS LLM Studio Watch App 提供商操作视图
 //
 // 定义内容:
-// - 提供对单个提供商进行编辑或删除的选项
+// - 提供单个提供商的模型配置与提供商配置入口
 // ============================================================================
 
 import SwiftUI
@@ -13,65 +13,50 @@ import Foundation
 import Shared
 
 struct ProviderActionsView: View {
-    @EnvironmentObject var viewModel: ChatViewModel
-    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject private var viewModel: ChatViewModel
     
-    let provider: Provider
-    
-    @State private var isShowingDeleteConfirm = false
+    @State private var provider: Provider
+    @State private var providerRevision = 0
+
+    init(provider: Provider) {
+        _provider = State(initialValue: provider)
+    }
 
     var body: some View {
-        Form {
-            Section(NSLocalizedString("当前提供商", comment: "")) {
-                MarqueeTitleSubtitleLabel(
-                    title: provider.name,
-                    subtitle: provider.baseURL,
-                    titleUIFont: .preferredFont(forTextStyle: .body),
-                    subtitleUIFont: .preferredFont(forTextStyle: .caption2),
-                    spacing: 2
-                )
-            }
-
-            Section {
-                // 编辑按钮
-                NavigationLink(destination: ProviderEditView(provider: provider, isNew: false).environmentObject(viewModel)) {
-                    Label(NSLocalizedString("编辑提供商", comment: ""), systemImage: "pencil")
+        List {
+            Section(NSLocalizedString("配置入口", comment: "")) {
+                NavigationLink {
+                    ProviderDetailView(provider: provider) { updatedProvider in
+                        updateProvider(updatedProvider)
+                    }
+                        .environmentObject(viewModel)
+                } label: {
+                    Label(NSLocalizedString("模型配置", comment: ""), systemImage: "square.stack.3d.up")
                 }
-            }
 
-            Section {
-                // 删除按钮
-                Button(role: .destructive, action: {
-                    isShowingDeleteConfirm = true
-                }) {
-                    Label(NSLocalizedString("删除提供商", comment: ""), systemImage: "trash.fill")
+                NavigationLink {
+                    ProviderEditView(
+                        provider: provider,
+                        isNew: false,
+                        dismissAfterSave: false,
+                        showsCancelButton: false,
+                        navigationTitleOverride: NSLocalizedString("提供商配置", comment: "")
+                    ) { updatedProvider in
+                        updateProvider(updatedProvider)
+                    }
+                    .id(providerRevision)
+                    .environmentObject(viewModel)
+                } label: {
+                    Label(NSLocalizedString("提供商配置", comment: ""), systemImage: "slider.horizontal.3")
                 }
             }
         }
         .navigationTitle(provider.name)
-        .alert(NSLocalizedString("确认删除", comment: ""), isPresented: $isShowingDeleteConfirm, actions: {
-            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
-                deleteProvider()
-            }
-            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
-        }, message: {
-            Text(
-                String(
-                    format: NSLocalizedString("您确定要删除提供商 “%@” 吗？此操作无法撤销。", comment: ""),
-                    provider.name
-                )
-            )
-        })
     }
 
-    private func deleteProvider() {
-        // 使用 ConfigLoader 删除配置文件
-        ConfigLoader.deleteProvider(provider)
-        
-        // 在 ChatService 中重新加载提供商以更新应用状态
-        ChatService.shared.reloadProviders()
-        
-        // 自动返回上一级视图
-        presentationMode.wrappedValue.dismiss()
+    private func updateProvider(_ updatedProvider: Provider) {
+        guard provider != updatedProvider else { return }
+        provider = updatedProvider
+        providerRevision += 1
     }
 }

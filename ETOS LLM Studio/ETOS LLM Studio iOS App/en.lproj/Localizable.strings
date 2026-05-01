@@ -579,6 +579,7 @@
 "记忆数据" = "Memory Data";
 "背景图片" = "Backgrounds";
 "提供商配置" = "Provider Configs";
+"模型配置" = "Model Config";
 "MCP 服务器" = "MCP Servers";
 "其他文件" = "Other Files";
 "点击类别可查看详细文件列表。" = "Tap a category to view file details.";

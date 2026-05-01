@@ -24,8 +24,19 @@ struct ProviderEditView: View {
     @State private var showApiKeys: Bool = false
     @State private var showProxyPassword: Bool = false
     let isNew: Bool
+    let dismissAfterSave: Bool
+    let showsCancelButton: Bool
+    let navigationTitleOverride: String?
+    let onSave: (Provider) -> Void
     
-    init(provider: Provider, isNew: Bool = false) {
+    init(
+        provider: Provider,
+        isNew: Bool = false,
+        dismissAfterSave: Bool = true,
+        showsCancelButton: Bool = true,
+        navigationTitleOverride: String? = nil,
+        onSave: @escaping (Provider) -> Void = { _ in }
+    ) {
         _provider = State(initialValue: provider)
         _apiKeysText = State(initialValue: provider.apiKeys.joined(separator: ","))
         let serializedHeaders = HeaderExpressionParser.serialize(headers: provider.headerOverrides)
@@ -35,6 +46,10 @@ struct ProviderEditView: View {
         _useProviderProxyOverride = State(initialValue: provider.proxyConfiguration != nil)
         _providerProxyConfiguration = State(initialValue: provider.proxyConfiguration ?? NetworkProxyConfiguration())
         self.isNew = isNew
+        self.dismissAfterSave = dismissAfterSave
+        self.showsCancelButton = showsCancelButton
+        self.navigationTitleOverride = navigationTitleOverride
+        self.onSave = onSave
     }
     
     var body: some View {
@@ -145,10 +160,12 @@ struct ProviderEditView: View {
                 }
             }
         }
-        .navigationTitle(isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
+        .navigationTitle(navigationTitle)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+            if showsCancelButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(NSLocalizedString("保存", comment: "")) {
@@ -167,7 +184,15 @@ struct ProviderEditView: View {
         updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
         ConfigLoader.saveProvider(updated)
         ChatService.shared.reloadProviders()
-        dismiss()
+        provider = updated
+        onSave(updated)
+        if dismissAfterSave {
+            dismiss()
+        }
+    }
+
+    private var navigationTitle: String {
+        navigationTitleOverride ?? (isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
     }
 
     private var apiBaseURLHint: String {

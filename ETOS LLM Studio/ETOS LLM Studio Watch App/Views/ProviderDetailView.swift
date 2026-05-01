@@ -14,7 +14,10 @@ import Foundation
 import Shared
 
 struct ProviderDetailView: View {
-    @State var provider: Provider
+    private let sourceProvider: Provider
+    @State private var provider: Provider
+    let onSave: (Provider) -> Void
+    @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
     @State private var isFetchingModels = false
     @State private var fetchError: String?
@@ -24,6 +27,12 @@ struct ProviderDetailView: View {
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
+
+    init(provider: Provider, onSave: @escaping (Provider) -> Void = { _ in }) {
+        self.sourceProvider = provider
+        _provider = State(initialValue: provider)
+        self.onSave = onSave
+    }
     
     var body: some View {
         ZStack {
@@ -142,7 +151,11 @@ struct ProviderDetailView: View {
             ModelAddView(provider: $provider)
         }
         .onChange(of: provider) {
+            guard !isApplyingProviderUpdateFromParent else { return }
             saveChanges()
+        }
+        .onChange(of: sourceProvider) { _, newProvider in
+            syncProviderConfiguration(from: newProvider)
         }
         .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {
             Button(NSLocalizedString("好的", comment: "")) { }
@@ -181,6 +194,20 @@ struct ProviderDetailView: View {
         
         ConfigLoader.saveProvider(providerToSave)
         ChatService.shared.reloadProviders()
+        onSave(providerToSave)
+    }
+
+    private func syncProviderConfiguration(from newProvider: Provider) {
+        let inactiveModels = provider.models.filter { !$0.isActivated }
+        let existingModelNames = Set(newProvider.models.map(\.modelName))
+        var updatedProvider = newProvider
+        updatedProvider.models.append(contentsOf: inactiveModels.filter { !existingModelNames.contains($0.modelName) })
+        guard updatedProvider != provider else { return }
+        isApplyingProviderUpdateFromParent = true
+        provider = updatedProvider
+        DispatchQueue.main.async {
+            isApplyingProviderUpdateFromParent = false
+        }
     }
 
     private var normalizedSearchText: String {

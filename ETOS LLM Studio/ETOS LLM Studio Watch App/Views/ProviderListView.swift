@@ -54,7 +54,10 @@ private struct WatchProviderManagementContentView: View {
     var body: some View {
         List {
             ForEach(viewModel.providers) { provider in
-                NavigationLink(destination: ProviderDetailView(provider: provider)) {
+                NavigationLink {
+                    ProviderActionsView(provider: provider)
+                        .environmentObject(viewModel)
+                } label: {
                     MarqueeTitleSubtitleLabel(
                         title: provider.name,
                         subtitle: provider.baseURL,
@@ -62,12 +65,6 @@ private struct WatchProviderManagementContentView: View {
                         subtitleUIFont: .preferredFont(forTextStyle: .caption2),
                         spacing: 2
                     )
-                }
-                .swipeActions(edge: .leading) {
-                    NavigationLink(destination: ProviderEditView(provider: provider, isNew: false)) {
-                        Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
-                    }
-                    .tint(.blue)
                 }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {

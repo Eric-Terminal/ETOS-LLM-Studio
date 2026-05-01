@@ -594,6 +594,7 @@ Agregar Authorization y other auth headers manually.";
 "记忆数据" = "Memoria Datos";
 "背景图片" = "Fondos";
 "提供商配置" = "Proveedor Configs";
+"模型配置" = "Configuración de modelos";
 "MCP 服务器" = "MCP Servidores";
 "其他文件" = "Other Archivos";
 "点击类别可查看详细文件列表。" = "Toca a Categoría a Ver Archivo Detalles.";

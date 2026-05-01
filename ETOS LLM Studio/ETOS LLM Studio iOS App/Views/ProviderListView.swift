@@ -45,6 +45,31 @@ private enum ProviderManagementTab: String, CaseIterable, Identifiable {
     }
 }
 
+private enum ProviderConfigurationTab: String, CaseIterable, Identifiable {
+    case models
+    case provider
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .models:
+            return NSLocalizedString("模型配置", comment: "")
+        case .provider:
+            return NSLocalizedString("提供商配置", comment: "")
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .models:
+            return "square.stack.3d.up"
+        case .provider:
+            return "slider.horizontal.3"
+        }
+    }
+}
+
 struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var selectedTab: ProviderManagementTab = .provider
@@ -105,7 +130,6 @@ struct ProviderListView: View {
 
 private struct ProviderManagementContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @State private var providerToEdit: Provider?
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
 
@@ -114,7 +138,8 @@ private struct ProviderManagementContentView: View {
             Section {
                 ForEach(viewModel.providers) { provider in
                     NavigationLink {
-                        ProviderDetailView(provider: provider)
+                        ProviderConfigurationTabsView(provider: provider)
+                            .environmentObject(viewModel)
                     } label: {
                         MarqueeTitleSubtitleLabel(
                             title: provider.name,
@@ -123,27 +148,15 @@ private struct ProviderManagementContentView: View {
                             subtitleUIFont: .preferredFont(forTextStyle: .caption1)
                         )
                     }
-                    .contextMenu {
-                        Button {
-                            providerToEdit = provider
-                        } label: {
-                            Label(NSLocalizedString("编辑提供商", comment: ""), systemImage: "pencil")
-                        }
-
+                    .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             providerToDelete = provider
                             showDeleteAlert = true
                         } label: {
-                            Label(NSLocalizedString("删除提供商", comment: ""), systemImage: "trash")
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                         }
                     }
                 }
-            }
-        }
-        .sheet(item: $providerToEdit) { provider in
-            NavigationStack {
-                ProviderEditView(provider: provider, isNew: false)
-                    .environmentObject(viewModel)
             }
         }
         .alert(NSLocalizedString("确认删除提供商", comment: ""), isPresented: $showDeleteAlert) {
@@ -163,6 +176,52 @@ private struct ProviderManagementContentView: View {
                 Text(NSLocalizedString("此操作无法撤销。", comment: ""))
             }
         }
+    }
+}
+
+private struct ProviderConfigurationTabsView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @State private var provider: Provider
+    @State private var selectedTab: ProviderConfigurationTab = .models
+    @State private var providerRevision = 0
+
+    init(provider: Provider) {
+        _provider = State(initialValue: provider)
+    }
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            ProviderDetailView(provider: provider) { updatedProvider in
+                updateProvider(updatedProvider)
+            }
+                .environmentObject(viewModel)
+                .tabItem {
+                    Label(ProviderConfigurationTab.models.title, systemImage: ProviderConfigurationTab.models.iconName)
+                }
+                .tag(ProviderConfigurationTab.models)
+
+            ProviderEditView(
+                provider: provider,
+                isNew: false,
+                dismissAfterSave: false,
+                showsCancelButton: false,
+                navigationTitleOverride: NSLocalizedString("提供商配置", comment: "")
+            ) { updatedProvider in
+                updateProvider(updatedProvider)
+            }
+            .id(providerRevision)
+            .environmentObject(viewModel)
+            .tabItem {
+                Label(ProviderConfigurationTab.provider.title, systemImage: ProviderConfigurationTab.provider.iconName)
+            }
+            .tag(ProviderConfigurationTab.provider)
+        }
+    }
+
+    private func updateProvider(_ updatedProvider: Provider) {
+        guard provider != updatedProvider else { return }
+        provider = updatedProvider
+        providerRevision += 1
     }
 }
 

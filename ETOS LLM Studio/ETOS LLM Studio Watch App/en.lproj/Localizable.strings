@@ -587,6 +587,8 @@
 "记忆数据" = "Memory Data";
 "背景图片" = "Backgrounds";
 "提供商配置" = "Providers";
+"模型配置" = "Model Config";
+"配置入口" = "Config Entry";
 "MCP 服务器" = "MCP Servers";
 "清理工具" = "Cleanup";
 "清理孤立文件" = "Clean Orphans";

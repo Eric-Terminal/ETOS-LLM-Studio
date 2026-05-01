@@ -601,6 +601,8 @@ Ajouter Authorization et other auth headers manually.";
 "记忆数据" = "Mémoire Données";
 "背景图片" = "Arrière-plans";
 "提供商配置" = "Fournisseurs";
+"模型配置" = "Configuration des modèles";
+"配置入口" = "Entrée de configuration";
 "MCP 服务器" = "MCP Serveurs";
 "清理工具" = "Nettoyage";
 "清理孤立文件" = "Nettoyer les orphelins";
