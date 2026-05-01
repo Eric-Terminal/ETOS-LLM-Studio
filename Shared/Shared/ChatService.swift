@@ -262,6 +262,7 @@ public class ChatService {
     private let worldbookExportService: WorldbookExportService
     private let worldbookEngine: WorldbookEngine
     private let urlSession: URLSession
+    private let fileAttachmentTextExtractor: FileAttachmentTextExtractor
     private let startupStateLoadLock = NSLock()
     private var hasTriggeredStartupStateLoad = false
     private var hasCompletedStartupStateLoad = false
@@ -307,6 +308,12 @@ public class ChatService {
     private struct ImageOCRPreprocessingResult {
         let messages: [ChatMessage]
         let imageAttachments: [UUID: [ImageAttachment]]
+        let errorMessage: String?
+    }
+
+    private struct FileAttachmentTextPreprocessingResult {
+        let messages: [ChatMessage]
+        let fileAttachments: [UUID: [FileAttachment]]
         let errorMessage: String?
     }
 
@@ -634,6 +641,7 @@ public class ChatService {
         worldbookImportService: WorldbookImportService = WorldbookImportService(),
         worldbookExportService: WorldbookExportService = WorldbookExportService(),
         worldbookEngine: WorldbookEngine = WorldbookEngine(),
+        fileAttachmentTextExtractor: FileAttachmentTextExtractor = FileAttachmentTextExtractor(),
         urlSession: URLSession = NetworkSessionConfiguration.shared
     ) {
         logger.info("ChatService 正在初始化...")
@@ -643,6 +651,7 @@ public class ChatService {
         self.worldbookImportService = worldbookImportService
         self.worldbookExportService = worldbookExportService
         self.worldbookEngine = worldbookEngine
+        self.fileAttachmentTextExtractor = fileAttachmentTextExtractor
         self.urlSession = urlSession
         ConfigLoader.setupInitialProviderConfigs()
         ConfigLoader.setupBackgroundsDirectory()
@@ -3675,6 +3684,26 @@ public class ChatService {
                 fileAttachments[msg.id] = attachments
             }
         }
+
+        let filePreprocessing = preprocessFileAttachmentsForText(
+            messages: messagesToSend,
+            fileAttachments: fileAttachments
+        )
+        if let errorMessage = filePreprocessing.errorMessage {
+            addErrorMessage(errorMessage, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "file_attachment_text_extraction_failed"
+            )
+            return
+        }
+        messagesToSend = filePreprocessing.messages
+        fileAttachments = filePreprocessing.fileAttachments
         
         var commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
         if adapter is OpenAIAdapter {
@@ -3767,6 +3796,73 @@ public class ChatService {
         }
         #endif
         return "application/octet-stream"
+    }
+
+    private func preprocessFileAttachmentsForText(
+        messages: [ChatMessage],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> FileAttachmentTextPreprocessingResult {
+        guard !fileAttachments.isEmpty else {
+            return FileAttachmentTextPreprocessingResult(messages: messages, fileAttachments: fileAttachments, errorMessage: nil)
+        }
+
+        var updatedMessages = messages
+        let orderedMessageIDs = updatedMessages.map(\.id)
+        let sortedPairs = fileAttachments.sorted { lhs, rhs in
+            let lhsIndex = orderedMessageIDs.firstIndex(of: lhs.key) ?? Int.max
+            let rhsIndex = orderedMessageIDs.firstIndex(of: rhs.key) ?? Int.max
+            return lhsIndex < rhsIndex
+        }
+
+        for (messageID, attachments) in sortedPairs {
+            guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else { continue }
+            var fileBlocks: [String] = []
+            for attachment in attachments {
+                do {
+                    let text = try fileAttachmentTextExtractor.extractText(from: attachment)
+                    let title = String(
+                        format: NSLocalizedString("文件：%@", comment: "Extracted file attachment block title"),
+                        attachment.fileName
+                    )
+                    fileBlocks.append("\(title)\n\(text)")
+                } catch {
+                    logger.error("文件附件文本提取失败: \(error.localizedDescription)")
+                    let reason = localizedFileExtractionErrorDescription(error)
+                    let errorMessage = String(
+                        format: NSLocalizedString("附件“%@”文本提取失败：%@", comment: "File attachment extraction failed"),
+                        attachment.fileName,
+                        reason
+                    )
+                    return FileAttachmentTextPreprocessingResult(messages: messages, fileAttachments: fileAttachments, errorMessage: errorMessage)
+                }
+            }
+
+            guard !fileBlocks.isEmpty else { continue }
+            let appendixText = makeFileAttachmentAppendixText(fileBlocks)
+            if updatedMessages[messageIndex].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                updatedMessages[messageIndex].content = appendixText
+            } else {
+                updatedMessages[messageIndex].content += "\n\n\(appendixText)"
+            }
+        }
+
+        logger.info("已将文件附件转换为纯文本并附加到消息正文。")
+        return FileAttachmentTextPreprocessingResult(messages: updatedMessages, fileAttachments: [:], errorMessage: nil)
+    }
+
+    private func localizedFileExtractionErrorDescription(_ error: Error) -> String {
+        if let description = (error as? LocalizedError)?.errorDescription, !description.isEmpty {
+            return description
+        }
+        return error.localizedDescription
+    }
+
+    private func makeFileAttachmentAppendixText(_ blocks: [String]) -> String {
+        let joinedBlocks = blocks.joined(separator: "\n\n")
+        return String(
+            format: NSLocalizedString("以下内容来自文件附件文本提取：\n\n%@", comment: "File attachment text appendix sent to chat model"),
+            joinedBlocks
+        )
     }
 
     private func preprocessImageAttachmentsIfNeeded(

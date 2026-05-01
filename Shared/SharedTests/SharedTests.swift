@@ -2859,6 +2859,7 @@ fileprivate class MockAPIAdapter: APIAdapter {
     var receivedTitleMessages: [ChatMessage]?
     var receivedReasoningSummaryMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
+    var receivedFileAttachments: [UUID: [FileAttachment]]?
     var responseToReturn: ChatMessage?
     var receivedChatModel: RunnableModel?
     var receivedTitleModel: RunnableModel?
@@ -2877,6 +2878,7 @@ fileprivate class MockAPIAdapter: APIAdapter {
         } else {
             self.receivedMessages = messages
             self.receivedTools = tools
+            self.receivedFileAttachments = fileAttachments
             self.receivedChatModel = model
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
         }
@@ -3026,6 +3028,7 @@ fileprivate struct ChatServiceTests {
         mockAdapter.receivedTitleMessages = nil
         mockAdapter.receivedReasoningSummaryMessages = nil
         mockAdapter.receivedTools = nil
+        mockAdapter.receivedFileAttachments = nil
         mockAdapter.responseToReturn = nil
         mockAdapter.receivedChatModel = nil
         mockAdapter.receivedTitleModel = nil
@@ -3055,6 +3058,12 @@ fileprivate struct ChatServiceTests {
         let summaryHTTPResponse = HTTPURLResponse(url: summaryURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
         let summaryJSON = #"{"choices":[{"message":{"content":"\#(summary)"}}]}"#.data(using: .utf8) ?? Data()
         MockURLProtocol.mockResponses[summaryURL] = .success((summaryHTTPResponse, summaryJSON))
+    }
+
+    private func createPermanentTestSession(name: String = "附件文本化测试") -> ChatSession {
+        let session = chatService.createSavedSession(name: name)
+        chatService.setCurrentSession(session)
+        return session
     }
 
     private func activatedChatModels() -> [RunnableModel] {
@@ -3140,6 +3149,75 @@ fileprivate struct ChatServiceTests {
         }
         #expect(requestedAt >= startedAt.addingTimeInterval(-1))
         #expect(requestedAt <= finishedAt.addingTimeInterval(1))
+    }
+
+    @Test("文件附件会在发送前转换为纯文本并清空原始附件")
+    func testFileAttachmentsAreTextifiedBeforeSending() async {
+        await cleanup()
+        let session = createPermanentTestSession()
+        defer { chatService.deleteSessions([session]) }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "文件附件已收到")
+
+        let attachment = FileAttachment(
+            data: Data("附件原文".utf8),
+            mimeType: "text/plain",
+            fileName: "notes.txt"
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请处理这个附件",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            fileAttachments: [attachment],
+            includeSystemTime: false
+        )
+
+        let sentMessages = try #require(mockAdapter.receivedMessages)
+        let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
+        #expect(userMessage.content.contains("请处理这个附件"))
+        #expect(userMessage.content.contains("notes.txt"))
+        #expect(userMessage.content.contains("附件原文"))
+        #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
+    }
+
+    @Test("文件附件文本提取失败时会阻断请求")
+    func testFileAttachmentTextExtractionFailureBlocksRequest() async {
+        await cleanup()
+        let session = createPermanentTestSession(name: "附件失败测试")
+        defer { chatService.deleteSessions([session]) }
+
+        let attachment = FileAttachment(
+            data: Data([0, 1, 2, 3, 4, 5]),
+            mimeType: "application/octet-stream",
+            fileName: "binary.bin"
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请读取这个文件",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            fileAttachments: [attachment],
+            includeSystemTime: false
+        )
+
+        #expect(mockAdapter.receivedMessages == nil)
+        let messages = chatService.messagesForSessionSubject.value
+        let errorMessage = messages.last(where: { $0.role == .error })?.content ?? ""
+        #expect(errorMessage.contains("binary.bin"))
     }
 
     @Test("Auto-naming handles network error during title generation")

@@ -2471,3 +2471,12 @@
 "自定义Body有误，无法预览" = "Custom Body is invalid, cannot preview";
 "Key" = "Key";
 "Value" = "Value";
+"无法将“%@”转换为纯文本。" = "Unable to convert \"%@\" to plain text.";
+"“%@”没有可发送的文本内容。" = "\"%@\" does not contain sendable text.";
+"无法读取“%@”中的必要内容：%@。" = "Could not read required content from \"%@\": %@.";
+"读取“%@”失败：%@。" = "Failed to read \"%@\": %@.";
+"当前平台不支持读取 PDF 附件“%@”。请在 iOS 端发送，或先转换为纯文本。" = "This platform does not support reading PDF attachment \"%@\". Please send it from iOS or convert it to plain text first.";
+"无法读取 PDF 附件“%@”。" = "Unable to read PDF attachment \"%@\".";
+"文件：%@" = "File: %@";
+"以下内容来自文件附件文本提取：\n\n%@" = "The following content was extracted from file attachments:\n\n%@";
+"附件“%@”文本提取失败：%@" = "Failed to extract text from attachment \"%@\": %@";
