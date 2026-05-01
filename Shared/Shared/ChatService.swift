@@ -709,7 +709,7 @@ public class ChatService {
     }
 
     @discardableResult
-    public func loadInitialPersistenceStateIfNeeded(priority: TaskPriority = .utility) -> Task<Void, Never>? {
+    public func loadInitialPersistenceStateIfNeeded(priority: TaskPriority = .userInitiated) -> Task<Void, Never>? {
         startupStateLoadLock.lock()
         if let startupStateLoadTask {
             startupStateLoadLock.unlock()
@@ -747,7 +747,7 @@ public class ChatService {
         return task
     }
 
-    public func waitForInitialPersistenceStateIfNeeded(priority: TaskPriority = .utility) async {
+    public func waitForInitialPersistenceStateIfNeeded(priority: TaskPriority = .userInitiated) async {
         if let task = loadInitialPersistenceStateIfNeeded(priority: priority) {
             await task.value
         }

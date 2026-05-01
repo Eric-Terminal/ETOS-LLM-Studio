@@ -243,14 +243,15 @@ public final class CloudSyncManager: ObservableObject {
         options: SyncOptions,
         remoteManifest: SyncManifest
     ) async -> CloudSyncRemoteSnapshot {
+        await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
         let buildSnapshot = snapshotBuilder
         let deviceID = currentDeviceIdentifier
-        let localSnapshot = await runOnUtilityQueue {
+        let localSnapshot = await runOnSnapshotBuildQueue {
             buildSnapshot(options)
         }
         let updatedAt = now()
         let recordName = "snapshot.\(deviceID)"
-        let delta = await runOnUtilityQueue {
+        let delta = await runOnSnapshotBuildQueue {
             SyncDeltaEngine.buildDelta(
                 localSnapshot: localSnapshot,
                 remoteManifest: remoteManifest,
@@ -313,11 +314,11 @@ public final class CloudSyncManager: ObservableObject {
         )
     }
 
-    private func runOnUtilityQueue<T>(
+    private func runOnSnapshotBuildQueue<T>(
         _ operation: @escaping () -> T
     ) async -> T {
         await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
+            DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: operation())
             }
         }

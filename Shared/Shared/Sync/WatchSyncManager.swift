@@ -51,6 +51,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         var delta: SyncDeltaPackage?
     }
 
+    private struct SyncExchangePayload: Sendable {
+        let fileURL: URL
+        let optionsRawValue: Int
+        let isResponse: Bool
+        let requestID: String?
+        let expectsResponse: Bool
+    }
+
     private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
     private let syncChannel = "watch.connectivity"
     /// 标记是否为静默同步（启动时自动同步）
@@ -77,22 +85,50 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
         lastSummary = .empty
 
-        let snapshot = SyncDeltaEngine.buildLocalSnapshot(
-            options: options,
-            channel: syncChannel
-        )
-        let emptyManifest = SyncManifest(options: options, records: [])
-        let initialDelta = SyncDeltaEngine.buildDelta(
-            localSnapshot: snapshot,
-            remoteManifest: emptyManifest,
-            channel: syncChannel
-        )
-        sendExchange(
-            manifest: snapshot.manifest,
-            delta: initialDelta,
-            isResponse: false,
-            expectsResponse: true
-        )
+        let syncChannel = self.syncChannel
+        let optionsRawValue = options.rawValue
+
+        Task.detached(priority: .userInitiated) {
+            await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+            let syncOptions = SyncOptions(rawValue: optionsRawValue)
+            let snapshot = SyncDeltaEngine.buildLocalSnapshot(
+                options: syncOptions,
+                channel: syncChannel
+            )
+            let emptyManifest = SyncManifest(options: syncOptions, records: [])
+            let initialDelta = SyncDeltaEngine.buildDelta(
+                localSnapshot: snapshot,
+                remoteManifest: emptyManifest,
+                channel: syncChannel
+            )
+            let packet = SyncExchangePacket(manifest: snapshot.manifest, delta: initialDelta)
+            guard let data = try? JSONEncoder().encode(packet) else {
+                await MainActor.run { [weak self] in
+                    self?.state = .failed("无法编码同步数据。")
+                }
+                return
+            }
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("sync-\(UUID().uuidString).json")
+            do {
+                try data.write(to: tempURL, options: [.atomic])
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.state = .failed("写入同步文件失败: \(error.localizedDescription)")
+                }
+                return
+            }
+            let payload = SyncExchangePayload(
+                fileURL: tempURL,
+                optionsRawValue: syncOptions.rawValue,
+                isResponse: false,
+                requestID: nil,
+                expectsResponse: true
+            )
+            await MainActor.run { [weak self] in
+                self?.sendExchange(payload: payload)
+            }
+        }
     }
 
     /// 发送单个会话到对端设备（单向）
@@ -110,23 +146,50 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         state = .syncing("正在发送“\(selectedSession.name)”…")
         lastSummary = .empty
 
-        let snapshot = SyncDeltaEngine.buildLocalSnapshot(
-            options: [.sessions],
-            channel: "\(syncChannel).single-session",
-            sessionIDs: Set([sessionID])
-        )
-        let emptyManifest = SyncManifest(options: [.sessions], records: [])
-        let delta = SyncDeltaEngine.buildDelta(
-            localSnapshot: snapshot,
-            remoteManifest: emptyManifest,
-            channel: "\(syncChannel).single-session"
-        )
-        sendExchange(
-            manifest: snapshot.manifest,
-            delta: delta,
-            isResponse: false,
-            expectsResponse: false
-        )
+        let syncChannel = self.syncChannel
+        let sessionIDValue = sessionID
+
+        Task.detached(priority: .userInitiated) {
+            await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+            let snapshot = SyncDeltaEngine.buildLocalSnapshot(
+                options: [.sessions],
+                channel: "\(syncChannel).single-session",
+                sessionIDs: Set([sessionIDValue])
+            )
+            let emptyManifest = SyncManifest(options: [.sessions], records: [])
+            let delta = SyncDeltaEngine.buildDelta(
+                localSnapshot: snapshot,
+                remoteManifest: emptyManifest,
+                channel: "\(syncChannel).single-session"
+            )
+            let packet = SyncExchangePacket(manifest: snapshot.manifest, delta: delta)
+            guard let data = try? JSONEncoder().encode(packet) else {
+                await MainActor.run { [weak self] in
+                    self?.state = .failed("无法编码同步数据。")
+                }
+                return
+            }
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("sync-\(UUID().uuidString).json")
+            do {
+                try data.write(to: tempURL, options: [.atomic])
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.state = .failed("写入同步文件失败: \(error.localizedDescription)")
+                }
+                return
+            }
+            let payload = SyncExchangePayload(
+                fileURL: tempURL,
+                optionsRawValue: SyncOptions.sessions.rawValue,
+                isResponse: false,
+                requestID: nil,
+                expectsResponse: false
+            )
+            await MainActor.run { [weak self] in
+                self?.sendExchange(payload: payload)
+            }
+        }
     }
     
     /// 启动时自动同步（静默模式）
@@ -261,46 +324,21 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    private func sendExchange(
-        manifest: SyncManifest,
-        delta: SyncDeltaPackage?,
-        isResponse: Bool,
-        requestID: String? = nil,
-        expectsResponse: Bool = true
-    ) {
+    private func sendExchange(payload: SyncExchangePayload) {
         guard let session else { return }
-        let payload = SyncExchangePacket(manifest: manifest, delta: delta)
-        guard let data = try? JSONEncoder().encode(payload) else {
-            if !isSilentSync {
-                state = .failed("无法编码同步数据。")
-            }
-            return
-        }
-        
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sync-\(UUID().uuidString).json")
-        do {
-            try data.write(to: tempURL, options: [.atomic])
-        } catch {
-            if !isSilentSync {
-                state = .failed("写入同步文件失败: \(error.localizedDescription)")
-            }
-            return
-        }
-        
         var metadata: [String: Any] = [
-            "options": manifest.options.rawValue,
-            "response": isResponse,
-            "expectsResponse": expectsResponse,
+            "options": payload.optionsRawValue,
+            "response": payload.isResponse,
+            "expectsResponse": payload.expectsResponse,
             "timestamp": Date().timeIntervalSince1970
         ]
-        if let requestID {
+        if let requestID = payload.requestID {
             metadata["requestID"] = requestID
         }
         
-        let transfer = session.transferFile(tempURL, metadata: metadata)
+        let transfer = session.transferFile(payload.fileURL, metadata: metadata)
         pendingTransfers[ObjectIdentifier(transfer)] = PendingTransferContext(
-            expectsResponse: expectsResponse
+            expectsResponse: payload.expectsResponse
         )
     }
     
@@ -330,25 +368,54 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             sendSyncSuccessNotification(summary: summary)
             
             if expectsResponse {
-                let localSnapshot = SyncDeltaEngine.buildLocalSnapshot(
-                    options: packet.manifest.options,
-                    channel: syncChannel
-                )
-                let responseDelta = SyncDeltaEngine.buildDelta(
-                    localSnapshot: localSnapshot,
-                    remoteManifest: packet.manifest,
-                    channel: syncChannel
-                )
-                if !isSilentSync {
-                    state = .syncing("正在回传差异…")
+                let responseChannel = syncChannel
+                let responseOptionsRawValue = packet.manifest.optionsRawValue
+                let responseManifest = packet.manifest
+
+                Task.detached(priority: .userInitiated) {
+                    await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                    let responseOptions = SyncOptions(rawValue: responseOptionsRawValue)
+                    let localSnapshot = SyncDeltaEngine.buildLocalSnapshot(
+                        options: responseOptions,
+                        channel: responseChannel
+                    )
+                    let responseDelta = SyncDeltaEngine.buildDelta(
+                        localSnapshot: localSnapshot,
+                        remoteManifest: responseManifest,
+                        channel: responseChannel
+                    )
+                    let packet = SyncExchangePacket(manifest: localSnapshot.manifest, delta: responseDelta)
+                    guard let data = try? JSONEncoder().encode(packet) else {
+                        await MainActor.run { [weak self] in
+                            self?.state = .failed("无法编码同步数据。")
+                        }
+                        return
+                    }
+                    let tempURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("sync-\(UUID().uuidString).json")
+                    do {
+                        try data.write(to: tempURL, options: [.atomic])
+                    } catch {
+                        await MainActor.run { [weak self] in
+                            self?.state = .failed("写入同步文件失败: \(error.localizedDescription)")
+                        }
+                        return
+                    }
+                    let payload = SyncExchangePayload(
+                        fileURL: tempURL,
+                        optionsRawValue: responseOptions.rawValue,
+                        isResponse: true,
+                        requestID: requestID,
+                        expectsResponse: !isResponse
+                    )
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        if !self.isSilentSync {
+                            self.state = .syncing("正在回传差异…")
+                        }
+                        self.sendExchange(payload: payload)
+                    }
                 }
-                sendExchange(
-                    manifest: localSnapshot.manifest,
-                    delta: responseDelta,
-                    isResponse: true,
-                    requestID: requestID,
-                    expectsResponse: !isResponse
-                )
             }
             
             if let idString = requestID, let uuid = UUID(uuidString: idString) {

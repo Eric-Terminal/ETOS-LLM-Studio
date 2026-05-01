@@ -1257,6 +1257,11 @@ public enum Persistence {
         activeGRDBStore()?.flushPendingMessageWrites()
     }
 
+    public static func flushPendingMessageWritesForSyncSnapshotAsync() async {
+        guard let store = activeGRDBStore() else { return }
+        await store.flushPendingMessageWritesAsync()
+    }
+
     /// 保存指定会话的聊天消息
     public static func saveMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         if let store = activeGRDBStore() {

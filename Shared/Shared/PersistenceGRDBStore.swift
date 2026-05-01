@@ -233,6 +233,17 @@ final class PersistenceGRDBStore {
         messageWriteQueue.sync {}
     }
 
+    func flushPendingMessageWritesAsync() async {
+        if DispatchQueue.getSpecific(key: messageWriteQueueSpecificKey) != nil {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            messageWriteQueue.async {
+                continuation.resume()
+            }
+        }
+    }
+
     func saveChatSessions(_ sessions: [ChatSession]) {
         let persistedSessions = sessions.filter { !$0.isTemporary }
         do {

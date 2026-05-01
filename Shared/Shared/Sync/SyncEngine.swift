@@ -58,7 +58,6 @@ public enum SyncEngine {
         }
         
         if options.contains(.sessions) {
-            Persistence.flushPendingMessageWritesForSyncSnapshot()
             let allSessions = chatService.chatSessionsSubject.value.filter { session in
                 guard !session.isTemporary else { return false }
                 guard let sessionIDs else { return true }

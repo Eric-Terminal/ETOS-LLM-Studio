@@ -379,20 +379,30 @@ struct DeviceSyncSettingsView: View {
 
     private func exportDataPackage() {
         isExporting = true
-        defer { isExporting = false }
 
-        do {
-            let package = SyncEngine.buildPackage(options: selectedSyncOptions)
-            let output = try SyncPackageTransferService.exportPackageToTemporaryFile(package)
+        let syncOptionsRawValue = selectedSyncOptions.rawValue
+        Task.detached(priority: .userInitiated) {
+            do {
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                let syncOptions = SyncOptions(rawValue: syncOptionsRawValue)
+                let package = SyncEngine.buildPackage(options: syncOptions)
+                let output = try SyncPackageTransferService.exportPackageToTemporaryFile(package)
 
-            if let existing = exportFileURL {
-                try? FileManager.default.removeItem(at: existing)
+                await MainActor.run {
+                    if let existing = exportFileURL {
+                        try? FileManager.default.removeItem(at: existing)
+                    }
+
+                    exportFileURL = output.fileURL
+                    exportErrorMessage = nil
+                    isExporting = false
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = String(format: NSLocalizedString("导出失败：%@", comment: ""), error.localizedDescription)
+                    isExporting = false
+                }
             }
-
-            exportFileURL = output.fileURL
-            exportErrorMessage = nil
-        } catch {
-            exportErrorMessage = String(format: NSLocalizedString("导出失败：%@", comment: ""), error.localizedDescription)
         }
     }
 
@@ -420,9 +430,20 @@ struct DeviceSyncSettingsView: View {
         uploadSuccessMessage = nil
         uploadResponsePreview = nil
 
-        Task {
+        let syncOptionsRawValue = selectedSyncOptions.rawValue
+        let endpointString = endpoint.absoluteString
+        Task.detached(priority: .userInitiated) {
             do {
-                let package = SyncEngine.buildPackage(options: selectedSyncOptions)
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                guard let endpoint = URL(string: endpointString) else {
+                    await MainActor.run {
+                        isUploading = false
+                        uploadErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+                    }
+                    return
+                }
+                let syncOptions = SyncOptions(rawValue: syncOptionsRawValue)
+                let package = SyncEngine.buildPackage(options: syncOptions)
                 let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
                 await MainActor.run {
                     isUploading = false
