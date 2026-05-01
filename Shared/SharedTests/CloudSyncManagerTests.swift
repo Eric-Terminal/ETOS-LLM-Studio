@@ -51,8 +51,8 @@ struct CloudSyncManagerTests {
                     generatedAt: now
                 )
             },
-            deltaApplier: { delta in
-                await appliedRecorder.record(delta)
+            deltaApplier: { delta, manifest in
+                await appliedRecorder.record(delta, manifest: manifest)
                 return await appliedRecorder.summary
             },
             now: { now }
@@ -62,6 +62,7 @@ struct CloudSyncManagerTests {
 
         let uploadedSnapshots = await transport.uploadedSnapshots
         let appliedPackages = await appliedRecorder.packages
+        let appliedManifests = await appliedRecorder.manifests
 
         #expect(uploadedSnapshots.count == 2)
         #expect(uploadedSnapshots.first?.recordName == uploadedSnapshots.last?.recordName)
@@ -72,6 +73,9 @@ struct CloudSyncManagerTests {
         #expect(uploadedSnapshots.last?.snapshot.delta.package.options == localPackage.options)
         #expect(appliedPackages.count == 1)
         #expect(appliedPackages.first?.package.options == remotePackage.options)
+        #expect(appliedManifests.count == 1)
+        #expect(appliedManifests.first?.options == remoteSnapshot.snapshot.manifest.options)
+        #expect(appliedManifests.first?.records == remoteSnapshot.snapshot.manifest.records)
         #expect(manager.lastSummary == .summary(importedSessions: 1))
         #expect(manager.lastUpdatedAt == now)
 
@@ -117,8 +121,8 @@ struct CloudSyncManagerTests {
                     userDefaults: snapshotDefaults
                 )
             },
-            deltaApplier: { delta in
-                await appliedRecorder.record(delta)
+            deltaApplier: { delta, manifest in
+                await appliedRecorder.record(delta, manifest: manifest)
                 return await appliedRecorder.summary
             }
         )
@@ -176,8 +180,8 @@ struct CloudSyncManagerTests {
                     generatedAt: now
                 )
             },
-            deltaApplier: { delta in
-                await appliedRecorder.record(delta)
+            deltaApplier: { delta, manifest in
+                await appliedRecorder.record(delta, manifest: manifest)
                 return await appliedRecorder.summary
             },
             now: { now }
@@ -239,8 +243,8 @@ struct CloudSyncManagerTests {
                     generatedAt: now
                 )
             },
-            deltaApplier: { delta in
-                await appliedRecorder.record(delta)
+            deltaApplier: { delta, manifest in
+                await appliedRecorder.record(delta, manifest: manifest)
                 return await appliedRecorder.summary
             },
             now: { now }
@@ -325,8 +329,8 @@ struct CloudSyncManagerTests {
                     generatedAt: now
                 )
             },
-            deltaApplier: { delta in
-                await appliedRecorder.record(delta)
+            deltaApplier: { delta, manifest in
+                await appliedRecorder.record(delta, manifest: manifest)
                 return await appliedRecorder.summary
             },
             now: { now }
@@ -426,14 +430,18 @@ private actor MockCloudSyncTransport: CloudSyncTransport {
 
 private actor AppliedPackageRecorder {
     private(set) var packages: [SyncDeltaPackage] = []
+    private(set) var manifests: [SyncManifest] = []
     let summary: SyncMergeSummary
 
     init(summary: SyncMergeSummary) {
         self.summary = summary
     }
 
-    func record(_ delta: SyncDeltaPackage) {
+    func record(_ delta: SyncDeltaPackage, manifest: SyncManifest? = nil) {
         packages.append(delta)
+        if let manifest {
+            manifests.append(manifest)
+        }
     }
 }
 

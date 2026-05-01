@@ -234,4 +234,173 @@ struct SyncDeltaEngineTests {
         #expect(deletionDelta.deletions.first?.type == .provider)
         #expect(deletionDelta.deletions.first?.recordID == provider.id.uuidString)
     }
+
+    @Test("同通道墓碑会过滤掉已删除记录的回流")
+    func testApplyFiltersOutStaleRecordsUsingTombstones() async {
+        let suite = "com.ETOS.tests.sync.delta.filter.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            resetProviders(to: originalProviders)
+            defaults.removePersistentDomain(forName: suite)
+        }
+
+        let provider = Provider(
+            id: UUID(),
+            name: "待过滤提供商",
+            baseURL: "https://filter.example.com",
+            apiKeys: ["filter-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "filter-model", displayName: "Filter", isActivated: true)]
+        )
+
+        ConfigLoader.saveProvider(provider)
+        defer {
+            if let target = ConfigLoader.loadProviders().first(where: { $0.id == provider.id }) {
+                ConfigLoader.deleteProvider(target)
+            }
+        }
+
+        let initialPackage = SyncPackage(options: [.providers], providers: [provider])
+        let initialManifest = SyncDeltaEngine.buildManifest(
+            from: initialPackage,
+            channel: "delta-filter",
+            userDefaults: defaults,
+            generatedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let initialSnapshot = SyncLocalSnapshot(package: initialPackage, manifest: initialManifest)
+        _ = SyncDeltaEngine.buildDelta(
+            localSnapshot: initialSnapshot,
+            remoteManifest: SyncManifest(options: [.providers], records: []),
+            channel: "delta-filter",
+            userDefaults: defaults,
+            now: Date(timeIntervalSince1970: 1_100)
+        )
+        ConfigLoader.deleteProvider(provider)
+
+        let deletedPackage = SyncPackage(options: [.providers], providers: [])
+        let deletedManifest = SyncDeltaEngine.buildManifest(
+            from: deletedPackage,
+            channel: "delta-filter",
+            userDefaults: defaults,
+            generatedAt: Date(timeIntervalSince1970: 2_000)
+        )
+        let deletedSnapshot = SyncLocalSnapshot(package: deletedPackage, manifest: deletedManifest)
+        let remoteRecord = SyncRecordDescriptor(
+            type: .provider,
+            recordID: provider.id.uuidString,
+            checksum: "stale-remote",
+            updatedAt: Date(timeIntervalSince1970: 1_500)
+        )
+        _ = SyncDeltaEngine.buildDelta(
+            localSnapshot: deletedSnapshot,
+            remoteManifest: SyncManifest(options: [.providers], records: [remoteRecord]),
+            channel: "delta-filter",
+            userDefaults: defaults,
+            now: Date(timeIntervalSince1970: 2_100)
+        )
+
+        let incomingPackage = SyncPackage(options: [.providers], providers: [provider])
+        let incomingDelta = SyncDeltaPackage(
+            generatedAt: Date(timeIntervalSince1970: 9_000),
+            options: [.providers],
+            package: incomingPackage
+        )
+        let incomingManifest = SyncManifest(
+            options: [.providers],
+            records: [remoteRecord]
+        )
+
+        _ = await SyncDeltaEngine.apply(
+            delta: incomingDelta,
+            channel: "delta-filter",
+            remoteManifest: incomingManifest,
+            userDefaults: defaults
+        )
+
+        let providers = ConfigLoader.loadProviders()
+        #expect(!providers.contains(where: { $0.id == provider.id }))
+    }
+
+    @Test("接收删除指令后会阻止旧记录再次回流")
+    func testApplyPersistsIncomingDeletionTombstone() async {
+        let suite = "com.ETOS.tests.sync.delta.remote-delete.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let provider = Provider(
+            id: UUID(),
+            name: "远端已删提供商",
+            baseURL: "https://remote-delete.example.com",
+            apiKeys: ["remote-delete-key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "remote-delete-model", displayName: "RemoteDelete", isActivated: true)]
+        )
+        defer {
+            if let target = ConfigLoader.loadProviders().first(where: { $0.id == provider.id }) {
+                ConfigLoader.deleteProvider(target)
+            }
+        }
+
+        let deletion = SyncDeleteRecord(
+            type: .provider,
+            recordID: provider.id.uuidString,
+            deletedAt: Date(timeIntervalSince1970: 2_000)
+        )
+        let deletionDelta = SyncDeltaPackage(
+            generatedAt: Date(timeIntervalSince1970: 2_100),
+            options: [],
+            package: SyncPackage(options: []),
+            deletions: [deletion]
+        )
+        _ = await SyncDeltaEngine.apply(
+            delta: deletionDelta,
+            channel: "delta-remote-delete",
+            remoteManifest: SyncManifest(options: [.providers], records: []),
+            userDefaults: defaults
+        )
+
+        let oldRemoteRecord = SyncRecordDescriptor(
+            type: .provider,
+            recordID: provider.id.uuidString,
+            checksum: "old-remote",
+            updatedAt: Date(timeIntervalSince1970: 1_500)
+        )
+        let oldRemotePackage = SyncPackage(options: [.providers], providers: [provider])
+        let oldRemoteDelta = SyncDeltaPackage(
+            generatedAt: Date(timeIntervalSince1970: 9_000),
+            options: [.providers],
+            package: oldRemotePackage
+        )
+        let oldRemoteManifest = SyncManifest(
+            options: [.providers],
+            records: [oldRemoteRecord]
+        )
+
+        _ = await SyncDeltaEngine.apply(
+            delta: oldRemoteDelta,
+            channel: "delta-remote-delete",
+            remoteManifest: oldRemoteManifest,
+            userDefaults: defaults
+        )
+
+        let providers = ConfigLoader.loadProviders()
+        #expect(!providers.contains(where: { $0.id == provider.id }))
+    }
+}
+
+private extension SyncDeltaEngineTests {
+    func resetProviders(to providers: [Provider]) {
+        let currentProviders = ConfigLoader.loadProviders()
+        currentProviders.forEach { ConfigLoader.deleteProvider($0) }
+        providers.forEach { ConfigLoader.saveProvider($0) }
+    }
 }

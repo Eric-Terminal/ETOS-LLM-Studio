@@ -430,7 +430,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 
             var summary = SyncMergeSummary.empty
             if let delta = packet.delta {
-                summary = await SyncDeltaEngine.apply(delta: delta)
+                summary = await SyncDeltaEngine.apply(
+                    delta: delta,
+                    channel: syncChannel,
+                    remoteManifest: packet.manifest
+                )
             }
             lastSummary = summary
             lastUpdatedAt = Date()

@@ -89,7 +89,7 @@ public final class CloudSyncManager: ObservableObject {
     private let transportFactory: @Sendable () -> any CloudSyncTransport
     private let userDefaults: UserDefaults
     private let snapshotBuilder: @Sendable (SyncOptions) -> SyncLocalSnapshot
-    private let deltaApplier: @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary
+    private let deltaApplier: @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary
     private let now: @Sendable () -> Date
     private lazy var transport: any CloudSyncTransport = transportFactory()
 
@@ -98,8 +98,8 @@ public final class CloudSyncManager: ObservableObject {
         snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot = { options in
             SyncDeltaEngine.buildLocalSnapshot(options: options, channel: "cloud.sync")
         },
-        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary = { delta in
-            await SyncDeltaEngine.apply(delta: delta)
+        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary = { delta, manifest in
+            await SyncDeltaEngine.apply(delta: delta, channel: "cloud.sync.upload", remoteManifest: manifest)
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
@@ -118,8 +118,8 @@ public final class CloudSyncManager: ObservableObject {
         snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot = { options in
             SyncDeltaEngine.buildLocalSnapshot(options: options, channel: "cloud.sync")
         },
-        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary = { delta in
-            await SyncDeltaEngine.apply(delta: delta)
+        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary = { delta, manifest in
+            await SyncDeltaEngine.apply(delta: delta, channel: "cloud.sync.upload", remoteManifest: manifest)
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
@@ -138,8 +138,8 @@ public final class CloudSyncManager: ObservableObject {
         snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot = { options in
             SyncDeltaEngine.buildLocalSnapshot(options: options, channel: "cloud.sync")
         },
-        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage) async -> SyncMergeSummary = { delta in
-            await SyncDeltaEngine.apply(delta: delta)
+        deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary = { delta, manifest in
+            await SyncDeltaEngine.apply(delta: delta, channel: "cloud.sync.upload", remoteManifest: manifest)
         },
         now: @escaping @Sendable () -> Date = Date.init
     ) {
@@ -334,7 +334,7 @@ public final class CloudSyncManager: ObservableObject {
                 continue
             }
 
-            let summary = await deltaApplier(snapshot.snapshot.delta)
+            let summary = await deltaApplier(snapshot.snapshot.delta, snapshot.snapshot.manifest)
             aggregate.accumulate(summary)
             appliedChecksums[snapshot.recordName] = semanticChecksum
         }

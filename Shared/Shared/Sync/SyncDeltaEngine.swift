@@ -206,22 +206,46 @@ public enum SyncDeltaEngine {
     @discardableResult
     public static func apply(
         delta: SyncDeltaPackage,
+        channel: String,
+        remoteManifest: SyncManifest? = nil,
         chatService: ChatService = .shared,
         memoryManager: MemoryManager? = nil,
         userDefaults: UserDefaults = .standard
     ) async -> SyncMergeSummary {
         var summary = SyncMergeSummary.empty
 
-        if !delta.package.options.isEmpty {
+        var deletionCheckpoint = SyncCheckpointStore.load(channel: channel, userDefaults: userDefaults)
+        var tombstoneDatesByKey = deletionCheckpoint.tombstones
+        for deletion in delta.deletions {
+            let key = SyncRecordDescriptor.key(type: deletion.type, recordID: deletion.recordID)
+            if let existingDate = tombstoneDatesByKey[key], existingDate >= deletion.deletedAt {
+                continue
+            }
+            tombstoneDatesByKey[key] = deletion.deletedAt
+        }
+        if tombstoneDatesByKey != deletionCheckpoint.tombstones {
+            deletionCheckpoint.tombstones = tombstoneDatesByKey
+            SyncCheckpointStore.save(deletionCheckpoint, channel: channel, userDefaults: userDefaults)
+        }
+        let remoteRecordDatesByKey = Dictionary(
+            uniqueKeysWithValues: (remoteManifest?.records ?? []).map { ($0.storageKey, $0.updatedAt) }
+        )
+        let filteredDelta = filter(
+            delta: delta,
+            using: tombstoneDatesByKey,
+            remoteRecordDatesByKey: remoteRecordDatesByKey
+        )
+
+        if !filteredDelta.package.options.isEmpty {
             summary = await SyncEngine.apply(
-                package: delta.package,
+                package: filteredDelta.package,
                 chatService: chatService,
                 memoryManager: memoryManager,
                 userDefaults: userDefaults
             )
         }
 
-        guard !delta.deletions.isEmpty else { return summary }
+        guard !filteredDelta.deletions.isEmpty else { return summary }
         let resolvedMemoryManager = memoryManager ?? .shared
 
         var providerDeleted = false
@@ -231,7 +255,7 @@ public enum SyncDeltaEngine {
         var fontDeleted = false
         var memoryIDsToDelete = Set<UUID>()
 
-        for deletion in delta.deletions {
+        for deletion in filteredDelta.deletions {
             switch deletion.type {
             case .provider:
                 guard let id = UUID(uuidString: deletion.recordID) else { continue }
@@ -384,6 +408,162 @@ public enum SyncDeltaEngine {
 // MARK: - 细节实现
 
 private extension SyncDeltaEngine {
+    static func filter(
+        delta: SyncDeltaPackage,
+        using tombstonesByKey: [String: Date],
+        remoteRecordDatesByKey: [String: Date]
+    ) -> SyncDeltaPackage {
+        guard !tombstonesByKey.isEmpty else { return delta }
+
+        let filteredPackage = filter(
+            package: delta.package,
+            incomingGeneratedAt: delta.generatedAt,
+            using: tombstonesByKey,
+            remoteRecordDatesByKey: remoteRecordDatesByKey
+        )
+        let filteredDeletions = delta.deletions.filter { deletion in
+            let key = SyncRecordDescriptor.key(type: deletion.type, recordID: deletion.recordID)
+            if let tombstoneDate = tombstonesByKey[key] {
+                return deletion.deletedAt >= tombstoneDate
+            }
+            return true
+        }
+
+        return SyncDeltaPackage(
+            schemaVersion: delta.schemaVersion,
+            generatedAt: delta.generatedAt,
+            sourceDeviceID: delta.sourceDeviceID,
+            options: filteredPackage.options,
+            package: filteredPackage,
+            deletions: filteredDeletions
+        )
+    }
+
+    static func filter(
+        package: SyncPackage,
+        incomingGeneratedAt: Date,
+        using tombstonesByKey: [String: Date],
+        remoteRecordDatesByKey: [String: Date]
+    ) -> SyncPackage {
+        guard !tombstonesByKey.isEmpty else { return package }
+
+        let shouldKeep: (SyncRecordType, String) -> Bool = { type, recordID in
+            !isFilteredOut(
+                type: type,
+                recordID: recordID,
+                incomingGeneratedAt: incomingGeneratedAt,
+                tombstonesByKey: tombstonesByKey,
+                remoteRecordDatesByKey: remoteRecordDatesByKey
+            )
+        }
+
+        let providers = package.providers.filter { shouldKeep(.provider, $0.id.uuidString) }
+        let sessions = package.sessions.filter { shouldKeep(.session, $0.session.id.uuidString) }
+        let backgrounds = package.backgrounds.filter { shouldKeep(.background, $0.filename) }
+        let memories = package.memories.filter { shouldKeep(.memory, $0.id.uuidString) }
+        let mcpServers = package.mcpServers.filter { shouldKeep(.mcpServer, $0.id.uuidString) }
+        let audioFiles = package.audioFiles.filter { shouldKeep(.audioFile, $0.filename) }
+        let imageFiles = package.imageFiles.filter { shouldKeep(.imageFile, $0.filename) }
+        let skills = package.skills.filter { shouldKeep(.skill, $0.name) }
+        let shortcutTools = package.shortcutTools.filter { shouldKeep(.shortcutTool, $0.id.uuidString) }
+        let worldbooks = package.worldbooks.filter { shouldKeep(.worldbook, $0.id.uuidString) }
+        let feedbackTickets = package.feedbackTickets.filter { shouldKeep(.feedbackTicket, $0.id) }
+        let shouldFilterDailyPulse = !shouldKeep(.dailyPulseRun, dailyPulseBundleRecordID)
+        let dailyPulseRuns = shouldFilterDailyPulse
+            ? []
+            : package.dailyPulseRuns
+        let dailyPulseFeedbackHistory = shouldFilterDailyPulse
+            ? []
+            : package.dailyPulseFeedbackHistory
+        let dailyPulsePendingCuration = shouldFilterDailyPulse
+            ? nil
+            : package.dailyPulsePendingCuration
+        let dailyPulseExternalSignals = shouldFilterDailyPulse
+            ? []
+            : package.dailyPulseExternalSignals
+        let dailyPulseTasks = shouldFilterDailyPulse
+            ? []
+            : package.dailyPulseTasks
+        let usageStatsDayBundles = package.usageStatsDayBundles.filter { shouldKeep(.usageStatsDay, $0.dayKey) }
+        let fontFiles = package.fontFiles.filter { shouldKeep(.fontFile, $0.assetID.uuidString) }
+        let shouldFilterFontRoute = !shouldKeep(.fontRouteConfiguration, "global.font.route")
+        let fontRouteConfigurationData = shouldFilterFontRoute
+            ? nil
+            : package.fontRouteConfigurationData
+        let shouldFilterAppStorage = !shouldKeep(.appStorage, "global.app.storage")
+        let appStorageSnapshot = shouldFilterAppStorage
+            ? nil
+            : package.appStorageSnapshot
+        let globalSystemPrompt = shouldFilterAppStorage
+            ? nil
+            : package.globalSystemPrompt
+
+        var options = package.options
+        if package.options.contains(.providers), !package.providers.isEmpty, providers.isEmpty { options.remove(.providers) }
+        if package.options.contains(.sessions), !package.sessions.isEmpty, sessions.isEmpty { options.remove(.sessions) }
+        if package.options.contains(.backgrounds), !package.backgrounds.isEmpty, backgrounds.isEmpty { options.remove(.backgrounds) }
+        if package.options.contains(.memories), !package.memories.isEmpty, memories.isEmpty { options.remove(.memories) }
+        if package.options.contains(.mcpServers), !package.mcpServers.isEmpty, mcpServers.isEmpty { options.remove(.mcpServers) }
+        if package.options.contains(.audioFiles), !package.audioFiles.isEmpty, audioFiles.isEmpty { options.remove(.audioFiles) }
+        if package.options.contains(.imageFiles), !package.imageFiles.isEmpty, imageFiles.isEmpty { options.remove(.imageFiles) }
+        if package.options.contains(.skills), !package.skills.isEmpty, skills.isEmpty { options.remove(.skills) }
+        if package.options.contains(.shortcutTools), !package.shortcutTools.isEmpty, shortcutTools.isEmpty { options.remove(.shortcutTools) }
+        if package.options.contains(.worldbooks), !package.worldbooks.isEmpty, worldbooks.isEmpty { options.remove(.worldbooks) }
+        if package.options.contains(.feedbackTickets), !package.feedbackTickets.isEmpty, feedbackTickets.isEmpty { options.remove(.feedbackTickets) }
+        if package.options.contains(.dailyPulse), shouldFilterDailyPulse { options.remove(.dailyPulse) }
+        if package.options.contains(.usageStats), !package.usageStatsDayBundles.isEmpty, usageStatsDayBundles.isEmpty { options.remove(.usageStats) }
+        if package.options.contains(.fontFiles),
+           (!package.fontFiles.isEmpty || package.fontRouteConfigurationData != nil),
+           fontFiles.isEmpty,
+           fontRouteConfigurationData == nil {
+            options.remove(.fontFiles)
+        }
+        if package.options.contains(.appStorage),
+           (package.appStorageSnapshot != nil || package.globalSystemPrompt != nil),
+           appStorageSnapshot == nil,
+           globalSystemPrompt == nil {
+            options.remove(.appStorage)
+        }
+
+        return SyncPackage(
+            options: options,
+            providers: providers,
+            sessions: sessions,
+            backgrounds: backgrounds,
+            memories: memories,
+            mcpServers: mcpServers,
+            audioFiles: audioFiles,
+            imageFiles: imageFiles,
+            skills: skills,
+            shortcutTools: shortcutTools,
+            worldbooks: worldbooks,
+            feedbackTickets: feedbackTickets,
+            dailyPulseRuns: dailyPulseRuns,
+            dailyPulseFeedbackHistory: dailyPulseFeedbackHistory,
+            dailyPulsePendingCuration: dailyPulsePendingCuration,
+            dailyPulseExternalSignals: dailyPulseExternalSignals,
+            dailyPulseTasks: dailyPulseTasks,
+            usageStatsDayBundles: usageStatsDayBundles,
+            fontFiles: fontFiles,
+            fontRouteConfigurationData: fontRouteConfigurationData,
+            appStorageSnapshot: appStorageSnapshot,
+            globalSystemPrompt: globalSystemPrompt
+        )
+    }
+
+    static func isFilteredOut(
+        type: SyncRecordType,
+        recordID: String,
+        incomingGeneratedAt: Date,
+        tombstonesByKey: [String: Date],
+        remoteRecordDatesByKey: [String: Date]
+    ) -> Bool {
+        let key = SyncRecordDescriptor.key(type: type, recordID: recordID)
+        guard let tombstoneDate = tombstonesByKey[key] else { return false }
+        let incomingUpdatedAt = remoteRecordDatesByKey[key] ?? incomingGeneratedAt
+        return incomingUpdatedAt <= tombstoneDate
+    }
+
     static func makeSeedDescriptors(from package: SyncPackage) -> [SyncRecordDescriptor] {
         var records: [SyncRecordDescriptor] = []
 
