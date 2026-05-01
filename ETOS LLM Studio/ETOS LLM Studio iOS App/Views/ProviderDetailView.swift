@@ -13,6 +13,9 @@ import Shared
 struct ProviderDetailView: View {
     private let sourceProvider: Provider
     @State private var provider: Provider
+    let showsToolbar: Bool
+    let addModelRequest: Int
+    let fetchModelsRequest: Int
     let onSave: (Provider) -> Void
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
@@ -23,8 +26,17 @@ struct ProviderDetailView: View {
     @State private var searchText = ""
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
-    init(provider: Provider, onSave: @escaping (Provider) -> Void = { _ in }) {
+    init(
+        provider: Provider,
+        showsToolbar: Bool = true,
+        addModelRequest: Int = 0,
+        fetchModelsRequest: Int = 0,
+        onSave: @escaping (Provider) -> Void = { _ in }
+    ) {
         self.sourceProvider = provider
+        self.showsToolbar = showsToolbar
+        self.addModelRequest = addModelRequest
+        self.fetchModelsRequest = fetchModelsRequest
         _provider = State(initialValue: provider)
         self.onSave = onSave
     }
@@ -100,21 +112,23 @@ struct ProviderDetailView: View {
             await fetchAndMergeModels()
         }
         .toolbar {
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    Task { await fetchAndMergeModels() }
-                } label: {
-                    Image(systemName: "icloud.and.arrow.down")
-                }
-                .disabled(isFetchingModels)
-                .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
+            if showsToolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        Task { await fetchAndMergeModels() }
+                    } label: {
+                        Image(systemName: "icloud.and.arrow.down")
+                    }
+                    .disabled(isFetchingModels)
+                    .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
 
-                Button {
-                    isAddingModel = true
-                } label: {
-                    Image(systemName: "plus")
+                    Button {
+                        isAddingModel = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
                 }
-                .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
             }
         }
         .sheet(isPresented: $isAddingModel) {
@@ -129,6 +143,12 @@ struct ProviderDetailView: View {
         .onChange(of: sourceProvider) { _, newProvider in
             syncProviderConfiguration(from: newProvider)
         }
+        .onChange(of: addModelRequest) { _, _ in
+            isAddingModel = true
+        }
+        .onChange(of: fetchModelsRequest) { _, _ in
+            Task { await fetchAndMergeModels() }
+        }
         .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
         } message: {
@@ -137,6 +157,7 @@ struct ProviderDetailView: View {
     }
 
     private func fetchAndMergeModels() async {
+        guard !isFetchingModels else { return }
         isFetchingModels = true
         defer { isFetchingModels = false }
 

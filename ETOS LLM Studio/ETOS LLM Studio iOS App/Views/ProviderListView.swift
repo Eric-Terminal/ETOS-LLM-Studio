@@ -184,6 +184,8 @@ private struct ProviderConfigurationTabsView: View {
     @State private var provider: Provider
     @State private var selectedTab: ProviderConfigurationTab = .models
     @State private var providerRevision = 0
+    @State private var addModelRequest = 0
+    @State private var fetchModelsRequest = 0
 
     init(provider: Provider) {
         _provider = State(initialValue: provider)
@@ -191,7 +193,12 @@ private struct ProviderConfigurationTabsView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ProviderDetailView(provider: provider) { updatedProvider in
+            ProviderDetailView(
+                provider: provider,
+                showsToolbar: false,
+                addModelRequest: addModelRequest,
+                fetchModelsRequest: fetchModelsRequest
+            ) { updatedProvider in
                 updateProvider(updatedProvider)
             }
                 .environmentObject(viewModel)
@@ -215,6 +222,26 @@ private struct ProviderConfigurationTabsView: View {
                 Label(ProviderConfigurationTab.provider.title, systemImage: ProviderConfigurationTab.provider.iconName)
             }
             .tag(ProviderConfigurationTab.provider)
+        }
+        .navigationTitle(provider.name)
+        .toolbar {
+            if selectedTab == .models {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        fetchModelsRequest += 1
+                    } label: {
+                        Image(systemName: "icloud.and.arrow.down")
+                    }
+                    .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
+
+                    Button {
+                        addModelRequest += 1
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
+                }
+            }
         }
     }
 
