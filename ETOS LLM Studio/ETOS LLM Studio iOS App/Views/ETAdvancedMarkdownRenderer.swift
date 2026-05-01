@@ -124,6 +124,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableMathRendering: Bool
     let customTextColor: Color?
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
 
     private var effectivePreparedContent: ETPreparedMarkdownRenderPayload? {
@@ -135,7 +136,7 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
-        let fontScale = FontLibrary.normalizedFontScale(customFontScale)
+        let fontScale = FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled)
         if enableMarkdown {
             if let prepared = effectivePreparedContent {
                 if shouldUseWebRenderer(prepared) {
@@ -196,10 +197,10 @@ struct ETAdvancedMarkdownRenderer: View {
         let mathTextColor = ETIOSMathColorComponents(textColor)
         Markdown(markdownContent)
             .markdownImageProvider(
-                ETIOSMarkdownImageProvider(textColor: mathTextColor)
+                ETIOSMarkdownImageProvider(textColor: mathTextColor, fontScale: fontScale)
             )
             .markdownInlineImageProvider(
-                ETIOSMarkdownInlineImageProvider(textColor: mathTextColor)
+                ETIOSMarkdownInlineImageProvider(textColor: mathTextColor, fontScale: fontScale)
             )
             .etChatMarkdownBaseStyle(
                 textColor: textColor,
@@ -1428,13 +1429,15 @@ window.__etNotifyHeight && window.__etNotifyHeight();
 
 private struct ETIOSMarkdownImageProvider: ImageProvider {
     let textColor: ETIOSMathColorComponents
+    let fontScale: Double
 
     @ViewBuilder
     func makeImage(url: URL?) -> some View {
         if let request = ETNativeMathMarkdownCodec.request(from: url) {
             ETIOSMathBlockImageView(
                 request: request,
-                textColor: textColor
+                textColor: textColor,
+                fontScale: fontScale
             )
         } else {
             DefaultImageProvider.default.makeImage(url: url)
@@ -1444,13 +1447,14 @@ private struct ETIOSMarkdownImageProvider: ImageProvider {
 
 private struct ETIOSMarkdownInlineImageProvider: InlineImageProvider {
     let textColor: ETIOSMathColorComponents
+    let fontScale: Double
 
     func image(with url: URL, label: String) async throws -> Image {
         guard let request = ETNativeMathMarkdownCodec.request(from: url) else {
             return try await DefaultInlineImageProvider.default.image(with: url, label: label)
         }
 
-        guard let data = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor),
+        guard let data = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor, fontScale: fontScale),
               let image = UIImage(data: data, scale: UIScreen.main.scale) else {
             return Image(systemName: "function")
         }
@@ -1462,6 +1466,7 @@ private struct ETIOSMarkdownInlineImageProvider: InlineImageProvider {
 private struct ETIOSMathBlockImageView: View {
     let request: ETNativeMathMarkdownCodec.Request
     let textColor: ETIOSMathColorComponents
+    let fontScale: Double
 
     @State private var renderedImageData: Data?
     @State private var didAttemptRender = false
@@ -1476,13 +1481,13 @@ private struct ETIOSMathBlockImageView: View {
                 }
             } else if didAttemptRender {
                 Text(verbatim: request.latex)
-                    .font(.system(size: request.renderKind.fallbackFontSize, design: .serif))
+                    .font(.system(size: request.renderKind.fallbackFontSize(fontScale: fontScale), design: .serif))
                     .foregroundStyle(textColor.swiftUIColor.opacity(0.9))
                     .textSelection(.enabled)
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(textColor.swiftUIColor.opacity(0.08))
-                    .frame(height: request.renderKind.placeholderHeight)
+                    .frame(height: request.renderKind.placeholderHeight(fontScale: fontScale))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1490,7 +1495,7 @@ private struct ETIOSMathBlockImageView: View {
         .task(id: taskKey) {
             didAttemptRender = false
             renderedImageData = nil
-            renderedImageData = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor)
+            renderedImageData = await ETIOSMathImageRenderer.imageData(for: request, textColor: textColor, fontScale: fontScale)
             didAttemptRender = true
         }
     }
@@ -1501,7 +1506,7 @@ private struct ETIOSMathBlockImageView: View {
     }
 
     private var taskKey: String {
-        "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)"
+        "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)|\(fontScale)"
     }
 }
 
@@ -1550,9 +1555,10 @@ private enum ETIOSMathImageRenderer {
 
     static func imageData(
         for request: ETNativeMathMarkdownCodec.Request,
-        textColor: ETIOSMathColorComponents
+        textColor: ETIOSMathColorComponents,
+        fontScale: Double
     ) async -> Data? {
-        let cacheKey = "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)" as NSString
+        let cacheKey = "\(request.renderKind.rawValue)|\(request.latex)|\(textColor.cacheKey)|\(fontScale)" as NSString
         if let cachedData = cache.object(forKey: cacheKey) {
             return cachedData as Data
         }
@@ -1561,7 +1567,7 @@ private enum ETIOSMathImageRenderer {
             DispatchQueue.global(qos: .userInitiated).async {
                 let image = MTMathImage(
                     latex: request.latex,
-                    fontSize: request.renderKind.fontSize,
+                    fontSize: request.renderKind.fontSize(fontScale: fontScale),
                     textColor: textColor.uiColor,
                     labelMode: request.renderKind.labelMode,
                     textAlignment: .left
@@ -1585,41 +1591,43 @@ private enum ETIOSMathImageRenderer {
 #else
     static func imageData(
         for request: ETNativeMathMarkdownCodec.Request,
-        textColor: ETIOSMathColorComponents
+        textColor: ETIOSMathColorComponents,
+        fontScale: Double
     ) async -> Data? {
+        _ = fontScale
         nil
     }
 #endif
 }
 
 private extension ETNativeMathMarkdownCodec.RenderKind {
-    var placeholderHeight: CGFloat {
+    func placeholderHeight(fontScale: Double) -> CGFloat {
         switch self {
         case .inline:
-            return 18
+            return 18 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
         case .block:
-            return 28
+            return 28 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
         }
     }
 
-    var fallbackFontSize: CGFloat {
+    func fallbackFontSize(fontScale: Double) -> CGFloat {
         switch self {
         case .inline:
-            return 17
+            return 17 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
         case .block:
-            return 20
+            return 20 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
         }
     }
 }
 
 #if canImport(SwiftMath)
 private extension ETNativeMathMarkdownCodec.RenderKind {
-    var fontSize: CGFloat {
+    func fontSize(fontScale: Double) -> CGFloat {
         switch self {
         case .inline:
-            return 17
+            return 17 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
         case .block:
-            return 20
+            return 20 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
         }
     }
 

@@ -112,11 +112,11 @@ struct ContentView: View {
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
     @AppStorage("watch.attachment.sourceHistory") private var attachmentSourceHistoryRawValue: String = "[]"
-    private var normalizedFontScale: CGFloat {
-        CGFloat(FontLibrary.normalizedFontScale(customFontScale))
+    private var effectiveFontScale: CGFloat {
+        CGFloat(FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled))
     }
     private var inputControlHeight: CGFloat {
-        max(38, 38 * normalizedFontScale)
+        max(38, 38 * effectiveFontScale)
     }
     private let inputBubbleVerticalPadding: CGFloat = 8
     private let emptyStateSpacerHeight: CGFloat = 120

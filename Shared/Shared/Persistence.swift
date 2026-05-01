@@ -3235,6 +3235,22 @@ public enum FontLibrary {
         return min(max(value, minimumFontScale), maximumFontScale)
     }
 
+    public static func effectiveFontScale(_ value: Double, isCustomFontEnabled: Bool) -> Double {
+        isCustomFontEnabled ? normalizedFontScale(value) : defaultFontScale
+    }
+
+    public static func effectiveFontScale(isCustomFontEnabled: Bool) -> Double {
+        effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled)
+    }
+
+    public static func scaledPointSize(_ pointSize: Double, scale: Double, isCustomFontEnabled: Bool) -> Double {
+        pointSize * effectiveFontScale(scale, isCustomFontEnabled: isCustomFontEnabled)
+    }
+
+    public static func scaledPointSize(_ pointSize: Double, isCustomFontEnabled: Bool) -> Double {
+        pointSize * effectiveFontScale(isCustomFontEnabled: isCustomFontEnabled)
+    }
+
     public static func scaledPointSize(_ pointSize: Double) -> Double {
         pointSize * customFontScale
     }

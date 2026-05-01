@@ -21,6 +21,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @State private var imagePreviewItem: ETWatchMarkdownImagePreviewItem?
 
@@ -53,14 +54,15 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
-        let fontScale = FontLibrary.normalizedFontScale(customFontScale)
+        let fontScale = FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled)
         if enableMarkdown {
             if let prepared = effectivePreparedContent {
                 if shouldUseMathEngine(prepared) {
                     ETMathAwareMarkdownView(
                         preparedContent: prepared,
                         isOutgoing: isOutgoing,
-                        customTextColor: customTextColor
+                        customTextColor: customTextColor,
+                        fontScale: fontScale
                     )
                 } else {
                     markdownTextView(
@@ -126,9 +128,18 @@ private struct ETMathAwareMarkdownView: View {
     let preparedContent: ETPreparedMarkdownRenderPayload
     let isOutgoing: Bool
     let customTextColor: Color?
+    let fontScale: Double
 
     private var textColor: Color {
         customTextColor ?? (isOutgoing ? .white : .primary)
+    }
+
+    private var inlineMathFontSize: CGFloat {
+        17 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
+    }
+
+    private var blockMathFontSize: CGFloat {
+        20 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
     }
 
     private var blocks: [ETMathRenderBlock] {
@@ -146,7 +157,7 @@ private struct ETMathAwareMarkdownView: View {
                         ETMathView(
                             latex: latex,
                             displayMode: .block,
-                            style: ETMathStyle(fontSize: 20, textColor: textColor)
+                            style: ETMathStyle(fontSize: blockMathFontSize, textColor: textColor)
                         )
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 2)
@@ -176,7 +187,7 @@ private struct ETMathAwareMarkdownView: View {
                         ETMathView(
                             latex: latex,
                             displayMode: .inline,
-                            style: ETMathStyle(fontSize: 17, textColor: textColor)
+                            style: ETMathStyle(fontSize: inlineMathFontSize, textColor: textColor)
                         )
                         .fixedSize(horizontal: true, vertical: true)
                     }

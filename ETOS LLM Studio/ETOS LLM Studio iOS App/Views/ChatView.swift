@@ -3420,16 +3420,17 @@ private struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     
     private let controlSize: CGFloat = 40
     private let expandedControlSize: CGFloat = 34
-    private var normalizedFontScale: CGFloat {
-        CGFloat(FontLibrary.normalizedFontScale(customFontScale))
+    private var effectiveFontScale: CGFloat {
+        CGFloat(FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled))
     }
     private let inputBasePointSize: CGFloat = 16
     private var measuredInputPointSize: CGFloat {
-        CGFloat(FontLibrary.scaledPointSize(16))
+        CGFloat(FontLibrary.scaledPointSize(Double(inputBasePointSize), scale: customFontScale, isCustomFontEnabled: isCustomFontEnabled))
     }
     private var inputUIFont: UIFont {
         .systemFont(ofSize: measuredInputPointSize)
@@ -3439,15 +3440,15 @@ private struct TelegramMessageComposer: View {
     }
     private var expandedInputHeight: CGFloat {
         let rawHeight = UIScreen.main.bounds.height * 0.3
-        return max(160 * normalizedFontScale, min(rawHeight, 360 * normalizedFontScale))
+        return max(160 * effectiveFontScale, min(rawHeight, 360 * effectiveFontScale))
     }
     private let textContainerInset: CGFloat = 8
     private let textHorizontalPadding: CGFloat = 10
     private var compactTextVerticalPadding: CGFloat {
-        max(4, 4 * normalizedFontScale)
+        max(4, 4 * effectiveFontScale)
     }
     private var expandedTextVerticalPadding: CGFloat {
-        max(6, 6 * normalizedFontScale)
+        max(6, 6 * effectiveFontScale)
     }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
