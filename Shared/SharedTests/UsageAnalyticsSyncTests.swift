@@ -5,6 +5,38 @@ import Foundation
 @Suite("用量统计同步测试")
 struct UsageAnalyticsSyncTests {
 
+    @Test("缓存命中率会兼容不同服务商 Token 口径")
+    func cacheHitRateHandlesProviderTokenShapes() {
+        let includedRead = RequestLogTokenTotals(
+            sentTokens: 100,
+            cacheWriteTokens: 20,
+            cacheReadTokens: 40
+        )
+        #expect(UsageAnalyticsCacheMetrics.hitRate(for: includedRead) == 40.0 / 120.0)
+
+        let claudeStyle = UsageDailyModelTotal(
+            dayKey: "2026-05-02",
+            providerName: "Anthropic",
+            modelID: "claude-sonnet",
+            requestSource: .chat,
+            tokenTotals: RequestLogTokenTotals(
+                sentTokens: 30,
+                cacheWriteTokens: 20,
+                cacheReadTokens: 120
+            )
+        )
+        #expect(UsageAnalyticsCacheMetrics.hitRate(for: [claudeStyle]) == 120.0 / 170.0)
+
+        let inferredSeparateRead = RequestLogTokenTotals(
+            sentTokens: 30,
+            cacheWriteTokens: 20,
+            cacheReadTokens: 120
+        )
+        #expect(UsageAnalyticsCacheMetrics.hitRate(for: inferredSeparateRead) == 120.0 / 170.0)
+
+        #expect(UsageAnalyticsCacheMetrics.hitRate(for: .init()) == nil)
+    }
+
     @Test("用量事件会生成按天与按模型汇总")
     func usageEventsBuildDailyRollups() {
         let originalBundles = Persistence.loadUsageStatsDayBundles()

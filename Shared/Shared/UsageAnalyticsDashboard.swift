@@ -93,6 +93,8 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
     public var requestCount: Int
     public var totalTokens: Int
     public var errorCount: Int
+    public var tokenTotals: RequestLogTokenTotals
+    public var cacheHitRate: Double?
 
     public init(
         id: String,
@@ -100,14 +102,65 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
         subtitle: String = "",
         requestCount: Int,
         totalTokens: Int,
-        errorCount: Int
+        errorCount: Int,
+        tokenTotals: RequestLogTokenTotals? = nil,
+        cacheHitRate: Double? = nil
     ) {
+        let resolvedTokenTotals = tokenTotals ?? RequestLogTokenTotals(totalTokens: totalTokens)
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.requestCount = requestCount
-        self.totalTokens = totalTokens
+        self.totalTokens = resolvedTokenTotals.totalTokens
         self.errorCount = errorCount
+        self.tokenTotals = resolvedTokenTotals
+        self.cacheHitRate = cacheHitRate ?? UsageAnalyticsCacheMetrics.hitRate(for: resolvedTokenTotals)
+    }
+}
+
+public enum UsageAnalyticsCacheMetrics {
+    public static func hitRate(for totals: RequestLogTokenTotals) -> Double? {
+        hitRate(for: totals, providerName: "", modelID: "")
+    }
+
+    public static func hitRate(for totals: RequestLogTokenTotals, providerName: String, modelID: String) -> Double? {
+        let denominator = cacheableInputTokens(for: totals, providerName: providerName, modelID: modelID)
+        guard denominator > 0 else { return nil }
+        return Double(totals.cacheReadTokens) / Double(denominator)
+    }
+
+    public static func hitRate(for items: [UsageDailyModelTotal]) -> Double? {
+        let readTokens = items.reduce(0) { $0 + $1.tokenTotals.cacheReadTokens }
+        let denominator = items.reduce(0) { partial, item in
+            partial + cacheableInputTokens(
+                for: item.tokenTotals,
+                providerName: item.providerName,
+                modelID: item.modelID
+            )
+        }
+        guard denominator > 0 else { return nil }
+        return Double(readTokens) / Double(denominator)
+    }
+
+    private static func cacheableInputTokens(for totals: RequestLogTokenTotals, providerName: String, modelID: String) -> Int {
+        let readTokens = totals.cacheReadTokens
+        guard totals.sentTokens > 0 || totals.cacheWriteTokens > 0 || readTokens > 0 else {
+            return 0
+        }
+
+        if usesSeparateCacheTokens(totals: totals, providerName: providerName, modelID: modelID) {
+            return totals.sentTokens + totals.cacheWriteTokens + readTokens
+        }
+        return totals.sentTokens + totals.cacheWriteTokens
+    }
+
+    private static func usesSeparateCacheTokens(totals: RequestLogTokenTotals, providerName: String, modelID: String) -> Bool {
+        let provider = providerName.lowercased()
+        let model = modelID.lowercased()
+        if provider.contains("anthropic") || model.contains("claude") {
+            return true
+        }
+        return totals.cacheReadTokens > totals.sentTokens
     }
 }
 
@@ -121,6 +174,7 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
     public var tokenTotals: RequestLogTokenTotals
     public var topModels: [UsageAnalyticsRankItem]
     public var sourceBreakdown: [UsageAnalyticsRankItem]
+    public var cacheHitRate: Double?
 
     public init(
         title: String = "",
@@ -131,7 +185,8 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         cancelledCount: Int = 0,
         tokenTotals: RequestLogTokenTotals = .init(),
         topModels: [UsageAnalyticsRankItem] = [],
-        sourceBreakdown: [UsageAnalyticsRankItem] = []
+        sourceBreakdown: [UsageAnalyticsRankItem] = [],
+        cacheHitRate: Double? = nil
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -142,6 +197,7 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         self.tokenTotals = tokenTotals
         self.topModels = topModels
         self.sourceBreakdown = sourceBreakdown
+        self.cacheHitRate = cacheHitRate
     }
 }
 
@@ -537,12 +593,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let failedCount = scopedTotals.reduce(0) { $0 + $1.failedCount }
         let cancelledCount = scopedTotals.reduce(0) { $0 + $1.cancelledCount }
         let tokenTotals = scopedTotals.reduce(into: RequestLogTokenTotals()) { partial, item in
-            partial.sentTokens += item.tokenTotals.sentTokens
-            partial.receivedTokens += item.tokenTotals.receivedTokens
-            partial.thinkingTokens += item.tokenTotals.thinkingTokens
-            partial.cacheWriteTokens += item.tokenTotals.cacheWriteTokens
-            partial.cacheReadTokens += item.tokenTotals.cacheReadTokens
-            partial.totalTokens += item.tokenTotals.totalTokens
+            mergeTokenTotals(item.tokenTotals, into: &partial)
         }
 
         return UsageAnalyticsDetailSnapshot(
@@ -554,7 +605,8 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             cancelledCount: cancelledCount,
             tokenTotals: tokenTotals,
             topModels: aggregateModels(scopedModels),
-            sourceBreakdown: aggregateSources(scopedModels)
+            sourceBreakdown: aggregateSources(scopedModels),
+            cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals)
         )
     }
 
@@ -564,7 +616,8 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             var modelID: String
             var requestCount: Int
             var errorCount: Int
-            var totalTokens: Int
+            var tokenTotals: RequestLogTokenTotals
+            var items: [UsageDailyModelTotal]
         }
 
         var buckets: [String: Bucket] = [:]
@@ -575,11 +628,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 modelID: item.modelID,
                 requestCount: 0,
                 errorCount: 0,
-                totalTokens: 0
+                tokenTotals: .init(),
+                items: []
             )
             bucket.requestCount += item.requestCount
             bucket.errorCount += item.failedCount
-            bucket.totalTokens += item.tokenTotals.totalTokens
+            mergeTokenTotals(item.tokenTotals, into: &bucket.tokenTotals)
+            bucket.items.append(item)
             buckets[key] = bucket
         }
 
@@ -590,8 +645,14 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     title: value.modelID,
                     subtitle: value.providerName,
                     requestCount: value.requestCount,
-                    totalTokens: value.totalTokens,
-                    errorCount: value.errorCount
+                    totalTokens: value.tokenTotals.totalTokens,
+                    errorCount: value.errorCount,
+                    tokenTotals: value.tokenTotals,
+                    cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(
+                        for: value.tokenTotals,
+                        providerName: value.providerName,
+                        modelID: value.modelID
+                    )
                 )
             }
             .sorted(by: rankComparator)
@@ -602,7 +663,8 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             var source: UsageRequestSource
             var requestCount: Int
             var errorCount: Int
-            var totalTokens: Int
+            var tokenTotals: RequestLogTokenTotals
+            var items: [UsageDailyModelTotal]
         }
 
         var buckets: [UsageRequestSource: Bucket] = [:]
@@ -611,11 +673,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 source: item.requestSource,
                 requestCount: 0,
                 errorCount: 0,
-                totalTokens: 0
+                tokenTotals: .init(),
+                items: []
             )
             bucket.requestCount += item.requestCount
             bucket.errorCount += item.failedCount
-            bucket.totalTokens += item.tokenTotals.totalTokens
+            mergeTokenTotals(item.tokenTotals, into: &bucket.tokenTotals)
+            bucket.items.append(item)
             buckets[item.requestSource] = bucket
         }
 
@@ -626,11 +690,22 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     title: $0.source.displayName,
                     subtitle: "",
                     requestCount: $0.requestCount,
-                    totalTokens: $0.totalTokens,
-                    errorCount: $0.errorCount
+                    totalTokens: $0.tokenTotals.totalTokens,
+                    errorCount: $0.errorCount,
+                    tokenTotals: $0.tokenTotals,
+                    cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: $0.items)
                 )
             }
             .sorted(by: rankComparator)
+    }
+
+    private nonisolated static func mergeTokenTotals(_ source: RequestLogTokenTotals, into target: inout RequestLogTokenTotals) {
+        target.sentTokens += source.sentTokens
+        target.receivedTokens += source.receivedTokens
+        target.thinkingTokens += source.thinkingTokens
+        target.cacheWriteTokens += source.cacheWriteTokens
+        target.cacheReadTokens += source.cacheReadTokens
+        target.totalTokens += source.totalTokens
     }
 
     private nonisolated static func rankComparator(_ lhs: UsageAnalyticsRankItem, _ rhs: UsageAnalyticsRankItem) -> Bool {
