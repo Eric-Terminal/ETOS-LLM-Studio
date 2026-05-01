@@ -185,7 +185,11 @@ private struct AppLogRunDetailView: View {
                     )
                 } else {
                     ForEach(displayedEvents) { entry in
-                        AppLogDetailRow(entry: entry)
+                        NavigationLink {
+                            AppLogEventDetailView(entry: entry)
+                        } label: {
+                            AppLogDetailRow(entry: entry)
+                        }
                     }
                 }
             }
@@ -351,16 +355,9 @@ private struct AppLogDetailRow: View {
                 .textSelection(.enabled)
 
             if let payload = entry.payload, !payload.isEmpty {
-                Text(formatLogPayload(payload))
-                    .etFont(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.secondary.opacity(0.08))
-                    )
+                Label(NSLocalizedString("详情", comment: ""), systemImage: "doc.text.magnifyingglass")
+                    .etFont(.caption)
+                    .foregroundStyle(.blue)
             }
         }
         .padding(.vertical, 2)
@@ -387,6 +384,101 @@ private struct AppLogDetailRow: View {
             return .red
         @unknown default:
             return .gray
+        }
+    }
+}
+
+private struct AppLogEventDetailView: View {
+    let entry: AppLogEvent
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("基础信息", comment: "")) {
+                LabeledContent(NSLocalizedString("等级", comment: ""), value: entry.level.displayName)
+                LabeledContent(NSLocalizedString("分类（category）", comment: ""), value: entry.category)
+                LabeledContent(NSLocalizedString("创建时间", comment: ""), value: formatTime(entry.timestamp))
+                Text("\(entry.channel == .developer ? NSLocalizedString("开发", comment: "") : NSLocalizedString("用户", comment: "")) · \(entry.action)\n\(entry.id.uuidString)")
+                    .etFont(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Section(NSLocalizedString("日志记录", comment: "")) {
+                Text(entry.message)
+                    .textSelection(.enabled)
+            }
+
+            if let payload = entry.payload, !payload.isEmpty {
+                Section(NSLocalizedString("payload", comment: "")) {
+                    ForEach(payload.sorted { $0.key < $1.key }, id: \.key) { item in
+                        NavigationLink {
+                            AppLogPayloadValueDetailView(key: item.key, value: item.value)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.key)
+                                    .etFont(.subheadline)
+                                Text(payloadValueSummary(item.value))
+                                    .etFont(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+
+                Section(NSLocalizedString("详情", comment: "")) {
+                    Text(formatLogPayload(payload))
+                        .etFont(.footnote.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("详情", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(NSLocalizedString("复制", comment: "")) {
+                    UIPasteboard.general.string = fullLogText
+                }
+            }
+        }
+    }
+
+    private var fullLogText: String {
+        var lines: [String] = [
+            "[\(formatTime(entry.timestamp))] [\(entry.channel.displayName)] [\(entry.level.displayName)] [\(entry.category)] [\(entry.action)]",
+            "message: \(entry.message)",
+            "eventID: \(entry.id.uuidString)"
+        ]
+        if let payload = entry.payload, !payload.isEmpty {
+            lines.append("payload:")
+            lines.append(formatLogPayload(payload))
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+
+private struct AppLogPayloadValueDetailView: View {
+    let key: String
+    let value: String
+
+    var body: some View {
+        List {
+            Section(key) {
+                Text(prettyPayloadValue(value))
+                    .etFont(.footnote.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+        .navigationTitle(key)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(NSLocalizedString("复制", comment: "")) {
+                    UIPasteboard.general.string = prettyPayloadValue(value)
+                }
+            }
         }
     }
 }
@@ -440,5 +532,25 @@ private func formatTime(_ date: Date) -> String {
 
 private func formatLogPayload(_ payload: [String: String]) -> String {
     let sorted = payload.sorted { $0.key < $1.key }
-    return sorted.map { "\($0.key):\n\($0.value)" }.joined(separator: "\n\n")
+    return sorted.map { "\($0.key):\n\(prettyPayloadValue($0.value))" }.joined(separator: "\n\n")
+}
+
+private func payloadValueSummary(_ value: String) -> String {
+    let pretty = prettyPayloadValue(value)
+    return pretty
+        .split(separator: "\n", omittingEmptySubsequences: true)
+        .prefix(3)
+        .joined(separator: "\n")
+}
+
+private func prettyPayloadValue(_ value: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let data = trimmed.data(using: .utf8),
+          let jsonObject = try? JSONSerialization.jsonObject(with: data),
+          JSONSerialization.isValidJSONObject(jsonObject),
+          let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
+          let pretty = String(data: prettyData, encoding: .utf8) else {
+        return value
+    }
+    return pretty
 }

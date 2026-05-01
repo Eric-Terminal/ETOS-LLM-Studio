@@ -9,6 +9,9 @@
 import SwiftUI
 import Foundation
 import Shared
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ModelSettingsView: View {
     @Binding var model: Model
@@ -112,10 +115,21 @@ struct ModelSettingsView: View {
             }
 
             Section(NSLocalizedString("请求体预览", comment: "")) {
-                Text(preview.text)
-                    .etFont(.footnote.monospaced())
-                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
-                    .textSelection(.enabled)
+                NavigationLink {
+                    RequestBodyPreviewDetailView(
+                        preview: preview,
+                        modelName: model.displayName,
+                        modelID: model.modelName,
+                        providerName: provider.name,
+                        apiFormat: provider.apiFormat,
+                        editMode: requestBodyModeDisplayName
+                    )
+                } label: {
+                    PreviewNavigationRow(
+                        text: preview.text,
+                        isPlaceholder: preview.isPlaceholder
+                    )
+                }
             }
         }
         .navigationTitle(NSLocalizedString("模型信息", comment: ""))
@@ -242,6 +256,17 @@ extension ModelSettingsView {
             text: prettyPrintedJSON(sanitized),
             isPlaceholder: false
         )
+    }
+
+    private var requestBodyModeDisplayName: String {
+        switch requestBodyMode {
+        case .expression:
+            return NSLocalizedString("参数表达式", comment: "")
+        case .rawJSON:
+            return NSLocalizedString("原始 JSON", comment: "")
+        @unknown default:
+            return NSLocalizedString("未知", comment: "")
+        }
     }
 
     private func previewOverrideParameters() -> (parameters: [String: JSONValue], hasError: Bool) {
@@ -663,6 +688,64 @@ extension ModelSettingsView {
 private struct RequestBodyPreview {
     let text: String
     let isPlaceholder: Bool
+}
+
+private struct PreviewNavigationRow: View {
+    let text: String
+    let isPlaceholder: Bool
+
+    private var summary: String {
+        let firstLine = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map(String.init) ?? text
+        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        Text(summary.isEmpty ? NSLocalizedString("详情", comment: "") : summary)
+            .etFont(.footnote.monospaced())
+            .foregroundStyle(isPlaceholder ? .secondary : .primary)
+            .lineLimit(3)
+        .padding(.vertical, 2)
+    }
+}
+
+private struct RequestBodyPreviewDetailView: View {
+    let preview: RequestBodyPreview
+    let modelName: String
+    let modelID: String
+    let providerName: String
+    let apiFormat: String
+    let editMode: String
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("基础信息", comment: "")) {
+                LabeledContent(NSLocalizedString("模型名称", comment: ""), value: modelName)
+                LabeledContent(NSLocalizedString("模型ID", comment: ""), value: modelID)
+                LabeledContent(NSLocalizedString("提供商名称", comment: ""), value: providerName)
+                LabeledContent(NSLocalizedString("API 格式", comment: ""), value: apiFormat)
+                LabeledContent(NSLocalizedString("请求体编辑方式", comment: ""), value: editMode)
+            }
+
+            Section(NSLocalizedString("请求体预览", comment: "")) {
+                Text(preview.text)
+                    .etFont(.footnote.monospaced())
+                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+                    .textSelection(.enabled)
+            }
+        }
+        .navigationTitle(NSLocalizedString("请求体预览", comment: ""))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(NSLocalizedString("复制", comment: "")) {
+                    UIPasteboard.general.string = preview.text
+                }
+                .disabled(preview.text.isEmpty)
+            }
+        }
+    }
 }
 
 private struct ExpressionRow: View {

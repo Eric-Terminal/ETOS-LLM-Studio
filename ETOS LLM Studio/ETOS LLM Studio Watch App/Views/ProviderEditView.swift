@@ -127,9 +127,18 @@ struct ProviderEditView: View {
             }
 
             Section(header: Text(NSLocalizedString("请求头预览", comment: ""))) {
-                Text(preview.text)
-                    .etFont(.footnote.monospaced())
-                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+                NavigationLink {
+                    HeaderOverridesPreviewDetailView(
+                        preview: preview,
+                        providerName: provider.name,
+                        apiFormat: provider.apiFormat
+                    )
+                } label: {
+                    PreviewNavigationRow(
+                        text: preview.text,
+                        isPlaceholder: preview.isPlaceholder
+                    )
+                }
             }
             
             Section {
@@ -345,6 +354,52 @@ struct ProviderEditView: View {
 private struct HeaderOverridesPreview {
     let text: String
     let isPlaceholder: Bool
+}
+
+private struct PreviewNavigationRow: View {
+    let text: String
+    let isPlaceholder: Bool
+
+    private var summary: String {
+        let firstLine = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map(String.init) ?? text
+        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        Text(summary.isEmpty ? NSLocalizedString("详情", comment: "") : summary)
+            .etFont(.footnote.monospaced())
+            .foregroundStyle(isPlaceholder ? .secondary : .primary)
+            .lineLimit(4)
+            .padding(.vertical, 2)
+    }
+}
+
+private struct HeaderOverridesPreviewDetailView: View {
+    let preview: HeaderOverridesPreview
+    let providerName: String
+    let apiFormat: String
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("基础信息", comment: "")) {
+                Text(providerName)
+                    .etFont(.caption)
+                Text(apiFormat)
+                    .etFont(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(NSLocalizedString("请求头预览", comment: "")) {
+                Text(preview.text)
+                    .etFont(.caption2.monospaced())
+                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+            }
+        }
+        .navigationTitle(NSLocalizedString("请求头预览", comment: ""))
+    }
 }
 
 private struct HeaderOverrideEntry: Identifiable, Equatable {

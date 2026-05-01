@@ -144,37 +144,11 @@ private struct WatchAppRunLogDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(displayedEvents) { entry in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(entry.channel == .developer ? NSLocalizedString("开发", comment: "") : NSLocalizedString("用户", comment: ""))
-                                    .etFont(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(entry.channel == .developer ? .purple : .green)
-                                Text(entry.level.displayName)
-                                    .etFont(.system(size: 9, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(levelColor(entry.level))
-                                Spacer()
-                                Text(formatTime(entry.timestamp))
-                                    .etFont(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Text("\(entry.category) · \(entry.action)")
-                                .etFont(.caption2)
-                                .lineLimit(2)
-
-                            Text(entry.message)
-                                .etFont(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-
-                            if let payload = entry.payload, !payload.isEmpty {
-                                Text(formatPayload(payload))
-                                    .etFont(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(6)
-                            }
+                        NavigationLink {
+                            WatchAppLogEventDetailView(entry: entry)
+                        } label: {
+                            WatchAppLogEventRow(entry: entry)
                         }
-                        .padding(.vertical, 2)
                     }
                 }
             }
@@ -203,24 +177,116 @@ private struct WatchAppRunLogDetailView: View {
         }
     }
 
-    private func levelColor(_ level: AppLogLevel) -> Color {
-        switch level {
-        case .debug:
-            return .gray
-        case .info:
-            return .blue
-        case .warning:
-            return .orange
-        case .error:
-            return .red
-        @unknown default:
-            return .gray
-        }
-    }
+}
 
-    private func formatPayload(_ payload: [String: String]) -> String {
-        let sorted = payload.sorted { $0.key < $1.key }
-        return sorted.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+private struct WatchAppLogEventRow: View {
+    let entry: AppLogEvent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(entry.channel == .developer ? NSLocalizedString("开发", comment: "") : NSLocalizedString("用户", comment: ""))
+                    .etFont(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(entry.channel == .developer ? .purple : .green)
+                Text(entry.level.displayName)
+                    .etFont(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(levelColor(entry.level))
+                Spacer()
+                Text(formatTime(entry.timestamp))
+                    .etFont(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("\(entry.category) · \(entry.action)")
+                .etFont(.caption2)
+                .lineLimit(2)
+
+            Text(entry.message)
+                .etFont(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+
+            if entry.payload?.isEmpty == false {
+                Label(NSLocalizedString("详情", comment: ""), systemImage: "doc.text.magnifyingglass")
+                    .etFont(.system(size: 9))
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct WatchAppLogEventDetailView: View {
+    let entry: AppLogEvent
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("基础信息", comment: "")) {
+                Text("\(entry.channel == .developer ? NSLocalizedString("开发", comment: "") : NSLocalizedString("用户", comment: "")) · \(entry.level.displayName)")
+                    .etFont(.caption)
+                    .foregroundStyle(levelColor(entry.level))
+                Text("\(entry.category) · \(entry.action)")
+                    .etFont(.caption2)
+                Text(formatTime(entry.timestamp))
+                    .etFont(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(NSLocalizedString("记录", comment: "")) {
+                Text(entry.message)
+                    .etFont(.caption2)
+            }
+
+            if let payload = entry.payload, !payload.isEmpty {
+                Section(NSLocalizedString("payload", comment: "")) {
+                    ForEach(payload.sorted { $0.key < $1.key }, id: \.key) { item in
+                        NavigationLink {
+                            WatchAppLogPayloadValueDetailView(key: item.key, value: item.value)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.key)
+                                    .etFont(.caption2)
+                                Text(payloadValueSummary(item.value))
+                                    .etFont(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("详情", comment: ""))
+    }
+}
+
+private struct WatchAppLogPayloadValueDetailView: View {
+    let key: String
+    let value: String
+
+    var body: some View {
+        List {
+            Section(key) {
+                Text(prettyPayloadValue(value))
+                    .etFont(.system(size: 9, design: .monospaced))
+            }
+        }
+        .navigationTitle(key)
+    }
+}
+
+private func levelColor(_ level: AppLogLevel) -> Color {
+    switch level {
+    case .debug:
+        return .gray
+    case .info:
+        return .blue
+    case .warning:
+        return .orange
+    case .error:
+        return .red
+    @unknown default:
+        return .gray
     }
 }
 
@@ -254,4 +320,24 @@ private func formatTime(_ date: Date) -> String {
     formatter.locale = Locale(identifier: "zh_CN")
     formatter.dateFormat = "HH:mm:ss"
     return formatter.string(from: date)
+}
+
+private func payloadValueSummary(_ value: String) -> String {
+    let pretty = prettyPayloadValue(value)
+    return pretty
+        .split(separator: "\n", omittingEmptySubsequences: true)
+        .prefix(3)
+        .joined(separator: "\n")
+}
+
+private func prettyPayloadValue(_ value: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let data = trimmed.data(using: .utf8),
+          let jsonObject = try? JSONSerialization.jsonObject(with: data),
+          JSONSerialization.isValidJSONObject(jsonObject),
+          let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
+          let pretty = String(data: prettyData, encoding: .utf8) else {
+        return value
+    }
+    return pretty
 }

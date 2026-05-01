@@ -113,9 +113,21 @@ struct ModelSettingsView: View {
             }
 
             Section(header: Text(NSLocalizedString("请求体预览", comment: ""))) {
-                Text(preview.text)
-                    .etFont(.footnote.monospaced())
-                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+                NavigationLink {
+                    RequestBodyPreviewDetailView(
+                        preview: preview,
+                        modelName: model.displayName,
+                        modelID: model.modelName,
+                        providerName: provider.name,
+                        apiFormat: provider.apiFormat,
+                        editMode: requestBodyModeDisplayName
+                    )
+                } label: {
+                    PreviewNavigationRow(
+                        text: preview.text,
+                        isPlaceholder: preview.isPlaceholder
+                    )
+                }
             }
         }
         .navigationTitle(NSLocalizedString("编辑模型信息", comment: ""))
@@ -242,6 +254,17 @@ extension ModelSettingsView {
             text: prettyPrintedJSON(sanitized),
             isPlaceholder: false
         )
+    }
+
+    private var requestBodyModeDisplayName: String {
+        switch requestBodyMode {
+        case .expression:
+            return NSLocalizedString("表达式", comment: "")
+        case .rawJSON:
+            return NSLocalizedString("原始 JSON", comment: "")
+        @unknown default:
+            return NSLocalizedString("未知", comment: "")
+        }
     }
 
     private func previewOverrideParameters() -> (parameters: [String: JSONValue], hasError: Bool) {
@@ -663,6 +686,61 @@ extension ModelSettingsView {
 private struct RequestBodyPreview {
     let text: String
     let isPlaceholder: Bool
+}
+
+private struct PreviewNavigationRow: View {
+    let text: String
+    let isPlaceholder: Bool
+
+    private var summary: String {
+        let firstLine = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map(String.init) ?? text
+        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        Text(summary.isEmpty ? NSLocalizedString("详情", comment: "") : summary)
+            .etFont(.footnote.monospaced())
+            .foregroundStyle(isPlaceholder ? .secondary : .primary)
+            .lineLimit(4)
+            .padding(.vertical, 2)
+    }
+}
+
+private struct RequestBodyPreviewDetailView: View {
+    let preview: RequestBodyPreview
+    let modelName: String
+    let modelID: String
+    let providerName: String
+    let apiFormat: String
+    let editMode: String
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("基础信息", comment: "")) {
+                Text(modelName)
+                    .etFont(.caption)
+                Text(modelID)
+                    .etFont(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                Text(providerName)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("\(apiFormat) · \(editMode)")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(NSLocalizedString("请求体预览", comment: "")) {
+                Text(preview.text)
+                    .etFont(.caption2.monospaced())
+                    .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
+            }
+        }
+        .navigationTitle(NSLocalizedString("请求体预览", comment: ""))
+    }
 }
 
 private struct ExpressionRow: View {
