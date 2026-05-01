@@ -118,6 +118,130 @@ struct ThirdPartyImportKelivoTests {
         #expect(provider.models.map(\.modelName) == ["claude-3-5-sonnet"])
     }
 
+    @Test("Kelivo 导入会保留 Responses、多 Key、代理与模型覆盖")
+    func testPrepareKelivoImportPreservesResponsesKeysProxyAndModelOverrides() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let settings: [String: Any] = [
+            "provider_configs": [
+                "kelivo-provider-3": [
+                    "name": "Kelivo OpenAI",
+                    "providerType": "openai",
+                    "baseUrl": "https://example.com/v1",
+                    "apiKey": "primary-key",
+                    "enabled": true,
+                    "useResponseApi": true,
+                    "proxyEnabled": true,
+                    "proxyType": "socks5",
+                    "proxyHost": "127.0.0.1",
+                    "proxyPort": "7890",
+                    "apiKeys": [
+                        ["key": "secondary-key", "isEnabled": true, "status": "active"],
+                        ["key": "disabled-key", "isEnabled": false, "status": "disabled"]
+                    ],
+                    "models": ["logical-vision"],
+                    "modelOverrides": [
+                        "logical-vision": [
+                            "apiModelId": "gpt-4o",
+                            "name": "GPT 4o Vision",
+                            "type": "chat",
+                            "input": ["text", "image"],
+                            "output": ["text"],
+                            "abilities": ["tool", "reasoning"],
+                            "body": [
+                                ["key": "temperature", "value": "0.4"],
+                                ["key": "metadata", "value": "{\"source\":\"kelivo\"}"]
+                            ]
+                        ],
+                        "extra-embedding": [
+                            "apiModelId": "text-embedding-3-small",
+                            "name": "Embedding",
+                            "type": "embedding",
+                            "input": ["text"]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        try JSONSerialization.data(withJSONObject: settings)
+            .write(to: sandbox.appendingPathComponent("settings.json"))
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .kelivo,
+            fileURL: sandbox
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.apiKeys == ["primary-key", "secondary-key"])
+        #expect(provider.proxyConfiguration?.type == .socks5)
+        #expect(provider.proxyConfiguration?.host == "127.0.0.1")
+        #expect(provider.proxyConfiguration?.port == 7890)
+
+        let visionModel = try #require(provider.models.first { $0.modelName == "gpt-4o" })
+        #expect(visionModel.displayName == "GPT 4o Vision")
+        #expect(visionModel.inputModalities == [.text, .image])
+        #expect(visionModel.capabilities == [.toolCalling, .reasoning])
+        #expect(visionModel.overrideParameters["use_responses_api"] == .bool(true))
+        #expect(visionModel.overrideParameters["temperature"] == .double(0.4))
+        #expect(visionModel.overrideParameters["metadata"] == .dictionary(["source": .string("kelivo")]))
+
+        let embeddingModel = try #require(provider.models.first { $0.modelName == "text-embedding-3-small" })
+        #expect(embeddingModel.kind == .embedding)
+        #expect(embeddingModel.capabilities == [])
+    }
+
+    @Test("Kelivo 导入不会合并带有不同模型覆盖的同名 provider")
+    func testPrepareKelivoImportKeepsProvidersWithDifferentOverridesSeparate() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let commonProvider: [String: Any] = [
+            "name": "同名 OpenAI",
+            "providerType": "openai",
+            "baseUrl": "https://example.com/v1",
+            "apiKey": "same-key",
+            "enabled": true
+        ]
+
+        let settings: [String: Any] = [
+            "provider_configs": [
+                "kelivo-provider-a": commonProvider.merging([
+                    "models": ["model-a"],
+                    "modelOverrides": [
+                        "model-a": [
+                            "body": [["key": "temperature", "value": "0.1"]]
+                        ]
+                    ]
+                ]) { _, new in new },
+                "kelivo-provider-b": commonProvider.merging([
+                    "models": ["model-a"],
+                    "modelOverrides": [
+                        "model-a": [
+                            "body": [["key": "temperature", "value": "0.9"]]
+                        ]
+                    ]
+                ]) { _, new in new }
+            ]
+        ]
+
+        try JSONSerialization.data(withJSONObject: settings)
+            .write(to: sandbox.appendingPathComponent("settings.json"))
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .kelivo,
+            fileURL: sandbox
+        )
+
+        #expect(prepared.package.providers.count == 2)
+        let temperatures = prepared.package.providers.compactMap {
+            $0.models.first?.overrideParameters["temperature"]
+        }
+        #expect(temperatures.contains(.double(0.1)))
+        #expect(temperatures.contains(.double(0.9)))
+    }
+
     private func makeTemporaryDirectory() -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -141,6 +141,75 @@ struct ThirdPartyImportCherryTests {
         #expect(chatModel.overrideParameters["use_responses_api"] == nil)
     }
 
+    @Test("Cherry 导入会保留 provider 状态、请求头与模型能力")
+    func testPrepareCherryImportPreservesProviderStateHeadersAndModelShape() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let llm: [String: Any] = [
+            "providers": [
+                [
+                    "id": "provider-shape",
+                    "name": "Cherry 自定义",
+                    "type": "openai",
+                    "apiHost": "https://api.example.com/v1",
+                    "apiKey": "test-key",
+                    "enabled": false,
+                    "extra_headers": [
+                        "X-App": "Cherry"
+                    ],
+                    "models": [
+                        [
+                            "id": "vision-chat",
+                            "name": "Vision Chat",
+                            "capabilities": [
+                                ["type": "vision", "isUserSelected": true],
+                                ["type": "function_calling", "isUserSelected": "false"],
+                                ["type": "reasoning", "isUserSelected": true]
+                            ]
+                        ],
+                        [
+                            "id": "gpt-image-1",
+                            "name": "Image",
+                            "endpoint_type": "image-generation"
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let persist: [String: Any] = [
+            "llm": try encodeJSONString(llm)
+        ]
+        let root: [String: Any] = [
+            "localStorage": [
+                "persist:cherry-studio": try encodeJSONString(persist)
+            ],
+            "indexedDB": [:]
+        ]
+
+        let fileURL = sandbox.appendingPathComponent("cherry-shape.json")
+        try JSONSerialization.data(withJSONObject: root).write(to: fileURL)
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .cherryStudio,
+            fileURL: fileURL
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.headerOverrides["X-App"] == "Cherry")
+
+        let visionModel = try #require(provider.models.first { $0.modelName == "vision-chat" })
+        #expect(visionModel.isActivated == false)
+        #expect(visionModel.kind == .chat)
+        #expect(visionModel.inputModalities == [.text, .image])
+        #expect(visionModel.capabilities == [.reasoning])
+
+        let imageModel = try #require(provider.models.first { $0.modelName == "gpt-image-1" })
+        #expect(imageModel.kind == .image)
+        #expect(imageModel.outputModalities == [.image])
+    }
+
     @Test("Cherry 压缩包会提示先解压")
     func testPrepareCherryImportWithCompressedFileShowsHint() throws {
         let sandbox = makeTemporaryDirectory()
