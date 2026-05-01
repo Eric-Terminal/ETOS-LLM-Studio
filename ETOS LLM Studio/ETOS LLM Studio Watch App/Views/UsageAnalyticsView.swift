@@ -154,20 +154,44 @@ struct UsageAnalyticsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let topModel = viewModel.state.detail.topModels.first {
+                if viewModel.state.detail.topModels.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(NSLocalizedString("模型 Top", comment: ""))
                             .etFont(.caption.weight(.semibold))
-                        Text(topModel.title)
-                            .etFont(.footnote.weight(.semibold))
-                        if !topModel.subtitle.isEmpty {
-                            Text(topModel.subtitle)
+                        Text(NSLocalizedString("当前范围内还没有模型请求。", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(NSLocalizedString("模型 Top", comment: ""))
+                                .etFont(.caption.weight(.semibold))
+                            Spacer()
+                            Text(String(format: NSLocalizedString("共 %d 项", comment: "用量统计榜单数量"), viewModel.state.detail.topModels.count))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-                        Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), topModel.requestCount, topModel.totalTokens))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
+
+                        ForEach(Array(viewModel.state.detail.topModels.enumerated()), id: \.element.id) { index, model in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(format: NSLocalizedString("第 %d 名", comment: "用量统计榜单名次"), index + 1))
+                                    .etFont(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(model.title)
+                                    .etFont(.footnote.weight(.semibold))
+                                    .lineLimit(1)
+                                if !model.subtitle.isEmpty {
+                                    Text(model.subtitle)
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), model.requestCount, model.totalTokens))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
 

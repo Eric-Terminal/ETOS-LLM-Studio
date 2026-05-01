@@ -291,13 +291,13 @@ struct UsageAnalyticsView: View {
                 rankedSection(
                     title: "模型榜单",
                     emptyText: "当前范围内还没有模型请求。",
-                    items: Array(viewModel.state.detail.topModels.prefix(6))
+                    items: viewModel.state.detail.topModels
                 )
 
                 rankedSection(
                     title: "来源分布",
                     emptyText: "当前范围内还没有来源统计。",
-                    items: Array(viewModel.state.detail.sourceBreakdown.prefix(6))
+                    items: viewModel.state.detail.sourceBreakdown
                 )
             }
             .padding(14)
@@ -335,7 +335,7 @@ struct UsageAnalyticsView: View {
                 Text(NSLocalizedString(title, comment: "用量统计榜单标题"))
                     .etFont(.headline)
                 Spacer()
-                Text("Top \(min(items.count, 6))")
+                Text(String(format: NSLocalizedString("共 %d 项", comment: "用量统计榜单数量"), items.count))
                     .etFont(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
