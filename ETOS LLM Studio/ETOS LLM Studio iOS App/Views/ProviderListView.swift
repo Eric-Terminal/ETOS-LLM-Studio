@@ -197,7 +197,8 @@ private struct ProviderConfigurationTabsView: View {
                 provider: provider,
                 showsToolbar: false,
                 addModelRequest: addModelRequest,
-                fetchModelsRequest: fetchModelsRequest
+                fetchModelsRequest: fetchModelsRequest,
+                allowsRemoteModelFetch: allowsRemoteModelFetch
             ) { updatedProvider in
                 updateProvider(updatedProvider)
             }
@@ -227,12 +228,14 @@ private struct ProviderConfigurationTabsView: View {
         .toolbar {
             if selectedTab == .models {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        fetchModelsRequest += 1
-                    } label: {
-                        Image(systemName: "icloud.and.arrow.down")
+                    if allowsRemoteModelFetch {
+                        Button {
+                            fetchModelsRequest += 1
+                        } label: {
+                            Image(systemName: "icloud.and.arrow.down")
+                        }
+                        .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
                     }
-                    .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
 
                     Button {
                         addModelRequest += 1
@@ -243,6 +246,10 @@ private struct ProviderConfigurationTabsView: View {
                 }
             }
         }
+    }
+
+    private var allowsRemoteModelFetch: Bool {
+        provider.apiFormat.lowercased() != "anthropic"
     }
 
     private func updateProvider(_ updatedProvider: Provider) {

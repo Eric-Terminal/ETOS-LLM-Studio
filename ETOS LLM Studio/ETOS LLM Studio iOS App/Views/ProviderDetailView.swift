@@ -16,6 +16,7 @@ struct ProviderDetailView: View {
     let showsToolbar: Bool
     let addModelRequest: Int
     let fetchModelsRequest: Int
+    let allowsRemoteModelFetch: Bool
     let onSave: (Provider) -> Void
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
@@ -32,12 +33,14 @@ struct ProviderDetailView: View {
         showsToolbar: Bool = true,
         addModelRequest: Int = 0,
         fetchModelsRequest: Int = 0,
+        allowsRemoteModelFetch: Bool = true,
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self.sourceProvider = provider
         self.showsToolbar = showsToolbar
         self.addModelRequest = addModelRequest
         self.fetchModelsRequest = fetchModelsRequest
+        self.allowsRemoteModelFetch = allowsRemoteModelFetch
         _provider = State(initialValue: provider)
         self.onSave = onSave
     }
@@ -108,20 +111,22 @@ struct ProviderDetailView: View {
         }
         .navigationTitle(provider.name)
         .task {
-            guard !hasAutoFetchedModels, !isFetchingModels else { return }
+            guard allowsRemoteModelFetch, !hasAutoFetchedModels, !isFetchingModels else { return }
             hasAutoFetchedModels = true
             await fetchAndMergeModels(showsProgress: false)
         }
         .toolbar {
             if showsToolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        Task { await fetchAndMergeModels(showsProgress: true) }
-                    } label: {
-                        Image(systemName: "icloud.and.arrow.down")
+                    if allowsRemoteModelFetch {
+                        Button {
+                            Task { await fetchAndMergeModels(showsProgress: true) }
+                        } label: {
+                            Image(systemName: "icloud.and.arrow.down")
+                        }
+                        .disabled(isFetchingModels)
+                        .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
                     }
-                    .disabled(isFetchingModels)
-                    .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
 
                     Button {
                         isAddingModel = true
@@ -148,6 +153,7 @@ struct ProviderDetailView: View {
             isAddingModel = true
         }
         .onChange(of: fetchModelsRequest) { _, _ in
+            guard allowsRemoteModelFetch else { return }
             Task { await fetchAndMergeModels(showsProgress: true) }
         }
         .alert(NSLocalizedString("获取模型失败", comment: ""), isPresented: $showErrorAlert) {

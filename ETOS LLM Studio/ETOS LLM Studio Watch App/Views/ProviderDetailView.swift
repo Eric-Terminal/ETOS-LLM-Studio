@@ -17,6 +17,7 @@ struct ProviderDetailView: View {
     private let sourceProvider: Provider
     @State private var provider: Provider
     let onSave: (Provider) -> Void
+    let allowsRemoteModelFetch: Bool
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
     @State private var isFetchingModels = false
@@ -29,9 +30,14 @@ struct ProviderDetailView: View {
     @FocusState private var isSearchFieldFocused: Bool
     @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
-    init(provider: Provider, onSave: @escaping (Provider) -> Void = { _ in }) {
+    init(
+        provider: Provider,
+        allowsRemoteModelFetch: Bool = true,
+        onSave: @escaping (Provider) -> Void = { _ in }
+    ) {
         self.sourceProvider = provider
         _provider = State(initialValue: provider)
+        self.allowsRemoteModelFetch = allowsRemoteModelFetch
         self.onSave = onSave
     }
     
@@ -122,7 +128,7 @@ struct ProviderDetailView: View {
         }
         .navigationTitle(provider.name)
         .task {
-            guard !hasAutoFetchedModels, !isFetchingModels else { return }
+            guard allowsRemoteModelFetch, !hasAutoFetchedModels, !isFetchingModels else { return }
             hasAutoFetchedModels = true
             await fetchAndMergeModels(showsProgress: false)
         }
@@ -135,10 +141,12 @@ struct ProviderDetailView: View {
             
             ToolbarItem(placement: .bottomBar) {
                 HStack {
-                    Button(action: { Task { await fetchAndMergeModels(showsProgress: true) } }) {
-                        Image(systemName: "icloud.and.arrow.down")
+                    if allowsRemoteModelFetch {
+                        Button(action: { Task { await fetchAndMergeModels(showsProgress: true) } }) {
+                            Image(systemName: "icloud.and.arrow.down")
+                        }
+                        .disabled(isFetchingModels)
                     }
-                    .disabled(isFetchingModels)
                     Spacer()
                     Button(action: { toggleSearch() }) {
                         Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
@@ -165,6 +173,7 @@ struct ProviderDetailView: View {
     }
     
     private func fetchAndMergeModels(showsProgress: Bool) async {
+        guard allowsRemoteModelFetch else { return }
         isFetchingModels = true
         isShowingFetchProgress = showsProgress
         defer { isFetchingModels = false }

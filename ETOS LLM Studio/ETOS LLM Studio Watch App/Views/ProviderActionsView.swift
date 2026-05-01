@@ -26,7 +26,10 @@ struct ProviderActionsView: View {
         List {
             Section(NSLocalizedString("配置入口", comment: "")) {
                 NavigationLink {
-                    ProviderDetailView(provider: provider) { updatedProvider in
+                    ProviderDetailView(
+                        provider: provider,
+                        allowsRemoteModelFetch: provider.apiFormat.lowercased() != "anthropic"
+                    ) { updatedProvider in
                         updateProvider(updatedProvider)
                     }
                         .environmentObject(viewModel)
