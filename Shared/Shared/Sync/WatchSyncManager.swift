@@ -44,6 +44,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     private struct PendingTransferContext {
         let expectsResponse: Bool
+        let operationID: UUID?
+        let isSilent: Bool
+        let marksSuccessWhenFinished: Bool
+    }
+
+    private struct ActiveSyncOperation {
+        let id: UUID
+        var isSilent: Bool
     }
 
     private struct SyncExchangePacket: Codable {
@@ -57,12 +65,13 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let isResponse: Bool
         let requestID: String?
         let expectsResponse: Bool
+        let isSilent: Bool
+        let marksSuccessWhenFinished: Bool
     }
 
     private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
     private let syncChannel = "watch.connectivity"
-    /// 标记是否为静默同步（启动时自动同步）
-    private var isSilentSync = false
+    private var activeSyncOperation: ActiveSyncOperation?
     private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -77,13 +86,13 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     /// 执行双向同步：发送本地数据并接收对端数据
     public func performSync(options: SyncOptions, silent: Bool = false) {
-        isSilentSync = silent
         guard validateSessionBeforeTransfer(options: options, silent: silent) != nil else { return }
-        
-        if !silent {
-            state = .syncing("正在同步数据…")
-        }
-        lastSummary = .empty
+
+        guard let operationID = beginSyncOperation(
+            silent: silent,
+            allowReuseExisting: true,
+            stateMessage: "正在同步数据…"
+        ) else { return }
 
         let syncChannel = self.syncChannel
         let optionsRawValue = options.rawValue
@@ -104,7 +113,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             let packet = SyncExchangePacket(manifest: snapshot.manifest, delta: initialDelta)
             guard let data = try? JSONEncoder().encode(packet) else {
                 await MainActor.run { [weak self] in
-                    self?.state = .failed("无法编码同步数据。")
+                    self?.failSyncOperation(
+                        operationID: operationID,
+                        fallbackSilent: silent,
+                        message: "无法编码同步数据。"
+                    )
                 }
                 return
             }
@@ -114,7 +127,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 try data.write(to: tempURL, options: [.atomic])
             } catch {
                 await MainActor.run { [weak self] in
-                    self?.state = .failed("写入同步文件失败: \(error.localizedDescription)")
+                    self?.failSyncOperation(
+                        operationID: operationID,
+                        fallbackSilent: silent,
+                        message: "写入同步文件失败: \(error.localizedDescription)"
+                    )
                 }
                 return
             }
@@ -122,8 +139,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 fileURL: tempURL,
                 optionsRawValue: syncOptions.rawValue,
                 isResponse: false,
-                requestID: nil,
-                expectsResponse: true
+                requestID: operationID.uuidString,
+                expectsResponse: true,
+                isSilent: silent,
+                marksSuccessWhenFinished: false
             )
             await MainActor.run { [weak self] in
                 self?.sendExchange(payload: payload)
@@ -133,7 +152,6 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 
     /// 发送单个会话到对端设备（单向）
     public func sendSessionToCompanion(sessionID: UUID) {
-        isSilentSync = false
         guard validateSessionBeforeTransfer(options: [.sessions], silent: false) != nil else { return }
 
         guard let selectedSession = ChatService.shared.chatSessionsSubject.value.first(where: {
@@ -143,8 +161,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             return
         }
 
-        state = .syncing("正在发送“\(selectedSession.name)”…")
-        lastSummary = .empty
+        guard let operationID = beginSyncOperation(
+            silent: false,
+            allowReuseExisting: false,
+            stateMessage: "正在发送“\(selectedSession.name)”…"
+        ) else { return }
 
         let syncChannel = self.syncChannel
         let sessionIDValue = sessionID
@@ -183,8 +204,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 fileURL: tempURL,
                 optionsRawValue: SyncOptions.sessions.rawValue,
                 isResponse: false,
-                requestID: nil,
-                expectsResponse: false
+                requestID: operationID.uuidString,
+                expectsResponse: false,
+                isSilent: false,
+                marksSuccessWhenFinished: true
             )
             await MainActor.run { [weak self] in
                 self?.sendExchange(payload: payload)
@@ -275,9 +298,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
     
-    private func sendSyncSuccessNotification(summary: SyncMergeSummary) {
+    private func sendSyncSuccessNotification(summary: SyncMergeSummary, silent: Bool) {
         guard !Self.shouldSkipUserNotificationsForCurrentProcess else { return }
-        guard isSilentSync else { return }
+        guard silent else { return }
         guard summary != .empty else { return } // 没有变化不通知
         
         let content = UNMutableNotificationContent()
@@ -330,6 +353,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             "options": payload.optionsRawValue,
             "response": payload.isResponse,
             "expectsResponse": payload.expectsResponse,
+            "silent": payload.isSilent,
             "timestamp": Date().timeIntervalSince1970
         ]
         if let requestID = payload.requestID {
@@ -338,16 +362,67 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         
         let transfer = session.transferFile(payload.fileURL, metadata: metadata)
         pendingTransfers[ObjectIdentifier(transfer)] = PendingTransferContext(
-            expectsResponse: payload.expectsResponse
+            expectsResponse: payload.expectsResponse,
+            operationID: payload.requestID.flatMap(UUID.init(uuidString:)),
+            isSilent: payload.isSilent,
+            marksSuccessWhenFinished: payload.marksSuccessWhenFinished
         )
+    }
+
+    private func isSyncSilent(operationID: UUID?, fallback: Bool) -> Bool {
+        guard let operationID,
+              let activeSyncOperation,
+              activeSyncOperation.id == operationID else {
+            return fallback
+        }
+        return activeSyncOperation.isSilent
+    }
+
+    private func failSyncOperation(operationID: UUID?, fallbackSilent: Bool, message: String) {
+        if !isSyncSilent(operationID: operationID, fallback: fallbackSilent) {
+            state = .failed(message)
+        }
+        completeSyncOperationIfNeeded(operationID: operationID)
+    }
+
+    private func beginSyncOperation(
+        silent: Bool,
+        allowReuseExisting: Bool,
+        stateMessage: String
+    ) -> UUID? {
+        if let activeSyncOperation {
+            guard allowReuseExisting else { return nil }
+            if !silent {
+                self.activeSyncOperation?.isSilent = false
+                state = .syncing(stateMessage)
+            }
+            return nil
+        }
+
+        let operationID = UUID()
+        activeSyncOperation = ActiveSyncOperation(id: operationID, isSilent: silent)
+        if !silent {
+            state = .syncing(stateMessage)
+        }
+        lastSummary = .empty
+        return operationID
+    }
+
+    private func completeSyncOperationIfNeeded(operationID: UUID?) {
+        guard let operationID, activeSyncOperation?.id == operationID else { return }
+        activeSyncOperation = nil
     }
     
     private func applyExchange(
         from url: URL,
         isResponse: Bool,
         requestID: String?,
-        expectsResponse: Bool
+        expectsResponse: Bool,
+        silent: Bool
     ) async {
+        let operationID = requestID.flatMap(UUID.init(uuidString:))
+        let effectiveSilent = isSyncSilent(operationID: operationID, fallback: silent)
+
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
@@ -360,12 +435,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             lastSummary = summary
             lastUpdatedAt = Date()
             
-            if !isSilentSync {
+            if !effectiveSilent {
                 state = .success(summary)
             }
             
             // 发送通知（仅静默模式下）
-            sendSyncSuccessNotification(summary: summary)
+            sendSyncSuccessNotification(summary: summary, silent: effectiveSilent)
             
             if expectsResponse {
                 let responseChannel = syncChannel
@@ -387,7 +462,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                     let packet = SyncExchangePacket(manifest: localSnapshot.manifest, delta: responseDelta)
                     guard let data = try? JSONEncoder().encode(packet) else {
                         await MainActor.run { [weak self] in
-                            self?.state = .failed("无法编码同步数据。")
+                            self?.failSyncOperation(
+                                operationID: operationID,
+                                fallbackSilent: effectiveSilent,
+                                message: "无法编码同步数据。"
+                            )
                         }
                         return
                     }
@@ -397,7 +476,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                         try data.write(to: tempURL, options: [.atomic])
                     } catch {
                         await MainActor.run { [weak self] in
-                            self?.state = .failed("写入同步文件失败: \(error.localizedDescription)")
+                            self?.failSyncOperation(
+                                operationID: operationID,
+                                fallbackSilent: effectiveSilent,
+                                message: "写入同步文件失败: \(error.localizedDescription)"
+                            )
                         }
                         return
                     }
@@ -406,25 +489,31 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                         optionsRawValue: responseOptions.rawValue,
                         isResponse: true,
                         requestID: requestID,
-                        expectsResponse: !isResponse
+                        expectsResponse: !isResponse,
+                        isSilent: effectiveSilent,
+                        marksSuccessWhenFinished: false
                     )
                     await MainActor.run { [weak self] in
                         guard let self else { return }
-                        if !self.isSilentSync {
+                        if !self.isSyncSilent(operationID: operationID, fallback: effectiveSilent) {
                             self.state = .syncing("正在回传差异…")
                         }
                         self.sendExchange(payload: payload)
                     }
                 }
+            } else {
+                completeSyncOperationIfNeeded(operationID: operationID)
             }
             
             if let idString = requestID, let uuid = UUID(uuidString: idString) {
                 _ = uuid
             }
         } catch {
-            if !isSilentSync {
-                state = .failed("解析同步包失败: \(error.localizedDescription)")
-            }
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: effectiveSilent,
+                message: "解析同步包失败: \(error.localizedDescription)"
+            )
         }
     }
 }
@@ -437,7 +526,7 @@ extension WatchSyncManager: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        if let error, !isSilentSync {
+        if let error, activeSyncOperation?.isSilent != true {
             state = .failed("会话激活失败: \(error.localizedDescription)")
         }
     }
@@ -457,11 +546,15 @@ extension WatchSyncManager: WCSessionDelegate {
             let isResponse = (file.metadata?["response"] as? Bool) ?? false
             let requestID = file.metadata?["requestID"] as? String
             let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
+            let operationID = requestID.flatMap(UUID.init(uuidString:))
+            let silent = (file.metadata?["silent"] as? Bool)
+                ?? isSyncSilent(operationID: operationID, fallback: false)
             await applyExchange(
                 from: file.fileURL,
                 isResponse: isResponse,
                 requestID: requestID,
-                expectsResponse: expectsResponse
+                expectsResponse: expectsResponse,
+                silent: silent
             )
         }
     }
@@ -477,16 +570,28 @@ extension WatchSyncManager: WCSessionDelegate {
             defer { pendingTransfers.removeValue(forKey: identifier) }
             
             if let error {
-                if !isSilentSync {
-                    state = .failed("发送失败: \(error.localizedDescription)")
-                }
-            } else if !isSilentSync {
-                if transferContext?.expectsResponse == false {
-                    lastSummary = .empty
+                failSyncOperation(
+                    operationID: transferContext?.operationID,
+                    fallbackSilent: transferContext?.isSilent ?? false,
+                    message: "发送失败: \(error.localizedDescription)"
+                )
+            } else if let transferContext {
+                let isSilent = isSyncSilent(
+                    operationID: transferContext.operationID,
+                    fallback: transferContext.isSilent
+                )
+                if !isSilent, transferContext.expectsResponse == false {
+                    if transferContext.marksSuccessWhenFinished {
+                        lastSummary = .empty
+                    }
                     lastUpdatedAt = Date()
-                    state = .success(.empty)
-                } else {
+                    state = .success(lastSummary)
+                } else if !isSilent {
                     state = .syncing("等待对端处理…")
+                }
+
+                if transferContext.expectsResponse == false {
+                    completeSyncOperationIfNeeded(operationID: transferContext.operationID)
                 }
             }
         }
