@@ -113,7 +113,6 @@ struct DisplaySettingsView: View {
                     Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
                     Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
                 }
-                .pickerStyle(.automatic)
             }
 
             Section(footer: Text(NSLocalizedString("需要先将界面架构切换为“独立页面”才可开启彩色设置图标；沉浸视窗会继续使用单色线条图标。", comment: ""))) {

@@ -106,7 +106,6 @@ struct DisplaySettingsView: View {
                     Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
                     Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
                 }
-                .pickerStyle(.segmented)
             }
 
             Section(footer: Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))) {
@@ -114,7 +113,6 @@ struct DisplaySettingsView: View {
                     Text(NSLocalizedString("悬浮面板", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
                     Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
                 }
-                .pickerStyle(.segmented)
             }
 
             Section {
