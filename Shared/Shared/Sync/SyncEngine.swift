@@ -2287,10 +2287,10 @@ public enum SyncEngine {
         let localHasRawJSON = normalizeOptionalJSONString(local.rawRequestBodyJSON) != nil
         let incomingHasRawJSON = normalizeOptionalJSONString(incoming.rawRequestBodyJSON) != nil
 
-        if local.requestBodyOverrideMode == .expression && !localHasRawJSON {
+        if local.requestBodyOverrideMode == .keyValue && !localHasRawJSON {
             return incoming.requestBodyOverrideMode
         }
-        if incoming.requestBodyOverrideMode == .expression && !incomingHasRawJSON {
+        if incoming.requestBodyOverrideMode == .keyValue && !incomingHasRawJSON {
             return local.requestBodyOverrideMode
         }
         return nil

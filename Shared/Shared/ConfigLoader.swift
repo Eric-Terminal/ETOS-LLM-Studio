@@ -532,7 +532,7 @@ public struct ConfigLoader {
 
                 let requestBodyOverrideMode = modelRow.requestBodyOverrideMode
                     .flatMap(Model.RequestBodyOverrideMode.init(rawValue:))
-                    ?? .expression
+                    ?? .keyValue
 
                 var model = Model(
                     id: modelID,

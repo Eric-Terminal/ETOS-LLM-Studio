@@ -479,6 +479,13 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.rawRequestBodyJSON == "{\"temperature\":0.8}")
     }
 
+    @Test("键值对编辑模式是默认请求体编辑模式")
+    func testKeyValueModeIsDefaultRequestBodyMode() throws {
+        let model = Model(modelName: "test-model")
+
+        #expect(model.requestBodyOverrideMode == .keyValue)
+    }
+
     @Test("旧配置缺少新字段时使用默认编辑模式")
     func testModelDecodingDefaultsForLegacyPayload() throws {
         let legacyJSON = """
@@ -491,7 +498,7 @@ struct RequestBodyOverrideModeTests {
         let data = Data(legacyJSON.utf8)
         let decoded = try JSONDecoder().decode(Model.self, from: data)
 
-        #expect(decoded.requestBodyOverrideMode == .expression)
+        #expect(decoded.requestBodyOverrideMode == .keyValue)
         #expect(decoded.rawRequestBodyJSON == nil)
     }
 

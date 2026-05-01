@@ -323,6 +323,7 @@ public struct Model: Codable, Identifiable, Hashable {
     public static let defaultCapabilities: [ModelCapability] = [.toolCalling]
 
     public enum RequestBodyOverrideMode: String, Codable, Hashable {
+        case keyValue
         case expression
         case rawJSON
     }
@@ -350,7 +351,7 @@ public struct Model: Codable, Identifiable, Hashable {
         outputModalities: [ModelModality]? = nil,
         capabilities: [ModelCapability]? = nil,
         legacyCapabilityRawValues: [String]? = nil,
-        requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
+        requestBodyOverrideMode: RequestBodyOverrideMode = .keyValue,
         rawRequestBodyJSON: String? = nil
     ) {
         let normalized = Self.normalizedCapabilityShape(
@@ -380,7 +381,7 @@ public struct Model: Codable, Identifiable, Hashable {
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         capabilities legacyCapabilities: [Capability],
-        requestBodyOverrideMode: RequestBodyOverrideMode = .expression,
+        requestBodyOverrideMode: RequestBodyOverrideMode = .keyValue,
         rawRequestBodyJSON: String? = nil
     ) {
         self.init(
@@ -429,7 +430,7 @@ public struct Model: Codable, Identifiable, Hashable {
         self.inputModalities = normalized.inputModalities
         self.outputModalities = normalized.outputModalities
         self.capabilities = normalized.capabilities
-        self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .expression
+        self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .keyValue
         self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
     }
     
@@ -456,7 +457,7 @@ public struct Model: Codable, Identifiable, Hashable {
         if capabilities != Self.defaultCapabilities(for: kind) {
             try container.encode(capabilities, forKey: .capabilities)
         }
-        if requestBodyOverrideMode != .expression {
+        if requestBodyOverrideMode != .keyValue {
             try container.encode(requestBodyOverrideMode, forKey: .requestBodyOverrideMode)
         }
         if let rawRequestBodyJSON, !rawRequestBodyJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
