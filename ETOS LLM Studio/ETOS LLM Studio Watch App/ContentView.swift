@@ -105,6 +105,7 @@ struct ContentView: View {
     @State private var isQuickModelSelectorPresented = false
     @State private var isAttachmentImportPresented = false
     @State private var attachmentSourceText: String = ""
+    @State private var importSourceHistory: [String] = []
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
@@ -133,13 +134,6 @@ struct ContentView: View {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
     }
 
-    private var attachmentSourceHistory: [String] {
-        WatchAttachmentSourceHistory.values(
-            from: attachmentSourceHistoryRawValue,
-            fallback: lastAttachmentSource
-        )
-    }
-    
     // MARK: - 视图主体
     
     var body: some View {
@@ -216,6 +210,7 @@ struct ContentView: View {
         .onAppear {
             AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
             refreshRootBodyFont()
+            refreshAttachmentSourceHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
@@ -243,6 +238,12 @@ struct ContentView: View {
         }
         .onChange(of: appLanguageRawValue) { _, newValue in
             AppLanguageRuntime.apply(rawValue: newValue)
+        }
+        .onChange(of: attachmentSourceHistoryRawValue) { _, _ in
+            refreshAttachmentSourceHistory()
+        }
+        .onChange(of: lastAttachmentSource) { _, _ in
+            refreshAttachmentSourceHistory()
         }
         .onDisappear {
             pendingBottomSnapTask?.cancel()
@@ -1012,12 +1013,20 @@ struct ContentView: View {
     }
 
     private func rememberAttachmentSource(_ source: String) {
-        let updatedHistory = WatchAttachmentSourceHistory.appending(
+        let updatedHistory = WatchImportSourceHistory.appending(
             source,
-            to: attachmentSourceHistory
+            to: importSourceHistory
         )
-        attachmentSourceHistoryRawValue = WatchAttachmentSourceHistory.rawValue(for: updatedHistory)
+        attachmentSourceHistoryRawValue = WatchImportSourceHistory.rawValue(for: updatedHistory)
         lastAttachmentSource = updatedHistory.first ?? ""
+        importSourceHistory = updatedHistory
+    }
+
+    private func refreshAttachmentSourceHistory() {
+        importSourceHistory = WatchImportSourceHistory.values(
+            from: attachmentSourceHistoryRawValue,
+            fallback: lastAttachmentSource
+        )
     }
 
     private var hasPendingAttachments: Bool {
@@ -1232,7 +1241,7 @@ struct ContentView: View {
         let bubbleWithTrailingSwipe = coreBubble
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button {
-                    attachmentSourceText = attachmentSourceHistory.first ?? lastAttachmentSource
+                    attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
                     isAttachmentImportPresented = true
                 } label: {
                     Image(systemName: "plus")
@@ -1312,10 +1321,14 @@ struct ContentView: View {
             }
             .sheet(isPresented: $isAttachmentImportPresented) {
                 NavigationStack {
-                    WatchAttachmentImportView(
+                    WatchImportSourceView(
                         source: $attachmentSourceText,
-                        history: attachmentSourceHistory,
+                        history: importSourceHistory,
                         isImporting: viewModel.attachmentImportInProgress,
+                        title: NSLocalizedString("添加附件", comment: ""),
+                        placeholder: NSLocalizedString("链接或文件路径", comment: ""),
+                        progressTitle: NSLocalizedString("正在导入...", comment: ""),
+                        confirmTitle: NSLocalizedString("导入", comment: ""),
                         onImport: {
                             let trimmedSource = attachmentSourceText.trimmingCharacters(in: .whitespacesAndNewlines)
                             rememberAttachmentSource(trimmedSource)
@@ -1540,7 +1553,7 @@ struct ContentView: View {
 
 }
 
-enum WatchAttachmentSourceHistory {
+enum WatchImportSourceHistory {
     static let limit = 5
 
     static func values(from rawValue: String, fallback: String = "") -> [String] {
@@ -1579,10 +1592,14 @@ enum WatchAttachmentSourceHistory {
     }
 }
 
-private struct WatchAttachmentImportView: View {
+struct WatchImportSourceView: View {
     @Binding var source: String
     let history: [String]
     let isImporting: Bool
+    let title: String
+    let placeholder: String
+    let progressTitle: String
+    let confirmTitle: String
     let onImport: () -> Void
     let onCancel: () -> Void
 
@@ -1593,12 +1610,12 @@ private struct WatchAttachmentImportView: View {
     var body: some View {
         Form {
             Section {
-                TextField(NSLocalizedString("链接或文件路径", comment: ""), text: $source)
+                TextField(placeholder, text: $source.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
 
                 if isImporting {
-                    ProgressView(NSLocalizedString("正在导入...", comment: ""))
+                    ProgressView(progressTitle)
                 }
             }
 
@@ -1624,14 +1641,14 @@ private struct WatchAttachmentImportView: View {
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("添加附件", comment: ""))
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: ""), action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("导入", comment: ""), action: onImport)
+                Button(confirmTitle, action: onImport)
                     .disabled(!canImport)
             }
         }

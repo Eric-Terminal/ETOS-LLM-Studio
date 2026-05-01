@@ -241,7 +241,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
 
     @Test("watchOS 附件来源历史会去重并保留最近 5 条")
     func testWatchAttachmentSourceHistoryKeepsRecentFiveItems() {
-        let history = WatchAttachmentSourceHistory.normalized([
+        let history = WatchImportSourceHistory.normalized([
             " https://example.com/a.png ",
             "https://example.com/b.mp3",
             "https://example.com/a.png",
@@ -259,7 +259,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             "Documents/e.json"
         ])
 
-        let updated = WatchAttachmentSourceHistory.appending(
+        let updated = WatchImportSourceHistory.appending(
             "https://example.com/b.mp3",
             to: history
         )
@@ -274,14 +274,14 @@ struct ETOS_LLM_Studio_Watch_AppTests {
 
     @Test("watchOS 附件来源历史会兼容旧的单条记录")
     func testWatchAttachmentSourceHistoryFallsBackToLegacyLastSource() {
-        let history = WatchAttachmentSourceHistory.values(
+        let history = WatchImportSourceHistory.values(
             from: "not-json",
             fallback: "https://example.com/legacy.jpg"
         )
         #expect(history == ["https://example.com/legacy.jpg"])
 
-        let rawValue = WatchAttachmentSourceHistory.rawValue(for: history)
-        let decoded = WatchAttachmentSourceHistory.values(from: rawValue)
+        let rawValue = WatchImportSourceHistory.rawValue(for: history)
+        let decoded = WatchImportSourceHistory.values(from: rawValue)
         #expect(decoded == history)
     }
 

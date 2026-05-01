@@ -2102,6 +2102,9 @@
 "保存成功" = "Saved";
 "用户画像已更新。" = "User profile has been updated.";
 "保存失败" = "Save Failed";
+"添加背景" = "Add background";
+"背景图片链接" = "Background image URL";
+"无法添加背景" = "Unable to Add Background";
 "未选择（跟随当前对话模型）" = "Not selected (follow current chat model)";
 "已清空会话摘要" = "Session summaries cleared";
 "共清理 %d 条摘要。" = "%d summaries cleared.";
