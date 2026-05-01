@@ -372,7 +372,7 @@ struct UsageAnalyticsView: View {
             .etFont(.caption2)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
-            .frame(width: heatmapMonthSegmentWidth(segment.weekCount), height: 12, alignment: .leading)
+            .frame(width: heatmapMonthSegmentWidth(segment.weekCount), height: 12, alignment: .center)
     }
 
     private func heatmapMonthSegmentWidth(_ weekCount: Int) -> CGFloat {
