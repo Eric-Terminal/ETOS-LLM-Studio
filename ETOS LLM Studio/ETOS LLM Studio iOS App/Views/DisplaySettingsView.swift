@@ -103,12 +103,12 @@ struct DisplaySettingsView: View {
 
             Section {
                 Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
-                    Text(NSLocalizedString("沉浸浮层", comment: "")).tag(ChatNavigationMode.legacyOverlay)
-                    Text(NSLocalizedString("原生导航", comment: "")).tag(ChatNavigationMode.nativeNavigation)
+                    Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
+                    Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
                 }
                 .pickerStyle(.segmented)
             } footer: {
-                Text(NSLocalizedString("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。", comment: ""))
+                Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
