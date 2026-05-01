@@ -33,6 +33,24 @@ struct ChatNavigationModeTests {
     }
 }
 
+@Suite("聊天选择器呈现样式测试")
+struct ChatPickerPresentationStyleTests {
+    @Test("默认保留顶部悬浮选择器")
+    func defaultStyleUsesLegacyOverlay() {
+        #expect(ChatPickerPresentationStyle.defaultStyle == .legacyOverlay)
+    }
+
+    @Test("底部抽屉配置可正确解析")
+    func bottomSheetResolvesToBottomSheet() {
+        #expect(ChatPickerPresentationStyle.resolvedStyle(rawValue: ChatPickerPresentationStyle.bottomSheet.rawValue) == .bottomSheet)
+    }
+
+    @Test("未知配置回退到保留现状")
+    func unknownStyleFallsBackToDefault() {
+        #expect(ChatPickerPresentationStyle.resolvedStyle(rawValue: "unknown") == .legacyOverlay)
+    }
+}
+
 @Suite("模型提示词语言适配测试")
 struct ModelPromptLanguageTests {
     @Test("根据语言标识解析模型提示词目标语言")

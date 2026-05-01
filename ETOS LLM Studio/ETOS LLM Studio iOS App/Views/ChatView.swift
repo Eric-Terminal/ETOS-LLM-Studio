@@ -65,6 +65,13 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
+private enum ChatPickerSheet: String, Identifiable {
+    case session
+    case model
+
+    var id: String { rawValue }
+}
+
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
@@ -100,6 +107,7 @@ struct ChatView: View {
     @State private var imageDownloadAlertMessage: String?
     @State private var exportSharePayload: ChatExportSharePayload?
     @State private var exportErrorMessage: String?
+    @State private var activeChatPickerSheet: ChatPickerSheet?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatInputBarHeight: CGFloat = 0
@@ -112,6 +120,7 @@ struct ChatView: View {
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
     @Namespace private var modelPickerNamespace
     @Namespace private var sessionPickerNamespace
     
@@ -160,10 +169,22 @@ struct ChatView: View {
         navBarPillHeight
     }
     private var isOverlayPanelPresented: Bool {
-        showModelPickerPanel || showSessionPickerPanel
+        !usesBottomSheetPickerStyle && (showModelPickerPanel || showSessionPickerPanel)
     }
     private var isNativeNavigationEnabled: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+    }
+    private var chatPickerPresentationStyle: ChatPickerPresentationStyle {
+        ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue)
+    }
+    private var usesBottomSheetPickerStyle: Bool {
+        chatPickerPresentationStyle == .bottomSheet
+    }
+    private var isModelPickerPresented: Bool {
+        usesBottomSheetPickerStyle ? activeChatPickerSheet == .model : showModelPickerPanel
+    }
+    private var isSessionPickerPresented: Bool {
+        usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
     }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
@@ -509,11 +530,11 @@ struct ChatView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: ttsManager.isSpeaking)
 
-                if showModelPickerPanel {
+                if !usesBottomSheetPickerStyle && showModelPickerPanel {
                     modelPickerOverlay
                 }
 
-                if showSessionPickerPanel {
+                if !usesBottomSheetPickerStyle && showSessionPickerPanel {
                     sessionPickerOverlay
                 }
 
@@ -549,6 +570,12 @@ struct ChatView: View {
                 pendingHistoryResetWorkItem = nil
                 pendingBottomSnapTask?.cancel()
                 pendingBottomSnapTask = nil
+            }
+            .onChange(of: chatPickerPresentationStyleRawValue) { _, _ in
+                showModelPickerPanel = false
+                showSessionPickerPanel = false
+                activeChatPickerSheet = nil
+                resetSessionPickerSearchState()
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
@@ -586,6 +613,11 @@ struct ChatView: View {
             }
             .sheet(item: $exportSharePayload) { payload in
                 ActivityShareSheet(activityItems: [payload.fileURL])
+            }
+            .sheet(item: $activeChatPickerSheet, onDismiss: handleChatPickerSheetDismissed) { sheet in
+                chatPickerSheet(for: sheet)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .confirmationDialog(NSLocalizedString("创建分支选项", comment: ""), isPresented: $showBranchOptions, titleVisibility: .visible) {
                 Button(NSLocalizedString("仅复制消息历史", comment: "")) {
@@ -863,7 +895,7 @@ struct ChatView: View {
             )
             .overlay(
                 Circle()
-                    .stroke(showSessionPickerPanel ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
+                    .stroke(isSessionPickerPresented ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
             )
             .contentShape(Circle())
             .accessibilityLabel(NSLocalizedString("会话列表", comment: ""))
@@ -912,10 +944,10 @@ struct ChatView: View {
         )
         .overlay(
             Capsule()
-                .stroke(showModelPickerPanel ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
+                .stroke(isModelPickerPresented ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
         )
         .overlay(alignment: .trailing) {
-            Image(systemName: showModelPickerPanel ? "chevron.up" : "chevron.down")
+            Image(systemName: isModelPickerPresented ? "chevron.up" : "chevron.down")
                 .etFont(.system(size: 11, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarSubtitle)
                 .padding(.trailing, 10)
@@ -996,6 +1028,12 @@ struct ChatView: View {
     }
 
     private func toggleModelPickerPanel() {
+        guard !usesBottomSheetPickerStyle else {
+            showSessionPickerPanel = false
+            showModelPickerPanel = false
+            activeChatPickerSheet = .model
+            return
+        }
         withAnimation(modelPickerAnimation) {
             if showSessionPickerPanel {
                 showSessionPickerPanel = false
@@ -1005,12 +1043,22 @@ struct ChatView: View {
     }
 
     private func dismissModelPickerPanel() {
+        if usesBottomSheetPickerStyle {
+            activeChatPickerSheet = nil
+            return
+        }
         withAnimation(modelPickerAnimation) {
             showModelPickerPanel = false
         }
     }
 
     private func toggleSessionPickerPanel() {
+        guard !usesBottomSheetPickerStyle else {
+            showModelPickerPanel = false
+            showSessionPickerPanel = false
+            activeChatPickerSheet = .session
+            return
+        }
         withAnimation(modelPickerAnimation) {
             if showModelPickerPanel {
                 showModelPickerPanel = false
@@ -1023,6 +1071,11 @@ struct ChatView: View {
     }
 
     private func dismissSessionPickerPanel() {
+        if usesBottomSheetPickerStyle {
+            activeChatPickerSheet = nil
+            resetSessionPickerSearchState()
+            return
+        }
         withAnimation(modelPickerAnimation) {
             showSessionPickerPanel = false
             resetSessionPickerSearchState()
@@ -1038,6 +1091,170 @@ struct ChatView: View {
         showSessionPickerSearchInput = false
         sessionPickerSearchFocused = false
         sessionPickerSearchResultPageIndex = 0
+    }
+
+    private func handleChatPickerSheetDismissed() {
+        resetSessionPickerSearchState()
+    }
+
+    @ViewBuilder
+    private func chatPickerSheet(for sheet: ChatPickerSheet) -> some View {
+        switch sheet {
+        case .session:
+            nativeSessionPickerSheet
+        case .model:
+            nativeModelPickerSheet
+        }
+    }
+
+    private var nativeModelPickerSheet: some View {
+        NavigationStack {
+            List {
+                if viewModel.activatedModels.isEmpty {
+                    VStack(spacing: 6) {
+                        Text(NSLocalizedString("暂无可用模型", comment: ""))
+                            .etFont(.headline)
+                        Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 28)
+                } else {
+                    Section {
+                        ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                            Button {
+                                viewModel.setSelectedModel(runnable)
+                                dismissModelPickerPanel()
+                            } label: {
+                                MarqueeTitleSubtitleSelectionRow(
+                                    title: runnable.model.displayName,
+                                    subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                                    isSelected: runnable.id == viewModel.selectedModel?.id,
+                                    subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
+                                )
+                            }
+                        }
+                    } footer: {
+                        Text(NSLocalizedString("切换当前对话的模型", comment: ""))
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("选择模型", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("完成", comment: "")) {
+                        dismissModelPickerPanel()
+                    }
+                }
+            }
+        }
+    }
+
+    private var nativeSessionPickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                nativeSessionPickerTopBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+
+                Divider()
+
+                sessionPickerList(
+                    queryActive: nativeSessionPickerQueryActive,
+                    isSearching: isSessionPickerSearching,
+                    includesSearchInput: false
+                )
+
+                Divider()
+
+                sessionPickerFooter(
+                    queryActive: nativeSessionPickerQueryActive,
+                    displayedCount: nativeSessionPickerDisplayedCount,
+                    isSearching: isSessionPickerSearching
+                )
+                .padding(.top, 10)
+            }
+            .navigationTitle(NSLocalizedString("会话", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("完成", comment: "")) {
+                        dismissSessionPickerPanel()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        viewModel.createNewSession()
+                        editingSessionID = nil
+                        sessionDraftName = ""
+                        dismissSessionPickerPanel()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
+                }
+            }
+        }
+        .onAppear {
+            showSessionPickerSearchInput = false
+            normalizeSessionPickerPageIndex()
+            normalizeSessionPickerSearchResultPageIndex()
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: sessionPickerSearchText) { _, newValue in
+            sessionPickerSearchResultPageIndex = 0
+            scheduleSessionPickerSearch(for: newValue)
+        }
+        .onChange(of: viewModel.chatSessionListVersion) { _, _ in
+            normalizeSessionPickerPageIndex()
+            normalizeSessionPickerSearchResultPageIndex()
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.allMessageIdentityVersion) { _, _ in
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onDisappear {
+            sessionPickerPendingSearchWorkItem?.cancel()
+            sessionPickerPendingSearchWorkItem = nil
+        }
+    }
+
+    private var nativeSessionPickerTopBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(nativeSessionPickerSubtitle)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+
+            sessionPickerSearchInput
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var nativeSessionPickerQueryActive: Bool {
+        !SessionHistorySearchSupport.normalizedQuery(sessionPickerSearchText).isEmpty
+    }
+
+    private var nativeSessionPickerDisplayedCount: Int {
+        nativeSessionPickerQueryActive ? totalSessionPickerSearchResultCount : totalSessionPickerCount
+    }
+
+    private var nativeSessionPickerSubtitle: String {
+        if nativeSessionPickerQueryActive {
+            if isSessionPickerSearching {
+                return NSLocalizedString("正在搜索历史会话…", comment: "")
+            }
+            return String(
+                format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""),
+                nativeSessionPickerDisplayedCount,
+                sessionPickerSearchHits.count
+            )
+        }
+        return NSLocalizedString("快速切换与管理", comment: "")
     }
 
     private var modelPickerOverlay: some View {
@@ -1467,10 +1684,14 @@ struct ChatView: View {
         .padding(.vertical, 28)
     }
 
-    private func sessionPickerList(queryActive: Bool, isSearching: Bool) -> some View {
+    private func sessionPickerList(
+        queryActive: Bool,
+        isSearching: Bool,
+        includesSearchInput: Bool = true
+    ) -> some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                if showSessionPickerSearchInput {
+                if includesSearchInput && showSessionPickerSearchInput {
                     sessionPickerSearchInput
                         .id("session-picker-search-input")
                 }

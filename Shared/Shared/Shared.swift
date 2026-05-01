@@ -27,6 +27,20 @@ public enum ChatNavigationMode: String, CaseIterable, Identifiable {
     }
 }
 
+public enum ChatPickerPresentationStyle: String, CaseIterable, Identifiable {
+    case legacyOverlay = "legacyOverlay"
+    case bottomSheet = "bottomSheet"
+
+    public static let storageKey = "ui.chatPickerPresentationStyle"
+    public static let defaultStyle: ChatPickerPresentationStyle = .legacyOverlay
+
+    public var id: String { rawValue }
+
+    public static func resolvedStyle(rawValue: String) -> ChatPickerPresentationStyle {
+        ChatPickerPresentationStyle(rawValue: rawValue) ?? defaultStyle
+    }
+}
+
 public enum SettingsIconAppearancePreference {
     public static let storageKey = "ui.settingsColorfulIconsEnabled"
 }

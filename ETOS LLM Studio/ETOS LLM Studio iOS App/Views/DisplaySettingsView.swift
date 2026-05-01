@@ -26,6 +26,7 @@ struct DisplaySettingsView: View {
     @Binding var enableNoBubbleUI: Bool
 
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
     @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
@@ -108,6 +109,18 @@ struct DisplaySettingsView: View {
                 .pickerStyle(.segmented)
             } footer: {
                 Text(NSLocalizedString("「沉浸浮层」会在当前聊天页叠加半透明菜单，保留背景画面；「原生导航」则采用纯色底层的页面推拉切换，层级与手势更清晰。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
+                    Text(NSLocalizedString("保留现状", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
+                    Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(NSLocalizedString("保留现状会继续沿用顶部悬浮面板；底部抽屉会改用系统 sheet 从屏幕底部弹出，并支持中号与大号高度。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -267,6 +280,13 @@ struct DisplaySettingsView: View {
         Binding(
             get: { ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) },
             set: { chatNavigationModeRawValue = $0.rawValue }
+        )
+    }
+
+    private var chatPickerPresentationStyleBinding: Binding<ChatPickerPresentationStyle> {
+        Binding(
+            get: { ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue) },
+            set: { chatPickerPresentationStyleRawValue = $0.rawValue }
         )
     }
 
