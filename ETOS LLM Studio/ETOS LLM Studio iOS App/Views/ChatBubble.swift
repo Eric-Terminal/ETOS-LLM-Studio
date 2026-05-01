@@ -549,6 +549,7 @@ struct ChatBubble: View {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, rowHorizontalPadding)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
