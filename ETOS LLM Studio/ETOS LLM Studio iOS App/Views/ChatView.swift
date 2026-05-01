@@ -3420,19 +3420,35 @@ private struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     
     private let controlSize: CGFloat = 40
     private let expandedControlSize: CGFloat = 34
-    private let compactInputHeight: CGFloat = 44
+    private var normalizedFontScale: CGFloat {
+        CGFloat(FontLibrary.normalizedFontScale(customFontScale))
+    }
+    private let inputBasePointSize: CGFloat = 16
+    private var measuredInputPointSize: CGFloat {
+        CGFloat(FontLibrary.scaledPointSize(16))
+    }
+    private var inputUIFont: UIFont {
+        .systemFont(ofSize: measuredInputPointSize)
+    }
+    private var compactInputHeight: CGFloat {
+        max(44, inputUIFont.lineHeight + compactTextVerticalPadding * 2 + textContainerInset * 2)
+    }
     private var expandedInputHeight: CGFloat {
         let rawHeight = UIScreen.main.bounds.height * 0.3
-        return max(160, min(rawHeight, 360))
+        return max(160 * normalizedFontScale, min(rawHeight, 360 * normalizedFontScale))
     }
-    private let inputFont = UIFont.systemFont(ofSize: 16)
     private let textContainerInset: CGFloat = 8
     private let textHorizontalPadding: CGFloat = 10
-    private let compactTextVerticalPadding: CGFloat = 4
-    private let expandedTextVerticalPadding: CGFloat = 6
+    private var compactTextVerticalPadding: CGFloat {
+        max(4, 4 * normalizedFontScale)
+    }
+    private var expandedTextVerticalPadding: CGFloat {
+        max(6, 6 * normalizedFontScale)
+    }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -3655,7 +3671,7 @@ private struct TelegramMessageComposer: View {
 
         ZStack(alignment: .topLeading) {
             TextEditor(text: $text)
-                .etFont(.system(size: inputFont.pointSize))
+                .etFont(.system(size: inputBasePointSize))
                 .focused(focus)
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(!isExpandedComposer)
@@ -3663,8 +3679,8 @@ private struct TelegramMessageComposer: View {
                 .padding(.horizontal, textHorizontalPadding)
 
             if text.isEmpty {
-                Text("Message")
-                    .etFont(.system(size: inputFont.pointSize))
+                Text(NSLocalizedString("Message", comment: "聊天输入框占位文本"))
+                    .etFont(.system(size: inputBasePointSize))
                     .foregroundColor(.secondary)
                     .padding(.top, verticalPadding + textContainerInset)
                     .padding(.leading, textHorizontalPadding + textContainerInset)
@@ -3715,10 +3731,10 @@ private struct TelegramMessageComposer: View {
                 let boundingRect = (newValue as NSString).boundingRect(
                     with: CGSize(width: availableWidth, height: .greatestFiniteMagnitude),
                     options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    attributes: [.font: inputFont],
+                    attributes: [.font: inputUIFont],
                     context: nil
                 )
-                let lineCount = max(1, Int(ceil(boundingRect.height / inputFont.lineHeight)))
+                let lineCount = max(1, Int(ceil(boundingRect.height / inputUIFont.lineHeight)))
                 shouldExpand = lineCount > 1
             }
         }
@@ -4224,7 +4240,7 @@ private struct MessageComposerView: View {
                 // 输入框（拉长的药丸型）
                 if #available(iOS 26.0, *) {
                     HStack(spacing: 8) {
-                        TextField("Message", text: $text, axis: .vertical)
+                        TextField(NSLocalizedString("Message", comment: "聊天输入框占位文本"), text: $text, axis: .vertical)
                             .lineLimit(1...6)
                             .textFieldStyle(.plain)
                             .focused(focus)
@@ -4234,7 +4250,7 @@ private struct MessageComposerView: View {
                     .glassEffect(.clear, in: Capsule())
                 } else {
                     HStack(spacing: 8) {
-                        TextField("Message", text: $text, axis: .vertical)
+                        TextField(NSLocalizedString("Message", comment: "聊天输入框占位文本"), text: $text, axis: .vertical)
                             .lineLimit(1...6)
                             .textFieldStyle(.plain)
                             .focused(focus)

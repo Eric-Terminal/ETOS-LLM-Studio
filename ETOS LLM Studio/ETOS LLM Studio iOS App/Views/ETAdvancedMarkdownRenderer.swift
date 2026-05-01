@@ -124,6 +124,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableMathRendering: Bool
     let customTextColor: Color?
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
 
     private var effectivePreparedContent: ETPreparedMarkdownRenderPayload? {
         guard let preparedContent, preparedContent.sourceText == content else {
@@ -134,6 +135,7 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
+        let fontScale = FontLibrary.normalizedFontScale(customFontScale)
         if enableMarkdown {
             if let prepared = effectivePreparedContent {
                 if shouldUseWebRenderer(prepared) {
@@ -142,21 +144,24 @@ struct ETAdvancedMarkdownRenderer: View {
                         enableMarkdown: enableMarkdown,
                         isOutgoing: isOutgoing,
                         customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
-                        prefersDarkPalette: colorScheme == .dark
+                        prefersDarkPalette: colorScheme == .dark,
+                        fontScale: fontScale
                     )
                 } else {
                     let markdownContent = resolvedMarkdownContent(for: prepared)
                     markdownTextView(
                         markdownContent: markdownContent,
                         sampleText: prepared.sourceText,
-                        textColor: textColor
+                        textColor: textColor,
+                        fontScale: fontScale
                     )
                 }
             } else {
                 markdownTextView(
                     markdownContent: MarkdownContent(content),
                     sampleText: content,
-                    textColor: textColor
+                    textColor: textColor,
+                    fontScale: fontScale
                 )
             }
         } else {
@@ -185,7 +190,8 @@ struct ETAdvancedMarkdownRenderer: View {
     private func markdownTextView(
         markdownContent: MarkdownContent,
         sampleText: String,
-        textColor: Color
+        textColor: Color,
+        fontScale: Double
     ) -> some View {
         let mathTextColor = ETIOSMathColorComponents(textColor)
         Markdown(markdownContent)
@@ -199,7 +205,8 @@ struct ETAdvancedMarkdownRenderer: View {
                 textColor: textColor,
                 isOutgoing: isOutgoing,
                 prefersDarkPalette: colorScheme == .dark,
-                sampleText: sampleText
+                sampleText: sampleText,
+                fontScale: fontScale
             )
     }
 
@@ -217,6 +224,7 @@ private struct ETMathWebMarkdownView: View {
     let isOutgoing: Bool
     let customTextHex: String?
     let prefersDarkPalette: Bool
+    let fontScale: Double
 
     @State private var renderedHeight: CGFloat = 28
 
@@ -228,6 +236,7 @@ private struct ETMathWebMarkdownView: View {
                 isOutgoing: isOutgoing,
                 customTextHex: customTextHex,
                 prefersDarkPalette: prefersDarkPalette,
+                fontScale: fontScale,
                 availableWidth: max(1, geometry.size.width),
                 renderedHeight: $renderedHeight
             )
@@ -242,6 +251,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let isOutgoing: Bool
     let customTextHex: String?
     let prefersDarkPalette: Bool
+    let fontScale: Double
     let availableWidth: CGFloat
     @Binding var renderedHeight: CGFloat
 
@@ -297,7 +307,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             enableMarkdown: enableMarkdown,
             isOutgoing: isOutgoing,
             customTextHex: customTextHex,
-            prefersDarkPalette: prefersDarkPalette
+            prefersDarkPalette: prefersDarkPalette,
+            fontScale: fontScale
         )
         context.coordinator.render(
             payload,
@@ -431,6 +442,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let isOutgoing: Bool
         let customTextHex: String?
         let prefersDarkPalette: Bool
+        let fontScale: Double
 
         var htmlDocument: String {
             let defaultTextColor = isOutgoing ? "#FFFFFF" : (prefersDarkPalette ? "#FFFFFF" : "#1C1C1E")
@@ -503,6 +515,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       --font-emphasis: \(emphasisFontFamily);
       --font-strong: \(strongFontFamily);
       --font-code: \(codeFontFamily);
+      --font-scale: \(String(format: "%.3f", fontScale));
     }
 
     html, body {
@@ -522,6 +535,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
       width: 100%;
       max-width: var(--max-width);
       box-sizing: border-box;
+      font-size: calc(1em * var(--font-scale));
       line-height: 1.45;
       word-break: break-word;
       overflow-wrap: anywhere;
@@ -1626,7 +1640,8 @@ private extension View {
         textColor: Color,
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
-        sampleText: String
+        sampleText: String,
+        fontScale: Double
     ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
@@ -1645,6 +1660,7 @@ private extension View {
         let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
         let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
         let usesCharacterFallback = FontLibrary.fallbackScope == .character
+        let bodyFontSize = CGFloat(17 * FontLibrary.normalizedFontScale(fontScale))
 
         self
             .markdownSoftBreakMode(.lineBreak)
@@ -1662,6 +1678,7 @@ private extension View {
                    !bodyFontName.isEmpty {
                     FontFamily(.custom(bodyFontName))
                 }
+                FontSize(bodyFontSize)
                 ForegroundColor(textColor)
             }
             .markdownTextStyle(\.emphasis) {

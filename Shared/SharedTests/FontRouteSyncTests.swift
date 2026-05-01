@@ -312,13 +312,16 @@ struct FontRouteSyncTests {
 
             defaults.set(1.75, forKey: key)
             #expect(FontLibrary.customFontScale == 1.75)
+            #expect(FontLibrary.scaledPointSize(16) == 28)
             #expect(FontLibrary.adapterCacheToken() != defaultToken)
 
             defaults.set(9.0, forKey: key)
             #expect(FontLibrary.customFontScale == FontLibrary.maximumFontScale)
+            #expect(FontLibrary.scaledPointSize(17) == 34)
 
             defaults.set(0.1, forKey: key)
             #expect(FontLibrary.customFontScale == FontLibrary.minimumFontScale)
+            #expect(FontLibrary.scaledPointSize(20) == 10)
         }
     }
 

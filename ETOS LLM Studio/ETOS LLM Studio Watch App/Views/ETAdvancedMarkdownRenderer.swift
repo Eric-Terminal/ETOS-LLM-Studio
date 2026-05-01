@@ -21,6 +21,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @State private var imagePreviewItem: ETWatchMarkdownImagePreviewItem?
 
     init(
@@ -52,6 +53,7 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
+        let fontScale = FontLibrary.normalizedFontScale(customFontScale)
         if enableMarkdown {
             if let prepared = effectivePreparedContent {
                 if shouldUseMathEngine(prepared) {
@@ -64,14 +66,16 @@ struct ETAdvancedMarkdownRenderer: View {
                     markdownTextView(
                         markdownContent: prepared.markdownContent,
                         sampleText: prepared.sourceText,
-                        textColor: textColor
+                        textColor: textColor,
+                        fontScale: fontScale
                     )
                 }
             } else {
                 markdownTextView(
                     markdownContent: MarkdownContent(content),
                     sampleText: content,
-                    textColor: textColor
+                    textColor: textColor,
+                    fontScale: fontScale
                 )
             }
         } else {
@@ -87,7 +91,8 @@ struct ETAdvancedMarkdownRenderer: View {
     private func markdownTextView(
         markdownContent: MarkdownContent,
         sampleText: String,
-        textColor: Color
+        textColor: Color,
+        fontScale: Double
     ) -> some View {
         Markdown(markdownContent)
             .markdownImageProvider(
@@ -100,6 +105,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 isOutgoing: isOutgoing,
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
+                fontScale: fontScale,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
             .sheet(item: $imagePreviewItem) { item in
@@ -193,6 +199,7 @@ private extension View {
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
         sampleText: String,
+        fontScale: Double,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -212,6 +219,7 @@ private extension View {
         let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
         let codeFontName = FontLibrary.resolvePostScriptName(for: .code, sampleText: sampleText)
         let usesCharacterFallback = FontLibrary.fallbackScope == .character
+        let bodyFontSize = CGFloat(16 * FontLibrary.normalizedFontScale(fontScale))
 
         self
             .markdownSoftBreakMode(.lineBreak)
@@ -229,6 +237,7 @@ private extension View {
                    !bodyFontName.isEmpty {
                     FontFamily(.custom(bodyFontName))
                 }
+                FontSize(bodyFontSize)
                 ForegroundColor(textColor)
             }
             .markdownTextStyle(\.emphasis) {

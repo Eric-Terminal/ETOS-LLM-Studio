@@ -3235,6 +3235,10 @@ public enum FontLibrary {
         return min(max(value, minimumFontScale), maximumFontScale)
     }
 
+    public static func scaledPointSize(_ pointSize: Double) -> Double {
+        pointSize * customFontScale
+    }
+
     public static func preloadRuntimeCacheAsync(forceReload: Bool = false) {
         Task.detached(priority: .utility) {
             preloadRuntimeCache(forceReload: forceReload)
