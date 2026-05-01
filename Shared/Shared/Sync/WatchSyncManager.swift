@@ -390,7 +390,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         allowReuseExisting: Bool,
         stateMessage: String
     ) -> UUID? {
-        if let activeSyncOperation {
+        if activeSyncOperation != nil {
             guard allowReuseExisting else { return nil }
             if !silent {
                 self.activeSyncOperation?.isSilent = false
