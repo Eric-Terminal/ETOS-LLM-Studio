@@ -12,14 +12,14 @@ import Shared
 struct WorldbookSettingsView: View {
     @ObservedObject var viewModel: ChatViewModel
 
-    @State var worldbooks: [Worldbook] = []
-    @State var selected = Set<UUID>()
-    @State var worldbookToDelete: Worldbook?
-    @State var importURLText: String = ""
-    @State var isImportingFromURL = false
-    @State var importError: String?
-    @State var importReport: WorldbookImportReport?
-    @State var isShowingIntroDetails = false
+    @State private var worldbooks: [Worldbook] = []
+    @State private var selected = Set<UUID>()
+    @State private var worldbookToDelete: Worldbook?
+    @State private var importURLText: String = ""
+    @State private var isImportingFromURL = false
+    @State private var importError: String?
+    @State private var importReport: WorldbookImportReport?
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
         List {
@@ -193,12 +193,12 @@ struct WorldbookSettingsView: View {
         }
     }
 
-    func load() {
+    private func load() {
         worldbooks = ChatService.shared.loadWorldbooks().sorted { $0.updatedAt > $1.updatedAt }
         selected = Set(viewModel.currentSession?.lorebookIDs ?? [])
     }
 
-    func row(title: String, value: String) -> some View {
+    private func row(title: String, value: String) -> some View {
         HStack {
             Text(NSLocalizedString(title, comment: "世界书信息行标题"))
             Spacer()
@@ -207,7 +207,7 @@ struct WorldbookSettingsView: View {
         }
     }
 
-    func settingsIntroCard(
+    private func settingsIntroCard(
         title: String,
         summary: String,
         details: String,
@@ -241,7 +241,7 @@ struct WorldbookSettingsView: View {
         }
     }
 
-    func bindingSummary(for session: ChatSession) -> String {
+    private func bindingSummary(for session: ChatSession) -> String {
         let boundSet = Set(session.lorebookIDs)
         let boundBookCount = worldbooks.filter { boundSet.contains($0.id) }.count
         let totalBookCount = worldbooks.count
@@ -252,7 +252,7 @@ struct WorldbookSettingsView: View {
         )
     }
 
-    func enabledEntrySummary(for book: Worldbook) -> String {
+    private func enabledEntrySummary(for book: Worldbook) -> String {
         let enabledCount = book.entries.filter(\.isEnabled).count
         return String(
             format: NSLocalizedString("启用条目 %d/%d", comment: "Enabled worldbook entry summary"),
@@ -261,7 +261,7 @@ struct WorldbookSettingsView: View {
         )
     }
 
-    func confirmDeleteWorldbook() {
+    private func confirmDeleteWorldbook() {
         guard let target = worldbookToDelete else { return }
         ChatService.shared.deleteWorldbook(id: target.id)
         if var session = viewModel.currentSession {
@@ -272,7 +272,7 @@ struct WorldbookSettingsView: View {
         load()
     }
 
-    func createEmptyWorldbook() {
+    private func createEmptyWorldbook() {
         let defaultEntry = WorldbookEntry(
             comment: NSLocalizedString("新条目", comment: "New entry comment"),
             content: "",
@@ -288,7 +288,7 @@ struct WorldbookSettingsView: View {
         load()
     }
 
-    func importFromURL() {
+    private func importFromURL() {
         let trimmed = importURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             importError = NSLocalizedString("链接不能为空。", comment: "URL cannot be empty")
@@ -340,7 +340,7 @@ struct WorldbookSettingsView: View {
         }
     }
 
-    func suggestedRemoteImportFileName(from url: URL, response: URLResponse) -> String {
+    private func suggestedRemoteImportFileName(from url: URL, response: URLResponse) -> String {
         var fileName = response.suggestedFilename?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if fileName.isEmpty {
@@ -365,17 +365,16 @@ struct WorldbookSettingsView: View {
 
 }
 
-
-struct WatchWorldbookDetailView: View {
+private struct WatchWorldbookDetailView: View {
     let worldbookID: UUID
 
-    @State var worldbook: Worldbook?
-    @State var editingEntryDraft: WatchWorldbookEntryDraft?
-    @State var entryToDelete: WorldbookEntry?
-    @State var nameDraft: String = ""
-    @State var descriptionDraft: String = ""
+    @State private var worldbook: Worldbook?
+    @State private var editingEntryDraft: WatchWorldbookEntryDraft?
+    @State private var entryToDelete: WorldbookEntry?
+    @State private var nameDraft: String = ""
+    @State private var descriptionDraft: String = ""
 
-    var orderedEntries: [WorldbookEntry] {
+    private var orderedEntries: [WorldbookEntry] {
         guard let worldbook else { return [] }
         return worldbook.entries.sorted { lhs, rhs in
             if lhs.order == rhs.order {
@@ -498,13 +497,13 @@ struct WatchWorldbookDetailView: View {
         }
     }
 
-    func load() {
+    private func load() {
         worldbook = ChatService.shared.loadWorldbooks().first(where: { $0.id == worldbookID })
         nameDraft = worldbook?.name ?? ""
         descriptionDraft = worldbook?.description ?? ""
     }
 
-    func saveBasicInfo() {
+    private func saveBasicInfo() {
         guard var worldbook else { return }
         let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         if !trimmedName.isEmpty {
@@ -516,7 +515,7 @@ struct WatchWorldbookDetailView: View {
         self.worldbook = worldbook
     }
 
-    func upsertEntry(_ entry: WorldbookEntry) {
+    private func upsertEntry(_ entry: WorldbookEntry) {
         guard var worldbook else { return }
         if let index = worldbook.entries.firstIndex(where: { $0.id == entry.id }) {
             worldbook.entries[index] = entry
@@ -529,7 +528,7 @@ struct WatchWorldbookDetailView: View {
         self.worldbook = worldbook
     }
 
-    func deleteEntry(_ entryID: UUID) {
+    private func deleteEntry(_ entryID: UUID) {
         guard var worldbook else { return }
         worldbook.entries.removeAll { $0.id == entryID }
         worldbook.entries = normalizeEntryOrder(worldbook.entries)
@@ -538,7 +537,7 @@ struct WatchWorldbookDetailView: View {
         self.worldbook = worldbook
     }
 
-    func normalizeEntryOrder(_ entries: [WorldbookEntry]) -> [WorldbookEntry] {
+    private func normalizeEntryOrder(_ entries: [WorldbookEntry]) -> [WorldbookEntry] {
         var normalized = entries
         normalized.sort {
             if $0.order == $1.order {
@@ -553,15 +552,14 @@ struct WatchWorldbookDetailView: View {
         return normalized
     }
 
-    func entryPreview(_ entry: WorldbookEntry) -> String? {
+    private func entryPreview(_ entry: WorldbookEntry) -> String? {
         let trimmed = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 }
 
-
-struct WatchWorldbookEntryDetailView: View {
-    @State var entry: WorldbookEntry
+private struct WatchWorldbookEntryDetailView: View {
+    @State private var entry: WorldbookEntry
 
     let onSave: (WorldbookEntry) -> Void
 
@@ -570,7 +568,7 @@ struct WatchWorldbookEntryDetailView: View {
         self.onSave = onSave
     }
 
-    var enabledBinding: Binding<Bool> {
+    private var enabledBinding: Binding<Bool> {
         Binding(
             get: { entry.isEnabled },
             set: { enabled in
@@ -636,8 +634,140 @@ struct WatchWorldbookEntryDetailView: View {
     }
 }
 
+private struct WatchWorldbookEntryEditView: View {
+    @Environment(\.dismiss) private var dismiss
 
-struct WatchWorldbookEntryDraft: Identifiable {
+    @State private var draft: WatchWorldbookEntryDraft
+
+    let onSave: (WorldbookEntry) -> Void
+
+    let onDelete: (() -> Void)?
+
+    init(draft: WatchWorldbookEntryDraft, onSave: @escaping (WorldbookEntry) -> Void, onDelete: (() -> Void)? = nil) {
+        _draft = State(initialValue: draft)
+        self.onSave = onSave
+        self.onDelete = onDelete
+    }
+
+    private var canSave: Bool {
+        let content = draft.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if content.isEmpty { return false }
+        if !draft.constant && parseKeywordList(draft.keysText).isEmpty { return false }
+        return true
+    }
+
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var orderBinding: Binding<Int> {
+        Binding(
+            get: { draft.order },
+            set: { newValue in
+                draft.order = min(1000, max(0, newValue))
+            }
+        )
+    }
+
+    private var depthBinding: Binding<Int> {
+        Binding(
+            get: { draft.depth },
+            set: { newValue in
+                draft.depth = max(0, newValue)
+            }
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section(NSLocalizedString("基础", comment: "Entry base section")) {
+                TextField(
+                    NSLocalizedString("注释", comment: "Comment field"),
+                    text: $draft.comment.watchKeyboardNewlineBinding(normalizeSmartQuotes: true),
+                    axis: .vertical
+                )
+                .lineLimit(1...4)
+                TextField(
+                    NSLocalizedString("内容", comment: "Content field"),
+                    text: $draft.content.watchKeyboardNewlineBinding(normalizeSmartQuotes: true),
+                    axis: .vertical
+                )
+                .lineLimit(4...12)
+                Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: $draft.isEnabled)
+            }
+
+            Section(NSLocalizedString("触发", comment: "Entry trigger section")) {
+                TextField(
+                    NSLocalizedString("关键词（逗号分隔）", comment: "Keywords field"),
+                    text: $draft.keysText.watchKeyboardNewlineBinding(normalizeSmartQuotes: true),
+                    axis: .vertical
+                )
+                .lineLimit(2...6)
+                Toggle(NSLocalizedString("常驻激活", comment: "Constant active"), isOn: $draft.constant)
+                Toggle(NSLocalizedString("正则匹配", comment: "Regex match"), isOn: $draft.useRegex)
+                Toggle(NSLocalizedString("区分大小写", comment: "Case sensitive"), isOn: $draft.caseSensitive)
+            }
+
+            Section(NSLocalizedString("插入", comment: "Entry position section")) {
+                Picker(NSLocalizedString("位置", comment: "Position"), selection: $draft.position) {
+                    ForEach(WorldbookPosition.allCases, id: \.self) { position in
+                        Text(worldbookPositionLabel(position)).tag(position)
+                    }
+                }
+                Picker(NSLocalizedString("角色", comment: "Role"), selection: $draft.role) {
+                    ForEach(WorldbookEntryRole.allCases, id: \.self) { role in
+                        Text(worldbookEntryRoleLabel(role)).tag(role)
+                    }
+                }
+                HStack {
+                    Text(String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order))
+                    Spacer()
+                    TextField(NSLocalizedString("数量", comment: ""), value: orderBinding, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                }
+                if draft.position == .atDepth {
+                    HStack {
+                        Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: ""), value: depthBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+                }
+            }
+
+            if let onDelete {
+                Section {
+                    Button(NSLocalizedString("删除条目", comment: "Delete entry"), role: .destructive) {
+                        onDelete()
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("编辑条目", comment: "Edit entry"))
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(NSLocalizedString("取消", comment: "Cancel")) {
+                    dismiss()
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(NSLocalizedString("保存", comment: "Save")) {
+                    onSave(draft.toEntry())
+                    dismiss()
+                }
+                .disabled(!canSave)
+            }
+        }
+    }
+}
+
+private struct WatchWorldbookEntryDraft: Identifiable {
     let id: UUID
     let entryID: UUID
 
@@ -687,7 +817,7 @@ struct WatchWorldbookEntryDraft: Identifiable {
         )
     }
 
-    init(
+    private init(
         id: UUID,
         entryID: UUID,
         comment: String,
@@ -738,8 +868,150 @@ struct WatchWorldbookEntryDraft: Identifiable {
     }
 }
 
+private struct WatchWorldbookSessionBindingView: View {
+    private enum InjectionBindingTab: String, CaseIterable, Identifiable {
+        case mode
+        case lorebooks
 
-func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .mode:
+                return NSLocalizedString("Mode Injections", comment: "Mode injection tab")
+            case .lorebooks:
+                return NSLocalizedString("Lorebooks", comment: "Lorebooks tab")
+            }
+        }
+    }
+
+    @Binding var session: ChatSession?
+    @State private var worldbooks: [Worldbook] = []
+    @State private var selected = Set<UUID>()
+    @State private var selectedTab: InjectionBindingTab = .lorebooks
+
+    var body: some View {
+        List {
+            Section {
+                Picker(NSLocalizedString("注入类型", comment: "Injection type"), selection: $selectedTab) {
+                    ForEach(InjectionBindingTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+            }
+
+            Section {
+                Toggle(
+                    NSLocalizedString("绑定世界书时屏蔽记忆与工具", comment: "Worldbook isolation toggle"),
+                    isOn: Binding(
+                        get: { session?.worldbookContextIsolationEnabled ?? false },
+                        set: { updateIsolationMode($0) }
+                    )
+                )
+
+                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送记忆系统、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Text(NSLocalizedString("点击条目即可绑定或取消绑定。", comment: "Binding hint tap row"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if selectedTab == .mode {
+                Text(NSLocalizedString("Mode Injection 绑定功能将与助手注入页对齐，当前版本先保留 Lorebook 绑定。", comment: "Mode injection placeholder"))
+                    .foregroundStyle(.secondary)
+            } else if worldbooks.isEmpty {
+                Text(NSLocalizedString("暂无可绑定世界书", comment: "No bindable worldbook on watch"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(worldbooks) { book in
+                    Button {
+                        toggle(book.id)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(book.name)
+                                    .etFont(.footnote)
+                                Text(String(format: NSLocalizedString("%d 条", comment: "Entry count short"), book.entries.count))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: selected.contains(book.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(
+                                    selected.contains(book.id)
+                                    ? AnyShapeStyle(.tint)
+                                    : AnyShapeStyle(.tertiary)
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("会话绑定", comment: "Session binding title"))
+        .onAppear(perform: load)
+    }
+
+    private func load() {
+        worldbooks = ChatService.shared.loadWorldbooks().sorted { $0.updatedAt > $1.updatedAt }
+        selected = Set(session?.lorebookIDs ?? [])
+    }
+
+    private func toggle(_ id: UUID) {
+        guard var current = session else { return }
+        if selected.contains(id) {
+            selected.remove(id)
+        } else {
+            selected.insert(id)
+        }
+        current.lorebookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
+        persistSessionSettings(current)
+    }
+
+    private func updateIsolationMode(_ isEnabled: Bool) {
+        guard var current = session else { return }
+        current.worldbookContextIsolationEnabled = isEnabled
+        persistSessionSettings(current)
+    }
+
+    private func persistSessionSettings(_ current: ChatSession) {
+        session = current
+        ChatService.shared.updateWorldbookSessionSettings(
+            sessionID: current.id,
+            worldbookIDs: current.lorebookIDs,
+            worldbookContextIsolationEnabled: current.worldbookContextIsolationEnabled
+        )
+    }
+}
+
+private func worldbookPositionLabel(_ position: WorldbookPosition) -> String {
+    switch position {
+    case .before:
+        return NSLocalizedString("系统前置", comment: "Worldbook position before")
+    case .after:
+        return NSLocalizedString("系统后置", comment: "Worldbook position after")
+    case .anTop:
+        return NSLocalizedString("AN 顶部", comment: "Worldbook position anTop")
+    case .anBottom:
+        return NSLocalizedString("AN 底部", comment: "Worldbook position anBottom")
+    case .atDepth:
+        return NSLocalizedString("按深度插入", comment: "Worldbook position atDepth")
+    case .emTop:
+        return NSLocalizedString("消息顶部", comment: "Worldbook position emTop")
+    case .emBottom:
+        return NSLocalizedString("消息底部", comment: "Worldbook position emBottom")
+    case .outlet:
+        return NSLocalizedString("Outlet", comment: "Worldbook position outlet")
+    @unknown default:
+        return NSLocalizedString("系统后置", comment: "Worldbook position fallback")
+    }
+}
+
+private func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
     switch role {
     case .system:
         return NSLocalizedString("系统", comment: "Worldbook role system")
@@ -750,4 +1022,24 @@ func worldbookEntryRoleLabel(_ role: WorldbookEntryRole) -> String {
     @unknown default:
         return NSLocalizedString("用户", comment: "Worldbook role default")
     }
+}
+
+private func parseKeywordList(_ raw: String) -> [String] {
+    let normalized = raw
+        .normalizedPlainQuotes()
+        .replacingOccurrences(of: "，", with: ",")
+    let components = normalized.components(separatedBy: CharacterSet(charactersIn: ",\n"))
+    var seen = Set<String>()
+    var result: [String] = []
+
+    for component in components {
+        let trimmed = component.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { continue }
+        let key = trimmed.lowercased()
+        if seen.contains(key) { continue }
+        seen.insert(key)
+        result.append(trimmed)
+    }
+
+    return result
 }
