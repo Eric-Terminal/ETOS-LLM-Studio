@@ -104,7 +104,6 @@ private enum MessageActionExportScope: String, CaseIterable, Identifiable {
 struct ChatView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var ttsManager = TTSManager.shared
     @State private var showScrollToBottom = false
@@ -151,7 +150,6 @@ struct ChatView: View {
     @FocusState private var composerFocused: Bool
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
     @AppStorage(ChatMessageActionPresentationStyle.storageKey) private var chatMessageActionPresentationStyleRawValue: String = ChatMessageActionPresentationStyle.defaultStyle.rawValue
     @Namespace private var modelPickerNamespace
@@ -203,9 +201,6 @@ struct ChatView: View {
     }
     private var isOverlayPanelPresented: Bool {
         !usesBottomSheetPickerStyle && (showModelPickerPanel || showSessionPickerPanel)
-    }
-    private var isNativeNavigationEnabled: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
     }
     private var chatPickerPresentationStyle: ChatPickerPresentationStyle {
         ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue)
@@ -626,12 +621,8 @@ struct ChatView: View {
             .toolbar(.hidden, for: .tabBar)
             .navigationDestination(item: $navigationDestination) { destination in
                 switch destination {
-                case .sessions:
-                    SessionListView()
                 case .settings:
                     SettingsView()
-                case .preferenceSettings:
-                    preferenceSettingsView
                 }
             }
             .sheet(item: $editingMessage) { message in
@@ -923,11 +914,7 @@ struct ChatView: View {
     @ViewBuilder
     private var telegramNavBar: some View {
         HStack(spacing: 12) {
-            if isNativeNavigationEnabled {
-                navBarBackButton
-            } else {
-                navBarSessionButton
-            }
+            navBarSessionButton
 
             Spacer(minLength: 12)
 
@@ -941,7 +928,7 @@ struct ChatView: View {
             Spacer(minLength: 12)
 
             Button {
-                navigationDestination = isNativeNavigationEnabled ? .preferenceSettings : .settings
+                navigationDestination = .settings
             } label: {
                 navBarIconLabel(systemName: "gearshape", accessibilityLabel: "设置")
             }
@@ -949,52 +936,6 @@ struct ChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, navBarVerticalPadding)
-    }
-
-    private var navBarBackButton: some View {
-        Button {
-            dismiss()
-        } label: {
-            navBarIconLabel(systemName: "chevron.left", accessibilityLabel: "返回历史会话")
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var preferenceSettingsView: some View {
-        ModelAdvancedSettingsView(
-            aiTemperature: $viewModel.aiTemperature,
-            aiTopP: $viewModel.aiTopP,
-            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
-            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
-            maxChatHistory: $viewModel.maxChatHistory,
-            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
-            enableStreaming: $viewModel.enableStreaming,
-            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
-            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
-            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
-            enableReasoningSummary: $viewModel.enableReasoningSummary,
-            currentSession: $viewModel.currentSession,
-            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-            systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
-            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
-            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
-            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
-            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
-            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
-            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
-            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
-        )
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    navigationDestination = nil
-                } label: {
-                    Label(NSLocalizedString("返回对话", comment: ""), systemImage: "chevron.left")
-                }
-            }
-        }
     }
 
     private var navBarSessionButton: some View {

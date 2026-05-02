@@ -57,6 +57,7 @@ struct ContentView: View {
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appLanguageRawValue))
         .onAppear {
+            normalizeChatNavigationModeIfNeeded()
             AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
             refreshRootBodyFont()
         }
@@ -79,6 +80,7 @@ struct ContentView: View {
             refreshRootBodyFont()
         }
         .onChange(of: chatNavigationModeRawValue) { _, _ in
+            normalizeChatNavigationModeIfNeeded()
             isNativeSettingsPresented = false
             isNativeChatPresented = true
         }
@@ -310,6 +312,11 @@ struct ContentView: View {
         isNativeChatPresented = true
     }
 
+    private func normalizeChatNavigationModeIfNeeded() {
+        guard chatNavigationModeRawValue != ChatNavigationMode.legacyOverlay.rawValue else { return }
+        chatNavigationModeRawValue = ChatNavigationMode.legacyOverlay.rawValue
+    }
+
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {
         dailyPulsePreparationTask?.cancel()
         dailyPulsePreparationTask = Task(priority: .utility) {
@@ -415,9 +422,7 @@ struct ContentView: View {
 }
 
 enum ChatNavigationDestination: Hashable {
-    case sessions
     case settings
-    case preferenceSettings
 }
 
 extension Notification.Name {

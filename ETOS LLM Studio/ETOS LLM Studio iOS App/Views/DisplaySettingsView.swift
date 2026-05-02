@@ -25,7 +25,6 @@ struct DisplaySettingsView: View {
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
 
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
     @AppStorage(ChatMessageActionPresentationStyle.storageKey) private var chatMessageActionPresentationStyleRawValue: String = ChatMessageActionPresentationStyle.defaultStyle.rawValue
     @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
@@ -93,13 +92,6 @@ struct DisplaySettingsView: View {
                 Text(NSLocalizedString("手动选择 App 界面语言；跟随系统时会使用设备当前语言。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-            }
-
-            Section(footer: Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))) {
-                Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
-                    Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
-                    Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
-                }
             }
 
             Section(footer: Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))) {
@@ -175,13 +167,6 @@ struct DisplaySettingsView: View {
                 enableAdvancedRenderer = false
             }
         }
-    }
-
-    private var chatNavigationModeBinding: Binding<ChatNavigationMode> {
-        Binding(
-            get: { ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) },
-            set: { chatNavigationModeRawValue = $0.rawValue }
-        )
     }
 
     private var chatPickerPresentationStyleBinding: Binding<ChatPickerPresentationStyle> {
