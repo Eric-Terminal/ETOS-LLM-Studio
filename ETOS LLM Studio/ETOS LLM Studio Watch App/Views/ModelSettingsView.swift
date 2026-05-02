@@ -119,7 +119,6 @@ struct ModelSettingsView: View {
                         text: $rawJSONInput.watchKeyboardNewlineBinding(),
                         axis: .vertical
                     )
-                    .etFont(.footnote.monospaced())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .lineLimit(6...16)
@@ -1291,7 +1290,6 @@ private struct KeyValueRow: View {
             TextField(NSLocalizedString("Key", comment: ""), text: $entry.key.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .etFont(.footnote.monospaced())
 
             Text(NSLocalizedString("Value", comment: ""))
                 .etFont(.caption2)
@@ -1300,7 +1298,6 @@ private struct KeyValueRow: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .lineLimit(1...4)
-                .etFont(.footnote.monospaced())
 
             if let error = entry.error {
                 Text(error)

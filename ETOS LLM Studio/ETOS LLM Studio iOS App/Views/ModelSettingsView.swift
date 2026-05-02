@@ -115,7 +115,6 @@ struct ModelSettingsView: View {
                     footer: Text(NSLocalizedString("填写 JSON 对象并与默认请求体合并。示例：{\"extra_body\": {\"abc\": \"123\"}}", comment: ""))
                 ) {
                     TextEditor(text: $rawJSONInput)
-                        .etFont(.footnote.monospaced())
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .frame(minHeight: 180)
@@ -885,7 +884,6 @@ private struct RequestBodyPreviewInlineView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: true) {
             Text(preview.text)
-                .etFont(.footnote.monospaced())
                 .foregroundStyle(preview.isPlaceholder ? .secondary : .primary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: true, vertical: false)
@@ -1059,7 +1057,6 @@ private struct RequestBodyPayloadEditor: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .lineLimit(lineLimit)
-                .etFont(.footnote.monospaced())
                 .onAppear(perform: syncTextFromPayload)
                 .onChange(of: text) { _, newValue in
                     parse(newValue)
@@ -1240,7 +1237,6 @@ private struct RequestBodyPayloadKeyValueRow: View {
                     TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .etFont(.footnote.monospaced())
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1260,7 +1256,6 @@ private struct RequestBodyPayloadKeyValueRow: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .lineLimit(1...4)
-                .etFont(.footnote.monospaced())
 
             if let error = entry.error {
                 Text(error)
