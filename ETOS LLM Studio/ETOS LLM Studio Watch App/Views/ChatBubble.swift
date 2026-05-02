@@ -104,16 +104,9 @@ struct ChatBubble: View {
     @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State private var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
-    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
-    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
-    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
-    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
-    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
-    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
-    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
 
     init(
         messageState: ChatMessageRenderState,
@@ -167,24 +160,32 @@ struct ChatBubble: View {
         messageState.message
     }
 
+    private var activeAppearanceProfile: ChatAppearanceProfile {
+        appearanceProfileManager.activeProfile
+    }
+
     private var resolvedUserBubbleColorOverride: Color? {
-        guard enableCustomUserBubbleColor else { return nil }
-        return ChatAppearanceColorCodec.color(from: customUserBubbleColorHex, fallback: .blue)
+        let slot = activeAppearanceProfile.userBubble
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .blue)
     }
 
     private var resolvedAssistantBubbleColorOverride: Color? {
         let fallback = Color(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
-        guard enableCustomAssistantBubbleColor else { return nil }
-        return ChatAppearanceColorCodec.color(from: customAssistantBubbleColorHex, fallback: fallback)
+        let slot = activeAppearanceProfile.assistantBubble
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
     }
 
     private var customTextColorOverride: Color? {
         if colorScheme == .dark {
-            guard enableCustomDarkTextColor else { return nil }
-            return ChatAppearanceColorCodec.color(from: customDarkTextColorHex, fallback: .white)
+            let slot = activeAppearanceProfile.darkText
+            guard slot.isEnabled else { return nil }
+            return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .white)
         }
-        guard enableCustomLightTextColor else { return nil }
-        return ChatAppearanceColorCodec.color(from: customLightTextColorHex, fallback: .primary)
+        let slot = activeAppearanceProfile.lightText
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .primary)
     }
 
     private func resolvedTextColor(default defaultColor: Color) -> Color {

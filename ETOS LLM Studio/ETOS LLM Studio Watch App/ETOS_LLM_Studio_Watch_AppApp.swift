@@ -28,6 +28,9 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
         AppLanguageRuntime.apply(rawValue: UserDefaults.standard.string(forKey: AppLanguagePreference.storageKey) ?? AppLanguagePreference.defaultLanguage.rawValue)
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+        Task { @MainActor in
+            ChatAppearanceProfileManager.shared.activate()
+        }
         // 在 App 启动时预先触发本地网络权限
         // 这样用户在第一次使用远程调试前就会看到权限弹窗
         #if !targetEnvironment(simulator)

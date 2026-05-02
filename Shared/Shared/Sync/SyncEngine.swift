@@ -348,6 +348,11 @@ public enum SyncEngine {
             )
             summary.importedAppStorageValues = result.imported
             summary.skippedAppStorageValues = result.skipped
+            if result.imported > 0 {
+                Task { @MainActor in
+                    ChatAppearanceProfileManager.shared.reloadFromStorage()
+                }
+            }
         }
         
         return summary

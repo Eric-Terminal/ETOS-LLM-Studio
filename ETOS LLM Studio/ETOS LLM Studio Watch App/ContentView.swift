@@ -1448,6 +1448,7 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    ChatAppearanceProfileManager.shared.handleAppBecameActive()
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 default:
                     cancelDailyPulsePreparation()

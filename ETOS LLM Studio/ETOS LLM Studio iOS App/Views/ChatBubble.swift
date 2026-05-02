@@ -118,15 +118,8 @@ struct ChatBubble: View {
     @State private var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State private var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
-    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
-    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
-    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
-    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
-    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
-    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
-    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
 
     init(
         messageState: ChatMessageRenderState,
@@ -188,20 +181,26 @@ struct ChatBubble: View {
     private let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
     private let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
 
+    private var activeAppearanceProfile: ChatAppearanceProfile {
+        appearanceProfileManager.activeProfile
+    }
+
     private var resolvedUserBubbleStartColor: Color {
-        guard enableCustomUserBubbleColor else { return telegramBlue }
-        return ChatAppearanceColorCodec.color(from: customUserBubbleColorHex, fallback: telegramBlue)
+        let slot = activeAppearanceProfile.userBubble
+        guard slot.isEnabled else { return telegramBlue }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: telegramBlue)
     }
 
     private var resolvedUserBubbleEndColor: Color {
-        guard enableCustomUserBubbleColor else { return telegramBlueDark }
+        guard activeAppearanceProfile.userBubble.isEnabled else { return telegramBlueDark }
         return ChatAppearanceColorCodec.darkened(resolvedUserBubbleStartColor, factor: 0.86)
     }
 
     private var resolvedAssistantBubbleColor: Color? {
-        guard enableCustomAssistantBubbleColor else { return nil }
+        let slot = activeAppearanceProfile.assistantBubble
+        guard slot.isEnabled else { return nil }
         return ChatAppearanceColorCodec.color(
-            from: customAssistantBubbleColorHex,
+            from: slot.hex,
             fallback: Color(uiColor: .secondarySystemBackground)
         )
     }
@@ -220,11 +219,13 @@ struct ChatBubble: View {
 
     private var customTextColorOverride: Color? {
         if colorScheme == .dark {
-            guard enableCustomDarkTextColor else { return nil }
-            return ChatAppearanceColorCodec.color(from: customDarkTextColorHex, fallback: .white)
+            let slot = activeAppearanceProfile.darkText
+            guard slot.isEnabled else { return nil }
+            return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .white)
         }
-        guard enableCustomLightTextColor else { return nil }
-        return ChatAppearanceColorCodec.color(from: customLightTextColorHex, fallback: .primary)
+        let slot = activeAppearanceProfile.lightText
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .primary)
     }
     
     private var isOutgoing: Bool {

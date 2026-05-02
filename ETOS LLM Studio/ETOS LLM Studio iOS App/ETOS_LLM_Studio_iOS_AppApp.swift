@@ -30,6 +30,9 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         AppLanguageRuntime.apply(rawValue: UserDefaults.standard.string(forKey: AppLanguagePreference.storageKey) ?? AppLanguagePreference.defaultLanguage.rawValue)
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+        Task { @MainActor in
+            ChatAppearanceProfileManager.shared.activate()
+        }
     }
 
     var body: some Scene {

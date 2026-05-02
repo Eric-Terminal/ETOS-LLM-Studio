@@ -30,14 +30,7 @@ struct DisplaySettingsView: View {
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
-    @AppStorage("enableCustomUserBubbleColor") private var enableCustomUserBubbleColor: Bool = false
-    @AppStorage("customUserBubbleColorHex") private var customUserBubbleColorHex: String = "3D8FF2FF"
-    @AppStorage("enableCustomAssistantBubbleColor") private var enableCustomAssistantBubbleColor: Bool = false
-    @AppStorage("customAssistantBubbleColorHex") private var customAssistantBubbleColorHex: String = "F2F2F7FF"
-    @AppStorage("enableCustomLightTextColor") private var enableCustomLightTextColor: Bool = false
-    @AppStorage("customLightTextColorHex") private var customLightTextColorHex: String = "1C1C1EFF"
-    @AppStorage("enableCustomDarkTextColor") private var enableCustomDarkTextColor: Bool = false
-    @AppStorage("customDarkTextColorHex") private var customDarkTextColorHex: String = "FFFFFFFF"
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
     
     // MARK: - 属性
     
@@ -151,45 +144,15 @@ struct DisplaySettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("自定义用户气泡颜色", comment: ""), isOn: $enableCustomUserBubbleColor)
-                if enableCustomUserBubbleColor {
-                    colorEditorLink(
-                        title: "用户气泡颜色",
-                        hex: $customUserBubbleColorHex,
-                        fallback: defaultUserBubbleColor,
-                        description: "影响你发送消息的气泡背景颜色。"
-                    )
-                }
-
-                Toggle(NSLocalizedString("自定义助手气泡颜色（含 Tool）", comment: ""), isOn: $enableCustomAssistantBubbleColor)
-                if enableCustomAssistantBubbleColor {
-                    colorEditorLink(
-                        title: "助手气泡颜色",
-                        hex: $customAssistantBubbleColorHex,
-                        fallback: defaultAssistantBubbleColor,
-                        description: "影响助手消息与 Tool 消息的气泡背景颜色。"
-                    )
-                }
-
-                Toggle(NSLocalizedString("自定义文字颜色", comment: ""), isOn: customTextColorEnabledBinding)
-                if customTextColorEnabledBinding.wrappedValue {
-                    colorEditorLink(
-                        title: "文字颜色",
-                        hex: customTextColorHexBinding,
-                        fallback: defaultTextColor,
-                        description: "覆盖聊天文本颜色。"
-                    )
-                }
-
-                if hasAnyCustomColorOverride {
-                    Button(NSLocalizedString("恢复默认聊天颜色", comment: "")) {
-                        resetCustomChatColors()
-                    }
+                NavigationLink {
+                    WatchChatAppearanceProfileSettingsView()
+                } label: {
+                    Label(NSLocalizedString("颜色配置", comment: ""), systemImage: "paintpalette")
                 }
             } header: {
                 Text(NSLocalizedString("聊天颜色自定义", comment: ""))
             } footer: {
-                Text(NSLocalizedString("默认全部关闭时，聊天配色与当前版本完全一致。", comment: ""))
+                Text(String(format: NSLocalizedString("当前使用：%@", comment: ""), profileDisplayName(appearanceProfileManager.activeProfile)))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -209,29 +172,6 @@ struct DisplaySettingsView: View {
         }
     }
 
-    private var hasAnyCustomColorOverride: Bool {
-        enableCustomUserBubbleColor
-            || enableCustomAssistantBubbleColor
-            || enableCustomLightTextColor
-            || enableCustomDarkTextColor
-    }
-
-    private var defaultUserBubbleColor: Color {
-        .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1)
-    }
-
-    private var defaultAssistantBubbleColor: Color {
-        .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
-    }
-
-    private var defaultDarkTextColor: Color {
-        .white
-    }
-
-    private var defaultTextColor: Color {
-        defaultDarkTextColor
-    }
-
     private var normalizedBackgroundOpacity: Double {
         WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
     }
@@ -241,56 +181,6 @@ struct DisplaySettingsView: View {
             get: { normalizedBackgroundOpacity },
             set: { backgroundOpacity = WatchBackgroundOpacitySetting.normalized($0) }
         )
-    }
-
-    private var customTextColorEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { enableCustomLightTextColor || enableCustomDarkTextColor },
-            set: { isEnabled in
-                enableCustomLightTextColor = isEnabled
-                enableCustomDarkTextColor = isEnabled
-            }
-        )
-    }
-
-    private var customTextColorHexBinding: Binding<String> {
-        Binding(
-            get: { enableCustomDarkTextColor ? customDarkTextColorHex : customLightTextColorHex },
-            set: { newValue in
-                customLightTextColorHex = newValue
-                customDarkTextColorHex = newValue
-            }
-        )
-    }
-
-    @ViewBuilder
-    private func colorEditorLink(
-        title: String,
-        hex: Binding<String>,
-        fallback: Color,
-        description: String
-    ) -> some View {
-        let localizedTitle = NSLocalizedString(title, comment: "")
-        NavigationLink {
-            WatchColorEditorView(
-                title: title,
-                hexValue: hex,
-                fallback: fallback,
-                description: description
-            )
-        } label: {
-            HStack(spacing: 8) {
-                Text(String(format: NSLocalizedString("设置%@", comment: ""), localizedTitle))
-                Spacer(minLength: 8)
-                Circle()
-                    .fill(ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback))
-                    .overlay(
-                        Circle()
-                            .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
-                    )
-                    .frame(width: 14, height: 14)
-            }
-        }
     }
 
     private var chatNavigationModeBinding: Binding<ChatNavigationMode> {
@@ -338,19 +228,440 @@ struct DisplaySettingsView: View {
         if language == .system {
             Text(NSLocalizedString("跟随系统", comment: ""))
         } else {
-            Text(verbatim: language.nativeDisplayName)
+            Text(language.nativeDisplayName)
         }
     }
 
-    private func resetCustomChatColors() {
-        enableCustomUserBubbleColor = false
-        enableCustomAssistantBubbleColor = false
-        enableCustomLightTextColor = false
-        enableCustomDarkTextColor = false
-        customUserBubbleColorHex = "3D8FF2FF"
-        customAssistantBubbleColorHex = "F2F2F7FF"
-        customLightTextColorHex = "1C1C1EFF"
-        customDarkTextColorHex = "FFFFFFFF"
+    private func profileDisplayName(_ profile: ChatAppearanceProfile) -> String {
+        if profile.isDefaultProfile {
+            return NSLocalizedString("默认配置", comment: "")
+        }
+        return profile.name
+    }
+}
+
+private struct WatchChatAppearanceProfileSettingsView: View {
+    @ObservedObject private var manager = ChatAppearanceProfileManager.shared
+    @State private var selectedProfileID = ChatAppearanceProfile.defaultProfileID
+    @State private var errorMessage: String?
+
+    private var selectedProfile: ChatAppearanceProfile {
+        manager.configuration.profile(id: selectedProfileID) ?? manager.configuration.defaultProfile
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker(NSLocalizedString("当前编辑", comment: ""), selection: selectedProfileIDBinding) {
+                    ForEach(manager.configuration.profiles) { profile in
+                        Text(profileDisplayName(profile)).tag(profile.id)
+                    }
+                }
+
+                Button {
+                    addProfile()
+                } label: {
+                    Label(NSLocalizedString("新增颜色配置", comment: ""), systemImage: "plus")
+                }
+            } header: {
+                Text(NSLocalizedString("配置", comment: ""))
+            } footer: {
+                Text(String(format: NSLocalizedString("当前生效：%@", comment: ""), profileDisplayName(manager.activeProfile)))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                WatchChatAppearanceProfileEditor(profile: selectedProfile) { updatedProfile in
+                    saveProfile(updatedProfile)
+                }
+
+                Button(NSLocalizedString("恢复默认聊天颜色", comment: "")) {
+                    resetColors()
+                }
+
+                if !selectedProfile.isDefaultProfile {
+                    Button(NSLocalizedString("删除配置", comment: ""), role: .destructive) {
+                        deleteSelectedProfile()
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("颜色", comment: ""))
+            }
+
+            Section {
+                ForEach(manager.configuration.scheduleRules) { rule in
+                    WatchScheduleRuleRow(
+                        rule: rule,
+                        profiles: manager.configuration.profiles
+                    ) { updatedRule in
+                        saveRule(updatedRule)
+                    } onDelete: {
+                        deleteRule(rule.id)
+                    }
+                }
+
+                Button {
+                    addRule()
+                } label: {
+                    Label(NSLocalizedString("新增时间段", comment: ""), systemImage: "clock.badge.plus")
+                }
+            } header: {
+                Text(NSLocalizedString("自动切换", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("没有匹配时间段时会使用 default 配置；时间段不能重叠。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle(NSLocalizedString("颜色配置", comment: ""))
+        .alert(NSLocalizedString("颜色配置", comment: ""), isPresented: errorPresented) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .onAppear {
+            manager.activate()
+            selectedProfileID = selectedProfile.id
+        }
+        .onChange(of: manager.configuration.profiles) { _, profiles in
+            if !profiles.contains(where: { $0.id == selectedProfileID }) {
+                selectedProfileID = manager.configuration.defaultProfile.id
+            }
+        }
+    }
+
+    private var selectedProfileIDBinding: Binding<String> {
+        Binding(
+            get: { selectedProfileID },
+            set: { selectedProfileID = $0 }
+        )
+    }
+
+    private var errorPresented: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )
+    }
+
+    private func addProfile() {
+        do {
+            let profile = try manager.addProfile()
+            selectedProfileID = profile.id
+        } catch {
+            show(error)
+        }
+    }
+
+    private func saveProfile(_ profile: ChatAppearanceProfile) {
+        do {
+            try manager.updateProfile(profile)
+            selectedProfileID = profile.id
+        } catch {
+            show(error)
+        }
+    }
+
+    private func resetColors() {
+        do {
+            try manager.resetColors(profileID: selectedProfileID)
+        } catch {
+            show(error)
+        }
+    }
+
+    private func deleteSelectedProfile() {
+        do {
+            let deletingID = selectedProfileID
+            selectedProfileID = ChatAppearanceProfile.defaultProfileID
+            try manager.deleteProfile(id: deletingID)
+        } catch {
+            show(error)
+        }
+    }
+
+    private func addRule() {
+        do {
+            guard let window = manager.configuration.firstAvailableScheduleWindow() else {
+                throw ChatAppearanceProfileError.noAvailableScheduleWindow
+            }
+            _ = try manager.addScheduleRule(
+                profileID: selectedProfileID,
+                startMinuteOfDay: window.startMinuteOfDay,
+                endMinuteOfDay: window.endMinuteOfDay
+            )
+        } catch {
+            show(error)
+        }
+    }
+
+    private func saveRule(_ rule: ChatAppearanceScheduleRule) {
+        do {
+            try manager.updateScheduleRule(rule)
+        } catch {
+            show(error)
+        }
+    }
+
+    private func deleteRule(_ id: String) {
+        do {
+            try manager.deleteScheduleRule(id: id)
+        } catch {
+            show(error)
+        }
+    }
+
+    private func show(_ error: Error) {
+        errorMessage = error.localizedDescription
+    }
+
+    private func profileDisplayName(_ profile: ChatAppearanceProfile) -> String {
+        if profile.isDefaultProfile {
+            return NSLocalizedString("默认配置", comment: "")
+        }
+        return profile.name
+    }
+}
+
+private struct WatchChatAppearanceProfileEditor: View {
+    let profile: ChatAppearanceProfile
+    let onChange: (ChatAppearanceProfile) -> Void
+
+    private var defaultUserBubbleColor: Color {
+        .init(.sRGB, red: 0.24, green: 0.56, blue: 0.95, opacity: 1)
+    }
+
+    private var defaultAssistantBubbleColor: Color {
+        .init(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
+    }
+
+    var body: some View {
+        if !profile.isDefaultProfile {
+            TextField(NSLocalizedString("配置名称", comment: ""), text: nameBinding)
+        }
+
+        colorSlotEditor(
+            title: "用户气泡颜色",
+            toggleTitle: "自定义用户气泡颜色",
+            slot: userBubbleBinding,
+            fallback: defaultUserBubbleColor,
+            description: "影响你发送消息的气泡背景颜色。"
+        )
+        colorSlotEditor(
+            title: "助手气泡颜色",
+            toggleTitle: "自定义助手气泡颜色（含 Tool）",
+            slot: assistantBubbleBinding,
+            fallback: defaultAssistantBubbleColor,
+            description: "影响助手消息与 Tool 消息的气泡背景颜色。"
+        )
+        colorSlotEditor(
+            title: "白天文字颜色",
+            toggleTitle: "自定义白天文字颜色",
+            slot: lightTextBinding,
+            fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1),
+            description: "覆盖浅色外观下的聊天文本颜色。"
+        )
+        colorSlotEditor(
+            title: "夜览文字颜色",
+            toggleTitle: "自定义夜览文字颜色",
+            slot: darkTextBinding,
+            fallback: .white,
+            description: "覆盖深色外观下的聊天文本颜色。"
+        )
+    }
+
+    private var nameBinding: Binding<String> {
+        Binding(
+            get: { profile.name },
+            set: { newValue in
+                var updated = profile
+                updated.name = newValue
+                onChange(updated)
+            }
+        )
+    }
+
+    private var userBubbleBinding: Binding<ChatAppearanceColorSlot> {
+        slotBinding(\.userBubble)
+    }
+
+    private var assistantBubbleBinding: Binding<ChatAppearanceColorSlot> {
+        slotBinding(\.assistantBubble)
+    }
+
+    private var lightTextBinding: Binding<ChatAppearanceColorSlot> {
+        slotBinding(\.lightText)
+    }
+
+    private var darkTextBinding: Binding<ChatAppearanceColorSlot> {
+        slotBinding(\.darkText)
+    }
+
+    private func slotBinding(_ keyPath: WritableKeyPath<ChatAppearanceProfile, ChatAppearanceColorSlot>) -> Binding<ChatAppearanceColorSlot> {
+        Binding(
+            get: { profile[keyPath: keyPath] },
+            set: { newValue in
+                var updated = profile
+                updated[keyPath: keyPath] = newValue
+                onChange(updated)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func colorSlotEditor(
+        title: String,
+        toggleTitle: String,
+        slot: Binding<ChatAppearanceColorSlot>,
+        fallback: Color,
+        description: String
+    ) -> some View {
+        Toggle(NSLocalizedString(toggleTitle, comment: ""), isOn: Binding(
+            get: { slot.wrappedValue.isEnabled },
+            set: { isEnabled in
+                var updated = slot.wrappedValue
+                updated.isEnabled = isEnabled
+                slot.wrappedValue = updated
+            }
+        ))
+
+        if slot.wrappedValue.isEnabled {
+            colorEditorLink(
+                title: title,
+                hex: Binding(
+                    get: { slot.wrappedValue.hex },
+                    set: { newValue in
+                        var updated = slot.wrappedValue
+                        updated.hex = newValue
+                        slot.wrappedValue = updated
+                    }
+                ),
+                fallback: fallback,
+                description: description
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func colorEditorLink(
+        title: String,
+        hex: Binding<String>,
+        fallback: Color,
+        description: String
+    ) -> some View {
+        let localizedTitle = NSLocalizedString(title, comment: "")
+        NavigationLink {
+            WatchColorEditorView(
+                title: title,
+                hexValue: hex,
+                fallback: fallback,
+                description: description
+            )
+        } label: {
+            HStack(spacing: 8) {
+                Text(String(format: NSLocalizedString("设置%@", comment: ""), localizedTitle))
+                Spacer(minLength: 8)
+                Circle()
+                    .fill(ChatAppearanceColorCodec.color(from: hex.wrappedValue, fallback: fallback))
+                    .overlay(
+                        Circle()
+                            .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
+                    )
+                    .frame(width: 14, height: 14)
+            }
+        }
+    }
+}
+
+private struct WatchScheduleRuleRow: View {
+    let rule: ChatAppearanceScheduleRule
+    let profiles: [ChatAppearanceProfile]
+    let onChange: (ChatAppearanceScheduleRule) -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(rule.displayTimeRange)
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            Picker(NSLocalizedString("使用配置", comment: ""), selection: profileIDBinding) {
+                ForEach(profiles) { profile in
+                    Text(profileDisplayName(profile)).tag(profile.id)
+                }
+            }
+
+            DatePicker(
+                NSLocalizedString("开始时间", comment: ""),
+                selection: startDateBinding,
+                displayedComponents: .hourAndMinute
+            )
+
+            DatePicker(
+                NSLocalizedString("结束时间", comment: ""),
+                selection: endDateBinding,
+                displayedComponents: .hourAndMinute
+            )
+
+            Button(NSLocalizedString("删除时间段", comment: ""), role: .destructive) {
+                onDelete()
+            }
+        }
+    }
+
+    private var profileIDBinding: Binding<String> {
+        Binding(
+            get: { rule.profileID },
+            set: { newValue in
+                var updated = rule
+                updated.profileID = newValue
+                onChange(updated)
+            }
+        )
+    }
+
+    private var startDateBinding: Binding<Date> {
+        minuteDateBinding(
+            get: { rule.startMinuteOfDay },
+            set: { newMinute in
+                var updated = rule
+                updated.startMinuteOfDay = newMinute
+                onChange(updated)
+            }
+        )
+    }
+
+    private var endDateBinding: Binding<Date> {
+        minuteDateBinding(
+            get: { rule.endMinuteOfDay },
+            set: { newMinute in
+                var updated = rule
+                updated.endMinuteOfDay = newMinute
+                onChange(updated)
+            }
+        )
+    }
+
+    private func minuteDateBinding(get: @escaping () -> Int, set: @escaping (Int) -> Void) -> Binding<Date> {
+        Binding(
+            get: { date(fromMinute: get()) },
+            set: { set(ChatAppearanceProfileConfiguration.minuteOfDay(for: $0)) }
+        )
+    }
+
+    private func date(fromMinute minute: Int) -> Date {
+        let normalized = ChatAppearanceScheduleRule.normalizedMinute(minute)
+        return Calendar.current.startOfDay(for: Date())
+            .addingTimeInterval(TimeInterval(normalized * 60))
+    }
+
+    private func profileDisplayName(_ profile: ChatAppearanceProfile) -> String {
+        if profile.isDefaultProfile {
+            return NSLocalizedString("默认配置", comment: "")
+        }
+        return profile.name
     }
 }
 
@@ -403,7 +714,7 @@ private struct WatchColorEditorView: View {
                 channelSlider(title: "绿", value: $green, tint: .green)
                 channelSlider(title: "蓝", value: $blue, tint: .blue)
             } header: {
-                Text("RGB")
+                Text(NSLocalizedString("RGB", comment: ""))
             }
 
             Section {
