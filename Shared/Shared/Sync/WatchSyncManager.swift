@@ -15,6 +15,16 @@ import UserNotifications
 import WatchConnectivity
 #endif
 
+func stageIncomingSyncExchangeFile(
+    from sourceURL: URL,
+    fileManager: FileManager = .default
+) throws -> URL {
+    let stagedURL = fileManager.temporaryDirectory
+        .appendingPathComponent("watch-sync-\(UUID().uuidString).json", isDirectory: false)
+    try fileManager.copyItem(at: sourceURL, to: stagedURL)
+    return stagedURL
+}
+
 #if canImport(WatchConnectivity)
 @MainActor
 public final class WatchSyncManager: NSObject, ObservableObject {
@@ -47,6 +57,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let operationID: UUID?
         let isSilent: Bool
         let marksSuccessWhenFinished: Bool
+        let fileURL: URL?
     }
 
     private struct ActiveSyncOperation {
@@ -365,7 +376,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             expectsResponse: payload.expectsResponse,
             operationID: payload.requestID.flatMap(UUID.init(uuidString:)),
             isSilent: payload.isSilent,
-            marksSuccessWhenFinished: payload.marksSuccessWhenFinished
+            marksSuccessWhenFinished: payload.marksSuccessWhenFinished,
+            fileURL: payload.fileURL
         )
     }
 
@@ -422,6 +434,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     ) async {
         let operationID = requestID.flatMap(UUID.init(uuidString:))
         let effectiveSilent = isSyncSilent(operationID: operationID, fallback: silent)
+        defer { try? FileManager.default.removeItem(at: url) }
 
         do {
             let data = try Data(contentsOf: url)
@@ -546,19 +559,36 @@ extension WatchSyncManager: WCSessionDelegate {
         _ session: WCSession,
         didReceive file: WCSessionFile
     ) {
-        Task { @MainActor in
-            let isResponse = (file.metadata?["response"] as? Bool) ?? false
-            let requestID = file.metadata?["requestID"] as? String
-            let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
-            let operationID = requestID.flatMap(UUID.init(uuidString:))
-            let silent = (file.metadata?["silent"] as? Bool)
-                ?? isSyncSilent(operationID: operationID, fallback: false)
-            await applyExchange(
-                from: file.fileURL,
+        let isResponse = (file.metadata?["response"] as? Bool) ?? false
+        let requestID = file.metadata?["requestID"] as? String
+        let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
+        let operationID = requestID.flatMap(UUID.init(uuidString:))
+        let silent = (file.metadata?["silent"] as? Bool) ?? false
+
+        let stagedFileURL: URL
+        do {
+            stagedFileURL = try stageIncomingSyncExchangeFile(from: file.fileURL)
+        } catch {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.failSyncOperation(
+                    operationID: operationID,
+                    fallbackSilent: silent,
+                    message: "接收同步文件失败: \(error.localizedDescription)"
+                )
+            }
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let effectiveSilent = self.isSyncSilent(operationID: operationID, fallback: silent)
+            await self.applyExchange(
+                from: stagedFileURL,
                 isResponse: isResponse,
                 requestID: requestID,
                 expectsResponse: expectsResponse,
-                silent: silent
+                silent: effectiveSilent
             )
         }
     }
@@ -572,6 +602,11 @@ extension WatchSyncManager: WCSessionDelegate {
             let identifier = ObjectIdentifier(fileTransfer)
             let transferContext = pendingTransfers[identifier]
             defer { pendingTransfers.removeValue(forKey: identifier) }
+            defer {
+                if let fileURL = transferContext?.fileURL {
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+            }
             
             if let error {
                 failSyncOperation(
