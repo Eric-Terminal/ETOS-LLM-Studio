@@ -125,7 +125,7 @@ struct ModelAdvancedSettingsView: View {
 
             Section(
                 header: Text(NSLocalizedString("系统时间注入", comment: "")),
-                footer: Text(NSLocalizedString("开启后可选择在前置系统提示词中插入 <time>，或在消息末尾追加一条 system 时间提示。", comment: ""))
+                footer: Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: ""))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             ) {
