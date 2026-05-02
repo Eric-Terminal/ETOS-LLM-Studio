@@ -1028,8 +1028,13 @@ private struct RequestBodyOptionRow: View {
 
             Spacer(minLength: 8)
 
-            Image(systemName: isDefault ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isDefault ? .tint : .secondary)
+            if isDefault {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.tint)
+            } else {
+                Image(systemName: "circle")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
