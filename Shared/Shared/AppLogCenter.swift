@@ -78,34 +78,6 @@ public struct AppLogEvent: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-public struct AppLogSourceContext: Codable, Hashable, Sendable {
-    public let fileID: String
-    public let function: String
-    public let line: UInt
-    public let capturedOnMainThread: Bool
-
-    public init(
-        fileID: String,
-        function: String,
-        line: UInt,
-        capturedOnMainThread: Bool
-    ) {
-        self.fileID = fileID
-        self.function = function
-        self.line = line
-        self.capturedOnMainThread = capturedOnMainThread
-    }
-
-    var payloadFields: [String: String] {
-        [
-            "来源文件": fileID,
-            "来源函数": function,
-            "来源行": "\(line)",
-            "捕获线程": capturedOnMainThread ? "main" : "background"
-        ]
-    }
-}
-
 public struct AppLogRunFile: Identifiable, Hashable, Sendable {
     public let relativePath: String
     public let day: String
@@ -256,25 +228,15 @@ public enum AppLog {
         category: String,
         action: String,
         message: String,
-        payload: [String: String]? = nil,
-        fileID: StaticString = #fileID,
-        function: StaticString = #function,
-        line: UInt = #line
+        payload: [String: String]? = nil
     ) {
-        let source = AppLogSourceContext(
-            fileID: String(describing: fileID),
-            function: String(describing: function),
-            line: line,
-            capturedOnMainThread: Thread.isMainThread
-        )
         Task { @MainActor in
             AppLogCenter.shared.logDeveloper(
                 level: level,
                 category: category,
                 action: action,
                 message: message,
-                payload: payload,
-                source: source
+                payload: payload
             )
         }
     }
@@ -284,25 +246,15 @@ public enum AppLog {
         category: String,
         action: String,
         message: String? = nil,
-        payload: [String: String]? = nil,
-        fileID: StaticString = #fileID,
-        function: StaticString = #function,
-        line: UInt = #line
+        payload: [String: String]? = nil
     ) {
-        let source = AppLogSourceContext(
-            fileID: String(describing: fileID),
-            function: String(describing: function),
-            line: line,
-            capturedOnMainThread: Thread.isMainThread
-        )
         Task { @MainActor in
             AppLogCenter.shared.logUserOperation(
                 level: level,
                 category: category,
                 action: action,
                 message: message,
-                payload: payload,
-                source: source
+                payload: payload
             )
         }
     }
@@ -343,8 +295,7 @@ public final class AppLogCenter: ObservableObject {
         category: String,
         action: String,
         message: String,
-        payload: [String: String]? = nil,
-        source: AppLogSourceContext? = nil
+        payload: [String: String]? = nil
     ) {
         let event = AppLogEvent(
             channel: .developer,
@@ -352,7 +303,7 @@ public final class AppLogCenter: ObservableObject {
             category: category,
             action: action,
             message: message,
-            payload: Self.enrichedPayload(payload, source: source)
+            payload: payload
         )
         append(event, persist: true)
         mirrorToConsole(event)
@@ -363,10 +314,9 @@ public final class AppLogCenter: ObservableObject {
         category: String,
         action: String,
         message: String? = nil,
-        payload: [String: String]? = nil,
-        source: AppLogSourceContext? = nil
+        payload: [String: String]? = nil
     ) {
-        let redactedPayload = AppLogRedactor.redactPayload(Self.enrichedPayload(payload, source: source))
+        let redactedPayload = AppLogRedactor.redactPayload(payload)
         let event = AppLogEvent(
             channel: .user,
             level: level,
@@ -376,19 +326,6 @@ public final class AppLogCenter: ObservableObject {
             payload: redactedPayload
         )
         append(event, persist: true)
-    }
-
-    private static func enrichedPayload(
-        _ payload: [String: String]?,
-        source: AppLogSourceContext?
-    ) -> [String: String]? {
-        var result = payload ?? [:]
-        if let source {
-            for (key, value) in source.payloadFields where result[key] == nil {
-                result[key] = value
-            }
-        }
-        return result.isEmpty ? nil : result
     }
 
     public func clear(channel: AppLogChannel) {
@@ -601,17 +538,6 @@ enum AppLogRedactor {
         "cookie",
         "set-cookie"
     ]
-    private static let freeTextRedactionRules: [(pattern: String, template: String)] = [
-        ("(?i)(\"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret)\"\\s*:\\s*\")[^\"]+\"", "$1***\""),
-        (#"(?i)(authorization\s*:\s*bearer\s+)[^\s]+"#, "$1***"),
-        (#"(?i)(proxy-authorization\s*:\s*)[^\s]+"#, "$1***"),
-        (#"(?i)(x-api-key\s*:\s*)[^\s\",]+"#, "$1***"),
-        (#"(?i)(api[_-]?key\s*[=:]\s*)[^\s\",]+"#, "$1***"),
-        (#"(?i)(access[_-]?token\s*[=:]\s*)[^\s\",]+"#, "$1***"),
-        (#"(?i)(refresh[_-]?token\s*[=:]\s*)[^\s\",]+"#, "$1***"),
-        (#"(?i)(secret\s*[=:]\s*)[^\s\",]+"#, "$1***"),
-        (#"(?i)sk-[A-Za-z0-9]{12,}"#, "***")
-    ]
 
     static func redactedMessage(_ message: String?) -> String {
         guard let message else { return redactionToken }
@@ -640,33 +566,15 @@ enum AppLogRedactor {
         let sanitized = sanitizeJSONValue(payload)
         guard JSONSerialization.isValidJSONObject(sanitized),
               let data = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]),
-              let text = String(data: data, encoding: .utf8) else {
+              var text = String(data: data, encoding: .utf8) else {
             return nil
         }
 
-        return sanitizeFreeTextForLog(text, maxLength: maxLength)
-    }
-
-    static func sanitizeFreeTextForLog(_ text: String, maxLength: Int = 4_000) -> String {
-        guard !text.isEmpty else { return text }
-        var output = text
-        for rule in freeTextRedactionRules {
-            guard let regex = try? NSRegularExpression(pattern: rule.pattern) else { continue }
-            let range = NSRange(output.startIndex..<output.endIndex, in: output)
-            output = regex.stringByReplacingMatches(
-                in: output,
-                options: [],
-                range: range,
-                withTemplate: rule.template
-            )
-        }
-
         let safeMaxLength = max(200, maxLength)
-        if output.count > safeMaxLength {
-            let originalLength = output.count
-            output = String(output.prefix(safeMaxLength)) + "\n...(已截断，脱敏后长度 \(originalLength) 字符)"
+        if text.count > safeMaxLength {
+            text = String(text.prefix(safeMaxLength)) + "\n...(已截断，原始长度 \(text.count) 字符)"
         }
-        return output
+        return text
     }
 
     static func sanitizeURLForLog(_ url: URL?) -> String {

@@ -165,7 +165,6 @@ public final class FeedbackService: ObservableObject {
         defer { isSubmitting = false }
 
         let challenge = try await requestChallenge()
-        let diagnosticLogs = await FeedbackEnvironmentCollector.collectDiagnosticLogs()
         let payload = SubmitIssuePayload(
             type: draft.category.rawValue,
             title: FeedbackTextSanitizer.redact(sanitizedTitle),
@@ -175,7 +174,7 @@ public final class FeedbackService: ObservableObject {
             actualBehavior: FeedbackTextSanitizer.redact(sanitizedActualBehavior ?? ""),
             extraContext: FeedbackTextSanitizer.redact(sanitizedExtraContext ?? ""),
             environment: FeedbackEnvironmentCollector.collectSnapshot(),
-            logs: diagnosticLogs.map(FeedbackTextSanitizer.redact)
+            logs: FeedbackEnvironmentCollector.collectMinimalLogs().map(FeedbackTextSanitizer.redact)
         )
 
         let bodyData = try encoder.encode(payload)
