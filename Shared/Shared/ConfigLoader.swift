@@ -388,6 +388,7 @@ public struct ConfigLoader {
                         outputModalitiesJSON: encodeRawValues(model.outputModalities),
                         requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
                         rawRequestBodyJSON: model.rawRequestBodyJSON,
+                        requestBodyControlsJSON: encodeJSON(model.requestBodyControls),
                         sortIndex: modelIndex,
                         updatedAt: now
                     )
@@ -546,7 +547,8 @@ public struct ConfigLoader {
                     capabilities: capabilities,
                     legacyCapabilityRawValues: legacyCapabilityRawValues,
                     requestBodyOverrideMode: requestBodyOverrideMode,
-                    rawRequestBodyJSON: modelRow.rawRequestBodyJSON
+                    rawRequestBodyJSON: modelRow.rawRequestBodyJSON,
+                    requestBodyControls: decodeJSON(modelRow.requestBodyControlsJSON, as: [ModelRequestBodyControl].self) ?? []
                 )
                 if !hasStoredCapabilityShape {
                     model = model.applyingInferredCapabilityHints()
@@ -639,6 +641,19 @@ public struct ConfigLoader {
             return "[]"
         }
         return text
+    }
+
+    private static func encodeJSON<T: Encodable>(_ value: T) -> String? {
+        guard let data = try? jsonEncoder.encode(value) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodeJSON<T: Decodable>(_ text: String?, as type: T.Type) -> T? {
+        guard let text,
+              let data = text.data(using: .utf8) else {
+            return nil
+        }
+        return try? jsonDecoder.decode(T.self, from: data)
     }
 
     private static func decodeRawValues<T: RawRepresentable>(_ text: String?, as type: T.Type) -> [T]? where T.RawValue == String {
@@ -896,6 +911,7 @@ public struct ConfigLoader {
             case outputModalitiesJSON = "output_modalities_json"
             case requestBodyOverrideMode = "request_body_override_mode"
             case rawRequestBodyJSON = "raw_request_body_json"
+            case requestBodyControlsJSON = "request_body_controls_json"
             case sortIndex = "sort_index"
             case updatedAt = "updated_at"
         }
@@ -914,6 +930,7 @@ public struct ConfigLoader {
         var outputModalitiesJSON: String?
         var requestBodyOverrideMode: String?
         var rawRequestBodyJSON: String?
+        var requestBodyControlsJSON: String?
         var sortIndex: Int
         var updatedAt: Double
     }

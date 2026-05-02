@@ -103,6 +103,7 @@ struct ContentView: View {
     @State private var legacyMigrationErrorMessage: String?
     @State private var nativeDestination: WatchNativeNavigationDestination? = .chat
     @State private var isQuickModelSelectorPresented = false
+    @State private var isRequestBodyControlsPresented = false
     @State private var isAttachmentImportPresented = false
     @State private var attachmentSourceText: String = ""
     @State private var importSourceHistory: [String] = []
@@ -1274,6 +1275,19 @@ struct ContentView: View {
             bubbleWithLeadingSwipe = AnyView(
                 bubbleWithTrailingSwipe
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
+                            Button {
+                                isRequestBodyControlsPresented = true
+                            } label: {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: inputControlHeight, height: inputControlHeight)
+                            }
+                            .labelStyle(.iconOnly)
+                            .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
+                            .tint(.purple)
+                        }
+
                         Button {
                             isQuickModelSelectorPresented = true
                         } label: {
@@ -1290,6 +1304,19 @@ struct ContentView: View {
             bubbleWithLeadingSwipe = AnyView(
                 bubbleWithTrailingSwipe
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
+                            Button {
+                                isRequestBodyControlsPresented = true
+                            } label: {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: inputControlHeight, height: inputControlHeight)
+                            }
+                            .labelStyle(.iconOnly)
+                            .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
+                            .tint(.purple)
+                        }
+
                         Button {
                             openSessionHistory()
                         } label: {
@@ -1317,6 +1344,13 @@ struct ContentView: View {
                             }
                         )
                     )
+                }
+            }
+            .sheet(isPresented: $isRequestBodyControlsPresented) {
+                if let selectedModel = viewModel.selectedModel {
+                    NavigationStack {
+                        WatchRequestBodyQuickControlsView(runnableModel: selectedModel)
+                    }
                 }
             }
             .sheet(isPresented: $isAttachmentImportPresented) {
@@ -1693,6 +1727,93 @@ private struct WatchQuickModelSelectorView: View {
         }
         .navigationTitle(NSLocalizedString("切换模型", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct WatchRequestBodyQuickControlsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let runnableModel: RunnableModel
+    @State private var state: ModelRequestBodyControlState
+
+    init(runnableModel: RunnableModel) {
+        self.runnableModel = runnableModel
+        _state = State(initialValue: runnableModel.requestBodyControlState)
+    }
+
+    var body: some View {
+        List {
+            if controls.isEmpty {
+                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(controls) { control in
+                    switch control.kind {
+                    case .toggle:
+                        Toggle(isOn: toggleBinding(for: control)) {
+                            Text(verbatim: control.title)
+                        }
+                    case .optionGroup:
+                        if control.options.isEmpty {
+                            Text(verbatim: control.title)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker(selection: optionBinding(for: control)) {
+                                ForEach(control.options) { option in
+                                    Text(verbatim: option.title).tag(option.id)
+                                }
+                            } label: {
+                                Text(verbatim: control.title)
+                            }
+                            .pickerStyle(.navigationLink)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("请求控制", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("完成", comment: "")) {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private var controls: [ModelRequestBodyControl] {
+        runnableModel.model.requestBodyControls.filter(\.isEnabled)
+    }
+
+    private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
+        Binding(
+            get: { state.toggleValuesByControlID[control.id] ?? control.defaultIsActive },
+            set: { newValue in
+                state.toggleValuesByControlID[control.id] = newValue
+                saveState()
+            }
+        )
+    }
+
+    private func optionBinding(for control: ModelRequestBodyControl) -> Binding<String> {
+        Binding(
+            get: {
+                state.selectedOptionIDsByControlID[control.id]
+                    ?? control.defaultOptionID
+                    ?? control.options.first?.id
+                    ?? ""
+            },
+            set: { newValue in
+                state.selectedOptionIDsByControlID[control.id] = newValue
+                saveState()
+            }
+        )
+    }
+
+    private func saveState() {
+        state = ModelRequestBodyControlCompiler.normalized(state, for: runnableModel.model.requestBodyControls)
+        runnableModel.saveRequestBodyControlState(state)
     }
 }
 

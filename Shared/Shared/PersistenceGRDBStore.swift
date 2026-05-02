@@ -4026,6 +4026,7 @@ final class PersistenceAuxiliaryGRDBStore {
                         output_modalities_json TEXT,
                         request_body_override_mode TEXT NOT NULL,
                         raw_request_body_json TEXT,
+                        request_body_controls_json TEXT,
                         sort_index INTEGER NOT NULL,
                         updated_at REAL NOT NULL
                     )
@@ -4704,6 +4705,20 @@ final class PersistenceAuxiliaryGRDBStore {
                 }
                 if !(try tableHasColumn("provider_models", columnName: "output_modalities_json")) {
                     try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN output_modalities_json TEXT")
+                }
+            }
+
+            migrator.registerMigration("v8_add_provider_model_request_body_controls") { db in
+                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                    return columns.contains { row in
+                        let name: String = row["name"]
+                        return name == columnName
+                    }
+                }
+
+                if !(try tableHasColumn("provider_models", columnName: "request_body_controls_json")) {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN request_body_controls_json TEXT")
                 }
             }
         }

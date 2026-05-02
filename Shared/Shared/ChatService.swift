@@ -20,6 +20,29 @@ public struct RunnableModel: Identifiable, Hashable {
     public var id: String { "\(provider.id.uuidString)-\(model.id.uuidString)" }
     public let provider: Provider
     public let model: Model
+
+    public var requestBodyControlState: ModelRequestBodyControlState {
+        ModelRequestBodyControlRuntimeStore.state(
+            forModelKey: id,
+            controls: model.requestBodyControls
+        )
+    }
+
+    public var effectiveOverrideParameters: [String: JSONValue] {
+        model.effectiveOverrideParameters(using: requestBodyControlState)
+    }
+
+    public func effectiveOverrideParameters(using state: ModelRequestBodyControlState) -> [String: JSONValue] {
+        model.effectiveOverrideParameters(using: state)
+    }
+
+    public func saveRequestBodyControlState(_ state: ModelRequestBodyControlState) {
+        ModelRequestBodyControlRuntimeStore.save(
+            state,
+            forModelKey: id,
+            controls: model.requestBodyControls
+        )
+    }
     
     public init(provider: Provider, model: Model) {
         self.provider = provider

@@ -1604,6 +1604,15 @@ public enum SyncEngine {
             changed = true
         }
 
+        let mergedControls = mergeRequestBodyControlsConservatively(
+            merged.requestBodyControls,
+            incoming.requestBodyControls
+        )
+        if mergedControls != merged.requestBodyControls {
+            merged.requestBodyControls = mergedControls
+            changed = true
+        }
+
         return (merged, changed)
     }
 
@@ -2176,6 +2185,14 @@ public enum SyncEngine {
             changed = true
         }
 
+        guard let requestBodyControls = mergeRequestBodyControls(local.requestBodyControls, incoming.requestBodyControls) else {
+            return .conflict
+        }
+        if requestBodyControls != local.requestBodyControls {
+            merged.requestBodyControls = requestBodyControls
+            changed = true
+        }
+
         if changed {
             return .merged(merged)
         }
@@ -2246,6 +2263,36 @@ public enum SyncEngine {
         var merged = local
         for value in incoming where !merged.contains(value) {
             merged.append(value)
+        }
+        return merged
+    }
+
+    private static func mergeRequestBodyControlsConservatively(
+        _ local: [ModelRequestBodyControl],
+        _ incoming: [ModelRequestBodyControl]
+    ) -> [ModelRequestBodyControl] {
+        var merged = local
+        var ids = Set(local.map(\.id))
+        for control in incoming where !ids.contains(control.id) {
+            merged.append(control)
+            ids.insert(control.id)
+        }
+        return merged
+    }
+
+    private static func mergeRequestBodyControls(
+        _ local: [ModelRequestBodyControl],
+        _ incoming: [ModelRequestBodyControl]
+    ) -> [ModelRequestBodyControl]? {
+        var merged = local
+        var indexByID = Dictionary(uniqueKeysWithValues: local.enumerated().map { ($1.id, $0) })
+        for control in incoming {
+            if let index = indexByID[control.id] {
+                guard merged[index] == control else { return nil }
+            } else {
+                indexByID[control.id] = merged.count
+                merged.append(control)
+            }
         }
         return merged
     }
@@ -2667,6 +2714,26 @@ public enum SyncEngine {
             }
             hasher.combine(model.requestBodyOverrideMode.rawValue)
             hasher.combine(model.rawRequestBodyJSON ?? "")
+            for control in model.requestBodyControls.sorted(by: { $0.id < $1.id }) {
+                hasher.combine(control.id)
+                hasher.combine(control.title)
+                hasher.combine(control.kind.rawValue)
+                hasher.combine(control.isEnabled)
+                hasher.combine(control.defaultIsActive)
+                hasher.combine(control.defaultOptionID ?? "")
+                for (key, value) in control.payload.sorted(by: { $0.key < $1.key }) {
+                    hasher.combine("control-payload:\(key)")
+                    hasher.combine(value.prettyPrintedCompact())
+                }
+                for option in control.options.sorted(by: { $0.id < $1.id }) {
+                    hasher.combine(option.id)
+                    hasher.combine(option.title)
+                    for (key, value) in option.payload.sorted(by: { $0.key < $1.key }) {
+                        hasher.combine("option-payload:\(key)")
+                        hasher.combine(value.prettyPrintedCompact())
+                    }
+                }
+            }
             for capability in model.capabilities.sorted(by: { $0.rawValue < $1.rawValue }) {
                 hasher.combine(capability.rawValue)
             }

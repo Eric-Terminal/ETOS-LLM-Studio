@@ -654,7 +654,8 @@ extension Model {
         outputModalities == other.outputModalities &&
         capabilities == other.capabilities &&
         requestBodyOverrideMode == other.requestBodyOverrideMode &&
-        rawRequestBodyJSON == other.rawRequestBodyJSON
+        rawRequestBodyJSON == other.rawRequestBodyJSON &&
+        requestBodyControls == other.requestBodyControls
     }
 }
 

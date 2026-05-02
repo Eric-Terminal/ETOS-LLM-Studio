@@ -59,6 +59,8 @@ struct ModelSettingsView: View {
                 modelCapabilityRows
             }
 
+            structuredControlsSection
+
             Section(NSLocalizedString("自定义Body", comment: "")) {
                 Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
                     Text(NSLocalizedString("键值对", comment: "")).tag(Model.RequestBodyOverrideMode.keyValue)
@@ -309,10 +311,15 @@ extension ModelSettingsView {
             )
         }
 
+        let effectiveOverrides = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: result.parameters,
+            controls: model.requestBodyControls,
+            state: model.defaultRequestBodyControlState
+        )
         let payload = buildRequestPreviewPayload(
             apiFormat: provider.apiFormat,
             model: model,
-            overrides: result.parameters
+            overrides: effectiveOverrides
         )
         let sanitized = sanitizePreviewPayload(payload)
         return RequestBodyPreview(
@@ -453,6 +460,71 @@ extension ModelSettingsView {
         } catch {
             rawJSONError = error.localizedDescription
         }
+    }
+
+    @ViewBuilder
+    private var structuredControlsSection: some View {
+        Section(
+            header: Text(NSLocalizedString("结构化控制", comment: "")),
+            footer: Text(NSLocalizedString("这些控制会在发送时覆盖上面的自定义Body，适合思考预算、搜索、温度等常切参数。", comment: ""))
+        ) {
+            if model.requestBodyControls.isEmpty {
+                Text(NSLocalizedString("暂无结构化控制。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach($model.requestBodyControls) { $control in
+                    RequestBodyControlEditor(control: $control)
+                }
+                .onDelete(perform: deleteRequestBodyControls)
+            }
+
+            Menu {
+                Button {
+                    addToggleControl()
+                } label: {
+                    Label(NSLocalizedString("添加开关", comment: ""), systemImage: "power")
+                }
+                Button {
+                    addOptionGroupControl()
+                } label: {
+                    Label(NSLocalizedString("添加组选项", comment: ""), systemImage: "list.bullet")
+                }
+            } label: {
+                Label(NSLocalizedString("添加控制", comment: ""), systemImage: "plus")
+            }
+        }
+    }
+
+    private func addToggleControl() {
+        model.requestBodyControls.append(
+            ModelRequestBodyControl(
+                title: NSLocalizedString("开启思考", comment: ""),
+                kind: .toggle,
+                payload: ["enable_thinking": .bool(true)]
+            )
+        )
+    }
+
+    private func addOptionGroupControl() {
+        let lowID = "low"
+        model.requestBodyControls.append(
+            ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""),
+                kind: .optionGroup,
+                defaultOptionID: lowID,
+                options: [
+                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["thinking_budget": .string("minimal")]),
+                    ModelRequestBodyControlOption(id: lowID, title: NSLocalizedString("low", comment: ""), payload: ["thinking_budget": .string("low")]),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["thinking_budget": .string("medium")]),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["thinking_budget": .string("high")]),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["thinking_budget": .string("xhigh")])
+                ]
+            )
+        )
+    }
+
+    private func deleteRequestBodyControls(at offsets: IndexSet) {
+        model.requestBodyControls.remove(atOffsets: offsets)
     }
 
     private func buildRequestPreviewPayload(
@@ -818,6 +890,159 @@ private struct RequestBodyPreviewInlineView: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .textSelection(.enabled)
                 .padding(.vertical, 2)
+        }
+    }
+}
+
+private struct RequestBodyControlEditor: View {
+    @Binding var control: ModelRequestBodyControl
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title)
+                Picker(NSLocalizedString("类型", comment: ""), selection: $control.kind) {
+                    Text(NSLocalizedString("开关", comment: "")).tag(ModelRequestBodyControl.Kind.toggle)
+                    Text(NSLocalizedString("组选", comment: "")).tag(ModelRequestBodyControl.Kind.optionGroup)
+                }
+                .pickerStyle(.menu)
+            }
+
+            Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
+
+            switch control.kind {
+            case .toggle:
+                Toggle(NSLocalizedString("默认开启", comment: ""), isOn: $control.defaultIsActive)
+                RequestBodyPayloadEditor(payload: $control.payload)
+            case .optionGroup:
+                if control.options.isEmpty {
+                    Text(NSLocalizedString("暂无选项。", comment: ""))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach($control.options) { $option in
+                        RequestBodyOptionEditor(
+                            option: $option,
+                            defaultOptionID: $control.defaultOptionID,
+                            onDelete: {
+                                deleteOption(withID: option.id)
+                            }
+                        )
+                    }
+                }
+
+                Button {
+                    addOption()
+                } label: {
+                    Label(NSLocalizedString("添加选项", comment: ""), systemImage: "plus")
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func addOption() {
+        let optionID = UUID().uuidString
+        control.options.append(
+            ModelRequestBodyControlOption(
+                id: optionID,
+                title: NSLocalizedString("新选项", comment: ""),
+                payload: [:]
+            )
+        )
+        if control.defaultOptionID == nil {
+            control.defaultOptionID = optionID
+        }
+    }
+
+    private func deleteOptions(at offsets: IndexSet) {
+        let deletedIDs = offsets.compactMap { index in
+            control.options.indices.contains(index) ? control.options[index].id : nil
+        }
+        control.options.remove(atOffsets: offsets)
+        if let defaultOptionID = control.defaultOptionID,
+           deletedIDs.contains(defaultOptionID) {
+            control.defaultOptionID = control.options.first?.id
+        }
+    }
+
+    private func deleteOption(withID optionID: String) {
+        guard let index = control.options.firstIndex(where: { $0.id == optionID }) else { return }
+        deleteOptions(at: IndexSet(integer: index))
+    }
+}
+
+private struct RequestBodyOptionEditor: View {
+    @Binding var option: ModelRequestBodyControlOption
+    @Binding var defaultOptionID: String?
+    let onDelete: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                TextField(NSLocalizedString("选项名称", comment: ""), text: $option.title)
+                if let onDelete {
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("删除选项", comment: ""))
+                }
+                Button {
+                    defaultOptionID = option.id
+                } label: {
+                    Image(systemName: defaultOptionID == option.id ? "checkmark.circle.fill" : "circle")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("设为默认", comment: ""))
+            }
+            RequestBodyPayloadEditor(payload: $option.payload)
+        }
+        .padding(.leading, 8)
+    }
+}
+
+private struct RequestBodyPayloadEditor: View {
+    @Binding var payload: [String: JSONValue]
+    @State private var text: String = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(NSLocalizedString("payload，例如 thinking_budget = low", comment: ""), text: $text, axis: .vertical)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .lineLimit(1...5)
+                .etFont(.footnote.monospaced())
+                .onAppear(perform: syncTextFromPayload)
+                .onChange(of: text) { _, newValue in
+                    parse(newValue)
+                }
+
+            if let error {
+                Text(error)
+                    .etFont(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func syncTextFromPayload() {
+        text = ParameterExpressionParser.serialize(parameters: payload).joined(separator: "\n")
+    }
+
+    private func parse(_ rawText: String) {
+        let lines = rawText
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        do {
+            let expressions = try lines.map { try ParameterExpressionParser.parse($0) }
+            payload = ParameterExpressionParser.buildParameters(from: expressions)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

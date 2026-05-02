@@ -1224,7 +1224,7 @@ public class OpenAIAdapter: APIAdapter {
     // MARK: - 协议方法实现
 
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
-        let rawOverrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let rawOverrides = model.effectiveOverrideParameters.mapValues { $0.toAny() }
         let conversationAPI = resolvedConversationAPI(for: rawOverrides)
 
         switch conversationAPI {
@@ -1380,8 +1380,8 @@ public class OpenAIAdapter: APIAdapter {
 
         let shouldIncludeUsageInStream = boolValue(from: commonPayload[Self.streamIncludeUsageControlKey]) ?? true
 
-        var finalPayload = overrides
-        finalPayload.merge(commonPayload) { _, new in new }
+        var finalPayload = commonPayload
+        finalPayload.merge(overrides) { _, new in new }
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["messages"] = apiMessages
@@ -1513,8 +1513,8 @@ public class OpenAIAdapter: APIAdapter {
             fileAttachments: fileAttachments
         )
 
-        var finalPayload = overrides
-        finalPayload.merge(commonPayload) { _, new in new }
+        var finalPayload = commonPayload
+        finalPayload.merge(overrides) { _, new in new }
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["input"] = inputItems
@@ -1705,7 +1705,7 @@ public class OpenAIAdapter: APIAdapter {
         let transcriptionURL = baseURL.appendingPathComponent("audio/transcriptions")
         let requestModelName = resolvedRequestModelName(
             for: model,
-            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+            overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         
         guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
@@ -1754,7 +1754,7 @@ public class OpenAIAdapter: APIAdapter {
         let embeddingsURL = baseURL.appendingPathComponent("embeddings")
         let requestModelName = resolvedRequestModelName(
             for: model,
-            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+            overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         
         guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
@@ -1773,7 +1773,7 @@ public class OpenAIAdapter: APIAdapter {
             "model": requestModelName,
             "input": texts
         ]
-        let overrides = sanitizedOpenAIControlOverrides(model.model.overrideParameters.mapValues { $0.toAny() })
+        let overrides = sanitizedOpenAIControlOverrides(model.effectiveOverrideParameters.mapValues { $0.toAny() })
         payload.merge(overrides) { _, new in new }
         
         do {
@@ -1809,11 +1809,11 @@ public class OpenAIAdapter: APIAdapter {
         }
 
         let overrides = sanitizedImageGenerationOverrides(
-            model.model.overrideParameters.mapValues { $0.toAny() }
+            model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         let requestModelName = resolvedRequestModelName(
             for: model,
-            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+            overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         if referenceImages.isEmpty {
             let imagesURL = baseURL.appendingPathComponent("images/generations")
@@ -2505,7 +2505,7 @@ public class GeminiAdapter: APIAdapter {
         let action = isStreaming ? "streamGenerateContent" : "generateContent"
         let requestModelName = resolvedRequestModelName(
             for: model,
-            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+            overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         var chatURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
         
@@ -2668,7 +2668,7 @@ public class GeminiAdapter: APIAdapter {
         var payload: [String: Any] = [:]
         
         // 应用模型覆盖参数
-        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let overrides = model.effectiveOverrideParameters.mapValues { $0.toAny() }
         
         // 设置 contents
         payload["contents"] = geminiContents
@@ -2680,16 +2680,16 @@ public class GeminiAdapter: APIAdapter {
         
         // 构建 generationConfig
         var generationConfig: [String: Any] = [:]
-        if let temperature = commonPayload["temperature"] ?? overrides["temperature"] {
+        if let temperature = overrides["temperature"] ?? commonPayload["temperature"] {
             generationConfig["temperature"] = temperature
         }
-        if let topP = commonPayload["top_p"] ?? overrides["top_p"] {
+        if let topP = overrides["top_p"] ?? commonPayload["top_p"] {
             generationConfig["topP"] = topP
         }
-        if let topK = commonPayload["top_k"] ?? overrides["top_k"] {
+        if let topK = overrides["top_k"] ?? commonPayload["top_k"] {
             generationConfig["topK"] = topK
         }
-        if let maxTokens = commonPayload["max_tokens"] ?? overrides["max_tokens"] {
+        if let maxTokens = overrides["max_tokens"] ?? commonPayload["max_tokens"] {
             generationConfig["maxOutputTokens"] = maxTokens
         }
         // 支持 thinking 模式
@@ -2948,7 +2948,7 @@ public class GeminiAdapter: APIAdapter {
         let action = texts.count == 1 ? "embedContent" : "batchEmbedContents"
         let requestModelName = resolvedRequestModelName(
             for: model,
-            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+            overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         var embeddingsURL = baseURL.appendingPathComponent("models/\(requestModelName):\(action)")
         var urlComponents = URLComponents(url: embeddingsURL, resolvingAgainstBaseURL: false)!
@@ -3017,7 +3017,7 @@ public class GeminiAdapter: APIAdapter {
 
         let requestModelName = resolvedRequestModelName(
             for: model,
-            overrides: model.model.overrideParameters.mapValues { $0.toAny() }
+            overrides: model.effectiveOverrideParameters.mapValues { $0.toAny() }
         )
         var imageURL = baseURL.appendingPathComponent("models/\(requestModelName):generateContent")
         var urlComponents = URLComponents(url: imageURL, resolvingAgainstBaseURL: false)!
@@ -3030,7 +3030,7 @@ public class GeminiAdapter: APIAdapter {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: apiKey, to: &request)
 
-        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let overrides = model.effectiveOverrideParameters.mapValues { $0.toAny() }
         var parts: [[String: Any]] = []
         if referenceImages.isEmpty {
             parts.append(["text": prompt])
@@ -3491,7 +3491,7 @@ public class AnthropicAdapter: APIAdapter {
         var payload: [String: Any] = [:]
         
         // 应用模型覆盖参数
-        let overrides = model.model.overrideParameters.mapValues { $0.toAny() }
+        let overrides = model.effectiveOverrideParameters.mapValues { $0.toAny() }
         let requestModelName = resolvedRequestModelName(for: model, overrides: overrides)
         
         payload["model"] = requestModelName
@@ -3503,25 +3503,25 @@ public class AnthropicAdapter: APIAdapter {
         }
         
         // 设置生成参数
-        if let maxTokens = commonPayload["max_tokens"] ?? overrides["max_tokens"] {
+        if let maxTokens = overrides["max_tokens"] ?? commonPayload["max_tokens"] {
             payload["max_tokens"] = maxTokens
         } else {
             // Anthropic 要求必须指定 max_tokens
             payload["max_tokens"] = 8192
         }
         
-        if let temperature = commonPayload["temperature"] ?? overrides["temperature"] {
+        if let temperature = overrides["temperature"] ?? commonPayload["temperature"] {
             payload["temperature"] = temperature
         }
-        if let topP = commonPayload["top_p"] ?? overrides["top_p"] {
+        if let topP = overrides["top_p"] ?? commonPayload["top_p"] {
             payload["top_p"] = topP
         }
-        if let topK = commonPayload["top_k"] ?? overrides["top_k"] {
+        if let topK = overrides["top_k"] ?? commonPayload["top_k"] {
             payload["top_k"] = topK
         }
         
         // 流式设置
-        if let stream = commonPayload["stream"] as? Bool {
+        if let stream = (overrides["stream"] ?? commonPayload["stream"]) as? Bool {
             payload["stream"] = stream
         }
         

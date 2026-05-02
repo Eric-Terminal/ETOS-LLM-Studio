@@ -3416,6 +3416,7 @@ private struct TelegramMessageComposer: View {
     @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
+    @State private var showRequestBodyControls = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
@@ -3475,6 +3476,7 @@ private struct TelegramMessageComposer: View {
             HStack(alignment: .bottom, spacing: 12) {
                 if !isExpandedComposer {
                     attachmentMenuButton(size: controlSize)
+                    requestBodyControlButton(size: controlSize)
                 }
                 
                 // 输入框容器
@@ -3595,6 +3597,15 @@ private struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
             }
         }
+        .sheet(isPresented: $showRequestBodyControls) {
+            if let selectedModel = viewModel.selectedModel {
+                NavigationStack {
+                    RequestBodyQuickControlsView(runnableModel: selectedModel)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {
@@ -3638,6 +3649,23 @@ private struct TelegramMessageComposer: View {
                 .background(glassCircleBackground)
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func requestBodyControlButton(size: CGFloat) -> some View {
+        if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
+            Button {
+                showRequestBodyControls = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
+                    .foregroundColor(TelegramColors.attachButtonColor)
+                    .frame(width: size, height: size)
+                    .background(glassCircleBackground)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
+        }
     }
 
     private func actionControlButton(size: CGFloat) -> some View {
@@ -4181,6 +4209,7 @@ private struct MessageComposerView: View {
     @State private var audioRecorderSheetDetent: PresentationDetent = .fraction(0.5)
     @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showFileImporter = false
+    @State private var showRequestBodyControls = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     var body: some View {
@@ -4238,6 +4267,18 @@ private struct MessageComposerView: View {
                     }
                 }
                 
+                if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
+                    Button {
+                        showRequestBodyControls = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .etFont(.system(size: 24))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
+                }
+
                 // 输入框（拉长的药丸型）
                 if #available(iOS 26.0, *) {
                     HStack(spacing: 8) {
@@ -4343,6 +4384,15 @@ private struct MessageComposerView: View {
                 }
             case .failure(let error):
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
+            }
+        }
+        .sheet(isPresented: $showRequestBodyControls) {
+            if let selectedModel = viewModel.selectedModel {
+                NavigationStack {
+                    RequestBodyQuickControlsView(runnableModel: selectedModel)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -4475,6 +4525,96 @@ private struct MessageComposerView: View {
     }
 
     // file MIME type helper lives at file scope (resolvedFileMimeType)
+}
+
+private struct RequestBodyQuickControlsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let runnableModel: RunnableModel
+    @State private var state: ModelRequestBodyControlState
+
+    init(runnableModel: RunnableModel) {
+        self.runnableModel = runnableModel
+        _state = State(initialValue: runnableModel.requestBodyControlState)
+    }
+
+    var body: some View {
+        List {
+            if controls.isEmpty {
+                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(controls) { control in
+                    switch control.kind {
+                    case .toggle:
+                        Toggle(isOn: toggleBinding(for: control)) {
+                            Text(verbatim: control.title)
+                        }
+                    case .optionGroup:
+                        if control.options.isEmpty {
+                            Text(verbatim: control.title)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Section {
+                                Picker(selection: optionBinding(for: control)) {
+                                    ForEach(control.options) { option in
+                                        Text(verbatim: option.title).tag(option.id)
+                                    }
+                                }
+                                .pickerStyle(.inline)
+                                .labelsHidden()
+                            } header: {
+                                Text(verbatim: control.title)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("请求控制", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("完成", comment: "")) {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private var controls: [ModelRequestBodyControl] {
+        runnableModel.model.requestBodyControls.filter(\.isEnabled)
+    }
+
+    private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
+        Binding(
+            get: { state.toggleValuesByControlID[control.id] ?? control.defaultIsActive },
+            set: { newValue in
+                state.toggleValuesByControlID[control.id] = newValue
+                saveState()
+            }
+        )
+    }
+
+    private func optionBinding(for control: ModelRequestBodyControl) -> Binding<String> {
+        Binding(
+            get: {
+                state.selectedOptionIDsByControlID[control.id]
+                    ?? control.defaultOptionID
+                    ?? control.options.first?.id
+                    ?? ""
+            },
+            set: { newValue in
+                state.selectedOptionIDsByControlID[control.id] = newValue
+                saveState()
+            }
+        )
+    }
+
+    private func saveState() {
+        state = ModelRequestBodyControlCompiler.normalized(state, for: runnableModel.model.requestBodyControls)
+        runnableModel.saveRequestBodyControlState(state)
+    }
 }
 
 // MARK: - Camera Image Picker
