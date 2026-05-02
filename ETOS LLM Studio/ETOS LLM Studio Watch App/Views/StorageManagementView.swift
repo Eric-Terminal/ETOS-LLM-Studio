@@ -510,8 +510,9 @@ private struct WatchImagePreviewView: View {
         }
         .navigationTitle(NSLocalizedString("图片预览", comment: ""))
         .task {
+            let filePath = file.url.path
             image = await Task.detached(priority: .userInitiated) {
-                UIImage(contentsOfFile: file.url.path)
+                UIImage(contentsOfFile: filePath)
             }.value
             isLoading = false
         }

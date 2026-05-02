@@ -4556,7 +4556,7 @@ private struct RequestBodyQuickControlsView: View {
                                 .foregroundStyle(.secondary)
                         } else {
                             Section {
-                                Picker(selection: optionBinding(for: control)) {
+                                Picker(NSLocalizedString("选择选项", comment: ""), selection: optionBinding(for: control)) {
                                     ForEach(control.options) { option in
                                         Text(option.title).tag(option.id)
                                     }
