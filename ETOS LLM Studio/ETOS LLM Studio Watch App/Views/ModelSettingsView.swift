@@ -929,15 +929,21 @@ private struct RequestBodyControlEditor: View {
                     Text(NSLocalizedString("暂无选项。", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach($control.options) { $option in
+                    let lastIndex = control.options.indices.last
+                    ForEach(control.options.indices, id: \.self) { index in
+                        let optionID = control.options[index].id
                         RequestBodyOptionEditor(
-                            option: $option,
+                            option: $control.options[index],
                             defaultOptionID: $control.defaultOptionID,
                             payloadDisplayMode: payloadDisplayMode,
                             onDelete: {
-                                deleteOption(withID: option.id)
+                                deleteOption(withID: optionID)
                             }
                         )
+                        if let lastIndex, index < lastIndex {
+                            Divider()
+                                .padding(.vertical, 6)
+                        }
                     }
                 }
 
@@ -990,6 +996,9 @@ private struct RequestBodyOptionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Text(NSLocalizedString("选项名称", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
             TextField(NSLocalizedString("选项名称", comment: ""), text: $option.title.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
 
@@ -1030,40 +1039,49 @@ private struct RequestBodyPayloadEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             switch payloadDisplayMode {
+            case .keyValue:
+                RequestBodyPayloadKeyValueEditor(payload: $payload)
             case .rawJSON:
-                TextField(
-                    NSLocalizedString("填写 JSON 对象", comment: ""),
-                    text: $text.watchKeyboardNewlineBinding(),
-                    axis: .vertical
+                textPayloadEditor(
+                    title: NSLocalizedString("Value", comment: ""),
+                    placeholder: NSLocalizedString("填写 JSON 对象", comment: ""),
+                    lineLimit: 2...8
                 )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(2...8)
-                .etFont(.caption2.monospaced())
-                .onAppear(perform: syncTextFromPayload)
-                .onChange(of: text, initial: false) { _, newValue in
-                    parse(newValue)
-                }
-                .onChange(of: payloadDisplayMode, initial: false) { _, _ in
-                    syncTextFromPayload()
-                }
             default:
-                TextField(
-                    NSLocalizedString("payload，例如 thinking_budget = low", comment: ""),
-                    text: $text.watchKeyboardNewlineBinding(),
-                    axis: .vertical
+                textPayloadEditor(
+                    title: NSLocalizedString("Value", comment: ""),
+                    placeholder: NSLocalizedString("payload，例如 thinking_budget = low", comment: ""),
+                    lineLimit: 1...5
                 )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...5)
-                .etFont(.caption2.monospaced())
-                .onAppear(perform: syncTextFromPayload)
-                .onChange(of: text, initial: false) { _, newValue in
-                    parse(newValue)
-                }
-                .onChange(of: payloadDisplayMode, initial: false) { _, _ in
-                    syncTextFromPayload()
-                }
+            }
+        }
+    }
+
+    private func textPayloadEditor(
+        title: String,
+        placeholder: String,
+        lineLimit: ClosedRange<Int>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+
+            TextField(
+                placeholder,
+                text: $text.watchKeyboardNewlineBinding(),
+                axis: .vertical
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .lineLimit(lineLimit)
+            .etFont(.caption2.monospaced())
+            .onAppear(perform: syncTextFromPayload)
+            .onChange(of: text, initial: false) { _, newValue in
+                parse(newValue)
+            }
+            .onChange(of: payloadDisplayMode, initial: false) { _, _ in
+                syncTextFromPayload()
             }
 
             if let error {
@@ -1109,6 +1127,164 @@ private struct RequestBodyPayloadEditor: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+private struct RequestBodyPayloadKeyValueEntry: Identifiable, Equatable {
+    let id: UUID
+    var key: String
+    var value: String
+    var error: String?
+
+    init(id: UUID = UUID(), key: String, value: String, error: String? = nil) {
+        self.id = id
+        self.key = key
+        self.value = value
+        self.error = error
+    }
+}
+
+private struct RequestBodyPayloadKeyValueEditor: View {
+    @Binding var payload: [String: JSONValue]
+    @State private var entries: [RequestBodyPayloadKeyValueEntry] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(entries) { entry in
+                if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+                    RequestBodyPayloadKeyValueRow(
+                        entry: $entries[index],
+                        canDelete: entries.count > 1,
+                        onDelete: {
+                            deleteEntry(withID: entry.id)
+                        },
+                        onChange: updatePayload
+                    )
+                }
+            }
+
+            Button {
+                entries.append(RequestBodyPayloadKeyValueEntry(key: "", value: ""))
+            } label: {
+                Label(NSLocalizedString("添加键值对", comment: ""), systemImage: "plus")
+            }
+        }
+        .onAppear(perform: syncEntriesFromPayload)
+    }
+
+    private func syncEntriesFromPayload() {
+        let rows = payload
+            .sorted(by: { $0.key < $1.key })
+            .map { RequestBodyPayloadKeyValueEntry(key: $0.key, value: stringValue(for: $0.value)) }
+        entries = rows.isEmpty ? [RequestBodyPayloadKeyValueEntry(key: "", value: "")] : rows
+    }
+
+    private func updatePayload() {
+        var updatedEntries = entries
+        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
+        var hasError = false
+
+        for index in updatedEntries.indices {
+            do {
+                if let expression = try parseEntry(updatedEntries[index]) {
+                    parsedExpressions.append(expression)
+                }
+                updatedEntries[index].error = nil
+            } catch {
+                hasError = true
+                updatedEntries[index].error = error.localizedDescription
+            }
+        }
+
+        entries = updatedEntries
+        guard !hasError else { return }
+        payload = ParameterExpressionParser.buildParameters(from: parsedExpressions)
+    }
+
+    private func parseEntry(_ entry: RequestBodyPayloadKeyValueEntry) throws -> ParameterExpressionParser.ParsedExpression? {
+        let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty && value.isEmpty {
+            return nil
+        }
+        guard !key.isEmpty else {
+            throw ParameterExpressionParser.ParserError.invalidKey
+        }
+        if value.isEmpty {
+            return ParameterExpressionParser.ParsedExpression(key: key, value: .string(""))
+        }
+        return try ParameterExpressionParser.parse("\(key) = \(entry.value)")
+    }
+
+    private func deleteEntry(withID id: UUID) {
+        entries.removeAll { $0.id == id }
+        if entries.isEmpty {
+            entries.append(RequestBodyPayloadKeyValueEntry(key: "", value: ""))
+        }
+        updatePayload()
+    }
+
+    private func stringValue(for value: JSONValue) -> String {
+        switch value {
+        case .string(let string):
+            return string
+        case .int(let int):
+            return String(int)
+        case .double(let double):
+            return String(double)
+        case .bool(let bool):
+            return bool ? "true" : "false"
+        case .dictionary, .array, .null:
+            return value.prettyPrintedCompact()
+        }
+    }
+}
+
+private struct RequestBodyPayloadKeyValueRow: View {
+    @Binding var entry: RequestBodyPayloadKeyValueEntry
+    let canDelete: Bool
+    let onDelete: () -> Void
+    let onChange: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(NSLocalizedString("Key", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    TextField(NSLocalizedString("Key", comment: ""), text: $entry.key.watchKeyboardNewlineBinding())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .etFont(.caption2.monospaced())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if canDelete {
+                    Button(role: .destructive, action: onDelete) {
+                        Image(systemName: "trash")
+                    }
+                    .accessibilityLabel(NSLocalizedString("删除", comment: ""))
+                }
+            }
+
+            Text(NSLocalizedString("Value", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            TextField(NSLocalizedString("Value", comment: ""), text: $entry.value.watchKeyboardNewlineBinding(), axis: .vertical)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .lineLimit(1...4)
+                .etFont(.caption2.monospaced())
+
+            if let error = entry.error {
+                Text(error)
+                    .etFont(.caption2)
+                    .foregroundStyle(.red)
+            }
+        }
+        .onChange(of: entry.key, initial: false) { _, _ in onChange() }
+        .onChange(of: entry.value, initial: false) { _, _ in onChange() }
     }
 }
 
