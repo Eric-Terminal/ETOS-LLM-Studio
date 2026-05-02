@@ -91,4 +91,14 @@ extension ChatService {
         let data = try worldbookExportService.exportWorldbook(book)
         return (data: data, suggestedFileName: worldbookExportService.suggestedFileName(for: book))
     }
+
+    private func deduplicatedWorldbookIDs(_ ids: [UUID]) -> [UUID] {
+        var seen = Set<UUID>()
+        var ordered: [UUID] = []
+        for id in ids where !seen.contains(id) {
+            seen.insert(id)
+            ordered.append(id)
+        }
+        return ordered
+    }
 }
