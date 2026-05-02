@@ -250,6 +250,8 @@ public enum ParameterExpressionParser {
             return .bool(true)
         } else if lowered == "false" {
             return .bool(false)
+        } else if lowered == "null" {
+            return .null
         } else if let intValue = Int(raw) {
             return .int(intValue)
         } else if let doubleValue = Double(raw) {
@@ -361,7 +363,15 @@ public enum ParameterExpressionParser {
     private static func serializeString(_ value: String) -> String {
         // watchOS 上很难输入双引号，因此只有在必要时才添加引号
         let unsafeCharacters = CharacterSet(charactersIn: ",{}[]\"'")
-        if value.rangeOfCharacter(from: unsafeCharacters) != nil || value.contains(" ") {
+        let lowered = value.lowercased()
+        if value.isEmpty ||
+            lowered == "true" ||
+            lowered == "false" ||
+            lowered == "null" ||
+            Int(value) != nil ||
+            Double(value) != nil ||
+            value.rangeOfCharacter(from: unsafeCharacters) != nil ||
+            value.contains(" ") {
             let escaped = value
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")

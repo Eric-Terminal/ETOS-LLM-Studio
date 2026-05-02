@@ -170,7 +170,7 @@ extension ModelSettingsView {
     }
     
     private func loadEditorState() {
-        requestBodyMode = .keyValue
+        requestBodyMode = model.requestBodyOverrideMode
         loadKeyValueEntriesFromModel()
         loadExpressionEntriesFromModel()
         if let savedRawJSON = model.rawRequestBodyJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -432,18 +432,11 @@ extension ModelSettingsView {
     }
 
     private func keyValueString(for value: JSONValue) -> String {
-        switch value {
-        case .string(let string):
-            return string
-        case .int(let int):
-            return String(int)
-        case .double(let double):
-            return String(double)
-        case .bool(let bool):
-            return bool ? "true" : "false"
-        case .dictionary, .array, .null:
-            return value.prettyPrintedCompact()
+        let serialized = ParameterExpressionParser.serialize(parameters: ["value": value]).first ?? "value="
+        guard let separatorIndex = serialized.firstIndex(of: "=") else {
+            return serialized
         }
+        return String(serialized[serialized.index(after: separatorIndex)...])
     }
 
     private func validateRawJSON(_ rawJSON: String) {
@@ -922,18 +915,18 @@ private struct RequestBodyControlEditor: View {
                     Text(NSLocalizedString("暂无选项。", comment: ""))
                         .foregroundStyle(.secondary)
                 } else {
-                    let lastIndex = control.options.indices.last
-                    ForEach(control.options.indices, id: \.self) { index in
-                        let optionID = control.options[index].id
+                    let lastOptionID = control.options.last?.id
+                    ForEach($control.options) { $option in
+                        let optionID = option.id
                         RequestBodyOptionEditor(
-                            option: $control.options[index],
+                            option: $option,
                             defaultOptionID: $control.defaultOptionID,
                             payloadDisplayMode: payloadDisplayMode,
                             onDelete: {
                                 deleteOption(withID: optionID)
                             }
                         )
-                        if let lastIndex, index < lastIndex {
+                        if optionID != lastOptionID {
                             Divider()
                                 .padding(.vertical, 8)
                         }
@@ -1214,18 +1207,11 @@ private struct RequestBodyPayloadKeyValueEditor: View {
     }
 
     private func stringValue(for value: JSONValue) -> String {
-        switch value {
-        case .string(let string):
-            return string
-        case .int(let int):
-            return String(int)
-        case .double(let double):
-            return String(double)
-        case .bool(let bool):
-            return bool ? "true" : "false"
-        case .dictionary, .array, .null:
-            return value.prettyPrintedCompact()
+        let serialized = ParameterExpressionParser.serialize(parameters: ["value": value]).first ?? "value="
+        guard let separatorIndex = serialized.firstIndex(of: "=") else {
+            return serialized
         }
+        return String(serialized[serialized.index(after: separatorIndex)...])
     }
 }
 

@@ -464,6 +464,26 @@ struct RequestBodyOverrideModeTests {
         }
     }
 
+    @Test("表达式序列化可保留嵌套对象和空值")
+    func testSerializeParametersPreservesNestedStructures() throws {
+        let parameters: [String: JSONValue] = [
+            "extra_body": .dictionary([
+                "abc": .string("123"),
+                "nested": .dictionary([
+                    "flag": .bool(false),
+                    "items": .array([.string("x"), .int(1), .null])
+                ])
+            ]),
+            "temperature": .double(0.7)
+        ]
+
+        let serialized = ParameterExpressionParser.serialize(parameters: parameters)
+        let reparsed = try serialized.map { try ParameterExpressionParser.parse($0) }
+        let rebuilt = ParameterExpressionParser.buildParameters(from: reparsed)
+
+        #expect(rebuilt == parameters)
+    }
+
     @Test("Model 编解码保留请求体编辑模式和原始 JSON 文本")
     func testModelCodingPreservesRequestBodyMode() throws {
         let source = Model(
