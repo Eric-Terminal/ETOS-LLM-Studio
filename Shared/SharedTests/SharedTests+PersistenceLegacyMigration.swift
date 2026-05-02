@@ -1,17 +1,8 @@
 // ============================================================================
-// SharedTests.swift
+// SharedTests+PersistenceLegacyMigration.swift
 // ============================================================================
-// SharedTests 测试文件
-// - 覆盖相关模块的行为与回归测试
-// - 保障迭代过程中的稳定性
+// Persistence 的旧 JSON 导入、启动备份、迁移清理与重复消息修复测试。
 // ============================================================================
-
-//
-//  SharedTests.swift
-//  SharedTests
-//
-//  Created by Eric on 2025/10/5.
-//
 
 import Testing
 import Foundation

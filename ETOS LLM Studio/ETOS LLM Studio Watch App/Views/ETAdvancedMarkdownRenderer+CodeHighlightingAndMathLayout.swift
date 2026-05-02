@@ -1,9 +1,7 @@
 // ============================================================================
-// ETAdvancedMarkdownRenderer.swift
+// ETAdvancedMarkdownRenderer+CodeHighlightingAndMathLayout.swift
 // ============================================================================
-// ETAdvancedMarkdownRenderer 界面 (watchOS)
-// - 负责该功能在 watchOS 端的交互与展示
-// - 适配手表端交互与布局约束
+// watchOS Markdown 渲染器的代码高亮、数学块拆分与行内数学布局。
 // ============================================================================
 
 import Foundation

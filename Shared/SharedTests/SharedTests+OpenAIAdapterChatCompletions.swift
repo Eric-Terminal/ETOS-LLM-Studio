@@ -1,17 +1,8 @@
 // ============================================================================
-// SharedTests.swift
+// SharedTests+OpenAIAdapterChatCompletions.swift
 // ============================================================================
-// SharedTests 测试文件
-// - 覆盖相关模块的行为与回归测试
-// - 保障迭代过程中的稳定性
+// OpenAI 适配器的模型能力、工具 schema、Chat Completions 请求与流式解析测试。
 // ============================================================================
-
-//
-//  SharedTests.swift
-//  SharedTests
-//
-//  Created by Eric on 2025/10/5.
-//
 
 import Testing
 import Foundation

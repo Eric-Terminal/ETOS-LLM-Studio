@@ -1,15 +1,8 @@
 // ============================================================================
-// MCPIntegrationView.swift
+// MCPIntegrationView+DebuggersAndEditor.swift
 // ============================================================================
-// MCPIntegrationView 界面 (watchOS)
-// - 负责该功能在 watchOS 端的交互与展示
-// - 适配手表端交互与布局约束
+// watchOS MCP 集成页的工具调试、资源调试与服务器编辑视图。
 // ============================================================================
-
-//
-//  MCPIntegrationView.swift
-//  ETOS LLM Studio Watch App
-//
 
 import SwiftUI
 import Foundation

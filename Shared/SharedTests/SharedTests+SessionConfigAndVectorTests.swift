@@ -1,17 +1,8 @@
 // ============================================================================
-// SharedTests.swift
+// SharedTests+SessionConfigAndVectorTests.swift
 // ============================================================================
-// SharedTests 测试文件
-// - 覆盖相关模块的行为与回归测试
-// - 保障迭代过程中的稳定性
+// 会话管理、ConfigLoader、同步包编码与向量检索基础设施测试。
 // ============================================================================
-
-//
-//  SharedTests.swift
-//  SharedTests
-//
-//  Created by Eric on 2025/10/5.
-//
 
 import Testing
 import Foundation
