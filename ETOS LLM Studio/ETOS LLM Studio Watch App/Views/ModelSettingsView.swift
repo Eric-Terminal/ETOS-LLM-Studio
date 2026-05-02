@@ -905,8 +905,16 @@ private struct RequestBodyControlEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
-            TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title.watchKeyboardNewlineBinding())
-                .textInputAutocapitalization(.never)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("显示名称", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title.watchKeyboardNewlineBinding())
+                    .textInputAutocapitalization(.never)
+            }
+
+            Divider()
+                .padding(.vertical, 2)
 
             switch control.kind {
             case .toggle:

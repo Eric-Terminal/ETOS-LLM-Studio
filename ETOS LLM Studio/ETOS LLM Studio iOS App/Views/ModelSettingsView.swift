@@ -900,7 +900,15 @@ private struct RequestBodyControlEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
-            TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("显示名称", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title)
+            }
+
+            Divider()
+                .padding(.vertical, 2)
 
             switch control.kind {
             case .toggle:
