@@ -13,6 +13,13 @@ import Foundation
 @Suite("Worldbook Engine Tests")
 struct WorldbookEngineTests {
 
+    @Test("默认世界书注入字符数不限制")
+    func testDefaultWorldbookInjectionCharactersUnlimited() {
+        let settings = WorldbookSettings()
+
+        #expect(settings.maxInjectedCharacters == -1)
+    }
+
     @Test("engine handles secondary logic, probability and sticky")
     func testEngineCoreRules() {
         let tempURL = FileManager.default.temporaryDirectory
@@ -93,6 +100,38 @@ struct WorldbookEngineTests {
         )
 
         #expect(second.after.contains(where: { $0.content.contains("粘性") }))
+    }
+
+    @Test("engine treats negative injected character budget as unlimited")
+    func testNegativeInjectedCharacterBudgetIsUnlimited() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-unlimited-budget-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+        let longContent = String(repeating: "设定", count: 200)
+        let entry = WorldbookEntry(
+            content: longContent,
+            keys: ["无限"],
+            position: .after
+        )
+        let book = Worldbook(
+            name: "无限预算测试",
+            entries: [entry],
+            settings: WorldbookSettings(maxInjectedEntries: 1, maxInjectedCharacters: -1)
+        )
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "无限")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.contains(where: { $0.content == longContent }))
     }
 
     @Test("engine supports atDepth / emTop / emBottom positions")

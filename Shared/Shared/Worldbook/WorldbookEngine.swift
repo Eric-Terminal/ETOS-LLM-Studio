@@ -244,7 +244,9 @@ public struct WorldbookEngine {
         let turn = runtimeStore.nextTurn(for: context.sessionID)
         let maxRecursionDepth = activeBooks.map { $0.settings.maxRecursionDepth }.max() ?? 0
         let maxInjectedEntries = activeBooks.map { $0.settings.maxInjectedEntries }.max() ?? 64
-        let maxInjectedChars = activeBooks.map { $0.settings.maxInjectedCharacters }.max() ?? 6000
+        let maxInjectedChars = activeBooks.contains(where: { $0.settings.maxInjectedCharacters < 0 })
+            ? -1
+            : activeBooks.map { $0.settings.maxInjectedCharacters }.max() ?? -1
 
         var triggered: [WorldbookInjection] = []
         var triggeredIDs = Set<UUID>()
@@ -577,7 +579,7 @@ public struct WorldbookEngine {
             if result.count >= maxEntries { break }
             let rendered = item.renderedContent
             let nextChars = totalChars + rendered.count
-            if nextChars > maxCharacters {
+            if maxCharacters >= 0, nextChars > maxCharacters {
                 continue
             }
             result.append(item)

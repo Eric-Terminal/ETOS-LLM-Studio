@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import UniformTypeIdentifiers
 import Shared
 
@@ -575,6 +576,13 @@ private struct WorldbookDetailView: View {
         worldbook?.entries ?? []
     }
 
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
     var body: some View {
         List {
             if let worldbook {
@@ -593,27 +601,30 @@ private struct WorldbookDetailView: View {
                 }
 
                 Section(NSLocalizedString("默认设置", comment: "Default settings")) {
-                    Stepper(
-                        String(format: NSLocalizedString("扫描深度：%d", comment: "Scan depth value"), worldbook.settings.scanDepth),
-                        value: settingsScanDepthBinding,
-                        in: 1...64
-                    )
-                    Stepper(
-                        String(format: NSLocalizedString("最大递归层级：%d", comment: "Max recursion depth value"), worldbook.settings.maxRecursionDepth),
-                        value: settingsMaxRecursionDepthBinding,
-                        in: 0...16
-                    )
-                    Stepper(
-                        String(format: NSLocalizedString("最大注入条目：%d", comment: "Max injected entries value"), worldbook.settings.maxInjectedEntries),
-                        value: settingsMaxInjectedEntriesBinding,
-                        in: 1...256
-                    )
-                    Stepper(
-                        String(format: NSLocalizedString("最大注入字符：%d", comment: "Max injected chars value"), worldbook.settings.maxInjectedCharacters),
-                        value: settingsMaxInjectedCharsBinding,
-                        in: 256...20000,
-                        step: 128
-                    )
+                    LabeledContent(NSLocalizedString("扫描深度", comment: "Scan depth label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsScanDepthBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
+                    LabeledContent(NSLocalizedString("最大递归层级", comment: "Max recursion depth label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsMaxRecursionDepthBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
+                    LabeledContent(NSLocalizedString("最大注入条目", comment: "Max injected entries label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsMaxInjectedEntriesBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
+                    LabeledContent(NSLocalizedString("最大注入字符", comment: "Max injected characters label")) {
+                        TextField(NSLocalizedString("-1 表示不限制", comment: "Unlimited placeholder"), value: settingsMaxInjectedCharsBinding, formatter: numberFormatter)
+                            .keyboardType(.numbersAndPunctuation)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 120)
+                    }
                     Picker(NSLocalizedString("备用插入位置", comment: "Fallback position"), selection: settingsFallbackPositionBinding) {
                         ForEach(WorldbookPosition.allCases, id: \.self) { position in
                             Text(worldbookPositionLabel(position))
@@ -796,9 +807,9 @@ private struct WorldbookDetailView: View {
 
     private var settingsMaxInjectedCharsBinding: Binding<Int> {
         Binding(
-            get: { worldbook?.settings.maxInjectedCharacters ?? 6000 },
+            get: { worldbook?.settings.maxInjectedCharacters ?? -1 },
             set: { value in
-                updateWorldbook { $0.settings.maxInjectedCharacters = max(256, value) }
+                updateWorldbook { $0.settings.maxInjectedCharacters = value < 0 ? -1 : max(1, value) }
             }
         )
     }
@@ -970,6 +981,76 @@ private struct WorldbookEntryEditView: View {
         return true
     }
 
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var decimalFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }
+
+    private var orderBinding: Binding<Int> {
+        Binding(
+            get: { draft.order },
+            set: { draft.order = min(1000, max(0, $0)) }
+        )
+    }
+
+    private var depthBinding: Binding<Int> {
+        Binding(
+            get: { draft.depth },
+            set: { draft.depth = max(0, $0) }
+        )
+    }
+
+    private var scanDepthBinding: Binding<Int> {
+        Binding(
+            get: { draft.scanDepth },
+            set: { draft.scanDepth = max(1, $0) }
+        )
+    }
+
+    private var stickyBinding: Binding<Int> {
+        Binding(
+            get: { draft.sticky },
+            set: { draft.sticky = max(1, $0) }
+        )
+    }
+
+    private var cooldownBinding: Binding<Int> {
+        Binding(
+            get: { draft.cooldown },
+            set: { draft.cooldown = max(1, $0) }
+        )
+    }
+
+    private var delayBinding: Binding<Int> {
+        Binding(
+            get: { draft.delay },
+            set: { draft.delay = max(1, $0) }
+        )
+    }
+
+    private var probabilityBinding: Binding<Double> {
+        Binding(
+            get: { draft.probability },
+            set: { draft.probability = max(1, min(100, $0)) }
+        )
+    }
+
+    private var groupWeightBinding: Binding<Double> {
+        Binding(
+            get: { draft.groupWeight },
+            set: { draft.groupWeight = max(0, min(10, $0)) }
+        )
+    }
+
     var body: some View {
         Form {
             Section(NSLocalizedString("基础", comment: "Base section")) {
@@ -998,19 +1079,19 @@ private struct WorldbookEntryEditView: View {
                 Toggle(NSLocalizedString("整词匹配", comment: "Whole word match"), isOn: $draft.matchWholeWords)
                 Toggle(NSLocalizedString("启用概率", comment: "Enable probability"), isOn: $draft.useProbability)
                 if draft.useProbability {
-                    HStack {
-                        Text(NSLocalizedString("概率", comment: "Probability"))
-                        Spacer()
-                        Text("\(Int(draft.probability.rounded()))%")
-                            .foregroundStyle(.secondary)
+                    LabeledContent(NSLocalizedString("概率", comment: "Probability")) {
+                        TextField(NSLocalizedString("百分比", comment: "Percent placeholder"), value: probabilityBinding, formatter: decimalFormatter)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
                     }
-                    Slider(value: $draft.probability, in: 1...100, step: 1)
                 }
-                Stepper(
-                    String(format: NSLocalizedString("优先级：%d", comment: "Order value"), draft.order),
-                    value: $draft.order,
-                    in: 0...1000
-                )
+                LabeledContent(NSLocalizedString("优先级", comment: "Order label")) {
+                    TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: orderBinding, formatter: numberFormatter)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 88)
+                }
             }
 
             Section(NSLocalizedString("插入方式", comment: "Injection mode section")) {
@@ -1027,12 +1108,11 @@ private struct WorldbookEntryEditView: View {
                 }
 
                 if draft.position == .atDepth {
-                    Stepper {
-                        Text(String(format: NSLocalizedString("深度：%d", comment: "Depth value"), draft.depth))
-                    } onIncrement: {
-                        draft.depth += 1
-                    } onDecrement: {
-                        draft.depth = max(0, draft.depth - 1)
+                    LabeledContent(NSLocalizedString("深度", comment: "Depth label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: depthBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
                     }
                 }
 
@@ -1044,51 +1124,54 @@ private struct WorldbookEntryEditView: View {
             Section(NSLocalizedString("扫描与分组", comment: "Scan and group section")) {
                 Toggle(NSLocalizedString("覆盖扫描深度", comment: "Override scan depth"), isOn: $draft.enableEntryScanDepth)
                 if draft.enableEntryScanDepth {
-                    Stepper(
-                        String(format: NSLocalizedString("扫描深度：%d", comment: "Scan depth value"), draft.scanDepth),
-                        value: $draft.scanDepth,
-                        in: 1...64
-                    )
+                    LabeledContent(NSLocalizedString("扫描深度", comment: "Scan depth label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: scanDepthBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
                 }
 
                 TextField(NSLocalizedString("分组名", comment: "Group name"), text: $draft.groupName)
                 Toggle(NSLocalizedString("组覆盖", comment: "Group override"), isOn: $draft.groupOverride)
                 Toggle(NSLocalizedString("组评分", comment: "Use group scoring"), isOn: $draft.useGroupScoring)
-                HStack {
-                    Text(NSLocalizedString("组权重", comment: "Group weight"))
-                    Spacer()
-                    Text(String(format: "%.1f", draft.groupWeight))
-                        .foregroundStyle(.secondary)
+                LabeledContent(NSLocalizedString("组权重", comment: "Group weight")) {
+                    TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: groupWeightBinding, formatter: decimalFormatter)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 88)
                 }
-                Slider(value: $draft.groupWeight, in: 0...10, step: 0.5)
             }
 
             Section(NSLocalizedString("定时效果", comment: "Timed effects section")) {
                 Toggle(NSLocalizedString("Sticky", comment: "Sticky toggle"), isOn: $draft.enableSticky)
                 if draft.enableSticky {
-                    Stepper(
-                        String(format: NSLocalizedString("Sticky 回合：%d", comment: "Sticky turns"), draft.sticky),
-                        value: $draft.sticky,
-                        in: 1...20
-                    )
+                    LabeledContent(NSLocalizedString("Sticky 回合", comment: "Sticky turns label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: stickyBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
                 }
 
                 Toggle(NSLocalizedString("Cooldown", comment: "Cooldown toggle"), isOn: $draft.enableCooldown)
                 if draft.enableCooldown {
-                    Stepper(
-                        String(format: NSLocalizedString("Cooldown 回合：%d", comment: "Cooldown turns"), draft.cooldown),
-                        value: $draft.cooldown,
-                        in: 1...20
-                    )
+                    LabeledContent(NSLocalizedString("Cooldown 回合", comment: "Cooldown turns label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: cooldownBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
                 }
 
                 Toggle(NSLocalizedString("Delay", comment: "Delay toggle"), isOn: $draft.enableDelay)
                 if draft.enableDelay {
-                    Stepper(
-                        String(format: NSLocalizedString("Delay 回合：%d", comment: "Delay turns"), draft.delay),
-                        value: $draft.delay,
-                        in: 1...20
-                    )
+                    LabeledContent(NSLocalizedString("Delay 回合", comment: "Delay turns label")) {
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: delayBinding, formatter: numberFormatter)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 88)
+                    }
                 }
             }
 

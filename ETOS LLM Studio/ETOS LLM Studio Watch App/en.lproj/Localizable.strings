@@ -2356,3 +2356,14 @@
 "文件：%@" = "File: %@";
 "以下内容来自文件附件文本提取：\n\n%@" = "The following content was extracted from file attachments:\n\n%@";
 "附件“%@”文本提取失败：%@" = "Failed to extract text from attachment \"%@\": %@";
+"扫描深度" = "Scan depth";
+"最大递归层级" = "Max recursion depth";
+"最大注入条目" = "Max injected entries";
+"最大注入字符" = "Max injected characters";
+"-1 表示不限制" = "-1 means no limit";
+"百分比" = "Percent";
+"优先级" = "Priority";
+"深度" = "Depth";
+"Sticky 回合" = "Sticky turns";
+"Cooldown 回合" = "Cooldown turns";
+"Delay 回合" = "Delay turns";

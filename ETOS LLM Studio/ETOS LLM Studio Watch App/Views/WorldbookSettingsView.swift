@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 
 struct WorldbookSettingsView: View {
@@ -384,6 +385,68 @@ private struct WatchWorldbookDetailView: View {
         }
     }
 
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var settingsScanDepthBinding: Binding<Int> {
+        Binding(
+            get: { worldbook?.settings.scanDepth ?? 4 },
+            set: { value in
+                updateWorldbook { book in
+                    book.settings.scanDepth = max(1, value)
+                }
+            }
+        )
+    }
+
+    private var settingsMaxRecursionDepthBinding: Binding<Int> {
+        Binding(
+            get: { worldbook?.settings.maxRecursionDepth ?? 2 },
+            set: { value in
+                updateWorldbook { book in
+                    book.settings.maxRecursionDepth = max(0, value)
+                }
+            }
+        )
+    }
+
+    private var settingsMaxInjectedEntriesBinding: Binding<Int> {
+        Binding(
+            get: { worldbook?.settings.maxInjectedEntries ?? 64 },
+            set: { value in
+                updateWorldbook { book in
+                    book.settings.maxInjectedEntries = max(1, value)
+                }
+            }
+        )
+    }
+
+    private var settingsMaxInjectedCharsBinding: Binding<Int> {
+        Binding(
+            get: { worldbook?.settings.maxInjectedCharacters ?? -1 },
+            set: { value in
+                updateWorldbook { book in
+                    book.settings.maxInjectedCharacters = value < 0 ? -1 : max(1, value)
+                }
+            }
+        )
+    }
+
+    private var settingsFallbackPositionBinding: Binding<WorldbookPosition> {
+        Binding(
+            get: { worldbook?.settings.fallbackPosition ?? .after },
+            set: { value in
+                updateWorldbook { book in
+                    book.settings.fallbackPosition = value
+                }
+            }
+        )
+    }
+
     var body: some View {
         List {
             if let worldbook {
@@ -402,6 +465,42 @@ private struct WatchWorldbookDetailView: View {
                     Text(String(format: NSLocalizedString("条目数量：%d", comment: "Entry count"), worldbook.entries.count))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
+                }
+
+                Section(NSLocalizedString("默认设置", comment: "Default settings")) {
+                    HStack {
+                        Text(NSLocalizedString("扫描深度", comment: "Scan depth label"))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsScanDepthBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+                    HStack {
+                        Text(NSLocalizedString("最大递归层级", comment: "Max recursion depth label"))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsMaxRecursionDepthBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+                    HStack {
+                        Text(NSLocalizedString("最大注入条目", comment: "Max injected entries label"))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsMaxInjectedEntriesBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+                    HStack {
+                        Text(NSLocalizedString("最大注入字符", comment: "Max injected characters label"))
+                        Spacer()
+                        TextField(NSLocalizedString("-1 表示不限制", comment: "Unlimited placeholder"), value: settingsMaxInjectedCharsBinding, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 76)
+                    }
+                    Picker(NSLocalizedString("备用插入位置", comment: "Fallback position"), selection: settingsFallbackPositionBinding) {
+                        ForEach(WorldbookPosition.allCases, id: \.self) { position in
+                            Text(worldbookPositionLabel(position)).tag(position)
+                        }
+                    }
                 }
 
                 Section(NSLocalizedString("条目", comment: "Entries section")) {
@@ -504,34 +603,36 @@ private struct WatchWorldbookDetailView: View {
     }
 
     private func saveBasicInfo() {
-        guard var worldbook else { return }
         let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
-        if !trimmedName.isEmpty {
-            worldbook.name = trimmedName
+        updateWorldbook { worldbook in
+            if !trimmedName.isEmpty {
+                worldbook.name = trimmedName
+            }
+            worldbook.description = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         }
-        worldbook.description = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
-        worldbook.updatedAt = Date()
-        ChatService.shared.saveWorldbook(worldbook)
-        self.worldbook = worldbook
     }
 
     private func upsertEntry(_ entry: WorldbookEntry) {
-        guard var worldbook else { return }
-        if let index = worldbook.entries.firstIndex(where: { $0.id == entry.id }) {
-            worldbook.entries[index] = entry
-        } else {
-            worldbook.entries.append(entry)
+        updateWorldbook { worldbook in
+            if let index = worldbook.entries.firstIndex(where: { $0.id == entry.id }) {
+                worldbook.entries[index] = entry
+            } else {
+                worldbook.entries.append(entry)
+            }
+            worldbook.entries = normalizeEntryOrder(worldbook.entries)
         }
-        worldbook.entries = normalizeEntryOrder(worldbook.entries)
-        worldbook.updatedAt = Date()
-        ChatService.shared.saveWorldbook(worldbook)
-        self.worldbook = worldbook
     }
 
     private func deleteEntry(_ entryID: UUID) {
+        updateWorldbook { worldbook in
+            worldbook.entries.removeAll { $0.id == entryID }
+            worldbook.entries = normalizeEntryOrder(worldbook.entries)
+        }
+    }
+
+    private func updateWorldbook(_ mutate: (inout Worldbook) -> Void) {
         guard var worldbook else { return }
-        worldbook.entries.removeAll { $0.id == entryID }
-        worldbook.entries = normalizeEntryOrder(worldbook.entries)
+        mutate(&worldbook)
         worldbook.updatedAt = Date()
         ChatService.shared.saveWorldbook(worldbook)
         self.worldbook = worldbook

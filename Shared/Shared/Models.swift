@@ -2382,14 +2382,33 @@ public struct WorldbookSettings: Codable, Hashable, Sendable {
         scanDepth: Int = 4,
         maxRecursionDepth: Int = 2,
         maxInjectedEntries: Int = 64,
-        maxInjectedCharacters: Int = 6000,
+        maxInjectedCharacters: Int = -1,
         fallbackPosition: WorldbookPosition = .after
     ) {
         self.scanDepth = max(1, scanDepth)
         self.maxRecursionDepth = max(0, maxRecursionDepth)
         self.maxInjectedEntries = max(1, maxInjectedEntries)
-        self.maxInjectedCharacters = max(256, maxInjectedCharacters)
+        self.maxInjectedCharacters = maxInjectedCharacters < 0 ? -1 : max(1, maxInjectedCharacters)
         self.fallbackPosition = fallbackPosition
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case scanDepth
+        case maxRecursionDepth
+        case maxInjectedEntries
+        case maxInjectedCharacters
+        case fallbackPosition
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            scanDepth: try container.decodeIfPresent(Int.self, forKey: .scanDepth) ?? 4,
+            maxRecursionDepth: try container.decodeIfPresent(Int.self, forKey: .maxRecursionDepth) ?? 2,
+            maxInjectedEntries: try container.decodeIfPresent(Int.self, forKey: .maxInjectedEntries) ?? 64,
+            maxInjectedCharacters: try container.decodeIfPresent(Int.self, forKey: .maxInjectedCharacters) ?? -1,
+            fallbackPosition: try container.decodeIfPresent(WorldbookPosition.self, forKey: .fallbackPosition) ?? .after
+        )
     }
 }
 
