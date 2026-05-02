@@ -1101,12 +1101,18 @@ private struct KeyValueRow: View {
     @Binding var entry: ModelSettingsView.KeyValueEntry
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("Key", comment: ""))
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
             TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .etFont(.body.monospaced())
 
+            Text(NSLocalizedString("Value", comment: ""))
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
             TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -1119,7 +1125,7 @@ private struct KeyValueRow: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 }
 
