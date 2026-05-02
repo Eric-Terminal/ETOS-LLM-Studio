@@ -59,8 +59,6 @@ struct ModelSettingsView: View {
                 modelCapabilityRows
             }
 
-            structuredControlsSection
-
             Section(NSLocalizedString("自定义Body", comment: "")) {
                 Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
                     Text(NSLocalizedString("键值对", comment: "")).tag(Model.RequestBodyOverrideMode.keyValue)
@@ -68,6 +66,8 @@ struct ModelSettingsView: View {
                     Text(NSLocalizedString("原始 JSON", comment: "")).tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
             }
+
+            structuredControlsSection
 
             if requestBodyMode == .keyValue {
                 Section(NSLocalizedString("键值对", comment: "")) {
@@ -472,7 +472,10 @@ extension ModelSettingsView {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach($model.requestBodyControls) { $control in
-                    RequestBodyControlEditor(control: $control)
+                    RequestBodyControlEditor(
+                        control: $control,
+                        payloadDisplayMode: requestBodyMode
+                    )
                 }
                 .onDelete(perform: deleteRequestBodyControls)
             }
@@ -895,6 +898,7 @@ private struct RequestBodyPreviewInlineView: View {
 
 private struct RequestBodyControlEditor: View {
     @Binding var control: ModelRequestBodyControl
+    let payloadDisplayMode: Model.RequestBodyOverrideMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -912,7 +916,10 @@ private struct RequestBodyControlEditor: View {
             switch control.kind {
             case .toggle:
                 Toggle(NSLocalizedString("默认开启", comment: ""), isOn: $control.defaultIsActive)
-                RequestBodyPayloadEditor(payload: $control.payload)
+                RequestBodyPayloadEditor(
+                    payloadDisplayMode: payloadDisplayMode,
+                    payload: $control.payload
+                )
             case .optionGroup:
                 if control.options.isEmpty {
                     Text(NSLocalizedString("暂无选项。", comment: ""))
@@ -922,6 +929,7 @@ private struct RequestBodyControlEditor: View {
                         RequestBodyOptionEditor(
                             option: $option,
                             defaultOptionID: $control.defaultOptionID,
+                            payloadDisplayMode: payloadDisplayMode,
                             onDelete: {
                                 deleteOption(withID: option.id)
                             }
@@ -973,6 +981,7 @@ private struct RequestBodyControlEditor: View {
 private struct RequestBodyOptionEditor: View {
     @Binding var option: ModelRequestBodyControlOption
     @Binding var defaultOptionID: String?
+    let payloadDisplayMode: Model.RequestBodyOverrideMode
     let onDelete: (() -> Void)?
 
     var body: some View {
@@ -996,27 +1005,49 @@ private struct RequestBodyOptionEditor: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(NSLocalizedString("设为默认", comment: ""))
             }
-            RequestBodyPayloadEditor(payload: $option.payload)
+            RequestBodyPayloadEditor(
+                payloadDisplayMode: payloadDisplayMode,
+                payload: $option.payload
+            )
         }
         .padding(.leading, 8)
     }
 }
 
 private struct RequestBodyPayloadEditor: View {
+    let payloadDisplayMode: Model.RequestBodyOverrideMode
     @Binding var payload: [String: JSONValue]
     @State private var text: String = ""
     @State private var error: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField(NSLocalizedString("payload，例如 thinking_budget = low", comment: ""), text: $text, axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...5)
-                .etFont(.footnote.monospaced())
-                .onAppear(perform: syncTextFromPayload)
-                .onChange(of: text) { _, newValue in
-                    parse(newValue)
+            switch payloadDisplayMode {
+            case .rawJSON:
+                TextField(NSLocalizedString("填写 JSON 对象", comment: ""), text: $text, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(2...8)
+                    .etFont(.footnote.monospaced())
+                    .onAppear(perform: syncTextFromPayload)
+                    .onChange(of: text) { _, newValue in
+                        parse(newValue)
+                    }
+                    .onChange(of: payloadDisplayMode) { _, _ in
+                        syncTextFromPayload()
+                    }
+            default:
+                TextField(NSLocalizedString("payload，例如 thinking_budget = low", comment: ""), text: $text, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(1...5)
+                    .etFont(.footnote.monospaced())
+                    .onAppear(perform: syncTextFromPayload)
+                    .onChange(of: text) { _, newValue in
+                        parse(newValue)
+                }
+                .onChange(of: payloadDisplayMode) { _, _ in
+                    syncTextFromPayload()
                 }
 
             if let error {
@@ -1028,17 +1059,36 @@ private struct RequestBodyPayloadEditor: View {
     }
 
     private func syncTextFromPayload() {
-        text = ParameterExpressionParser.serialize(parameters: payload).joined(separator: "\n")
+        switch payloadDisplayMode {
+        case .rawJSON:
+            text = ParameterExpressionParser.serializeRawJSONObject(parameters: payload)
+        case .keyValue, .expression:
+            text = ParameterExpressionParser.serialize(parameters: payload).joined(separator: "\n")
+        @unknown default:
+            text = ParameterExpressionParser.serialize(parameters: payload).joined(separator: "\n")
+        }
     }
 
     private func parse(_ rawText: String) {
-        let lines = rawText
-            .split(whereSeparator: \.isNewline)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
         do {
-            let expressions = try lines.map { try ParameterExpressionParser.parse($0) }
-            payload = ParameterExpressionParser.buildParameters(from: expressions)
+            switch payloadDisplayMode {
+            case .rawJSON:
+                payload = try ParameterExpressionParser.parseRawJSONObject(rawText)
+            case .keyValue, .expression:
+                let lines = rawText
+                    .split(whereSeparator: \.isNewline)
+                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let expressions = try lines.map { try ParameterExpressionParser.parse($0) }
+                payload = ParameterExpressionParser.buildParameters(from: expressions)
+            @unknown default:
+                let lines = rawText
+                    .split(whereSeparator: \.isNewline)
+                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let expressions = try lines.map { try ParameterExpressionParser.parse($0) }
+                payload = ParameterExpressionParser.buildParameters(from: expressions)
+            }
             error = nil
         } catch {
             self.error = error.localizedDescription
