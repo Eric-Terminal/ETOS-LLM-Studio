@@ -1268,12 +1268,14 @@ struct ChatView: View {
                     Text(NSLocalizedString("切换当前对话的模型", comment: ""))
                 }
 
-                Section {
-                    nativeModelPickerRequestControlRows
-                } header: {
-                    Text(NSLocalizedString("请求控制", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("点击控制名称后选择具体参数。", comment: ""))
+                if hasModelPickerRequestControls {
+                    Section {
+                        nativeModelPickerRequestControlRows
+                    } header: {
+                        Text(NSLocalizedString("请求控制", comment: ""))
+                    } footer: {
+                        Text(NSLocalizedString("点击控制名称后选择具体参数。", comment: ""))
+                    }
                 }
 
                 if hasMoreModelChoices {
@@ -1319,22 +1321,13 @@ struct ChatView: View {
     @ViewBuilder
     private var nativeModelPickerRequestControlRows: some View {
         if let selectedModel = viewModel.selectedModel {
-            let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
-            if controls.isEmpty {
-                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(controls) { control in
-                    NavigationLink {
-                        RequestBodyControlDetailView(runnableModel: selectedModel, control: control)
-                    } label: {
-                        Text(control.title)
-                    }
+            ForEach(selectedModelRequestControls) { control in
+                NavigationLink {
+                    RequestBodyControlDetailView(runnableModel: selectedModel, control: control)
+                } label: {
+                    Text(control.title)
                 }
             }
-        } else {
-            Text(NSLocalizedString("请先选择模型。", comment: ""))
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -1541,10 +1534,12 @@ struct ChatView: View {
                     modelPickerRow(runnable)
                 }
 
-                Divider()
-                    .padding(.top, 2)
+                if hasModelPickerRequestControls {
+                    Divider()
+                        .padding(.top, 2)
 
-                modelPickerRequestControlsPanel
+                    modelPickerRequestControlsPanel
+                }
 
                 if hasMoreModelChoices {
                     Divider()
@@ -1603,6 +1598,14 @@ struct ChatView: View {
         viewModel.activatedModels.count > topModelChoices.count
     }
 
+    private var selectedModelRequestControls: [ModelRequestBodyControl] {
+        viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
+    }
+
+    private var hasModelPickerRequestControls: Bool {
+        !selectedModelRequestControls.isEmpty
+    }
+
     private var modelPickerSplitContent: some View {
         modelPickerList
     }
@@ -1614,47 +1617,32 @@ struct ChatView: View {
                 .foregroundColor(TelegramColors.navBarText)
                 .padding(.horizontal, 2)
 
-            if let selectedModel = viewModel.selectedModel {
-                let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
-                if controls.isEmpty {
-                    Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
-                        .etFont(.system(size: 12))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    LazyVStack(spacing: 8) {
-                        ForEach(controls) { control in
-                            Button {
-                                modelPickerRequestControl = control
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Text(control.title)
-                                        .etFont(.system(size: 14, weight: .medium))
-                                        .foregroundColor(TelegramColors.navBarText)
-                                        .lineLimit(1)
+            LazyVStack(spacing: 8) {
+                ForEach(selectedModelRequestControls) { control in
+                    Button {
+                        modelPickerRequestControl = control
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(control.title)
+                                .etFont(.system(size: 14, weight: .medium))
+                                .foregroundColor(TelegramColors.navBarText)
+                                .lineLimit(1)
 
-                                    Spacer()
+                            Spacer()
 
-                                    Image(systemName: "chevron.right")
-                                        .etFont(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(TelegramColors.navBarSubtitle)
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.05))
-                                )
-                            }
-                            .buttonStyle(.plain)
+                            Image(systemName: "chevron.right")
+                                .etFont(.system(size: 11, weight: .semibold))
+                                .foregroundColor(TelegramColors.navBarSubtitle)
                         }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.05))
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
-            } else {
-                Text(NSLocalizedString("请先选择模型。", comment: ""))
-                    .etFont(.system(size: 12))
-                    .foregroundColor(TelegramColors.navBarSubtitle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 16)
