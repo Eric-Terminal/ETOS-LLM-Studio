@@ -37,7 +37,6 @@ struct ModelSettingsView: View {
             ) {
                 TextField(NSLocalizedString("模型名称", comment: ""), text: $model.displayName.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("模型ID", comment: ""), text: $model.modelName.watchKeyboardNewlineBinding())
-                    .etFont(.caption)
             }
 
             Section(

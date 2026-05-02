@@ -38,7 +38,6 @@ struct ModelSettingsView: View {
                 TextField(NSLocalizedString("模型ID", comment: ""), text: $model.modelName)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .etFont(.footnote.monospaced())
             }
 
             Section(
