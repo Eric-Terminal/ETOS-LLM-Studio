@@ -2895,7 +2895,13 @@ struct AnthropicAdapterTests {
             model: Model(
                 modelName: "claude-sonnet-4-6",
                 requestBodyControls: [
-                    ModelRequestBodyControlDefaults.thinkingToggle(for: "anthropic"),
+                    ModelRequestBodyControl(
+                        id: "thinking-toggle",
+                        title: NSLocalizedString("开启思考", comment: ""),
+                        kind: .toggle,
+                        defaultIsActive: true,
+                        payload: ["thinking": .dictionary(["type": .string("adaptive")])]
+                    ),
                     ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
                 ]
             )

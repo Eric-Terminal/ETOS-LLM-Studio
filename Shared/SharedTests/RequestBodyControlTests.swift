@@ -223,18 +223,13 @@ struct RequestBodyControlTests {
         ]))
     }
 
-    @Test("新增思考开关默认启用并按适配器格式生成参数")
-    func testDefaultThinkingToggleIsEnabledByProviderAPIFormat() {
-        let openAI = ModelRequestBodyControlDefaults.thinkingToggle(for: "openai-compatible")
-        let gemini = ModelRequestBodyControlDefaults.thinkingToggle(for: "gemini")
-        let anthropic = ModelRequestBodyControlDefaults.thinkingToggle(for: "anthropic")
+    @Test("新增开关默认是温度控制")
+    func testDefaultToggleIsTemperatureControl() {
+        let control = ModelRequestBodyControlDefaults.temperatureControl()
 
-        #expect(openAI.defaultIsActive)
-        #expect(openAI.payload["reasoning_effort"] == .string("medium"))
-        #expect(gemini.defaultIsActive)
-        #expect(gemini.payload["thinkingBudget"] == .int(-1))
-        #expect(anthropic.defaultIsActive)
-        #expect(anthropic.payload["thinking"] == .dictionary(["type": .string("adaptive")]))
+        #expect(control.title == NSLocalizedString("温度", comment: ""))
+        #expect(control.defaultIsActive)
+        #expect(control.payload["temperature"] == .double(1))
     }
 
     @Test("OpenAI 请求构建使用结构化控制后的最终覆盖参数")

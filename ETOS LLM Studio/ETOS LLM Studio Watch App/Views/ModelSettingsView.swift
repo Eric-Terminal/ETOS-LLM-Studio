@@ -507,7 +507,7 @@ extension ModelSettingsView {
 
     private func addToggleControl() {
         model.requestBodyControls.append(
-            ModelRequestBodyControlDefaults.thinkingToggle(for: provider.apiFormat)
+            ModelRequestBodyControlDefaults.temperatureControl()
         )
     }
 

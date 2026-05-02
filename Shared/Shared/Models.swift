@@ -244,30 +244,13 @@ public enum ProviderAPIFormatFamily {
 }
 
 public enum ModelRequestBodyControlDefaults {
-    public static func thinkingToggle(for apiFormat: String) -> ModelRequestBodyControl {
-        switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
-        case .anthropic:
-            return ModelRequestBodyControl(
-                title: NSLocalizedString("开启思考", comment: ""),
-                kind: .toggle,
-                defaultIsActive: true,
-                payload: ["thinking": .dictionary(["type": .string("adaptive")])]
-            )
-        case .gemini:
-            return ModelRequestBodyControl(
-                title: NSLocalizedString("开启思考", comment: ""),
-                kind: .toggle,
-                defaultIsActive: true,
-                payload: ["thinkingBudget": .int(-1)]
-            )
-        case .openAICompatible:
-            return ModelRequestBodyControl(
-                title: NSLocalizedString("开启思考", comment: ""),
-                kind: .toggle,
-                defaultIsActive: true,
-                payload: ["reasoning_effort": .string("medium")]
-            )
-        }
+    public static func temperatureControl() -> ModelRequestBodyControl {
+        ModelRequestBodyControl(
+            title: NSLocalizedString("温度", comment: ""),
+            kind: .toggle,
+            defaultIsActive: true,
+            payload: ["temperature": .double(1)]
+        )
     }
 
     public static func thinkingOptionGroup(for apiFormat: String) -> ModelRequestBodyControl {
