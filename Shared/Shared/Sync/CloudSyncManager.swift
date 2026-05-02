@@ -22,6 +22,25 @@ private let cloudSyncLogger = Logger(
     category: "CloudSync"
 )
 
+private let cloudSyncSnapshotRecordType = "CloudSyncSnapshot"
+private let cloudSyncSnapshotZoneName = "CloudSyncSnapshots"
+
+#if canImport(CloudKit)
+let cloudSyncSnapshotZoneID = CKRecordZone.ID(
+    zoneName: cloudSyncSnapshotZoneName,
+    ownerName: CKCurrentUserDefaultName
+)
+
+let cloudSyncSnapshotDesiredKeys: [CKRecord.FieldKey] = [
+    "schemaVersion",
+    "deviceID",
+    "updatedAt",
+    "checksum",
+    "optionsRawValue",
+    "payloadAsset"
+]
+#endif
+
 public struct CloudSyncSnapshot: Codable {
     public let schemaVersion: Int
     public let deviceID: String
@@ -441,13 +460,13 @@ enum CloudSyncManagerError: LocalizedError {
 
 #if canImport(CloudKit)
 private struct CloudKitCloudSyncTransport: CloudSyncTransport {
-    private static let recordType = "CloudSyncSnapshot"
     private static let schemaVersionKey = "schemaVersion"
     private static let deviceIdentifierKey = "deviceID"
     private static let updatedAtKey = "updatedAt"
     private static let checksumKey = "checksum"
     private static let optionsRawValueKey = "optionsRawValue"
     private static let payloadAssetKey = "payloadAsset"
+    private let userDefaults: UserDefaults
     private static let containerIdentifier = "iCloud.com.ericterminal.els"
 
     private let container: CKContainer
@@ -455,17 +474,22 @@ private struct CloudKitCloudSyncTransport: CloudSyncTransport {
 
     init(
         container: CKContainer = CKContainer(identifier: containerIdentifier),
-        database: CKDatabase? = nil
+        database: CKDatabase? = nil,
+        userDefaults: UserDefaults = .standard
     ) {
         self.container = container
         self.database = database ?? container.privateCloudDatabase
+        self.userDefaults = userDefaults
     }
 
     func upload(snapshot: CloudSyncRemoteSnapshot) async throws {
         try await ensureAvailableAccount()
+        try await ensureCloudSyncZoneExists()
 
-        let recordID = CKRecord.ID(recordName: snapshot.recordName)
-        let record = CKRecord(recordType: Self.recordType, recordID: recordID)
+        let record = CKRecord(
+            recordType: cloudSyncSnapshotRecordType,
+            recordID: CKRecord.ID(recordName: snapshot.recordName, zoneID: cloudSyncSnapshotZoneID)
+        )
         record[Self.schemaVersionKey] = snapshot.snapshot.schemaVersion as NSNumber
         record[Self.deviceIdentifierKey] = snapshot.deviceID as NSString
         record[Self.updatedAtKey] = snapshot.updatedAt as NSDate
@@ -490,24 +514,55 @@ private struct CloudKitCloudSyncTransport: CloudSyncTransport {
 
     func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot] {
         try await ensureAvailableAccount()
-        return try await fetchAllSnapshots(excludingDeviceID: deviceID, cursor: nil, accumulated: [])
+        try await ensureCloudSyncZoneExists()
+
+        do {
+            return try await fetchSnapshots(
+                excludingDeviceID: deviceID,
+                previousServerChangeTokenData: loadZoneChangeTokenData()
+            )
+        } catch let error as CKError where error.code == .changeTokenExpired {
+            saveZoneChangeTokenData(nil)
+            return try await fetchSnapshots(
+                excludingDeviceID: deviceID,
+                previousServerChangeTokenData: nil
+            )
+        }
     }
 
-    private func fetchAllSnapshots(
+    private func fetchSnapshots(
         excludingDeviceID deviceID: String,
-        cursor: CKQueryOperation.Cursor?,
-        accumulated: [CloudSyncRemoteSnapshot]
+        previousServerChangeTokenData: Data?
     ) async throws -> [CloudSyncRemoteSnapshot] {
-        let operation = cursor.map(CKQueryOperation.init(cursor:)) ?? makeInitialQueryOperation()
-        var snapshots = accumulated
+        let token: CKServerChangeToken?
+        if let previousServerChangeTokenData {
+            token = try? NSKeyedUnarchiver.unarchivedObject(
+                ofClass: CKServerChangeToken.self,
+                from: previousServerChangeTokenData
+            )
+        } else {
+            token = nil
+        }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            operation.recordMatchedBlock = { _, result in
-                switch result {
-                case .success(let record):
+        var snapshots: [CloudSyncRemoteSnapshot] = []
+        var currentToken = token
+        var latestChangeTokenData: Data?
+        var hasMoreChanges = false
+
+        repeat {
+            let result = try await database.recordZoneChanges(
+                inZoneWith: cloudSyncSnapshotZoneID,
+                since: currentToken,
+                desiredKeys: cloudSyncSnapshotDesiredKeys,
+                resultsLimit: 200
+            )
+
+            for modificationResult in result.modificationResultsByID.values {
+                switch modificationResult {
+                case .success(let modification):
                     do {
-                        let snapshot = try makeSnapshot(from: record)
-                        guard snapshot.deviceID != deviceID else { return }
+                        let snapshot = try makeSnapshot(from: modification.record)
+                        guard snapshot.deviceID != deviceID else { continue }
                         snapshots.append(snapshot)
                     } catch {
                         cloudSyncLogger.error("解析 CloudKit 记录失败: \(error.localizedDescription)")
@@ -517,40 +572,46 @@ private struct CloudKitCloudSyncTransport: CloudSyncTransport {
                 }
             }
 
-            operation.queryResultBlock = { result in
-                switch result {
-                case .success(let nextCursor):
-                    if let nextCursor {
-                        Task {
-                            do {
-                                let all = try await fetchAllSnapshots(
-                                    excludingDeviceID: deviceID,
-                                    cursor: nextCursor,
-                                    accumulated: snapshots
-                                )
-                                continuation.resume(returning: all)
-                            } catch {
-                                continuation.resume(throwing: error)
-                            }
-                        }
-                    } else {
-                        continuation.resume(returning: snapshots)
-                    }
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                }
-            }
+            latestChangeTokenData = try archivedChangeTokenData(from: result.changeToken)
+            currentToken = result.changeToken
+            hasMoreChanges = result.moreComing
+        } while hasMoreChanges
 
-            database.add(operation)
+        if let latestChangeTokenData {
+            saveZoneChangeTokenData(latestChangeTokenData)
+        }
+
+        return snapshots.sorted { lhs, rhs in
+            lhs.updatedAt > rhs.updatedAt
         }
     }
 
-    private func makeInitialQueryOperation() -> CKQueryOperation {
-        let query = CKQuery(recordType: Self.recordType, predicate: NSPredicate(value: true))
-        query.sortDescriptors = [NSSortDescriptor(key: Self.updatedAtKey, ascending: false)]
-        let operation = CKQueryOperation(query: query)
-        operation.resultsLimit = 50
-        return operation
+    private func ensureCloudSyncZoneExists() async throws {
+        let fetched = try await database.recordZones(for: [cloudSyncSnapshotZoneID])
+        if case .success = fetched[cloudSyncSnapshotZoneID] {
+            return
+        }
+
+        _ = try await database.modifyRecordZones(
+            saving: [CKRecordZone(zoneID: cloudSyncSnapshotZoneID)],
+            deleting: []
+        )
+    }
+
+    private func loadZoneChangeTokenData() -> Data? {
+        userDefaults.data(forKey: Self.zoneChangeTokenKey)
+    }
+
+    private func saveZoneChangeTokenData(_ data: Data?) {
+        if let data {
+            userDefaults.set(data, forKey: Self.zoneChangeTokenKey)
+        } else {
+            userDefaults.removeObject(forKey: Self.zoneChangeTokenKey)
+        }
+    }
+
+    private func archivedChangeTokenData(from token: CKServerChangeToken) throws -> Data {
+        try NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true)
     }
 
     private func makeSnapshot(from record: CKRecord) throws -> CloudSyncRemoteSnapshot {
@@ -611,6 +672,8 @@ private struct CloudKitCloudSyncTransport: CloudSyncTransport {
             }
         }
     }
+
+    private static let zoneChangeTokenKey = "cloudSync.snapshotChangeToken"
 }
 #else
 private struct CloudKitCloudSyncTransport: CloudSyncTransport {

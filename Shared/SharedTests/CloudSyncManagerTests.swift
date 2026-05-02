@@ -8,6 +8,9 @@
 
 import Testing
 import Foundation
+#if canImport(CloudKit)
+import CloudKit
+#endif
 @testable import Shared
 
 @Suite("CloudSyncManager 测试")
@@ -350,6 +353,14 @@ struct CloudSyncManagerTests {
         #expect(lastDelta?.deletions.first?.type == .provider)
         #expect(lastDelta?.deletions.first?.recordID == provider.id.uuidString)
     }
+
+#if canImport(CloudKit)
+    @Test("CloudKit 快照拉取使用自定义 zone")
+    func testCloudSyncSnapshotUsesCustomZone() {
+        #expect(cloudSyncSnapshotZoneID.zoneName == "CloudSyncSnapshots")
+        #expect(cloudSyncSnapshotDesiredKeys.contains("payloadAsset"))
+    }
+#endif
 
     private func makeRemoteSnapshot(
         recordName: String,
