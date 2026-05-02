@@ -176,7 +176,7 @@ public struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("检索设置", comment: ""))
             } footer: {
-                Text(NSLocalizedString("设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。", comment: ""))
+                Text(NSLocalizedString("如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -111,7 +111,7 @@ struct MemorySettingsView: View {
 
             Section {
                 LabeledContent(NSLocalizedString("检索数量 (Top K)", comment: "")) {
-                    TextField(NSLocalizedString("0 表示不限制", comment: ""), value: $memoryTopK, formatter: numberFormatter)
+                    TextField(NSLocalizedString("0 表示关闭检索", comment: ""), value: $memoryTopK, formatter: numberFormatter)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
@@ -136,7 +136,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("检索设置", comment: ""))
             } footer: {
-                Text(NSLocalizedString("设置为 0 表示跳过检索，直接把所有记忆原文注入上下文。默认为 3。", comment: ""))
+                Text(NSLocalizedString("如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

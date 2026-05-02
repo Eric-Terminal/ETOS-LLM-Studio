@@ -512,7 +512,7 @@ Ajouter Authorization et other auth headers manually.";
 "记忆列表" = "Mémoire Liste";
 "记忆库管理 (系统版本过低)" = "Mémoire Bibliothèque Gestion (OS Version too low)";
 "设置为 0 表示跳过检索，直接把所有记忆原文注入上下文。默认为 3。" = "Définir à 0 à Ignorer récupération et inject Tout Mémoire Texte into context. Par défaut est 3.";
-"设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。" = "Définir à 0 à Ignorer récupération et inject Tout Mémoire Texte. Par défaut est 3.";
+"如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。" = "Activer la récupération peut fortement réduire le taux de réussite du cache de contexte. Pour la désactiver, définissez Top K sur 0. Par défaut : 3.";
 "设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。" = "Définir how many recent Messages sont envoyé à le Modèle. Pour Exemple, 10 sends le last 5 Utilisateur + 5 AI Messages. 0 means Aucun limit.";
 "设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。" = "Définir le Par défaut number de recent Messages Quand entering Historique. Ce reduces memory/perf cost pour long chats. 0 disables et loads Tout Messages.";
 "设置进入历史会话时默认加载的最近消息数量。数值越小，长对话加载越快；设置为 0 表示加载全部历史。" = "Définir le Par défaut number de recent Messages Quand entering Historique. Smaller values Charger faster; 0 loads Tout Historique.";
