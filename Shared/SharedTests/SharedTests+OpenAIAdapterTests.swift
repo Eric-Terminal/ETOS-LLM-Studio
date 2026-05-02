@@ -1,8 +1,17 @@
 // ============================================================================
-// SharedTests+OpenAIAdapterTests.swift
+// SharedTests.swift
 // ============================================================================
-// OpenAIAdapterTests 的共享适配器实例与基础测试夹具。
+// SharedTests 测试文件
+// - 覆盖相关模块的行为与回归测试
+// - 保障迭代过程中的稳定性
 // ============================================================================
+
+//
+//  SharedTests.swift
+//  SharedTests
+//
+//  Created by Eric on 2025/10/5.
+//
 
 import Testing
 import Foundation

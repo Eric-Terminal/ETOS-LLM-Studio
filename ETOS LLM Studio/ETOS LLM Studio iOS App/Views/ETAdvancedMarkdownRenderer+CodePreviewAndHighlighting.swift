@@ -1,7 +1,9 @@
 // ============================================================================
-// ETAdvancedMarkdownRenderer+CodePreviewAndHighlighting.swift
+// ETAdvancedMarkdownRenderer.swift
 // ============================================================================
-// iOS Markdown 渲染器的代码预览、Web 预览与语法高亮支持。
+// ETAdvancedMarkdownRenderer 界面 (iOS)
+// - 负责该功能在 iOS 端的交互与展示
+// - 遵循项目现有视图结构与状态流
 // ============================================================================
 
 import Foundation

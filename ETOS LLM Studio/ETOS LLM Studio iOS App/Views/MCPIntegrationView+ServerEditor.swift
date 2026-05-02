@@ -1,8 +1,17 @@
 // ============================================================================
-// MCPIntegrationView+ServerEditor.swift
+// MCPIntegrationView.swift
 // ============================================================================
-// iOS MCP 集成页的服务器编辑表单、传输配置与 Header 覆盖校验。
+// MCPIntegrationView 界面 (iOS)
+// - 负责该功能在 iOS 端的交互与展示
+// - 遵循项目现有视图结构与状态流
 // ============================================================================
+
+//
+//  MCPIntegrationView.swift
+//  ETOS LLM Studio iOS App
+//
+//  创建一个用于管理 MCP Server 的交互界面。
+//
 
 import SwiftUI
 import Foundation

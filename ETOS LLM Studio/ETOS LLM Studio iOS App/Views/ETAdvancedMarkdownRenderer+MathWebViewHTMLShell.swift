@@ -1,7 +1,9 @@
 // ============================================================================
-// ETAdvancedMarkdownRenderer+MathWebViewHTMLShell.swift
+// ETAdvancedMarkdownRenderer.swift
 // ============================================================================
-// iOS 数学 WebView 渲染组件的 HTML 壳、样式与前端渲染脚本。
+// ETAdvancedMarkdownRenderer 界面 (iOS)
+// - 负责该功能在 iOS 端的交互与展示
+// - 遵循项目现有视图结构与状态流
 // ============================================================================
 
 import Foundation

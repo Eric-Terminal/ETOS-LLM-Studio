@@ -1,7 +1,9 @@
 // ============================================================================
-// ETAdvancedMarkdownRenderer+MathWebViewLifecycle.swift
+// ETAdvancedMarkdownRenderer.swift
 // ============================================================================
-// iOS 数学 WebView 渲染组件的 WKWebView 生命周期、协调器与高度回传。
+// ETAdvancedMarkdownRenderer 界面 (iOS)
+// - 负责该功能在 iOS 端的交互与展示
+// - 遵循项目现有视图结构与状态流
 // ============================================================================
 
 import Foundation
