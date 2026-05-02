@@ -4548,23 +4548,23 @@ private struct RequestBodyQuickControlsView: View {
                     switch control.kind {
                     case .toggle:
                         Toggle(isOn: toggleBinding(for: control)) {
-                            Text(verbatim: control.title)
+                            Text(control.title)
                         }
                     case .optionGroup:
                         if control.options.isEmpty {
-                            Text(verbatim: control.title)
+                            Text(control.title)
                                 .foregroundStyle(.secondary)
                         } else {
                             Section {
                                 Picker(selection: optionBinding(for: control)) {
                                     ForEach(control.options) { option in
-                                        Text(verbatim: option.title).tag(option.id)
+                                        Text(option.title).tag(option.id)
                                     }
                                 }
                                 .pickerStyle(.inline)
                                 .labelsHidden()
                             } header: {
-                                Text(verbatim: control.title)
+                                Text(control.title)
                             }
                         }
                     }
