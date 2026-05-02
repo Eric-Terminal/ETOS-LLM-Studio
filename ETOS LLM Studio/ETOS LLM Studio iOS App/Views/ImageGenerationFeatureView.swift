@@ -144,7 +144,7 @@ struct ImageGenerationFeatureView: View {
             }
 
             Section {
-                PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 4, matching: .images) {
+                PhotosPicker(selection: $selectedPhotos, matching: .images) {
                     Label(NSLocalizedString("选择参考图", comment: ""), systemImage: "photo")
                 }
 

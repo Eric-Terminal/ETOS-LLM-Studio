@@ -3716,7 +3716,7 @@ private struct TelegramMessageComposer: View {
 
         }
         .padding(.bottom, 6)
-        .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
+        .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
                 for item in newItems {
@@ -4501,7 +4501,7 @@ private struct MessageComposerView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, maxSelectionCount: 4, matching: .images)
+        .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
                 for item in newItems {
