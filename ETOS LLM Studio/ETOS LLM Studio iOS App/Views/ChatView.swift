@@ -3959,101 +3959,110 @@ private struct TelegramMessageComposer: View {
     /// Telegram 风格附件预览
     @ViewBuilder
     private var telegramAttachmentPreview: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // 图片预览
-                ForEach(viewModel.pendingImageAttachments) { attachment in
-                    ZStack(alignment: .topTrailing) {
-                        if let thumbnail = attachment.thumbnailImage {
-                            Image(uiImage: thumbnail)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 64, height: 64)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                        
-                        Button {
-                            viewModel.removePendingImageAttachment(attachment)
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.black.opacity(0.5))
-                                    .frame(width: 22, height: 22)
-                                Image(systemName: "xmark")
-                                    .etFont(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 8) {
+            if !viewModel.pendingImageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(viewModel.pendingImageAttachments) { attachment in
+                            ZStack(alignment: .topTrailing) {
+                                if let thumbnail = attachment.thumbnailImage {
+                                    Image(uiImage: thumbnail)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 72, height: 72)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                } else {
+                                    ZStack {
+                                        Color(uiColor: .secondarySystemBackground)
+                                        Image(systemName: "photo")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(width: 72, height: 72)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+
+                                Button {
+                                    viewModel.removePendingImageAttachment(attachment)
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.black.opacity(0.5))
+                                            .frame(width: 22, height: 22)
+                                        Image(systemName: "xmark")
+                                            .etFont(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                .offset(x: 6, y: -6)
                             }
                         }
-                        .offset(x: 6, y: -6)
                     }
+                    .padding(.horizontal, 2)
                 }
-                
-                // 音频预览
-                if let audio = viewModel.pendingAudioAttachment {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform")
-                            .etFont(.system(size: 18))
-                            .foregroundColor(TelegramColors.attachButtonColor)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("语音消息", comment: ""))
-                                .etFont(.system(size: 13, weight: .medium))
-                            Text(audio.fileName)
-                                .etFont(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-                        
-                        Button {
-                            viewModel.clearPendingAudioAttachment()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .etFont(.system(size: 18))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(uiColor: .secondarySystemBackground))
-                    )
-                }
-
-                // 文件预览
-                ForEach(viewModel.pendingFileAttachments) { attachment in
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc")
-                            .etFont(.system(size: 18))
-                            .foregroundColor(TelegramColors.attachButtonColor)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("文件", comment: ""))
-                                .etFont(.system(size: 13, weight: .medium))
-                            Text(attachment.fileName)
-                                .etFont(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-                        
-                        Button {
-                            viewModel.removePendingFileAttachment(attachment)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .etFont(.system(size: 18))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(uiColor: .secondarySystemBackground))
-                    )
-                }
+                .frame(height: 80)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+
+            if let audio = viewModel.pendingAudioAttachment {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .etFont(.system(size: 18))
+                        .foregroundColor(TelegramColors.attachButtonColor)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(NSLocalizedString("语音消息", comment: ""))
+                            .etFont(.system(size: 13, weight: .medium))
+                        Text(audio.fileName)
+                            .etFont(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Button {
+                        viewModel.clearPendingAudioAttachment()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .etFont(.system(size: 18))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(uiColor: .secondarySystemBackground))
+                )
+            }
+
+            ForEach(viewModel.pendingFileAttachments) { attachment in
+                HStack(spacing: 8) {
+                    Image(systemName: "doc")
+                        .etFont(.system(size: 18))
+                        .foregroundColor(TelegramColors.attachButtonColor)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(NSLocalizedString("文件", comment: ""))
+                            .etFont(.system(size: 13, weight: .medium))
+                        Text(attachment.fileName)
+                            .etFont(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Button {
+                        viewModel.removePendingFileAttachment(attachment)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .etFont(.system(size: 18))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(uiColor: .secondarySystemBackground))
+                )
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
@@ -4561,84 +4570,93 @@ private struct MessageComposerView: View {
     
     @ViewBuilder
     private var attachmentPreviewBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // 图片预览
-                ForEach(viewModel.pendingImageAttachments) { attachment in
-                    ZStack(alignment: .topTrailing) {
-                        if let thumbnail = attachment.thumbnailImage {
-                            Image(uiImage: thumbnail)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 60)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        
-                        Button {
-                            viewModel.removePendingImageAttachment(attachment)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .etFont(.system(size: 18))
-                                .foregroundStyle(.white, .black.opacity(0.6))
-                        }
-                        .offset(x: 4, y: -4)
-                    }
-                }
-                
-                // 音频预览
-                if let audio = viewModel.pendingAudioAttachment {
-                    HStack(spacing: 6) {
-                        Image(systemName: "waveform")
-                            .etFont(.system(size: 16))
-                            .foregroundStyle(.tint)
-                        
-                        Text(audio.fileName)
-                            .etFont(.caption)
-                            .lineLimit(1)
-                            .frame(maxWidth: 80)
-                        
-                        Button {
-                            viewModel.clearPendingAudioAttachment()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .etFont(.system(size: 16))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            if !viewModel.pendingImageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(viewModel.pendingImageAttachments) { attachment in
+                            ZStack(alignment: .topTrailing) {
+                                if let thumbnail = attachment.thumbnailImage {
+                                    Image(uiImage: thumbnail)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 60, height: 60)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                } else {
+                                    ZStack {
+                                        Color(uiColor: .secondarySystemBackground)
+                                        Image(systemName: "photo")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
 
-                // 文件预览
-                ForEach(viewModel.pendingFileAttachments) { attachment in
-                    HStack(spacing: 6) {
-                        Image(systemName: "doc")
-                            .etFont(.system(size: 16))
-                            .foregroundStyle(.tint)
-                        
-                        Text(attachment.fileName)
-                            .etFont(.caption)
-                            .lineLimit(1)
-                            .frame(maxWidth: 120)
-                        
-                        Button {
-                            viewModel.removePendingFileAttachment(attachment)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .etFont(.system(size: 16))
-                                .foregroundStyle(.secondary)
+                                Button {
+                                    viewModel.removePendingImageAttachment(attachment)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .etFont(.system(size: 18))
+                                        .foregroundStyle(.white, .black.opacity(0.6))
+                                }
+                                .offset(x: 4, y: -4)
+                            }
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 2)
                 }
+                .frame(height: 68)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+
+            if let audio = viewModel.pendingAudioAttachment {
+                HStack(spacing: 6) {
+                    Image(systemName: "waveform")
+                        .etFont(.system(size: 16))
+                        .foregroundStyle(.tint)
+
+                    Text(audio.fileName)
+                        .etFont(.caption)
+                        .lineLimit(1)
+                        .frame(maxWidth: 80)
+
+                    Button {
+                        viewModel.clearPendingAudioAttachment()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .etFont(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            ForEach(viewModel.pendingFileAttachments) { attachment in
+                HStack(spacing: 6) {
+                    Image(systemName: "doc")
+                        .etFont(.system(size: 16))
+                        .foregroundStyle(.tint)
+
+                    Text(attachment.fileName)
+                        .etFont(.caption)
+                        .lineLimit(1)
+                        .frame(maxWidth: 120)
+
+                    Button {
+                        viewModel.removePendingFileAttachment(attachment)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .etFont(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 

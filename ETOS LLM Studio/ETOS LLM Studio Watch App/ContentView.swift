@@ -1037,7 +1037,27 @@ struct ContentView: View {
 
     @ViewBuilder
     private var pendingAttachmentPreview: some View {
-        VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            if !viewModel.pendingImageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(viewModel.pendingImageAttachments) { attachment in
+                            attachmentPreviewRow(
+                                systemImage: "photo",
+                                title: NSLocalizedString("图片文件", comment: ""),
+                                fileName: attachment.fileName,
+                                tint: .green,
+                                onRemove: {
+                                    viewModel.removePendingImageAttachment(attachment)
+                                }
+                            )
+                            .frame(width: 140, alignment: .leading)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+
             if let audio = viewModel.pendingAudioAttachment {
                 attachmentPreviewRow(
                     systemImage: "waveform",
@@ -1046,18 +1066,6 @@ struct ContentView: View {
                     tint: .blue,
                     onRemove: {
                         viewModel.clearPendingAudioAttachment()
-                    }
-                )
-            }
-
-            ForEach(viewModel.pendingImageAttachments) { attachment in
-                attachmentPreviewRow(
-                    systemImage: "photo",
-                    title: NSLocalizedString("图片文件", comment: ""),
-                    fileName: attachment.fileName,
-                    tint: .green,
-                    onRemove: {
-                        viewModel.removePendingImageAttachment(attachment)
                     }
                 )
             }
