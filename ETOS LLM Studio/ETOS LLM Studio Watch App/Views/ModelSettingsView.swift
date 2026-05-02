@@ -916,6 +916,7 @@ private struct RequestBodyControlEditor: View {
                     payloadDisplayMode: payloadDisplayMode,
                     payload: $control.payload
                 )
+                .id("\(control.id)-toggle-payload")
             case .optionGroup:
                 if control.options.isEmpty {
                     Text(NSLocalizedString("暂无选项。", comment: ""))
@@ -927,11 +928,13 @@ private struct RequestBodyControlEditor: View {
                         RequestBodyOptionEditor(
                             option: $option,
                             defaultOptionID: $control.defaultOptionID,
+                            controlID: control.id,
                             payloadDisplayMode: payloadDisplayMode,
                             onDelete: {
                                 deleteOption(withID: optionID)
                             }
                         )
+                        .id(optionID)
                         if optionID != lastOptionID {
                             Divider()
                                 .padding(.vertical, 6)
@@ -983,6 +986,7 @@ private struct RequestBodyControlEditor: View {
 private struct RequestBodyOptionEditor: View {
     @Binding var option: ModelRequestBodyControlOption
     @Binding var defaultOptionID: String?
+    let controlID: String
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     let onDelete: (() -> Void)?
 
@@ -1017,6 +1021,7 @@ private struct RequestBodyOptionEditor: View {
                 payloadDisplayMode: payloadDisplayMode,
                 payload: $option.payload
             )
+            .id("\(controlID)-\(option.id)-payload")
         }
         .padding(.leading, 4)
     }
@@ -1042,8 +1047,8 @@ private struct RequestBodyPayloadEditor: View {
             default:
                 textPayloadEditor(
                     title: NSLocalizedString("Value", comment: ""),
-                    placeholder: NSLocalizedString("payload，例如 thinking_budget = low", comment: ""),
-                    lineLimit: 1...5
+                    placeholder: NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""),
+                    lineLimit: 2...8
                 )
             }
         }
