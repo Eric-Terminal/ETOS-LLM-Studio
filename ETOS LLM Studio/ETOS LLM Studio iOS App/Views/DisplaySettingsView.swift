@@ -218,7 +218,7 @@ struct DisplaySettingsView: View {
     }
 
     private func profileDisplayName(_ profile: ChatAppearanceProfile) -> String {
-        if profile.isDefaultProfile {
+        if profile.isDefaultProfile && profile.name == ChatAppearanceProfile.defaultProfileID {
             return NSLocalizedString("默认配置", comment: "")
         }
         return profile.name
@@ -294,7 +294,7 @@ private struct ChatAppearanceProfileSettingsView: View {
             } header: {
                 Text(NSLocalizedString("自动切换", comment: ""))
             } footer: {
-                Text(NSLocalizedString("没有匹配时间段时会使用 default 配置；时间段不能重叠。", comment: ""))
+                Text(NSLocalizedString("没有匹配时间段时会使用默认配置；时间段不能重叠。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -402,7 +402,7 @@ private struct ChatAppearanceProfileSettingsView: View {
     }
 
     private func profileDisplayName(_ profile: ChatAppearanceProfile) -> String {
-        if profile.isDefaultProfile {
+        if profile.isDefaultProfile && profile.name == ChatAppearanceProfile.defaultProfileID {
             return NSLocalizedString("默认配置", comment: "")
         }
         return profile.name
@@ -422,9 +422,7 @@ private struct ChatAppearanceProfileEditor: View {
     }
 
     var body: some View {
-        if !profile.isDefaultProfile {
-            TextField(NSLocalizedString("配置名称", comment: ""), text: nameBinding)
-        }
+        TextField(NSLocalizedString("配置名称", comment: ""), text: nameBinding)
 
         colorSlotEditor(
             title: "用户气泡颜色",
@@ -460,13 +458,20 @@ private struct ChatAppearanceProfileEditor: View {
 
     private var nameBinding: Binding<String> {
         Binding(
-            get: { profile.name },
+            get: { profileEditableName(profile) },
             set: { newValue in
                 var updated = profile
                 updated.name = newValue
                 onChange(updated)
             }
         )
+    }
+
+    private func profileEditableName(_ profile: ChatAppearanceProfile) -> String {
+        if profile.isDefaultProfile && profile.name == ChatAppearanceProfile.defaultProfileID {
+            return NSLocalizedString("默认配置", comment: "")
+        }
+        return profile.name
     }
 
     private var userBubbleBinding: Binding<ChatAppearanceColorSlot> {
@@ -657,7 +662,7 @@ private struct ScheduleRuleRow: View {
     }
 
     private func profileDisplayName(_ profile: ChatAppearanceProfile) -> String {
-        if profile.isDefaultProfile {
+        if profile.isDefaultProfile && profile.name == ChatAppearanceProfile.defaultProfileID {
             return NSLocalizedString("默认配置", comment: "")
         }
         return profile.name

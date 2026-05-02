@@ -482,7 +482,9 @@ public final class ChatAppearanceProfileManager: ObservableObject {
         var normalizedProfile = profile
         normalizedProfile.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Profile" : profile.name
         if normalizedProfile.id == ChatAppearanceProfile.defaultProfileID {
-            normalizedProfile.name = ChatAppearanceProfile.defaultProfileID
+            normalizedProfile.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? ChatAppearanceProfile.defaultProfileID
+                : profile.name
         }
         updated.profiles[index] = normalizedProfile
         try saveConfiguration(updated)

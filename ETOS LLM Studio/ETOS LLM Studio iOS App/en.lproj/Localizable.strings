@@ -31,7 +31,7 @@
 "恢复默认聊天颜色" = "Restore default chat colors";
 "删除配置" = "Delete profile";
 "新增时间段" = "Add time slot";
-"没有匹配时间段时会使用 default 配置；时间段不能重叠。" = "When no time slot matches, the default profile is used. Time slots cannot overlap.";
+"没有匹配时间段时会使用默认配置；时间段不能重叠。" = "When no time slot matches, the default profile is used. Time slots cannot overlap.";
 "自定义用户气泡颜色" = "Custom user bubble color";
 "自定义助手气泡颜色（含 Tool）" = "Custom assistant bubble color (including tool)";
 "自定义白天文字颜色" = "Custom light-mode text color";

@@ -75,6 +75,32 @@ struct ChatAppearanceProfilesTests {
         #expect(added.name == "Profile 1")
     }
 
+    @Test("默认配置名称可以修改并持久化")
+    @MainActor
+    func defaultProfileNameCanBeRenamed() throws {
+        let suite = "com.ETOS.tests.chatAppearance.renameDefault.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let manager = ChatAppearanceProfileManager(
+            userDefaults: defaults,
+            now: { Date(timeIntervalSince1970: 1_700_000_000) },
+            automaticallySchedulesRefresh: false
+        )
+        var defaultProfile = manager.configuration.defaultProfile
+        defaultProfile.name = "晚间默认"
+
+        try manager.updateProfile(defaultProfile)
+
+        let reloaded = ChatAppearanceProfileStore.loadConfiguration(userDefaults: defaults)
+        #expect(manager.configuration.defaultProfile.name == "晚间默认")
+        #expect(reloaded.defaultProfile.name == "晚间默认")
+    }
+
     @Test("时间窗会命中当前 Profile 并支持跨午夜")
     func scheduleRulesMatchAndCrossMidnight() {
         let nightProfile = ChatAppearanceProfile(id: "night", name: "Night")
