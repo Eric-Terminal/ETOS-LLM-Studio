@@ -507,13 +507,16 @@ extension ModelSettingsView {
 
     private func addToggleControl() {
         model.requestBodyControls.append(
-            ModelRequestBodyControlDefaults.temperatureControl()
+            ModelRequestBodyControlDefaults.initialToggleControl(existingControls: model.requestBodyControls)
         )
     }
 
     private func addOptionGroupControl() {
         model.requestBodyControls.append(
-            ModelRequestBodyControlDefaults.thinkingOptionGroup(for: provider.apiFormat)
+            ModelRequestBodyControlDefaults.initialOptionGroupControl(
+                existingControls: model.requestBodyControls,
+                apiFormat: provider.apiFormat
+            )
         )
     }
 
@@ -909,7 +912,7 @@ private struct RequestBodyControlRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(control.title)
+            Text(displayTitle)
                 .lineLimit(1)
 
             Text(control.isEnabled ? NSLocalizedString("已启用", comment: "") : NSLocalizedString("已停用", comment: ""))
@@ -917,6 +920,11 @@ private struct RequestBodyControlRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    private var displayTitle: String {
+        let trimmedTitle = control.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
     }
 }
 
@@ -984,7 +992,12 @@ private struct RequestBodyControlDetailView: View {
                 }
             }
         }
-        .navigationTitle(control.title)
+        .navigationTitle(displayTitle)
+    }
+
+    private var displayTitle: String {
+        let trimmedTitle = control.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
     }
 
     private func addOption() {
@@ -1024,7 +1037,7 @@ private struct RequestBodyOptionRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(option.title)
+            Text(displayTitle)
                 .lineLimit(1)
 
             Spacer(minLength: 8)
@@ -1037,6 +1050,11 @@ private struct RequestBodyOptionRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var displayTitle: String {
+        let trimmedTitle = option.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
     }
 }
 
@@ -1064,7 +1082,12 @@ private struct RequestBodyOptionDetailView: View {
                 .id("\(option.id)-payload")
             }
         }
-        .navigationTitle(option.title)
+        .navigationTitle(displayTitle)
+    }
+
+    private var displayTitle: String {
+        let trimmedTitle = option.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
     }
 
     private var defaultOptionBinding: Binding<Bool> {

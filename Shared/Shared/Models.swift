@@ -253,6 +253,13 @@ public enum ModelRequestBodyControlDefaults {
         )
     }
 
+    public static func initialToggleControl(existingControls: [ModelRequestBodyControl]) -> ModelRequestBodyControl {
+        if existingControls.contains(where: { $0.kind == .toggle }) {
+            return ModelRequestBodyControl(title: "", kind: .toggle)
+        }
+        return temperatureControl()
+    }
+
     public static func thinkingOptionGroup(for apiFormat: String) -> ModelRequestBodyControl {
         switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
         case .anthropic:
@@ -296,6 +303,16 @@ public enum ModelRequestBodyControlDefaults {
                 ]
             )
         }
+    }
+
+    public static func initialOptionGroupControl(
+        existingControls: [ModelRequestBodyControl],
+        apiFormat: String
+    ) -> ModelRequestBodyControl {
+        if existingControls.contains(where: { $0.kind == .optionGroup }) {
+            return ModelRequestBodyControl(title: "", kind: .optionGroup)
+        }
+        return thinkingOptionGroup(for: apiFormat)
     }
 }
 

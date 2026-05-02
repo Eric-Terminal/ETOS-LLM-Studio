@@ -223,6 +223,29 @@ struct RequestBodyControlTests {
         ]))
     }
 
+    @Test("重复新增开关会改为空白模板")
+    func testAdditionalToggleControlUsesBlankTemplate() {
+        let control = ModelRequestBodyControlDefaults.initialToggleControl(
+            existingControls: [ModelRequestBodyControlDefaults.temperatureControl()]
+        )
+
+        #expect(control.title.isEmpty)
+        #expect(control.defaultIsActive == false)
+        #expect(control.payload.isEmpty)
+    }
+
+    @Test("重复新增组选项会改为空白模板")
+    func testAdditionalOptionGroupUsesBlankTemplate() {
+        let control = ModelRequestBodyControlDefaults.initialOptionGroupControl(
+            existingControls: [ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-compatible")],
+            apiFormat: "openai-compatible"
+        )
+
+        #expect(control.title.isEmpty)
+        #expect(control.defaultOptionID == nil)
+        #expect(control.options.isEmpty)
+    }
+
     @Test("新增开关默认是温度控制")
     func testDefaultToggleIsTemperatureControl() {
         let control = ModelRequestBodyControlDefaults.temperatureControl()
