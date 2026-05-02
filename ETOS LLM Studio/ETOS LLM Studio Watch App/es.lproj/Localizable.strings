@@ -2222,3 +2222,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+
+"none" = "none";

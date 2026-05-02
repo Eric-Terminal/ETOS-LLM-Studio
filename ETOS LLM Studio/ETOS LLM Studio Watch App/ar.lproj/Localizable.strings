@@ -2222,3 +2222,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+
+"none" = "none";

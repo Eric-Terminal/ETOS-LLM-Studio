@@ -2139,3 +2139,5 @@
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+
+"none" = "none";

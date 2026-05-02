@@ -2222,3 +2222,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+
+"none" = "none";

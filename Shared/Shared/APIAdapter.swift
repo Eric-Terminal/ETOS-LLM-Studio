@@ -2692,9 +2692,15 @@ public class GeminiAdapter: APIAdapter {
         if let maxTokens = overrides["max_tokens"] ?? commonPayload["max_tokens"] {
             generationConfig["maxOutputTokens"] = maxTokens
         }
-        // 支持 thinking 模式
-        if let thinkingBudget = overrides["thinking_budget"] {
-            generationConfig["thinkingConfig"] = ["thinkingBudget": thinkingBudget]
+        var thinkingConfig: [String: Any] = [:]
+        if let thinkingLevel = overrides["thinking_level"] {
+            thinkingConfig["thinkingLevel"] = thinkingLevel
+        }
+        if let thinkingBudget = overrides["thinkingBudget"] ?? overrides["thinking_budget"] {
+            thinkingConfig["thinkingBudget"] = thinkingBudget
+        }
+        if !thinkingConfig.isEmpty {
+            generationConfig["thinkingConfig"] = thinkingConfig
         }
         if !generationConfig.isEmpty {
             payload["generationConfig"] = generationConfig
@@ -3525,12 +3531,16 @@ public class AnthropicAdapter: APIAdapter {
             payload["stream"] = stream
         }
         
-        // 支持 extended thinking
-        if let thinkingBudget = overrides["thinking_budget"] {
+        if let thinking = overrides["thinking"] as? [String: Any] {
+            payload["thinking"] = thinking
+        } else if let thinkingBudget = overrides["thinking_budget"] {
             payload["thinking"] = [
                 "type": "enabled",
                 "budget_tokens": thinkingBudget
             ]
+        }
+        if let effort = overrides["effort"] {
+            payload["effort"] = effort
         }
         
         // 工具定义

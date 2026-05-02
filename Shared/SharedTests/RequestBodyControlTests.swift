@@ -202,6 +202,41 @@ struct RequestBodyControlTests {
         #expect(model.effectiveOverrideParameters(using: state)["temperature"] == .double(1.0))
     }
 
+    @Test("新增组选项会按适配器格式生成默认参数")
+    func testDefaultThinkingOptionGroupUsesProviderAPIFormat() {
+        let openAI = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-compatible")
+        let gemini = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
+        let anthropic = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
+
+        #expect(openAI.defaultOptionID == "medium")
+        #expect(openAI.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
+
+        #expect(gemini.defaultOptionID == "medium")
+        #expect(gemini.options.first(where: { $0.id == "high" })?.payload["thinking_level"] == .string("HIGH"))
+        #expect(gemini.options.first(where: { $0.id == "auto" })?.payload["thinkingBudget"] == .int(-1))
+
+        #expect(anthropic.defaultOptionID == "medium")
+        #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["effort"] == .string("high"))
+        #expect(anthropic.options.first(where: { $0.id == "budget-2048" })?.payload["thinking"] == .dictionary([
+            "type": .string("enabled"),
+            "budget_tokens": .int(2048)
+        ]))
+    }
+
+    @Test("新增思考开关默认启用并按适配器格式生成参数")
+    func testDefaultThinkingToggleIsEnabledByProviderAPIFormat() {
+        let openAI = ModelRequestBodyControlDefaults.thinkingToggle(for: "openai-compatible")
+        let gemini = ModelRequestBodyControlDefaults.thinkingToggle(for: "gemini")
+        let anthropic = ModelRequestBodyControlDefaults.thinkingToggle(for: "anthropic")
+
+        #expect(openAI.defaultIsActive)
+        #expect(openAI.payload["reasoning_effort"] == .string("medium"))
+        #expect(gemini.defaultIsActive)
+        #expect(gemini.payload["thinkingBudget"] == .int(-1))
+        #expect(anthropic.defaultIsActive)
+        #expect(anthropic.payload["thinking"] == .dictionary(["type": .string("adaptive")]))
+    }
+
     @Test("OpenAI 请求构建使用结构化控制后的最终覆盖参数")
     func testOpenAIRequestUsesCompiledStructuredControls() throws {
         let model = Model(

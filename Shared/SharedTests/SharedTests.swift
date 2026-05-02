@@ -2678,6 +2678,35 @@ struct GeminiAdapterTests {
         #expect(functionResponseID == "function-call-456")
     }
 
+    @Test("Gemini 请求体会把思考档位放入 thinkingConfig")
+    func testGeminiBuildRequestUsesThinkingLevelControl() throws {
+        let model = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gemini-2.5-pro",
+                requestBodyControls: [
+                    ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
+                ]
+            )
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试一下")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let generationConfig = try #require(payload["generationConfig"] as? [String: Any])
+        let thinkingConfig = try #require(generationConfig["thinkingConfig"] as? [String: Any])
+
+        #expect(thinkingConfig["thinkingLevel"] as? String == "MEDIUM")
+    }
+
     @Test("Gemini 流式增量保留 thought_signature")
     func testGeminiStreamingDeltaPreservesThoughtSignature() throws {
         let line = """
@@ -2850,6 +2879,43 @@ struct AnthropicAdapterTests {
 
         let part = try #require(adapter.parseStreamingResponse(line: line))
         #expect(part.reasoningProviderSpecificFields?["anthropic_signature"] == .string("sig-stream"))
+    }
+
+    @Test("Anthropic 请求体支持自适应思考和 effort")
+    func testAnthropicBuildRequestUsesAdaptiveThinkingControls() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(
+                modelName: "claude-sonnet-4-6",
+                requestBodyControls: [
+                    ModelRequestBodyControlDefaults.thinkingToggle(for: "anthropic"),
+                    ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
+                ]
+            )
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试一下")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let thinking = try #require(payload["thinking"] as? [String: Any])
+
+        #expect(thinking["type"] as? String == "adaptive")
+        #expect(payload["effort"] as? String == "medium")
     }
 }
 

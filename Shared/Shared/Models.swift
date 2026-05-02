@@ -224,6 +224,98 @@ public enum ModelRequestBodyControlCompiler {
     }
 }
 
+public enum ProviderAPIFormatFamily {
+    case openAICompatible
+    case gemini
+    case anthropic
+
+    public init(apiFormat: String) {
+        let normalized = apiFormat
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if normalized.contains("anthropic") || normalized.contains("claude") {
+            self = .anthropic
+        } else if normalized.contains("gemini") || normalized.contains("google") || normalized.contains("vertex") {
+            self = .gemini
+        } else {
+            self = .openAICompatible
+        }
+    }
+}
+
+public enum ModelRequestBodyControlDefaults {
+    public static func thinkingToggle(for apiFormat: String) -> ModelRequestBodyControl {
+        switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
+        case .anthropic:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("开启思考", comment: ""),
+                kind: .toggle,
+                defaultIsActive: true,
+                payload: ["thinking": .dictionary(["type": .string("adaptive")])]
+            )
+        case .gemini:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("开启思考", comment: ""),
+                kind: .toggle,
+                defaultIsActive: true,
+                payload: ["thinkingBudget": .int(-1)]
+            )
+        case .openAICompatible:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("开启思考", comment: ""),
+                kind: .toggle,
+                defaultIsActive: true,
+                payload: ["reasoning_effort": .string("medium")]
+            )
+        }
+    }
+
+    public static func thinkingOptionGroup(for apiFormat: String) -> ModelRequestBodyControl {
+        switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
+        case .anthropic:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""),
+                kind: .optionGroup,
+                defaultOptionID: "medium",
+                options: [
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["effort": .string("low")]),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["effort": .string("medium")]),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["effort": .string("high")]),
+                    ModelRequestBodyControlOption(id: "budget-2048", title: "2048", payload: ["thinking": .dictionary(["type": .string("enabled"), "budget_tokens": .int(2048)])])
+                ]
+            )
+        case .gemini:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""),
+                kind: .optionGroup,
+                defaultOptionID: "medium",
+                options: [
+                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["thinking_level": .string("MINIMAL")]),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["thinking_level": .string("LOW")]),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["thinking_level": .string("MEDIUM")]),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["thinking_level": .string("HIGH")]),
+                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: ""), payload: ["thinkingBudget": .int(-1)]),
+                    ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: ["thinkingBudget": .int(0)])
+                ]
+            )
+        case .openAICompatible:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""),
+                kind: .optionGroup,
+                defaultOptionID: "medium",
+                options: [
+                    ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: ["reasoning_effort": .string("none")]),
+                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["reasoning_effort": .string("minimal")]),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["reasoning_effort": .string("low")]),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["reasoning_effort": .string("medium")]),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["reasoning_effort": .string("high")]),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["reasoning_effort": .string("xhigh")])
+                ]
+            )
+        }
+    }
+}
+
 public enum ModelRequestBodyControlRuntimeStore {
     private static let perModelPrefix = "requestBodyControls.state.model."
     private static let signaturePrefix = "requestBodyControls.state.signature."

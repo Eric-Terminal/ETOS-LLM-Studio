@@ -502,29 +502,13 @@ extension ModelSettingsView {
 
     private func addToggleControl() {
         model.requestBodyControls.append(
-            ModelRequestBodyControl(
-                title: NSLocalizedString("开启思考", comment: ""),
-                kind: .toggle,
-                payload: ["enable_thinking": .bool(true)]
-            )
+            ModelRequestBodyControlDefaults.thinkingToggle(for: provider.apiFormat)
         )
     }
 
     private func addOptionGroupControl() {
-        let lowID = "low"
         model.requestBodyControls.append(
-            ModelRequestBodyControl(
-                title: NSLocalizedString("思考预算", comment: ""),
-                kind: .optionGroup,
-                defaultOptionID: lowID,
-                options: [
-                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["thinking_budget": .string("minimal")]),
-                    ModelRequestBodyControlOption(id: lowID, title: NSLocalizedString("low", comment: ""), payload: ["thinking_budget": .string("low")]),
-                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["thinking_budget": .string("medium")]),
-                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["thinking_budget": .string("high")]),
-                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["thinking_budget": .string("xhigh")])
-                ]
-            )
+            ModelRequestBodyControlDefaults.thinkingOptionGroup(for: provider.apiFormat)
         )
     }
 
@@ -544,8 +528,8 @@ extension ModelSettingsView {
     ) -> [String: Any] {
         let overridesAny = overrides.mapValues { $0.toAny() }
 
-        switch apiFormat {
-        case "gemini":
+        switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
+        case .gemini:
             var payload: [String: Any] = [:]
             payload["contents"] = [
                 [
@@ -561,15 +545,22 @@ extension ModelSettingsView {
             if let topP = overridesAny["top_p"] { generationConfig["topP"] = topP }
             if let topK = overridesAny["top_k"] { generationConfig["topK"] = topK }
             if let maxTokens = overridesAny["max_tokens"] { generationConfig["maxOutputTokens"] = maxTokens }
-            if let thinkingBudget = overridesAny["thinking_budget"] {
-                generationConfig["thinkingConfig"] = ["thinkingBudget": thinkingBudget]
+            var thinkingConfig: [String: Any] = [:]
+            if let thinkingLevel = overridesAny["thinking_level"] {
+                thinkingConfig["thinkingLevel"] = thinkingLevel
+            }
+            if let thinkingBudget = overridesAny["thinkingBudget"] ?? overridesAny["thinking_budget"] {
+                thinkingConfig["thinkingBudget"] = thinkingBudget
+            }
+            if !thinkingConfig.isEmpty {
+                generationConfig["thinkingConfig"] = thinkingConfig
             }
             if !generationConfig.isEmpty {
                 payload["generationConfig"] = generationConfig
             }
             return payload
 
-        case "anthropic":
+        case .anthropic:
             var payload: [String: Any] = [:]
             payload["model"] = model.modelName
             payload["messages"] = [
@@ -584,11 +575,16 @@ extension ModelSettingsView {
             if let topP = overridesAny["top_p"] { payload["top_p"] = topP }
             if let topK = overridesAny["top_k"] { payload["top_k"] = topK }
             if let stream = overridesAny["stream"] { payload["stream"] = stream }
-            if let thinkingBudget = overridesAny["thinking_budget"] {
+            if let thinking = overridesAny["thinking"] as? [String: Any] {
+                payload["thinking"] = thinking
+            } else if let thinkingBudget = overridesAny["thinking_budget"] {
                 payload["thinking"] = [
                     "type": "enabled",
                     "budget_tokens": thinkingBudget
                 ]
+            }
+            if let effort = overridesAny["effort"] {
+                payload["effort"] = effort
             }
             return payload
 
