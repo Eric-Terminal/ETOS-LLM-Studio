@@ -480,7 +480,10 @@ extension ModelSettingsView {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach($model.requestBodyControls) { $control in
-                    RequestBodyControlEditor(control: $control)
+                    RequestBodyControlEditor(
+                        control: $control,
+                        payloadDisplayMode: requestBodyMode
+                    )
                 }
                 .onDelete(perform: deleteRequestBodyControls)
             }
@@ -899,6 +902,7 @@ private struct RequestBodyPreviewInlineView: View {
 
 private struct RequestBodyControlEditor: View {
     @Binding var control: ModelRequestBodyControl
+    let payloadDisplayMode: Model.RequestBodyOverrideMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -917,7 +921,7 @@ private struct RequestBodyControlEditor: View {
             case .toggle:
                 Toggle(NSLocalizedString("默认开启", comment: ""), isOn: $control.defaultIsActive)
                 RequestBodyPayloadEditor(
-                    payloadDisplayMode: requestBodyMode,
+                    payloadDisplayMode: payloadDisplayMode,
                     payload: $control.payload
                 )
             case .optionGroup:
@@ -929,7 +933,7 @@ private struct RequestBodyControlEditor: View {
                         RequestBodyOptionEditor(
                             option: $option,
                             defaultOptionID: $control.defaultOptionID,
-                            payloadDisplayMode: requestBodyMode,
+                            payloadDisplayMode: payloadDisplayMode,
                             onDelete: {
                                 deleteOption(withID: option.id)
                             }
