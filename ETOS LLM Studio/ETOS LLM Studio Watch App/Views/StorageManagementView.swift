@@ -6,7 +6,7 @@
 // 功能特性:
 // - 显示 Documents 目录的存储使用概览
 // - 按类别浏览文件，并支持继续进入子文件夹
-// - 支持 JSON 文件分页预览和图片预览
+// - 支持 JSON 文件分页预览、图片预览和 SQLite 数据库查询
 // - 提供缓存清理功能
 // ============================================================================
 
@@ -400,6 +400,15 @@ public struct WatchFileListView: View {
             .swipeActions(edge: .trailing) {
                 deleteAction(for: file)
             }
+        } else if StorageBrowserSupport.isSQLiteDatabaseFile(file.url) {
+            NavigationLink {
+                WatchSQLitePreviewView(file: file)
+            } label: {
+                WatchFileRow(file: file)
+            }
+            .swipeActions(edge: .trailing) {
+                deleteAction(for: file)
+            }
         } else {
             WatchFileRow(file: file)
                 .swipeActions(edge: .trailing) {
@@ -509,6 +518,369 @@ private struct WatchImagePreviewView: View {
     }
 }
 
+private struct WatchSQLitePreviewView: View {
+    let file: FileItem
+
+    @State private var tables: [StorageSQLiteTableInfo] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView()
+            } else if let errorMessage {
+                VStack(spacing: 8) {
+                    Image(systemName: "cylinder.split.1x2")
+                        .etFont(.title3)
+                        .foregroundStyle(.secondary)
+                    Text(NSLocalizedString("无法预览", comment: ""))
+                        .etFont(.footnote)
+                    Text(errorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                List {
+                    Section(NSLocalizedString("文件", comment: "")) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(file.name)
+                                .etFont(.footnote)
+                            Text(StorageUtility.formatSize(file.size))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Section(NSLocalizedString("查询", comment: "")) {
+                        NavigationLink {
+                            WatchSQLiteQueryView(databaseURL: file.url)
+                        } label: {
+                            Label(NSLocalizedString("查询数据库", comment: "Query SQLite database"), systemImage: "magnifyingglass")
+                        }
+                    }
+
+                    Section(NSLocalizedString("表", comment: "SQLite tables")) {
+                        if tables.isEmpty {
+                            Text(NSLocalizedString("暂无内容", comment: ""))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(tables) { table in
+                                NavigationLink {
+                                    WatchSQLiteTableDataView(databaseURL: file.url, table: table)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(table.name)
+                                            .etFont(.footnote.weight(.semibold))
+                                        Text(String(format: NSLocalizedString("%d 个字段", comment: "SQLite column count"), table.columns.count))
+                                            .etFont(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("数据库预览", comment: "SQLite database preview"))
+        .task {
+            await loadTables()
+        }
+    }
+
+    private func loadTables() async {
+        isLoading = true
+        let databaseURL = file.url
+        let result = await Task.detached(priority: .userInitiated) {
+            Result {
+                try StorageBrowserSupport.listSQLiteTables(at: databaseURL)
+            }
+        }.value
+
+        await MainActor.run {
+            switch result {
+            case .success(let loadedTables):
+                tables = loadedTables
+                errorMessage = nil
+            case .failure(let error):
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
+}
+
+private struct WatchSQLiteTableDataView: View {
+    let databaseURL: URL
+    let table: StorageSQLiteTableInfo
+
+    @State private var page: StorageSQLiteQueryPage?
+    @State private var pageIndex = 0
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    private let pageSize = 20
+
+    var body: some View {
+        WatchSQLiteRowsView(
+            title: table.name,
+            page: page,
+            isLoading: isLoading,
+            errorMessage: errorMessage,
+            canGoBack: pageIndex > 0,
+            canGoForward: page?.hasNextPage == true,
+            onPrevious: {
+                pageIndex = max(0, pageIndex - 1)
+                Task { await loadPage() }
+            },
+            onNext: {
+                pageIndex += 1
+                Task { await loadPage() }
+            }
+        )
+        .task {
+            await loadPage()
+        }
+    }
+
+    private func loadPage() async {
+        isLoading = true
+        let databaseURL = databaseURL
+        let tableName = table.name
+        let pageIndex = pageIndex
+        let pageSize = pageSize
+        let result = await Task.detached(priority: .userInitiated) {
+            Result {
+                try StorageBrowserSupport.querySQLiteTablePage(
+                    at: databaseURL,
+                    tableName: tableName,
+                    pageIndex: pageIndex,
+                    pageSize: pageSize
+                )
+            }
+        }.value
+
+        await MainActor.run {
+            switch result {
+            case .success(let loadedPage):
+                page = loadedPage
+                errorMessage = nil
+            case .failure(let error):
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
+}
+
+private struct WatchSQLiteQueryView: View {
+    let databaseURL: URL
+
+    @State private var sql = "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')"
+    @State private var page: StorageSQLiteQueryPage?
+    @State private var pageIndex = 0
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private let pageSize = 20
+
+    var body: some View {
+        WatchSQLiteRowsView(
+            title: NSLocalizedString("查询数据库", comment: "Query SQLite database"),
+            page: page,
+            isLoading: isLoading,
+            errorMessage: errorMessage,
+            canGoBack: pageIndex > 0,
+            canGoForward: page?.hasNextPage == true,
+            onPrevious: {
+                pageIndex = max(0, pageIndex - 1)
+                Task { await executeQuery() }
+            },
+            onNext: {
+                pageIndex += 1
+                Task { await executeQuery() }
+            },
+            header: {
+                Section(NSLocalizedString("SQL", comment: "SQLite SQL input section")) {
+                    TextField(
+                        NSLocalizedString("只读 SQL", comment: "Read-only SQL placeholder"),
+                        text: $sql.watchKeyboardNewlineBinding(),
+                        axis: .vertical
+                    )
+                    .etFont(.system(size: 10, design: .monospaced))
+
+                    Button {
+                        pageIndex = 0
+                        Task { await executeQuery() }
+                    } label: {
+                        Label(NSLocalizedString("执行查询", comment: "Run SQLite query"), systemImage: "play")
+                    }
+                    .disabled(sql.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                }
+            }
+        )
+        .task {
+            if page == nil && errorMessage == nil {
+                await executeQuery()
+            }
+        }
+    }
+
+    private func executeQuery() async {
+        isLoading = true
+        let databaseURL = databaseURL
+        let sql = sql
+        let pageIndex = pageIndex
+        let pageSize = pageSize
+        let result = await Task.detached(priority: .userInitiated) {
+            Result {
+                try StorageBrowserSupport.querySQLitePage(
+                    at: databaseURL,
+                    sql: sql,
+                    pageIndex: pageIndex,
+                    pageSize: pageSize
+                )
+            }
+        }.value
+
+        await MainActor.run {
+            switch result {
+            case .success(let loadedPage):
+                page = loadedPage
+                errorMessage = nil
+            case .failure(let error):
+                page = nil
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
+}
+
+private struct WatchSQLiteRowsView<Header: View>: View {
+    let title: String
+    let page: StorageSQLiteQueryPage?
+    let isLoading: Bool
+    let errorMessage: String?
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let header: () -> Header
+
+    var body: some View {
+        List {
+            header()
+
+            if isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+            } else if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .etFont(.caption2)
+                    .foregroundStyle(.orange)
+            } else if let page {
+                Section(NSLocalizedString("统计", comment: "")) {
+                    infoRow(title: NSLocalizedString("当前页", comment: "SQLite current page"), value: "\(page.pageIndex + 1)")
+                    infoRow(title: NSLocalizedString("行", comment: "SQLite row count"), value: "\(page.rows.count)")
+                    infoRow(title: NSLocalizedString("字段", comment: "SQLite column count label"), value: "\(page.columns.count)")
+                }
+
+                Section {
+                    HStack(spacing: 8) {
+                        Button(NSLocalizedString("上一页", comment: "")) {
+                            onPrevious()
+                        }
+                        .disabled(!canGoBack || isLoading)
+
+                        Button(NSLocalizedString("下一页", comment: "")) {
+                            onNext()
+                        }
+                        .disabled(!canGoForward || isLoading)
+                    }
+                    .etFont(.caption2)
+                }
+
+                Section(NSLocalizedString("内容", comment: "")) {
+                    if page.rows.isEmpty {
+                        Text(NSLocalizedString("暂无内容", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(page.rows) { row in
+                            WatchSQLiteRowCard(row: row)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(title)
+    }
+
+    private func infoRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .etFont(.footnote)
+            Spacer()
+            Text(value)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private extension WatchSQLiteRowsView where Header == EmptyView {
+    init(
+        title: String,
+        page: StorageSQLiteQueryPage?,
+        isLoading: Bool,
+        errorMessage: String?,
+        canGoBack: Bool,
+        canGoForward: Bool,
+        onPrevious: @escaping () -> Void,
+        onNext: @escaping () -> Void
+    ) {
+        self.title = title
+        self.page = page
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+        self.canGoBack = canGoBack
+        self.canGoForward = canGoForward
+        self.onPrevious = onPrevious
+        self.onNext = onNext
+        self.header = { EmptyView() }
+    }
+}
+
+private struct WatchSQLiteRowCard: View {
+    let row: StorageSQLiteRow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("#\(row.index + 1)")
+                .etFont(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(row.cells) { cell in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cell.column)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(cell.value)
+                        .etFont(.system(size: 10, design: .monospaced))
+                        .lineLimit(6)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 private struct WatchFileRow: View {
     let file: FileItem
 
@@ -552,6 +924,9 @@ private struct WatchFileRow: View {
         if StorageBrowserSupport.isImageFile(file.url) {
             return "photo"
         }
+        if StorageBrowserSupport.isSQLiteDatabaseFile(file.url) {
+            return "cylinder.split.1x2"
+        }
         switch file.url.pathExtension.lowercased() {
         case "json":
             return "doc.text"
@@ -568,6 +943,9 @@ private struct WatchFileRow: View {
         }
         if StorageBrowserSupport.isImageFile(file.url) {
             return .green
+        }
+        if StorageBrowserSupport.isSQLiteDatabaseFile(file.url) {
+            return .indigo
         }
         switch file.url.pathExtension.lowercased() {
         case "json":
