@@ -33,6 +33,10 @@ public struct StorageTextPage: Identifiable, Hashable, Sendable {
 }
 
 public enum StorageBrowserSupport {
+    private static let imageFileExtensions: Set<String> = [
+        "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp", "tiff"
+    ]
+
     public static func relativeDisplayPath(
         for directory: URL,
         rootDirectory: URL
@@ -52,6 +56,10 @@ public enum StorageBrowserSupport {
 
     public static func isJSONFile(_ url: URL) -> Bool {
         url.pathExtension.lowercased() == "json"
+    }
+
+    public static func isImageFile(_ url: URL) -> Bool {
+        imageFileExtensions.contains(url.pathExtension.lowercased())
     }
 
     public static func paginateText(

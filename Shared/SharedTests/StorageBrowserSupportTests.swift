@@ -61,4 +61,11 @@ struct StorageBrowserSupportTests {
 
         #expect(breakdown.cacheSize == 42)
     }
+
+    @Test("图片文件判断会识别常见格式")
+    func testIsImageFile() {
+        #expect(StorageBrowserSupport.isImageFile(URL(fileURLWithPath: "/tmp/a.png")))
+        #expect(StorageBrowserSupport.isImageFile(URL(fileURLWithPath: "/tmp/a.heic")))
+        #expect(!StorageBrowserSupport.isImageFile(URL(fileURLWithPath: "/tmp/a.json")))
+    }
 }

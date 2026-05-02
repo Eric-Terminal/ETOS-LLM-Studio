@@ -6,7 +6,7 @@
 // 功能特性:
 // - 显示 Documents 目录的存储使用概览
 // - 按类别浏览文件，并支持继续进入子文件夹
-// - 支持 JSON 文件分页预览
+// - 支持 JSON 文件分页预览和图片预览
 // - 提供缓存清理功能
 // ============================================================================
 
@@ -391,6 +391,15 @@ public struct WatchFileListView: View {
             .swipeActions(edge: .trailing) {
                 deleteAction(for: file)
             }
+        } else if StorageBrowserSupport.isImageFile(file.url) {
+            NavigationLink {
+                WatchImagePreviewView(file: file)
+            } label: {
+                WatchFileRow(file: file)
+            }
+            .swipeActions(edge: .trailing) {
+                deleteAction(for: file)
+            }
         } else {
             WatchFileRow(file: file)
                 .swipeActions(edge: .trailing) {
@@ -447,6 +456,59 @@ public struct WatchFileListView: View {
     }
 }
 
+private struct WatchImagePreviewView: View {
+    let file: FileItem
+
+    @State private var image: UIImage?
+    @State private var isLoading = true
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView()
+            } else if let image {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(NSLocalizedString("文件名", comment: ""))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(file.name)
+                                .etFont(.footnote)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "photo")
+                        .etFont(.title3)
+                        .foregroundStyle(.secondary)
+                    Text(NSLocalizedString("无法预览", comment: ""))
+                        .etFont(.footnote)
+                    Text(NSLocalizedString("无法读取图片数据。", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("图片预览", comment: ""))
+        .task {
+            image = await Task.detached(priority: .userInitiated) {
+                UIImage(contentsOfFile: file.url.path)
+            }.value
+            isLoading = false
+        }
+    }
+}
+
 private struct WatchFileRow: View {
     let file: FileItem
 
@@ -487,13 +549,14 @@ private struct WatchFileRow: View {
         if file.isDirectory {
             return "folder.fill"
         }
+        if StorageBrowserSupport.isImageFile(file.url) {
+            return "photo"
+        }
         switch file.url.pathExtension.lowercased() {
         case "json":
             return "doc.text"
         case "m4a", "mp3", "wav", "aac":
             return "waveform"
-        case "jpg", "jpeg", "png", "gif", "webp", "heic":
-            return "photo"
         default:
             return "doc"
         }
@@ -503,13 +566,14 @@ private struct WatchFileRow: View {
         if file.isDirectory {
             return .blue
         }
+        if StorageBrowserSupport.isImageFile(file.url) {
+            return .green
+        }
         switch file.url.pathExtension.lowercased() {
         case "json":
             return .orange
         case "m4a", "mp3", "wav", "aac":
             return .purple
-        case "jpg", "jpeg", "png", "gif", "webp", "heic":
-            return .green
         default:
             return .secondary
         }

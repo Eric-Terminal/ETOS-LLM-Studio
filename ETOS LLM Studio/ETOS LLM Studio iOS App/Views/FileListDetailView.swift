@@ -7,10 +7,11 @@
 // - 按目录层级浏览文件与文件夹
 // - 显示文件名、大小、修改时间，并为长文件名提供跑马灯
 // - 支持删除单个文件和批量删除
-// - 支持 JSON 文件预览
+// - 支持 JSON 文件和图片预览
 // ============================================================================
 
 import SwiftUI
+import UIKit
 import Shared
 
 struct FileListDetailView: View {
@@ -159,7 +160,11 @@ private struct StorageDirectoryBrowserView: View {
             Text(String(format: NSLocalizedString("确定要删除选中的 %d 个项目吗？此操作不可撤销。", comment: ""), selectedFiles.count))
         }
         .sheet(item: $previewingFile) { file in
-            FilePreviewSheet(file: file)
+            if StorageBrowserSupport.isImageFile(file.url) {
+                ImagePreviewSheet(file: file)
+            } else {
+                FilePreviewSheet(file: file)
+            }
         }
     }
 
@@ -248,6 +253,16 @@ private struct StorageDirectoryBrowserView: View {
                 deleteAction(for: file)
             }
         } else if StorageBrowserSupport.isJSONFile(file.url) {
+            Button {
+                previewingFile = file
+            } label: {
+                FileRowView(file: file, isEditing: false, isSelected: false)
+            }
+            .buttonStyle(.plain)
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                deleteAction(for: file)
+            }
+        } else if StorageBrowserSupport.isImageFile(file.url) {
             Button {
                 previewingFile = file
             } label: {
@@ -369,7 +384,7 @@ private struct FileRowView: View {
                 Image(systemName: "chevron.right")
                     .etFont(.caption)
                     .foregroundStyle(.tertiary)
-            } else if StorageBrowserSupport.isJSONFile(file.url) && !isEditing {
+            } else if (StorageBrowserSupport.isJSONFile(file.url) || StorageBrowserSupport.isImageFile(file.url)) && !isEditing {
                 Image(systemName: "eye")
                     .etFont(.caption)
                     .foregroundStyle(.tertiary)
@@ -393,6 +408,9 @@ private struct FileRowView: View {
         if file.isDirectory {
             return ("folder.fill", .blue)
         }
+        if StorageBrowserSupport.isImageFile(file.url) {
+            return ("photo", .green)
+        }
 
         let ext = file.url.pathExtension.lowercased()
         switch ext {
@@ -400,8 +418,6 @@ private struct FileRowView: View {
             return ("doc.text", .orange)
         case "m4a", "mp3", "wav", "aac":
             return ("waveform", .purple)
-        case "jpg", "jpeg", "png", "gif", "webp", "heic":
-            return ("photo", .green)
         case "pdf":
             return ("doc.richtext", .red)
         default:
@@ -471,6 +487,64 @@ private struct FilePreviewSheet: View {
         }
         .task {
             content = StorageUtility.readJSONFile(at: file.url)
+            isLoading = false
+        }
+    }
+}
+
+private struct ImagePreviewSheet: View {
+    let file: FileItem
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var image: UIImage?
+    @State private var isLoading = true
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let image {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(NSLocalizedString("文件名", comment: ""))
+                                    .etFont(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(file.name)
+                                    .etFont(.footnote.monospaced())
+                            }
+                        }
+                        .padding()
+                    }
+                } else {
+                    ContentUnavailableView(
+                        NSLocalizedString("无法预览", comment: ""),
+                        systemImage: "photo",
+                        description: Text(NSLocalizedString("无法读取图片数据。", comment: ""))
+                    )
+                }
+            }
+            .navigationTitle(NSLocalizedString("图片预览", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(NSLocalizedString("完成", comment: "")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .task {
+            image = await Task.detached(priority: .userInitiated) {
+                UIImage(contentsOfFile: file.url.path)
+            }.value
             isLoading = false
         }
     }
