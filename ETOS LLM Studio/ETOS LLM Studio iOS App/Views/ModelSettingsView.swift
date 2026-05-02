@@ -67,7 +67,6 @@ struct ModelSettingsView: View {
                     Text(NSLocalizedString("参数表达式", comment: "")).tag(Model.RequestBodyOverrideMode.expression)
                     Text(NSLocalizedString("原始 JSON", comment: "")).tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
-                .pickerStyle(.segmented)
             }
 
             if requestBodyMode == .keyValue {
