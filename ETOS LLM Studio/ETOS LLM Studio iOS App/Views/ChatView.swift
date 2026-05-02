@@ -139,6 +139,7 @@ struct ChatView: View {
     @State private var exportErrorMessage: String?
     @State private var activeChatPickerSheet: ChatPickerSheet?
     @State private var modelPickerRequestControl: ModelRequestBodyControl?
+    @State private var showAllModelsInPicker = false
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatInputBarHeight: CGFloat = 0
@@ -1164,6 +1165,7 @@ struct ChatView: View {
 
     private func dismissModelPickerPanel() {
         modelPickerRequestControl = nil
+        showAllModelsInPicker = false
         if usesBottomSheetPickerStyle {
             activeChatPickerSheet = nil
             return
@@ -1265,24 +1267,50 @@ struct ChatView: View {
                 .padding(.vertical, 28)
             } else {
                 Section {
-                    ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                        Button {
-                            viewModel.setSelectedModel(runnable)
+                    ForEach(topModelChoices, id: \.id) { runnable in
+                        nativeModelPickerModelRow(runnable)
+                    }
+
+                    if hasMoreModelChoices {
+                        NavigationLink {
+                            nativeModelPickerAllModelsList
                         } label: {
-                            MarqueeTitleSubtitleSelectionRow(
-                                title: runnable.model.displayName,
-                                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
-                                isSelected: runnable.id == viewModel.selectedModel?.id,
-                                subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
-                            )
+                            Label(NSLocalizedString("更多模型", comment: ""), systemImage: "ellipsis")
                         }
                     }
                 } header: {
-                    Text(NSLocalizedString("模型", comment: ""))
+                    Text(NSLocalizedString("置顶模型", comment: ""))
                 } footer: {
                     Text(NSLocalizedString("切换当前对话的模型", comment: ""))
                 }
             }
+        }
+    }
+
+    private var nativeModelPickerAllModelsList: some View {
+        List {
+            Section {
+                ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                    nativeModelPickerModelRow(runnable)
+                }
+            } header: {
+                Text(NSLocalizedString("模型", comment: ""))
+            }
+        }
+        .navigationTitle(NSLocalizedString("更多模型", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func nativeModelPickerModelRow(_ runnable: RunnableModel) -> some View {
+        Button {
+            viewModel.setSelectedModel(runnable)
+        } label: {
+            MarqueeTitleSubtitleSelectionRow(
+                title: runnable.model.displayName,
+                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                isSelected: runnable.id == viewModel.selectedModel?.id,
+                subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
+            )
         }
     }
 
@@ -1444,6 +1472,8 @@ struct ChatView: View {
                     } else if let control = modelPickerRequestControl,
                               let selectedModel = viewModel.selectedModel {
                         overlayRequestControlDetail(runnableModel: selectedModel, control: control)
+                    } else if showAllModelsInPicker {
+                        modelPickerAllModelsList
                     } else {
                         modelPickerSplitContent
                     }
@@ -1480,18 +1510,24 @@ struct ChatView: View {
             Spacer()
 
             pickerHeaderActionButton(
-                systemName: modelPickerRequestControl == nil ? "xmark" : "chevron.left",
-                accessibilityLabel: modelPickerRequestControl == nil ? "关闭" : "返回"
+                systemName: modelPickerBackButtonShowsClose ? "xmark" : "chevron.left",
+                accessibilityLabel: modelPickerBackButtonShowsClose ? "关闭" : "返回"
             ) {
-                if modelPickerRequestControl == nil {
-                    dismissModelPickerPanel()
-                } else {
+                if modelPickerRequestControl != nil {
                     modelPickerRequestControl = nil
+                } else if showAllModelsInPicker {
+                    showAllModelsInPicker = false
+                } else {
+                    dismissModelPickerPanel()
                 }
             }
         }
         .padding(.horizontal, 18)
         .padding(.top, 14)
+    }
+
+    private var modelPickerBackButtonShowsClose: Bool {
+        modelPickerRequestControl == nil && !showAllModelsInPicker
     }
 
     private var modelPickerEmptyState: some View {
@@ -1511,6 +1547,47 @@ struct ChatView: View {
     private var modelPickerList: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
+                ForEach(topModelChoices, id: \.id) { runnable in
+                    modelPickerRow(runnable)
+                }
+
+                if hasMoreModelChoices {
+                    Button {
+                        showAllModelsInPicker = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(NSLocalizedString("更多模型", comment: ""))
+                                .etFont(.system(size: 15, weight: .semibold))
+                                .foregroundColor(TelegramColors.navBarText)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .etFont(.system(size: 12, weight: .semibold))
+                                .foregroundColor(TelegramColors.navBarSubtitle)
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(colorScheme == .dark ? 0.1 : 0.15), lineWidth: 0.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+    }
+
+    private var modelPickerAllModelsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
                 ForEach(viewModel.activatedModels, id: \.id) { runnable in
                     modelPickerRow(runnable)
                 }
@@ -1518,6 +1595,14 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
+    }
+
+    private var topModelChoices: [RunnableModel] {
+        Array(viewModel.activatedModels.prefix(3))
+    }
+
+    private var hasMoreModelChoices: Bool {
+        viewModel.activatedModels.count > topModelChoices.count
     }
 
     private var modelPickerSplitContent: some View {

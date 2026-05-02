@@ -2248,3 +2248,5 @@
 "Sticky 回合" = "Sticky ターン";
 "Cooldown 回合" = "Cooldown ターン";
 "Delay 回合" = "Delay ターン";
+"置顶模型" = "固定モデル";
+"更多模型" = "その他のモデル";

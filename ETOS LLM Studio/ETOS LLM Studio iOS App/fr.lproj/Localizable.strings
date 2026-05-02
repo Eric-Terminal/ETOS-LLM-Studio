@@ -2346,3 +2346,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Sticky 回合" = "Tours Sticky";
 "Cooldown 回合" = "Tours Cooldown";
 "Delay 回合" = "Tours Delay";
+"置顶模型" = "Modèles épinglés";
+"更多模型" = "Plus de modèles";
