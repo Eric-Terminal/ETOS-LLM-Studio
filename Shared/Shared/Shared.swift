@@ -41,20 +41,6 @@ public enum ChatPickerPresentationStyle: String, CaseIterable, Identifiable {
     }
 }
 
-public enum ChatMessageActionPresentationStyle: String, CaseIterable, Identifiable {
-    case nativeContextMenu = "nativeContextMenu"
-    case bottomSheet = "bottomSheet"
-
-    public static let storageKey = "ui.chatMessageActionPresentationStyle"
-    public static let defaultStyle: ChatMessageActionPresentationStyle = .nativeContextMenu
-
-    public var id: String { rawValue }
-
-    public static func resolvedStyle(rawValue: String) -> ChatMessageActionPresentationStyle {
-        ChatMessageActionPresentationStyle(rawValue: rawValue) ?? defaultStyle
-    }
-}
-
 public enum SettingsIconAppearancePreference {
     public static let storageKey = "ui.settingsColorfulIconsEnabled"
 }

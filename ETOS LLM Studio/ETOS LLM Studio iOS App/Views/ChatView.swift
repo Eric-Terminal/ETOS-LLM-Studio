@@ -65,23 +65,6 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-private extension View {
-    @ViewBuilder
-    func messageActionPresentation<MenuContent: View>(
-        usesBottomSheet: Bool,
-        onPresentSheet: @escaping () -> Void,
-        @ViewBuilder contextMenuContent: @escaping () -> MenuContent
-    ) -> some View {
-        if usesBottomSheet {
-            self.contentShape(Rectangle())
-        } else {
-            self.contextMenu {
-                contextMenuContent()
-            }
-        }
-    }
-}
-
 private enum ChatPickerSheet: String, Identifiable {
     case session
     case model
@@ -151,7 +134,6 @@ struct ChatView: View {
     @FocusState private var sessionPickerSearchFocused: Bool
     @AppStorage("chat.composer.draft") private var draftText: String = ""
     @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
-    @AppStorage(ChatMessageActionPresentationStyle.storageKey) private var chatMessageActionPresentationStyleRawValue: String = ChatMessageActionPresentationStyle.defaultStyle.rawValue
     @Namespace private var modelPickerNamespace
     @Namespace private var sessionPickerNamespace
     
@@ -207,9 +189,6 @@ struct ChatView: View {
     }
     private var usesBottomSheetPickerStyle: Bool {
         chatPickerPresentationStyle == .bottomSheet
-    }
-    private var usesBottomSheetMessageActionStyle: Bool {
-        ChatMessageActionPresentationStyle.resolvedStyle(rawValue: chatMessageActionPresentationStyleRawValue) == .bottomSheet
     }
     private var isModelPickerPresented: Bool {
         usesBottomSheetPickerStyle ? activeChatPickerSheet == .model : showModelPickerPanel
@@ -448,20 +427,11 @@ struct ChatView: View {
                                         onSwitchToNextVersion: {
                                             viewModel.switchToNextVersion(of: message)
                                         },
-                                        onOpenMore: usesBottomSheetMessageActionStyle ? {
+                                        onOpenMore: {
                                             messageActionSheetPayload = MessageActionSheetPayload(message: message)
-                                        } : nil
-                                    )
-                                    .id(state.id)
-                                    .messageActionPresentation(
-                                        usesBottomSheet: usesBottomSheetMessageActionStyle,
-                                        onPresentSheet: {
-                                            messageActionSheetPayload = MessageActionSheetPayload(message: message)
-                                        },
-                                        contextMenuContent: {
-                                            contextMenu(for: message)
                                         }
                                     )
+                                    .id(state.id)
                                 }
                             }
 
@@ -2469,208 +2439,6 @@ struct ChatView: View {
         }
     }
     
-    @ViewBuilder
-    private func contextMenu(for message: ChatMessage) -> some View {
-        // 有音频或图片附件的消息不显示编辑按钮
-        let hasAttachments = message.audioFileName != nil || (message.imageFileNames?.isEmpty == false)
-        
-        if !hasAttachments {
-            Button {
-                editingMessage = message
-            } label: {
-                Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
-            }
-        }
-        
-        if viewModel.canRetry(message: message) {
-            Button {
-                performDeferredRetry(message)
-            } label: {
-                Label(NSLocalizedString("重试", comment: ""), systemImage: "arrow.clockwise")
-            }
-        }
-        
-        // 如果错误消息有完整内容（被截断），显示查看完整响应按钮
-        if message.role == .error, let fullContent = message.fullErrorContent {
-            Button {
-                fullErrorContent = FullErrorContentPayload(content: fullContent)
-            } label: {
-                Label(NSLocalizedString("查看完整响应", comment: ""), systemImage: "doc.text.magnifyingglass")
-            }
-        }
-        
-        Button {
-            messageToBranch = message
-            showBranchOptions = true
-        } label: {
-            Label(NSLocalizedString("从此处创建分支", comment: ""), systemImage: "arrow.triangle.branch")
-        }
-
-        Menu {
-            Menu(NSLocalizedString("包含思考", comment: "")) {
-                Button {
-                    exportConversation(format: .pdf, includeReasoning: true, upToMessage: nil)
-                } label: {
-                    Label("PDF", systemImage: "doc.richtext")
-                }
-                Button {
-                    exportConversation(format: .markdown, includeReasoning: true, upToMessage: nil)
-                } label: {
-                    Label("Markdown", systemImage: "number.square")
-                }
-                Button {
-                    exportConversation(format: .text, includeReasoning: true, upToMessage: nil)
-                } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
-                }
-            }
-            Menu(NSLocalizedString("不包含思考", comment: "")) {
-                Button {
-                    exportConversation(format: .pdf, includeReasoning: false, upToMessage: nil)
-                } label: {
-                    Label("PDF", systemImage: "doc.richtext")
-                }
-                Button {
-                    exportConversation(format: .markdown, includeReasoning: false, upToMessage: nil)
-                } label: {
-                    Label("Markdown", systemImage: "number.square")
-                }
-                Button {
-                    exportConversation(format: .text, includeReasoning: false, upToMessage: nil)
-                } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
-                }
-            }
-        } label: {
-            Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
-        }
-
-        Menu {
-            Menu(NSLocalizedString("包含思考", comment: "")) {
-                Button {
-                    exportConversation(format: .pdf, includeReasoning: true, upToMessage: message)
-                } label: {
-                    Label("PDF", systemImage: "doc.richtext")
-                }
-                Button {
-                    exportConversation(format: .markdown, includeReasoning: true, upToMessage: message)
-                } label: {
-                    Label("Markdown", systemImage: "number.square")
-                }
-                Button {
-                    exportConversation(format: .text, includeReasoning: true, upToMessage: message)
-                } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
-                }
-            }
-            Menu(NSLocalizedString("不包含思考", comment: "")) {
-                Button {
-                    exportConversation(format: .pdf, includeReasoning: false, upToMessage: message)
-                } label: {
-                    Label("PDF", systemImage: "doc.richtext")
-                }
-                Button {
-                    exportConversation(format: .markdown, includeReasoning: false, upToMessage: message)
-                } label: {
-                    Label("Markdown", systemImage: "number.square")
-                }
-                Button {
-                    exportConversation(format: .text, includeReasoning: false, upToMessage: message)
-                } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
-                }
-            }
-        } label: {
-            Label(NSLocalizedString("导出到此消息（含上文）", comment: ""), systemImage: "arrow.up.doc")
-        }
-
-        if message.role == .assistant || message.role == .tool || message.role == .system {
-            Button {
-                toggleSpeaking(message)
-            } label: {
-                Label(
-                    ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? NSLocalizedString("停止朗读", comment: "") : NSLocalizedString("朗读消息", comment: ""),
-                    systemImage: ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking ? "stop.circle" : "speaker.wave.2"
-                )
-            }
-        }
-        
-        Divider()
-        
-        // 版本管理菜单项
-        if viewModel.hasDisplayVersions(for: message) {
-            Menu {
-                ForEach(0..<viewModel.displayVersionCount(for: message), id: \.self) { index in
-                    Button {
-                        viewModel.switchToVersion(index, of: message)
-                    } label: {
-                        HStack {
-                            Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
-                            if index == viewModel.displayCurrentVersionIndex(for: message) {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Label(
-                    String(
-                        format: NSLocalizedString("切换版本 (%d/%d)", comment: ""),
-                        viewModel.displayCurrentVersionIndex(for: message) + 1,
-                        viewModel.displayVersionCount(for: message)
-                    ),
-                    systemImage: "clock.arrow.circlepath"
-                )
-            }
-            
-            if viewModel.displayVersionCount(for: message) > 1 {
-                Button(role: .destructive) {
-                    messageVersionToDelete = message
-                } label: {
-                    Label(NSLocalizedString("删除当前版本", comment: ""), systemImage: "trash")
-                }
-            }
-            
-            Divider()
-        }
-        
-        Button(role: .destructive) {
-            messageToDelete = message
-        } label: {
-            Label(viewModel.hasDisplayVersions(for: message) ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
-        }
-        
-        Divider()
-        
-        if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
-            Button {
-                Task {
-                    await downloadImagesToPhotoLibrary(fileNames: imageFileNames)
-                }
-            } label: {
-                Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
-            }
-        }
-
-        Button {
-            UIPasteboard.general.string = message.content
-        } label: {
-            Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
-        }
-        
-        if let index = viewModel.allMessagesForSession.firstIndex(where: { $0.id == message.id }) {
-            Button {
-                messageInfo = MessageInfoPayload(
-                    message: message,
-                    displayIndex: index + 1,
-                    totalCount: viewModel.allMessagesForSession.count
-                )
-            } label: {
-                Label(NSLocalizedString("查看消息信息", comment: ""), systemImage: "info.circle")
-            }
-        }
-    }
-
     private func toggleSpeaking(_ message: ChatMessage) {
         if ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking {
             viewModel.stopSpeakingMessage()

@@ -1633,9 +1633,6 @@
 "悬浮面板" = "Floating Panel";
 "底部抽屉" = "Bottom Sheet";
 "设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。" = "Set how the picker menu appears. \"Floating Panel\" offers a centered, visually focused experience; \"Bottom Sheet\" follows the natural thumb gesture so every switch feels silky smooth.";
-"消息操作菜单" = "Message action menu";
-"系统菜单" = "System Menu";
-"设定长按消息后的操作列表呈现方式。「系统菜单」保留原生长按体验；「底部抽屉」会从屏幕底部展开完整操作列表。" = "Set how the action list appears after long-pressing a message. \"System Menu\" keeps the native long-press experience; \"Bottom Sheet\" expands the full action list from the bottom of the screen.";
 "消息操作" = "Message Actions";
 "无气泡UI" = "No Bubble UI";
 "开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。" = "When enabled, chat bubble backgrounds become transparent and message text can use a wider layout.";
