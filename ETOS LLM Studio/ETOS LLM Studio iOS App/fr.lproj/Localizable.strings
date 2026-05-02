@@ -1407,6 +1407,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "向模型暴露 Agent Skills（use_skill）" = "Exposer les compétences de l'agent au modèle (use_skill)";
 "向模型暴露快捷指令工具" = "Exposer les outils de raccourci au modèle";
 "启用" = "Activer";
+"设为默认" = "Définir par défaut";
 "启用倒计时自动批准" = "Activer l'approbation automatique du compte à rebours";
 "启用异步跨对话记忆" = "Activer la mémoire asynchrone entre sessions";
 "响应格式（mp3/wav）" = "Format de réponse (mp3/wav)";

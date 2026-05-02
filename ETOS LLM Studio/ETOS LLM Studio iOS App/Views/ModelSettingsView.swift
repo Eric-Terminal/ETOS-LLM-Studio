@@ -985,33 +985,32 @@ private struct RequestBodyOptionEditor: View {
     let onDelete: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("选项名称", comment: ""))
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField(NSLocalizedString("选项名称", comment: ""), text: $option.title)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("选项名称", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("选项名称", comment: ""), text: $option.title)
+            }
+
+            HStack(alignment: .center, spacing: 12) {
+                Toggle(NSLocalizedString("设为默认", comment: ""), isOn: defaultOptionBinding)
+                    .fixedSize()
 
                 if let onDelete {
+                    Spacer()
                     Button(role: .destructive) {
                         onDelete()
                     } label: {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("删除选项", comment: ""))
+                    .accessibilityLabel(NSLocalizedString("删除", comment: ""))
                 }
-                Button {
-                    defaultOptionID = option.id
-                } label: {
-                    Image(systemName: defaultOptionID == option.id ? "checkmark.circle.fill" : "circle")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("设为默认", comment: ""))
             }
+
+            Divider()
+
             RequestBodyPayloadEditor(
                 payloadDisplayMode: payloadDisplayMode,
                 payload: $option.payload
@@ -1019,6 +1018,18 @@ private struct RequestBodyOptionEditor: View {
             .id("\(controlID)-\(option.id)-payload")
         }
         .padding(.leading, 8)
+    }
+
+    private var defaultOptionBinding: Binding<Bool> {
+        Binding {
+            defaultOptionID == option.id
+        } set: { isDefault in
+            if isDefault {
+                defaultOptionID = option.id
+            } else if defaultOptionID == option.id {
+                defaultOptionID = nil
+            }
+        }
     }
 }
 
@@ -1031,15 +1042,19 @@ private struct RequestBodyPayloadEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             switch payloadDisplayMode {
-            case .keyValue:
-                RequestBodyPayloadKeyValueEditor(payload: $payload)
             case .rawJSON:
                 textPayloadEditor(
                     title: NSLocalizedString("Value", comment: ""),
                     placeholder: NSLocalizedString("填写 JSON 对象", comment: ""),
                     lineLimit: 2...8
                 )
-            default:
+            case .keyValue, .expression:
+                textPayloadEditor(
+                    title: NSLocalizedString("Value", comment: ""),
+                    placeholder: NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""),
+                    lineLimit: 2...8
+                )
+            @unknown default:
                 textPayloadEditor(
                     title: NSLocalizedString("Value", comment: ""),
                     placeholder: NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""),
@@ -1114,156 +1129,6 @@ private struct RequestBodyPayloadEditor: View {
         } catch {
             self.error = error.localizedDescription
         }
-    }
-}
-
-private struct RequestBodyPayloadKeyValueEntry: Identifiable, Equatable {
-    let id: UUID
-    var key: String
-    var value: String
-    var error: String?
-
-    init(id: UUID = UUID(), key: String, value: String, error: String? = nil) {
-        self.id = id
-        self.key = key
-        self.value = value
-        self.error = error
-    }
-}
-
-private struct RequestBodyPayloadKeyValueEditor: View {
-    @Binding var payload: [String: JSONValue]
-    @State private var entries: [RequestBodyPayloadKeyValueEntry] = []
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(entries) { entry in
-                if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-                    RequestBodyPayloadKeyValueRow(
-                        entry: $entries[index],
-                        canDelete: entries.count > 1,
-                        onDelete: {
-                            deleteEntry(withID: entry.id)
-                        },
-                        onChange: updatePayload
-                    )
-                }
-            }
-
-            Button {
-                entries.append(RequestBodyPayloadKeyValueEntry(key: "", value: ""))
-            } label: {
-                Label(NSLocalizedString("添加键值对", comment: ""), systemImage: "plus")
-            }
-        }
-        .onAppear(perform: syncEntriesFromPayload)
-    }
-
-    private func syncEntriesFromPayload() {
-        let rows = payload
-            .sorted(by: { $0.key < $1.key })
-            .map { RequestBodyPayloadKeyValueEntry(key: $0.key, value: stringValue(for: $0.value)) }
-        entries = rows.isEmpty ? [RequestBodyPayloadKeyValueEntry(key: "", value: "")] : rows
-    }
-
-    private func updatePayload() {
-        var updatedEntries = entries
-        var parsedExpressions: [ParameterExpressionParser.ParsedExpression] = []
-        var hasError = false
-
-        for index in updatedEntries.indices {
-            do {
-                if let expression = try parseEntry(updatedEntries[index]) {
-                    parsedExpressions.append(expression)
-                }
-                updatedEntries[index].error = nil
-            } catch {
-                hasError = true
-                updatedEntries[index].error = error.localizedDescription
-            }
-        }
-
-        entries = updatedEntries
-        guard !hasError else { return }
-        payload = ParameterExpressionParser.buildParameters(from: parsedExpressions)
-    }
-
-    private func parseEntry(_ entry: RequestBodyPayloadKeyValueEntry) throws -> ParameterExpressionParser.ParsedExpression? {
-        let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if key.isEmpty && value.isEmpty {
-            return nil
-        }
-        guard !key.isEmpty else {
-            throw ParameterExpressionParser.ParserError.invalidKey
-        }
-        if value.isEmpty {
-            return ParameterExpressionParser.ParsedExpression(key: key, value: .string(""))
-        }
-        return try ParameterExpressionParser.parse("\(key) = \(entry.value)")
-    }
-
-    private func deleteEntry(withID id: UUID) {
-        entries.removeAll { $0.id == id }
-        if entries.isEmpty {
-            entries.append(RequestBodyPayloadKeyValueEntry(key: "", value: ""))
-        }
-        updatePayload()
-    }
-
-    private func stringValue(for value: JSONValue) -> String {
-        let serialized = ParameterExpressionParser.serialize(parameters: ["value": value]).first ?? "value="
-        guard let separatorIndex = serialized.firstIndex(of: "=") else {
-            return serialized
-        }
-        return String(serialized[serialized.index(after: separatorIndex)...])
-    }
-}
-
-private struct RequestBodyPayloadKeyValueRow: View {
-    @Binding var entry: RequestBodyPayloadKeyValueEntry
-    let canDelete: Bool
-    let onDelete: () -> Void
-    let onChange: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("Key", comment: ""))
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if canDelete {
-                    Button(role: .destructive, action: onDelete) {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("删除", comment: ""))
-                }
-            }
-
-            Text(NSLocalizedString("Value", comment: ""))
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-            TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...4)
-
-            if let error = entry.error {
-                Text(error)
-                    .etFont(.footnote)
-                    .foregroundStyle(.red)
-            }
-        }
-        .onChange(of: entry.key) { _, _ in onChange() }
-        .onChange(of: entry.value) { _, _ in onChange() }
     }
 }
 

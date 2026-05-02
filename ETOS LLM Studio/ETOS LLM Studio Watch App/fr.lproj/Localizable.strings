@@ -1664,6 +1664,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "启动时自动同步" = "Auto-sync on Launch";
 "启动步骤" = "Setup Steps";
 "启用" = "Enable";
+"设为默认" = "Set as Default";
 "启用 iCloud 同步" = "Enable iCloud Sync";
 "启用全局代理" = "Enable Global Proxy";
 "启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。" = "When enabled, AI gains memory capabilities. It retrieves relevant memories before each chat and can actively learn through tools.";

@@ -1407,6 +1407,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "向模型暴露 Agent Skills（use_skill）" = "Exponer las habilidades del agente al modelo (use_skill)";
 "向模型暴露快捷指令工具" = "Exponer herramientas de acceso directo al modelo";
 "启用" = "Permitir";
+"设为默认" = "Establecer por defecto";
 "启用倒计时自动批准" = "Habilitar la aprobación automática de cuenta regresiva";
 "启用异步跨对话记忆" = "Habilitar la memoria asíncrona entre sesiones";
 "响应格式（mp3/wav）" = "Formato de respuesta (mp3/wav)";

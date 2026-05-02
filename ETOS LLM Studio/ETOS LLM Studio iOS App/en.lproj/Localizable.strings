@@ -1436,6 +1436,7 @@
 "常见问题：如果 urlshim / URL Scheme 跳转失败，请先把清单内容复制到剪贴板，再点上面的“从剪贴板导入清单”。" = "FAQ: If urlshim / URL Scheme fails, copy the manifest to clipboard first, then click Import Manifest from Clipboard.";
 "默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。" = "Default executes Direct -> Bridge; if tool run mode is set to Bridge, executes Bridge -> Direct.";
 "启用" = "Enable";
+"设为默认" = "Set as Default";
 "暂无可用模型，请先在“提供商与模型管理”中给模型开启“文字转语音”能力。" = "No available models. Please enable Text-to-Speech capability in Provider & Model Management first.";
 "当前没有可用于 Detached Completion 的聊天模型。" = "No chat model available for Detached Completion.";
 "当前模型对应的适配器不可用，无法执行 Detached Completion。" = "The adapter for the current model is unavailable, cannot execute Detached Completion.";
