@@ -1232,15 +1232,7 @@ struct ChatView: View {
 
     private var nativeModelPickerSheet: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                nativeModelPickerModelList
-                    .frame(maxHeight: .infinity)
-
-                Divider()
-
-                nativeModelPickerRequestControlList
-                    .frame(maxHeight: .infinity)
-            }
+            nativeModelPickerContent
             .navigationTitle(NSLocalizedString("选择模型", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1253,7 +1245,7 @@ struct ChatView: View {
         }
     }
 
-    private var nativeModelPickerModelList: some View {
+    private var nativeModelPickerContent: some View {
         List {
             if viewModel.activatedModels.isEmpty {
                 VStack(spacing: 6) {
@@ -1270,18 +1262,28 @@ struct ChatView: View {
                     ForEach(topModelChoices, id: \.id) { runnable in
                         nativeModelPickerModelRow(runnable)
                     }
+                } header: {
+                    Text(NSLocalizedString("置顶模型", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("切换当前对话的模型", comment: ""))
+                }
 
-                    if hasMoreModelChoices {
+                Section {
+                    nativeModelPickerRequestControlRows
+                } header: {
+                    Text(NSLocalizedString("请求控制", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("点击控制名称后选择具体参数。", comment: ""))
+                }
+
+                if hasMoreModelChoices {
+                    Section {
                         NavigationLink {
                             nativeModelPickerAllModelsList
                         } label: {
                             Label(NSLocalizedString("更多模型", comment: ""), systemImage: "ellipsis")
                         }
                     }
-                } header: {
-                    Text(NSLocalizedString("置顶模型", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("切换当前对话的模型", comment: ""))
                 }
             }
         }
@@ -1311,18 +1313,6 @@ struct ChatView: View {
                 isSelected: runnable.id == viewModel.selectedModel?.id,
                 subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
             )
-        }
-    }
-
-    private var nativeModelPickerRequestControlList: some View {
-        List {
-            Section {
-                nativeModelPickerRequestControlRows
-            } header: {
-                Text(NSLocalizedString("请求控制", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("点击控制名称后选择具体参数。", comment: ""))
-            }
         }
     }
 
@@ -1546,12 +1536,20 @@ struct ChatView: View {
 
     private var modelPickerList: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 10, pinnedViews: []) {
                 ForEach(topModelChoices, id: \.id) { runnable in
                     modelPickerRow(runnable)
                 }
 
+                Divider()
+                    .padding(.top, 2)
+
+                modelPickerRequestControlsPanel
+
                 if hasMoreModelChoices {
+                    Divider()
+                        .padding(.top, 2)
+
                     Button {
                         showAllModelsInPicker = true
                     } label: {
@@ -1606,16 +1604,7 @@ struct ChatView: View {
     }
 
     private var modelPickerSplitContent: some View {
-        VStack(spacing: 0) {
-            modelPickerList
-                .frame(maxHeight: .infinity)
-
-            Divider()
-                .padding(.horizontal, 16)
-
-            modelPickerRequestControlsPanel
-                .frame(maxHeight: .infinity)
-        }
+        modelPickerList
     }
 
     private var modelPickerRequestControlsPanel: some View {
@@ -1633,33 +1622,31 @@ struct ChatView: View {
                         .foregroundColor(TelegramColors.navBarSubtitle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(controls) { control in
-                                Button {
-                                    modelPickerRequestControl = control
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Text(control.title)
-                                            .etFont(.system(size: 14, weight: .medium))
-                                            .foregroundColor(TelegramColors.navBarText)
-                                            .lineLimit(1)
+                    LazyVStack(spacing: 8) {
+                        ForEach(controls) { control in
+                            Button {
+                                modelPickerRequestControl = control
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text(control.title)
+                                        .etFont(.system(size: 14, weight: .medium))
+                                        .foregroundColor(TelegramColors.navBarText)
+                                        .lineLimit(1)
 
-                                        Spacer()
+                                    Spacer()
 
-                                        Image(systemName: "chevron.right")
-                                            .etFont(.system(size: 11, weight: .semibold))
-                                            .foregroundColor(TelegramColors.navBarSubtitle)
-                                    }
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.05))
-                                    )
+                                    Image(systemName: "chevron.right")
+                                        .etFont(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(TelegramColors.navBarSubtitle)
                                 }
-                                .buttonStyle(.plain)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.05))
+                                )
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
