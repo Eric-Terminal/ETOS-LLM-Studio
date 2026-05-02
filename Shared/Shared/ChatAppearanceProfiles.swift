@@ -338,11 +338,11 @@ public enum ChatAppearanceProfileStore {
             if (try? normalized.validateScheduleRules()) == nil {
                 var safeConfiguration = normalized
                 safeConfiguration.scheduleRules = []
-                try? saveConfiguration(safeConfiguration, userDefaults: userDefaults)
+                _ = try? saveConfiguration(safeConfiguration, userDefaults: userDefaults)
                 return safeConfiguration
             }
             if normalized != decoded {
-                try? saveConfiguration(normalized, userDefaults: userDefaults)
+                _ = try? saveConfiguration(normalized, userDefaults: userDefaults)
             }
             return normalized
         }
