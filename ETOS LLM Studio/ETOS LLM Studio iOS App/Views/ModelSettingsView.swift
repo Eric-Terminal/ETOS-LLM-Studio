@@ -902,16 +902,8 @@ private struct RequestBodyControlEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title)
-                Picker(NSLocalizedString("类型", comment: ""), selection: $control.kind) {
-                    Text(NSLocalizedString("开关", comment: "")).tag(ModelRequestBodyControl.Kind.toggle)
-                    Text(NSLocalizedString("组选", comment: "")).tag(ModelRequestBodyControl.Kind.optionGroup)
-                }
-                .pickerStyle(.menu)
-            }
-
             Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
+            TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title)
 
             switch control.kind {
             case .toggle:

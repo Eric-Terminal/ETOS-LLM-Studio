@@ -906,16 +906,9 @@ private struct RequestBodyControlEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
             TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title.watchKeyboardNewlineBinding())
                 .textInputAutocapitalization(.never)
-
-            Picker(NSLocalizedString("类型", comment: ""), selection: $control.kind) {
-                Text(NSLocalizedString("开关", comment: "")).tag(ModelRequestBodyControl.Kind.toggle)
-                Text(NSLocalizedString("组选", comment: "")).tag(ModelRequestBodyControl.Kind.optionGroup)
-            }
-            .pickerStyle(.navigationLink)
-
-            Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
 
             switch control.kind {
             case .toggle:
