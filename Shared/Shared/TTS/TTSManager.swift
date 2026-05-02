@@ -9,64 +9,64 @@ import AVFoundation
 public final class TTSManager: NSObject, ObservableObject {
     public static let shared = TTSManager()
 
-    @Published public private(set) var isSpeaking: Bool = false
-    @Published public private(set) var playbackState: TTSPlaybackState = .init()
-    @Published public private(set) var currentSpeakingMessageID: UUID?
+    @Published public var isSpeaking: Bool = false
+    @Published public var playbackState: TTSPlaybackState = .init()
+    @Published public var currentSpeakingMessageID: UUID?
 
-    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "TTSManager")
-    private let settingsStore = TTSSettingsStore.shared
-    private let urlSession: URLSession
+    let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "TTSManager")
+    let settingsStore = TTSSettingsStore.shared
+    let urlSession: URLSession
 
-    private var selectedModel: RunnableModel?
-    private var queue: [QueueItem] = []
-    private var workerTask: Task<Void, Never>?
-    private var prefetchTasks: [UUID: Task<AudioClip, Error>] = [:]
-    private let prefetchWindowSize: Int = 1
-    private var isPausedByUser = false
-    private var activeBackend: ActiveBackend = .none
+    var selectedModel: RunnableModel?
+    var queue: [QueueItem] = []
+    var workerTask: Task<Void, Never>?
+    var prefetchTasks: [UUID: Task<AudioClip, Error>] = [:]
+    let prefetchWindowSize: Int = 1
+    var isPausedByUser = false
+    var activeBackend: ActiveBackend = .none
 
 #if canImport(AVFoundation)
-    private var audioPlayer: AVAudioPlayer?
-    private var audioContinuation: CheckedContinuation<Void, Error>?
-    private var progressTimer: Timer?
+    var audioPlayer: AVAudioPlayer?
+    var audioContinuation: CheckedContinuation<Void, Error>?
+    var progressTimer: Timer?
 #endif
 
 #if os(iOS) || os(watchOS)
-    private lazy var speechSynthesizer: AVSpeechSynthesizer = {
+    lazy var speechSynthesizer: AVSpeechSynthesizer = {
         let synthesizer = AVSpeechSynthesizer()
         synthesizer.delegate = self
         return synthesizer
     }()
-    private var speechContinuation: CheckedContinuation<Void, Error>?
-    private var speechMonitorTask: Task<Void, Never>?
-    private var speechDidStart = false
+    var speechContinuation: CheckedContinuation<Void, Error>?
+    var speechMonitorTask: Task<Void, Never>?
+    var speechDidStart = false
 #endif
 
-    private struct QueueItem: Identifiable {
+    struct QueueItem: Identifiable {
         let id = UUID()
         let messageID: UUID?
         let text: String
     }
 
     /// 用于在朗读结束后执行“重试朗读”
-    private struct ReplayRequest {
+    struct ReplayRequest {
         let messageID: UUID?
         let text: String
     }
 
-    private enum ActiveBackend {
+    enum ActiveBackend {
         case none
         case system
         case cloud
     }
 
-    private struct AudioClip: Sendable {
+    struct AudioClip: Sendable {
         var data: Data
         var format: String
         var sampleRate: Int?
     }
 
-    private var lastReplayRequest: ReplayRequest?
+    var lastReplayRequest: ReplayRequest?
 
     public init(urlSession: URLSession = NetworkSessionConfiguration.shared) {
         self.urlSession = urlSession
@@ -206,7 +206,7 @@ public final class TTSManager: NSObject, ObservableObject {
 #endif
     }
 
-    private func processQueue() async {
+    func processQueue() async {
         while !Task.isCancelled {
             if isPausedByUser {
                 try? await Task.sleep(nanoseconds: 80_000_000)
@@ -276,7 +276,7 @@ public final class TTSManager: NSObject, ObservableObject {
         workerTask = nil
     }
 
-    private func resolvePlaybackMode(_ mode: TTSPlaybackMode) -> TTSPlaybackMode {
+    func resolvePlaybackMode(_ mode: TTSPlaybackMode) -> TTSPlaybackMode {
 #if os(iOS) || os(watchOS)
         if mode == .auto {
             return .system
@@ -293,14 +293,14 @@ public final class TTSManager: NSObject, ObservableObject {
 #endif
     }
 
-    private func speakByCloud(_ item: QueueItem, settings: TTSSettingsSnapshot) async throws {
+    func speakByCloud(_ item: QueueItem, settings: TTSSettingsSnapshot) async throws {
         let candidates = [item] + Array(queue.prefix(prefetchWindowSize))
         scheduleCloudPrefetch(for: candidates, settings: settings)
         let clip = try await resolveCloudClip(for: item, settings: settings)
         try await playAudio(clip: clip, speed: settings.playbackSpeed)
     }
 
-    private func resolveCloudClip(for item: QueueItem, settings: TTSSettingsSnapshot) async throws -> AudioClip {
+    func resolveCloudClip(for item: QueueItem, settings: TTSSettingsSnapshot) async throws -> AudioClip {
         if let task = prefetchTasks[item.id] {
             prefetchTasks.removeValue(forKey: item.id)
             return try await task.value
@@ -310,7 +310,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return try await synthesizeCloudAudio(text: item.text, settings: settings, model: model)
     }
 
-    private func scheduleCloudPrefetch(for candidates: [QueueItem], settings: TTSSettingsSnapshot) {
+    func scheduleCloudPrefetch(for candidates: [QueueItem], settings: TTSSettingsSnapshot) {
         guard !candidates.isEmpty else { return }
 
         for item in candidates {
@@ -327,21 +327,21 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
-    private func clearPrefetchState() {
+    func clearPrefetchState() {
         for task in prefetchTasks.values {
             task.cancel()
         }
         prefetchTasks.removeAll()
     }
 
-    private func resolveCloudModel() throws -> RunnableModel {
+    func resolveCloudModel() throws -> RunnableModel {
         guard let model = selectedModel ?? ChatService.shared.resolveSelectedTTSModel() else {
             throw NSError(domain: "TTS", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未选择可用的 TTS 模型。", comment: "")])
         }
         return model
     }
 
-    private var cloudRequestTimeoutSeconds: TimeInterval {
+    var cloudRequestTimeoutSeconds: TimeInterval {
 #if os(watchOS)
         25
 #else
@@ -349,7 +349,7 @@ public final class TTSManager: NSObject, ObservableObject {
 #endif
     }
 
-    private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
+    func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
 #if os(iOS) || os(watchOS)
         activeBackend = .system
         playbackState.status = .playing
@@ -380,7 +380,7 @@ public final class TTSManager: NSObject, ObservableObject {
 
 #if os(iOS) || os(watchOS)
     /// 兜底监控系统 TTS 的回调，避免在 watchOS 上出现无回调导致队列永久卡住。
-    private func startSpeechCompletionMonitor(estimatedDuration: TimeInterval) {
+    func startSpeechCompletionMonitor(estimatedDuration: TimeInterval) {
         stopSpeechMonitor(resetDidStart: false)
         let startupGrace: TimeInterval = 5
         let hardDeadline = min(75, max(30, estimatedDuration * 2.2 + 8))
@@ -454,7 +454,7 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
-    private func stopSpeechMonitor(resetDidStart: Bool = true) {
+    func stopSpeechMonitor(resetDidStart: Bool = true) {
         speechMonitorTask?.cancel()
         speechMonitorTask = nil
         if resetDidStart {
@@ -463,7 +463,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 #endif
 
-    private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
+    func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         switch settings.providerKind {
         case .openAICompatible:
             return try await synthesizeOpenAICompatible(text: text, settings: settings, model: model)
@@ -478,7 +478,7 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
-    private func synthesizeOpenAICompatible(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
+    func synthesizeOpenAICompatible(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         guard let key = firstAPIKey(from: model.provider) else {
             throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
         }
@@ -502,7 +502,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return AudioClip(data: data, format: settings.responseFormat.lowercased(), sampleRate: nil)
     }
 
-    private func synthesizeGroq(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
+    func synthesizeGroq(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         var groqSettings = settings
         if groqSettings.responseFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             groqSettings.responseFormat = "wav"
@@ -510,7 +510,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return try await synthesizeOpenAICompatible(text: text, settings: groqSettings, model: model)
     }
 
-    private func synthesizeGemini(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
+    func synthesizeGemini(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         guard let key = firstAPIKey(from: model.provider) else {
             throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
         }
@@ -558,7 +558,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return AudioClip(data: pcmData, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeQwen(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
+    func synthesizeQwen(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         guard let key = firstAPIKey(from: model.provider) else {
             throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
         }
@@ -607,7 +607,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return AudioClip(data: output, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeMiniMax(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
+    func synthesizeMiniMax(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
         guard let key = firstAPIKey(from: model.provider) else {
             throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
         }
@@ -656,7 +656,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 
 #if canImport(AVFoundation)
-    private func playAudio(clip: AudioClip, speed: Float) async throws {
+    func playAudio(clip: AudioClip, speed: Float) async throws {
         activeBackend = .cloud
         playbackState.status = .buffering
 
@@ -695,7 +695,7 @@ public final class TTSManager: NSObject, ObservableObject {
     }
 #endif
 
-    private func fetchData(for request: URLRequest) async throws -> Data {
+    func fetchData(for request: URLRequest) async throws -> Data {
         let (data, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NSError(domain: "TTS", code: -20, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("无效的网络响应。", comment: "")])
@@ -711,7 +711,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return data
     }
 
-    private func preprocessText(_ text: String, settings: TTSSettingsSnapshot) -> String {
+    func preprocessText(_ text: String, settings: TTSSettingsSnapshot) -> String {
         let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
         let stripped: String
 #if os(watchOS)
@@ -728,7 +728,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return quoted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func boundedSpeechInput(_ text: String, settings: TTSSettingsSnapshot) -> String {
+    func boundedSpeechInput(_ text: String, settings: TTSSettingsSnapshot) -> String {
 #if os(watchOS)
         let maxLength = min(max(settings.watchSpeechMaxCharacters, 500), 6_000)
 #else
@@ -738,7 +738,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return String(text.prefix(maxLength))
     }
 
-    private func splitText(_ text: String, maxLength: Int = 160) -> [String] {
+    func splitText(_ text: String, maxLength: Int = 160) -> [String] {
         Self.splitTextForPlayback(text, maxLength: maxLength)
     }
 
@@ -769,7 +769,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return chunks
     }
 
-    private func stopCurrentPlayback(clearQueueOnly: Bool) {
+    func stopCurrentPlayback(clearQueueOnly: Bool) {
 #if canImport(AVFoundation)
         audioPlayer?.stop()
         audioPlayer = nil
@@ -799,13 +799,13 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
-    private func firstAPIKey(from provider: Provider) -> String? {
+    func firstAPIKey(from provider: Provider) -> String? {
         provider.apiKeys
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first(where: { !$0.isEmpty })
     }
 
-    private func normalizedBaseURL(_ string: String) -> URL {
+    func normalizedBaseURL(_ string: String) -> URL {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         if let url = URL(string: trimmed), !trimmed.isEmpty {
             return url
@@ -813,7 +813,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return URL(string: "https://api.openai.com/v1")!
     }
 
-    private func parseSSEPayloads(from data: Data) -> [String] {
+    func parseSSEPayloads(from data: Data) -> [String] {
         guard let text = String(data: data, encoding: .utf8) else { return [] }
         var payloads: [String] = []
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -858,7 +858,7 @@ public final class TTSManager: NSObject, ObservableObject {
         return parts.joined(separator: "\n")
     }
 
-    private nonisolated static func closingQuote(for character: Character, in text: String, at index: String.Index) -> Character? {
+    nonisolated static func closingQuote(for character: Character, in text: String, at index: String.Index) -> Character? {
         switch character {
         case "\"":
             return "\""
@@ -877,7 +877,7 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
-    private nonisolated static func isLikelyApostrophe(in text: String, at index: String.Index) -> Bool {
+    nonisolated static func isLikelyApostrophe(in text: String, at index: String.Index) -> Bool {
         guard index > text.startIndex else { return false }
         let nextIndex = text.index(after: index)
         guard nextIndex < text.endIndex else { return false }
@@ -887,11 +887,11 @@ public final class TTSManager: NSObject, ObservableObject {
         return isLetterOrNumber(previous) && isLetterOrNumber(next)
     }
 
-    private nonisolated static func isLetterOrNumber(_ character: Character) -> Bool {
+    nonisolated static func isLetterOrNumber(_ character: Character) -> Bool {
         character.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
     }
 
-    private func stripMarkdown(_ text: String) -> String {
+    func stripMarkdown(_ text: String) -> String {
         var output = text
         let patterns: [(String, String)] = [
             (#"```[\s\S]*?```|`[^`]*?`"#, ""),
@@ -913,14 +913,14 @@ public final class TTSManager: NSObject, ObservableObject {
         return output
     }
 
-    private func estimateDuration(for text: String, speechRate: Float) -> TimeInterval {
+    func estimateDuration(for text: String, speechRate: Float) -> TimeInterval {
         let length = max(1, text.count)
         let normalizedRate = max(0.2, speechRate)
         return TimeInterval(Double(length) * 0.065 / Double(normalizedRate))
     }
 
 #if canImport(AVFoundation)
-    private func startProgressTimer() {
+    func startProgressTimer() {
         stopProgressTimer()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -931,12 +931,12 @@ public final class TTSManager: NSObject, ObservableObject {
         }
     }
 
-    private func stopProgressTimer() {
+    func stopProgressTimer() {
         progressTimer?.invalidate()
         progressTimer = nil
     }
 
-    private func pcmToWav(pcm: Data, sampleRate: Int, channels: Int = 1, bitsPerSample: Int = 16) -> Data {
+    func pcmToWav(pcm: Data, sampleRate: Int, channels: Int = 1, bitsPerSample: Int = 16) -> Data {
         let byteRate = sampleRate * channels * bitsPerSample / 8
         let blockAlign = channels * bitsPerSample / 8
         var header = Data()
@@ -956,105 +956,4 @@ public final class TTSManager: NSObject, ObservableObject {
         return header + pcm
     }
 #endif
-}
-
-#if canImport(AVFoundation)
-@MainActor
-extension TTSManager: AVAudioPlayerDelegate {
-    public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        playbackState.status = .ended
-        if let continuation = audioContinuation {
-            audioContinuation = nil
-            continuation.resume()
-        }
-    }
-
-    public func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        playbackState.status = .error
-        playbackState.errorMessage = error?.localizedDescription
-        if let continuation = audioContinuation {
-            audioContinuation = nil
-            continuation.resume(throwing: error ?? NSError(domain: "TTS", code: -11, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("音频解码失败。", comment: "")]))
-        }
-    }
-}
-#endif
-
-#if os(iOS) || os(watchOS)
-extension TTSManager: AVSpeechSynthesizerDelegate {
-    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        Task { @MainActor [weak self] in
-            self?.speechDidStart = true
-        }
-    }
-
-    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor [weak self] in
-            self?.handleSpeechSynthesizerDidFinish()
-        }
-    }
-
-    nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor [weak self] in
-            self?.handleSpeechSynthesizerDidCancel()
-        }
-    }
-
-    @MainActor
-    private func handleSpeechSynthesizerDidFinish() {
-        stopSpeechMonitor()
-        playbackState.status = .ended
-        playbackState.position = playbackState.duration
-        if let continuation = speechContinuation {
-            speechContinuation = nil
-            continuation.resume()
-        }
-    }
-
-    @MainActor
-    private func handleSpeechSynthesizerDidCancel() {
-        stopSpeechMonitor()
-        if let continuation = speechContinuation {
-            speechContinuation = nil
-            continuation.resume(throwing: CancellationError())
-        }
-    }
-}
-#endif
-
-private extension Float {
-    func ttsClamped(to range: ClosedRange<Float>) -> Float {
-        min(max(self, range.lowerBound), range.upperBound)
-    }
-}
-
-private extension Data {
-    init?(hexString: String) {
-        let cleaned = hexString.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
-        guard cleaned.count % 2 == 0 else { return nil }
-        var bytes = Data(capacity: cleaned.count / 2)
-        var index = cleaned.startIndex
-        while index < cleaned.endIndex {
-            let next = cleaned.index(index, offsetBy: 2)
-            let byteString = cleaned[index..<next]
-            guard let value = UInt8(byteString, radix: 16) else { return nil }
-            bytes.append(value)
-            index = next
-        }
-        self = bytes
-    }
-}
-
-private extension UInt16 {
-    var littleEndianData: Data {
-        var value = self.littleEndian
-        return Data(bytes: &value, count: MemoryLayout<UInt16>.size)
-    }
-}
-
-private extension UInt32 {
-    var littleEndianData: Data {
-        var value = self.littleEndian
-        return Data(bytes: &value, count: MemoryLayout<UInt32>.size)
-    }
 }
