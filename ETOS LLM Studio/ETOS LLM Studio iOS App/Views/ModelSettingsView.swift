@@ -459,14 +459,26 @@ extension ModelSettingsView {
             footer: Text(NSLocalizedString("这些控制会在发送时覆盖上面的自定义Body，适合思考预算、搜索、温度等常切参数。", comment: ""))
         ) {
             if model.requestBodyControls.isEmpty {
-                Text(NSLocalizedString("暂无结构化控制。", comment: ""))
+                Text(NSLocalizedString("暂无", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach($model.requestBodyControls) { $control in
-                    RequestBodyControlEditor(
-                        control: $control,
-                        payloadDisplayMode: requestBodyMode
-                    )
+                    let controlID = control.id
+                    NavigationLink {
+                        RequestBodyControlDetailView(
+                            control: $control,
+                            payloadDisplayMode: requestBodyMode
+                        )
+                    } label: {
+                        RequestBodyControlRow(control: control)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteRequestBodyControl(withID: controlID)
+                        } label: {
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                        }
+                    }
                 }
                 .onDelete(perform: deleteRequestBodyControls)
             }
@@ -518,6 +530,11 @@ extension ModelSettingsView {
 
     private func deleteRequestBodyControls(at offsets: IndexSet) {
         model.requestBodyControls.remove(atOffsets: offsets)
+    }
+
+    private func deleteRequestBodyControl(withID controlID: String) {
+        guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
+        model.requestBodyControls.remove(at: index)
     }
 
     private func buildRequestPreviewPayload(
@@ -886,64 +903,87 @@ private struct RequestBodyPreviewInlineView: View {
     }
 }
 
-private struct RequestBodyControlEditor: View {
+private struct RequestBodyControlRow: View {
+    let control: ModelRequestBodyControl
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(control.title)
+                .lineLimit(1)
+
+            Text(control.isEnabled ? NSLocalizedString("已启用", comment: "") : NSLocalizedString("已停用", comment: ""))
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+private struct RequestBodyControlDetailView: View {
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(NSLocalizedString("显示名称", comment: ""))
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
+        Form {
+            Section(header: Text(NSLocalizedString("基础信息", comment: ""))) {
                 TextField(NSLocalizedString("显示名称", comment: ""), text: $control.title)
+                    .textInputAutocapitalization(.never)
             }
 
-            Divider()
-                .padding(.vertical, 2)
+            Section(header: Text(NSLocalizedString("启用状态", comment: ""))) {
+                Toggle(NSLocalizedString("启用", comment: ""), isOn: $control.isEnabled)
+            }
 
             switch control.kind {
             case .toggle:
-                Toggle(NSLocalizedString("默认开启", comment: ""), isOn: $control.defaultIsActive)
-                RequestBodyPayloadEditor(
-                    payloadDisplayMode: payloadDisplayMode,
-                    payload: $control.payload
-                )
-                .id("\(control.id)-toggle-payload")
+                Section(header: Text(NSLocalizedString("详情", comment: ""))) {
+                    Toggle(NSLocalizedString("默认开启", comment: ""), isOn: $control.defaultIsActive)
+
+                    RequestBodyPayloadEditor(
+                        payloadDisplayMode: payloadDisplayMode,
+                        payload: $control.payload
+                    )
+                    .id("\(control.id)-toggle-payload")
+                }
             case .optionGroup:
-                if control.options.isEmpty {
-                    Text(NSLocalizedString("暂无选项。", comment: ""))
-                        .foregroundStyle(.secondary)
-                } else {
-                    let lastOptionID = control.options.last?.id
-                    ForEach($control.options) { $option in
-                        let optionID = option.id
-                        RequestBodyOptionEditor(
-                            option: $option,
-                            defaultOptionID: $control.defaultOptionID,
-                            controlID: control.id,
-                            payloadDisplayMode: payloadDisplayMode,
-                            onDelete: {
-                                deleteOption(withID: optionID)
+                Section(header: Text(NSLocalizedString("详情", comment: ""))) {
+                    if control.options.isEmpty {
+                        Text(NSLocalizedString("暂无", comment: ""))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach($control.options) { $option in
+                            let optionID = option.id
+                            NavigationLink {
+                                RequestBodyOptionDetailView(
+                                    option: $option,
+                                    defaultOptionID: $control.defaultOptionID,
+                                    payloadDisplayMode: payloadDisplayMode
+                                )
+                            } label: {
+                                RequestBodyOptionRow(
+                                    option: option,
+                                    isDefault: control.defaultOptionID == optionID
+                                )
                             }
-                        )
-                        .id(optionID)
-                        if optionID != lastOptionID {
-                            Divider()
-                                .padding(.vertical, 8)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteOption(withID: optionID)
+                                } label: {
+                                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                                }
+                            }
                         }
                     }
-                }
 
-                Button {
-                    addOption()
-                } label: {
-                    Label(NSLocalizedString("添加选项", comment: ""), systemImage: "plus")
+                    Button {
+                        addOption()
+                    } label: {
+                        Label(NSLocalizedString("添加", comment: ""), systemImage: "plus")
+                    }
                 }
             }
         }
-        .padding(.vertical, 4)
+        .navigationTitle(control.title)
     }
 
     private func addOption() {
@@ -977,48 +1017,60 @@ private struct RequestBodyControlEditor: View {
     }
 }
 
-private struct RequestBodyOptionEditor: View {
-    @Binding var option: ModelRequestBodyControlOption
-    @Binding var defaultOptionID: String?
-    let controlID: String
-    let payloadDisplayMode: Model.RequestBodyOverrideMode
-    let onDelete: (() -> Void)?
+private struct RequestBodyOptionRow: View {
+    let option: ModelRequestBodyControlOption
+    let isDefault: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("选项名称", comment: ""))
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField(NSLocalizedString("选项名称", comment: ""), text: $option.title)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 8) {
+            Text(option.title)
+                .lineLimit(1)
 
-                if let onDelete {
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("删除选项", comment: ""))
-                }
-                Button {
-                    defaultOptionID = option.id
-                } label: {
-                    Image(systemName: defaultOptionID == option.id ? "checkmark.circle.fill" : "circle")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("设为默认", comment: ""))
-            }
-            RequestBodyPayloadEditor(
-                payloadDisplayMode: payloadDisplayMode,
-                payload: $option.payload
-            )
-            .id("\(controlID)-\(option.id)-payload")
+            Spacer(minLength: 8)
+
+            Image(systemName: isDefault ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isDefault ? .tint : .secondary)
         }
-        .padding(.leading, 8)
+    }
+}
+
+private struct RequestBodyOptionDetailView: View {
+    @Binding var option: ModelRequestBodyControlOption
+    @Binding var defaultOptionID: String?
+    let payloadDisplayMode: Model.RequestBodyOverrideMode
+
+    var body: some View {
+        Form {
+            Section(header: Text(NSLocalizedString("基础信息", comment: ""))) {
+                TextField(NSLocalizedString("显示名称", comment: ""), text: $option.title)
+                    .textInputAutocapitalization(.never)
+            }
+
+            Section(header: Text(NSLocalizedString("启用状态", comment: ""))) {
+                Toggle(NSLocalizedString("设为默认", comment: ""), isOn: defaultOptionBinding)
+            }
+
+            Section(header: Text(NSLocalizedString("详情", comment: ""))) {
+                RequestBodyPayloadEditor(
+                    payloadDisplayMode: payloadDisplayMode,
+                    payload: $option.payload
+                )
+                .id("\(option.id)-payload")
+            }
+        }
+        .navigationTitle(option.title)
+    }
+
+    private var defaultOptionBinding: Binding<Bool> {
+        Binding {
+            defaultOptionID == option.id
+        } set: { isDefault in
+            if isDefault {
+                defaultOptionID = option.id
+            } else if defaultOptionID == option.id {
+                defaultOptionID = nil
+            }
+        }
     }
 }
 

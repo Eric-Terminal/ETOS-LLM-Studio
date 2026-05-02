@@ -2527,3 +2527,17 @@
 "Delay 回合" = "Delay turns";
 "置顶模型" = "Pinned Models";
 "更多模型" = "More models";
+"结构化控制" = "Structured Controls";
+"这些控制会在发送时覆盖上面的自定义Body，适合思考预算、搜索、温度等常切参数。" = "These controls override the custom body above when sending, useful for frequently changed parameters such as thinking budget, search, and temperature.";
+"添加开关" = "Add Toggle";
+"添加组选项" = "Add Option Group";
+"添加控制" = "Add Control";
+"开启思考" = "Enable Thinking";
+"思考预算" = "Thinking Budget";
+"默认开启" = "On by Default";
+"新选项" = "New Option";
+"minimal" = "minimal";
+"low" = "low";
+"medium" = "medium";
+"high" = "high";
+"xhigh" = "xhigh";
