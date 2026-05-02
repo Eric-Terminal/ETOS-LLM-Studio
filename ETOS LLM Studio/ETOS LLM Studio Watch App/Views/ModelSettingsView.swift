@@ -1095,7 +1095,7 @@ private struct RequestBodyPayloadEditor: View {
             switch payloadDisplayMode {
             case .rawJSON:
                 textPayloadEditor(
-                    title: NSLocalizedString("Value", comment: ""),
+                    title: nil,
                     placeholder: NSLocalizedString("填写 JSON 对象", comment: ""),
                     lineLimit: 2...8
                 )
@@ -1116,14 +1116,16 @@ private struct RequestBodyPayloadEditor: View {
     }
 
     private func textPayloadEditor(
-        title: String,
+        title: String?,
         placeholder: String,
         lineLimit: ClosedRange<Int>
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
+            if let title {
+                Text(title)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             TextField(
                 placeholder,
