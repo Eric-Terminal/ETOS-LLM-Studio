@@ -1589,19 +1589,25 @@ class ChatViewModel: ObservableObject {
     
     /// 删除指定消息的当前版本（如果只剩一个版本则删除整个消息）
     func deleteCurrentVersion(of message: ChatMessage) {
-        if deleteCurrentResponseAttempt(of: message) {
+        deleteVersion(at: displayCurrentVersionIndex(for: message), of: message)
+    }
+
+    func deleteVersion(at index: Int, of message: ChatMessage) {
+        if responseAttemptVersionInfo(for: message) != nil {
+            if deleteResponseAttemptVersion(at: index, of: message) {
+                return
+            }
+        }
+
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+
+        if updatedMessage.getAllVersions().count <= 1 {
+            deleteMessage(updatedMessage)
             return
         }
-        guard var updatedMessage = findMessage(by: message.id) else { return }
-        
-        if updatedMessage.getAllVersions().count <= 1 {
-            // 只剩一个版本，删除整个消息
-            deleteMessage(updatedMessage)
-        } else {
-            // 删除当前版本
-            updatedMessage.removeVersion(at: updatedMessage.getCurrentVersionIndex())
-            updateMessage(updatedMessage)
-        }
+
+        guard updatedMessage.removeVersionAndReturnCurrentIndex(at: index) != nil else { return }
+        updateMessage(updatedMessage)
     }
 
     func deleteAllVersions(of message: ChatMessage) {
@@ -1633,25 +1639,17 @@ class ChatViewModel: ObservableObject {
         saveCurrentSessionDetails()
     }
 
-    private func deleteCurrentResponseAttempt(of message: ChatMessage) -> Bool {
-        guard let info = responseAttemptVersionInfo(for: message) else { return false }
-        let attempts = ChatResponseAttemptSupport.orderedAttemptIDs(for: info.responseGroupID, in: allMessagesForSession)
-        let remainingAttempts = attempts.filter { $0 != info.currentAttemptID }
-        var updatedMessages = allMessagesForSession.filter {
-            !($0.responseGroupID == info.responseGroupID && $0.responseAttemptID == info.currentAttemptID)
+    private func deleteResponseAttemptVersion(at index: Int, of message: ChatMessage) -> Bool {
+        guard let groupID = message.responseGroupID,
+              message.responseAttemptID != nil else {
+            return false
         }
 
-        let replacementIndex = max(0, min(info.currentIndex, remainingAttempts.count - 1))
-        if remainingAttempts.indices.contains(replacementIndex) {
-            let replacementAttemptID = remainingAttempts[replacementIndex]
-            updatedMessages = ChatResponseAttemptSupport.selectAttempt(
-                attemptID: replacementAttemptID,
-                groupID: info.responseGroupID,
-                in: updatedMessages
-            )
-        } else if let anchorIndex = updatedMessages.firstIndex(where: { $0.id == info.responseGroupID && $0.role == .user }) {
-            updatedMessages[anchorIndex].selectedResponseAttemptID = nil
-        }
+        guard let updatedMessages = ChatResponseAttemptSupport.deleteAttempt(
+            at: index,
+            groupID: groupID,
+            in: allMessagesForSession
+        ) else { return false }
 
         updateMessages(updatedMessages)
         return true

@@ -1510,7 +1510,15 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         // 确保索引在有效范围内
         currentVersionIndex = min(currentVersionIndex, contentVersions.count - 1)
     }
-    
+
+    /// 删除指定版本并返回删除后的当前索引
+    public mutating func removeVersionAndReturnCurrentIndex(at index: Int) -> Int? {
+        guard contentVersions.indices.contains(index), contentVersions.count > 1 else { return nil }
+
+        removeVersion(at: index)
+        return currentVersionIndex
+    }
+
     /// 切换到指定版本
     public mutating func switchToVersion(_ index: Int) {
         if contentVersions.indices.contains(index) {
@@ -1743,6 +1751,36 @@ public enum ChatResponseAttemptSupport {
             updated.selectedResponseAttemptID = attemptID
             return updated
         }
+    }
+
+    public static func deleteAttempt(at index: Int, groupID: UUID, in messages: [ChatMessage]) -> [ChatMessage]? {
+        let attempts = orderedAttemptIDs(for: groupID, in: messages)
+        guard attempts.indices.contains(index) else { return nil }
+
+        let targetAttemptID = attempts[index]
+        let selectedAttemptID = messages.first { $0.id == groupID && $0.role == .user }?.selectedResponseAttemptID
+        let remainingAttempts = attempts.filter { $0 != targetAttemptID }
+        var updatedMessages = messages.filter {
+            !($0.responseGroupID == groupID && $0.responseAttemptID == targetAttemptID)
+        }
+
+        guard selectedAttemptID == targetAttemptID else {
+            return updatedMessages
+        }
+
+        let replacementIndex = max(0, min(index, remainingAttempts.count - 1))
+        if remainingAttempts.indices.contains(replacementIndex) {
+            return selectAttempt(
+                attemptID: remainingAttempts[replacementIndex],
+                groupID: groupID,
+                in: updatedMessages
+            )
+        }
+
+        if let anchorIndex = updatedMessages.firstIndex(where: { $0.id == groupID && $0.role == .user }) {
+            updatedMessages[anchorIndex].selectedResponseAttemptID = nil
+        }
+        return updatedMessages
     }
 
     public static func orderedAttemptIDs(for groupID: UUID, in messages: [ChatMessage]) -> [UUID] {

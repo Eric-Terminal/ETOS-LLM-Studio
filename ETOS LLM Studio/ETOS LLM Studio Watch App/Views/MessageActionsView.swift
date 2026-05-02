@@ -22,7 +22,7 @@ struct MessageActionsView: View {
     let onSpeak: (ChatMessage) -> Void
     let onStopSpeaking: () -> Void
     let onDelete: () -> Void
-    let onDeleteCurrentVersion: () -> Void
+    let onDeleteVersion: (Int) -> Void
     let onSwitchVersion: (Int) -> Void
     let onBranch: (Bool) -> Void
     let onShowFullError: ((String) -> Void)?
@@ -44,7 +44,7 @@ struct MessageActionsView: View {
         onSpeak: @escaping (ChatMessage) -> Void,
         onStopSpeaking: @escaping () -> Void,
         onDelete: @escaping () -> Void,
-        onDeleteCurrentVersion: @escaping () -> Void,
+        onDeleteVersion: @escaping (Int) -> Void,
         onSwitchVersion: @escaping (Int) -> Void,
         onBranch: @escaping (Bool) -> Void,
         onShowFullError: ((String) -> Void)?,
@@ -64,7 +64,7 @@ struct MessageActionsView: View {
         self.onSpeak = onSpeak
         self.onStopSpeaking = onStopSpeaking
         self.onDelete = onDelete
-        self.onDeleteCurrentVersion = onDeleteCurrentVersion
+        self.onDeleteVersion = onDeleteVersion
         self.onSwitchVersion = onSwitchVersion
         self.onBranch = onBranch
         self.onShowFullError = onShowFullError
@@ -82,8 +82,8 @@ struct MessageActionsView: View {
     
     @Environment(\.dismiss) var dismiss
     @State private var showDeleteConfirm = false
-    @State private var showDeleteVersionConfirm = false
     @State private var showBranchOptions = false
+    @State private var versionIndexToDelete: Int?
     @State private var pendingRetryMessage: ChatMessage?
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
@@ -202,28 +202,27 @@ struct MessageActionsView: View {
                 }
             }
             
-            // 版本管理菜单
             if hasDisplayVersions {
                 Section(NSLocalizedString("版本管理", comment: "")) {
-                    Picker(NSLocalizedString("选择版本", comment: ""), selection: Binding(
-                        get: { displayCurrentVersionIndex },
-                        set: { newIndex in
-                            onSwitchVersion(newIndex)
+                    ForEach(0..<displayVersionCount, id: \.self) { index in
+                        Button {
+                            onSwitchVersion(index)
                             dismiss()
-                        }
-                    )) {
-                        ForEach(0..<displayVersionCount, id: \.self) { index in
-                            Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
-                                .tag(index)
-                        }
-                    }
-                    .pickerStyle(.navigationLink)
-                    
-                    if displayVersionCount > 1 {
-                        Button(role: .destructive) {
-                            showDeleteVersionConfirm = true
                         } label: {
-                            Label(NSLocalizedString("删除当前版本", comment: ""), systemImage: "trash")
+                            MessageVersionRow(
+                                index: index,
+                                isCurrent: index == displayCurrentVersionIndex
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if displayVersionCount > 1 {
+                                Button(role: .destructive) {
+                                    versionIndexToDelete = index
+                                } label: {
+                                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
@@ -370,12 +369,17 @@ struct MessageActionsView: View {
         } message: {
             Text(hasDisplayVersions ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "") : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
         }
-        .alert(NSLocalizedString("确认删除当前版本", comment: ""), isPresented: $showDeleteVersionConfirm) {
+        .alert(NSLocalizedString("确认删除", comment: ""), isPresented: deleteVersionConfirmPresented) {
             Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
-                onDeleteCurrentVersion()
+                if let versionIndexToDelete {
+                    onDeleteVersion(versionIndexToDelete)
+                }
+                versionIndexToDelete = nil
                 dismiss()
             }
-            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
+                versionIndexToDelete = nil
+            }
         } message: {
             Text(NSLocalizedString("删除后将无法恢复此版本的内容。", comment: ""))
         }
@@ -397,6 +401,13 @@ struct MessageActionsView: View {
         .onDisappear {
             performPendingRetryIfNeeded()
         }
+    }
+
+    private var deleteVersionConfirmPresented: Binding<Bool> {
+        Binding(
+            get: { versionIndexToDelete != nil },
+            set: { if !$0 { versionIndexToDelete = nil } }
+        )
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -445,6 +456,28 @@ struct MessageActionsView: View {
         Task { @MainActor in
             await Task.yield()
             onRetry(message)
+        }
+    }
+}
+
+private struct MessageVersionRow: View {
+    let index: Int
+    let isCurrent: Bool
+
+    var body: some View {
+        Label {
+            HStack(spacing: 6) {
+                Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
+                Spacer(minLength: 4)
+                if isCurrent {
+                    Text(NSLocalizedString("当前", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } icon: {
+            Image(systemName: isCurrent ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
         }
     }
 }

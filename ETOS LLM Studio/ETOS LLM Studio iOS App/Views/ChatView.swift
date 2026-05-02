@@ -77,6 +77,12 @@ private struct MessageActionSheetPayload: Identifiable {
     let message: ChatMessage
 }
 
+private struct MessageVersionDeletePayload: Identifiable {
+    let id = UUID()
+    let message: ChatMessage
+    let index: Int
+}
+
 private enum MessageActionExportScope: String, CaseIterable, Identifiable {
     case fullSession
     case upToMessage
@@ -97,7 +103,7 @@ struct ChatView: View {
     @State private var showBranchOptions = false
     @State private var messageToBranch: ChatMessage?
     @State private var messageToDelete: ChatMessage?
-    @State private var messageVersionToDelete: ChatMessage?
+    @State private var messageVersionToDelete: MessageVersionDeletePayload?
     @State private var messageActionSheetPayload: MessageActionSheetPayload?
     @State private var fullErrorContent: FullErrorContentPayload?
     @State private var showModelPickerPanel = false
@@ -653,9 +659,9 @@ struct ChatView: View {
                         viewModel.switchToVersion(index, of: message)
                         messageActionSheetPayload = nil
                     },
-                    onDeleteCurrentVersion: { message in
+                    onDeleteVersion: { message, index in
                         dismissMessageActionSheet {
-                            messageVersionToDelete = message
+                            messageVersionToDelete = MessageVersionDeletePayload(message: message, index: index)
                         }
                     },
                     onDelete: { message in
@@ -739,10 +745,10 @@ struct ChatView: View {
                      ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
                      : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
             }
-            .alert(NSLocalizedString("确认删除当前版本", comment: ""), isPresented: messageVersionDeleteAlertPresented) {
+            .alert(NSLocalizedString("确认删除", comment: ""), isPresented: messageVersionDeleteAlertPresented) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
-                    if let message = messageVersionToDelete {
-                        viewModel.deleteCurrentVersion(of: message)
+                    if let payload = messageVersionToDelete {
+                        viewModel.deleteVersion(at: payload.index, of: payload.message)
                     }
                     messageVersionToDelete = nil
                 }
@@ -5062,7 +5068,7 @@ private struct MessageActionSheet: View {
     let onExport: (ChatTranscriptExportFormat, Bool, ChatMessage?) -> Void
     let onSpeak: (ChatMessage) -> Void
     let onSwitchVersion: (Int, ChatMessage) -> Void
-    let onDeleteCurrentVersion: (ChatMessage) -> Void
+    let onDeleteVersion: (ChatMessage, Int) -> Void
     let onDelete: (ChatMessage) -> Void
     let onDownloadImages: ([String]) -> Void
     let onCopy: (ChatMessage) -> Void
@@ -5156,18 +5162,24 @@ private struct MessageActionSheet: View {
 
                 if hasDisplayVersions {
                     Section(NSLocalizedString("版本管理", comment: "")) {
-                        Picker(NSLocalizedString("选择版本", comment: ""), selection: versionSelection) {
-                            ForEach(0..<displayVersionCount, id: \.self) { index in
-                                Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
-                                    .tag(index)
-                            }
-                        }
-
-                        if displayVersionCount > 1 {
-                            Button(role: .destructive) {
-                                onDeleteCurrentVersion(message)
+                        ForEach(0..<displayVersionCount, id: \.self) { index in
+                            Button {
+                                onSwitchVersion(index, message)
                             } label: {
-                                Label(NSLocalizedString("删除当前版本", comment: ""), systemImage: "trash")
+                                MessageVersionRow(
+                                    index: index,
+                                    isCurrent: index == displayCurrentVersionIndex
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if displayVersionCount > 1 {
+                                    Button(role: .destructive) {
+                                        onDeleteVersion(message, index)
+                                    } label: {
+                                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                                    }
+                                }
                             }
                         }
                     }
@@ -5217,13 +5229,6 @@ private struct MessageActionSheet: View {
         }
     }
 
-    private var versionSelection: Binding<Int> {
-        Binding(
-            get: { displayCurrentVersionIndex },
-            set: { onSwitchVersion($0, message) }
-        )
-    }
-
     private func exportScopeTitle(_ scope: MessageActionExportScope) -> String {
         switch scope {
         case .fullSession:
@@ -5241,6 +5246,27 @@ private struct MessageActionSheet: View {
             return "number.square"
         case .text:
             return "doc.plaintext"
+        }
+    }
+}
+
+private struct MessageVersionRow: View {
+    let index: Int
+    let isCurrent: Bool
+
+    var body: some View {
+        Label {
+            HStack(spacing: 8) {
+                Text(String(format: NSLocalizedString("版本 %d", comment: ""), index + 1))
+                Spacer()
+                if isCurrent {
+                    Text(NSLocalizedString("当前", comment: ""))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } icon: {
+            Image(systemName: isCurrent ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
         }
     }
 }

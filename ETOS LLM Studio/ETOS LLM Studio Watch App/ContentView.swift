@@ -815,8 +815,8 @@ struct ContentView: View {
                 onDelete: {
                     viewModel.deleteAllVersions(of: message)
                 },
-                onDeleteCurrentVersion: {
-                    viewModel.deleteCurrentVersion(of: message)
+                onDeleteVersion: { index in
+                    viewModel.deleteVersion(at: index, of: message)
                 },
                 onSwitchVersion: { index in
                     viewModel.switchToVersion(index, of: message)

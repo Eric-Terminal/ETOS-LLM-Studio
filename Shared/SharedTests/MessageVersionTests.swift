@@ -149,6 +149,20 @@ final class MessageVersionTests: XCTestCase {
         message.removeVersion(at: 0)
         XCTAssertEqual(message.getAllVersions().count, 1)
     }
+
+    /// 测试删除指定版本后会返回修正后的当前索引
+    func testRemoveVersionReturnsAdjustedCurrentIndex() {
+        var message = ChatMessage(role: .assistant, content: "V1")
+        message.addVersion("V2")
+        message.addVersion("V3")
+        message.switchToVersion(2)
+
+        let currentIndex = message.removeVersionAndReturnCurrentIndex(at: 0)
+
+        XCTAssertEqual(currentIndex, 1)
+        XCTAssertEqual(message.getAllVersions(), ["V2", "V3"])
+        XCTAssertEqual(message.content, "V3")
+    }
     
     /// 测试修改 content 属性
     func testModifyContent() {
