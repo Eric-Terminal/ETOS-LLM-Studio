@@ -505,6 +505,8 @@ private struct ImagePreviewSheet: View {
     @State private var isLoading = true
 
     var body: some View {
+        let filePath = file.url.path
+
         NavigationStack {
             Group {
                 if isLoading {
@@ -547,7 +549,6 @@ private struct ImagePreviewSheet: View {
             }
         }
         .task {
-            let filePath = file.url.path
             image = await Task.detached(priority: .userInitiated) {
                 UIImage(contentsOfFile: filePath)
             }.value

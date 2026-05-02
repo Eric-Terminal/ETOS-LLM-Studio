@@ -138,6 +138,7 @@ struct ChatView: View {
     @State private var exportSharePayload: ChatExportSharePayload?
     @State private var exportErrorMessage: String?
     @State private var activeChatPickerSheet: ChatPickerSheet?
+    @State private var modelPickerRequestControl: ModelRequestBodyControl?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var keyboardHeight: CGFloat = 0
     @State private var chatInputBarHeight: CGFloat = 0
@@ -1162,6 +1163,7 @@ struct ChatView: View {
     }
 
     private func dismissModelPickerPanel() {
+        modelPickerRequestControl = nil
         if usesBottomSheetPickerStyle {
             activeChatPickerSheet = nil
             return
@@ -1228,36 +1230,14 @@ struct ChatView: View {
 
     private var nativeModelPickerSheet: some View {
         NavigationStack {
-            List {
-                if viewModel.activatedModels.isEmpty {
-                    VStack(spacing: 6) {
-                        Text(NSLocalizedString("暂无可用模型", comment: ""))
-                            .etFont(.headline)
-                        Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 28)
-                } else {
-                    Section {
-                        ForEach(viewModel.activatedModels, id: \.id) { runnable in
-                            Button {
-                                viewModel.setSelectedModel(runnable)
-                                dismissModelPickerPanel()
-                            } label: {
-                                MarqueeTitleSubtitleSelectionRow(
-                                    title: runnable.model.displayName,
-                                    subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
-                                    isSelected: runnable.id == viewModel.selectedModel?.id,
-                                    subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
-                                )
-                            }
-                        }
-                    } footer: {
-                        Text(NSLocalizedString("切换当前对话的模型", comment: ""))
-                    }
-                }
+            VStack(spacing: 0) {
+                nativeModelPickerModelList
+                    .frame(maxHeight: .infinity)
+
+                Divider()
+
+                nativeModelPickerRequestControlList
+                    .frame(maxHeight: .infinity)
             }
             .navigationTitle(NSLocalizedString("选择模型", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
@@ -1268,6 +1248,75 @@ struct ChatView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var nativeModelPickerModelList: some View {
+        List {
+            if viewModel.activatedModels.isEmpty {
+                VStack(spacing: 6) {
+                    Text(NSLocalizedString("暂无可用模型", comment: ""))
+                        .etFont(.headline)
+                    Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 28)
+            } else {
+                Section {
+                    ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                        Button {
+                            viewModel.setSelectedModel(runnable)
+                        } label: {
+                            MarqueeTitleSubtitleSelectionRow(
+                                title: runnable.model.displayName,
+                                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                                isSelected: runnable.id == viewModel.selectedModel?.id,
+                                subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
+                            )
+                        }
+                    }
+                } header: {
+                    Text(NSLocalizedString("模型", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("切换当前对话的模型", comment: ""))
+                }
+            }
+        }
+    }
+
+    private var nativeModelPickerRequestControlList: some View {
+        List {
+            Section {
+                nativeModelPickerRequestControlRows
+            } header: {
+                Text(NSLocalizedString("请求控制", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("点击控制名称后选择具体参数。", comment: ""))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nativeModelPickerRequestControlRows: some View {
+        if let selectedModel = viewModel.selectedModel {
+            let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
+            if controls.isEmpty {
+                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(controls) { control in
+                    NavigationLink {
+                        RequestBodyControlDetailView(runnableModel: selectedModel, control: control)
+                    } label: {
+                        Text(control.title)
+                    }
+                }
+            }
+        } else {
+            Text(NSLocalizedString("请先选择模型。", comment: ""))
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1392,8 +1441,11 @@ struct ChatView: View {
 
                     if viewModel.activatedModels.isEmpty {
                         modelPickerEmptyState
+                    } else if let control = modelPickerRequestControl,
+                              let selectedModel = viewModel.selectedModel {
+                        overlayRequestControlDetail(runnableModel: selectedModel, control: control)
                     } else {
-                        modelPickerList
+                        modelPickerSplitContent
                     }
                 }
                 .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
@@ -1428,10 +1480,14 @@ struct ChatView: View {
             Spacer()
 
             pickerHeaderActionButton(
-                systemName: "xmark",
-                accessibilityLabel: "关闭"
+                systemName: modelPickerRequestControl == nil ? "xmark" : "chevron.left",
+                accessibilityLabel: modelPickerRequestControl == nil ? "关闭" : "返回"
             ) {
-                dismissModelPickerPanel()
+                if modelPickerRequestControl == nil {
+                    dismissModelPickerPanel()
+                } else {
+                    modelPickerRequestControl = nil
+                }
             }
         }
         .padding(.horizontal, 18)
@@ -1464,6 +1520,85 @@ struct ChatView: View {
         }
     }
 
+    private var modelPickerSplitContent: some View {
+        VStack(spacing: 0) {
+            modelPickerList
+                .frame(maxHeight: .infinity)
+
+            Divider()
+                .padding(.horizontal, 16)
+
+            modelPickerRequestControlsPanel
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    private var modelPickerRequestControlsPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(NSLocalizedString("请求控制", comment: ""))
+                .etFont(.system(size: 13, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+                .padding(.horizontal, 2)
+
+            if let selectedModel = viewModel.selectedModel {
+                let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
+                if controls.isEmpty {
+                    Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
+                        .etFont(.system(size: 12))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(controls) { control in
+                                Button {
+                                    modelPickerRequestControl = control
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Text(control.title)
+                                            .etFont(.system(size: 14, weight: .medium))
+                                            .foregroundColor(TelegramColors.navBarText)
+                                            .lineLimit(1)
+
+                                        Spacer()
+
+                                        Image(systemName: "chevron.right")
+                                            .etFont(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(TelegramColors.navBarSubtitle)
+                                    }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .fill(colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.05))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(NSLocalizedString("请先选择模型。", comment: ""))
+                    .etFont(.system(size: 12))
+                    .foregroundColor(TelegramColors.navBarSubtitle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func overlayRequestControlDetail(
+        runnableModel: RunnableModel,
+        control: ModelRequestBodyControl
+    ) -> some View {
+        OverlayRequestControlDetailPanel(runnableModel: runnableModel, control: control)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+            .frame(maxHeight: .infinity)
+    }
+
     private func modelPickerRow(_ runnable: RunnableModel) -> some View {
         let isSelected = runnable.id == viewModel.selectedModel?.id
         let baseFill = colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.05)
@@ -1473,7 +1608,6 @@ struct ChatView: View {
 
         return Button {
             viewModel.setSelectedModel(runnable)
-            dismissModelPickerPanel()
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 MarqueeTitleSubtitleLabel(
@@ -3416,7 +3550,6 @@ private struct TelegramMessageComposer: View {
     @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
-    @State private var showRequestBodyControls = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
@@ -3476,7 +3609,6 @@ private struct TelegramMessageComposer: View {
             HStack(alignment: .bottom, spacing: 12) {
                 if !isExpandedComposer {
                     attachmentMenuButton(size: controlSize)
-                    requestBodyControlButton(size: controlSize)
                 }
                 
                 // 输入框容器
@@ -3597,15 +3729,6 @@ private struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
             }
         }
-        .sheet(isPresented: $showRequestBodyControls) {
-            if let selectedModel = viewModel.selectedModel {
-                NavigationStack {
-                    RequestBodyQuickControlsView(runnableModel: selectedModel)
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
-        }
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {
@@ -3649,23 +3772,6 @@ private struct TelegramMessageComposer: View {
                 .background(glassCircleBackground)
         }
         .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private func requestBodyControlButton(size: CGFloat) -> some View {
-        if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
-            Button {
-                showRequestBodyControls = true
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
-                    .foregroundColor(TelegramColors.attachButtonColor)
-                    .frame(width: size, height: size)
-                    .background(glassCircleBackground)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
-        }
     }
 
     private func actionControlButton(size: CGFloat) -> some View {
@@ -4209,7 +4315,6 @@ private struct MessageComposerView: View {
     @State private var audioRecorderSheetDetent: PresentationDetent = .fraction(0.5)
     @State private var audioRecorderEntryMode: AudioRecorderEntryMode = .attachment
     @State private var showFileImporter = false
-    @State private var showRequestBodyControls = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     
     var body: some View {
@@ -4267,18 +4372,6 @@ private struct MessageComposerView: View {
                     }
                 }
                 
-                if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
-                    Button {
-                        showRequestBodyControls = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .etFont(.system(size: 24))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
-                }
-
                 // 输入框（拉长的药丸型）
                 if #available(iOS 26.0, *) {
                     HStack(spacing: 8) {
@@ -4384,15 +4477,6 @@ private struct MessageComposerView: View {
                 }
             case .failure(let error):
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
-            }
-        }
-        .sheet(isPresented: $showRequestBodyControls) {
-            if let selectedModel = viewModel.selectedModel {
-                NavigationStack {
-                    RequestBodyQuickControlsView(runnableModel: selectedModel)
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -4527,51 +4611,49 @@ private struct MessageComposerView: View {
     // file MIME type helper lives at file scope (resolvedFileMimeType)
 }
 
-private struct RequestBodyQuickControlsView: View {
+private struct RequestBodyControlDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     let runnableModel: RunnableModel
+    let control: ModelRequestBodyControl
     @State private var state: ModelRequestBodyControlState
 
-    init(runnableModel: RunnableModel) {
+    init(runnableModel: RunnableModel, control: ModelRequestBodyControl) {
         self.runnableModel = runnableModel
+        self.control = control
         _state = State(initialValue: runnableModel.requestBodyControlState)
     }
 
     var body: some View {
         List {
-            if controls.isEmpty {
-                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(controls) { control in
-                    switch control.kind {
-                    case .toggle:
-                        Toggle(isOn: toggleBinding(for: control)) {
-                            Text(control.title)
-                        }
-                    case .optionGroup:
-                        if control.options.isEmpty {
-                            Text(control.title)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Section {
-                                Picker(NSLocalizedString("选择选项", comment: ""), selection: optionBinding(for: control)) {
-                                    ForEach(control.options) { option in
-                                        Text(option.title).tag(option.id)
-                                    }
+            switch control.kind {
+            case .toggle:
+                Toggle(isOn: toggleBinding(for: control)) {
+                    Text(control.title)
+                }
+            case .optionGroup:
+                if control.options.isEmpty {
+                    Text(NSLocalizedString("这个控制还没有选项。", comment: ""))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(control.options) { option in
+                        Button {
+                            state.selectedOptionIDsByControlID[control.id] = option.id
+                            saveState()
+                        } label: {
+                            HStack {
+                                Text(option.title)
+                                Spacer()
+                                if selectedOptionID(for: control) == option.id {
+                                    Image(systemName: "checkmark")
                                 }
-                                .pickerStyle(.inline)
-                                .labelsHidden()
-                            } header: {
-                                Text(control.title)
                             }
                         }
                     }
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("请求控制", comment: ""))
+        .navigationTitle(control.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -4580,10 +4662,6 @@ private struct RequestBodyQuickControlsView: View {
                 }
             }
         }
-    }
-
-    private var controls: [ModelRequestBodyControl] {
-        runnableModel.model.requestBodyControls.filter(\.isEnabled)
     }
 
     private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
@@ -4596,19 +4674,109 @@ private struct RequestBodyQuickControlsView: View {
         )
     }
 
-    private func optionBinding(for control: ModelRequestBodyControl) -> Binding<String> {
+    private func selectedOptionID(for control: ModelRequestBodyControl) -> String {
+        state.selectedOptionIDsByControlID[control.id]
+            ?? control.defaultOptionID
+            ?? control.options.first?.id
+            ?? ""
+    }
+
+    private func saveState() {
+        state = ModelRequestBodyControlCompiler.normalized(state, for: runnableModel.model.requestBodyControls)
+        runnableModel.saveRequestBodyControlState(state)
+    }
+}
+
+private struct OverlayRequestControlDetailPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let runnableModel: RunnableModel
+    let control: ModelRequestBodyControl
+    @State private var state: ModelRequestBodyControlState
+
+    init(runnableModel: RunnableModel, control: ModelRequestBodyControl) {
+        self.runnableModel = runnableModel
+        self.control = control
+        _state = State(initialValue: runnableModel.requestBodyControlState)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(control.title)
+                    .etFont(.system(size: 15, weight: .semibold))
+                    .foregroundColor(TelegramColors.navBarText)
+                    .padding(.horizontal, 2)
+
+                switch control.kind {
+                case .toggle:
+                    Toggle(isOn: toggleBinding(for: control)) {
+                        Text(control.title)
+                            .etFont(.system(size: 14, weight: .medium))
+                            .foregroundColor(TelegramColors.navBarText)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(rowBackground)
+                case .optionGroup:
+                    if control.options.isEmpty {
+                        Text(NSLocalizedString("这个控制还没有选项。", comment: ""))
+                            .etFont(.system(size: 12))
+                            .foregroundColor(TelegramColors.navBarSubtitle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(control.options) { option in
+                            Button {
+                                state.selectedOptionIDsByControlID[control.id] = option.id
+                                saveState()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text(option.title)
+                                        .etFont(.system(size: 14, weight: .medium))
+                                        .foregroundColor(TelegramColors.navBarText)
+
+                                    Spacer()
+
+                                    Image(systemName: selectedOptionID(for: control) == option.id ? "checkmark.circle.fill" : "circle")
+                                        .etFont(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(
+                                            selectedOptionID(for: control) == option.id
+                                                ? TelegramColors.sendButtonColor
+                                                : TelegramColors.navBarSubtitle.opacity(0.5)
+                                        )
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .background(rowBackground)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.05))
+    }
+
+    private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
         Binding(
-            get: {
-                state.selectedOptionIDsByControlID[control.id]
-                    ?? control.defaultOptionID
-                    ?? control.options.first?.id
-                    ?? ""
-            },
+            get: { state.toggleValuesByControlID[control.id] ?? control.defaultIsActive },
             set: { newValue in
-                state.selectedOptionIDsByControlID[control.id] = newValue
+                state.toggleValuesByControlID[control.id] = newValue
                 saveState()
             }
         )
+    }
+
+    private func selectedOptionID(for control: ModelRequestBodyControl) -> String {
+        state.selectedOptionIDsByControlID[control.id]
+            ?? control.defaultOptionID
+            ?? control.options.first?.id
+            ?? ""
     }
 
     private func saveState() {

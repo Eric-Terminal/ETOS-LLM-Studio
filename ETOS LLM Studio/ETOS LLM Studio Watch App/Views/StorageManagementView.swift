@@ -472,6 +472,8 @@ private struct WatchImagePreviewView: View {
     @State private var isLoading = true
 
     var body: some View {
+        let filePath = file.url.path
+
         Group {
             if isLoading {
                 ProgressView()
@@ -510,7 +512,6 @@ private struct WatchImagePreviewView: View {
         }
         .navigationTitle(NSLocalizedString("图片预览", comment: ""))
         .task {
-            let filePath = file.url.path
             image = await Task.detached(priority: .userInitiated) {
                 UIImage(contentsOfFile: filePath)
             }.value

@@ -172,7 +172,7 @@ extension ModelSettingsView {
     }
     
     private func loadEditorState() {
-        requestBodyMode = model.requestBodyOverrideMode
+        requestBodyMode = .keyValue
         loadKeyValueEntriesFromModel()
         loadExpressionEntriesFromModel()
         if let savedRawJSON = model.rawRequestBodyJSON?.trimmingCharacters(in: .whitespacesAndNewlines),

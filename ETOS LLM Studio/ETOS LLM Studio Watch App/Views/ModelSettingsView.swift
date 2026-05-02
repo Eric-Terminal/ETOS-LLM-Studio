@@ -58,8 +58,6 @@ struct ModelSettingsView: View {
                 modelCapabilityRows
             }
 
-            structuredControlsSection
-
             Section(header: Text(NSLocalizedString("自定义Body", comment: ""))) {
                 Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
                     Text(NSLocalizedString("键值对", comment: "")).tag(Model.RequestBodyOverrideMode.keyValue)
@@ -67,6 +65,8 @@ struct ModelSettingsView: View {
                     Text(NSLocalizedString("原始 JSON", comment: "")).tag(Model.RequestBodyOverrideMode.rawJSON)
                 }
             }
+
+            structuredControlsSection
 
             if requestBodyMode == .keyValue {
                 Section(
@@ -180,7 +180,7 @@ extension ModelSettingsView {
     }
     
     private func loadEditorState() {
-        requestBodyMode = model.requestBodyOverrideMode
+        requestBodyMode = .keyValue
         loadKeyValueEntriesFromModel()
         loadExpressionEntriesFromModel()
         if let savedRawJSON = model.rawRequestBodyJSON?.trimmingCharacters(in: .whitespacesAndNewlines),

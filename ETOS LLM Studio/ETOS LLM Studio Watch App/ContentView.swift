@@ -103,7 +103,6 @@ struct ContentView: View {
     @State private var legacyMigrationErrorMessage: String?
     @State private var nativeDestination: WatchNativeNavigationDestination? = .chat
     @State private var isQuickModelSelectorPresented = false
-    @State private var isRequestBodyControlsPresented = false
     @State private var isAttachmentImportPresented = false
     @State private var attachmentSourceText: String = ""
     @State private var importSourceHistory: [String] = []
@@ -1275,19 +1274,6 @@ struct ContentView: View {
             bubbleWithLeadingSwipe = AnyView(
                 bubbleWithTrailingSwipe
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
-                            Button {
-                                isRequestBodyControlsPresented = true
-                            } label: {
-                                Image(systemName: "slider.horizontal.3")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(width: inputControlHeight, height: inputControlHeight)
-                            }
-                            .labelStyle(.iconOnly)
-                            .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
-                            .tint(.purple)
-                        }
-
                         Button {
                             isQuickModelSelectorPresented = true
                         } label: {
@@ -1304,19 +1290,6 @@ struct ContentView: View {
             bubbleWithLeadingSwipe = AnyView(
                 bubbleWithTrailingSwipe
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        if viewModel.selectedModel?.model.requestBodyControls.isEmpty == false {
-                            Button {
-                                isRequestBodyControlsPresented = true
-                            } label: {
-                                Image(systemName: "slider.horizontal.3")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(width: inputControlHeight, height: inputControlHeight)
-                            }
-                            .labelStyle(.iconOnly)
-                            .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
-                            .tint(.purple)
-                        }
-
                         Button {
                             openSessionHistory()
                         } label: {
@@ -1344,13 +1317,6 @@ struct ContentView: View {
                             }
                         )
                     )
-                }
-            }
-            .sheet(isPresented: $isRequestBodyControlsPresented) {
-                if let selectedModel = viewModel.selectedModel {
-                    NavigationStack {
-                        WatchRequestBodyQuickControlsView(runnableModel: selectedModel)
-                    }
                 }
             }
             .sheet(isPresented: $isAttachmentImportPresented) {
@@ -1702,77 +1668,105 @@ private struct WatchQuickModelSelectorView: View {
                 Text(NSLocalizedString("暂无可用模型，请先在设置中启用模型。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(models, id: \.id) { model in
-                    Button {
-                        selectedModel = model
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(model.model.displayName)
-                                    .etFont(.subheadline.weight(.semibold))
-                                Text("\(model.provider.name) · \(model.model.modelName)")
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if selectedModel?.id == model.id {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
+                Section(header: Text(NSLocalizedString("模型", comment: ""))) {
+                    ForEach(models, id: \.id) { model in
+                        Button {
+                            selectedModel = model
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.model.displayName)
+                                        .etFont(.subheadline.weight(.semibold))
+                                    Text("\(model.provider.name) · \(model.model.modelName)")
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if selectedModel?.id == model.id {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.blue)
+                                }
                             }
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                }
+
+                Section(header: Text(NSLocalizedString("请求控制", comment: ""))) {
+                    requestControlRows
                 }
             }
         }
         .navigationTitle(NSLocalizedString("切换模型", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
     }
-}
 
-private struct WatchRequestBodyQuickControlsView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let runnableModel: RunnableModel
-    @State private var state: ModelRequestBodyControlState
-
-    init(runnableModel: RunnableModel) {
-        self.runnableModel = runnableModel
-        _state = State(initialValue: runnableModel.requestBodyControlState)
-    }
-
-    var body: some View {
-        List {
+    @ViewBuilder
+    private var requestControlRows: some View {
+        if let selectedModel {
+            let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
             if controls.isEmpty {
                 Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(controls) { control in
-                    switch control.kind {
-                    case .toggle:
-                        Toggle(isOn: toggleBinding(for: control)) {
-                            Text(control.title)
-                        }
-                    case .optionGroup:
-                        if control.options.isEmpty {
-                            Text(control.title)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Picker(selection: optionBinding(for: control)) {
-                                ForEach(control.options) { option in
-                                    Text(option.title).tag(option.id)
+                    NavigationLink {
+                        WatchRequestBodyControlDetailView(runnableModel: selectedModel, control: control)
+                    } label: {
+                        Text(control.title)
+                    }
+                }
+            }
+        } else {
+            Text(NSLocalizedString("请先选择模型。", comment: ""))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct WatchRequestBodyControlDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let runnableModel: RunnableModel
+    let control: ModelRequestBodyControl
+    @State private var state: ModelRequestBodyControlState
+
+    init(runnableModel: RunnableModel, control: ModelRequestBodyControl) {
+        self.runnableModel = runnableModel
+        self.control = control
+        _state = State(initialValue: runnableModel.requestBodyControlState)
+    }
+
+    var body: some View {
+        List {
+            switch control.kind {
+            case .toggle:
+                Toggle(isOn: toggleBinding(for: control)) {
+                    Text(control.title)
+                }
+            case .optionGroup:
+                if control.options.isEmpty {
+                    Text(NSLocalizedString("这个控制还没有选项。", comment: ""))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(control.options) { option in
+                        Button {
+                            state.selectedOptionIDsByControlID[control.id] = option.id
+                            saveState()
+                        } label: {
+                            HStack {
+                                Text(option.title)
+                                Spacer()
+                                if selectedOptionID(for: control) == option.id {
+                                    Image(systemName: "checkmark")
                                 }
-                            } label: {
-                                Text(control.title)
                             }
-                            .pickerStyle(.navigationLink)
                         }
                     }
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("请求控制", comment: ""))
+        .navigationTitle(control.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -1781,10 +1775,6 @@ private struct WatchRequestBodyQuickControlsView: View {
                 }
             }
         }
-    }
-
-    private var controls: [ModelRequestBodyControl] {
-        runnableModel.model.requestBodyControls.filter(\.isEnabled)
     }
 
     private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
@@ -1797,19 +1787,11 @@ private struct WatchRequestBodyQuickControlsView: View {
         )
     }
 
-    private func optionBinding(for control: ModelRequestBodyControl) -> Binding<String> {
-        Binding(
-            get: {
-                state.selectedOptionIDsByControlID[control.id]
-                    ?? control.defaultOptionID
-                    ?? control.options.first?.id
-                    ?? ""
-            },
-            set: { newValue in
-                state.selectedOptionIDsByControlID[control.id] = newValue
-                saveState()
-            }
-        )
+    private func selectedOptionID(for control: ModelRequestBodyControl) -> String {
+        state.selectedOptionIDsByControlID[control.id]
+            ?? control.defaultOptionID
+            ?? control.options.first?.id
+            ?? ""
     }
 
     private func saveState() {
