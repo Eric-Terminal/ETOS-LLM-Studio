@@ -1045,10 +1045,11 @@ private struct RequestBodyPayloadEditor: View {
                     .onAppear(perform: syncTextFromPayload)
                     .onChange(of: text) { _, newValue in
                         parse(newValue)
-                }
-                .onChange(of: payloadDisplayMode) { _, _ in
-                    syncTextFromPayload()
-                }
+                    }
+                    .onChange(of: payloadDisplayMode) { _, _ in
+                        syncTextFromPayload()
+                    }
+            }
 
             if let error {
                 Text(error)
