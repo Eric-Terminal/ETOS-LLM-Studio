@@ -99,6 +99,25 @@ public struct StorageManagementView: View {
 
     private var storageCategoriesSection: some View {
         Section(NSLocalizedString("存储分类", comment: "")) {
+            NavigationLink {
+                DocumentsStorageBrowserView()
+            } label: {
+                HStack {
+                    Image(systemName: "folder")
+                        .foregroundStyle(.blue)
+                        .frame(width: 20)
+
+                    Text(StorageUtility.documentsDirectory.lastPathComponent)
+                        .etFont(.footnote)
+
+                    Spacer()
+
+                    Text(StorageUtility.formatSize(storageBreakdown.totalSize))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             ForEach(StorageCategory.allCases) { category in
                 NavigationLink {
                     WatchFileListView(category: category)
@@ -227,22 +246,42 @@ public struct StorageManagementView: View {
     }
 }
 
+struct DocumentsStorageBrowserView: View {
+    private let rootDirectory = StorageUtility.documentsDirectory
+
+    var body: some View {
+        WatchFileListView(
+            category: .sessions,
+            directoryURL: rootDirectory,
+            rootDirectory: rootDirectory,
+            title: rootDirectory.lastPathComponent
+        )
+    }
+}
+
 public struct WatchFileListView: View {
     let category: StorageCategory
 
     private let rootDirectory: URL
     private let currentDirectory: URL
+    private let titleOverride: String?
 
     @State private var files: [FileItem] = []
     @State private var isLoading = true
     @State private var fileToDelete: FileItem?
     @State private var showDeleteConfirmation = false
 
-    public init(category: StorageCategory, directoryURL: URL? = nil) {
+    public init(
+        category: StorageCategory,
+        directoryURL: URL? = nil,
+        rootDirectory: URL? = nil,
+        title: String? = nil
+    ) {
         self.category = category
-        let root = StorageUtility.getDirectory(for: category)
+        let root = rootDirectory ?? StorageUtility.getDirectory(for: category)
         self.rootDirectory = root
         self.currentDirectory = directoryURL ?? root
+        self.titleOverride = title
     }
 
     private var relativePath: String {
@@ -278,7 +317,7 @@ public struct WatchFileListView: View {
                 fileListView
             }
         }
-        .navigationTitle(currentDirectory == rootDirectory ? category.displayName : currentDirectory.lastPathComponent)
+        .navigationTitle(currentDirectory == rootDirectory ? (titleOverride ?? category.displayName) : currentDirectory.lastPathComponent)
         .task {
             await loadFiles()
         }
@@ -331,7 +370,12 @@ public struct WatchFileListView: View {
     private func row(for file: FileItem) -> some View {
         if file.isDirectory {
             NavigationLink {
-                WatchFileListView(category: category, directoryURL: file.url)
+                WatchFileListView(
+                    category: category,
+                    directoryURL: file.url,
+                    rootDirectory: rootDirectory,
+                    title: titleOverride
+                )
             } label: {
                 WatchFileRow(file: file)
             }

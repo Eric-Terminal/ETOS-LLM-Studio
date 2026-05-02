@@ -97,6 +97,15 @@ struct StorageManagementView: View {
     
     private var storageCategoriesSection: some View {
         Section {
+            NavigationLink {
+                DocumentsStorageBrowserView()
+            } label: {
+                DocumentsStorageRow(
+                    name: StorageUtility.documentsDirectory.lastPathComponent,
+                    size: storageBreakdown.totalSize
+                )
+            }
+
             ForEach(StorageCategory.allCases) { category in
                 NavigationLink {
                     FileListDetailView(category: category)
@@ -300,6 +309,33 @@ private struct StorageCategoryRow: View {
                 }
             }
             
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct DocumentsStorageRow: View {
+    let name: String
+    let size: Int64
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "folder")
+                .etFont(.system(size: 18))
+                .foregroundStyle(.blue)
+                .frame(width: 32, height: 32)
+                .background(Color.blue.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .etFont(.subheadline.weight(.medium))
+                Text(StorageUtility.formatSize(size))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Spacer()
         }
         .padding(.vertical, 4)

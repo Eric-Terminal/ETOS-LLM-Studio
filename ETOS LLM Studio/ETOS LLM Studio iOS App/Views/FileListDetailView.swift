@@ -35,6 +35,21 @@ struct FileListDetailView: View {
     }
 }
 
+struct DocumentsStorageBrowserView: View {
+    private let rootDirectory = StorageUtility.documentsDirectory
+
+    var body: some View {
+        StorageDirectoryBrowserView(
+            title: rootDirectory.lastPathComponent,
+            rootDirectory: rootDirectory,
+            currentDirectory: rootDirectory,
+            emptyTitle: NSLocalizedString("暂无文件", comment: ""),
+            emptyDescription: NSLocalizedString("此类别下没有任何文件。", comment: ""),
+            footerText: NSLocalizedString("点击文件夹继续浏览，点击 JSON 文件可预览内容。", comment: "")
+        )
+    }
+}
+
 private struct StorageDirectoryBrowserView: View {
     let title: String
     let rootDirectory: URL
