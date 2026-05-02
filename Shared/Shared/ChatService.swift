@@ -9,111 +9,14 @@
 
 import Foundation
 import Combine
-import CryptoKit
 import os.log
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
 
-/// 一个组合了 Provider 和 Model 的可运行实体，包含了发起 API 请求所需的所有信息。
-public struct RunnableModel: Identifiable, Hashable {
-    public var id: String { "\(provider.id.uuidString)-\(model.id.uuidString)" }
-    public let provider: Provider
-    public let model: Model
-
-    public var requestBodyControlState: ModelRequestBodyControlState {
-        ModelRequestBodyControlRuntimeStore.state(
-            forModelKey: id,
-            controls: model.requestBodyControls
-        )
-    }
-
-    public var effectiveOverrideParameters: [String: JSONValue] {
-        model.effectiveOverrideParameters(using: requestBodyControlState)
-    }
-
-    public func effectiveOverrideParameters(using state: ModelRequestBodyControlState) -> [String: JSONValue] {
-        model.effectiveOverrideParameters(using: state)
-    }
-
-    public func saveRequestBodyControlState(_ state: ModelRequestBodyControlState) {
-        ModelRequestBodyControlRuntimeStore.save(
-            state,
-            forModelKey: id,
-            controls: model.requestBodyControls
-        )
-    }
-    
-    public init(provider: Provider, model: Model) {
-        self.provider = provider
-        self.model = model
-    }
-    
-    // 只根据 ID 判断相等性，避免参数变化导致 Picker 匹配失败
-    public static func == (lhs: RunnableModel, rhs: RunnableModel) -> Bool {
-        lhs.id == rhs.id
-    }
-    
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-}
-
-public enum SystemTimeInjectionPosition: String, CaseIterable, Identifiable, Sendable {
-    case front
-    case tail
-
-    public var id: String { rawValue }
-
-    public var displayName: String {
-        switch self {
-        case .front:
-            return NSLocalizedString("前置发送", comment: "System time injection position before system prompt")
-        case .tail:
-            return NSLocalizedString("末尾发送", comment: "System time injection position tail system message")
-        }
-    }
-}
-
-public enum SystemTimeContextFormatter {
-    public static func description(at date: Date = Date()) -> String {
-        let localeFormatter = DateFormatter()
-        localeFormatter.calendar = Calendar(identifier: .gregorian)
-        localeFormatter.locale = Locale(identifier: "zh_CN")
-        localeFormatter.timeZone = TimeZone.current
-        localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
-        let localTime = localeFormatter.string(from: date)
-
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.timeZone = TimeZone.current
-        let isoTime = isoFormatter.string(from: date)
-
-        let localTimeLine = String(format: NSLocalizedString("当前系统本地时间：%@", comment: "System local time line for model prompt."), localTime)
-        let isoTimeLine = String(format: NSLocalizedString("ISO8601：%@", comment: "ISO8601 time line for model prompt."), isoTime)
-        return "\(localTimeLine)\n\(isoTimeLine)"
-    }
-}
-
-private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
-    let sortedOffsets = offsets.sorted()
-    guard !sortedOffsets.isEmpty else { return }
-    guard sortedOffsets.allSatisfy({ $0 >= 0 && $0 < array.count }) else { return }
-    guard destination >= 0 && destination <= array.count else { return }
-
-    let movedItems = sortedOffsets.map { array[$0] }
-    for index in sortedOffsets.reversed() {
-        array.remove(at: index)
-    }
-
-    let removedBeforeDestination = sortedOffsets.filter { $0 < destination }.count
-    let insertionIndex = max(0, min(destination - removedBeforeDestination, array.count))
-    array.insert(contentsOf: movedItems, at: insertionIndex)
-}
-
 public class ChatService {
     
-    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
-    private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
     private static let modelOrderStorageKey = "modelOrder.runnableModels"
     private static let selectedRunnableModelStorageKey = "selectedRunnableModelID"
     private static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
@@ -517,52 +420,6 @@ public class ChatService {
             for fileName in fileFileNames {
                 fileAttachmentDataCache.removeObject(forKey: fileName as NSString)
             }
-        }
-    }
-
-    private func sanitizedToolName(_ name: String) -> String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let range = NSRange(trimmed.startIndex..., in: trimmed)
-        let sanitized = Self.toolNameRegex.stringByReplacingMatches(in: trimmed, options: [], range: range, withTemplate: "_")
-        return enforceToolNameLimit(sanitized, source: trimmed)
-    }
-
-    private func enforceToolNameLimit(_ name: String, source: String) -> String {
-        let maxLength = 64
-        guard name.count > maxLength else { return name }
-        let digest = SHA256.hash(data: Data(source.utf8))
-        let hash = digest.compactMap { String(format: "%02x", $0) }.joined().prefix(8)
-        let prefixLength = maxLength - 1 - hash.count
-        let prefix = name.prefix(prefixLength)
-        return "\(prefix)_\(hash)"
-    }
-
-    private func resolveToolName(_ name: String, availableTools: [InternalToolDefinition]) -> String {
-        if availableTools.contains(where: { $0.name == name }) {
-            return name
-        }
-        let matches = availableTools.filter { sanitizedToolName($0.name) == name }
-        if matches.count == 1 {
-            return matches[0].name
-        }
-        if matches.count > 1 {
-            let names = matches.map(\.name).joined(separator: ", ")
-            logger.warning("工具名在清洗后发生冲突: '\(names)'")
-        }
-        return name
-    }
-
-    private func resolveToolCalls(_ toolCalls: [InternalToolCall], availableTools: [InternalToolDefinition]) -> [InternalToolCall] {
-        toolCalls.map { call in
-            let resolvedName = resolveToolName(call.toolName, availableTools: availableTools)
-            guard resolvedName != call.toolName else { return call }
-            return InternalToolCall(
-                id: call.id,
-                toolName: resolvedName,
-                arguments: call.arguments,
-                result: call.result,
-                providerSpecificFields: call.providerSpecificFields
-            )
         }
     }
 
@@ -2057,81 +1914,6 @@ public class ChatService {
         persistAndPublishMessages(messages, for: resolvedSessionID)
     }
     
-    /// 获取 HTTP 状态码的描述信息
-    private func httpStatusCodeDescription(_ code: Int) -> String {
-        switch code {
-        // 4xx 客户端错误
-        case 400: return NSLocalizedString("请求格式错误 (Bad Request)", comment: "HTTP 400 description")
-        case 401: return NSLocalizedString("未授权，请检查 API Key (Unauthorized)", comment: "HTTP 401 description")
-        case 403: return NSLocalizedString("访问被拒绝，权限不足 (Forbidden)", comment: "HTTP 403 description")
-        case 404: return NSLocalizedString("请求的资源不存在 (Not Found)", comment: "HTTP 404 description")
-        case 405: return NSLocalizedString("请求方法不被允许 (Method Not Allowed)", comment: "HTTP 405 description")
-        case 408: return NSLocalizedString("请求超时 (Request Timeout)", comment: "HTTP 408 description")
-        case 409: return NSLocalizedString("请求冲突 (Conflict)", comment: "HTTP 409 description")
-        case 413: return NSLocalizedString("请求体过大 (Payload Too Large)", comment: "HTTP 413 description")
-        case 415: return NSLocalizedString("不支持的媒体类型 (Unsupported Media Type)", comment: "HTTP 415 description")
-        case 422: return NSLocalizedString("请求参数无法处理 (Unprocessable Entity)", comment: "HTTP 422 description")
-        case 429: return NSLocalizedString("请求过于频繁，请稍后重试 (Too Many Requests)", comment: "HTTP 429 description")
-        // 5xx 服务端错误
-        case 500: return NSLocalizedString("服务器内部错误 (Internal Server Error)", comment: "HTTP 500 description")
-        case 501: return NSLocalizedString("功能未实现 (Not Implemented)", comment: "HTTP 501 description")
-        case 502: return NSLocalizedString("网关错误，上游服务无响应 (Bad Gateway)", comment: "HTTP 502 description")
-        case 503: return NSLocalizedString("服务暂时不可用 (Service Unavailable)", comment: "HTTP 503 description")
-        case 504: return NSLocalizedString("网关超时 (Gateway Timeout)", comment: "HTTP 504 description")
-        case 520: return NSLocalizedString("未知错误 (Cloudflare)", comment: "HTTP 520 description")
-        case 521: return NSLocalizedString("服务器宕机 (Cloudflare)", comment: "HTTP 521 description")
-        case 522: return NSLocalizedString("连接超时 (Cloudflare)", comment: "HTTP 522 description")
-        case 523: return NSLocalizedString("源站不可达 (Cloudflare)", comment: "HTTP 523 description")
-        case 524: return NSLocalizedString("响应超时 (Cloudflare)", comment: "HTTP 524 description")
-        case 525: return NSLocalizedString("SSL 握手失败 (Cloudflare)", comment: "HTTP 525 description")
-        case 526: return NSLocalizedString("无效的 SSL 证书 (Cloudflare)", comment: "HTTP 526 description")
-        // 其他
-        default:
-            if code >= 400 && code < 500 {
-                return NSLocalizedString("客户端错误", comment: "Generic 4xx error description")
-            } else if code >= 500 && code < 600 {
-                return NSLocalizedString("服务器错误", comment: "Generic 5xx error description")
-            }
-            return NSLocalizedString("HTTP 错误", comment: "Generic HTTP error description")
-        }
-    }
-    
-    /// 格式化错误内容，使其更简洁易读
-    /// - Returns: (显示内容, 完整内容（如果被截断则非空）)
-    private func formatErrorContent(_ content: String, httpStatusCode: Int? = nil) -> (String, String?) {
-        let maxLength = 500
-        var displayMessage: String
-        var fullContent: String? = nil
-        
-        // 构建状态码描述前缀
-        var statusPrefix = ""
-        if let code = httpStatusCode {
-            let description = httpStatusCodeDescription(code)
-            statusPrefix = String(
-                format: NSLocalizedString("HTTP %d: %@\n\n", comment: "HTTP status prefix with code and description"),
-                code,
-                description
-            )
-        }
-        
-        // 检查内容是否需要截断
-        if content.count > maxLength {
-            // 内容过长，需要截断
-            let truncatedContent = String(content.prefix(maxLength))
-            let truncationNotice = NSLocalizedString(
-                "...\n\n(响应已截断，可在更多操作中查看完整内容)",
-                comment: "Truncation notice for long error content"
-            )
-            displayMessage = statusPrefix + truncatedContent + truncationNotice
-            fullContent = statusPrefix + content
-        } else {
-            // 内容长度合适，直接显示
-            displayMessage = statusPrefix + content
-        }
-        
-        return (displayMessage, fullContent)
-    }
-
     private struct AuxiliaryContextPolicy {
         let enableMemory: Bool
         let enableMemoryWrite: Bool
