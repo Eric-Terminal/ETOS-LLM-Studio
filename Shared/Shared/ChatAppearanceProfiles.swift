@@ -348,7 +348,7 @@ public enum ChatAppearanceProfileStore {
         }
 
         let migrated = migratedLegacyConfiguration(userDefaults: userDefaults)
-        try? saveConfiguration(migrated, userDefaults: userDefaults)
+        _ = try? saveConfiguration(migrated, userDefaults: userDefaults)
         return migrated
     }
 
@@ -577,7 +577,9 @@ public final class ChatAppearanceProfileManager: ObservableObject {
         let delay = max(1, min(nextDate.timeIntervalSince(now()), 24 * 60 * 60))
         refreshTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await self?.refreshActiveProfile()
+            await MainActor.run { [weak self] in
+                self?.refreshActiveProfile()
+            }
         }
     }
 
