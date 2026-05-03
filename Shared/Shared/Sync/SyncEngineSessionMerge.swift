@@ -1,0 +1,323 @@
+// ============================================================================
+// SyncEngineSessionMerge.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// 本文件承载会话与聊天消息的同步深合并逻辑。
+// ============================================================================
+
+import Foundation
+
+extension SyncEngine {
+    static func containsSessionHash(
+        _ hash: String,
+        sessions: [ChatSession],
+        messagesBySessionID: inout [UUID: [ChatMessage]]
+    ) -> Bool {
+        for session in sessions {
+            let messages = messagesForSession(session.id, cache: &messagesBySessionID)
+            if computeSessionContentHash(session: session, messages: messages) == hash {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func messagesForSession(_ sessionID: UUID, cache: inout [UUID: [ChatMessage]]) -> [ChatMessage] {
+        if let cached = cache[sessionID] {
+            return cached
+        }
+        let loaded = Persistence.loadMessages(for: sessionID)
+        cache[sessionID] = loaded
+        return loaded
+    }
+
+    static func sessionMergeCandidateIndex(for incomingSession: ChatSession, localSessions: [ChatSession]) -> Int? {
+        if let exactIDMatch = localSessions.firstIndex(where: { $0.id == incomingSession.id }) {
+            return exactIDMatch
+        }
+        return localSessions.firstIndex(where: { $0.isEquivalentIgnoringSyncSuffix(to: incomingSession) })
+    }
+
+    static func mergeSessionDeep(
+        localSession: ChatSession,
+        localMessages: [ChatMessage],
+        incomingSession: ChatSession,
+        incomingMessages: [ChatMessage]
+    ) -> DeepMergeResult<(ChatSession, [ChatMessage])> {
+        guard let mergedSession = mergeChatSessionMetadata(local: localSession, incoming: incomingSession) else {
+            return .conflict
+        }
+        guard let mergedMessagesResult = mergeLinearMessages(local: localMessages, incoming: incomingMessages) else {
+            return .conflict
+        }
+
+        let payload = (mergedSession, mergedMessagesResult.messages)
+        if mergedSession == localSession && !mergedMessagesResult.changed {
+            return .unchanged(payload)
+        }
+        return .merged(payload)
+    }
+
+    static func mergeChatSessionMetadata(local: ChatSession, incoming: ChatSession) -> ChatSession? {
+        guard local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix else {
+            return nil
+        }
+
+        var merged = local
+        guard let topicMerge = mergeOptionalStringField(
+            local.topicPrompt,
+            incoming.topicPrompt,
+            allowPrefixExtension: false
+        ) else {
+            return nil
+        }
+        merged.topicPrompt = topicMerge.value
+
+        guard let enhancedMerge = mergeOptionalStringField(
+            local.enhancedPrompt,
+            incoming.enhancedPrompt,
+            allowPrefixExtension: false
+        ) else {
+            return nil
+        }
+        merged.enhancedPrompt = enhancedMerge.value
+
+        if local.folderID == nil {
+            merged.folderID = incoming.folderID
+        }
+
+        merged.lorebookIDs = mergeOrderedUUIDs(local.lorebookIDs, incoming.lorebookIDs)
+
+        if local.worldbookContextIsolationEnabled != incoming.worldbookContextIsolationEnabled {
+            let localHasBindings = !local.lorebookIDs.isEmpty
+            let incomingHasBindings = !incoming.lorebookIDs.isEmpty
+            if local.worldbookContextIsolationEnabled && !localHasBindings {
+                merged.worldbookContextIsolationEnabled = incoming.worldbookContextIsolationEnabled
+            } else if incoming.worldbookContextIsolationEnabled && !incomingHasBindings {
+                merged.worldbookContextIsolationEnabled = local.worldbookContextIsolationEnabled
+            } else if local.worldbookContextIsolationEnabled || incoming.worldbookContextIsolationEnabled {
+                merged.worldbookContextIsolationEnabled = true
+            }
+        }
+
+        if local.name != incoming.name {
+            if local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix {
+                merged.name = local.name
+            } else {
+                return nil
+            }
+        }
+
+        merged.isTemporary = false
+        return merged
+    }
+
+    static func mergeLinearMessages(
+        local: [ChatMessage],
+        incoming: [ChatMessage]
+    ) -> (messages: [ChatMessage], changed: Bool)? {
+        if local == incoming {
+            return (local, false)
+        }
+
+        var merged = local
+        var changed = false
+        let overlapCount = min(local.count, incoming.count)
+
+        for index in 0..<overlapCount {
+            guard let mergedMessage = mergeChatMessage(local[index], incoming[index]) else {
+                return nil
+            }
+            if mergedMessage != merged[index] {
+                merged[index] = mergedMessage
+                changed = true
+            }
+        }
+
+        if incoming.count > local.count {
+            merged.append(contentsOf: incoming.dropFirst(overlapCount))
+            changed = true
+        }
+
+        return (merged, changed)
+    }
+
+    static func mergeChatMessage(_ local: ChatMessage, _ incoming: ChatMessage) -> ChatMessage? {
+        if local == incoming {
+            return local
+        }
+
+        let canTreatAsSameMessage = local.id == incoming.id
+            || messagesShareMergeIdentity(local, incoming)
+        guard canTreatAsSameMessage else {
+            return nil
+        }
+
+        guard let contentMerge = mergeMessageVersions(local: local, incoming: incoming) else {
+            return nil
+        }
+        guard let reasoningMerge = mergeOptionalStringField(
+            local.reasoningContent,
+            incoming.reasoningContent,
+            allowPrefixExtension: true
+        ) else {
+            return nil
+        }
+        guard let toolCallsMerge = mergeOptionalArrayField(local.toolCalls, incoming.toolCalls) else {
+            return nil
+        }
+        guard let toolCallsPlacement = mergeOptionalScalarField(
+            local.toolCallsPlacement,
+            incoming.toolCallsPlacement
+        ) else {
+            return nil
+        }
+        guard let audioFileName = mergeOptionalStringField(
+            local.audioFileName,
+            incoming.audioFileName,
+            allowPrefixExtension: false
+        ) else {
+            return nil
+        }
+        guard let responseGroupID = mergeOptionalScalarField(
+            local.responseGroupID,
+            incoming.responseGroupID
+        ) else {
+            return nil
+        }
+        guard let responseAttemptID = mergeOptionalScalarField(
+            local.responseAttemptID,
+            incoming.responseAttemptID
+        ) else {
+            return nil
+        }
+        guard let responseAttemptIndex = mergeOptionalScalarField(
+            local.responseAttemptIndex,
+            incoming.responseAttemptIndex
+        ) else {
+            return nil
+        }
+        guard let fullErrorContent = mergeOptionalStringField(
+            local.fullErrorContent,
+            incoming.fullErrorContent,
+            allowPrefixExtension: true
+        ) else {
+            return nil
+        }
+
+        let mergedImageFiles = mergeOrderedStrings(local.imageFileNames, incoming.imageFileNames)
+        let mergedFileFiles = mergeOrderedStrings(local.fileFileNames, incoming.fileFileNames)
+        let mergedTokenUsage = mergeTokenUsage(local.tokenUsage, incoming.tokenUsage)
+        let mergedResponseMetrics = mergeResponseMetrics(local.responseMetrics, incoming.responseMetrics)
+        let mergedRequestedAt = minOptional(local.requestedAt, incoming.requestedAt)
+
+        var merged = buildMessage(
+            from: local,
+            versions: contentMerge.versions,
+            currentVersionIndex: contentMerge.currentVersionIndex,
+            requestedAt: mergedRequestedAt,
+            reasoningContent: reasoningMerge.value,
+            toolCalls: toolCallsMerge.value,
+            toolCallsPlacement: toolCallsPlacement.value,
+            tokenUsage: mergedTokenUsage,
+            audioFileName: audioFileName.value,
+            imageFileNames: mergedImageFiles,
+            fileFileNames: mergedFileFiles,
+            fullErrorContent: fullErrorContent.value,
+            responseMetrics: mergedResponseMetrics
+        )
+        merged.responseGroupID = responseGroupID.value
+        merged.responseAttemptID = responseAttemptID.value
+        merged.responseAttemptIndex = responseAttemptIndex.value
+        merged.selectedResponseAttemptID = incoming.selectedResponseAttemptID ?? local.selectedResponseAttemptID
+
+        if local.id != incoming.id, local.content == incoming.content {
+            merged.id = local.id
+        }
+        return merged
+    }
+
+    static func messagesShareMergeIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
+        guard local.role == incoming.role else {
+            return false
+        }
+
+        if stringsAreCompatible(local.content, incoming.content) {
+            return true
+        }
+
+        let localVersions = local.getAllVersions()
+        let incomingVersions = incoming.getAllVersions()
+        for localVersion in localVersions {
+            if incomingVersions.contains(where: { stringsAreCompatible(localVersion, $0) }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func buildMessage(
+        from template: ChatMessage,
+        versions: [String],
+        currentVersionIndex: Int,
+        requestedAt: Date?,
+        reasoningContent: String?,
+        toolCalls: [InternalToolCall]?,
+        toolCallsPlacement: ToolCallsPlacement?,
+        tokenUsage: MessageTokenUsage?,
+        audioFileName: String?,
+        imageFileNames: [String]?,
+        fileFileNames: [String]?,
+        fullErrorContent: String?,
+        responseMetrics: MessageResponseMetrics?
+    ) -> ChatMessage {
+        let safeVersions = versions.isEmpty ? [""] : versions
+        var message = ChatMessage(
+            id: template.id,
+            role: template.role,
+            content: safeVersions[0],
+            requestedAt: requestedAt,
+            reasoningContent: reasoningContent,
+            toolCalls: toolCalls,
+            toolCallsPlacement: toolCallsPlacement,
+            tokenUsage: tokenUsage,
+            audioFileName: audioFileName,
+            imageFileNames: imageFileNames,
+            fileFileNames: fileFileNames,
+            fullErrorContent: fullErrorContent,
+            responseMetrics: responseMetrics
+        )
+        if safeVersions.count > 1 {
+            for version in safeVersions.dropFirst() {
+                message.addVersion(version)
+            }
+            let safeCurrentIndex = min(max(0, currentVersionIndex), safeVersions.count - 1)
+            message.switchToVersion(safeCurrentIndex)
+        }
+        return message
+    }
+
+    static func mergeMessageVersions(
+        local: ChatMessage,
+        incoming: ChatMessage
+    ) -> (versions: [String], currentVersionIndex: Int)? {
+        let localCurrent = local.content
+        let incomingCurrent = incoming.content
+        guard stringsAreCompatible(localCurrent, incomingCurrent) else {
+            return nil
+        }
+
+        var versions = local.getAllVersions()
+        for version in incoming.getAllVersions() where !versions.contains(version) {
+            versions.append(version)
+        }
+
+        let preferredCurrent = preferLongerString(localCurrent, incomingCurrent)
+        if !versions.contains(preferredCurrent) {
+            versions.append(preferredCurrent)
+        }
+        let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
+        return (versions, currentIndex)
+    }
+}
