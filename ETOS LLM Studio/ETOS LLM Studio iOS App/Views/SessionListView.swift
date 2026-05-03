@@ -27,77 +27,77 @@ struct SessionListView: View {
     }
 }
 
-private struct SessionFolderBrowserView: View {
-    @EnvironmentObject private var viewModel: ChatViewModel
-    @EnvironmentObject private var syncManager: WatchSyncManager
-    @Environment(\.dismiss) private var dismiss
+struct SessionFolderBrowserView: View {
+    @EnvironmentObject var viewModel: ChatViewModel
+    @EnvironmentObject var syncManager: WatchSyncManager
+    @Environment(\.dismiss) var dismiss
 
     let folderID: UUID?
     let isRoot: Bool
     let createConversationAction: (() -> Void)?
 
-    @State private var editingSessionID: UUID?
-    @State private var draftSessionName: String = ""
-    @State private var sessionToDelete: ChatSession?
-    @State private var sessionInfo: SessionInfoPayload?
-    @State private var showGhostSessionAlert = false
-    @State private var ghostSession: ChatSession?
+    @State var editingSessionID: UUID?
+    @State var draftSessionName: String = ""
+    @State var sessionToDelete: ChatSession?
+    @State var sessionInfo: SessionInfoPayload?
+    @State var showGhostSessionAlert = false
+    @State var ghostSession: ChatSession?
 
-    @State private var createFolderParentID: UUID?
-    @State private var createFolderName: String = ""
-    @State private var isShowingCreateFolderAlert = false
+    @State var createFolderParentID: UUID?
+    @State var createFolderName: String = ""
+    @State var isShowingCreateFolderAlert = false
 
-    @State private var folderToRename: SessionFolder?
-    @State private var renameFolderName: String = ""
-    @State private var isShowingRenameFolderAlert = false
+    @State var folderToRename: SessionFolder?
+    @State var renameFolderName: String = ""
+    @State var isShowingRenameFolderAlert = false
 
-    @State private var folderToDelete: SessionFolder?
+    @State var folderToDelete: SessionFolder?
 
-    @State private var isBatchSelecting = false
-    @State private var selectedSessionIDs: Set<UUID> = []
-    @State private var selectedFolderIDs: Set<UUID> = []
-    @State private var showBatchDeleteConfirm = false
-    @State private var searchText: String = ""
-    @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
-    @State private var isSearching: Bool = false
-    @State private var latestSearchToken: Int = 0
-    @State private var pendingSearchWorkItem: DispatchWorkItem?
-    @State private var sessionPageIndex: Int = 0
-    @State private var searchResultPageIndex: Int = 0
+    @State var isBatchSelecting = false
+    @State var selectedSessionIDs: Set<UUID> = []
+    @State var selectedFolderIDs: Set<UUID> = []
+    @State var showBatchDeleteConfirm = false
+    @State var searchText: String = ""
+    @State var searchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State var isSearching: Bool = false
+    @State var latestSearchToken: Int = 0
+    @State var pendingSearchWorkItem: DispatchWorkItem?
+    @State var sessionPageIndex: Int = 0
+    @State var searchResultPageIndex: Int = 0
 
-    private let maxSessionsPerPage = 100
+    let maxSessionsPerPage = 100
 
-    private var folderByID: [UUID: SessionFolder] {
+    var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })
     }
 
-    private var currentFolder: SessionFolder? {
+    var currentFolder: SessionFolder? {
         guard let folderID else { return nil }
         return folderByID[folderID]
     }
 
-    private var childFolders: [SessionFolder] {
+    var childFolders: [SessionFolder] {
         viewModel.sessionFolders.filter { normalizedParentID(of: $0) == folderID }
     }
 
-    private var directSessions: [ChatSession] {
+    var directSessions: [ChatSession] {
         viewModel.chatSessions.filter { normalizedFolderID(of: $0) == folderID }
     }
 
-    private var totalDirectSessionCount: Int {
+    var totalDirectSessionCount: Int {
         directSessions.count
     }
 
-    private var totalSessionPages: Int {
+    var totalSessionPages: Int {
         guard totalDirectSessionCount > 0 else { return 1 }
         return ((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1
     }
 
-    private var shouldShowPaginationBar: Bool {
+    var shouldShowPaginationBar: Bool {
         totalDirectSessionCount > maxSessionsPerPage
     }
 
-    private var pagedDirectSessions: [ChatSession] {
+    var pagedDirectSessions: [ChatSession] {
         guard totalDirectSessionCount > 0 else { return [] }
         let start = min(sessionPageIndex * maxSessionsPerPage, totalDirectSessionCount)
         let end = min(start + maxSessionsPerPage, totalDirectSessionCount)
@@ -105,11 +105,11 @@ private struct SessionFolderBrowserView: View {
         return Array(directSessions[start..<end])
     }
 
-    private var sessionOrderByID: [UUID: Int] {
+    var sessionOrderByID: [UUID: Int] {
         Dictionary(uniqueKeysWithValues: viewModel.chatSessions.enumerated().map { ($1.id, $0) })
     }
 
-    private var mergedEntries: [SessionMergedEntry] {
+    var mergedEntries: [SessionMergedEntry] {
         let folders = childFolders.map {
             SessionMergedEntryWithRank(
                 rank: recentActivityIndex(for: $0.id),
@@ -142,7 +142,7 @@ private struct SessionFolderBrowserView: View {
             .map(\.entry)
     }
 
-    private var moveFolderOptions: [SessionMoveFolderOption] {
+    var moveFolderOptions: [SessionMoveFolderOption] {
         viewModel.sessionFolders
             .sorted { lhs, rhs in
                 let left = folderDisplayPath(lhs)
@@ -154,40 +154,40 @@ private struct SessionFolderBrowserView: View {
             }
     }
 
-    private var batchMoveFolderOptions: [SessionMoveFolderOption] {
+    var batchMoveFolderOptions: [SessionMoveFolderOption] {
         moveFolderOptions.filter { isValidBatchMoveTarget($0.id) }
     }
 
-    private var selectedSessions: [ChatSession] {
+    var selectedSessions: [ChatSession] {
         pagedDirectSessions.filter { selectedSessionIDs.contains($0.id) }
     }
 
-    private var selectedFolders: [SessionFolder] {
+    var selectedFolders: [SessionFolder] {
         childFolders.filter { selectedFolderIDs.contains($0.id) }
     }
 
-    private var selectedBatchItemCount: Int {
+    var selectedBatchItemCount: Int {
         selectedSessionIDs.count + selectedFolderIDs.count
     }
 
-    private var hasBatchSelection: Bool {
+    var hasBatchSelection: Bool {
         selectedBatchItemCount > 0
     }
 
-    private var normalizedSearchQuery: String {
+    var normalizedSearchQuery: String {
         SessionHistorySearchSupport.normalizedQuery(searchText)
     }
 
-    private var isSearchActive: Bool {
+    var isSearchActive: Bool {
         isRoot && !normalizedSearchQuery.isEmpty
     }
 
-    private var searchResultSessions: [ChatSession] {
+    var searchResultSessions: [ChatSession] {
         guard isSearchActive else { return [] }
         return viewModel.chatSessions.filter { searchHits[$0.id] != nil }
     }
 
-    private var searchResultItems: [SessionHistorySearchResult] {
+    var searchResultItems: [SessionHistorySearchResult] {
         guard isSearchActive else { return [] }
         return SessionHistorySearchSupport.flattenedResults(
             sessions: viewModel.chatSessions,
@@ -195,20 +195,20 @@ private struct SessionFolderBrowserView: View {
         )
     }
 
-    private var totalSearchResultCount: Int {
+    var totalSearchResultCount: Int {
         searchResultItems.count
     }
 
-    private var totalSearchResultPages: Int {
+    var totalSearchResultPages: Int {
         guard totalSearchResultCount > 0 else { return 1 }
         return ((totalSearchResultCount - 1) / maxSessionsPerPage) + 1
     }
 
-    private var shouldShowSearchPaginationBar: Bool {
+    var shouldShowSearchPaginationBar: Bool {
         totalSearchResultCount > maxSessionsPerPage
     }
 
-    private var pagedSearchResultItems: [SessionHistorySearchResult] {
+    var pagedSearchResultItems: [SessionHistorySearchResult] {
         guard totalSearchResultCount > 0 else { return [] }
         let start = min(searchResultPageIndex * maxSessionsPerPage, totalSearchResultCount)
         let end = min(start + maxSessionsPerPage, totalSearchResultCount)
@@ -216,67 +216,67 @@ private struct SessionFolderBrowserView: View {
         return Array(searchResultItems[start..<end])
     }
 
-    private var emptyStateText: String {
+    var emptyStateText: String {
         folderID == nil ? NSLocalizedString("暂无文件夹或会话。", comment: "") : NSLocalizedString("当前文件夹暂无内容。", comment: "")
     }
 
-    private var canGoToPreviousPage: Bool {
+    var canGoToPreviousPage: Bool {
         sessionPageIndex > 0
     }
 
-    private var canGoToNextPage: Bool {
+    var canGoToNextPage: Bool {
         sessionPageIndex + 1 < totalSessionPages
     }
 
-    private var canGoToPreviousSearchResultPage: Bool {
+    var canGoToPreviousSearchResultPage: Bool {
         searchResultPageIndex > 0
     }
 
-    private var canGoToNextSearchResultPage: Bool {
+    var canGoToNextSearchResultPage: Bool {
         searchResultPageIndex + 1 < totalSearchResultPages
     }
 
-    private var currentPageStartOrdinal: Int {
+    var currentPageStartOrdinal: Int {
         guard totalDirectSessionCount > 0 else { return 0 }
         return sessionPageIndex * maxSessionsPerPage + 1
     }
 
-    private var currentPageEndOrdinal: Int {
+    var currentPageEndOrdinal: Int {
         guard totalDirectSessionCount > 0 else { return 0 }
         return min((sessionPageIndex + 1) * maxSessionsPerPage, totalDirectSessionCount)
     }
 
-    private var currentSearchResultPageStartOrdinal: Int {
+    var currentSearchResultPageStartOrdinal: Int {
         guard totalSearchResultCount > 0 else { return 0 }
         return searchResultPageIndex * maxSessionsPerPage + 1
     }
 
-    private var currentSearchResultPageEndOrdinal: Int {
+    var currentSearchResultPageEndOrdinal: Int {
         guard totalSearchResultCount > 0 else { return 0 }
         return min((searchResultPageIndex + 1) * maxSessionsPerPage, totalSearchResultCount)
     }
 
-    private var paginationSummaryText: String {
+    var paginationSummaryText: String {
         String(format: NSLocalizedString("当前显示%d-%d个对话(总共%d)", comment: ""), currentPageStartOrdinal, currentPageEndOrdinal, totalDirectSessionCount)
     }
 
-    private var searchPaginationSummaryText: String {
+    var searchPaginationSummaryText: String {
         String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentSearchResultPageStartOrdinal, currentSearchResultPageEndOrdinal, totalSearchResultCount)
     }
 
-    private var shouldShowActivePaginationBar: Bool {
+    var shouldShowActivePaginationBar: Bool {
         isSearchActive ? shouldShowSearchPaginationBar : shouldShowPaginationBar
     }
 
-    private var activePaginationSummaryText: String {
+    var activePaginationSummaryText: String {
         isSearchActive ? searchPaginationSummaryText : paginationSummaryText
     }
 
-    private var canGoToPreviousActivePage: Bool {
+    var canGoToPreviousActivePage: Bool {
         isSearchActive ? canGoToPreviousSearchResultPage : canGoToPreviousPage
     }
 
-    private var canGoToNextActivePage: Bool {
+    var canGoToNextActivePage: Bool {
         isSearchActive ? canGoToNextSearchResultPage : canGoToNextPage
     }
 
@@ -965,635 +965,5 @@ private struct SessionFolderBrowserView: View {
             .joined(separator: NSLocalizedString("和", comment: ""))
         let targetSummary = targetText.isEmpty ? NSLocalizedString("所选项目", comment: "") : targetText
         return String(format: NSLocalizedString("将删除 %@。文件夹内的会话会移回未分类，操作不可恢复。", comment: ""), targetSummary)
-    }
-
-    private func normalizeSessionPageIndex() {
-        let maxIndex = max(totalSessionPages - 1, 0)
-        if sessionPageIndex > maxIndex {
-            sessionPageIndex = maxIndex
-        }
-        if sessionPageIndex < 0 {
-            sessionPageIndex = 0
-        }
-    }
-
-    private func goToPreviousPage() {
-        guard canGoToPreviousPage else { return }
-        sessionPageIndex -= 1
-    }
-
-    private func goToNextPage() {
-        guard canGoToNextPage else { return }
-        sessionPageIndex += 1
-        unlockConversationArchaeologistIfNeeded()
-    }
-
-    private func normalizeSearchResultPageIndex() {
-        let maxIndex = max(totalSearchResultPages - 1, 0)
-        if searchResultPageIndex > maxIndex {
-            searchResultPageIndex = maxIndex
-        }
-        if searchResultPageIndex < 0 {
-            searchResultPageIndex = 0
-        }
-    }
-
-    private func goToPreviousActivePage() {
-        if isSearchActive {
-            guard canGoToPreviousSearchResultPage else { return }
-            searchResultPageIndex -= 1
-            return
-        }
-        goToPreviousPage()
-    }
-
-    private func goToNextActivePage() {
-        if isSearchActive {
-            guard canGoToNextSearchResultPage else { return }
-            searchResultPageIndex += 1
-            return
-        }
-        goToNextPage()
-    }
-
-    private func unlockConversationArchaeologistIfNeeded() {
-        guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
-            totalSessions: totalDirectSessionCount,
-            pageIndex: sessionPageIndex,
-            totalPages: totalSessionPages
-        ) else { return }
-
-        Task {
-            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .conversationArchaeologist)
-            guard !hasUnlocked else { return }
-            await AchievementCenter.shared.unlock(id: .conversationArchaeologist)
-        }
-    }
-
-    private func normalizedFolderID(of session: ChatSession) -> UUID? {
-        guard let folderID = session.folderID else { return nil }
-        return folderByID[folderID] == nil ? nil : folderID
-    }
-
-    private func normalizedParentID(of folder: SessionFolder) -> UUID? {
-        guard let parentID = folder.parentID else { return nil }
-        return folderByID[parentID] == nil ? nil : parentID
-    }
-
-    private func recentActivityIndex(for folderID: UUID) -> Int {
-        let sessions = viewModel.chatSessions
-        for (index, session) in sessions.enumerated() {
-            guard let assignedFolderID = normalizedFolderID(of: session) else { continue }
-            if folderHierarchyContains(descendantFolderID: assignedFolderID, ancestorFolderID: folderID) {
-                return index
-            }
-        }
-        return .max
-    }
-
-    private func folderHierarchyContains(descendantFolderID: UUID, ancestorFolderID: UUID) -> Bool {
-        var cursor: UUID? = descendantFolderID
-        var visited = Set<UUID>()
-        while let current = cursor {
-            if current == ancestorFolderID {
-                return true
-            }
-            guard visited.insert(current).inserted else {
-                return false
-            }
-            cursor = folderByID[current]?.parentID
-        }
-        return false
-    }
-
-    private func descendantFolderIDs(rootID: UUID) -> Set<UUID> {
-        var collected: Set<UUID> = [rootID]
-        var queue: [UUID] = [rootID]
-
-        while let current = queue.first {
-            queue.removeFirst()
-            let children = viewModel.sessionFolders.filter { normalizedParentID(of: $0) == current }
-            for child in children where collected.insert(child.id).inserted {
-                queue.append(child.id)
-            }
-        }
-
-        return collected
-    }
-
-    private func recursiveSessionCount(in folderID: UUID) -> Int {
-        let descendants = descendantFolderIDs(rootID: folderID)
-        return viewModel.chatSessions.filter { session in
-            guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
-            return descendants.contains(assignedFolderID)
-        }.count
-    }
-
-    private func folderDisplayPath(_ folder: SessionFolder) -> String {
-        var parts: [String] = [folder.name]
-        var cursor = folder.parentID
-        var visited = Set<UUID>()
-
-        while let current = cursor {
-            guard visited.insert(current).inserted else { break }
-            guard let parent = folderByID[current] else { break }
-            parts.append(parent.name)
-            cursor = parent.parentID
-        }
-
-        return parts.reversed().joined(separator: " /")
-    }
-
-    private func folderLocationSummary(for session: ChatSession) -> String {
-        guard let folderID = normalizedFolderID(of: session),
-              let folder = folderByID[folderID] else {
-            return NSLocalizedString("位置：未分类", comment: "")
-        }
-        return String(format: NSLocalizedString("位置：%@", comment: ""), folderDisplayPath(folder))
-    }
-
-    private func sourceLabel(for source: SessionHistorySearchHitSource) -> String {
-        switch source {
-        case .sessionName:
-            return NSLocalizedString("标题", comment: "")
-        case .topicPrompt:
-            return NSLocalizedString("主题提示", comment: "")
-        case .enhancedPrompt:
-            return NSLocalizedString("增强提示词", comment: "")
-        case .userMessage:
-            return NSLocalizedString("用户消息", comment: "")
-        case .assistantMessage:
-            return NSLocalizedString("助手消息", comment: "")
-        case .systemMessage:
-            return NSLocalizedString("系统消息", comment: "")
-        case .toolMessage:
-            return NSLocalizedString("工具消息", comment: "")
-        case .errorMessage:
-            return NSLocalizedString("错误消息", comment: "")
-        }
-    }
-
-    private func searchResultTitle(for result: SessionHistorySearchResult) -> String {
-        if let messageOrdinal = result.messageOrdinal {
-            return String(format: NSLocalizedString("“%@” 第%d条", comment: ""), result.sessionName, messageOrdinal)
-        }
-        return "“\(result.sessionName)” \(sourceLabel(for: result.match.source))"
-    }
-
-    private func scheduleSearch(for query: String) {
-        pendingSearchWorkItem?.cancel()
-        pendingSearchWorkItem = nil
-
-        let normalized = SessionHistorySearchSupport.normalizedQuery(query)
-        guard !normalized.isEmpty else {
-            searchHits = [:]
-            isSearching = false
-            searchResultPageIndex = 0
-            return
-        }
-
-        isSearching = true
-        latestSearchToken += 1
-        let searchToken = latestSearchToken
-        let sessionsSnapshot = viewModel.chatSessions
-        let currentSessionIDSnapshot = viewModel.currentSession?.id
-        let currentMessagesSnapshot = viewModel.allMessagesForSession
-        let querySnapshot = query
-
-        let workItem = DispatchWorkItem {
-            let hits = SessionHistorySearchSupport.searchHits(
-                sessions: sessionsSnapshot,
-                query: querySnapshot,
-                currentSessionID: currentSessionIDSnapshot,
-                currentSessionMessages: currentMessagesSnapshot,
-                messageLoader: { sessionID in
-                    Persistence.loadMessages(for: sessionID)
-                }
-            )
-            DispatchQueue.main.async {
-                guard searchToken == latestSearchToken else { return }
-                searchHits = hits
-                isSearching = false
-                pendingSearchWorkItem = nil
-            }
-        }
-
-        pendingSearchWorkItem = workItem
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
-    }
-
-    private func presentCreateFolder(parentID: UUID?) {
-        createFolderParentID = parentID
-        createFolderName = ""
-        isShowingCreateFolderAlert = true
-    }
-
-    private func startRenaming(_ folder: SessionFolder) {
-        folderToRename = folder
-        renameFolderName = folder.name
-        isShowingRenameFolderAlert = true
-    }
-
-    /// 选择会话时检测是否为 Ghost Session
-    private func selectSession(_ session: ChatSession, messageOrdinal: Int? = nil) {
-        if session.isTemporary {
-            if let messageOrdinal {
-                viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
-            } else {
-                viewModel.clearPendingMessageJumpTarget()
-            }
-            viewModel.setCurrentSession(session)
-            dismiss()
-            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-            return
-        }
-
-        if !Persistence.sessionDataExists(sessionID: session.id) {
-            ghostSession = session
-            showGhostSessionAlert = true
-        } else {
-            if let messageOrdinal {
-                viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
-            } else {
-                viewModel.clearPendingMessageJumpTarget()
-            }
-            viewModel.setCurrentSession(session)
-            dismiss()
-            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-        }
-    }
-
-    private func focusOnLatest() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            editingSessionID = viewModel.currentSession?.id
-            draftSessionName = viewModel.currentSession?.name ?? ""
-        }
-    }
-}
-
-private struct SessionMergedEntryWithRank {
-    let rank: Int
-    let entry: SessionMergedEntry
-}
-
-private enum SessionMergedEntry: Identifiable {
-    case folder(SessionFolder)
-    case session(ChatSession)
-
-    var id: String {
-        switch self {
-        case .folder(let folder):
-            return "folder-\(folder.id.uuidString)"
-        case .session(let session):
-            return "session-\(session.id.uuidString)"
-        }
-    }
-}
-
-private struct SessionMoveFolderOption: Identifiable {
-    let id: UUID
-    let title: String
-}
-
-private struct BatchSelectableFolderRow: View {
-    let folder: SessionFolder
-    let sessionCount: Int
-    let isSelected: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                    .padding(.top, 2)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Label {
-                        Text(folder.name)
-                    } icon: {
-                        Image(systemName: "folder")
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .etFont(.system(size: 16, weight: .medium))
-
-                    Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
-                        .etFont(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 8)
-            }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct BatchSelectableSessionRow: View {
-    let session: ChatSession
-    let isSelected: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 10) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                SessionListRowContent(
-                    title: session.name,
-                    subtitle: session.topicPrompt,
-                    footnote: nil,
-                    isCurrent: false,
-                    isRunning: false
-                )
-            }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Row
-
-private struct SessionRow: View {
-    let session: ChatSession
-    let isCurrent: Bool
-    let isRunning: Bool
-    let isEditing: Bool
-    @Binding var draftName: String
-    let currentFolderID: UUID?
-    let moveOptions: [SessionMoveFolderOption]
-    let searchSummary: String?
-    let locationSummary: String?
-
-    let onCommit: (String) -> Void
-    let onSelect: () -> Void
-    let onRename: () -> Void
-    let onBranch: (Bool) -> Void
-    let onMoveToFolder: (UUID?) -> Void
-    let onDeleteLastMessage: () -> Void
-    let onDelete: () -> Void
-    let onCancelRename: () -> Void
-    let onInfo: () -> Void
-    let onSendToCompanion: () -> Void
-
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if isEditing {
-                TextField(NSLocalizedString("会话名称", comment: ""), text: $draftName)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focused)
-                    .onSubmit {
-                        commit()
-                    }
-                    .onAppear { focused = true }
-
-                HStack {
-                    Button(NSLocalizedString("保存", comment: "")) {
-                        commit()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button(NSLocalizedString("取消", comment: "")) {
-                        onCancelRename()
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.top, 4)
-            } else {
-                SessionListRowContent(
-                    title: session.name,
-                    subtitle: primarySubtitle,
-                    footnote: secondarySubtitle,
-                    isCurrent: isCurrent,
-                    isRunning: isRunning
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onSelect()
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .contextMenu {
-            Button {
-                onSelect()
-            } label: {
-                Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
-            }
-
-            Button {
-                onRename()
-            } label: {
-                Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
-            }
-
-            Menu {
-                Button {
-                    onMoveToFolder(nil)
-                } label: {
-                    Label(NSLocalizedString("未分类", comment: ""), systemImage: currentFolderID == nil ? "checkmark" : "tray")
-                }
-
-                ForEach(moveOptions) { option in
-                    Button {
-                        onMoveToFolder(option.id)
-                    } label: {
-                        Label(option.title, systemImage: currentFolderID == option.id ? "checkmark" : "folder")
-                    }
-                }
-            } label: {
-                Label(NSLocalizedString("移动到文件夹", comment: ""), systemImage: "folder")
-            }
-
-            Button {
-                onBranch(false)
-            } label: {
-                Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
-            }
-
-            Button {
-                onBranch(true)
-            } label: {
-                Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
-            }
-
-            Button {
-                onDeleteLastMessage()
-            } label: {
-                Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
-            }
-
-            Button {
-                onInfo()
-            } label: {
-                Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
-            }
-
-            Button {
-                onSendToCompanion()
-            } label: {
-                Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
-            }
-            .disabled(session.isTemporary)
-
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
-            }
-        }
-    }
-
-    private func commit() {
-        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        onCommit(trimmed)
-    }
-
-    private var primarySubtitle: String? {
-        if let searchSummary, !searchSummary.isEmpty {
-            return searchSummary
-        }
-        if let topic = session.topicPrompt, !topic.isEmpty {
-            return topic
-        }
-        return locationSummary
-    }
-
-    private var secondarySubtitle: String? {
-        guard searchSummary == nil || searchSummary?.isEmpty == true else {
-            return locationSummary
-        }
-        if let topic = session.topicPrompt, !topic.isEmpty {
-            return locationSummary
-        }
-        return nil
-    }
-}
-
-private struct SessionListRowContent: View {
-    let title: String
-    let subtitle: String?
-    let footnote: String?
-    let isCurrent: Bool
-    let isRunning: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .etFont(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .etFont(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if let footnote, !footnote.isEmpty {
-                    Text(footnote)
-                        .etFont(.system(size: 12))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            trailingStatus
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private var trailingStatus: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            if isRunning {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 8, height: 8)
-            }
-
-            if isCurrent {
-                Image(systemName: "checkmark")
-                    .etFont(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-            }
-        }
-        .frame(minWidth: 22, alignment: .topTrailing)
-    }
-}
-
-// MARK: - Session Info
-
-private struct SessionInfoPayload: Identifiable {
-    let id = UUID()
-    let session: ChatSession
-    let messageCount: Int
-    let isCurrent: Bool
-}
-
-private struct SessionInfoSheet: View {
-    let payload: SessionInfoPayload
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section(NSLocalizedString("会话概览", comment: "")) {
-                    LabeledContent(NSLocalizedString("名称", comment: "")) {
-                        Text(payload.session.name)
-                    }
-                    LabeledContent(NSLocalizedString("状态", comment: "")) {
-                        Text(payload.isCurrent ? NSLocalizedString("当前会话", comment: "") : NSLocalizedString("历史会话", comment: ""))
-                            .foregroundStyle(payload.isCurrent ? Color.accentColor : Color.secondary)
-                    }
-                    LabeledContent(NSLocalizedString("消息数量", comment: "")) {
-                        Text(String(format: NSLocalizedString("%d 条", comment: ""), payload.messageCount))
-                    }
-                }
-
-                if let topic = payload.session.topicPrompt, !topic.isEmpty {
-                    Section(NSLocalizedString("主题提示", comment: "")) {
-                        Text(topic)
-                            .etFont(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if let enhanced = payload.session.enhancedPrompt, !enhanced.isEmpty {
-                    Section(NSLocalizedString("增强提示词", comment: "")) {
-                        Text(enhanced)
-                            .etFont(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section(NSLocalizedString("唯一标识", comment: "")) {
-                    Text(payload.session.id.uuidString)
-                        .etFont(.footnote.monospaced())
-                        .textSelection(.enabled)
-                }
-            }
-            .navigationTitle(NSLocalizedString("会话信息", comment: ""))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
-                }
-            }
-        }
     }
 }
