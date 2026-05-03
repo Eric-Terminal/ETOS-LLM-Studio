@@ -868,3 +868,4 @@ public class ChatService {
         let storedIdentifier = defaults.string(forKey: Self.reasoningSummaryModelStorageKey) ?? ""
         return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
     }
+}

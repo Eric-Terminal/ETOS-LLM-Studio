@@ -694,5 +694,3 @@ extension GeminiAdapter {
         return (mimeType, base64Data)
     }
 }
-
-}
