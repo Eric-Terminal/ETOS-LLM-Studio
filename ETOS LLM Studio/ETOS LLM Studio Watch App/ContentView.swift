@@ -20,77 +20,25 @@ import UIKit
 import CoreText
 #endif
 
-enum WatchChatInputActionState: Equatable {
-    case stop
-    case send
-    case quickRetry
-    case speechInput
-    case inactive
-
-    static func resolve(isSending: Bool, hasSendableContent: Bool, canQuickRetry: Bool, isSpeechInputEnabled: Bool) -> Self {
-        if isSending {
-            return .stop
-        }
-        if hasSendableContent {
-            return .send
-        }
-        if canQuickRetry {
-            return .quickRetry
-        }
-        if isSpeechInputEnabled {
-            return .speechInput
-        }
-        return .inactive
-    }
-
-    var systemImageName: String {
-        switch self {
-        case .stop:
-            return "stop.circle.fill"
-        case .send, .inactive:
-            return "arrow.up"
-        case .quickRetry:
-            return "arrow.clockwise"
-        case .speechInput:
-            return "mic.fill"
-        }
-    }
-
-    var isDisabled: Bool {
-        self == .inactive
-    }
-}
-
-private enum WatchNativeNavigationDestination: String, Identifiable {
-    case chat
-    case settings
-
-    var id: String { rawValue }
-}
-
-private struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
-    let id: UUID
-}
-
 struct ContentView: View {
-    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.scenePhase) var scenePhase
     
     // MARK: - 状态对象
     
     @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var viewModel = ChatViewModel()
+    @StateObject var viewModel = ChatViewModel()
     @StateObject private var announcementManager = AnnouncementManager.shared
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
-    @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
+    @ObservedObject var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var isAtBottom = true
     @State private var showScrollToBottomButton = false
     @State private var fullErrorContent: String?
-    @State private var isSettingsPresented = false
-    @State private var settingsDestination: WatchSettingsNavigationDestination?
+    @State var isSettingsPresented = false
+    @State var settingsDestination: WatchSettingsNavigationDestination?
     @State private var isSessionListPresented = false
     @State private var messageActionsTarget: WatchMessageActionsNavigationTarget?
-    @State private var dailyPulsePreparationTask: Task<Void, Never>?
+    @State var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var shouldForceScrollToBottom = false
     @State private var shouldKeepBottomPinned = true
     @State private var suppressAutoScrollOnce = false
@@ -98,20 +46,20 @@ struct ContentView: View {
     @State private var needsImmediateBottomSnap = true
     @State private var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
     @State private var pendingJumpRequest: MessageJumpRequest?
-    @State private var launchRecoveryNoticeMessage: String?
-    @State private var rootBodyFont: Font = .body
+    @State var launchRecoveryNoticeMessage: String?
+    @State var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
-    @State private var nativeDestination: WatchNativeNavigationDestination? = .chat
+    @State var nativeDestination: WatchNativeNavigationDestination? = .chat
     @State private var isQuickModelSelectorPresented = false
     @State private var isAttachmentImportPresented = false
     @State private var attachmentSourceText: String = ""
-    @State private var importSourceHistory: [String] = []
+    @State var importSourceHistory: [String] = []
     @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
     @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
-    @AppStorage("watch.attachment.lastSource") private var lastAttachmentSource: String = ""
-    @AppStorage("watch.attachment.sourceHistory") private var attachmentSourceHistoryRawValue: String = "[]"
+    @AppStorage("watch.attachment.lastSource") var lastAttachmentSource: String = ""
+    @AppStorage("watch.attachment.sourceHistory") var attachmentSourceHistoryRawValue: String = "[]"
     private var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled))
     }
@@ -130,7 +78,7 @@ struct ContentView: View {
         }
     }
 
-    private var isNativeNavigationEnabled: Bool {
+    var isNativeNavigationEnabled: Bool {
         ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
     }
 
@@ -364,6 +312,57 @@ struct ContentView: View {
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
         }
+        .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: Binding(
+            get: { launchRecoveryNoticeMessage != nil },
+            set: { if !$0 { launchRecoveryNoticeMessage = nil } }
+        )) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
+        } message: {
+            Text(launchRecoveryNoticeMessage ?? "")
+        }
+        .sheet(isPresented: $announcementManager.shouldShowAlert) {
+            if let announcement = announcementManager.currentAnnouncement {
+                NavigationStack {
+                    AnnouncementAlertView(
+                        announcement: announcement,
+                        onDismiss: {
+                            announcementManager.dismissAlert()
+                        }
+                    )
+                }
+            }
+        }
+        .task {
+            launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
+            await announcementManager.checkAnnouncement()
+            scheduleDailyPulsePreparation(after: 1_500_000_000)
+            if applyDailyPulseContinuationIfNeeded() {
+                return
+            }
+            if let pendingRoute = notificationCenter.consumePendingRoute() {
+                switch pendingRoute {
+                case .dailyPulse:
+                    openDailyPulse()
+                case .feedback:
+                    openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
+                case .chatSession:
+                    if let sessionID = notificationCenter.consumePendingChatSessionID() {
+                        openChatSession(sessionID: sessionID)
+                    }
+                case .achievementJournal:
+                    openAchievementJournal()
+                }
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                ChatAppearanceProfileManager.shared.handleAppBecameActive()
+                scheduleDailyPulsePreparation(after: 1_500_000_000)
+            default:
+                cancelDailyPulsePreparation()
+            }
+        }
     }
 
     @ViewBuilder
@@ -481,17 +480,74 @@ struct ContentView: View {
                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
-                messageRow(
-                    for: state,
+                WatchMessageRowView(
+                    viewModel: viewModel,
+                    toolPermissionCenter: toolPermissionCenter,
+                    state: state,
                     mergeWithPrevious: mergeWithPrevious,
                     mergeWithNext: mergeWithNext,
                     connectsTimelineFromPrevious: connectsTimelineFromPrevious,
-                    connectsTimelineToNext: connectsTimelineToNext
+                    connectsTimelineToNext: connectsTimelineToNext,
+                    isLiquidGlassEnabled: isLiquidGlassEnabled,
+                    onOpenMore: {
+                        messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
+                    }
                 )
             }
 
             if viewModel.activeAskUserInputRequest == nil {
-                inputBubble
+                WatchInputBubbleView(
+                    viewModel: viewModel,
+                    isLiquidGlassEnabled: isLiquidGlassEnabled,
+                    isNativeNavigationEnabled: isNativeNavigationEnabled,
+                    inputControlHeight: inputControlHeight,
+                    inputFillColor: inputFillColor,
+                    inputStrokeColor: inputStrokeColor,
+                    inputPlaceholderText: NSLocalizedString("输入...", comment: "Default input placeholder on watch"),
+                    inputBubbleVerticalPadding: inputBubbleVerticalPadding,
+                    onOpenSessionHistory: {
+                        viewModel.activeSheet = nil
+                        isSettingsPresented = false
+                        settingsDestination = nil
+                        if isNativeNavigationEnabled {
+                            nativeDestination = nil
+                        } else {
+                            isSessionListPresented = true
+                        }
+                    },
+                    onHandleInputAction: { state in
+                        switch state {
+                        case .stop:
+                            viewModel.cancelSending()
+                        case .send:
+                            shouldForceScrollToBottom = true
+                            shouldKeepBottomPinned = true
+                            viewModel.sendMessage()
+                        case .quickRetry:
+                            shouldForceScrollToBottom = true
+                            shouldKeepBottomPinned = true
+                            viewModel.quickRetryLatestMessage()
+                        case .speechInput:
+                            viewModel.beginSpeechInputFlow()
+                        case .inactive:
+                            break
+                        }
+                    },
+                    onRememberAttachmentSource: { source in
+                        let updatedHistory = WatchImportSourceHistory.appending(
+                            source,
+                            to: importSourceHistory
+                        )
+                        attachmentSourceHistoryRawValue = WatchImportSourceHistory.rawValue(for: updatedHistory)
+                        lastAttachmentSource = updatedHistory.first ?? ""
+                        importSourceHistory = updatedHistory
+                    },
+                    importSourceHistory: importSourceHistory,
+                    lastAttachmentSource: lastAttachmentSource,
+                    isQuickModelSelectorPresented: $isQuickModelSelectorPresented,
+                    isAttachmentImportPresented: $isAttachmentImportPresented,
+                    attachmentSourceText: $attachmentSourceText
+                )
                     .id(bottomAnchorID)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -586,13 +642,6 @@ struct ContentView: View {
             scheduleImmediateBottomSnap(proxy: proxy)
             resolvePendingSearchJumpIfNeeded()
         }
-    }
-
-    private func refreshRootBodyFont() {
-        rootBodyFont = AppFontAdapter.adaptedFont(
-            from: .body,
-            sampleText: "The quick brown fox 你好こんにちは"
-        )
     }
 
     private var sessionListView: some View {
@@ -708,91 +757,6 @@ struct ContentView: View {
         .navigationTitle(NSLocalizedString("迁移中", comment: ""))
     }
     
-    /// 辅助函数，用于构建单个消息行，以简化 chatList 的主体
-    @ViewBuilder
-    private func messageRow(
-        for state: ChatMessageRenderState,
-        mergeWithPrevious: Bool,
-        mergeWithNext: Bool,
-        connectsTimelineFromPrevious: Bool,
-        connectsTimelineToNext: Bool
-    ) -> some View {
-        let message = state.message
-        let isReasoningExpandedBinding = Binding<Bool>(
-            get: { viewModel.reasoningExpandedState[message.id, default: false] },
-            set: { viewModel.setReasoningExpanded($0, for: message.id) }
-        )
-        
-        let isToolCallsExpandedBinding = Binding<Bool>(
-            get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-            set: { viewModel.toolCallsExpandedState[message.id] = $0 }
-        )
-        let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
-        let hasActivePermission = hasActiveToolPermissionRequest(for: message)
-
-        let bubble = ChatBubble(
-            messageState: state,
-            preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
-            preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
-            isReasoningExpanded: isReasoningExpandedBinding,
-            isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
-            isToolCallsExpanded: isToolCallsExpandedBinding,
-            enableMarkdown: viewModel.enableMarkdown,
-            enableBackground: viewModel.enableBackground,
-            enableLiquidGlass: isLiquidGlassEnabled,
-            enableNoBubbleUI: viewModel.enableNoBubbleUI,
-            enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
-            enableExperimentalToolResultDisplay: true,
-            enableMathRendering: viewModel.isMathRenderingEnabled(for: message.id),
-            showsStreamingIndicators: showsStreamingIndicators,
-            mergeWithPrevious: mergeWithPrevious,
-            mergeWithNext: mergeWithNext,
-            connectsTimelineFromPrevious: connectsTimelineFromPrevious,
-            connectsTimelineToNext: connectsTimelineToNext,
-            hasAutoOpenedPendingToolCall: { toolCallID in
-                viewModel.hasAutoOpenedPendingToolCall(toolCallID)
-            },
-            markPendingToolCallAutoOpened: { toolCallID in
-                viewModel.markPendingToolCallAutoOpened(toolCallID)
-            },
-            onCodeBlockHeaderTap: { content in
-                viewModel.appendCodeBlockContentToInput(content)
-            },
-            onOpenMore: hasActivePermission ? nil : {
-                openMessageActions(for: message)
-            }
-        )
-        .id(state.id)
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-
-        if hasActivePermission {
-            bubble
-        } else {
-            bubble
-                .swipeActions(edge: .leading) {
-                    messageActionsSwipeAction(for: message)
-                }
-        }
-    }
-
-    private func hasActiveToolPermissionRequest(for message: ChatMessage) -> Bool {
-        guard let request = toolPermissionCenter.activeRequest,
-              let toolCalls = message.toolCalls,
-              !toolCalls.isEmpty else {
-            return false
-        }
-        let normalizedRequestArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        return toolCalls.contains { call in
-            call.toolName == request.toolName
-                && call.arguments.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedRequestArguments
-        }
-    }
-
-    private func openMessageActions(for message: ChatMessage) {
-        messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
-    }
-
     @ViewBuilder
     private func messageActionsView(for messageID: UUID) -> some View {
         if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
@@ -843,16 +807,6 @@ struct ContentView: View {
         } else {
             EmptyView()
         }
-    }
-
-    @ViewBuilder
-    private func messageActionsSwipeAction(for message: ChatMessage) -> some View {
-        Button {
-            openMessageActions(for: message)
-        } label: {
-            Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis")
-        }
-        .tint(.gray)
     }
     
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
@@ -956,40 +910,6 @@ struct ContentView: View {
         viewModel.clearPendingMessageJumpTarget()
     }
 
-    private func sendMessage() {
-        shouldForceScrollToBottom = true
-        shouldKeepBottomPinned = true
-        viewModel.sendMessage()
-    }
-
-    private func openSessionHistory() {
-        viewModel.activeSheet = nil
-        isSettingsPresented = false
-        settingsDestination = nil
-        if isNativeNavigationEnabled {
-            nativeDestination = nil
-        } else {
-            isSessionListPresented = true
-        }
-    }
-
-    private func handleInputAction(_ state: WatchChatInputActionState) {
-        switch state {
-        case .stop:
-            viewModel.cancelSending()
-        case .send:
-            sendMessage()
-        case .quickRetry:
-            shouldForceScrollToBottom = true
-            shouldKeepBottomPinned = true
-            viewModel.quickRetryLatestMessage()
-        case .speechInput:
-            viewModel.beginSpeechInputFlow()
-        case .inactive:
-            break
-        }
-    }
-
     private var inputFillColor: Color {
         viewModel.enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
     }
@@ -1012,1556 +932,4 @@ struct ContentView: View {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
 
-    private func rememberAttachmentSource(_ source: String) {
-        let updatedHistory = WatchImportSourceHistory.appending(
-            source,
-            to: importSourceHistory
-        )
-        attachmentSourceHistoryRawValue = WatchImportSourceHistory.rawValue(for: updatedHistory)
-        lastAttachmentSource = updatedHistory.first ?? ""
-        importSourceHistory = updatedHistory
-    }
-
-    private func refreshAttachmentSourceHistory() {
-        importSourceHistory = WatchImportSourceHistory.values(
-            from: attachmentSourceHistoryRawValue,
-            fallback: lastAttachmentSource
-        )
-    }
-
-    private var hasPendingAttachments: Bool {
-        viewModel.pendingAudioAttachment != nil
-            || !viewModel.pendingImageAttachments.isEmpty
-            || !viewModel.pendingFileAttachments.isEmpty
-    }
-
-    @ViewBuilder
-    private var pendingAttachmentPreview: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !viewModel.pendingImageAttachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(viewModel.pendingImageAttachments) { attachment in
-                            attachmentPreviewRow(
-                                systemImage: "photo",
-                                title: NSLocalizedString("图片文件", comment: ""),
-                                fileName: attachment.fileName,
-                                tint: .green,
-                                onRemove: {
-                                    viewModel.removePendingImageAttachment(attachment)
-                                }
-                            )
-                            .frame(width: 140, alignment: .leading)
-                        }
-                    }
-                    .padding(.horizontal, 2)
-                }
-            }
-
-            if let audio = viewModel.pendingAudioAttachment {
-                attachmentPreviewRow(
-                    systemImage: "waveform",
-                    title: NSLocalizedString("语音文件", comment: ""),
-                    fileName: audio.fileName,
-                    tint: .blue,
-                    onRemove: {
-                        viewModel.clearPendingAudioAttachment()
-                    }
-                )
-            }
-
-            ForEach(viewModel.pendingFileAttachments) { attachment in
-                attachmentPreviewRow(
-                    systemImage: "doc",
-                    title: NSLocalizedString("文件", comment: ""),
-                    fileName: attachment.fileName,
-                    tint: .cyan,
-                    onRemove: {
-                        viewModel.removePendingFileAttachment(attachment)
-                    }
-                )
-            }
-        }
-    }
-
-    private func attachmentPreviewRow(
-        systemImage: String,
-        title: String,
-        fileName: String,
-        tint: Color,
-        onRemove: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .etFont(.system(size: 12))
-                .foregroundStyle(tint)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .etFont(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(fileName)
-                    .etFont(.system(size: 10))
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-            }
-
-            Spacer()
-
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .etFont(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(white: 0.2))
-        .cornerRadius(8)
-    }
-    
-    private var transparentInputField: some View {
-        ZStack(alignment: .leading) {
-            Text(viewModel.userInput.isEmpty ? inputPlaceholderText : viewModel.userInput)
-                .foregroundStyle(viewModel.userInput.isEmpty ? .secondary : .primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .allowsHitTesting(false)
-            TextField("", text: $viewModel.userInput.watchKeyboardNewlineBinding())
-                .textFieldStyle(.plain)
-                .opacity(0.01)
-                .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
-        }
-        .etFont(.body, sampleText: viewModel.userInput.isEmpty ? inputPlaceholderText : viewModel.userInput)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
-        .layoutPriority(1)
-    }
-    
-    private var inputBubble: some View {
-        let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let canSend = hasTrimmedText || hasPendingAttachments
-        let inputActionState = WatchChatInputActionState.resolve(
-            isSending: viewModel.isSendingMessage,
-            hasSendableContent: canSend,
-            canQuickRetry: viewModel.canQuickRetryLatestMessage,
-            isSpeechInputEnabled: viewModel.enableSpeechInput
-        )
-        
-        let coreBubble = Group {
-            VStack(spacing: 6) {
-                if hasPendingAttachments {
-                    pendingAttachmentPreview
-                }
-                
-                if isLiquidGlassEnabled {
-                    HStack(spacing: 10) {
-                        if #available(watchOS 26.0, *) {
-                            transparentInputField
-                                .glassEffect(.clear, in: Capsule())
-
-                            Button {
-                                handleInputAction(inputActionState)
-                            } label: {
-                                Image(systemName: inputActionState.systemImageName)
-                                    .etFont(.system(size: 18, weight: .medium))
-                                    .frame(width: inputControlHeight, height: inputControlHeight)
-                            }
-                            .buttonStyle(.plain)
-                            .glassEffect(.clear, in: Circle())
-                            .disabled(inputActionState.isDisabled)
-                        } else {
-                            ZStack {
-                                Capsule()
-                                    .fill(inputFillColor)
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(inputStrokeColor, lineWidth: 0.6)
-                                    )
-                                transparentInputField
-                            }
-
-                            Button {
-                                handleInputAction(inputActionState)
-                            } label: {
-                                Image(systemName: inputActionState.systemImageName)
-                                    .etFont(.system(size: 18, weight: .medium))
-                            }
-                            .buttonStyle(.plain)
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .overlay(
-                                Circle()
-                                    .stroke(inputStrokeColor, lineWidth: 0.8)
-                            )
-                            .disabled(inputActionState.isDisabled)
-                        }
-                    }
-                    .frame(height: inputControlHeight)
-                } else {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Capsule()
-                                .fill(inputFillColor)
-                                .overlay(
-                                    Capsule()
-                                        .stroke(inputStrokeColor, lineWidth: 0.6)
-                                )
-                            transparentInputField
-                        }
-
-                        Button {
-                            handleInputAction(inputActionState)
-                        } label: {
-                            Image(systemName: inputActionState.systemImageName)
-                                .etFont(.system(size: 18, weight: .medium))
-                        }
-                        .buttonStyle(.plain)
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                        .background(
-                            Circle().fill(inputFillColor)
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(inputStrokeColor, lineWidth: 0.8)
-                        )
-                        .disabled(inputActionState.isDisabled)
-                    }
-                    .frame(height: inputControlHeight)
-                    .padding(.horizontal, 10)
-                    .background(viewModel.enableBackground ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
-                    .cornerRadius(12)
-                }
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, inputBubbleVerticalPadding)
-        
-        let speechSheetBinding = Binding(
-            get: { viewModel.isSpeechRecorderPresented },
-            set: { viewModel.isSpeechRecorderPresented = $0 }
-        )
-        let speechErrorBinding = Binding(
-            get: { viewModel.showSpeechErrorAlert },
-            set: { viewModel.showSpeechErrorAlert = $0 }
-        )
-        let bubbleWithTrailingSwipe = coreBubble
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button {
-                    attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
-                    isAttachmentImportPresented = true
-                } label: {
-                    Image(systemName: "plus")
-                        .etFont(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                        .contentShape(Circle())
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(NSLocalizedString("添加附件", comment: ""))
-                .tint(.blue)
-                .disabled(viewModel.attachmentImportInProgress)
-
-                if !viewModel.userInput.isEmpty || hasPendingAttachments {
-                    Button(role: .destructive) {
-                        viewModel.clearUserInput()
-                        viewModel.clearAllAttachments()
-                    } label: {
-                        Image(systemName: "trash")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("清空输入", comment: ""))
-                }
-            }
-
-        let bubbleWithLeadingSwipe: AnyView
-        if isNativeNavigationEnabled {
-            bubbleWithLeadingSwipe = AnyView(
-                bubbleWithTrailingSwipe
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            isQuickModelSelectorPresented = true
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: inputControlHeight, height: inputControlHeight)
-                        }
-                        .labelStyle(.iconOnly)
-                        .accessibilityLabel(NSLocalizedString("切换模型", comment: ""))
-                        .tint(.blue)
-                    }
-            )
-        } else {
-            bubbleWithLeadingSwipe = AnyView(
-                bubbleWithTrailingSwipe
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            openSessionHistory()
-                        } label: {
-                            Image(systemName: "list.bullet.rectangle")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: inputControlHeight, height: inputControlHeight)
-                        }
-                        .labelStyle(.iconOnly)
-                        .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
-                        .tint(.blue)
-                    }
-            )
-        }
-
-        return bubbleWithLeadingSwipe
-            .sheet(isPresented: $isQuickModelSelectorPresented) {
-                NavigationStack {
-                    WatchQuickModelSelectorView(
-                        models: viewModel.activatedModels,
-                        selectedModel: Binding(
-                            get: { viewModel.selectedModel },
-                            set: { newValue in
-                                viewModel.selectedModel = newValue
-                                ChatService.shared.setSelectedModel(newValue)
-                            }
-                        )
-                    )
-                }
-            }
-            .sheet(isPresented: $isAttachmentImportPresented) {
-                NavigationStack {
-                    WatchImportSourceView(
-                        source: $attachmentSourceText,
-                        history: importSourceHistory,
-                        isImporting: viewModel.attachmentImportInProgress,
-                        title: NSLocalizedString("添加附件", comment: ""),
-                        placeholder: NSLocalizedString("链接或文件路径", comment: ""),
-                        progressTitle: NSLocalizedString("正在导入...", comment: ""),
-                        confirmTitle: NSLocalizedString("导入", comment: ""),
-                        onImport: {
-                            let trimmedSource = attachmentSourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            rememberAttachmentSource(trimmedSource)
-                            viewModel.importAttachment(from: trimmedSource)
-                            isAttachmentImportPresented = false
-                        },
-                        onCancel: {
-                            isAttachmentImportPresented = false
-                        }
-                    )
-                }
-            }
-            .sheet(isPresented: speechSheetBinding) {
-                SpeechRecorderView(viewModel: viewModel)
-            }
-            .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: speechErrorBinding) {
-                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
-            } message: {
-                Text(viewModel.speechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
-            }
-            .alert(NSLocalizedString("附件导入失败", comment: ""), isPresented: $viewModel.showAttachmentImportErrorAlert) {
-                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
-            } message: {
-                Text(viewModel.attachmentImportErrorMessage ?? NSLocalizedString("附件导入失败，请稍后重试。", comment: ""))
-            }
-            .alert(NSLocalizedString("记忆系统需要更新", comment: ""), isPresented: $viewModel.showDimensionMismatchAlert) {
-                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
-            } message: {
-                Text(viewModel.dimensionMismatchMessage)
-            }
-            .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: Binding(
-                get: { launchRecoveryNoticeMessage != nil },
-                set: { if !$0 { launchRecoveryNoticeMessage = nil } }
-            )) {
-                Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
-            } message: {
-                Text(launchRecoveryNoticeMessage ?? "")
-            }
-            .alert(
-                Text(NSLocalizedString("记忆嵌入失败", comment: "Memory embedding failure alert title")),
-                isPresented: $viewModel.showMemoryEmbeddingErrorAlert
-            ) {
-                Button(NSLocalizedString("好的", comment: "OK"), role: .cancel) { }
-            } message: {
-                Text(viewModel.memoryEmbeddingErrorMessage)
-            }
-            // MARK: - 公告弹窗
-            .sheet(isPresented: $announcementManager.shouldShowAlert) {
-                if let announcement = announcementManager.currentAnnouncement {
-                    NavigationStack {
-                        AnnouncementAlertView(
-                            announcement: announcement,
-                            onDismiss: {
-                                announcementManager.dismissAlert()
-                            }
-                        )
-                    }
-                }
-            }
-            // 启动时检查公告
-            .task {
-                launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
-                await announcementManager.checkAnnouncement()
-                scheduleDailyPulsePreparation(after: 1_500_000_000)
-                if applyDailyPulseContinuationIfNeeded() {
-                    return
-                }
-                if let pendingRoute = notificationCenter.consumePendingRoute() {
-                    switch pendingRoute {
-                    case .dailyPulse:
-                        openDailyPulse()
-                    case .feedback:
-                        openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
-                    case .chatSession:
-                        if let sessionID = notificationCenter.consumePendingChatSessionID() {
-                            openChatSession(sessionID: sessionID)
-                        }
-                    case .achievementJournal:
-                        openAchievementJournal()
-                    }
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                switch newPhase {
-                case .active:
-                    ChatAppearanceProfileManager.shared.handleAppBecameActive()
-                    scheduleDailyPulsePreparation(after: 1_500_000_000)
-                default:
-                    cancelDailyPulsePreparation()
-                }
-            }
-    }
-
-    private func openDailyPulse() {
-        if isNativeNavigationEnabled {
-            settingsDestination = nil
-            nativeDestination = .settings
-            DispatchQueue.main.async {
-                settingsDestination = .dailyPulse
-            }
-            return
-        }
-        isSettingsPresented = true
-        settingsDestination = nil
-        DispatchQueue.main.async {
-            settingsDestination = .dailyPulse
-        }
-    }
-
-    private func openFeedbackFromNotification() {
-        _ = notificationCenter.consumePendingRoute()
-        openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
-    }
-
-    private func openChatSessionFromNotification() {
-        _ = notificationCenter.consumePendingRoute()
-        guard let sessionID = notificationCenter.consumePendingChatSessionID() else { return }
-        openChatSession(sessionID: sessionID)
-    }
-
-    private func openAchievementJournalFromNotification() {
-        _ = notificationCenter.consumePendingRoute()
-        openAchievementJournal()
-    }
-
-    private func openChatSession(sessionID: UUID) {
-        guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
-        if isNativeNavigationEnabled {
-            nativeDestination = .chat
-            return
-        }
-        isSettingsPresented = false
-        settingsDestination = nil
-    }
-
-    private func openFeedback(issueNumber: Int?) {
-        if isNativeNavigationEnabled {
-            settingsDestination = nil
-            nativeDestination = .settings
-            DispatchQueue.main.async {
-                if let issueNumber,
-                   FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
-                    settingsDestination = .feedbackIssue(issueNumber: issueNumber)
-                } else {
-                    settingsDestination = .feedbackCenter
-                }
-            }
-            return
-        }
-        isSettingsPresented = true
-        settingsDestination = nil
-        DispatchQueue.main.async {
-            if let issueNumber,
-               FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
-                settingsDestination = .feedbackIssue(issueNumber: issueNumber)
-            } else {
-                settingsDestination = .feedbackCenter
-            }
-        }
-    }
-
-    private func openAchievementJournal() {
-        if isNativeNavigationEnabled {
-            settingsDestination = nil
-            nativeDestination = .settings
-            DispatchQueue.main.async {
-                settingsDestination = .achievementJournal
-            }
-            return
-        }
-        isSettingsPresented = true
-        settingsDestination = nil
-        DispatchQueue.main.async {
-            settingsDestination = .achievementJournal
-        }
-    }
-
-    @discardableResult
-    private func applyDailyPulseContinuationIfNeeded() -> Bool {
-        guard let continuation = notificationCenter.consumePendingDailyPulseContinuation() else {
-            return false
-        }
-        viewModel.applyDailyPulseContinuation(
-            sessionID: continuation.sessionID,
-            prompt: continuation.prompt
-        )
-        if isNativeNavigationEnabled {
-            nativeDestination = .chat
-            return true
-        }
-        isSettingsPresented = false
-        settingsDestination = nil
-        return true
-    }
-
-    private var inputPlaceholderText: String {
-        return NSLocalizedString("输入...", comment: "Default input placeholder on watch")
-    }
-
-    private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {
-        dailyPulsePreparationTask?.cancel()
-        dailyPulsePreparationTask = Task(priority: .utility) {
-            if delayNanoseconds > 0 {
-                try? await Task.sleep(nanoseconds: delayNanoseconds)
-            }
-            guard !Task.isCancelled else { return }
-            let isSceneActive = await MainActor.run { scenePhase == .active }
-            guard isSceneActive else { return }
-            await viewModel.prepareDailyPulseIfNeeded()
-            guard !Task.isCancelled else { return }
-            await viewModel.prepareMorningDailyPulseDeliveryIfNeeded()
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                dailyPulsePreparationTask = nil
-            }
-        }
-    }
-
-    private func cancelDailyPulsePreparation() {
-        dailyPulsePreparationTask?.cancel()
-        dailyPulsePreparationTask = nil
-    }
-
-}
-
-enum WatchImportSourceHistory {
-    nonisolated static let limit = 5
-
-    nonisolated static func values(from rawValue: String, fallback: String = "") -> [String] {
-        guard let data = rawValue.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
-            return normalized([fallback])
-        }
-        let history = normalized(decoded)
-        return history.isEmpty ? normalized([fallback]) : history
-    }
-
-    nonisolated static func appending(_ source: String, to history: [String]) -> [String] {
-        normalized([source] + history)
-    }
-
-    nonisolated static func rawValue(for history: [String]) -> String {
-        let normalizedHistory = normalized(history)
-        guard let data = try? JSONEncoder().encode(normalizedHistory),
-              let rawValue = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
-        return rawValue
-    }
-
-    nonisolated static func normalized(_ sources: [String]) -> [String] {
-        var seen: Set<String> = []
-        var result: [String] = []
-        for source in sources {
-            let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            guard seen.insert(trimmed).inserted else { continue }
-            result.append(trimmed)
-            if result.count == limit { break }
-        }
-        return result
-    }
-}
-
-struct WatchImportSourceView: View {
-    @Binding var source: String
-    let history: [String]
-    let isImporting: Bool
-    let title: String
-    let placeholder: String
-    let progressTitle: String
-    let confirmTitle: String
-    let onImport: () -> Void
-    let onCancel: () -> Void
-
-    private var canImport: Bool {
-        !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isImporting
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                TextField(placeholder, text: $source.watchKeyboardNewlineBinding())
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-
-                if isImporting {
-                    ProgressView(progressTitle)
-                }
-            }
-
-            if !history.isEmpty {
-                Section(NSLocalizedString("最近链接", comment: "")) {
-                    ForEach(history, id: \.self) { item in
-                        Button {
-                            source = item
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(item)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Spacer()
-                                if source == item {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.blue)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(NSLocalizedString("取消", comment: ""), action: onCancel)
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button(confirmTitle, action: onImport)
-                    .disabled(!canImport)
-            }
-        }
-    }
-}
-
-private struct WatchQuickModelSelectorView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let models: [RunnableModel]
-    @Binding var selectedModel: RunnableModel?
-
-    var body: some View {
-        List {
-            if models.isEmpty {
-                Text(NSLocalizedString("暂无可用模型，请先在设置中启用模型。", comment: ""))
-                    .foregroundStyle(.secondary)
-            } else {
-                Section(header: Text(NSLocalizedString("模型", comment: ""))) {
-                    ForEach(models, id: \.id) { model in
-                        Button {
-                            selectedModel = model
-                        } label: {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.model.displayName)
-                                        .etFont(.subheadline.weight(.semibold))
-                                    Text("\(model.provider.name) · \(model.model.modelName)")
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if selectedModel?.id == model.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.blue)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Section(header: Text(NSLocalizedString("请求控制", comment: ""))) {
-                    requestControlRows
-                }
-            }
-        }
-        .navigationTitle(NSLocalizedString("切换模型", comment: ""))
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    @ViewBuilder
-    private var requestControlRows: some View {
-        if let selectedModel {
-            let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
-            if controls.isEmpty {
-                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(controls) { control in
-                    NavigationLink {
-                        WatchRequestBodyControlDetailView(runnableModel: selectedModel, control: control)
-                    } label: {
-                        Text(control.title)
-                    }
-                }
-            }
-        } else {
-            Text(NSLocalizedString("请先选择模型。", comment: ""))
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct WatchRequestBodyControlDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let runnableModel: RunnableModel
-    let control: ModelRequestBodyControl
-    @State private var state: ModelRequestBodyControlState
-
-    init(runnableModel: RunnableModel, control: ModelRequestBodyControl) {
-        self.runnableModel = runnableModel
-        self.control = control
-        _state = State(initialValue: runnableModel.requestBodyControlState)
-    }
-
-    var body: some View {
-        List {
-            switch control.kind {
-            case .toggle:
-                Toggle(isOn: toggleBinding(for: control)) {
-                    Text(control.title)
-                }
-            case .optionGroup:
-                if control.options.isEmpty {
-                    Text(NSLocalizedString("这个控制还没有选项。", comment: ""))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(control.options) { option in
-                        Button {
-                            state.selectedOptionIDsByControlID[control.id] = option.id
-                            saveState()
-                        } label: {
-                            HStack {
-                                Text(option.title)
-                                Spacer()
-                                if selectedOptionID(for: control) == option.id {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle(control.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("完成", comment: "")) {
-                    dismiss()
-                }
-            }
-        }
-    }
-
-    private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
-        Binding(
-            get: { state.toggleValuesByControlID[control.id] ?? control.defaultIsActive },
-            set: { newValue in
-                state.toggleValuesByControlID[control.id] = newValue
-                saveState()
-            }
-        )
-    }
-
-    private func selectedOptionID(for control: ModelRequestBodyControl) -> String {
-        state.selectedOptionIDsByControlID[control.id]
-            ?? control.defaultOptionID
-            ?? control.options.first?.id
-            ?? ""
-    }
-
-    private func saveState() {
-        state = ModelRequestBodyControlCompiler.normalized(state, for: runnableModel.model.requestBodyControls)
-        runnableModel.saveRequestBodyControlState(state)
-    }
-}
-
-private struct WatchAskUserInputView: View {
-    let request: AppToolAskUserInputRequest
-    let onSubmit: ([AppToolAskUserInputQuestionAnswer]) -> Void
-    let onCancel: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedOptionIDsByQuestion: [String: Set<String>] = [:]
-    @State private var otherTextByQuestion: [String: String] = [:]
-    @State private var currentQuestionIndex = 0
-    @State private var hasHandledAction = false
-
-    private var canSubmit: Bool {
-        request.questions.allSatisfy { question in
-            !question.required || isQuestionAnswered(question)
-        }
-    }
-
-    private var currentQuestion: AppToolAskUserInputQuestion? {
-        guard request.questions.indices.contains(currentQuestionIndex) else { return nil }
-        return request.questions[currentQuestionIndex]
-    }
-
-    private var progressText: String {
-        let total = max(request.questions.count, 1)
-        let current = min(currentQuestionIndex + 1, total)
-        return "\(current) / \(total)"
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    if let title = request.title, !title.isEmpty {
-                        Text(title)
-                            .etFont(.headline)
-                    } else {
-                        Text(NSLocalizedString("请补充信息", comment: ""))
-                            .etFont(.headline)
-                    }
-                    if let description = request.description, !description.isEmpty {
-                        Text(description)
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(progressText)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let question = currentQuestion {
-                    Section {
-                        ForEach(question.options) { option in
-                            Button {
-                                toggleOption(question: question, optionID: option.id)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: optionIconName(question: question, optionID: option.id))
-                                        .foregroundStyle(.blue)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(option.label)
-                                            .foregroundStyle(.primary)
-                                        if let description = option.description, !description.isEmpty {
-                                            Text(description)
-                                                .etFont(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(
-                                !AppToolAskUserInputAnswerPolicy.canSelectOption(
-                                    type: question.type,
-                                    customText: otherTextByQuestion[question.id]
-                                )
-                            )
-                        }
-                    } header: {
-                        HStack(spacing: 4) {
-                            Text(question.question)
-                            if question.required {
-                                Text("*")
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                    }
-
-                    Section {
-                        HStack(spacing: 6) {
-                            TextField(NSLocalizedString("请输入自定义偏好", comment: ""),
-                                text: Binding(
-                                    get: { otherTextByQuestion[question.id, default: ""] },
-                                    set: { newValue in
-                                        otherTextByQuestion[question.id] = newValue
-                                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
-                                            type: question.type,
-                                            customText: newValue
-                                        ) {
-                                            selectedOptionIDsByQuestion[question.id] = []
-                                        }
-                                    }
-                                )
-                            )
-
-                            Button(skipButtonTitle(for: question)) {
-                                handleSkipOrSubmit(for: question)
-                            }
-                            .disabled(!canContinue(from: question))
-                        }
-                    }
-                } else {
-                    Section {
-                        Text(NSLocalizedString("暂无可填写问题", comment: ""))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .navigationTitle(NSLocalizedString("结构化问答", comment: ""))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        goToPreviousQuestion()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .disabled(currentQuestionIndex == 0)
-                    .opacity(currentQuestionIndex == 0 ? 0.45 : 1)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("取消", comment: "")) {
-                        handleCancelAndDismiss()
-                    }
-                }
-            }
-            .onAppear {
-                resetSelectionState()
-                hasHandledAction = false
-            }
-            .onChange(of: request) {
-                resetSelectionState()
-                hasHandledAction = false
-            }
-            .onDisappear {
-                guard !hasHandledAction else { return }
-                onCancel()
-            }
-        }
-    }
-
-    private func optionIconName(question: AppToolAskUserInputQuestion, optionID: String) -> String {
-        let isSelected = selectedOptionIDsByQuestion[question.id, default: []].contains(optionID)
-        switch question.type {
-        case .singleSelect:
-            return isSelected ? "largecircle.fill.circle" : "circle"
-        case .multiSelect:
-            return isSelected ? "checkmark.square.fill" : "square"
-        }
-    }
-
-    private func toggleOption(question: AppToolAskUserInputQuestion, optionID: String) {
-        guard AppToolAskUserInputAnswerPolicy.canSelectOption(
-            type: question.type,
-            customText: otherTextByQuestion[question.id]
-        ) else {
-            return
-        }
-        switch question.type {
-        case .singleSelect:
-            let current = selectedOptionIDsByQuestion[question.id, default: []]
-            if current.contains(optionID) {
-                selectedOptionIDsByQuestion[question.id] = []
-            } else {
-                selectedOptionIDsByQuestion[question.id] = [optionID]
-                autoAdvanceIfNeeded(afterSelecting: question)
-            }
-        case .multiSelect:
-            var current = selectedOptionIDsByQuestion[question.id, default: []]
-            if current.contains(optionID) {
-                current.remove(optionID)
-            } else {
-                current.insert(optionID)
-            }
-            selectedOptionIDsByQuestion[question.id] = current
-        }
-    }
-
-    private func autoAdvanceIfNeeded(afterSelecting question: AppToolAskUserInputQuestion) {
-        guard question.type == .singleSelect else { return }
-        if isLastQuestion(question) {
-            if canSubmit {
-                submit()
-            }
-            return
-        }
-        guard canContinue(from: question) else { return }
-        currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
-    }
-
-    private func goToPreviousQuestion() {
-        guard currentQuestionIndex > 0 else { return }
-        currentQuestionIndex -= 1
-    }
-
-    private func handleSkipOrSubmit(for question: AppToolAskUserInputQuestion) {
-        guard canContinue(from: question) else { return }
-        if isLastQuestion(question) {
-            submit()
-            return
-        }
-        currentQuestionIndex = min(currentQuestionIndex + 1, request.questions.count - 1)
-    }
-
-    private func isQuestionAnswered(_ question: AppToolAskUserInputQuestion) -> Bool {
-        let selected = selectedOptionIDsByQuestion[question.id] ?? []
-        return AppToolAskUserInputAnswerPolicy.hasAnswer(
-            selectedOptionIDs: selected,
-            customText: otherTextByQuestion[question.id]
-        )
-    }
-
-    private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
-        if isLastQuestion(question) {
-            return canSubmit
-        }
-        return true
-    }
-
-    private func isLastQuestion(_ question: AppToolAskUserInputQuestion) -> Bool {
-        request.questions.last?.id == question.id
-    }
-
-    private func skipButtonTitle(for question: AppToolAskUserInputQuestion) -> String {
-        if isLastQuestion(question) {
-            return request.submitLabel
-        }
-        return isQuestionAnswered(question) ? NSLocalizedString("下一题", comment: "") : NSLocalizedString("跳过", comment: "")
-    }
-
-    private func submit() {
-        let answers = request.questions.map { question -> AppToolAskUserInputQuestionAnswer in
-            let selectedIDs = question.options
-                .map(\.id)
-                .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0) }
-            let selectedLabels = question.options
-                .filter { selectedOptionIDsByQuestion[question.id, default: []].contains($0.id) }
-                .map(\.label)
-            let otherText = AppToolAskUserInputAnswerPolicy.normalizedCustomText(
-                otherTextByQuestion[question.id]
-            )
-            return AppToolAskUserInputQuestionAnswer(
-                questionID: question.id,
-                question: question.question,
-                type: question.type,
-                selectedOptionIDs: selectedIDs,
-                selectedOptionLabels: selectedLabels,
-                otherText: otherText
-            )
-        }
-        hasHandledAction = true
-        onSubmit(answers)
-        dismiss()
-    }
-
-    private func handleCancelAndDismiss() {
-        hasHandledAction = true
-        onCancel()
-        dismiss()
-    }
-
-    private func resetSelectionState() {
-        selectedOptionIDsByQuestion = [:]
-        otherTextByQuestion = [:]
-        currentQuestionIndex = 0
-    }
-}
-
-// MARK: - 完整错误响应辅助类型
-
-/// 用于包装完整错误内容的 Identifiable 结构
-private struct FullErrorContentWrapper: Identifiable {
-    let id = UUID()
-    let content: String
-}
-
-private struct MessageJumpRequest: Equatable {
-    let token = UUID()
-    let messageID: UUID
-}
-
-/// 完整错误响应内容视图
-private struct FullErrorContentView: View {
-    let content: String
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                Text(content)
-                    .etFont(.system(.caption, design: .monospaced))
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .navigationTitle(NSLocalizedString("完整响应", comment: ""))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("完成", comment: "")) { dismiss() }
-                }
-            }
-        }
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func etFont(_ font: Font?) -> some View {
-        if let font {
-            self.font(AppFontAdapter.adaptedFont(from: font))
-        } else {
-            self.font(nil)
-        }
-    }
-
-    @ViewBuilder
-    func etFont(_ font: Font) -> some View {
-        self.font(AppFontAdapter.adaptedFont(from: font))
-    }
-
-    @ViewBuilder
-    func etFont(_ font: Font?, sampleText: String?) -> some View {
-        if let font {
-            self.font(AppFontAdapter.adaptedFont(from: font, sampleText: sampleText))
-        } else {
-            self.font(nil)
-        }
-    }
-
-    @ViewBuilder
-    func etFont(_ font: Font, sampleText: String?) -> some View {
-        self.font(AppFontAdapter.adaptedFont(from: font, sampleText: sampleText))
-    }
-}
-
-extension Text {
-    @ViewBuilder
-    func etFont(_ font: Font?) -> some View {
-        if let font {
-            self.font(AppFontAdapter.adaptedFont(from: font, sampleText: TextSampleExtractor.extract(from: self)))
-        } else {
-            self.font(nil)
-        }
-    }
-
-    @ViewBuilder
-    func etFont(_ font: Font) -> some View {
-        self.font(AppFontAdapter.adaptedFont(from: font, sampleText: TextSampleExtractor.extract(from: self)))
-    }
-}
-
-private enum TextSampleExtractor {
-    private static let maxDepth = 10
-
-    static func extract(from text: Text) -> String? {
-        let strings = collectStrings(from: text, depth: 0)
-        guard !strings.isEmpty else { return nil }
-
-        var ordered: [String] = []
-        var seen = Set<String>()
-        for item in strings {
-            let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if seen.insert(trimmed).inserted {
-                ordered.append(trimmed)
-            }
-        }
-
-        guard !ordered.isEmpty else { return nil }
-        return ordered.joined(separator: " ")
-    }
-
-    private static func collectStrings(from value: Any, depth: Int) -> [String] {
-        guard depth <= maxDepth else { return [] }
-
-        if let string = value as? String {
-            return [string]
-        }
-
-        let mirror = Mirror(reflecting: value)
-        if mirror.displayStyle == .optional {
-            guard let childValue = mirror.children.first?.value else { return [] }
-            return collectStrings(from: childValue, depth: depth + 1)
-        }
-
-        var results: [String] = []
-        for child in mirror.children {
-            if shouldSkip(label: child.label) {
-                continue
-            }
-            results.append(contentsOf: collectStrings(from: child.value, depth: depth + 1))
-        }
-        return results
-    }
-
-    private static func shouldSkip(label: String?) -> Bool {
-        switch label {
-        case "modifiers", "table", "bundle", "arguments", "hasFormatting":
-            return true
-        default:
-            return false
-        }
-    }
-}
-
-private enum AppFontAdapter {
-    private static let cacheLock = NSLock()
-    private static var adaptedFontCache: [String: Font] = [:]
-    private static var adaptedFontCacheToken: String = ""
-
-    static func adaptedFont(from original: Font, sampleText: String? = nil) -> Font {
-        let rawDescriptor = String(describing: original)
-        let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
-        let role = inferredRole(from: descriptor)
-        let resolvedSample = resolvedSampleText(for: role, override: sampleText)
-        let cacheKey = "\(rawDescriptor)|\(role.rawValue)|\(resolvedSample)"
-        let cacheToken = FontLibrary.adapterCacheToken()
-
-        if let cached = cachedFont(for: cacheKey, cacheToken: cacheToken) {
-            return cached
-        }
-
-        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: resolvedSample) else {
-            storeAdaptedFont(original, for: cacheKey, cacheToken: cacheToken)
-            return original
-        }
-
-        let fallbackPostScriptNames = FontLibrary.fallbackPostScriptNames(for: role)
-        let mapped = mappedFont(
-            postScriptName: postScriptName,
-            descriptor: descriptor,
-            fallbackPostScriptNames: fallbackPostScriptNames
-        )
-        storeAdaptedFont(mapped, for: cacheKey, cacheToken: cacheToken)
-        return mapped
-    }
-
-    private static func resolvedSampleText(for role: FontSemanticRole, override sampleText: String?) -> String {
-        if let sampleText {
-            let trimmed = sampleText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                let scalars = trimmed.unicodeScalars.filter {
-                    !$0.properties.isWhitespace && $0.properties.generalCategory != .control
-                }
-                let prefix = String(String.UnicodeScalarView(scalars.prefix(96)))
-                if !prefix.isEmpty {
-                    return prefix
-                }
-            }
-        }
-        return self.sampleText(for: role)
-    }
-
-    private static func inferredRole(from descriptor: FontDescriptorInfo) -> FontSemanticRole {
-        if descriptor.isMonospaced {
-            return .code
-        }
-        if descriptor.isItalic {
-            return .emphasis
-        }
-        if let weight = descriptor.weight, weightStrength(weight) >= weightStrength(.semibold) {
-            return .strong
-        }
-        return .body
-    }
-
-    private static func mappedFont(
-        postScriptName: String,
-        descriptor: FontDescriptorInfo,
-        fallbackPostScriptNames: [String]
-    ) -> Font {
-        if FontLibrary.fallbackScope == .character {
-            let fallbackChain = fallbackPostScriptNames.filter {
-                !$0.isEmpty && $0.caseInsensitiveCompare(postScriptName) != .orderedSame
-            }
-            if let cascaded = mappedFontWithCascade(
-                primaryPostScriptName: postScriptName,
-                fallbackPostScriptNames: fallbackChain,
-                descriptor: descriptor
-            ) {
-                return cascaded
-            }
-        }
-
-        var mapped: Font
-        if let explicitSize = descriptor.explicitSize {
-            mapped = .custom(postScriptName, size: scaledPointSize(explicitSize))
-        } else if let textStyle = descriptor.textStyle {
-            mapped = .custom(
-                postScriptName,
-                size: scaledPointSize(defaultPointSize(for: textStyle)),
-                relativeTo: textStyle
-            )
-        } else {
-            mapped = .custom(postScriptName, size: scaledPointSize(15), relativeTo: .body)
-        }
-
-        if descriptor.isItalic {
-            mapped = mapped.italic()
-        }
-        if let weight = descriptor.weight {
-            mapped = mapped.weight(weight)
-        }
-        return mapped
-    }
-
-    private static func resolvedPointSize(for descriptor: FontDescriptorInfo) -> CGFloat {
-        if let explicitSize = descriptor.explicitSize {
-            return scaledPointSize(explicitSize)
-        }
-        if let textStyle = descriptor.textStyle {
-            return scaledPointSize(defaultPointSize(for: textStyle))
-        }
-        return scaledPointSize(15)
-    }
-
-    private static func scaledPointSize(_ pointSize: CGFloat) -> CGFloat {
-        pointSize * CGFloat(FontLibrary.customFontScale)
-    }
-
-    private static func mappedFontWithCascade(
-        primaryPostScriptName: String,
-        fallbackPostScriptNames: [String],
-        descriptor: FontDescriptorInfo
-    ) -> Font? {
-#if canImport(UIKit) && canImport(CoreText)
-        guard !fallbackPostScriptNames.isEmpty else { return nil }
-        let pointSize = resolvedPointSize(for: descriptor)
-        guard UIFont(name: primaryPostScriptName, size: pointSize) != nil else { return nil }
-
-        let cascadeDescriptors = fallbackPostScriptNames.compactMap { candidate -> CTFontDescriptor? in
-            guard UIFont(name: candidate, size: pointSize) != nil else { return nil }
-            return CTFontDescriptorCreateWithNameAndSize(candidate as CFString, pointSize)
-        }
-        guard !cascadeDescriptors.isEmpty else { return nil }
-
-        let cascadeKey = UIFontDescriptor.AttributeName(rawValue: kCTFontCascadeListAttribute as String)
-        var descriptorAttributes: [UIFontDescriptor.AttributeName: Any] = [
-            .name: primaryPostScriptName,
-            .size: pointSize,
-            cascadeKey: cascadeDescriptors
-        ]
-
-        if let weight = descriptor.weight {
-            descriptorAttributes[.traits] = [
-                UIFontDescriptor.TraitKey.weight: uiFontWeightValue(weight)
-            ]
-        }
-
-        var uiFontDescriptor = UIFontDescriptor(fontAttributes: descriptorAttributes)
-        if descriptor.isItalic,
-           let italicDescriptor = uiFontDescriptor.withSymbolicTraits(.traitItalic) {
-            uiFontDescriptor = italicDescriptor
-        }
-
-        let uiFont = UIFont(descriptor: uiFontDescriptor, size: pointSize)
-        return Font(uiFont)
-#else
-        _ = primaryPostScriptName
-        _ = fallbackPostScriptNames
-        _ = descriptor
-        return nil
-#endif
-    }
-
-    private static func uiFontWeightValue(_ weight: Font.Weight) -> CGFloat {
-        switch weight {
-        case .ultraLight:
-            return UIFont.Weight.ultraLight.rawValue
-        case .thin:
-            return UIFont.Weight.thin.rawValue
-        case .light:
-            return UIFont.Weight.light.rawValue
-        case .regular:
-            return UIFont.Weight.regular.rawValue
-        case .medium:
-            return UIFont.Weight.medium.rawValue
-        case .semibold:
-            return UIFont.Weight.semibold.rawValue
-        case .bold:
-            return UIFont.Weight.bold.rawValue
-        case .heavy:
-            return UIFont.Weight.heavy.rawValue
-        case .black:
-            return UIFont.Weight.black.rawValue
-        default:
-            return UIFont.Weight.regular.rawValue
-        }
-    }
-
-    private static func sampleText(for role: FontSemanticRole) -> String {
-        switch role {
-        case .body:
-            return "The quick brown fox 你好こんにちは"
-        case .emphasis:
-            return "Emphasis 斜体预览 こんにちは"
-        case .strong:
-            return "Strong 粗体预览 こんにちは"
-        case .code:
-            return "let value = 42 // 代码"
-        }
-    }
-
-    private static func defaultPointSize(for textStyle: Font.TextStyle) -> CGFloat {
-        switch textStyle {
-        case .largeTitle:
-            return 34
-        case .title:
-            return 28
-        case .title2:
-            return 22
-        case .title3:
-            return 20
-        case .headline:
-            return 17
-        case .subheadline:
-            return 15
-        case .body:
-            return 15
-        case .callout:
-            return 16
-        case .footnote:
-            return 13
-        case .caption:
-            return 12
-        case .caption2:
-            return 11
-        @unknown default:
-            return 15
-        }
-    }
-
-    private static func weightStrength(_ weight: Font.Weight) -> Int {
-        switch weight {
-        case .ultraLight:
-            return 1
-        case .thin:
-            return 2
-        case .light:
-            return 3
-        case .regular:
-            return 4
-        case .medium:
-            return 5
-        case .semibold:
-            return 6
-        case .bold:
-            return 7
-        case .heavy:
-            return 8
-        case .black:
-            return 9
-        default:
-            return 4
-        }
-    }
-
-    private static func cachedFont(for key: String, cacheToken: String) -> Font? {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        if adaptedFontCacheToken != cacheToken {
-            adaptedFontCacheToken = cacheToken
-            adaptedFontCache.removeAll(keepingCapacity: true)
-        }
-        return adaptedFontCache[key]
-    }
-
-    private static func storeAdaptedFont(_ font: Font, for key: String, cacheToken: String) {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        if adaptedFontCacheToken != cacheToken {
-            adaptedFontCacheToken = cacheToken
-            adaptedFontCache.removeAll(keepingCapacity: true)
-        }
-        adaptedFontCache[key] = font
-    }
-}
-
-private struct FontDescriptorInfo {
-    let raw: String
-    let lowercasedRaw: String
-
-    init(rawDescription: String) {
-        self.raw = rawDescription
-        self.lowercasedRaw = rawDescription.lowercased()
-    }
-
-    var explicitSize: CGFloat? {
-        firstMatchedNumber(after: "size:")
-            ?? firstMatchedNumber(after: "size ")
-    }
-
-    var textStyle: Font.TextStyle? {
-        if lowercasedRaw.contains("caption2") { return .caption2 }
-        if lowercasedRaw.contains("caption") { return .caption }
-        if lowercasedRaw.contains("footnote") { return .footnote }
-        if lowercasedRaw.contains("callout") { return .callout }
-        if lowercasedRaw.contains("subheadline") { return .subheadline }
-        if lowercasedRaw.contains("headline") { return .headline }
-        if lowercasedRaw.contains("title3") { return .title3 }
-        if lowercasedRaw.contains("title2") { return .title2 }
-        if lowercasedRaw.contains("largetitle") || lowercasedRaw.contains("large title") { return .largeTitle }
-        if lowercasedRaw.contains("title") { return .title }
-        if lowercasedRaw.contains("body") { return .body }
-        return nil
-    }
-
-    var isItalic: Bool {
-        lowercasedRaw.contains("italic")
-    }
-
-    var isMonospaced: Bool {
-        lowercasedRaw.contains("monospaced") || lowercasedRaw.contains("mono")
-    }
-
-    var weight: Font.Weight? {
-        if lowercasedRaw.contains("black") { return .black }
-        if lowercasedRaw.contains("heavy") { return .heavy }
-        if lowercasedRaw.contains("semibold") { return .semibold }
-        if lowercasedRaw.contains("bold") { return .bold }
-        if lowercasedRaw.contains("medium") { return .medium }
-        if lowercasedRaw.contains("light") { return .light }
-        if lowercasedRaw.contains("thin") { return .thin }
-        if lowercasedRaw.contains("ultralight") || lowercasedRaw.contains("ultra light") { return .ultraLight }
-        return nil
-    }
-
-    private func firstMatchedNumber(after marker: String) -> CGFloat? {
-        guard let markerRange = lowercasedRaw.range(of: marker) else { return nil }
-        var cursor = markerRange.upperBound
-        var digits = ""
-        var hasStarted = false
-
-        while cursor < lowercasedRaw.endIndex {
-            let character = lowercasedRaw[cursor]
-            if character.isNumber || character == "." {
-                digits.append(character)
-                hasStarted = true
-            } else if hasStarted {
-                break
-            }
-            cursor = lowercasedRaw.index(after: cursor)
-        }
-
-        guard !digits.isEmpty, let value = Double(digits) else { return nil }
-        return CGFloat(value)
-    }
 }
