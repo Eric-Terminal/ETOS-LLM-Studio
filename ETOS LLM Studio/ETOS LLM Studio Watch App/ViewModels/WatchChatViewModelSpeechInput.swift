@@ -381,18 +381,13 @@ extension ChatViewModel {
     }
 
     private func requestMicrophonePermission() async -> Bool {
-        let session = AVAudioSession.sharedInstance()
-        switch session.recordPermission {
+        switch AVAudioApplication.shared.recordPermission {
         case .granted:
             return true
         case .denied:
             return false
         case .undetermined:
-            return await withCheckedContinuation { continuation in
-                AVAudioApplication.requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
+            return await AVAudioApplication.requestRecordPermission()
         @unknown default:
             return false
         }
