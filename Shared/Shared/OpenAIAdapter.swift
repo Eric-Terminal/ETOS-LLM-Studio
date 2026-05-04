@@ -14,6 +14,8 @@ import os.log
 
 /// `OpenAIAdapter` 是 `APIAdapter` 协议的具体实现，专门用于处理与 OpenAI 兼容的 API。
 public class OpenAIAdapter: APIAdapter {
+    public init() {}
+
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
     static let streamIncludeUsageControlKey = "openai_stream_include_usage"
     static let responsesReasoningItemsKey = "openai_responses_reasoning_items"

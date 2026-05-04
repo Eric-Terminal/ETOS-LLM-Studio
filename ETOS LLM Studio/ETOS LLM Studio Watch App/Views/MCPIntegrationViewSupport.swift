@@ -348,14 +348,14 @@ struct MCPResponseDetailView: View {
     var body: some View {
         List {
             if let output {
-                Section("Result") {
+                Section(NSLocalizedString("Result", comment: "MCP response result section")) {
                     Text(output)
                         .etFont(.system(.footnote, design: .monospaced))
                 }
             }
 
             if let error {
-                Section("Error") {
+                Section(NSLocalizedString("Error", comment: "MCP response error section")) {
                     Text(error)
                         .foregroundStyle(.red)
                         .etFont(.footnote)

@@ -620,7 +620,7 @@ struct BuiltInToolDetailView: View {
                     Toggle(NSLocalizedString("主动检索", comment: "Active retrieval toggle title"), isOn: $enableMemoryActiveRetrieval)
                         .disabled(!enableMemory)
                     HStack {
-                        Text("Top K")
+                        Text(NSLocalizedString("Top K", comment: "Memory search top k label"))
                         Spacer()
                         TextField("0", value: $memoryTopK, formatter: numberFormatter)
                             .multilineTextAlignment(.trailing)

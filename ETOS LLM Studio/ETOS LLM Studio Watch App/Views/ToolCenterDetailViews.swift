@@ -230,7 +230,7 @@ struct WatchBuiltInToolDetailView: View {
                     )
                     .disabled(!enableMemory)
                     HStack {
-                        Text("Top K")
+                        Text(NSLocalizedString("Top K", comment: "Memory search top k label"))
                         Spacer()
                         TextField(
                             "0",

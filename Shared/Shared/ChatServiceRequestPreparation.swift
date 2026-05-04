@@ -313,28 +313,34 @@ extension ChatService {
                 for toolMessage in contiguousToolMessages {
                     guard let toolCallID = normalizedToolCallID(from: toolMessage),
                           validToolCallIDSet.contains(toolCallID),
-                          !matchedToolCallIDs.contains(toolCallID) else {
+                          matchedToolCallIDs.insert(toolCallID).inserted else {
                         continue
                     }
                     matchedToolMessages.append(toolMessage)
-                    matchedToolCallIDs.insert(toolCallID)
                 }
             }
 
-            if matchedToolMessages.isEmpty {
-                var trimmedAssistant = message
-                trimmedAssistant.toolCalls = nil
-                trimmedAssistant.toolCallsPlacement = nil
-                normalized.append(trimmedAssistant)
+            let hasMainContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let filteredCalls = toolCalls.filter { call in
+                guard let toolCallID = normalizedToolCallID(call.id) else { return false }
+                return matchedToolCallIDs.contains(toolCallID)
+            }
+
+            if filteredCalls.isEmpty {
+                if hasMainContent {
+                    var sanitizedAssistant = message
+                    sanitizedAssistant.toolCalls = nil
+                    sanitizedAssistant.toolCallsPlacement = nil
+                    normalized.append(sanitizedAssistant)
+                }
             } else {
-                var trimmedAssistant = message
-                trimmedAssistant.toolCalls = message.toolCalls?.filter { normalizedToolCallID($0.id) == nil || matchedToolCallIDs.contains(normalizedToolCallID($0.id) ?? "") }
-                trimmedAssistant.toolCallsPlacement = nil
-                normalized.append(trimmedAssistant)
+                var sanitizedAssistant = message
+                sanitizedAssistant.toolCalls = filteredCalls
+                normalized.append(sanitizedAssistant)
                 normalized.append(contentsOf: matchedToolMessages)
             }
 
-            index = nextIndex
+            index = max(nextIndex, index + 1)
         }
 
         return normalized
@@ -345,10 +351,9 @@ extension ChatService {
         orderedIDs.reserveCapacity(toolCalls.count)
         var seen = Set<String>()
         for toolCall in toolCalls {
-            let normalizedID = normalizedToolCallID(toolCall.id) ?? toolCall.id
-            if seen.insert(normalizedID).inserted {
-                orderedIDs.append(normalizedID)
-            }
+            guard let normalizedID = normalizedToolCallID(toolCall.id),
+                  seen.insert(normalizedID).inserted else { continue }
+            orderedIDs.append(normalizedID)
         }
         return orderedIDs
     }
