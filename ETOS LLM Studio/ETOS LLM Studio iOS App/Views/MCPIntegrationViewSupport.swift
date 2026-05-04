@@ -414,24 +414,28 @@ extension MCPIntegrationView {
         }
     }
 
-    var latestOutputSection: some View? {
-        guard let output = manager.lastOperationOutput else { return nil }
-        return Section(NSLocalizedString("最新响应", comment: "")) {
-            ScrollView(.vertical) {
-                Text(output)
-                    .etFont(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    var latestOutputSection: some View {
+        if let output = manager.lastOperationOutput {
+            Section(NSLocalizedString("最新响应", comment: "")) {
+                ScrollView(.vertical) {
+                    Text(output)
+                        .etFont(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 120)
             }
-            .frame(minHeight: 120)
         }
     }
 
-    var latestErrorSection: some View? {
-        guard let error = manager.lastOperationError else { return nil }
-        return Section(NSLocalizedString("错误信息", comment: "")) {
-            Text(error)
-                .foregroundStyle(.red)
+    @ViewBuilder
+    var latestErrorSection: some View {
+        if let error = manager.lastOperationError {
+            Section(NSLocalizedString("错误信息", comment: "")) {
+                Text(error)
+                    .foregroundStyle(.red)
+            }
         }
     }
 
