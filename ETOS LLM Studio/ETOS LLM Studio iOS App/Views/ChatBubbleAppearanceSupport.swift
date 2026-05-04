@@ -56,6 +56,70 @@ extension ChatBubble {
             : Color(uiColor: .systemBackground)
     }
 
+    var versionSwitcherRow: some View {
+        let row = HStack(spacing: 0) {
+            compactVersionIndicator
+        }
+
+        if shouldForceMergedWidth {
+            row
+                .frame(width: bubbleMaxWidth, alignment: .trailing)
+                .padding(.top, 2)
+        } else {
+            row
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, 2)
+        }
+    }
+
+    var compactVersionIndicator: some View {
+        let currentIndex = responseAttemptVersionInfo?.currentIndex ?? message.getCurrentVersionIndex()
+        let totalCount = responseAttemptVersionInfo?.totalCount ?? message.getAllVersions().count
+        HStack(spacing: 4) {
+            Button {
+                onSwitchToPreviousVersion()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .etFont(.system(size: 14, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .disabled(currentIndex == 0)
+            .opacity(currentIndex > 0 ? 1 : 0.4)
+
+            Text("\(currentIndex + 1)/\(totalCount)")
+                .etFont(.system(size: 14, weight: .semibold))
+                .monospacedDigit()
+
+            Button {
+                onSwitchToNextVersion()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .etFont(.system(size: 14, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .disabled(currentIndex >= totalCount - 1)
+            .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
+        }
+        .foregroundStyle(
+            resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.86)
+        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(versionSwitcherBackgroundColor)
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
+        )
+        .contentShape(Capsule())
+    }
+
+    var shouldShowVersionIndicator: Bool {
+        responseAttemptVersionInfo != nil || message.hasMultipleVersions
+    }
+
     var customTextColorOverride: Color? {
         if colorScheme == .dark {
             let slot = activeAppearanceProfile.darkText
@@ -117,6 +181,53 @@ extension ChatBubble {
         return (Color.black.opacity(0.08), 3, 1)
     }
 
+    var bubbleGradient: some ShapeStyle {
+        if usesNoBubbleStyle {
+            return AnyShapeStyle(Color.clear)
+        }
+        let userOpacity = enableBackground ? 0.85 : 1.0
+        let assistantOpacity = enableBackground ? 0.75 : 1.0
+        let errorOpacity = enableBackground ? 0.8 : 1.0
+
+        if isError {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [Color.red.opacity(0.85 * errorOpacity), Color.red.opacity(0.7 * errorOpacity)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+
+        switch message.role {
+        case .user:
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        resolvedUserBubbleStartColor.opacity(userOpacity),
+                        resolvedUserBubbleEndColor.opacity(userOpacity)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        case .assistant, .system, .tool:
+            let baseColor: Color
+            if let resolvedAssistantBubbleColor {
+                baseColor = resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1)
+            } else {
+                baseColor = enableBackground
+                    ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
+                    : Color(uiColor: .systemBackground)
+            }
+            return AnyShapeStyle(baseColor)
+        case .error:
+            return AnyShapeStyle(Color.red.opacity(0.15 * errorOpacity))
+        @unknown default:
+            return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
+        }
+    }
+
     var bubbleMaxWidth: CGFloat {
         let baseWidth = max(UIScreen.main.bounds.width, 1)
         let rowChromeWidth = rowHorizontalPadding * 2 + (usesNoBubbleStyle ? 0 : rowSideSpacerMinLength)
@@ -150,6 +261,105 @@ extension ChatBubble {
     var rowVerticalPadding: CGFloat {
         let basePadding: CGFloat = 3
         return enableNoBubbleUI ? basePadding * 3 : basePadding
+    }
+
+    var standaloneBubbleShape: BubbleCornerShape {
+        BubbleCornerShape(
+            topLeft: 18,
+            topRight: 18,
+            bottomLeft: 18,
+            bottomRight: 18
+        )
+    }
+
+    func connectedAssistantBubbleShape(isFirst: Bool, isLast: Bool) -> BubbleCornerShape {
+        let baseRadius: CGFloat = 18
+        let mergedRadius: CGFloat = 0
+        let topRadius = isFirst ? (mergeWithPrevious ? mergedRadius : baseRadius) : mergedRadius
+        let bottomRadius = isLast ? (mergeWithNext ? mergedRadius : baseRadius) : mergedRadius
+        return BubbleCornerShape(
+            topLeft: topRadius,
+            topRight: topRadius,
+            bottomLeft: bottomRadius,
+            bottomRight: bottomRadius
+        )
+    }
+
+    @ViewBuilder
+    func bubbleBackground(for shape: BubbleCornerShape) -> some View {
+        if usesNoBubbleStyle {
+            shape.fill(Color.clear)
+        } else if enableLiquidGlass {
+            if #available(iOS 26.0, *) {
+                shape
+                    .fill(bubbleGradient)
+                    .glassEffect(.clear, in: shape)
+                    .clipShape(shape)
+            } else {
+                shape.fill(bubbleGradient)
+            }
+        } else {
+            shape.fill(bubbleGradient)
+        }
+    }
+
+    func bubbleDecoratedBackground(shape: BubbleCornerShape, showMergedSeparator: Bool) -> some View {
+        ZStack(alignment: .top) {
+            bubbleBackground(for: shape)
+            if showMergedSeparator {
+                Rectangle()
+                    .fill(separatorColor)
+                    .frame(height: separatorThickness)
+            }
+        }
+        .clipShape(shape)
+    }
+
+    @ViewBuilder
+    func bubbleContainerCore<Content: View>(
+        shape: BubbleCornerShape,
+        showMergedSeparator: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            content()
+        }
+        .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
+        .padding(.vertical, bubbleContentVerticalPadding)
+        .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
+        .background(
+            bubbleDecoratedBackground(
+                shape: shape,
+                showMergedSeparator: showMergedSeparator
+            )
+        )
+        .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
+    }
+
+    @ViewBuilder
+    func bubbleContainer<Content: View>(
+        standalone: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let shape = standalone ? standaloneBubbleShape : bubbleShape
+        bubbleContainerCore(
+            shape: shape,
+            showMergedSeparator: !standalone && shouldShowMergedSeparator,
+            content: content
+        )
+    }
+
+    @ViewBuilder
+    func connectedToolBubbleContainer<Content: View>(
+        isFirst: Bool,
+        isLast: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        bubbleContainerCore(
+            shape: connectedAssistantBubbleShape(isFirst: isFirst, isLast: isLast),
+            showMergedSeparator: isFirst && shouldShowMergedSeparator,
+            content: content
+        )
     }
 
     var bubbleContentVerticalPadding: CGFloat {

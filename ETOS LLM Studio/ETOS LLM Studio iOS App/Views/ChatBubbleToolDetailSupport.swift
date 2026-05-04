@@ -11,6 +11,16 @@ import SwiftUI
 import Shared
 
 extension ChatBubble {
+    struct ToolCallDetailSheetItem: Identifiable, Equatable {
+        let messageID: UUID
+        let toolCallID: String
+        let fallbackToolCall: InternalToolCall
+
+        var id: String {
+            "\(messageID.uuidString)-\(toolCallID)"
+        }
+    }
+
     @ViewBuilder
     func toolCallDetailSheet(for item: ToolCallDetailSheetItem) -> some View {
         let call = resolvedToolCall(for: item)
@@ -169,5 +179,51 @@ extension ChatBubble {
             return trimmed
         }
         return prettyText
+    }
+
+    enum ToolCallBubbleStatus: Equatable {
+        case pendingApproval
+        case running
+        case finished
+        case rejected
+
+        var title: String {
+            switch self {
+            case .pendingApproval:
+                return NSLocalizedString("等待审批", comment: "")
+            case .running:
+                return NSLocalizedString("执行中", comment: "")
+            case .finished:
+                return NSLocalizedString("已完成", comment: "")
+            case .rejected:
+                return NSLocalizedString("已拒绝", comment: "")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .pendingApproval:
+                return "hourglass"
+            case .running:
+                return "clock.arrow.trianglehead.counterclockwise.rotate.90"
+            case .finished:
+                return "checkmark.circle.fill"
+            case .rejected:
+                return "xmark.circle.fill"
+            }
+        }
+
+        var accentColor: Color {
+            switch self {
+            case .pendingApproval:
+                return .orange
+            case .running:
+                return .blue
+            case .finished:
+                return .green
+            case .rejected:
+                return .red
+            }
+        }
     }
 }
