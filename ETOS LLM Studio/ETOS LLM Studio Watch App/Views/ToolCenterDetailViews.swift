@@ -1,79 +1,162 @@
 // ============================================================================
-// ToolCenterViewSupport.swift
+// ToolCenterDetailViews.swift
 // ============================================================================
 // ETOS LLM Studio
 //
-// iOS 工具中心页的汇总行与详情页支撑视图。
+// watchOS 工具中心页的拓展工具、MCP、内置工具与快捷指令详情视图。
 // ============================================================================
 
+import Foundation
 import SwiftUI
 import Shared
 
-struct ToolCenterSummaryRow: View {
-    let title: String
-    let configuredEnabled: Int
-    let availableNow: Int
-    let total: Int
+struct WatchAppToolCenterDetailView: View {
+    let kind: AppToolKind
+    let currentSessionIsolationActive: Bool
+
+    @ObservedObject private var manager = AppToolManager.shared
+    @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
 
     var body: some View {
-        LabeledContent(title) {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(
-                    String(
-                        format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
-                        configuredEnabled,
-                        total
-                    )
-                )
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-
-                Text(
-                    String(
-                        format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
-                        availableNow,
-                        total
-                    )
-                )
-                .etFont(.caption2)
-                .foregroundStyle(.tertiary)
-            }
-        }
-    }
-}
-
-struct ToolCenterStatusRow: View {
-    let title: String
-    let subtitle: String
-    let detail: String
-    var auxiliary: String? = nil
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .etFont(.headline)
-
-            Text(subtitle)
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-
-            Text(detail)
-                .etFont(.caption)
-                .foregroundStyle(color)
-
-            if let auxiliary, !auxiliary.isEmpty {
-                Text(auxiliary)
+        List {
+            Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
+                Text(kind.displayName)
+                Text(kind.detailDescription)
                     .etFont(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(2)
+                    .foregroundStyle(.secondary)
+                if let schemaSummary = ToolCatalogSupport.schemaSummary(for: kind.parameters, fieldLimit: 4) {
+                    Text("Schema: \(schemaSummary)")
+                        .etFont(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Section(NSLocalizedString("当前状态", comment: "Current status section")) {
+                Text(currentStatusText)
+                    .etFont(.caption2)
+                    .foregroundStyle(currentStatusColor)
+            }
+
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(
+                    NSLocalizedString("启用", comment: "Enable"),
+                    isOn: Binding(
+                        get: { manager.isToolEnabled(kind) },
+                        set: { manager.setToolEnabled(kind: kind, isEnabled: $0) }
+                    )
+                )
+            }
+
+            if kind.requiresApproval {
+                Section(
+                    header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
+                    footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                ) {
+                    Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
+                        ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
+                            Text(policy.displayName).tag(policy)
+                        }
+                    }
+                }
+
+                Section(
+                    header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
+                    footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                ) {
+                    Toggle(
+                        NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
+                        isOn: Binding(
+                            get: { permissionCenter.autoApproveEnabled },
+                            set: { permissionCenter.setAutoApproveEnabled($0) }
+                        )
+                    )
+
+                    HStack {
+                        Text(NSLocalizedString("倒计时秒数", comment: "Auto approve countdown label"))
+                        Spacer()
+                        TextField(
+                            "1",
+                            value: Binding(
+                                get: { permissionCenter.autoApproveCountdownSeconds },
+                                set: { permissionCenter.setAutoApproveCountdownSeconds($0) }
+                            ),
+                            formatter: countdownNumberFormatter
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 52)
+                    }
+                    .disabled(!permissionCenter.autoApproveEnabled)
+
+                    Toggle(
+                        NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
+                        isOn: autoApproveToolBinding
+                    )
+                    .disabled(!permissionCenter.autoApproveEnabled)
+                }
             }
         }
-        .padding(.vertical, 2)
+        .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
+    }
+
+    private var currentStatusText: String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        if !manager.isToolEnabled(kind) {
+            return NSLocalizedString("已停用。", comment: "Tool disabled status")
+        }
+        if kind.requiresApproval && manager.approvalPolicy(for: kind) == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        if !kind.requiresApproval {
+            return NSLocalizedString("该工具为内置免审批工具，启用后可直接参与聊天。", comment: "No approval tool available status")
+        }
+        return NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
+    }
+
+    private var currentStatusColor: Color {
+        let isUnavailableByApproval = kind.requiresApproval && manager.approvalPolicy(for: kind) == .alwaysDeny
+        if currentSessionIsolationActive
+            || !manager.chatToolsEnabled
+            || !manager.isToolEnabled(kind)
+            || isUnavailableByApproval {
+            return .secondary
+        }
+        return .green
+    }
+
+    private var toolApprovalPolicyBinding: Binding<AppToolApprovalPolicy> {
+        Binding {
+            manager.approvalPolicy(for: kind)
+        } set: { newValue in
+            manager.setToolApprovalPolicy(kind: kind, policy: newValue)
+        }
+    }
+
+    private var autoApproveToolBinding: Binding<Bool> {
+        Binding {
+            !permissionCenter.isAutoApproveDisabled(for: kind.toolName)
+        } set: { isEnabled in
+            permissionCenter.setAutoApproveDisabled(!isEnabled, for: kind.toolName)
+        }
+    }
+
+    private var countdownNumberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
     }
 }
 
-struct BuiltInToolDetailView: View {
+struct WatchBuiltInToolDetailView: View {
     let kind: ToolCatalogBuiltInToolKind
     let currentSessionIsolationActive: Bool
 
@@ -108,23 +191,18 @@ struct BuiltInToolDetailView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                 Text(title)
-                    .etFont(.headline)
                 Text(subtitle)
-                    .etFont(.footnote)
+                    .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             Section(NSLocalizedString("当前状态", comment: "Current status section")) {
                 Text(statusText(for: state))
+                    .etFont(.caption2)
                     .foregroundStyle(state.isAvailableInCurrentSession ? .green : .secondary)
-                if currentSessionIsolationActive && state.statusReason == .isolatedByWorldbook {
-                    Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。", comment: "世界书隔离发送提示"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.orange)
-                }
             }
 
             switch kind {
@@ -151,16 +229,17 @@ struct BuiltInToolDetailView: View {
                         isOn: $enableMemoryActiveRetrieval
                     )
                     .disabled(!enableMemory)
-                    LabeledContent("Top K") {
-                        TextField("0", value: $memoryTopK, formatter: numberFormatter)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 72)
-                            .onChange(of: memoryTopK) { _, newValue in
-                                memoryTopK = max(0, newValue)
-                            }
+                    HStack {
+                        Text("Top K")
+                        Spacer()
+                        TextField(
+                            "0",
+                            value: $memoryTopK,
+                            formatter: numberFormatter
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 52)
                     }
-                    .disabled(!enableMemory)
                 }
             case .widgetCard:
                 Section(NSLocalizedString("启用状态", comment: "Enable status")) {
@@ -185,6 +264,7 @@ struct BuiltInToolDetailView: View {
             @unknown default:
                 Section(NSLocalizedString("当前状态", comment: "Current status section")) {
                     Text(NSLocalizedString("该工具类型暂未提供可编辑设置。", comment: "Unknown built-in tool settings fallback"))
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -300,13 +380,104 @@ struct BuiltInToolDetailView: View {
     }
 }
 
-struct ShortcutToolCenterDetailView: View {
+struct WatchMCPToolCenterDetailView: View {
+    let serverID: UUID
+    let tool: MCPToolDescription
+    let currentSessionIsolationActive: Bool
+
+    @ObservedObject private var manager = MCPManager.shared
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
+                Text(tool.toolId)
+                if let desc = tool.description, !desc.isEmpty {
+                    Text(desc)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let schemaSummary = ToolCatalogSupport.schemaSummary(for: tool.inputSchema, fieldLimit: 4) {
+                    Text("Schema: \(schemaSummary)")
+                        .etFont(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Section(NSLocalizedString("当前状态", comment: "Current status section")) {
+                Text(currentStatusText)
+                    .etFont(.caption2)
+                    .foregroundStyle(currentStatusColor)
+            }
+
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: toolBinding)
+            }
+
+            Section(
+                header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
+                footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: toolApprovalPolicyBinding) {
+                    ForEach(MCPToolApprovalPolicy.allCases, id: \.self) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
+    }
+
+    private var currentStatusText: String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        if !manager.isToolEnabled(serverID: serverID, toolId: tool.toolId) {
+            return NSLocalizedString("已停用。", comment: "Tool disabled status")
+        }
+        if manager.approvalPolicy(serverID: serverID, toolId: tool.toolId) == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        return NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
+    }
+
+    private var currentStatusColor: Color {
+        if currentSessionIsolationActive
+            || !manager.chatToolsEnabled
+            || !manager.isToolEnabled(serverID: serverID, toolId: tool.toolId)
+            || manager.approvalPolicy(serverID: serverID, toolId: tool.toolId) == .alwaysDeny {
+            return .secondary
+        }
+        return .green
+    }
+
+    private var toolBinding: Binding<Bool> {
+        Binding {
+            manager.isToolEnabled(serverID: serverID, toolId: tool.toolId)
+        } set: { newValue in
+            manager.setToolEnabled(serverID: serverID, toolId: tool.toolId, isEnabled: newValue)
+        }
+    }
+
+    private var toolApprovalPolicyBinding: Binding<MCPToolApprovalPolicy> {
+        Binding {
+            manager.approvalPolicy(serverID: serverID, toolId: tool.toolId)
+        } set: { newValue in
+            manager.setToolApprovalPolicy(serverID: serverID, toolId: tool.toolId, policy: newValue)
+        }
+    }
+}
+
+struct WatchShortcutToolCenterDetailView: View {
     let toolID: UUID
     let currentSessionIsolationActive: Bool
 
     @ObservedObject private var manager = ShortcutToolManager.shared
-    @State private var isEditingDescription = false
-    @State private var descriptionDraft = ""
+    @State private var descriptionDraft: String = ""
 
     private var tool: ShortcutToolDefinition? {
         manager.tools.first(where: { $0.id == toolID })
@@ -317,9 +488,8 @@ struct ShortcutToolCenterDetailView: View {
             if let tool {
                 Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
                     Text(tool.displayName)
-                        .etFont(.headline)
                     Text(tool.name)
-                        .etFont(.caption)
+                        .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     if let importStatusText = importStatusText(for: tool) {
                         Text(importStatusText)
@@ -330,6 +500,7 @@ struct ShortcutToolCenterDetailView: View {
 
                 Section(NSLocalizedString("当前状态", comment: "Current status section")) {
                     Text(currentStatusText(for: tool))
+                        .etFont(.caption2)
                         .foregroundStyle(currentStatusColor(for: tool))
                 }
 
@@ -356,28 +527,20 @@ struct ShortcutToolCenterDetailView: View {
                         Text(NSLocalizedString("桥接优先", comment: "Shortcut run mode bridge preferred"))
                             .tag(ShortcutRunModeHint.bridge)
                     }
-                    .pickerStyle(.segmented)
-                    .tint(.blue)
                 }
 
-                Section(NSLocalizedString("工具描述", comment: "Tool description section")) {
-                    Text(tool.effectiveDescription)
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        descriptionDraft = tool.userDescription ?? ""
-                        isEditingDescription = true
-                    } label: {
-                        Label(NSLocalizedString("编辑描述", comment: "Edit description"), systemImage: "square.and.pencil")
+                Section(NSLocalizedString("自定义描述", comment: "Custom description section")) {
+                    TextField(
+                        NSLocalizedString("自定义描述", comment: "Custom description section"),
+                        text: $descriptionDraft
+                    )
+                    Button(NSLocalizedString("保存", comment: "Save")) {
+                        manager.updateUserDescription(id: tool.id, description: descriptionDraft)
                     }
-
-                    Button {
+                    Button(NSLocalizedString("重新生成", comment: "Regenerate description")) {
                         Task {
                             await manager.regenerateDescriptionWithLLM(for: tool.id)
                         }
-                    } label: {
-                        Label(NSLocalizedString("重新生成", comment: "Regenerate description"), systemImage: "arrow.clockwise")
                     }
                 }
             } else {
@@ -386,38 +549,8 @@ struct ShortcutToolCenterDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
-        .sheet(isPresented: $isEditingDescription) {
-            if let tool {
-                NavigationStack {
-                    Form {
-                        Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
-                            Text(tool.displayName)
-                            Text(tool.name)
-                                .etFont(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Section(NSLocalizedString("自定义描述", comment: "Custom description section")) {
-                            TextEditor(text: $descriptionDraft)
-                                .frame(minHeight: 180)
-                        }
-                    }
-                    .navigationTitle(NSLocalizedString("编辑描述", comment: "Edit description"))
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button(NSLocalizedString("取消", comment: "Cancel")) {
-                                isEditingDescription = false
-                            }
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button(NSLocalizedString("保存", comment: "Save")) {
-                                manager.updateUserDescription(id: tool.id, description: descriptionDraft)
-                                isEditingDescription = false
-                            }
-                        }
-                    }
-                }
-            }
+        .onAppear {
+            descriptionDraft = tool?.userDescription ?? ""
         }
     }
 
