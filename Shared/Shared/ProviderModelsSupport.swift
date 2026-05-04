@@ -28,7 +28,7 @@ public extension Provider {
         guard !offsets.isEmpty else { return }
 
         var activatedModels = activatedIndices.map { models[$0] }
-        moveElements(in: &activatedModels, fromOffsets: offsets, toOffset: destination)
+        moveActivatedModelElements(in: &activatedModels, fromOffsets: offsets, toOffset: destination)
 
         for (position, modelIndex) in activatedIndices.enumerated() {
             models[modelIndex] = activatedModels[position]
@@ -192,7 +192,7 @@ public extension Model {
     }
 }
 
-private extension Model {
+extension Model {
     enum LegacyCapability: String {
         case chat
         case toolCalling
@@ -539,7 +539,7 @@ public enum MainstreamModelFamily: String, Codable, Hashable, CaseIterable, Send
     }
 }
 
-private func moveElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
+private func moveActivatedModelElements<T>(in array: inout [T], fromOffsets offsets: IndexSet, toOffset destination: Int) {
     let sortedOffsets = offsets.sorted()
     guard !sortedOffsets.isEmpty else { return }
     guard sortedOffsets.allSatisfy({ $0 >= 0 && $0 < array.count }) else { return }

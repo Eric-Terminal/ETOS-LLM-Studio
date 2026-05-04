@@ -41,6 +41,267 @@ extension OpenAIAdapter {
         }
     }
 
+    func buildChatCompletionsRequest(
+        for model: RunnableModel,
+        commonPayload: [String: Any],
+        overrides: [String: Any],
+        messages: [ChatMessage],
+        tools: [InternalToolDefinition]?,
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        let chatURL = baseURL.appendingPathComponent("chat/completions")
+
+        var request = URLRequest(url: chatURL)
+        request.timeoutInterval = 600
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
+            logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+        request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: randomApiKey, to: &request)
+
+        let apiMessages: [[String: Any]] = messages.map { msg in
+            var dict: [String: Any] = ["role": msg.role.rawValue]
+
+            let audioAttachment = audioAttachments[msg.id]
+            let msgImageAttachments = imageAttachments[msg.id] ?? []
+            let msgFileAttachments = fileAttachments[msg.id] ?? []
+            let hasMultiContent = (audioAttachment != nil || !msgImageAttachments.isEmpty || !msgFileAttachments.isEmpty) && msg.role == .user
+
+            if hasMultiContent {
+                var contentParts: [[String: Any]] = []
+                let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if shouldSendText(trimmed) {
+                    contentParts.append([
+                        "type": "text",
+                        "text": trimmed
+                    ])
+                }
+
+                for imageAttachment in msgImageAttachments {
+                    contentParts.append([
+                        "type": "image_url",
+                        "image_url": [
+                            "url": imageAttachment.dataURL
+                        ]
+                    ])
+                }
+
+                if let audioAttachment {
+                    contentParts.append([
+                        "type": "input_audio",
+                        "input_audio": [
+                            "data": audioAttachment.data.base64EncodedString(),
+                            "format": audioAttachment.format
+                        ]
+                    ])
+                }
+
+                for fileAttachment in msgFileAttachments {
+                    contentParts.append([
+                        "type": "input_file",
+                        "input_file": [
+                            "data": fileAttachment.data.base64EncodedString(),
+                            "mime_type": fileAttachment.mimeType,
+                            "file_name": fileAttachment.fileName
+                        ]
+                    ])
+                }
+
+                dict["content"] = contentParts.isEmpty ? msg.content : contentParts
+            } else {
+                dict["content"] = msg.content
+            }
+
+            if msg.role == .assistant,
+               let reasoningContent = msg.reasoningContent,
+               !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                dict["reasoning_content"] = reasoningContent
+            }
+
+            if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                let apiToolCalls: [[String: Any]] = toolCalls.map { call in
+                    var apiToolCall: [String: Any] = [
+                        "id": call.id,
+                        "type": "function",
+                        "function": [
+                            "name": sanitizedToolName(call.toolName),
+                            "arguments": call.arguments
+                        ]
+                    ]
+                    if let providerSpecificFields = call.providerSpecificFields, !providerSpecificFields.isEmpty {
+                        apiToolCall["provider_specific_fields"] = providerSpecificFields.mapValues { $0.toAny() }
+                        if let rawThoughtSignature = providerSpecificFields["thought_signature"],
+                           case let .string(thoughtSignature) = rawThoughtSignature,
+                           !thoughtSignature.isEmpty {
+                            apiToolCall["extra_content"] = [
+                                "google": [
+                                    "thought_signature": thoughtSignature
+                                ]
+                            ]
+                        }
+                    }
+                    return apiToolCall
+                }
+                dict["tool_calls"] = apiToolCalls
+            } else if msg.role == .tool, let toolCallId = msg.toolCalls?.first?.id {
+                dict["tool_call_id"] = toolCallId
+            }
+            return dict
+        }
+
+        let shouldIncludeUsageInStream = boolValue(from: commonPayload[Self.streamIncludeUsageControlKey]) ?? true
+
+        var finalPayload = commonPayload
+        finalPayload.merge(overrides) { _, new in new }
+        finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
+        finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
+        finalPayload["messages"] = apiMessages
+
+        if let shouldStream = finalPayload["stream"] as? Bool, shouldStream {
+            var streamOptions = finalPayload["stream_options"] as? [String: Any] ?? [:]
+            if shouldIncludeUsageInStream {
+                if streamOptions["include_usage"] == nil {
+                    streamOptions["include_usage"] = true
+                }
+            } else {
+                streamOptions.removeValue(forKey: "include_usage")
+            }
+            if streamOptions.isEmpty {
+                finalPayload.removeValue(forKey: "stream_options")
+            } else {
+                finalPayload["stream_options"] = streamOptions
+            }
+        }
+
+        if let tools, !tools.isEmpty {
+            let apiTools = tools.map { tool -> [String: Any] in
+                let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let functionParams = normalizedOpenAIToolParameters(rawParams)
+                let function: [String: Any] = [
+                    "name": sanitizedToolName(tool.name),
+                    "description": tool.description,
+                    "parameters": functionParams
+                ]
+                return ["type": "function", "function": function]
+            }
+            finalPayload["tools"] = apiTools
+            finalPayload["tool_choice"] = "auto"
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
+            if let httpBody = request.httpBody {
+                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
+                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
+                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
+                    logger.debug("构建的聊天请求体:\n---\n\(sanitizedString)\n---")
+                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
+                    logger.debug("构建的聊天请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
+                }
+            }
+            logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
+        } catch {
+            logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
+            return nil
+        }
+
+        return request
+    }
+
+    func buildResponsesRequest(
+        for model: RunnableModel,
+        commonPayload: [String: Any],
+        overrides: [String: Any],
+        messages: [ChatMessage],
+        tools: [InternalToolDefinition]?,
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> URLRequest? {
+        guard let baseURL = URL(string: model.provider.baseURL) else {
+            logger.error("构建 Responses 请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
+            return nil
+        }
+        let responsesURL = baseURL.appendingPathComponent("responses")
+
+        var request = URLRequest(url: responsesURL)
+        request.timeoutInterval = 600
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        guard let randomApiKey = model.provider.apiKeys.randomElement(), !randomApiKey.isEmpty else {
+            logger.error("构建 Responses 请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
+            return nil
+        }
+        request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
+        applyHeaderOverrides(model.provider.headerOverrides, apiKey: randomApiKey, to: &request)
+
+        let inputItems = buildResponsesInputItems(
+            from: messages,
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: fileAttachments
+        )
+
+        var finalPayload = commonPayload
+        finalPayload.merge(overrides) { _, new in new }
+        finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
+        finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
+        finalPayload["input"] = inputItems
+
+        if let tools, !tools.isEmpty {
+            let apiTools = tools.map { tool -> [String: Any] in
+                let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
+                let functionParams = normalizedOpenAIToolParameters(rawParams)
+                return [
+                    "type": "function",
+                    "name": sanitizedToolName(tool.name),
+                    "description": tool.description,
+                    "parameters": functionParams,
+                    "strict": false
+                ]
+            }
+            finalPayload["tools"] = apiTools
+            if finalPayload["tool_choice"] == nil {
+                finalPayload["tool_choice"] = "auto"
+            } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
+                finalPayload["tool_choice"] = normalizedChoice
+            }
+        } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
+            finalPayload["tool_choice"] = normalizedChoice
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
+            if let httpBody = request.httpBody {
+                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
+                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
+                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
+                    logger.debug("构建的 Responses 请求体:\n---\n\(sanitizedString)\n---")
+                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
+                    logger.debug("构建的 Responses 请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
+                }
+            }
+            logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
+        } catch {
+            logger.error("构建 Responses 请求失败: JSON 序列化错误 - \(error.localizedDescription)")
+            return nil
+        }
+
+        return request
+    }
+
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {
         guard let baseURL = URL(string: provider.baseURL) else {
             logger.error("构建模型列表请求失败: 无效的 API 基础 URL - \(provider.baseURL)")

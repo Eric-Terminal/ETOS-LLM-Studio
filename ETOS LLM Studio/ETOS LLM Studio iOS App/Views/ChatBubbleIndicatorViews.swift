@@ -6,6 +6,7 @@
 // 本文件收纳聊天气泡使用的输入指示器与波形辅助视图。
 // ============================================================================
 
+import Combine
 import SwiftUI
 
 struct TelegramTypingIndicator: View {

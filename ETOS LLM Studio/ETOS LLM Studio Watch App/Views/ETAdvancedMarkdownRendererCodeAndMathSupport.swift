@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Shared
 import SwiftUI
 import MarkdownUI
 

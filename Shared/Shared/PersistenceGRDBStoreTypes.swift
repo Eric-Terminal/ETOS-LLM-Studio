@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 
 struct LegacySessionSnapshot {
     let session: ChatSession

@@ -14,7 +14,7 @@ import UserNotifications
 #endif
 
 extension ChatViewModel {
-    private func refreshCurrentSessionSendingState() {
+    func refreshCurrentSessionSendingState() {
         guard let currentSessionID = currentSession?.id else {
             isSendingMessage = false
             return
@@ -22,7 +22,7 @@ extension ChatViewModel {
         isSendingMessage = runningSessionIDs.contains(currentSessionID)
     }
 
-    private func prepareBackgroundReplyNotificationContext(for sessionID: UUID) {
+    func prepareBackgroundReplyNotificationContext(for sessionID: UUID) {
         let messages = sessionID == currentSession?.id
             ? allMessagesForSession
             : Persistence.loadMessages(for: sessionID)
@@ -33,7 +33,7 @@ extension ChatViewModel {
         )
     }
 
-    private func notifyIfAssistantReplyFinishedInBackground(for sessionID: UUID) {
+    func notifyIfAssistantReplyFinishedInBackground(for sessionID: UUID) {
 #if canImport(UserNotifications)
         enforceBackgroundReplyNotificationEnabled()
 #else
@@ -67,7 +67,7 @@ extension ChatViewModel {
 #endif
     }
 
-    private func notifyIfAssistantReplyFinishedFromOffscreenSession(_ sessionID: UUID) {
+    func notifyIfAssistantReplyFinishedFromOffscreenSession(_ sessionID: UUID) {
 #if canImport(UserNotifications)
         enforceBackgroundReplyNotificationEnabled()
 #else
@@ -153,7 +153,7 @@ extension ChatViewModel {
         return String(text.prefix(maxLength - 1)) + "…"
     }
 
-    private func autoPlayLatestAssistantMessageIfNeeded() {
+    func autoPlayLatestAssistantMessageIfNeeded() {
         let settings = TTSSettingsStore.shared.snapshot
         let latest = allMessagesForSession.last(where: { $0.role == .assistant })
         guard Self.shouldAutoPlayAssistantMessage(
@@ -241,24 +241,24 @@ extension ChatViewModel {
     }
 #endif
 
-    private func startExtendedSession() {
+    func startExtendedSession() {
         extendedSession = WKExtendedRuntimeSession()
         extendedSession?.start()
     }
 
-    private func stopExtendedSession() {
+    func stopExtendedSession() {
         extendedSession?.invalidate()
         extendedSession = nil
     }
 
 #if canImport(UserNotifications)
-    private func enforceBackgroundReplyNotificationEnabled() {
+    func enforceBackgroundReplyNotificationEnabled() {
         if !enableBackgroundReplyNotification {
             enableBackgroundReplyNotification = true
         }
     }
 
-    private func requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded() {
+    func requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded() {
         enforceBackgroundReplyNotificationEnabled()
         guard !hasRequestedBackgroundReplyNotificationPermission else { return }
         hasRequestedBackgroundReplyNotificationPermission = true
@@ -267,7 +267,7 @@ extension ChatViewModel {
         }
     }
 
-    private func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
+    func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let settings = await withCheckedContinuation { continuation in
             center.getNotificationSettings { continuation.resume(returning: $0) }

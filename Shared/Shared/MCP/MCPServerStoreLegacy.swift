@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension MCPServerStore {
     static func loadLegacyRecords(usingBlobCache: Bool) -> [MCPServerStoredRecord] {

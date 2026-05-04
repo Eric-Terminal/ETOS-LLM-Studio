@@ -18,7 +18,7 @@ struct GeneratedImageItem: Identifiable {
     let prompt: String
 }
 
-private struct ImagePreviewPayload: Identifiable {
+private struct GeneratedImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
     let prompt: String
@@ -94,7 +94,7 @@ struct ImageParameterExpressionRow: View {
 struct ImageGenerationGalleryView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var previewPayload: ImagePreviewPayload?
+    @State private var previewPayload: GeneratedImagePreviewPayload?
     @State private var pendingDeleteItem: GeneratedImageItem?
     @State private var alertMessage: String?
     let onReusePrompt: (String) -> Void
@@ -209,7 +209,7 @@ struct ImageGenerationGalleryView: View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 guard let image else { return }
-                previewPayload = ImagePreviewPayload(image: image, prompt: item.prompt)
+                previewPayload = GeneratedImagePreviewPayload(image: image, prompt: item.prompt)
             } label: {
                 ZStack {
                     if let image {

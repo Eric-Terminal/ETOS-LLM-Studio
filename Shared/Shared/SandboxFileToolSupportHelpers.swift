@@ -7,7 +7,7 @@
 import Foundation
 
 extension SandboxFileToolSupport {
-    private struct SandboxUndoEntry {
+    struct SandboxUndoEntry {
         let rootPath: String
         let operation: String
         let recordedAt: Date

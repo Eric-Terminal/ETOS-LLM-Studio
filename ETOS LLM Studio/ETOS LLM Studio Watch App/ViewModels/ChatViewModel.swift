@@ -31,7 +31,7 @@ import Accelerate
 import UserNotifications
 #endif
 
-private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
+let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
 enum WatchBackgroundOpacitySetting {
     static let defaultValue: Double = 0.7
@@ -50,16 +50,16 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - @Published 属性 (UI 状态)
     
-    @Published private(set) var messages: [ChatMessageRenderState] = []
-    @Published private(set) var displayMessages: [ChatMessageRenderState] = []
-    @Published private(set) var displayMessageIdentityVersion: Int = 0
-    @Published private(set) var allMessageIdentityVersion: Int = 0
-    @Published private(set) var chatSessionListVersion: Int = 0
-    @Published private(set) var sessionFolderListVersion: Int = 0
-    @Published private(set) var activatedModelListVersion: Int = 0
-    @Published private(set) var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
-    @Published private(set) var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
-    private(set) var allMessagesForSession: [ChatMessage] = []
+    @Published var messages: [ChatMessageRenderState] = []
+    @Published var displayMessages: [ChatMessageRenderState] = []
+    @Published var displayMessageIdentityVersion: Int = 0
+    @Published var allMessageIdentityVersion: Int = 0
+    @Published var chatSessionListVersion: Int = 0
+    @Published var sessionFolderListVersion: Int = 0
+    @Published var activatedModelListVersion: Int = 0
+    @Published var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
+    @Published var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
+    var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
@@ -116,10 +116,10 @@ class ChatViewModel: ObservableObject {
     @Published var attachmentImportInProgress: Bool = false
     @Published var attachmentImportErrorMessage: String?
     @Published var showAttachmentImportErrorAlert: Bool = false
-    @Published private(set) var latestAssistantMessageID: UUID?
-    @Published private(set) var streamingScrollAnchorVersion: Int = 0
-    @Published private(set) var toolCallResultIDs: Set<String> = []
-    @Published private(set) var runningSessionIDs: Set<UUID> = []
+    @Published var latestAssistantMessageID: UUID?
+    @Published var streamingScrollAnchorVersion: Int = 0
+    @Published var toolCallResultIDs: Set<String> = []
+    @Published var runningSessionIDs: Set<UUID> = []
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     @Published var mathRenderOverrides: Set<UUID> = []
@@ -192,7 +192,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
     @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
-    @AppStorage("enableBackgroundReplyNotification") private var enableBackgroundReplyNotification: Bool = true {
+    @AppStorage("enableBackgroundReplyNotification") var enableBackgroundReplyNotification: Bool = true {
         didSet {
 #if canImport(UserNotifications)
             guard enableBackgroundReplyNotification else {
@@ -205,7 +205,7 @@ class ChatViewModel: ObservableObject {
 #endif
         }
     }
-    @AppStorage("hasRequestedBackgroundReplyNotificationPermissionWatch") private var hasRequestedBackgroundReplyNotificationPermission: Bool = false
+    @AppStorage("hasRequestedBackgroundReplyNotificationPermissionWatch") var hasRequestedBackgroundReplyNotificationPermission: Bool = false
     
     var audioRecordingFormat: AudioRecordingFormat {
         get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
@@ -220,7 +220,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - 公开属性
     
     @Published var backgroundImages: [String] = []
-    @Published private(set) var currentBackgroundImageBlurredUIImage: UIImage?
+    @Published var currentBackgroundImageBlurredUIImage: UIImage?
     
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
@@ -249,47 +249,47 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - 私有属性
     
-    private var extendedSession: WKExtendedRuntimeSession?
+    var extendedSession: WKExtendedRuntimeSession?
     let chatService: ChatService
     let ttsManager: TTSManager
-    private var cancellables = Set<AnyCancellable>()
-    private var additionalHistoryLoaded: Int = 0
-    private var lastSessionID: UUID?
+    var cancellables = Set<AnyCancellable>()
+    var additionalHistoryLoaded: Int = 0
+    var lastSessionID: UUID?
     let incrementalHistoryBatchSize = 5
-    private var displayMessageIDs: [UUID] = []
-    private var activatedModelIDs: [String] = []
+    var displayMessageIDs: [UUID] = []
+    var activatedModelIDs: [String] = []
     var audioRecorder: AVAudioRecorder?
     var systemSpeechStreamingSession: SystemSpeechStreamingSession?
     var speechRecordingURL: URL?
     var recordingStartDate: Date?
     var recordingTimer: Timer?
     let waveformSampleCount: Int = 24
-    private var messageStateByID: [UUID: ChatMessageRenderState] = [:]
-    private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
-    private var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
-    private var autoReasoningPreviewMessageIDs: Set<UUID> = []
-    private var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
-    private var isPersistingGlobalSystemPrompts = false
-    private var lastAutoPlayedAssistantMessageID: UUID?
-    private var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
-    private var lastNotifiedAssistantMarker: AssistantReplyMarker?
-    private var lastMemoryEmbeddingErrorSignature: String = ""
-    private var lastMemoryEmbeddingErrorDate: Date = .distantPast
+    var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var autoReasoningPreviewMessageIDs: Set<UUID> = []
+    var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
+    var isPersistingGlobalSystemPrompts = false
+    var lastAutoPlayedAssistantMessageID: UUID?
+    var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
+    var lastNotifiedAssistantMarker: AssistantReplyMarker?
+    var lastMemoryEmbeddingErrorSignature: String = ""
+    var lastMemoryEmbeddingErrorDate: Date = .distantPast
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
-    private var memoryRetryStoppedNoticeTask: Task<Void, Never>?
+    var memoryRetryStoppedNoticeTask: Task<Void, Never>?
     private let iso8601Formatter = ISO8601DateFormatter()
-    private let backgroundImageCache: NSCache<NSString, UIImage> = {
+    let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
         return cache
     }()
-    private let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
+    let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
         return cache
     }()
-    private var globalSystemPromptReloadTask: Task<Void, Never>?
-    private var backgroundBlurTask: Task<Void, Never>?
+    var globalSystemPromptReloadTask: Task<Void, Never>?
+    var backgroundBlurTask: Task<Void, Never>?
 
     // MARK: - 初始化
 
@@ -583,7 +583,7 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - 私有方法 (内部逻辑)
     
-    private func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
+    func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
         guard !message.isEmpty else { return false }
 
         let now = Date()
@@ -600,7 +600,7 @@ class ChatViewModel: ObservableObject {
         return true
     }
 
-    private func presentMemoryRetryStoppedNotice() {
+    func presentMemoryRetryStoppedNotice() {
         let message = NSLocalizedString(
             "记忆系统嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。",
             comment: "Non-modal notice shown when automatic memory embedding retry is stopped."

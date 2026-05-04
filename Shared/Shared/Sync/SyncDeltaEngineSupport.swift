@@ -550,7 +550,7 @@ extension SyncDeltaEngine {
     }
 }
 
-private extension SyncRecordDescriptor {
+extension SyncRecordDescriptor {
     static func key(type: SyncRecordType, recordID: String) -> String {
         "\(type.rawValue)|\(recordID)"
     }

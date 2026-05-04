@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 
 extension ChatService {
     public func loadWorldbooks() -> [Worldbook] {

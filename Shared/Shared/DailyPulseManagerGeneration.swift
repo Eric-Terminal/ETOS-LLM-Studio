@@ -7,13 +7,14 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import os.log
 #if os(iOS)
 import UIKit
 #endif
 
 extension DailyPulseManager {
-    private func resolveGenerationModel() -> RunnableModel? {
+    func resolveGenerationModel() -> RunnableModel? {
         let dedicatedModelIdentifier = defaults.string(forKey: Self.dedicatedModelDefaultsKey) ?? ""
         return Self.resolveGenerationModel(
             dedicatedModelIdentifier: dedicatedModelIdentifier,
@@ -22,7 +23,7 @@ extension DailyPulseManager {
         )
     }
 
-    private func generate(
+    func generate(
         force: Bool,
         trigger: DailyPulseTrigger,
         notifyReadyWhenFinished: Bool = false
@@ -109,23 +110,23 @@ extension DailyPulseManager {
         }
     }
 
-    private func upsertRun(_ run: DailyPulseRun) {
+    func upsertRun(_ run: DailyPulseRun) {
         var updatedRuns = runs.filter { $0.dayKey != run.dayKey }
         updatedRuns.insert(run, at: 0)
         runs = Self.trimmedRuns(updatedRuns, limit: retentionLimit)
         persistRuns()
     }
 
-    private func persistRuns() {
+    func persistRuns() {
         Persistence.saveDailyPulseRuns(runs)
     }
 
-    private func persistTasks() {
+    func persistTasks() {
         tasks = Self.sortedTasks(tasks)
         Persistence.saveDailyPulseTasks(tasks)
     }
 
-    private func appendFeedbackEvent(_ event: DailyPulseFeedbackEvent) {
+    func appendFeedbackEvent(_ event: DailyPulseFeedbackEvent) {
         feedbackHistory = Self.appendingFeedbackEvent(
             event,
             to: feedbackHistory,
@@ -134,7 +135,7 @@ extension DailyPulseManager {
         Persistence.saveDailyPulseFeedbackHistory(feedbackHistory)
     }
 
-    private func persistPendingCurationFromDraft(referenceDate: Date = Date()) {
+    func persistPendingCurationFromDraft(referenceDate: Date = Date()) {
         let trimmed = tomorrowCurationText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             pendingCuration = nil
@@ -152,7 +153,7 @@ extension DailyPulseManager {
         Persistence.saveDailyPulsePendingCuration(note)
     }
 
-    private func prunePendingCurationIfNeeded(referenceDate: Date) {
+    func prunePendingCurationIfNeeded(referenceDate: Date) {
         guard let pendingCuration else { return }
         let todayKey = Self.dayKey(for: referenceDate)
         if pendingCuration.targetDayKey < todayKey {
@@ -164,7 +165,7 @@ extension DailyPulseManager {
         }
     }
 
-    private func card(cardID: UUID, runID: UUID) -> DailyPulseCard? {
+    func card(cardID: UUID, runID: UUID) -> DailyPulseCard? {
         runs.first(where: { $0.id == runID })?.cards.first(where: { $0.id == cardID })
     }
 

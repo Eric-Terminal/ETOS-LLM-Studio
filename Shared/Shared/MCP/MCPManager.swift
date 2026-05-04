@@ -36,17 +36,17 @@ public final class MCPManager: ObservableObject {
         case failed(reason: String)
     }
 
-    @Published public private(set) var servers: [MCPServerConfiguration] = []
-    @Published public private(set) var serverStatuses: [UUID: MCPServerStatus] = [:]
-    @Published public private(set) var tools: [MCPAvailableTool] = []
-    @Published public private(set) var resources: [MCPAvailableResource] = []
-    @Published public private(set) var resourceTemplates: [MCPAvailableResourceTemplate] = []
-    @Published public private(set) var prompts: [MCPAvailablePrompt] = []
-    @Published public private(set) var logEntries: [MCPLogEntry] = []
-    @Published public private(set) var governanceLogEntries: [MCPGovernanceLogEntry] = []
-    @Published public private(set) var progressByToken: [String: MCPProgressParams] = [:]
-    @Published public private(set) var activeToolCalls: [UUID: MCPActiveToolCall] = [:]
-    @Published public private(set) var lastOperationOutput: String? {
+    @Published public internal(set) var servers: [MCPServerConfiguration] = []
+    @Published public internal(set) var serverStatuses: [UUID: MCPServerStatus] = [:]
+    @Published public internal(set) var tools: [MCPAvailableTool] = []
+    @Published public internal(set) var resources: [MCPAvailableResource] = []
+    @Published public internal(set) var resourceTemplates: [MCPAvailableResourceTemplate] = []
+    @Published public internal(set) var prompts: [MCPAvailablePrompt] = []
+    @Published public internal(set) var logEntries: [MCPLogEntry] = []
+    @Published public internal(set) var governanceLogEntries: [MCPGovernanceLogEntry] = []
+    @Published public internal(set) var progressByToken: [String: MCPProgressParams] = [:]
+    @Published public internal(set) var activeToolCalls: [UUID: MCPActiveToolCall] = [:]
+    @Published public internal(set) var lastOperationOutput: String? {
         didSet {
             guard let lastOperationOutput,
                   !lastOperationOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -61,7 +61,7 @@ public final class MCPManager: ObservableObject {
             )
         }
     }
-    @Published public private(set) var lastOperationError: String? {
+    @Published public internal(set) var lastOperationError: String? {
         didSet {
             guard let lastOperationError,
                   !lastOperationError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -76,8 +76,8 @@ public final class MCPManager: ObservableObject {
             )
         }
     }
-    @Published public private(set) var isBusy: Bool = false
-    @Published public private(set) var chatToolsEnabled: Bool
+    @Published public internal(set) var isBusy: Bool = false
+    @Published public internal(set) var chatToolsEnabled: Bool
 
     public weak var samplingHandler: MCPSamplingHandler? {
         didSet {
@@ -316,7 +316,7 @@ public final class MCPManager: ObservableObject {
         appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "已断开服务器连接。")
     }
 
-    private func ensureClientReady(
+    func ensureClientReady(
         for server: MCPServerConfiguration,
         preserveSelection: Bool = true,
         retryOnFailure: Bool = false,
@@ -353,7 +353,7 @@ public final class MCPManager: ObservableObject {
         }
     }
 
-    private func ensureClientReady(serverID: UUID, refreshMetadataIfCacheMissing: Bool = false) async throws -> MCPClient {
+    func ensureClientReady(serverID: UUID, refreshMetadataIfCacheMissing: Bool = false) async throws -> MCPClient {
         guard let server = servers.first(where: { $0.id == serverID }) else {
             throw MCPClientError.notConnected
         }
@@ -527,7 +527,7 @@ public final class MCPManager: ObservableObject {
     }
 
     @discardableResult
-    private func scheduleAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) -> Bool {
+    func scheduleAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) -> Bool {
         let attempt = (autoConnectRetryAttempts[serverID] ?? 0) + 1
         if attempt > autoConnectMaxRetries {
             autoConnectRetryAttempts[serverID] = nil
@@ -560,7 +560,7 @@ public final class MCPManager: ObservableObject {
         return true
     }
 
-    private func performAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) {
+    func performAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) {
         guard let server = servers.first(where: { $0.id == serverID }) else {
             cancelAutoConnectRetry(for: serverID, resetAttempts: true)
             return
@@ -580,7 +580,7 @@ public final class MCPManager: ObservableObject {
         }
     }
 
-    private func cancelAutoConnectRetry(for serverID: UUID, resetAttempts: Bool) {
+    func cancelAutoConnectRetry(for serverID: UUID, resetAttempts: Bool) {
         autoConnectRetryTasks[serverID]?.cancel()
         autoConnectRetryTasks[serverID] = nil
         if resetAttempts {

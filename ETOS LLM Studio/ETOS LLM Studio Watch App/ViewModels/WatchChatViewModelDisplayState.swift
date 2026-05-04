@@ -450,7 +450,7 @@ extension ChatViewModel {
         }
     }
 
-    private func updateAutoReasoningPreviewState(with messages: [ChatMessage]) {
+    func updateAutoReasoningPreviewState(with messages: [ChatMessage]) {
         guard let latestAssistantMessage = messages.last(where: { $0.role == .assistant }) else {
             autoReasoningPreviewMessageIDs.removeAll()
             userControlledReasoningPreviewMessageIDs.removeAll()

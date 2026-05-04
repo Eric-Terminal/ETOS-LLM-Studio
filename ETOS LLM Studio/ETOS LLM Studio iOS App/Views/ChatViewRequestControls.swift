@@ -9,7 +9,7 @@
 import SwiftUI
 import Shared
 
-struct RequestBodyControlDetailView: View {
+struct ChatRequestBodyControlDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     let runnableModel: RunnableModel

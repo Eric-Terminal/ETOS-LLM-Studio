@@ -15,7 +15,7 @@ import Shared
 
 /// Telegram 风格的消息输入框
 struct TelegramMessageComposer: View {
-    @EnvironmentObject private var viewModel: ChatViewModel
+    @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     let isSending: Bool
@@ -75,6 +75,15 @@ struct TelegramMessageComposer: View {
     }
     private var composerCornerRadius: CGFloat {
         isExpandedComposer ? 18 : compactInputHeight / 2
+    }
+    private var hasContent: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || viewModel.pendingAudioAttachment != nil
+            || !viewModel.pendingImageAttachments.isEmpty
+            || !viewModel.pendingFileAttachments.isEmpty
+    }
+    private var canQuickRetry: Bool {
+        viewModel.canQuickRetryLatestMessage
     }
 
     var body: some View {
@@ -481,7 +490,7 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func glassRoundedBackground(cornerRadius: CGFloat) -> some View {
+    func glassRoundedBackground(cornerRadius: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return Group {
             if isLiquidGlassEnabled {

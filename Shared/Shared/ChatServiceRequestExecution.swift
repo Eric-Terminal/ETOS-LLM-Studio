@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif

@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension Persistence {
     static func loadRequestLogEnvelope() throws -> RequestLogFileEnvelope? {

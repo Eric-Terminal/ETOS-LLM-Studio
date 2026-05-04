@@ -10,7 +10,7 @@ import SwiftUI
 import Foundation
 import Shared
 
-private struct EmbeddingModelSelectionView: View {
+struct EmbeddingModelSelectionView: View {
     @Environment(\.dismiss) private var dismiss
 
     let embeddingModels: [RunnableModel]
@@ -364,7 +364,7 @@ private struct ConversationMemoryAlert: Identifiable {
     let message: String
 }
 
-private struct MemoryReembedAlert: Identifiable {
+struct MemoryReembedAlert: Identifiable {
     enum Kind {
         case success(MemoryReembeddingSummary)
         case failure(String)

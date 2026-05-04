@@ -116,6 +116,7 @@ extension ChatBubble {
         }
     }
 
+    @ViewBuilder
     func reasoningToolTimeline(reasoning: String?, toolCalls: [InternalToolCall]) -> some View {
         let trimmedReasoning = reasoning?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasReasoning = !(trimmedReasoning ?? "").isEmpty

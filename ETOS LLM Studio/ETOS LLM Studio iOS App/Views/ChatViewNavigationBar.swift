@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Shared
 
 extension ChatView {
     /// Telegram 风格导航栏

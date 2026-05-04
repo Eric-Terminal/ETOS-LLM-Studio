@@ -30,7 +30,7 @@ public final class ShortcutToolManager: ObservableObject {
     let bridgeShortcutUserDefaultsKey = "shortcut.bridgeShortcutName"
     let officialImportShortcutNameUserDefaultsKey = "shortcut.officialImportShortcutName"
 
-    @Published public private(set) var tools: [ShortcutToolDefinition] = []
+    @Published public internal(set) var tools: [ShortcutToolDefinition] = []
     @Published public private(set) var lastImportSummary: ShortcutImportSummary?
     @Published public private(set) var lastExecutionResult: ShortcutToolExecutionResult? {
         didSet {
@@ -51,11 +51,11 @@ public final class ShortcutToolManager: ObservableObject {
     @Published public private(set) var lastErrorMessage: String?
     @Published public private(set) var lastOfficialTemplateStatusMessage: String?
     @Published public private(set) var lastOfficialTemplateRunSucceeded: Bool?
-    @Published public private(set) var isImporting: Bool = false
-    @Published public private(set) var isCancellingImport: Bool = false
-    @Published public private(set) var importProgressCompleted: Int = 0
-    @Published public private(set) var importProgressTotal: Int = 0
-    @Published public private(set) var importCurrentItemName: String?
+    @Published public internal(set) var isImporting: Bool = false
+    @Published public internal(set) var isCancellingImport: Bool = false
+    @Published public internal(set) var importProgressCompleted: Int = 0
+    @Published public internal(set) var importProgressTotal: Int = 0
+    @Published public internal(set) var importCurrentItemName: String?
     @Published public private(set) var chatToolsEnabled: Bool
 
     var routedTools: [String: ShortcutToolDefinition] = [:]

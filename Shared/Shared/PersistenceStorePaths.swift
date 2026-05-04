@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension Persistence {
     /// 获取用于存储聊天记录的目录URL

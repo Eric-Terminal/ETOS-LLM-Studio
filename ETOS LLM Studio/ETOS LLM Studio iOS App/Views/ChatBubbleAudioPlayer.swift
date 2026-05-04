@@ -7,7 +7,9 @@
 // ============================================================================
 
 import AVFoundation
+import Combine
 import Foundation
+import Shared
 
 final class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     // 注意：这里必须使用系统合成的 objectWillChange，

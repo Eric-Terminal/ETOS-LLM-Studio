@@ -48,33 +48,33 @@ public struct WorldbookImportDiagnostics: Hashable, Sendable {
 public final class WorldbookStore {
     public static let shared = WorldbookStore()
 
-    private struct StandaloneLoadResult {
+    struct StandaloneLoadResult {
         var worldbooks: [Worldbook]
         var requiresRewrite: Bool
     }
 
-    private struct LoadedStandaloneBook {
+    struct LoadedStandaloneBook {
         var worldbook: Worldbook
         var requiresRewrite: Bool
     }
 
-    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "WorldbookStore")
-    private let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.worldbook.store")
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
-    private let importService: WorldbookImportService
-    private let storageDirectoryOverride: URL?
-    private var cachedWorldbooks: [Worldbook]?
-    private var cacheByID: [UUID: Worldbook] = [:]
-    private var cacheNormalizedContents: Set<String> = []
+    let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "WorldbookStore")
+    let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.worldbook.store")
+    let encoder: JSONEncoder
+    let decoder: JSONDecoder
+    let importService: WorldbookImportService
+    let storageDirectoryOverride: URL?
+    var cachedWorldbooks: [Worldbook]?
+    var cacheByID: [UUID: Worldbook] = [:]
+    var cacheNormalizedContents: Set<String> = []
 
     public static let directoryName = "Worldbooks"
     public static let fileName = "worldbooks.json"
-    private static let grdbBlobKey = "worldbooks"
-    private static let legacyGrdbBlobKey = "worldbooks_v1"
-    private static let legacyBlobKeys = [grdbBlobKey, legacyGrdbBlobKey]
-    private static let standaloneFileExtension = "json"
-    private static let importedFileExtensions: Set<String> = ["json", "png"]
+    static let grdbBlobKey = "worldbooks"
+    static let legacyGrdbBlobKey = "worldbooks_v1"
+    static let legacyBlobKeys = [grdbBlobKey, legacyGrdbBlobKey]
+    static let standaloneFileExtension = "json"
+    static let importedFileExtensions: Set<String> = ["json", "png"]
 
     init(
         storageDirectoryURL: URL? = nil,
@@ -102,7 +102,7 @@ public final class WorldbookStore {
         storageDirectory.appendingPathComponent(Self.fileName, isDirectory: false)
     }
 
-    private var canUseGRDB: Bool {
+    var canUseGRDB: Bool {
         storageDirectoryOverride == nil
     }
 

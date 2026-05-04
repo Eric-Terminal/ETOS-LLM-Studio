@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension GeminiAdapter {
     public func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {

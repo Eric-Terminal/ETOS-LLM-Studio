@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 
 extension ChatService {
     /// 定义 `save_memory` 工具

@@ -8,11 +8,12 @@
 
 import Foundation
 import Combine
+import os.log
 import Shared
 import WatchKit
 
 extension ChatViewModel {
-    private func reloadGlobalSystemPromptEntries() {
+    func reloadGlobalSystemPromptEntries() {
         guard !isPersistingGlobalSystemPrompts else { return }
         globalSystemPromptReloadTask?.cancel()
         globalSystemPromptReloadTask = Task { [weak self] in
@@ -25,7 +26,7 @@ extension ChatViewModel {
         }
     }
 
-    private func persistGlobalSystemPromptEntries(selectedEntryID: UUID?) {
+    func persistGlobalSystemPromptEntries(selectedEntryID: UUID?) {
         globalSystemPromptReloadTask?.cancel()
         isPersistingGlobalSystemPrompts = true
         let snapshot = GlobalSystemPromptStore.save(
@@ -36,7 +37,7 @@ extension ChatViewModel {
         isPersistingGlobalSystemPrompts = false
     }
 
-    private func applyGlobalSystemPromptSnapshot(_ snapshot: GlobalSystemPromptSnapshot) {
+    func applyGlobalSystemPromptSnapshot(_ snapshot: GlobalSystemPromptSnapshot) {
         if globalSystemPromptEntries != snapshot.entries {
             globalSystemPromptEntries = snapshot.entries
         }
@@ -48,11 +49,11 @@ extension ChatViewModel {
         }
     }
 
-    @objc private func handleDidBecomeActive() {
+    @objc func handleDidBecomeActive() {
         logger.info("App became active, checking for interrupted state.")
     }
 
-    private func setupSubscriptions() {
+    func setupSubscriptions() {
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] sessions in
@@ -256,19 +257,19 @@ extension ChatViewModel {
         reloadConversationMemoryState()
     }
 
-    private func applyChatSessions(_ sessions: [ChatSession]) {
+    func applyChatSessions(_ sessions: [ChatSession]) {
         guard chatSessions != sessions else { return }
         chatSessions = sessions
         chatSessionListVersion &+= 1
     }
 
-    private func applySessionFolders(_ folders: [SessionFolder]) {
+    func applySessionFolders(_ folders: [SessionFolder]) {
         guard sessionFolders != folders else { return }
         sessionFolders = folders
         sessionFolderListVersion &+= 1
     }
 
-    private func applyActivatedModels(_ models: [RunnableModel]) {
+    func applyActivatedModels(_ models: [RunnableModel]) {
         let ids = models.map(\.id)
         let identityChanged = activatedModelIDs != ids
         if activatedModels != models {
@@ -280,18 +281,4 @@ extension ChatViewModel {
         }
     }
 
-    private func rotateBackgroundImageIfNeeded() {
-        refreshBackgroundImages()
-        guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
-        let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
-        currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""
-        logger.info("自动轮换背景，新背景: \(self.currentBackgroundImage, privacy: .public)")
-    }
-
-    private func normalizeBackgroundOpacityIfNeeded() {
-        let normalized = WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
-        if normalized != backgroundOpacity {
-            backgroundOpacity = normalized
-        }
-    }
 }

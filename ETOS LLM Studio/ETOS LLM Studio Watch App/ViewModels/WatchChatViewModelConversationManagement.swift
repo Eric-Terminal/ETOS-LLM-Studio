@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 import Shared
 
 extension ChatViewModel {

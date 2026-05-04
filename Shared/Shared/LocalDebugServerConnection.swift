@@ -9,6 +9,7 @@
 
 import Foundation
 import Network
+import os.log
 #if os(iOS)
 import UIKit
 #elseif os(watchOS)
@@ -16,7 +17,7 @@ import WatchKit
 #endif
 
 private extension NSLock {
-    func withLock<T>(_ block: () throws -> T) rethrows -> T {
+    func debugServerWithLock<T>(_ block: () throws -> T) rethrows -> T {
         lock()
         defer { unlock() }
         return try block()
@@ -31,13 +32,13 @@ extension LocalDebugServer {
         private var _permissionGranted = false
 
         var hasCompleted: Bool {
-            get { lock.withLock { _hasCompleted } }
-            set { lock.withLock { _hasCompleted = newValue } }
+            get { lock.debugServerWithLock { _hasCompleted } }
+            set { lock.debugServerWithLock { _hasCompleted = newValue } }
         }
 
         var permissionGranted: Bool {
-            get { lock.withLock { _permissionGranted } }
-            set { lock.withLock { _permissionGranted = newValue } }
+            get { lock.debugServerWithLock { _permissionGranted } }
+            set { lock.debugServerWithLock { _permissionGranted = newValue } }
         }
 
         /// 原子性地检查并设置完成状态，返回是否是第一次完成

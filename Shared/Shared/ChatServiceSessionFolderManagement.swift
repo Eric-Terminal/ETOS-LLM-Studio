@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 
 extension ChatService {
     // MARK: - 会话文件夹管理

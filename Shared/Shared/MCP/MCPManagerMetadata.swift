@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension MCPManager {
     public func refreshMetadata() {

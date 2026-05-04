@@ -9,6 +9,75 @@
 import SwiftUI
 import Shared
 
+struct ToolCenterSummaryRow: View {
+    let title: String
+    let configuredEnabled: Int
+    let availableNow: Int
+    let total: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            HStack(spacing: 12) {
+                Label(
+                    String(format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"), configuredEnabled, total),
+                    systemImage: "slider.horizontal.3"
+                )
+                Label(
+                    String(format: NSLocalizedString("当前会话可用 %d / %d", comment: "Currently available count"), availableNow, total),
+                    systemImage: "checkmark.circle"
+                )
+            }
+            .etFont(.caption)
+            .foregroundStyle(availableNow > 0 ? Color.green : Color.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+}
+
+struct ToolCenterStatusRow: View {
+    let title: String
+    let subtitle: String
+    let detail: String
+    var auxiliary: String?
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .etFont(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+            }
+
+            Text(subtitle)
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(detail)
+                .etFont(.caption)
+                .foregroundStyle(color)
+                .lineLimit(3)
+
+            if let auxiliary, !auxiliary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(auxiliary)
+                    .etFont(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+}
+
 extension ToolCenterView {
     var overviewSection: some View {
         Section {
@@ -486,5 +555,212 @@ extension ToolCenterView {
             return .secondary
         }
         return .green
+    }
+}
+
+struct BuiltInToolDetailView: View {
+    let kind: ToolCatalogBuiltInToolKind
+    let currentSessionIsolationActive: Bool
+
+    @ObservedObject private var appToolManager = AppToolManager.shared
+    @AppStorage("enableMemory") private var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
+    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
+
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var state: ToolCatalogBuiltInToolState {
+        ToolCatalogSupport.builtInToolStates(
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            memoryTopK: memoryTopK,
+            enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
+            enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
+            isIsolatedSession: currentSessionIsolationActive
+        ).first(where: { $0.kind == kind }) ?? ToolCatalogBuiltInToolState(
+            kind: kind,
+            isConfiguredEnabled: false,
+            isAvailableInCurrentSession: false,
+            statusReason: fallbackStatusReason(for: kind)
+        )
+    }
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
+                Text(title)
+                    .etFont(.headline)
+                Text(subtitle)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(NSLocalizedString("当前状态", comment: "Current status section")) {
+                Text(statusText(for: state))
+                    .foregroundStyle(state.isAvailableInCurrentSession ? .green : .secondary)
+            }
+
+            switch kind {
+            case .memoryWrite:
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"), isOn: $enableMemory)
+                    Toggle(NSLocalizedString("允许写入新的记忆", comment: "Allow memory writing"), isOn: $enableMemoryWrite)
+                        .disabled(!enableMemory)
+                }
+            case .memorySearch:
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"), isOn: $enableMemory)
+                    Toggle(NSLocalizedString("主动检索", comment: "Active retrieval toggle title"), isOn: $enableMemoryActiveRetrieval)
+                        .disabled(!enableMemory)
+                    HStack {
+                        Text("Top K")
+                        Spacer()
+                        TextField("0", value: $memoryTopK, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 72)
+                    }
+                }
+            case .widgetCard:
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(
+                        NSLocalizedString("启用显示网页卡片工具", comment: "Enable show widget built-in tool"),
+                        isOn: Binding(
+                            get: { appToolManager.isToolEnabled(.showWidget) },
+                            set: { appToolManager.setToolEnabled(kind: .showWidget, isEnabled: $0) }
+                        )
+                    )
+                }
+            case .askUserInput:
+                Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                    Toggle(
+                        NSLocalizedString("启用询问用户选项工具", comment: "Enable ask user input built-in tool"),
+                        isOn: Binding(
+                            get: { appToolManager.isToolEnabled(.askUserInput) },
+                            set: { appToolManager.setToolEnabled(kind: .askUserInput, isEnabled: $0) }
+                        )
+                    )
+                }
+            @unknown default:
+                Section(NSLocalizedString("当前状态", comment: "Current status section")) {
+                    Text(NSLocalizedString("该工具类型暂未提供可编辑设置。", comment: "Unknown built-in tool settings fallback"))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
+    }
+
+    private var title: String {
+        switch kind {
+        case .memoryWrite:
+            return NSLocalizedString("记忆系统写入", comment: "Memory write tool title")
+        case .memorySearch:
+            return NSLocalizedString("记忆系统主动检索", comment: "Memory search tool title")
+        case .widgetCard:
+            return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
+        case .askUserInput:
+            return NSLocalizedString("询问用户选项", comment: "Built-in ask user input tool title")
+        @unknown default:
+            return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
+        }
+    }
+
+    private var subtitle: String {
+        switch kind {
+        case .memoryWrite:
+            return NSLocalizedString("允许模型调用 save_memory，将有长期价值的信息写入记忆。", comment: "Memory write tool subtitle")
+        case .memorySearch:
+            return NSLocalizedString("允许模型调用 search_memory，在回答前主动检索记忆。", comment: "Memory search tool subtitle")
+        case .widgetCard:
+            return NSLocalizedString("允许模型调用 show_widget，在对话中渲染 HTML 网页卡片。", comment: "Built-in widget tool subtitle")
+        case .askUserInput:
+            return NSLocalizedString("允许模型调用 ask_user_input，在回答前向用户发起结构化问答。", comment: "Built-in ask user input tool subtitle")
+        @unknown default:
+            return NSLocalizedString("该内置工具当前可按配置参与聊天。", comment: "Built-in tool fallback subtitle")
+        }
+    }
+
+    private func fallbackStatusReason(for kind: ToolCatalogBuiltInToolKind) -> ToolCatalogBuiltInToolStatusReason {
+        switch kind {
+        case .widgetCard:
+            return .widgetDisabled
+        case .askUserInput:
+            return .askUserInputDisabled
+        case .memoryWrite, .memorySearch:
+            return .memoryDisabled
+        @unknown default:
+            return .memoryDisabled
+        }
+    }
+
+    private func statusText(for state: ToolCatalogBuiltInToolState) -> String {
+        switch state.kind {
+        case .memoryWrite:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已允许写入新的记忆。", comment: "Memory write enabled")
+            case .memoryDisabled:
+                return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
+            case .memoryWriteDisabled:
+                return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
+            case .isolatedByWorldbook:
+                return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled, .askUserInputDisabled:
+                return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
+            @unknown default:
+                return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
+            }
+        case .memorySearch:
+            switch state.statusReason {
+            case .enabled:
+                return String(
+                    format: NSLocalizedString("已允许主动检索，Top K = %d。", comment: "Memory search enabled with top k"),
+                    state.memoryTopK
+                )
+            case .memoryDisabled:
+                return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
+            case .activeRetrievalDisabled:
+                return NSLocalizedString("当前未允许主动检索。", comment: "Memory search disabled")
+            case .zeroTopK:
+                return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
+            case .isolatedByWorldbook:
+                return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            case .memoryWriteDisabled, .widgetDisabled, .askUserInputDisabled:
+                return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
+            @unknown default:
+                return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
+            }
+        case .widgetCard:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
+            case .widgetDisabled:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .askUserInputDisabled:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
+            }
+        case .askUserInput:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用结构化问答能力。", comment: "Built-in ask user input enabled status")
+            case .askUserInputDisabled:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input unknown status fallback")
+            }
+        @unknown default:
+            return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")
+        }
     }
 }

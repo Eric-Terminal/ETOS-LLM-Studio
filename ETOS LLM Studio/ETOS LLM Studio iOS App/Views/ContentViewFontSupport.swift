@@ -118,7 +118,7 @@ private enum TextSampleExtractor {
     }
 }
 
-private enum AppFontAdapter {
+enum AppFontAdapter {
     private static let cacheLock = NSLock()
     private static var adaptedFontCache: [String: Font] = [:]
     private static var adaptedFontCacheToken: String = ""

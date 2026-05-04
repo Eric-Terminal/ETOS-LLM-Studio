@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension ChatService {
     struct InlineImageExtractionResult {

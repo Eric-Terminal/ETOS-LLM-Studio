@@ -34,13 +34,13 @@ public enum FeedbackStore {
     }
 
     public static func loadTickets() -> [FeedbackTicket] {
-        lock.withLock {
+        lock.feedbackWithLock {
             loadTicketsWithoutLock()
         }
     }
 
     public static func saveTickets(_ tickets: [FeedbackTicket]) {
-        lock.withLock {
+        lock.feedbackWithLock {
             writeTicketsWithoutLock(sortTickets(deduplicateByIssueNumber(tickets)))
         }
 
@@ -48,7 +48,7 @@ public enum FeedbackStore {
     }
 
     public static func upsertTicket(_ ticket: FeedbackTicket) {
-        lock.withLock {
+        lock.feedbackWithLock {
             var current = loadTicketsWithoutLock()
             if let index = current.firstIndex(where: { $0.issueNumber == ticket.issueNumber }) {
                 current[index] = ticket
@@ -62,7 +62,7 @@ public enum FeedbackStore {
     }
 
     public static func deleteTicket(issueNumber: Int) {
-        lock.withLock {
+        lock.feedbackWithLock {
             var current = loadTicketsWithoutLock()
             current.removeAll { $0.issueNumber == issueNumber }
             writeTicketsWithoutLock(sortTickets(current))
@@ -75,7 +75,7 @@ public enum FeedbackStore {
     public static func mergeTickets(_ incoming: [FeedbackTicket]) -> (imported: Int, skipped: Int) {
         guard !incoming.isEmpty else { return (0, 0) }
 
-        let result: (Int, Int) = lock.withLock {
+        let result: (Int, Int) = lock.feedbackWithLock {
             var current = loadTicketsWithoutLock()
             var imported = 0
             var skipped = 0
@@ -353,7 +353,7 @@ public enum FeedbackStore {
 }
 
 private extension NSLock {
-    func withLock<T>(_ block: () throws -> T) rethrows -> T {
+    func feedbackWithLock<T>(_ block: () throws -> T) rethrows -> T {
         lock()
         defer { unlock() }
         return try block()

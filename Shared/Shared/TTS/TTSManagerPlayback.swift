@@ -13,7 +13,7 @@ import AVFoundation
 #endif
 
 extension TTSManager {
-    private func processQueue() async {
+    func processQueue() async {
         while !Task.isCancelled {
             if isPausedByUser {
                 try? await Task.sleep(nanoseconds: 80_000_000)
@@ -134,7 +134,7 @@ extension TTSManager {
         }
     }
 
-    private func clearPrefetchState() {
+    func clearPrefetchState() {
         for task in prefetchTasks.values {
             task.cancel()
         }
@@ -261,7 +261,7 @@ extension TTSManager {
         }
     }
 
-    private func stopSpeechMonitor(resetDidStart: Bool = true) {
+    func stopSpeechMonitor(resetDidStart: Bool = true) {
         speechMonitorTask?.cancel()
         speechMonitorTask = nil
         if resetDidStart {
@@ -512,7 +512,7 @@ extension TTSManager {
         }
     }
 
-    private func stopProgressTimer() {
+    func stopProgressTimer() {
         progressTimer?.invalidate()
         progressTimer = nil
     }

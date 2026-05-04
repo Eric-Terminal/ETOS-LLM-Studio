@@ -26,7 +26,7 @@ import UIKit
 import UserNotifications
 #endif
 
-private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
+let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
 @MainActor
 final class ChatViewModel: ObservableObject {
@@ -35,16 +35,16 @@ final class ChatViewModel: ObservableObject {
 
     // MARK: - Published UI State
     
-    @Published private(set) var messages: [ChatMessageRenderState] = []
-    @Published private(set) var displayMessages: [ChatMessageRenderState] = []
-    @Published private(set) var displayMessageIdentityVersion: Int = 0
-    @Published private(set) var allMessageIdentityVersion: Int = 0
-    @Published private(set) var chatSessionListVersion: Int = 0
-    @Published private(set) var sessionFolderListVersion: Int = 0
-    @Published private(set) var activatedModelListVersion: Int = 0
-    @Published private(set) var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
-    @Published private(set) var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
-    private(set) var allMessagesForSession: [ChatMessage] = []
+    @Published var messages: [ChatMessageRenderState] = []
+    @Published var displayMessages: [ChatMessageRenderState] = []
+    @Published var displayMessageIdentityVersion: Int = 0
+    @Published var allMessageIdentityVersion: Int = 0
+    @Published var chatSessionListVersion: Int = 0
+    @Published var sessionFolderListVersion: Int = 0
+    @Published var activatedModelListVersion: Int = 0
+    @Published var preparedMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
+    @Published var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
+    var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
@@ -75,13 +75,13 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedGlobalSystemPromptEntryID: UUID?
     @Published var speechModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
-    @Published private(set) var latestAssistantMessageID: UUID?
-    @Published private(set) var toolCallResultIDs: Set<String> = []
-    @Published private(set) var runningSessionIDs: Set<UUID> = []
+    @Published var latestAssistantMessageID: UUID?
+    @Published var toolCallResultIDs: Set<String> = []
+    @Published var runningSessionIDs: Set<UUID> = []
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
-    private var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
-    private var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     
     // MARK: - Attachment State
     
@@ -162,7 +162,7 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
     @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
     @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
-    @AppStorage("enableBackgroundReplyNotification") private var enableBackgroundReplyNotification: Bool = true {
+    @AppStorage("enableBackgroundReplyNotification") var enableBackgroundReplyNotification: Bool = true {
         didSet {
 #if canImport(UserNotifications)
             guard enableBackgroundReplyNotification else {
@@ -190,7 +190,7 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Public Properties
     
     @Published var backgroundImages: [String] = []
-    @Published private(set) var currentBackgroundImageBlurredUIImage: UIImage?
+    @Published var currentBackgroundImageBlurredUIImage: UIImage?
     
     var historyLoadChunkSize: Int {
         incrementalHistoryBatchSize
@@ -222,18 +222,18 @@ final class ChatViewModel: ObservableObject {
     var autoReasoningPreviewMessageIDs: Set<UUID> = []
     var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
     var isPersistingGlobalSystemPrompts = false
-    private let backgroundImageCache: NSCache<NSString, UIImage> = {
+    let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 8
         return cache
     }()
-    private let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
+    let blurredBackgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 8
         return cache
     }()
     var globalSystemPromptReloadTask: Task<Void, Never>?
-    private var backgroundBlurTask: Task<Void, Never>?
+    var backgroundBlurTask: Task<Void, Never>?
     var isApplicationActive: Bool = true
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
     var lastNotifiedAssistantMarker: AssistantReplyMarker?
@@ -451,7 +451,7 @@ final class ChatViewModel: ObservableObject {
         )
     }
 
-    private func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
+    func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
         let content = request.text
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 

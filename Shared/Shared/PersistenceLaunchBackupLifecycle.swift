@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 import SQLite3
 
 extension Persistence {

@@ -9,7 +9,7 @@
 import SwiftUI
 import Shared
 
-private struct WatchImagePreviewView: View {
+struct WatchImagePreviewView: View {
     let file: FileItem
 
     @State private var image: UIImage?
@@ -64,7 +64,7 @@ private struct WatchImagePreviewView: View {
     }
 }
 
-private struct WatchSQLitePreviewView: View {
+struct WatchSQLitePreviewView: View {
     let file: FileItem
 
     @State private var tables: [StorageSQLiteTableInfo] = []
@@ -302,5 +302,138 @@ private struct WatchSQLiteQueryView: View {
             }
             isLoading = false
         }
+    }
+}
+
+private struct WatchSQLiteRowsView<Header: View>: View {
+    let title: String
+    let page: StorageSQLiteQueryPage?
+    let isLoading: Bool
+    let errorMessage: String?
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let header: () -> Header
+
+    var body: some View {
+        List {
+            header()
+
+            if isLoading {
+                Section {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                }
+            } else if let errorMessage {
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+            } else if let page {
+                Section(NSLocalizedString("统计", comment: "")) {
+                    infoRow(
+                        title: NSLocalizedString("当前页", comment: "SQLite current page"),
+                        value: "\(page.pageIndex + 1)"
+                    )
+                    infoRow(
+                        title: NSLocalizedString("行", comment: "SQLite row count"),
+                        value: "\(page.rows.count)"
+                    )
+                    infoRow(
+                        title: NSLocalizedString("字段", comment: "SQLite column count label"),
+                        value: "\(page.columns.count)"
+                    )
+                }
+
+                Section {
+                    HStack {
+                        Button(NSLocalizedString("上一页", comment: "")) {
+                            onPrevious()
+                        }
+                        .disabled(!canGoBack || isLoading)
+
+                        Spacer()
+
+                        Button(NSLocalizedString("下一页", comment: "")) {
+                            onNext()
+                        }
+                        .disabled(!canGoForward || isLoading)
+                    }
+                }
+
+                Section(NSLocalizedString("内容", comment: "")) {
+                    if page.rows.isEmpty {
+                        Text(NSLocalizedString("暂无内容", comment: ""))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(page.rows) { row in
+                            WatchSQLiteRowCard(row: row)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func infoRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private extension WatchSQLiteRowsView where Header == EmptyView {
+    init(
+        title: String,
+        page: StorageSQLiteQueryPage?,
+        isLoading: Bool,
+        errorMessage: String?,
+        canGoBack: Bool,
+        canGoForward: Bool,
+        onPrevious: @escaping () -> Void,
+        onNext: @escaping () -> Void
+    ) {
+        self.title = title
+        self.page = page
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+        self.canGoBack = canGoBack
+        self.canGoForward = canGoForward
+        self.onPrevious = onPrevious
+        self.onNext = onNext
+        self.header = { EmptyView() }
+    }
+}
+
+private struct WatchSQLiteRowCard: View {
+    let row: StorageSQLiteRow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("#\(row.index + 1)")
+                .etFont(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(row.cells) { cell in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cell.column)
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(cell.value)
+                        .etFont(.system(.footnote, design: .monospaced))
+                        .lineLimit(8)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

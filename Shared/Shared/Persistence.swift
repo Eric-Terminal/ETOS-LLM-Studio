@@ -10,9 +10,8 @@ import Foundation
 import os.log
 import GRDB
 
-let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
-
 public enum Persistence {
+    static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
     static let sessionStoreSchemaVersion = 3
     static let sessionFoldersFileSchemaVersion = 1
     static let messagesFileSchemaVersion = 2

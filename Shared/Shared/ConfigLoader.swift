@@ -13,9 +13,8 @@ import Foundation
 import GRDB
 import os.log
 
-let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConfigLoader")
-
 public struct ConfigLoader {
+    static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConfigLoader")
     
     // MARK: - 目录管理
     
@@ -49,12 +48,12 @@ public struct ConfigLoader {
     static let downloadOnceStateQueue = DispatchQueue(label: "com.ETOS.LLM.Studio.downloadOnce")
     static var downloadOnceInProgress = false
 
-    private struct CredentialHydrationResult {
+    struct CredentialHydrationResult {
         let apiKeys: [String]
         let shouldRewriteProviderFile: Bool
     }
 
-    private struct LegacyProviderLoadResult {
+    struct LegacyProviderLoadResult {
         let providers: [Provider]
         let didScanProviderDirectory: Bool
     }

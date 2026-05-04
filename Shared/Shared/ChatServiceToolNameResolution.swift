@@ -8,6 +8,7 @@
 
 import CryptoKit
 import Foundation
+import os.log
 
 extension ChatService {
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])

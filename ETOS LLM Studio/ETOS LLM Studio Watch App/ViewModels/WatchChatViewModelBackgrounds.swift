@@ -10,6 +10,7 @@ import Foundation
 import SwiftUI
 import WatchKit
 import Shared
+import os.log
 #if canImport(CoreImage)
 import CoreImage
 #endif
@@ -42,7 +43,7 @@ extension ChatViewModel {
         }
     }
 
-    private func loadBackgroundImage(named name: String) -> UIImage? {
+    func loadBackgroundImage(named name: String) -> UIImage? {
         if let cached = backgroundImageCache.object(forKey: name as NSString) {
             return cached
         }

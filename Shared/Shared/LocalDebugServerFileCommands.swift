@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension LocalDebugServer {
     func handleList(_ json: [String: Any]) async -> [String: Any] {

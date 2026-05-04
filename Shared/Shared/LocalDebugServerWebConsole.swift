@@ -7,6 +7,7 @@
 // 以及 providers、sessions 和 memories 的同步命令。
 // ============================================================================
 
+import Combine
 import Foundation
 
 extension LocalDebugServer {

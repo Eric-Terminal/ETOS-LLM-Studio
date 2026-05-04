@@ -103,7 +103,7 @@ extension ChatView {
         if let selectedModel = viewModel.selectedModel {
             ForEach(selectedModelRequestControls) { control in
                 NavigationLink {
-                    RequestBodyControlDetailView(runnableModel: selectedModel, control: control)
+                    ChatRequestBodyControlDetailView(runnableModel: selectedModel, control: control)
                 } label: {
                     Text(control.title)
                 }

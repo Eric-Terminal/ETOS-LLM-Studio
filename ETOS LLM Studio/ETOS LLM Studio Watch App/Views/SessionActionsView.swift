@@ -154,8 +154,3 @@ struct SessionActionsView: View {
         return parts.reversed().joined(separator: " /")
     }
 }
-
-private struct SessionMoveTarget: Identifiable {
-    let id: UUID
-    let title: String
-}

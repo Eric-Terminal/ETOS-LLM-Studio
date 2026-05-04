@@ -7,7 +7,9 @@
 // 手动保存/忽略，以及捕获内容转回聊天会话。
 // ============================================================================
 
+import Combine
 import Foundation
+import os.log
 
 extension LocalDebugServer {
     func handleOpenAIQueueList() async -> [String: Any] {

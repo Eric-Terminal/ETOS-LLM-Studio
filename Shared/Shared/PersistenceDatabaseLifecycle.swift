@@ -129,7 +129,7 @@ extension Persistence {
         }
     }
 
-    private static func auxiliaryStoreDatabaseURL(for kind: AuxiliaryStoreKind) -> URL {
+    static func auxiliaryStoreDatabaseURL(for kind: AuxiliaryStoreKind) -> URL {
         switch kind {
         case .config:
             let configDirectory = documentsDirectory.appendingPathComponent("Config", isDirectory: true)

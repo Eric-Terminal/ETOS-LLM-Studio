@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 
 extension ChatService {
     /// 仅在内存中保留“最近一条助手消息”的流式速度采样，避免历史样本长期占用内存。

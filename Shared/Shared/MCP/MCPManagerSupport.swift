@@ -194,6 +194,151 @@ extension MCPManager {
         )
     }
 
+    func executeManagedToolCall(
+        callID: UUID,
+        serverID: UUID,
+        toolId: String,
+        inputs: [String: JSONValue],
+        options: MCPManagedToolCallOptions
+    ) async throws -> JSONValue {
+        let client = try await ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
+        let startedAt = Date()
+        let resolvedProgressToken = options.progressToken ?? .string(UUID().uuidString)
+        let tokenKey = resolvedProgressToken.canonicalValue
+        let serverDisplayName = displayName(for: serverID) ?? serverID.uuidString
+
+        activeToolCalls[callID] = MCPActiveToolCall(
+            id: callID,
+            serverID: serverID,
+            serverDisplayName: serverDisplayName,
+            toolId: toolId,
+            startedAt: startedAt,
+            progressToken: resolvedProgressToken,
+            timeout: options.timeout,
+            maxTotalTimeout: options.maxTotalTimeout ?? options.timeout.map { $0 * 2 },
+            resetTimeoutOnProgress: options.resetTimeoutOnProgress,
+            state: .running
+        )
+        trackedToolCallTokenKeys[callID] = tokenKey
+        progressTimestampsByToken[tokenKey] = startedAt
+        if let onProgress = options.onProgress {
+            trackedToolCallObservers[callID] = onProgress
+        }
+
+        let clientOptions = MCPToolCallOptions(
+            timeout: nil,
+            progressToken: resolvedProgressToken,
+            cancellationReason: options.cancellationReason,
+            includeTimeoutInMeta: options.includeTimeoutInMeta
+        )
+        let task = Task<JSONValue, Error> {
+            try await client.executeTool(
+                toolId: toolId,
+                inputs: inputs,
+                options: clientOptions
+            )
+        }
+        trackedToolCallTasks[callID] = task
+        appendGovernanceLog(
+            level: .info,
+            category: .toolCall,
+            serverID: serverID,
+            message: "工具调用已注册：\(toolId)，token=\(tokenKey)"
+        )
+
+        do {
+            let result = try await awaitManagedToolCallResult(
+                task: task,
+                callID: callID,
+                serverID: serverID,
+                toolId: toolId,
+                startedAt: startedAt,
+                tokenKey: tokenKey,
+                options: options
+            )
+            completeTrackedToolCall(callID: callID, state: .succeeded)
+            return result
+        } catch is CancellationError {
+            completeTrackedToolCall(callID: callID, state: .cancelled(reason: options.cancellationReason))
+            throw CancellationError()
+        } catch {
+            completeTrackedToolCall(callID: callID, state: .failed(reason: error.localizedDescription))
+            throw error
+        }
+    }
+
+    private func awaitManagedToolCallResult(
+        task: Task<JSONValue, Error>,
+        callID: UUID,
+        serverID: UUID,
+        toolId: String,
+        startedAt: Date,
+        tokenKey: String,
+        options: MCPManagedToolCallOptions
+    ) async throws -> JSONValue {
+        let idleTimeout = options.timeout
+        let maxTotalTimeout = options.maxTotalTimeout ?? idleTimeout.map { $0 * 2 }
+        guard idleTimeout != nil || maxTotalTimeout != nil else {
+            return try await task.value
+        }
+
+        let watchdogNanos = UInt64(toolCallWatchdogInterval * 1_000_000_000)
+        return try await withThrowingTaskGroup(of: JSONValue.self) { group in
+            group.addTask {
+                try await task.value
+            }
+            group.addTask { [weak self] in
+                while !Task.isCancelled {
+                    try await Task.sleep(nanoseconds: watchdogNanos)
+                    if Task.isCancelled {
+                        throw CancellationError()
+                    }
+                    let now = Date()
+                    if let maxTotalTimeout,
+                       now.timeIntervalSince(startedAt) > maxTotalTimeout {
+                        await self?.markToolCallCancelling(
+                            callID: callID,
+                            serverID: serverID,
+                            message: "工具调用触发最大超时：\(toolId)"
+                        )
+                        task.cancel()
+                        throw MCPClientError.requestTimedOut(method: "tools/call", timeout: maxTotalTimeout)
+                    }
+                    if let idleTimeout {
+                        let anchor: Date
+                        if options.resetTimeoutOnProgress {
+                            let latestProgressAt = await self?.latestProgressTimestamp(for: tokenKey)
+                            anchor = latestProgressAt ?? startedAt
+                        } else {
+                            anchor = startedAt
+                        }
+                        if now.timeIntervalSince(anchor) > idleTimeout {
+                            await self?.markToolCallCancelling(
+                                callID: callID,
+                                serverID: serverID,
+                                message: "工具调用触发空闲超时：\(toolId)"
+                            )
+                            task.cancel()
+                            throw MCPClientError.requestTimedOut(method: "tools/call", timeout: idleTimeout)
+                        }
+                    }
+                }
+                throw CancellationError()
+            }
+
+            do {
+                guard let firstResult = try await group.next() else {
+                    throw MCPClientError.invalidResponse
+                }
+                group.cancelAll()
+                return firstResult
+            } catch {
+                group.cancelAll()
+                throw error
+            }
+        }
+    }
+
     func clientCapabilitiesForCurrentHandlers() -> MCPClientCapabilities {
         var capabilities = MCPClientCapabilities(roots: MCPClientRootsCapabilities(listChanged: true))
         if samplingHandler != nil {

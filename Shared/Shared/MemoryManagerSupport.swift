@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import NaturalLanguage
 import os.log
 
@@ -601,7 +602,7 @@ extension MemoryManager {
     }
 }
 
-fileprivate extension MemoryItem {
+extension MemoryItem {
     init(from indexItem: IndexItem) {
         self.id = UUID(uuidString: indexItem.id) ?? UUID()
         self.content = indexItem.text

@@ -333,6 +333,59 @@ struct ToolCallSummaryBubbleRow: View {
     }
 }
 
+struct TimelineToolCallStepContent: View {
+    let label: String
+    let statusTitle: String
+    let statusIconName: String
+    let statusColor: Color
+    let showPendingGuidance: Bool
+    let customTextColor: Color?
+
+    private var titleText: String {
+        "\(NSLocalizedString("调用工具", comment: "Tool call timeline title"))：\(label)"
+    }
+
+    private var titleColor: Color {
+        customTextColor?.opacity(0.9) ?? .primary.opacity(0.84)
+    }
+
+    private var secondaryColor: Color {
+        customTextColor?.opacity(0.74) ?? .secondary.opacity(0.88)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 6) {
+                if showPendingGuidance {
+                    ToolCallPendingGuidanceLabel(text: titleText, color: titleColor)
+                } else {
+                    Text(titleText)
+                        .etFont(.subheadline.weight(.semibold))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.right")
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(secondaryColor)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 4) {
+                Image(systemName: statusIconName)
+                    .etFont(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                Text(statusTitle)
+                    .etFont(.caption)
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
+            }
+        }
+        .contentShape(Rectangle())
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct ToolCallPendingGuidanceLabel: View {
     let text: String
     let color: Color

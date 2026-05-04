@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 
 extension ChatService {
     /// 重试指定消息，支持任意位置的消息重试

@@ -56,6 +56,7 @@ extension ChatBubble {
             : Color(uiColor: .systemBackground)
     }
 
+    @ViewBuilder
     var versionSwitcherRow: some View {
         let row = HStack(spacing: 0) {
             compactVersionIndicator
@@ -72,6 +73,7 @@ extension ChatBubble {
         }
     }
 
+    @ViewBuilder
     var compactVersionIndicator: some View {
         let currentIndex = responseAttemptVersionInfo?.currentIndex ?? message.getCurrentVersionIndex()
         let totalCount = responseAttemptVersionInfo?.totalCount ?? message.getAllVersions().count

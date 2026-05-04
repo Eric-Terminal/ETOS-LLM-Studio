@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 
 extension ChatService {
     // MARK: - 错误消息与消息写入

@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension LocalDebugServer {
     /// 执行 HTTP 连接和轮询

@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os.log
 
 extension ChatService {
     func scheduleReasoningSummaryIfNeeded(for messageID: UUID, in sessionID: UUID) {

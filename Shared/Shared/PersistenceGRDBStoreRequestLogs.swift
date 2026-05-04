@@ -8,6 +8,7 @@
 
 import Foundation
 import GRDB
+import os.log
 
 extension PersistenceGRDBStore {
     func appendRequestLog(_ entry: RequestLogEntry, retentionLimit: Int) {

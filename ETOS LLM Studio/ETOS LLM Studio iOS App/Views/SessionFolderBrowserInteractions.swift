@@ -12,7 +12,7 @@ import SwiftUI
 
 extension SessionFolderBrowserView {
     func applyStateHandlers<Content: View>(to content: Content) -> some View {
-        content
+        let pagingContent = content
             .onChange(of: viewModel.sessionFolderListVersion) { _, _ in
                 guard folderID != nil else { return }
                 if currentFolder == nil {
@@ -31,6 +31,8 @@ extension SessionFolderBrowserView {
             .onChange(of: totalSearchResultCount) { _, _ in
                 normalizeSearchResultPageIndex()
             }
+
+        let searchContent = pagingContent
             .onAppear {
                 normalizeSessionPageIndex()
                 normalizeSearchResultPageIndex()
@@ -59,6 +61,8 @@ extension SessionFolderBrowserView {
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }
+
+        return searchContent
             .onDisappear {
                 guard isRoot else { return }
                 pendingSearchWorkItem?.cancel()

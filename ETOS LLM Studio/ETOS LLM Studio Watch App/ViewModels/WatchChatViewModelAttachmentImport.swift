@@ -8,6 +8,7 @@
 
 import Foundation
 import Shared
+import UniformTypeIdentifiers
 
 enum WatchAttachmentImportKind: Equatable, Sendable {
     case audio

@@ -8,6 +8,7 @@
 
 import Foundation
 import GRDB
+import os.log
 
 extension PersistenceGRDBStore {
     func writeMeta(_ db: Database, key: String, value: String) throws {

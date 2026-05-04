@@ -47,7 +47,7 @@ extension DailyPulseManager {
         )
     }
 
-    private static func makeCards(
+    static func makeCards(
         from cards: [DailyPulseModelCard],
         fallbackFocus: String,
         profile: DailyPulsePreferenceProfile,
@@ -128,7 +128,7 @@ extension DailyPulseManager {
         return Array(selected.prefix(max(1, limit)))
     }
 
-    private static let systemPrompt = """
+    static let systemPrompt = """
     你是 ETOS LLM Studio 的“每日脉冲”策展助手。
 
     任务：
@@ -162,7 +162,7 @@ extension DailyPulseManager {
       }
     """
 
-    private static func makeUserPrompt(
+    static func makeUserPrompt(
         from input: DailyPulseGenerationInput,
         cardsPerRun: Int,
         candidateCardsPerRun: Int

@@ -23,7 +23,7 @@ public struct SyncLocalSnapshot {
 public enum SyncDeltaEngine {
     public static let schemaVersion = 2
     private static let tombstoneRetention: TimeInterval = 30 * 24 * 60 * 60
-    private static let dailyPulseBundleRecordID = "dailyPulse.bundle"
+    static let dailyPulseBundleRecordID = "dailyPulse.bundle"
 
     public static func buildLocalSnapshot(
         options: SyncOptions,

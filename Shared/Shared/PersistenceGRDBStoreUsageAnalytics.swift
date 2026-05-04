@@ -8,6 +8,7 @@
 
 import Foundation
 import GRDB
+import os.log
 
 extension PersistenceGRDBStore {
     func appendUsageAnalyticsEvent(_ event: UsageAnalyticsEvent) {

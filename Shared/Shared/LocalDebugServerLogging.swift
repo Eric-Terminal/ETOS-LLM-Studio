@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension LocalDebugServer {
     /// 添加调试日志

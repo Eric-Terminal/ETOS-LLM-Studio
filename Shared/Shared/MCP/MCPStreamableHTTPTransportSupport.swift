@@ -9,6 +9,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 extension MCPStreamableHTTPTransport {
     func disconnectStream() {
@@ -552,7 +553,7 @@ extension MCPStreamableHTTPTransport {
         headers.keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
 
-    private static func terminateRemoteSession(
+    static func terminateRemoteSession(
         session: URLSession,
         endpoint: URL,
         headers: [String: String],

@@ -285,7 +285,7 @@ extension ChatViewModel {
         stopRecordingTimer(resetVisuals: true)
     }
 
-    private func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
+    func applyToolInputDraftRequest(_ request: AppToolInputDraftRequest) {
         let content = request.text
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
@@ -303,7 +303,7 @@ extension ChatViewModel {
         }
     }
 
-    private func sendToolSupplementMessage(_ content: String) {
+    func sendToolSupplementMessage(_ content: String) {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty, !isSendingMessage else { return }
 

@@ -327,11 +327,11 @@ struct SessionFolderBrowserView: View {
         return applySearchModifier(to: baseList)
     }
 
-    private var pagedSessionIDs: [UUID] {
+    var pagedSessionIDs: [UUID] {
         pagedDirectSessions.map(\.id)
     }
 
-    private var childFolderIDs: [UUID] {
+    var childFolderIDs: [UUID] {
         childFolders.map(\.id)
     }
 }

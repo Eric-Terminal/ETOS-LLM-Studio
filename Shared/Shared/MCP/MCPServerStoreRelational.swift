@@ -8,6 +8,7 @@
 
 import Foundation
 import GRDB
+import os.log
 
 extension MCPServerStore {
     static func bootstrapRelationalStoreIfNeeded() {
