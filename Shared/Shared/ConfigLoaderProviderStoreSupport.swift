@@ -11,6 +11,55 @@ import GRDB
 import os.log
 
 extension ConfigLoader {
+    /// 从 SQLite 优先加载提供商配置，必要时回退旧版 JSON 并迁移到 SQLite。
+    public static func loadProviders() -> [Provider] {
+        let shouldMigrateToolCapability = !UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
+
+        if var providers = loadProvidersFromSQLite() {
+            if providers.isEmpty {
+                let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
+                if !legacyResult.providers.isEmpty {
+                    if saveProvidersToSQLite(legacyResult.providers) {
+                        cleanupLegacyProviderFiles()
+                    }
+                    logger.info("从旧版 JSON 导入 \(legacyResult.providers.count) 个提供商到 SQLite。")
+                    return legacyResult.providers
+                }
+            }
+
+            var didRepair = false
+            if shouldMigrateToolCapability {
+                for index in providers.indices {
+                    if migrateToolCallingCapabilityIfNeeded(for: &providers[index]) {
+                        didRepair = true
+                    }
+                }
+                UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+            }
+
+            if didRepair {
+                _ = saveProvidersToSQLite(providers)
+            }
+
+            logger.info("正在从 SQLite 加载所有提供商，共 \(providers.count) 个。")
+            return providers
+        }
+
+        logger.info("正在从 \(providersDirectory.path) 加载所有提供商...")
+        let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
+        if shouldMigrateToolCapability, legacyResult.didScanProviderDirectory {
+            UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+        }
+
+        if !legacyResult.providers.isEmpty, saveProvidersToSQLite(legacyResult.providers) {
+            cleanupLegacyProviderFiles()
+            logger.info("提供商配置已迁移到 SQLite。")
+        }
+
+        logger.info("总共加载了 \(legacyResult.providers.count) 个提供商。")
+        return legacyResult.providers
+    }
+
     static func loadProvidersFromLegacyFiles(shouldMigrateToolCapability: Bool) -> LegacyProviderLoadResult {
         setupInitialProviderConfigs()
         let fileManager = FileManager.default
