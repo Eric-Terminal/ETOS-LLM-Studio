@@ -2283,3 +2283,6 @@
 
 "none" = "none";
 "温度" = "溫度";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API 地址應為基礎地址，例如: https://api.openai.com/v1；聊天請求會使用 Responses API。";

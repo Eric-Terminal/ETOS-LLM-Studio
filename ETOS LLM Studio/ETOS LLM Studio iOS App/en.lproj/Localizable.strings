@@ -2544,3 +2544,6 @@
 
 "none" = "none";
 "温度" = "Temperature";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API address should be the base URL, e.g., https://api.openai.com/v1; chat requests will use the Responses API.";

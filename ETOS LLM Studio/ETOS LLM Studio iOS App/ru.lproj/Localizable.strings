@@ -2268,3 +2268,6 @@
 
 "none" = "none";
 "温度" = "Температура";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API-адрес должен быть базовым, например: https://api.openai.com/v1; чат-запросы будут использовать Responses API.";

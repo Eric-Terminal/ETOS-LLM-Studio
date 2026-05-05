@@ -2366,3 +2366,6 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 
 "none" = "none";
 "温度" = "درجة الحرارة";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "يجب أن يكون عنوان API هو العنوان الأساسي، مثل: https://api.openai.com/v1؛ ستستخدم طلبات الدردشة Responses API.";

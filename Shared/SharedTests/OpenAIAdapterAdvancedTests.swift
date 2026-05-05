@@ -13,6 +13,7 @@ import Foundation
 @Suite("OpenAIAdapter Advanced Tests")
 struct OpenAIAdapterAdvancedTests {
     private let adapter = OpenAIAdapter()
+    private let responsesAdapter = OpenAIResponsesAdapter()
     private let dummyModel = RunnableModel(
         provider: Provider(
             id: UUID(),
@@ -20,6 +21,16 @@ struct OpenAIAdapterAdvancedTests {
             baseURL: "https://api.test.com/v1",
             apiKeys: ["test-key"],
             apiFormat: "openai-compatible"
+        ),
+        model: Model(modelName: "test-model")
+    )
+    private let responsesDummyModel = RunnableModel(
+        provider: Provider(
+            id: UUID(),
+            name: "Test Provider",
+            baseURL: "https://api.test.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-responses"
         ),
         model: Model(modelName: "test-model")
     )
@@ -194,6 +205,70 @@ struct OpenAIAdapterAdvancedTests {
         #expect(firstTool["strict"] as? Bool == false)
     }
 
+    @Test("OpenAI Responses 独立适配器默认使用 Responses 请求体")
+    func testOpenAIResponsesAdapterBuildsResponsesPayloadByDefault() throws {
+        let model = RunnableModel(
+            provider: responsesDummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "max_tokens": .int(512),
+                    "messages": .array([.dictionary(["role": .string("user")])])
+                ]
+            )
+        )
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        guard let request = responsesAdapter.buildChatRequest(
+            for: model,
+            commonPayload: ["stream": true],
+            messages: messages,
+            tools: [saveMemoryToolDefinition()],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let inputItems = jsonPayload["input"] as? [[String: Any]],
+        let tools = jsonPayload["tools"] as? [[String: Any]],
+        let firstTool = tools.first else {
+            Issue.record("OpenAI Responses 独立适配器未生成可用请求体。")
+            return
+        }
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/responses")
+        #expect(jsonPayload["messages"] == nil)
+        #expect(jsonPayload["max_tokens"] == nil)
+        #expect(jsonPayload["max_output_tokens"] as? Int == 512)
+        #expect(inputItems.first?["role"] as? String == "user")
+        #expect(firstTool["type"] as? String == "function")
+        #expect(firstTool["name"] as? String == "save_memory")
+    }
+
+    @Test("OpenAI Responses 请求拒绝音频附件")
+    func testOpenAIResponsesRequestRejectsAudioAttachments() throws {
+        let message = ChatMessage(role: .user, content: "[语音消息]")
+        let audioAttachment = AudioAttachment(
+            data: Data([0x00, 0x01]),
+            mimeType: "audio/m4a",
+            format: "m4a",
+            fileName: "voice.m4a"
+        )
+
+        let request = responsesAdapter.buildChatRequest(
+            for: responsesDummyModel,
+            commonPayload: [:],
+            messages: [message],
+            tools: nil,
+            audioAttachments: [message.id: audioAttachment],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        )
+
+        #expect(request == nil)
+    }
+
     @Test("OpenAI Responses 响应可解析正文、推理与工具调用")
     func testParseResponsesAPIResponse() throws {
         let json = """
@@ -266,6 +341,40 @@ struct OpenAIAdapterAdvancedTests {
         #expect(usage.thinkingTokens == 5)
         #expect(usage.cacheReadTokens == 6)
         #expect(usage.totalTokens == 30)
+    }
+
+    @Test("OpenAI Responses 独立适配器只按 Responses 格式解析响应")
+    func testOpenAIResponsesAdapterParsesResponsesPayload() throws {
+        let json = """
+        {
+          "id": "resp_adapter_1",
+          "object": "response",
+          "output": [
+            {
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "适配器正常。"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 4,
+            "total_tokens": 6
+          }
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let message = try responsesAdapter.parseResponse(data: data)
+
+        #expect(message.content == "适配器正常。")
+        #expect(message.tokenUsage?.promptTokens == 2)
+        #expect(message.tokenUsage?.completionTokens == 4)
+        #expect(message.tokenUsage?.totalTokens == 6)
     }
 
     @Test("OpenAI Responses 请求会回传 reasoning item")
@@ -394,6 +503,16 @@ struct OpenAIAdapterAdvancedTests {
         #expect(usage.thinkingTokens == 2)
         #expect(usage.cacheReadTokens == 4)
         #expect(usage.totalTokens == 16)
+    }
+
+    @Test("OpenAI Responses 独立适配器可解析 Responses 流式事件")
+    func testOpenAIResponsesAdapterParsesStreamingEvents() throws {
+        let line = """
+        data: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_1","content_index":0,"delta":"你好"}
+        """
+        let part = try #require(responsesAdapter.parseStreamingResponse(line: line))
+
+        #expect(part.content == "你好")
     }
 
     @Test("OpenAI 生图无参考图时走 generations 端点")

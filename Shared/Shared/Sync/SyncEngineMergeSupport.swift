@@ -229,6 +229,11 @@ extension SyncEngine {
 
     static func canonicalProviderAPIFormat(_ value: String) -> String {
         let normalized = normalizeAPIFormatToken(value)
+        if normalized == "openai-responses"
+            || normalized == "openai-response"
+            || normalized.contains("responses") {
+            return "openai-responses"
+        }
         if normalized.contains("anthropic") || normalized.contains("claude") {
             return "anthropic"
         }

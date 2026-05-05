@@ -222,6 +222,7 @@ extension ThirdPartyImportService {
 
             let format = normalizeProviderFormat(typeHint: type, modelIDs: modelList.map(\.modelName))
             let baseURL = normalizeBaseURL(rawHost, for: format)
+            let normalizedModels = normalizeModelsForProviderFormat(modelList, apiFormat: format)
 
             let imported = Provider(
                 id: stableUUID(from: string(provider["id"])) ?? UUID(),
@@ -229,7 +230,7 @@ extension ThirdPartyImportService {
                 baseURL: baseURL,
                 apiKeys: apiKeys,
                 apiFormat: format,
-                models: modelList,
+                models: normalizedModels,
                 headerOverrides: headerOverrides
             )
             result.append(imported)

@@ -205,11 +205,14 @@ struct RequestBodyControlTests {
     @Test("新增组选项会按适配器格式生成默认参数")
     func testDefaultThinkingOptionGroupUsesProviderAPIFormat() {
         let openAI = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-compatible")
+        let openAIResponses = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-responses")
         let gemini = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
         let anthropic = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
 
         #expect(openAI.defaultOptionID == "medium")
         #expect(openAI.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
+        #expect(openAIResponses.defaultOptionID == "medium")
+        #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
 
         #expect(gemini.defaultOptionID == "medium")
         #expect(gemini.options.first(where: { $0.id == "high" })?.payload["thinking_level"] == .string("HIGH"))

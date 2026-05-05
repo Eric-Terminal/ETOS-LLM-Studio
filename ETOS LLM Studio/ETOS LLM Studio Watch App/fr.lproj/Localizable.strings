@@ -2225,3 +2225,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 "none" = "none";
 "温度" = "Température";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API base URL Exemple : https://api.openai.com/v1 ; les requêtes de chat utiliseront Responses API.";

@@ -2127,3 +2127,6 @@
 
 "none" = "none";
 "温度" = "温度";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API のベースURL例: https://api.openai.com/v1。チャットリクエストには Responses API を使用します。";

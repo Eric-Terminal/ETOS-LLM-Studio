@@ -79,6 +79,7 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
     init(
         adapters: [String: APIAdapter] = [
             "openai-compatible": OpenAIAdapter(),
+            "openai-responses": OpenAIResponsesAdapter(),
             "gemini": GeminiAdapter()
         ],
         urlSession: URLSession = NetworkSessionConfiguration.shared

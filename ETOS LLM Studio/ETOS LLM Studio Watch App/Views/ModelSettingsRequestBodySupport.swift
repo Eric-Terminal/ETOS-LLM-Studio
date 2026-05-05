@@ -428,6 +428,23 @@ extension ModelSettingsView {
             }
             return payload
 
+        case .openAIResponses:
+            var payload = sanitizedResponsesPreviewOverrides(overridesAny)
+            payload["model"] = model.modelName
+            payload["input"] = [
+                [
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "input_text",
+                            "text": "<message>"
+                        ]
+                    ]
+                ]
+            ]
+            return payload
+
         default:
             if resolvedOpenAIPreviewMode(from: overridesAny) == .responses {
                 var payload = sanitizedResponsesPreviewOverrides(overridesAny)

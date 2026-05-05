@@ -142,7 +142,7 @@ extension ThirdPartyImportService {
                 baseURL: baseURL,
                 apiKeys: keys,
                 apiFormat: format,
-                models: modelList,
+                models: normalizeModelsForProviderFormat(modelList, apiFormat: format),
                 proxyConfiguration: networkProxyConfiguration(from: config)
             )
             result.append(provider)

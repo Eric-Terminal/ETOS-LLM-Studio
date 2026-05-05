@@ -103,7 +103,7 @@ extension ThirdPartyImportService {
                 baseURL: baseURL,
                 apiKeys: apiKey.isEmpty ? [] : [apiKey],
                 apiFormat: format,
-                models: models
+                models: normalizeModelsForProviderFormat(models, apiFormat: format)
             )
             result.append(imported)
         }

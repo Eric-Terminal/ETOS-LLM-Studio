@@ -451,6 +451,7 @@ public class ChatService {
         self.startupTemporarySession = startupTemporarySession
         self.adapters = adapters ?? [
             "openai-compatible": OpenAIAdapter(),
+            "openai-responses": OpenAIResponsesAdapter(),
             "gemini": GeminiAdapter(),
             "anthropic": AnthropicAdapter(),
         ]

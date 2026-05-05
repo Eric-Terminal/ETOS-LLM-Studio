@@ -19,10 +19,9 @@ extension OpenAIAdapter {
             return nil
         }
 
-        let audioAttachment = audioAttachments[message.id]
         let messageImageAttachments = imageAttachments[message.id] ?? []
         let messageFileAttachments = fileAttachments[message.id] ?? []
-        let needsMultipart = !messageImageAttachments.isEmpty || audioAttachment != nil || !messageFileAttachments.isEmpty
+        let needsMultipart = !messageImageAttachments.isEmpty || !messageFileAttachments.isEmpty
 
         let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if !needsMultipart {
@@ -46,14 +45,6 @@ extension OpenAIAdapter {
             content.append([
                 "type": "input_image",
                 "image_url": imageAttachment.dataURL
-            ])
-        }
-
-        if let audioAttachment {
-            content.append([
-                "type": "input_file",
-                "file_data": audioAttachment.data.base64EncodedString(),
-                "filename": audioAttachment.fileName
             ])
         }
 

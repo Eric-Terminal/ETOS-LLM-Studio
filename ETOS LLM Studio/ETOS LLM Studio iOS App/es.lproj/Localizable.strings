@@ -2366,3 +2366,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 "none" = "none";
 "温度" = "Temperatura";
+
+"OpenAI Responses" = "OpenAI Responses";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "La dirección de API debe ser la URL base, por ejemplo: https://api.openai.com/v1; las solicitudes de chat usarán Responses API.";

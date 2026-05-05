@@ -20,6 +20,9 @@ extension ThirdPartyImportService {
         let hint = (typeHint ?? "").lowercased()
 
         if !hint.isEmpty {
+            if isOpenAIResponsesType(hint) {
+                return "openai-responses"
+            }
             if hint.contains("anthropic") || hint.contains("claude") {
                 return "anthropic"
             }
@@ -74,6 +77,17 @@ extension ThirdPartyImportService {
             outputModalities: outputModalities,
             capabilities: resolvedCapabilities
         )
+    }
+
+    static func normalizeModelsForProviderFormat(_ models: [Model], apiFormat: String) -> [Model] {
+        guard apiFormat == "openai-responses" else { return models }
+        return models.map { model in
+            var normalized = model
+            normalized.overrideParameters.removeValue(forKey: "use_responses_api")
+            normalized.overrideParameters.removeValue(forKey: "openai_api")
+            normalized.overrideParameters.removeValue(forKey: "openai_api_mode")
+            return normalized
+        }
     }
 
     static func cherryModelCapabilityShape(_ model: [String: Any]) -> ImportedModelCapabilityShape {

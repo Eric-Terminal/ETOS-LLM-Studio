@@ -163,6 +163,7 @@ public enum ModelRequestBodyControlCompiler {
 
 public enum ProviderAPIFormatFamily {
     case openAICompatible
+    case openAIResponses
     case gemini
     case anthropic
 
@@ -170,7 +171,11 @@ public enum ProviderAPIFormatFamily {
         let normalized = apiFormat
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        if normalized.contains("anthropic") || normalized.contains("claude") {
+        if normalized == "openai-responses"
+            || normalized == "openai-response"
+            || normalized.contains("responses") {
+            self = .openAIResponses
+        } else if normalized.contains("anthropic") || normalized.contains("claude") {
             self = .anthropic
         } else if normalized.contains("gemini") || normalized.contains("google") || normalized.contains("vertex") {
             self = .gemini
@@ -225,7 +230,7 @@ public enum ModelRequestBodyControlDefaults {
                     ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: ["thinkingBudget": .int(0)])
                 ]
             )
-        case .openAICompatible:
+        case .openAICompatible, .openAIResponses:
             return ModelRequestBodyControl(
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,

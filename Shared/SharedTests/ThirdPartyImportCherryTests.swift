@@ -141,6 +141,51 @@ struct ThirdPartyImportCherryTests {
         #expect(chatModel.overrideParameters["use_responses_api"] == nil)
     }
 
+    @Test("Cherry provider 级 openai-response 会导入为 Responses 适配器")
+    func testPrepareCherryImportUsesOpenAIResponsesProviderFormat() throws {
+        let sandbox = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let llm: [String: Any] = [
+            "providers": [
+                [
+                    "id": "provider-responses-only",
+                    "name": "Responses Provider",
+                    "type": "openai-response",
+                    "apiHost": "https://api.openai.com",
+                    "apiKey": "test-key",
+                    "models": [
+                        ["id": "gpt-5", "name": "GPT-5"]
+                    ]
+                ]
+            ]
+        ]
+
+        let persist: [String: Any] = [
+            "llm": try encodeJSONString(llm)
+        ]
+        let root: [String: Any] = [
+            "localStorage": [
+                "persist:cherry-studio": try encodeJSONString(persist)
+            ],
+            "indexedDB": [:]
+        ]
+
+        let fileURL = sandbox.appendingPathComponent("cherry-responses-provider.json")
+        try JSONSerialization.data(withJSONObject: root).write(to: fileURL)
+
+        let prepared = try ThirdPartyImportService.prepareImport(
+            source: .cherryStudio,
+            fileURL: fileURL
+        )
+
+        let provider = try #require(prepared.package.providers.first)
+        #expect(provider.apiFormat == "openai-responses")
+        #expect(provider.baseURL == "https://api.openai.com/v1")
+        let model = try #require(provider.models.first)
+        #expect(model.overrideParameters["use_responses_api"] == nil)
+    }
+
     @Test("Cherry 导入会保留 provider 状态、请求头与模型能力")
     func testPrepareCherryImportPreservesProviderStateHeadersAndModelShape() throws {
         let sandbox = makeTemporaryDirectory()

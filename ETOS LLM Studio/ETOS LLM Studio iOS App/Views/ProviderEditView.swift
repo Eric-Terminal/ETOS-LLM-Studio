@@ -61,6 +61,7 @@ struct ProviderEditView: View {
                     .autocorrectionDisabled()
                 Picker(NSLocalizedString("API 格式", comment: ""), selection: $provider.apiFormat) {
                     Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag("openai-compatible")
+                    Text(NSLocalizedString("OpenAI Responses", comment: "")).tag("openai-responses")
                     Text("Gemini").tag("gemini")
                     Text("Anthropic").tag("anthropic")
                 }
@@ -192,6 +193,8 @@ struct ProviderEditView: View {
             return NSLocalizedString("API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta", comment: "")
         case "anthropic":
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.anthropic.com/v1", comment: "")
+        case "openai-responses":
+            return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。", comment: "")
         default:
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1", comment: "")
         }

@@ -229,6 +229,11 @@ extension OpenAIAdapter {
         imageAttachments: [UUID: [ImageAttachment]],
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
+        if !audioAttachments.isEmpty {
+            logger.error("构建 Responses 请求失败: OpenAI Responses API 暂不支持音频附件。")
+            return nil
+        }
+
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建 Responses 请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
