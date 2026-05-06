@@ -239,6 +239,12 @@ struct WatchInputBubbleView: View {
         .padding(.vertical, inputBubbleVerticalPadding)
 
         return coreBubble
+            .onLongPressGesture(minimumDuration: 0.5) {
+                if let model = viewModel.selectedModel,
+                   !model.model.requestBodyControls.filter(\.isEnabled).isEmpty {
+                    isRequestControlsPresented = true
+                }
+            }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button {
                     attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
