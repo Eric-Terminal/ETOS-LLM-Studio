@@ -25,6 +25,7 @@ struct WatchInputBubbleView: View {
     let importSourceHistory: [String]
     let lastAttachmentSource: String
     @Binding var isQuickModelSelectorPresented: Bool
+    @Binding var isRequestControlsPresented: Bool
     @Binding var isAttachmentImportPresented: Bool
     @Binding var attachmentSourceText: String
 
@@ -267,7 +268,20 @@ struct WatchInputBubbleView: View {
                     .accessibilityLabel(NSLocalizedString("清空输入", comment: ""))
                 }
             }
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                if let selectedModel = viewModel.selectedModel,
+                   !selectedModel.model.requestBodyControls.filter(\.isEnabled).isEmpty {
+                    Button {
+                        isRequestControlsPresented = true
+                    } label: {
+                        Image(systemName: "slider.vertical.3")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
+                    .tint(.purple)
+                }
                 if isNativeNavigationEnabled {
                     Button {
                         isQuickModelSelectorPresented = true
@@ -304,6 +318,13 @@ struct WatchInputBubbleView: View {
                             }
                         )
                     )
+                }
+            }
+            .sheet(isPresented: $isRequestControlsPresented) {
+                if let selectedModel = viewModel.selectedModel {
+                    NavigationStack {
+                        WatchQuickRequestControlsView(runnableModel: selectedModel)
+                    }
                 }
             }
             .sheet(isPresented: $isAttachmentImportPresented) {

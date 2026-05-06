@@ -37,6 +37,7 @@ struct ContentView: View {
     @State var legacyMigrationErrorMessage: String?
     @State var nativeDestination: WatchNativeNavigationDestination? = .chat
     @State var isQuickModelSelectorPresented = false
+    @State var isRequestControlsPresented = false
     @State var isAttachmentImportPresented = false
     @State var attachmentSourceText: String = ""
     @State var importSourceHistory: [String] = []

@@ -110,6 +110,7 @@ extension ContentView {
                     importSourceHistory: importSourceHistory,
                     lastAttachmentSource: lastAttachmentSource,
                     isQuickModelSelectorPresented: $isQuickModelSelectorPresented,
+                    isRequestControlsPresented: $isRequestControlsPresented,
                     isAttachmentImportPresented: $isAttachmentImportPresented,
                     attachmentSourceText: $attachmentSourceText
                 )

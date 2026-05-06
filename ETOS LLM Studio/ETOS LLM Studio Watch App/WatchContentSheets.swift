@@ -141,6 +141,31 @@ struct WatchQuickModelSelectorView: View {
     }
 }
 
+// 独立的请求控制快速面板，供输入框左划快捷入口使用
+struct WatchQuickRequestControlsView: View {
+    let runnableModel: RunnableModel
+
+    var body: some View {
+        let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
+        List {
+            if controls.isEmpty {
+                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(controls) { control in
+                    NavigationLink {
+                        WatchRequestBodyControlDetailView(runnableModel: runnableModel, control: control)
+                    } label: {
+                        Text(control.title)
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("请求控制", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct WatchRequestBodyControlDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
