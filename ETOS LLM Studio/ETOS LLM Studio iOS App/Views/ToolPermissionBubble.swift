@@ -28,6 +28,16 @@ struct ToolPermissionBubble: View {
         TelegramBubbleShape(isOutgoing: false)
     }
 
+    private var decisionRows: [(decision: ToolPermissionDecision, label: String, iconName: String, tint: Color)] {
+        [
+            (.allowOnce,    NSLocalizedString("允许",     comment: ""), "checkmark.circle.fill", .green),
+            (.deny,         NSLocalizedString("拒绝",     comment: ""), "xmark.circle.fill",     .red),
+            (.supplement,   NSLocalizedString("补充提示", comment: ""), "text.badge.plus",       .blue),
+            (.allowForTool, NSLocalizedString("保持允许", comment: ""), "checkmark.shield.fill", .teal),
+            (.allowAll,     NSLocalizedString("完全权限", comment: ""), "shield.fill",            .purple),
+        ]
+    }
+
     private var bubbleGradient: some ShapeStyle {
         let assistantOpacity = enableBackground ? 0.75 : 1.0
         let baseColor = enableBackground
@@ -38,55 +48,57 @@ struct ToolPermissionBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                // 头部：工具名称与参数预览
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(String(format: NSLocalizedString("工具：%@", comment: ""), toolName))
-                        .etFont(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.primary)
-
+                    HStack(spacing: 6) {
+                        Image(systemName: "hand.raised.circle.fill")
+                            .foregroundStyle(.orange)
+                        Text(toolName)
+                            .etFont(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                    }
                     if !trimmedArguments.isEmpty {
-                        Text(NSLocalizedString("参数：", comment: ""))
-                            .etFont(.caption.weight(.medium))
-                            .foregroundStyle(Color.secondary)
-
-                        ScrollView {
-                            Text(trimmedArguments)
-                                .etFont(.caption.monospaced())
-                                .foregroundStyle(Color.secondary)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 200)
+                        Text(trimmedArguments)
+                            .etFont(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .textSelection(.enabled)
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
 
-                HStack(spacing: 8) {
-                    Button(NSLocalizedString("允许", comment: "")) {
-                        onDecision(.allowOnce)
-                    }
-                    .buttonStyle(.borderedProminent)
+                Divider()
+                    .padding(.horizontal, 4)
 
-                    Menu {
-                        Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
-                            onDecision(.deny)
-                        }
-                        Button(NSLocalizedString("补充提示", comment: "")) {
-                            onDecision(.supplement)
-                        }
-                        Button(NSLocalizedString("保持允许", comment: "")) {
-                            onDecision(.allowForTool)
-                        }
-                        Button(NSLocalizedString("完全权限", comment: "")) {
-                            onDecision(.allowAll)
-                        }
+                // 决策选项行（仿 AskUserInput 逐行排列）
+                ForEach(Array(decisionRows.enumerated()), id: \.offset) { index, row in
+                    Button {
+                        onDecision(row.decision)
                     } label: {
-                        Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis")
+                        HStack(spacing: 10) {
+                            Image(systemName: row.iconName)
+                                .foregroundStyle(row.tint)
+                                .frame(width: 22, alignment: .center)
+                            Text(row.label)
+                                .etFont(.subheadline)
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
+
+                    if index < decisionRows.count - 1 {
+                        Divider()
+                            .padding(.leading, 44)
+                    }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
             .background(bubbleBackground)
             .shadow(color: Color.black.opacity(0.08), radius: 3, y: 1)
 
