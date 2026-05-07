@@ -330,28 +330,25 @@ struct WatchAskUserInputView: View {
                     }
 
                     Section {
-                        HStack(spacing: 6) {
-                            TextField(
-                                NSLocalizedString("请输入自定义偏好", comment: ""),
-                                text: Binding(
-                                    get: { otherTextByQuestion[question.id, default: ""] },
-                                    set: { newValue in
-                                        otherTextByQuestion[question.id] = newValue
-                                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
-                                            type: question.type,
-                                            customText: newValue
-                                        ) {
-                                            selectedOptionIDsByQuestion[question.id] = []
-                                        }
+                        TextField(
+                            NSLocalizedString("请输入自定义偏好", comment: ""),
+                            text: Binding(
+                                get: { otherTextByQuestion[question.id, default: ""] },
+                                set: { newValue in
+                                    otherTextByQuestion[question.id] = newValue
+                                    if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                                        type: question.type,
+                                        customText: newValue
+                                    ) {
+                                        selectedOptionIDsByQuestion[question.id] = []
                                     }
-                                )
+                                }
                             )
-
-                            Button(skipButtonTitle(for: question)) {
-                                handleSkipOrSubmit(for: question)
-                            }
-                            .disabled(!canContinue(from: question))
+                        )
+                        Button(skipButtonTitle(for: question)) {
+                            handleSkipOrSubmit(for: question)
                         }
+                        .disabled(!canContinue(from: question))
                     }
                 } else {
                     Section {
