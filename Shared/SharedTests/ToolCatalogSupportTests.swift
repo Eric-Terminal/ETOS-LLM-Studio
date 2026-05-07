@@ -22,6 +22,7 @@ struct ToolCatalogSupportTests {
             memoryTopK: 5,
             enableWidgetTool: true,
             enableAskUserInputTool: true,
+            enableGetSystemTimeTool: true,
             isIsolatedSession: true
         )
 
@@ -45,6 +46,7 @@ struct ToolCatalogSupportTests {
             memoryTopK: 0,
             enableWidgetTool: true,
             enableAskUserInputTool: true,
+            enableGetSystemTimeTool: true,
             isIsolatedSession: false
         )
 
@@ -64,6 +66,7 @@ struct ToolCatalogSupportTests {
             memoryTopK: 3,
             enableWidgetTool: false,
             enableAskUserInputTool: true,
+            enableGetSystemTimeTool: true,
             isIsolatedSession: false
         )
 
@@ -82,6 +85,7 @@ struct ToolCatalogSupportTests {
             memoryTopK: 3,
             enableWidgetTool: true,
             enableAskUserInputTool: false,
+            enableGetSystemTimeTool: true,
             isIsolatedSession: false
         )
 
@@ -89,6 +93,25 @@ struct ToolCatalogSupportTests {
         #expect(askTool?.isConfiguredEnabled == false)
         #expect(askTool?.isAvailableInCurrentSession == false)
         #expect(askTool?.statusReason == .askUserInputDisabled)
+    }
+
+    @Test("获取系统时间工具关闭时应标记为未启用")
+    func testBuiltInToolStatesReflectGetSystemTimeDisabled() {
+        let states = ToolCatalogSupport.builtInToolStates(
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true,
+            memoryTopK: 3,
+            enableWidgetTool: true,
+            enableAskUserInputTool: true,
+            enableGetSystemTimeTool: false,
+            isIsolatedSession: false
+        )
+
+        let timeTool = states.first(where: { $0.kind == .getSystemTime })
+        #expect(timeTool?.isConfiguredEnabled == false)
+        #expect(timeTool?.isAvailableInCurrentSession == false)
+        #expect(timeTool?.statusReason == .getSystemTimeDisabled)
     }
 
     @Test("Schema 摘要会提取字段与必填项")

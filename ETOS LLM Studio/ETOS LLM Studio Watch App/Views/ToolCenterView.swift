@@ -37,6 +37,7 @@ struct ToolCenterView: View {
             memoryTopK: memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
+            enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
             isIsolatedSession: currentSessionIsolationActive
         )
     }
@@ -491,6 +492,8 @@ struct ToolCenterView: View {
             return NSLocalizedString("显示网页卡片", comment: "Built-in widget tool title")
         case .askUserInput:
             return NSLocalizedString("询问用户选项", comment: "Built-in ask user input tool title")
+        case .getSystemTime:
+            return NSLocalizedString("获取系统时间", comment: "Get system time tool title")
         @unknown default:
             return NSLocalizedString("内置工具", comment: "Built-in tool fallback title")
         }
@@ -508,7 +511,7 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled, .askUserInputDisabled:
+            case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled, .askUserInputDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write unknown status fallback")
@@ -528,7 +531,7 @@ struct ToolCenterView: View {
                 return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
             case .isolatedByWorldbook:
                 return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-            case .memoryWriteDisabled, .widgetDisabled, .askUserInputDisabled:
+            case .memoryWriteDisabled, .widgetDisabled, .askUserInputDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
             @unknown default:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search unknown status fallback")
@@ -539,7 +542,7 @@ struct ToolCenterView: View {
                 return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
             case .widgetDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .askUserInputDisabled:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .askUserInputDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
@@ -550,10 +553,21 @@ struct ToolCenterView: View {
                 return NSLocalizedString("已启用结构化问答能力。", comment: "Built-in ask user input enabled status")
             case .askUserInputDisabled:
                 return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input unknown status fallback")
+            }
+        case .getSystemTime:
+            switch state.statusReason {
+            case .enabled:
+                return NSLocalizedString("已启用，模型可免审批获取当前系统时间。", comment: "Get system time enabled status")
+            case .getSystemTimeDisabled:
+                return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time disabled status")
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled, .askUserInputDisabled:
+                return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time disabled status fallback")
+            @unknown default:
+                return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time unknown status fallback")
             }
         @unknown default:
             return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")

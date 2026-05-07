@@ -38,6 +38,7 @@ struct ToolCenterView: View {
             memoryTopK: memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
+            enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
             isIsolatedSession: currentSessionIsolationActive
         )
     }

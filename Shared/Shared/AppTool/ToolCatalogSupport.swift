@@ -14,6 +14,7 @@ public enum ToolCatalogBuiltInToolKind: String, CaseIterable, Identifiable, Send
     case memorySearch
     case widgetCard
     case askUserInput
+    case getSystemTime
 
     public var id: String { rawValue }
 }
@@ -27,6 +28,7 @@ public enum ToolCatalogBuiltInToolStatusReason: String, Equatable, Sendable {
     case isolatedByWorldbook
     case widgetDisabled
     case askUserInputDisabled
+    case getSystemTimeDisabled
 }
 
 public struct ToolCatalogBuiltInToolState: Identifiable, Equatable, Sendable {
@@ -61,6 +63,7 @@ public enum ToolCatalogSupport {
         memoryTopK: Int,
         enableWidgetTool: Bool,
         enableAskUserInputTool: Bool,
+        enableGetSystemTimeTool: Bool,
         isIsolatedSession: Bool
     ) -> [ToolCatalogBuiltInToolState] {
         let memoryWriteConfiguredEnabled = enableMemory && enableMemoryWrite
@@ -94,6 +97,7 @@ public enum ToolCatalogSupport {
 
         let widgetReason: ToolCatalogBuiltInToolStatusReason = enableWidgetTool ? .enabled : .widgetDisabled
         let askUserInputReason: ToolCatalogBuiltInToolStatusReason = enableAskUserInputTool ? .enabled : .askUserInputDisabled
+        let getSystemTimeReason: ToolCatalogBuiltInToolStatusReason = enableGetSystemTimeTool ? .enabled : .getSystemTimeDisabled
 
         return [
             ToolCatalogBuiltInToolState(
@@ -120,6 +124,12 @@ public enum ToolCatalogSupport {
                 isConfiguredEnabled: enableAskUserInputTool,
                 isAvailableInCurrentSession: enableAskUserInputTool,
                 statusReason: askUserInputReason
+            ),
+            ToolCatalogBuiltInToolState(
+                kind: .getSystemTime,
+                isConfiguredEnabled: enableGetSystemTimeTool,
+                isAvailableInCurrentSession: enableGetSystemTimeTool,
+                statusReason: getSystemTimeReason
             )
         ]
     }
