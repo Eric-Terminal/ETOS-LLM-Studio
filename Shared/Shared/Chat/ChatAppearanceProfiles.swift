@@ -578,7 +578,12 @@ public final class ChatAppearanceProfileManager: ObservableObject {
 
         let delay = max(1, min(nextDate.timeIntervalSince(now()), 24 * 60 * 60))
         refreshTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                // 任务被取消（通常由下一次 scheduleNextRefresh 触发），直接退出，避免触发无限循环
+                return
+            }
             await MainActor.run { [weak self] in
                 self?.refreshActiveProfile()
             }
