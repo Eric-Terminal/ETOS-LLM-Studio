@@ -2603,3 +2603,4 @@
 "backup.decrypt.footer" = "Enter the password used when this backup was created.";
 "backup.decrypt.confirm" = "Decrypt & Restore";
 "本地备份与恢复" = "Local Backup & Restore";
+"密码已更新。" = "Password updated.";

@@ -18,6 +18,7 @@ struct AppLockSettingsView: View {
 
     @State private var newPassword: String = ""
     @State private var confirmPassword: String = ""
+    @State private var oldPasswordForChange: String = ""
     @State private var currentPasswordForDisable: String = ""
     @State private var errorMessage: String?
     @State private var isSetPasswordPresented: Bool = false
@@ -111,10 +112,15 @@ struct AppLockSettingsView: View {
                 : NSLocalizedString("设置密码", comment: "AppLockSettings set password alert title"),
             isPresented: $isSetPasswordPresented
         ) {
+            // 修改密码场景需要验证旧密码，防止旁路认证攻击
+            if appConfig.appLockEnabled {
+                SecureField(NSLocalizedString("当前密码", comment: "AppLockSettings current password field for change"), text: $oldPasswordForChange)
+            }
             SecureField(NSLocalizedString("新密码", comment: "AppLockSettings new password field"), text: $newPassword)
             SecureField(NSLocalizedString("确认密码", comment: "AppLockSettings confirm password field"), text: $confirmPassword)
             Button(NSLocalizedString("确定", comment: ""), action: applySetPassword)
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
+                oldPasswordForChange = ""
                 newPassword = ""
                 confirmPassword = ""
             }
@@ -141,24 +147,28 @@ struct AppLockSettingsView: View {
     private func applySetPassword() {
         guard newPassword == confirmPassword else {
             errorMessage = NSLocalizedString("两次输入的密码不一致。", comment: "AppLockSettings password mismatch error")
+            oldPasswordForChange = ""
             newPassword = ""
             confirmPassword = ""
             return
         }
         do {
             if appConfig.appLockEnabled {
-                // 修改密码（需要旧密码验证 — 此处通过 removePassword + setPassword 实现）
-                try lockManager.setPassword(newPassword)
+                // 修改密码：必须验证旧密码，防止旁路认证攻击
+                try lockManager.changePassword(old: oldPasswordForChange, new: newPassword)
+                successMessage = NSLocalizedString("密码已更新。", comment: "AppLockSettings change success")
             } else {
                 try lockManager.setPassword(newPassword)
+                successMessage = NSLocalizedString("密码已设置，应用锁已开启。", comment: "AppLockSettings set success")
             }
+            oldPasswordForChange = ""
             newPassword = ""
             confirmPassword = ""
             errorMessage = nil
-            successMessage = NSLocalizedString("密码已设置，应用锁已开启。", comment: "AppLockSettings set success")
             isSuccessAlertPresented = true
         } catch {
             errorMessage = error.localizedDescription
+            oldPasswordForChange = ""
             newPassword = ""
             confirmPassword = ""
         }

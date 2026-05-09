@@ -2425,3 +2425,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "backup.decrypt.footer" = "Entrez le mot de passe utilisé lors de la création de la sauvegarde.";
 "backup.decrypt.confirm" = "Déchiffrer et restaurer";
 "本地备份与恢复" = "Sauvegarde et restauration locale";
+"密码已更新。" = "Mot de passe mis à jour.";

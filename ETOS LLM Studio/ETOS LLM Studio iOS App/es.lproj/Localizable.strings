@@ -2425,3 +2425,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "backup.decrypt.footer" = "Introduce la contraseña utilizada al crear la copia de seguridad.";
 "backup.decrypt.confirm" = "Descifrar y restaurar";
 "本地备份与恢复" = "Copia de seguridad y restauración local";
+"密码已更新。" = "Contraseña actualizada.";
