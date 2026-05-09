@@ -277,7 +277,11 @@ extension ChatService {
         messagesToSend = filePreprocessing.messages
         fileAttachments = filePreprocessing.fileAttachments
 
-        var commonPayload: [String: Any] = ["temperature": aiTemperature, "top_p": aiTopP, "stream": enableStreaming]
+        let temperatureEnabled = UserDefaults.standard.object(forKey: "aiTemperatureEnabled") as? Bool ?? true
+        let topPEnabled = UserDefaults.standard.object(forKey: "aiTopPEnabled") as? Bool ?? true
+        var commonPayload: [String: Any] = ["stream": enableStreaming]
+        if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
+        if topPEnabled { commonPayload["top_p"] = aiTopP }
         if adapter is OpenAIAdapter {
             let includeUsageInStream = UserDefaults.standard.object(forKey: "enableOpenAIStreamIncludeUsage") as? Bool ?? true
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream

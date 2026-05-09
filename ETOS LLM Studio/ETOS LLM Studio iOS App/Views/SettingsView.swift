@@ -98,6 +98,8 @@ struct SettingsView: View {
                     ModelAdvancedSettingsView(
                         aiTemperature: $viewModel.aiTemperature,
                         aiTopP: $viewModel.aiTopP,
+                        aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
+                        aiTopPEnabled: $viewModel.aiTopPEnabled,
                         globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
                         selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
                         maxChatHistory: $viewModel.maxChatHistory,

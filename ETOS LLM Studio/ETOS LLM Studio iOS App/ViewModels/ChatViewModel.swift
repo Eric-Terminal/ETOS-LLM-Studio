@@ -124,6 +124,8 @@ final class ChatViewModel: ObservableObject {
     @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill"
     @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
     @AppStorage("aiTopP") var aiTopP: Double = 0.95
+    @AppStorage("aiTemperatureEnabled") var aiTemperatureEnabled: Bool = true
+    @AppStorage("aiTopPEnabled") var aiTopPEnabled: Bool = true
     @AppStorage("systemPrompt") var systemPrompt: String = ""
     @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
     @AppStorage("enableStreaming") var enableStreaming: Bool = true

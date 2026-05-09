@@ -14,6 +14,8 @@ struct ModelAdvancedSettingsView: View {
 
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
+    @Binding var aiTemperatureEnabled: Bool
+    @Binding var aiTopPEnabled: Bool
     @Binding var globalSystemPromptEntries: [GlobalSystemPromptEntry]
     @Binding var selectedGlobalSystemPromptEntryID: UUID?
     @Binding var maxChatHistory: Int
@@ -175,22 +177,28 @@ struct ModelAdvancedSettingsView: View {
         // MARK: - Tab 3：生成与输出
         Form {
             Section(NSLocalizedString("采样参数", comment: "")) {
-                VStack(alignment: .leading) {
-                    Text("Temperature \(String(format: "%.2f", aiTemperature))")
-                        .etFont(.subheadline)
-                    Slider(value: $aiTemperature, in: 0...2, step: 0.05)
-                        .onChange(of: aiTemperature) { _, value in
-                            handleTemperatureChange(value)
-                        }
+                Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
+                if aiTemperatureEnabled {
+                    VStack(alignment: .leading) {
+                        Text("Temperature \(String(format: "%.2f", aiTemperature))")
+                            .etFont(.subheadline)
+                        Slider(value: $aiTemperature, in: 0...2, step: 0.01)
+                            .onChange(of: aiTemperature) { _, value in
+                                handleTemperatureChange(value)
+                            }
+                    }
                 }
 
-                VStack(alignment: .leading) {
-                    Text("Top P \(String(format: "%.2f", aiTopP))")
-                        .etFont(.subheadline)
-                    Slider(value: $aiTopP, in: 0...1, step: 0.05)
-                        .onChange(of: aiTopP) { _, value in
-                            aiTopP = (value * 100).rounded() / 100
-                        }
+                Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
+                if aiTopPEnabled {
+                    VStack(alignment: .leading) {
+                        Text("Top P \(String(format: "%.2f", aiTopP))")
+                            .etFont(.subheadline)
+                        Slider(value: $aiTopP, in: 0...1, step: 0.01)
+                            .onChange(of: aiTopP) { _, value in
+                                aiTopP = (value * 100).rounded() / 100
+                            }
+                    }
                 }
             }
 

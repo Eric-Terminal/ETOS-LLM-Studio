@@ -20,6 +20,8 @@ struct ModelAdvancedSettingsView: View {
 
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
+    @Binding var aiTemperatureEnabled: Bool
+    @Binding var aiTopPEnabled: Bool
     @Binding var globalSystemPromptEntries: [GlobalSystemPromptEntry]
     @Binding var selectedGlobalSystemPromptEntryID: UUID?
     @Binding var maxChatHistory: Int
@@ -66,7 +68,8 @@ struct ModelAdvancedSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: Text(NSLocalizedString("全局系统提示词", comment: ""))) {
+            // MARK: Section 1：提示与注入
+            Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
                 TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(5...10)
                     .disabled(selectedGlobalPromptEntry == nil)
@@ -90,13 +93,7 @@ struct ModelAdvancedSettingsView: View {
                     }
                 }
 
-                Text(NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section(header: Text(NSLocalizedString("当前话题提示词", comment: "")), footer: Text(NSLocalizedString("仅对当前对话生效。", comment: ""))) {
-                TextField(NSLocalizedString("自定义话题提示词", comment: ""), text: Binding(
+                TextField(NSLocalizedString("话题提示词", comment: ""), text: Binding(
                     get: { currentSession?.topicPrompt ?? "" },
                     set: { newValue in
                         if var session = currentSession {
@@ -106,11 +103,9 @@ struct ModelAdvancedSettingsView: View {
                         }
                     }
                 ).watchKeyboardNewlineBinding(), axis: .vertical)
-                .lineLimit(5...10)
-            }
+                .lineLimit(3...8)
 
-            Section(header: Text(NSLocalizedString("增强提示词", comment: "")), footer: Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))) {
-                TextField(NSLocalizedString("自定义增强提示词", comment: ""), text: Binding(
+                TextField(NSLocalizedString("增强提示词", comment: ""), text: Binding(
                     get: { currentSession?.enhancedPrompt ?? "" },
                     set: { newValue in
                         if var session = currentSession {
@@ -120,108 +115,17 @@ struct ModelAdvancedSettingsView: View {
                         }
                     }
                 ).watchKeyboardNewlineBinding(), axis: .vertical)
-                .lineLimit(5...10)
-            }
+                .lineLimit(3...8)
 
-            Section(
-                header: Text(NSLocalizedString("系统时间注入", comment: "")),
-                footer: Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
                 Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
-                if includeSystemTimeInPrompt {
-                    Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
-                        ForEach(SystemTimeInjectionPosition.allCases) { position in
-                            Text(position.displayName).tag(position)
-                        }
-                    }
-                }
-            }
-
-            Section(
-                footer: Text(NSLocalizedString("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
                 Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
-                HStack {
-                    Text(NSLocalizedString("路标时间（分钟）", comment: ""))
-                    Spacer()
-                    TextField(NSLocalizedString("分钟", comment: ""), value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                        .disabled(!enablePeriodicTimeLandmark)
-                }
-            }
-            .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
-                if newValue < 1 {
-                    periodicTimeLandmarkIntervalMinutes = 1
-                }
             }
 
-            Section(header: Text(NSLocalizedString("会话设置", comment: ""))) {
+            // MARK: Section 2：会话与上下文
+            Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
                 Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $restoreLastSessionOnLaunch)
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
-            }
 
-            Section(
-                header: Text(NSLocalizedString("思考内容", comment: "")),
-                footer: Text(NSLocalizedString("开启后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
-                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
-            }
-
-            Section(header: Text(NSLocalizedString("输出设置", comment: ""))) {
-                Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $enableStreaming)
-            }
-
-            Section(
-                header: Text(NSLocalizedString("响应测速", comment: "Response speed metrics section title")),
-                footer: Text(
-                    "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
-                )
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
-                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
-                Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
-            }
-
-            Section(header: Text(NSLocalizedString("参数调整", comment: ""))) {
-                VStack(alignment: .leading) {
-                    Text(
-                        String(
-                            format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
-                            aiTemperature
-                        )
-                    )
-                    Slider(value: $aiTemperature, in: 0.0...2.0, step: 0.05)
-                        .onChange(of: aiTemperature) {
-                            handleTemperatureChange(aiTemperature)
-                        }
-                }
-
-                VStack(alignment: .leading) {
-                    Text(
-                        String(
-                            format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
-                            aiTopP
-                        )
-                    )
-                    Slider(value: $aiTopP, in: 0.0...1.0, step: 0.05)
-                        .onChange(of: aiTopP) {
-                            aiTopP = (aiTopP * 100).rounded() / 100
-                        }
-                }
-            }
-
-            Section(
-                header: Text(NSLocalizedString("上下文管理", comment: "")),
-                footer: Text(NSLocalizedString("设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。", comment: ""))
-            ) {
                 HStack {
                     Text(NSLocalizedString("最大上下文消息数", comment: ""))
                     Spacer()
@@ -229,14 +133,7 @@ struct ModelAdvancedSettingsView: View {
                         .multilineTextAlignment(.trailing)
                         .frame(width: 60)
                 }
-            }
 
-            Section(
-                header: Text(NSLocalizedString("性能设置", comment: "")),
-                footer: Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
-            ) {
                 HStack {
                     Text(NSLocalizedString("懒加载轮次", comment: ""))
                     Spacer()
@@ -245,10 +142,48 @@ struct ModelAdvancedSettingsView: View {
                         .frame(width: 60)
                 }
             }
+
+            // MARK: Section 3：生成与输出
+            Section(header: Text(NSLocalizedString("生成与输出", comment: ""))) {
+                Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $enableStreaming)
+                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
+                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
+
+                Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
+                if aiTemperatureEnabled {
+                    VStack(alignment: .leading) {
+                        Text(
+                            String(
+                                format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
+                                aiTemperature
+                            )
+                        )
+                        Slider(value: $aiTemperature, in: 0.0...2.0, step: 0.01)
+                            .onChange(of: aiTemperature) {
+                                handleTemperatureChange(aiTemperature)
+                            }
+                    }
+                }
+
+                Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
+                if aiTopPEnabled {
+                    VStack(alignment: .leading) {
+                        Text(
+                            String(
+                                format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
+                                aiTopP
+                            )
+                        )
+                        Slider(value: $aiTopP, in: 0.0...1.0, step: 0.01)
+                            .onChange(of: aiTopP) {
+                                aiTopP = (aiTopP * 100).rounded() / 100
+                            }
+                    }
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
     }
-
     private func handleTemperatureChange(_ value: Double) {
         let roundedValue = (value * 100).rounded() / 100
         aiTemperature = roundedValue
