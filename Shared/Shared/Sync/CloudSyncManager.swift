@@ -224,6 +224,18 @@ public final class CloudSyncManager: ObservableObject {
         }
     }
 
+    /// 激活 CloudKit zone 订阅（B2）：注册 APNs 静默推送，首次调用后幂等。
+    /// 应在应用启动且 CloudSync 已启用时调用。
+    public func activateCloudKitSubscriptionIfNeeded() {
+        guard isEnabled else { return }
+        #if canImport(CloudKit)
+        let transport = CloudKitCloudSyncTransport()
+        Task.detached(priority: .utility) {
+            await transport.subscribeToChanges()
+        }
+        #endif
+    }
+
     private var currentDeviceIdentifier: String {
         if let existing = userDefaults.string(forKey: Self.deviceIdentifierKey),
            !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

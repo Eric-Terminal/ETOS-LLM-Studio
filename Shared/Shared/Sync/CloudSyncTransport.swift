@@ -231,6 +231,42 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
+    // MARK: - CloudKit 订阅（B2）
+
+    private static let subscriptionIDKey = "cloudSync.zoneSubscriptionID"
+    private static let zoneSubscriptionID = "cloud-sync-snapshots-zone-sub"
+
+    /// 为 CloudSyncSnapshots zone 注册 CKRecordZoneSubscription，触发 APNs 静默推送。
+    /// 已存在时幂等跳过，失败仅记录日志不抛出。
+    func subscribeToChanges() async {
+        guard (try? await accountStatus()) == .available else { return }
+        let subID = Self.zoneSubscriptionID
+
+        // 若本地已记录订阅成功，跳过重复注册
+        if userDefaults.bool(forKey: Self.subscriptionIDKey) { return }
+
+        let subscription = CKRecordZoneSubscription(
+            zoneID: cloudSyncSnapshotZoneID,
+            subscriptionID: subID
+        )
+        let notificationInfo = CKSubscription.NotificationInfo()
+        // shouldSendContentAvailable = true → APNs 静默推送，后台唤醒应用
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+
+        do {
+            _ = try await database.modifySubscriptions(saving: [subscription], deleting: [])
+            userDefaults.set(true, forKey: Self.subscriptionIDKey)
+            cloudSyncLogger.info("CloudKit zone 订阅已注册（subID=\(subID, privacy: .public)）")
+        } catch let ckError as CKError where ckError.code == .serverRejectedRequest {
+            // 订阅已存在，标记本地标志避免重复尝试
+            userDefaults.set(true, forKey: Self.subscriptionIDKey)
+            cloudSyncLogger.info("CloudKit zone 订阅已存在，跳过注册")
+        } catch {
+            cloudSyncLogger.error("CloudKit zone 订阅注册失败：\(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// 幂等写入：savePolicy = .allKeys，无论记录新建或已存在均可正确保存
     private func upsert(_ record: CKRecord) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in

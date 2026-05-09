@@ -254,6 +254,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    BackupRestoreView()
+                } label: {
+                    SettingsListIconLabel("本地备份与恢复", icon: .backupRestore)
+                }
+
+                NavigationLink {
                     AppLockSettingsView()
                 } label: {
                     SettingsListIconLabel("应用锁", icon: .appLock)
@@ -453,6 +459,7 @@ extension SettingsListIcon {
     static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint)
     static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange)
     static let appLock = SettingsListIcon(systemName: "lock", backgroundColor: .red)
+    static let backupRestore = SettingsListIcon(systemName: "externaldrive.badge.timemachine", backgroundColor: .indigo)
 }
 
 struct SettingsListIconLabel: View {
