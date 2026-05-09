@@ -152,6 +152,14 @@ extension SyncEngine {
                     Persistence.saveMessages(mergedMessages, for: mergedSession.id)
                     imported += 1
                     continue
+                case .forked((let forkedSession, let forkedMessages)):
+                    // 真分叉：本地版本原地保留，远端克隆为带「同步分支」标签的独立会话
+                    let branchSession = makeBranchSession(from: forkedSession)
+                    Persistence.saveMessages(forkedMessages, for: branchSession.id)
+                    sessions.insert(branchSession, at: 0)
+                    messagesBySessionID[branchSession.id] = forkedMessages
+                    imported += 1
+                    continue
                 case .conflict:
                     break
                 }

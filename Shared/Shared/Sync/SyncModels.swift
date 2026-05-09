@@ -231,11 +231,13 @@ public struct SyncPackage: Codable {
     public var fontRouteConfigurationData: Data?
     /// 完整 AppStorage 快照（二进制 Plist），用于同步软件设置
     public var appStorageSnapshot: Data?
+    /// 用户画像（同步后若双端均有更新则合并并标记去重）
+    public var conversationUserProfile: ConversationUserProfile?
     /// 兼容旧版本：仅携带 systemPrompt 时回退使用
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, conversationUserProfile, globalSystemPrompt
     }
     
     public init(
@@ -260,6 +262,7 @@ public struct SyncPackage: Codable {
         fontFiles: [SyncedFontFile] = [],
         fontRouteConfigurationData: Data? = nil,
         appStorageSnapshot: Data? = nil,
+        conversationUserProfile: ConversationUserProfile? = nil,
         globalSystemPrompt: String? = nil
     ) {
         self.options = options
@@ -283,6 +286,7 @@ public struct SyncPackage: Codable {
         self.fontFiles = fontFiles
         self.fontRouteConfigurationData = fontRouteConfigurationData
         self.appStorageSnapshot = appStorageSnapshot
+        self.conversationUserProfile = conversationUserProfile
         self.globalSystemPrompt = globalSystemPrompt
     }
     
@@ -309,6 +313,7 @@ public struct SyncPackage: Codable {
         fontFiles = try container.decodeIfPresent([SyncedFontFile].self, forKey: .fontFiles) ?? []
         fontRouteConfigurationData = try container.decodeIfPresent(Data.self, forKey: .fontRouteConfigurationData)
         appStorageSnapshot = try container.decodeIfPresent(Data.self, forKey: .appStorageSnapshot)
+        conversationUserProfile = try container.decodeIfPresent(ConversationUserProfile.self, forKey: .conversationUserProfile)
         globalSystemPrompt = try container.decodeIfPresent(String.self, forKey: .globalSystemPrompt)
     }
 }

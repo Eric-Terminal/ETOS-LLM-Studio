@@ -31,11 +31,14 @@ public struct ConversationUserProfile: Codable, Hashable, Sendable {
     public let content: String
     public let updatedAt: Date
     public let sourceSessionID: UUID?
+    /// 两端画像在同步时产生分叉，需要 LLM 降维去重后清除此标记
+    public var needsLlmDedup: Bool
 
-    public init(content: String, updatedAt: Date, sourceSessionID: UUID? = nil) {
+    public init(content: String, updatedAt: Date, sourceSessionID: UUID? = nil, needsLlmDedup: Bool = false) {
         self.content = content
         self.updatedAt = updatedAt
         self.sourceSessionID = sourceSessionID
+        self.needsLlmDedup = needsLlmDedup
     }
 }
 
@@ -84,13 +87,13 @@ public enum ConversationMemoryManager {
         profileStore.loadProfile()
     }
 
-    public static func saveUserProfile(content: String, updatedAt: Date = Date(), sourceSessionID: UUID? = nil) throws {
+    public static func saveUserProfile(content: String, updatedAt: Date = Date(), sourceSessionID: UUID? = nil, needsLlmDedup: Bool = false) throws {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             try clearUserProfile()
             return
         }
-        let profile = ConversationUserProfile(content: trimmed, updatedAt: updatedAt, sourceSessionID: sourceSessionID)
+        let profile = ConversationUserProfile(content: trimmed, updatedAt: updatedAt, sourceSessionID: sourceSessionID, needsLlmDedup: needsLlmDedup)
         try profileStore.saveProfile(profile)
         NotificationCenter.default.post(name: .conversationMemoryDidChange, object: nil)
     }
@@ -196,7 +199,8 @@ private struct ConversationUserProfileStore {
             return ConversationUserProfile(
                 content: record.content,
                 updatedAt: Date(timeIntervalSince1970: record.updatedAt),
-                sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:))
+                sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
+                needsLlmDedup: record.needsLlmDedup
             )
         }) else {
             return (false, nil)
@@ -220,7 +224,8 @@ private struct ConversationUserProfileStore {
                 singletonKey: 1,
                 content: profile.content,
                 updatedAt: profile.updatedAt.timeIntervalSince1970,
-                sourceSessionID: profile.sourceSessionID?.uuidString
+                sourceSessionID: profile.sourceSessionID?.uuidString,
+                needsLlmDedup: profile.needsLlmDedup
             )
             try record.save(db)
             return true
@@ -266,11 +271,13 @@ private struct ConversationUserProfileStore {
             case content
             case updatedAt = "updated_at"
             case sourceSessionID = "source_session_id"
+            case needsLlmDedup = "needs_llm_dedup"
         }
 
         var singletonKey: Int
         var content: String
         var updatedAt: Double
         var sourceSessionID: String?
+        var needsLlmDedup: Bool
     }
 }

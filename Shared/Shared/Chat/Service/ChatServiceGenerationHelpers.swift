@@ -188,6 +188,12 @@ extension ChatService {
 
     private func updateConversationProfileIfNeeded(sessionID: UUID, latestSummary: String) async {
         guard isConversationProfileDailyUpdateEnabled() else { return }
+
+        // 检测同步合并标记：若存在双端拼接画像，先执行 LLM 去重再进行常规更新
+        if let existingProfile = ConversationMemoryManager.loadUserProfile(), existingProfile.needsLlmDedup {
+            await deduplicateConversationProfile(existingProfile, sessionID: sessionID)
+        }
+
         guard ConversationMemoryManager.shouldUpdateUserProfile(on: Date()) else { return }
 
         let existingProfileText = ConversationMemoryManager.loadUserProfile()?.content ?? ""
@@ -229,6 +235,48 @@ extension ChatService {
             )
         } catch {
             logger.warning("异步用户画像更新失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 对同步合并后的拼接画像执行 LLM 去重，完成后清除 needsLlmDedup 标记
+    private func deduplicateConversationProfile(_ profile: ConversationUserProfile, sessionID: UUID) async {
+        let dedupSystemPrompt = NSLocalizedString("""
+        你是用户画像去重助手。以下画像由两台设备的版本拼接而成，可能存在重复信息。
+        请合并去重，输出一份简洁统一的用户画像。
+        约束：
+        - 中文输出 80~220 字，其他语言输出 70~180 个词；
+        - 保留所有独特信息，去除完全重复的描述；
+        - 仅输出画像正文。
+        """, comment: "User profile dedup system prompt")
+        let dedupUserPrompt = String(
+            format: NSLocalizedString("""
+            待去重画像：
+            %@
+            """, comment: "User profile dedup user prompt"),
+            profile.content
+        )
+
+        do {
+            let rawProfile = try await generateDetachedChatCompletion(
+                systemPrompt: dedupSystemPrompt,
+                userPrompt: dedupUserPrompt,
+                temperature: 0.2,
+                runnableModel: resolvedConversationSummaryModel(),
+                requestSource: .conversationProfile,
+                sessionID: sessionID
+            )
+            let deduped = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
+            guard !deduped.isEmpty else { return }
+            // 保存去重结果，清除 needsLlmDedup 标记
+            try ConversationMemoryManager.saveUserProfile(
+                content: deduped,
+                updatedAt: profile.updatedAt,
+                sourceSessionID: profile.sourceSessionID,
+                needsLlmDedup: false
+            )
+        } catch {
+            logger.warning("用户画像 LLM 去重失败: \(error.localizedDescription)")
+            // 失败时不清除标记，下次重试
         }
     }
 

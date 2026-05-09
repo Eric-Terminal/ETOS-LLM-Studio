@@ -527,6 +527,13 @@ extension PersistenceAuxiliaryGRDBStore {
                     )
                 """)
             }
+
+            migrator.registerMigration("v3_add_needs_llm_dedup_to_user_profile") { db in
+                try db.execute(sql: """
+                    ALTER TABLE conversation_user_profile
+                    ADD COLUMN needs_llm_dedup INTEGER NOT NULL DEFAULT 0
+                """)
+            }
         }
         try migrator.migrate(self.dbPool)
         self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")

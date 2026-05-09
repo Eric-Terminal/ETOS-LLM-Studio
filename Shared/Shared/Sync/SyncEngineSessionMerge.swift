@@ -45,6 +45,11 @@ extension SyncEngine {
         incomingSession: ChatSession,
         incomingMessages: [ChatMessage]
     ) -> DeepMergeResult<(ChatSession, [ChatMessage])> {
+        // 优先检测真分叉：双方均在公共祖先之后有新消息
+        if detectMessageFork(local: localMessages, incoming: incomingMessages) {
+            return .forked((incomingSession, incomingMessages))
+        }
+
         guard let mergedSession = mergeChatSessionMetadata(local: localSession, incoming: incomingSession) else {
             return .conflict
         }
@@ -57,6 +62,20 @@ extension SyncEngine {
             return .unchanged(payload)
         }
         return .merged(payload)
+    }
+
+    /// 检测两条消息序列是否存在真分叉（双方均在最后公共祖先之后有新消息）
+    static func detectMessageFork(local: [ChatMessage], incoming: [ChatMessage]) -> Bool {
+        let overlapCount = min(local.count, incoming.count)
+        guard overlapCount > 0 else { return false }
+
+        for index in 0..<overlapCount {
+            if mergeChatMessage(local[index], incoming[index]) == nil {
+                // 在重叠范围内发现消息无法合并 → 双方在此处分叉
+                return true
+            }
+        }
+        return false
     }
 
     static func mergeChatSessionMetadata(local: ChatSession, incoming: ChatSession) -> ChatSession? {
