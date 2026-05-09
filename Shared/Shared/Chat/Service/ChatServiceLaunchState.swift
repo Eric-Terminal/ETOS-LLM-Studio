@@ -117,7 +117,7 @@ extension ChatService {
         newTemporarySession: ChatSession
     ) -> ChatSession {
         let defaults = UserDefaults.standard
-        let shouldRestore = (defaults.object(forKey: restoreLastSessionOnLaunchEnabledStorageKey) as? Bool) ?? false
+        let shouldRestore = AppConfigStore.shared.restoreLastSessionOnLaunch
         guard shouldRestore else { return newTemporarySession }
 
         if let rawID = defaults.string(forKey: lastActiveSessionIDStorageKey),

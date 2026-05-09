@@ -13,8 +13,7 @@ import Shared
 public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @ObservedObject private var achievementCenter = AchievementCenter.shared
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var isShowingIntroDetails = false
     
     public init() {}
@@ -287,8 +286,8 @@ public struct ExtendedFeaturesView: View {
     }
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
-            && useColorfulSettingsIcons
+        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
+            && appConfig.settingsUseColorfulIcons
     }
 
     @ViewBuilder
@@ -310,12 +309,7 @@ public struct ExtendedFeaturesView: View {
 
 struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
-    
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var isShowingIntroDetails = false
     
     var body: some View {
@@ -339,16 +333,16 @@ struct LongTermMemoryFeatureView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $enableMemory)
+                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $appConfig.enableMemory)
             } footer: {
                 Text(NSLocalizedString("启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。", comment: "启用记忆功能说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
             
-            if enableMemory {
+            if appConfig.enableMemory {
                 Section {
-                    Toggle(NSLocalizedString("是否记录新的记忆", comment: "是否记录新记忆开关"), isOn: $enableMemoryWrite)
+                    Toggle(NSLocalizedString("是否记录新的记忆", comment: "是否记录新记忆开关"), isOn: $appConfig.enableMemoryWrite)
                 } footer: {
                     Text(NSLocalizedString("关闭后仅读取记忆，不保存新内容。", comment: "关闭记忆写入说明"))
                         .etFont(.footnote)
@@ -356,9 +350,9 @@ struct LongTermMemoryFeatureView: View {
                 }
 
                 Section {
-                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $enableConversationMemoryAsync)
+                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $appConfig.enableConversationMemoryAsync)
 
-                    if enableConversationMemoryAsync {
+                    if appConfig.enableConversationMemoryAsync {
                         NavigationLink {
                             ConversationMemorySettingsView()
                                 .environmentObject(viewModel)
@@ -424,8 +418,8 @@ struct LongTermMemoryFeatureView: View {
     }
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
-            && useColorfulSettingsIcons
+        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
+            && appConfig.settingsUseColorfulIcons
     }
 
     @ViewBuilder

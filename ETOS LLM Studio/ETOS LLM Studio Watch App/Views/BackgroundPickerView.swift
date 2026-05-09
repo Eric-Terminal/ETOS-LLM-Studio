@@ -32,8 +32,8 @@ struct BackgroundPickerView: View {
     @State private var isImportingBackground = false
     @State private var importErrorMessage: String?
     @State private var backgroundSourceHistory: [String] = []
-    @AppStorage("watch.background.lastSource") private var lastBackgroundSource = ""
-    @AppStorage("watch.background.sourceHistory") private var backgroundSourceHistoryRawValue = "[]"
+    @EnvironmentObject private var appConfig: AppConfigStore
+    
     
     // MARK: - 私有属性
     
@@ -84,7 +84,7 @@ struct BackgroundPickerView: View {
                 }
 
                 Button {
-                    importSourceText = backgroundSourceHistory.first ?? lastBackgroundSource
+                    importSourceText = backgroundSourceHistory.first ?? appConfig.watchBackgroundLastSource
                     isShowingImportSheet = true
                 } label: {
                     Group {
@@ -178,10 +178,10 @@ struct BackgroundPickerView: View {
         } message: {
             Text(importErrorMessage ?? "")
         }
-        .onChange(of: backgroundSourceHistoryRawValue) { _, _ in
+        .onChange(of: appConfig.watchBackgroundSourceHistory) { _, _ in
             refreshBackgroundSourceHistory()
         }
-        .onChange(of: lastBackgroundSource) { _, _ in
+        .onChange(of: appConfig.watchBackgroundLastSource) { _, _ in
             refreshBackgroundSourceHistory()
         }
         .task {
@@ -200,14 +200,14 @@ struct BackgroundPickerView: View {
             source,
             to: backgroundSourceHistory
         )
-        backgroundSourceHistoryRawValue = WatchImportSourceHistory.rawValue(for: updatedHistory)
-        lastBackgroundSource = updatedHistory.first ?? ""
+        appConfig.watchBackgroundSourceHistory = WatchImportSourceHistory.rawValue(for: updatedHistory)
+        appConfig.watchBackgroundLastSource = updatedHistory.first ?? ""
         backgroundSourceHistory = updatedHistory
     }
 
     private func refreshBackgroundSourceHistory() {
-        let rawValue = backgroundSourceHistoryRawValue
-        let fallback = lastBackgroundSource
+        let rawValue = appConfig.watchBackgroundSourceHistory
+        let fallback = appConfig.watchBackgroundLastSource
         Task {
             let history = await Task.detached(priority: .utility) {
                 WatchImportSourceHistory.values(from: rawValue, fallback: fallback)

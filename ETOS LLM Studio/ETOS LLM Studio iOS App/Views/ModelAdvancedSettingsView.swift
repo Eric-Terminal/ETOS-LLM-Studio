@@ -10,7 +10,7 @@ import SwiftUI
 import Shared
 
 struct ModelAdvancedSettingsView: View {
-    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
+    @EnvironmentObject private var appConfig: AppConfigStore
 
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
@@ -148,7 +148,7 @@ struct ModelAdvancedSettingsView: View {
         // MARK: - Tab 2：会话与上下文
         Form {
             Section(NSLocalizedString("基础行为", comment: "")) {
-                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $restoreLastSessionOnLaunch)
+                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
             }
 

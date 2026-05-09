@@ -67,8 +67,7 @@ struct ChatView: View {
     @State var pendingJumpRequest: MessageJumpRequest?
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
-    @AppStorage("chat.composer.draft") var draftText: String = ""
-    @AppStorage(ChatPickerPresentationStyle.storageKey) var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
+    @EnvironmentObject private var appConfig: AppConfigStore
     @Namespace var modelPickerNamespace
     @Namespace var sessionPickerNamespace
 
@@ -120,7 +119,7 @@ struct ChatView: View {
         !usesBottomSheetPickerStyle && (showModelPickerPanel || showSessionPickerPanel)
     }
     var chatPickerPresentationStyle: ChatPickerPresentationStyle {
-        ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue)
+        ChatPickerPresentationStyle.resolvedStyle(rawValue: appConfig.chatPickerPresentationStyle)
     }
     var usesBottomSheetPickerStyle: Bool {
         chatPickerPresentationStyle == .bottomSheet
@@ -516,7 +515,7 @@ struct ChatView: View {
                 pendingBottomSnapTask?.cancel()
                 pendingBottomSnapTask = nil
             }
-            .onChange(of: chatPickerPresentationStyleRawValue) { _, _ in
+            .onChange(of: appConfig.chatPickerPresentationStyle) { _, _ in
                 showModelPickerPanel = false
                 showSessionPickerPanel = false
                 activeChatPickerSheet = nil

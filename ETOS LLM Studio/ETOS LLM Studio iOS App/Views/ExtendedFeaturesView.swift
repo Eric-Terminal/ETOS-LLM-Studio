@@ -144,10 +144,7 @@ struct ExtendedFeaturesView: View {
 
 struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
-    
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var isShowingIntroDetails = false
     
     var body: some View {
@@ -179,16 +176,16 @@ struct LongTermMemoryFeatureView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $enableMemory)
+                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $appConfig.enableMemory)
             } footer: {
                 Text(NSLocalizedString("启用后，AI 会在响应前自动检索相关记忆，并可选择写入新的记忆片段。", comment: "启用记忆功能说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
             
-            if enableMemory {
+            if appConfig.enableMemory {
                 Section {
-                    Toggle(NSLocalizedString("允许写入新的记忆", comment: "允许写入新记忆开关"), isOn: $enableMemoryWrite)
+                    Toggle(NSLocalizedString("允许写入新的记忆", comment: "允许写入新记忆开关"), isOn: $appConfig.enableMemoryWrite)
                 } footer: {
                     Text(NSLocalizedString("关闭后仅读取记忆，不会请求保存新内容。", comment: "关闭记忆写入说明"))
                         .etFont(.footnote)
@@ -196,9 +193,9 @@ struct LongTermMemoryFeatureView: View {
                 }
 
                 Section {
-                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $enableConversationMemoryAsync)
+                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $appConfig.enableConversationMemoryAsync)
 
-                    if enableConversationMemoryAsync {
+                    if appConfig.enableConversationMemoryAsync {
                         NavigationLink {
                             ConversationMemorySettingsView()
                                 .environmentObject(viewModel)

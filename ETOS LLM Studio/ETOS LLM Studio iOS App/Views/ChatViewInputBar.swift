@@ -17,12 +17,12 @@ extension ChatView {
                 request: request,
                 submitAction: { answers in
                     composerFocused = false
-                    draftText = ""
+                    appConfig.composerDraft = ""
                     viewModel.submitAskUserInputAnswers(answers, for: request)
                 },
                 cancelAction: {
                     composerFocused = false
-                    draftText = ""
+                    appConfig.composerDraft = ""
                     viewModel.cancelAskUserInputRequest(using: request)
                 }
             )
@@ -31,9 +31,9 @@ extension ChatView {
         } else {
             TelegramMessageComposer(
                 text: Binding(
-                    get: { draftText },
+                    get: { appConfig.composerDraft },
                     set: { newValue in
-                        draftText = newValue
+                        appConfig.composerDraft = newValue
                         viewModel.userInput = newValue
                     }
                 ),
@@ -41,7 +41,7 @@ extension ChatView {
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
                     viewModel.sendMessage()
-                    draftText = ""
+                    appConfig.composerDraft = ""
                 },
                 stopAction: {
                     viewModel.cancelSending()
@@ -49,7 +49,7 @@ extension ChatView {
                 focus: $composerFocused
             )
             .onAppear {
-                viewModel.userInput = draftText
+                viewModel.userInput = appConfig.composerDraft
             }
             .padding(.bottom, -tabBarCompensation)
         }

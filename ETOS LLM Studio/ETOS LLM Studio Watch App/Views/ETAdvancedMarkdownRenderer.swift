@@ -21,8 +21,8 @@ struct ETAdvancedMarkdownRenderer: View {
     let customTextColor: Color?
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
+    
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var imagePreviewItem: ETWatchMarkdownImagePreviewItem?
 
     init(
@@ -54,7 +54,7 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
-        let fontScale = FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled)
+        let fontScale = FontLibrary.effectiveFontScale(appConfig.fontScale, isCustomFontEnabled: appConfig.customFontEnabled)
         if enableMarkdown {
             if let prepared = effectivePreparedContent {
                 if shouldUseMathEngine(prepared) {

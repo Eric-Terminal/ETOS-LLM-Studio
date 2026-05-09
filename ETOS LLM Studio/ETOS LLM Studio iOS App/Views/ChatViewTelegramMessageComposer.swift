@@ -34,17 +34,16 @@ struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
+    @EnvironmentObject private var appConfig: AppConfigStore
 
     private let controlSize: CGFloat = 40
     private let expandedControlSize: CGFloat = 34
     private var effectiveFontScale: CGFloat {
-        CGFloat(FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled))
+        CGFloat(FontLibrary.effectiveFontScale(appConfig.fontScale, isCustomFontEnabled: appConfig.customFontEnabled))
     }
     private let inputBasePointSize: CGFloat = 16
     private var measuredInputPointSize: CGFloat {
-        CGFloat(FontLibrary.scaledPointSize(Double(inputBasePointSize), scale: customFontScale, isCustomFontEnabled: isCustomFontEnabled))
+        CGFloat(FontLibrary.scaledPointSize(Double(inputBasePointSize), scale: appConfig.fontScale, isCustomFontEnabled: appConfig.customFontEnabled))
     }
     private var inputUIFont: UIFont {
         .systemFont(ofSize: measuredInputPointSize)

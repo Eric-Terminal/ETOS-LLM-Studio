@@ -26,7 +26,7 @@ struct ProviderDetailView: View {
     @State private var showErrorAlert = false
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
-    @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
+    @EnvironmentObject private var appConfig: AppConfigStore
 
     init(
         provider: Provider,
@@ -57,8 +57,8 @@ struct ProviderDetailView: View {
             }
 
             Section(NSLocalizedString("列表设置", comment: "")) {
-                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
-                if groupByFamilySection {
+                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $appConfig.providerDetailGroupByMainstream)
+                if appConfig.providerDetailGroupByMainstream {
                     Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
@@ -68,7 +68,7 @@ struct ProviderDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if groupByFamilySection {
+            if appConfig.providerDetailGroupByMainstream {
                 let activeSections = sections(forActive: true)
                 let inactiveSections = sections(forActive: false)
 
@@ -100,7 +100,7 @@ struct ProviderDetailView: View {
                 )
             }
         }
-        .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
+        .id(appConfig.providerDetailGroupByMainstream ? "family-grouped" : "flat-grouped")
         .overlay {
             if isShowingFetchProgress {
                 progressOverlay
@@ -247,7 +247,7 @@ struct ProviderDetailView: View {
         let indices = filteredIndices(forActive: isActive)
         let sectionPrefix = isActive ? NSLocalizedString("已添加", comment: "") : NSLocalizedString("未添加", comment: "")
 
-        guard groupByFamilySection else {
+        guard appConfig.providerDetailGroupByMainstream else {
             return [ModelListSection(title: sectionPrefix, indices: indices, isActive: isActive)]
         }
 

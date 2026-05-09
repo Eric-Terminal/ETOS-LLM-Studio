@@ -203,18 +203,37 @@ extension SyncEngine {
         imported += globalPromptMergeResult.imported
         skipped += globalPromptMergeResult.skipped
 
+        // 构建当前 GRDB 状态用于去重比较
+        let currentRows = Persistence.loadAllAppConfigs()
+        let currentByKey: [String: Any] = currentRows.reduce(into: [:]) { result, row in
+            switch row.typeHint {
+            case "real":    if let v = row.real    { result[row.key] = v }
+            case "integer": if let v = row.integer { result[row.key] = v }
+            default:        if let v = row.text    { result[row.key] = v }
+            }
+        }
+
         for (key, incomingValue) in incomingSnapshot {
-            guard isCandidateAppStorageKey(key) else {
+            guard isCandidateAppStorageKey(key),
+                  let configKey = AppConfigKey(rawValue: key), configKey.isSynced else {
                 skipped += 1
                 continue
             }
-            let localValue = userDefaults.object(forKey: key)
+            let localValue = currentByKey[key]
             if appStorageValuesEqual(localValue, incomingValue) {
                 skipped += 1
                 continue
             }
-
-            userDefaults.set(incomingValue, forKey: key)
+            // 直接写入 GRDB，合并完成后由调用方刷新 AppConfigStore
+            if let v = incomingValue as? Bool {
+                Persistence.writeAppConfig(key: key, integer: v ? 1 : 0)
+            } else if let v = incomingValue as? Int {
+                Persistence.writeAppConfig(key: key, integer: v)
+            } else if let v = incomingValue as? Double {
+                Persistence.writeAppConfig(key: key, real: v)
+            } else if let v = incomingValue as? String {
+                Persistence.writeAppConfig(key: key, text: v)
+            }
             imported += 1
         }
 
@@ -237,15 +256,16 @@ extension SyncEngine {
     }
 
     static func collectAppStorageSnapshot(userDefaults: UserDefaults) -> [String: Any] {
-        var snapshot: [String: Any]
-        if userDefaults === UserDefaults.standard,
-           let bundleIdentifier = Bundle.main.bundleIdentifier,
-           let domain = userDefaults.persistentDomain(forName: bundleIdentifier),
-           !domain.isEmpty {
-            snapshot = domain.filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
-        } else {
-            snapshot = userDefaults.dictionaryRepresentation()
-                .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+        // 从 GRDB 读取已迁移的配置（线程安全，无需 @MainActor）
+        var snapshot: [String: Any] = [:]
+        let rows = Persistence.loadAllAppConfigs()
+        for row in rows {
+            guard let key = AppConfigKey(rawValue: row.key), key.isSynced else { continue }
+            switch row.typeHint {
+            case "real":    if let v = row.real    { snapshot[row.key] = v }
+            case "integer": if let v = row.integer { snapshot[row.key] = v }
+            default:        if let v = row.text    { snapshot[row.key] = v }
+            }
         }
 
         let globalPromptSnapshot = GlobalSystemPromptStore.load(userDefaults: userDefaults)

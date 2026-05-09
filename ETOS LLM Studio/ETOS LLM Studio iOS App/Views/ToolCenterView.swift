@@ -16,11 +16,7 @@ struct ToolCenterView: View {
     @StateObject var mcpManager = MCPManager.shared
     @StateObject var shortcutManager = ShortcutToolManager.shared
     @StateObject var skillManager = SkillManager.shared
-
-    @AppStorage("enableMemory") var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
-    @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("memoryTopK") var memoryTopK: Int = 3
+    @EnvironmentObject private var appConfig: AppConfigStore
 
     @State var searchText: String = ""
     @State var showEnabledOnly: Bool = false
@@ -32,10 +28,10 @@ struct ToolCenterView: View {
 
     var builtInStates: [ToolCatalogBuiltInToolState] {
         ToolCatalogSupport.builtInToolStates(
-            enableMemory: enableMemory,
-            enableMemoryWrite: enableMemoryWrite,
-            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-            memoryTopK: memoryTopK,
+            enableMemory: appConfig.enableMemory,
+            enableMemoryWrite: appConfig.enableMemoryWrite,
+            enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
+            memoryTopK: appConfig.memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),

@@ -49,8 +49,8 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
+    
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var settingsResearchTask: Task<Void, Never>?
     private let embedsInNavigationStack: Bool
 
@@ -293,8 +293,8 @@ struct SettingsView: View {
     // MARK: - 辅助方法
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
-            && useColorfulSettingsIcons
+        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
+            && appConfig.settingsUseColorfulIcons
     }
 
     @ViewBuilder

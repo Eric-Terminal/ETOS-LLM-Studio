@@ -12,9 +12,7 @@ import UniformTypeIdentifiers
 
 struct FontSettingsView: View {
     @Environment(\.editMode) private var editMode
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
-    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -47,7 +45,7 @@ struct FontSettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: $isCustomFontEnabled)
+                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: $appConfig.customFontEnabled)
             } footer: {
                 Text(NSLocalizedString("关闭后全局回退为系统字体；已导入字体与优先级配置会保留。", comment: ""))
                     .etFont(.footnote)
@@ -72,20 +70,20 @@ struct FontSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             reloadData()
         }
-        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+        .onChange(of: appConfig.customFontEnabled) { _, isEnabled in
             if isEnabled {
                 FontLibrary.registerAllFontsIfNeeded()
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
-        .onChange(of: fallbackScopeRawValue) { _, _ in
+        .onChange(of: appConfig.fontFallbackScope) { _, _ in
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
-        .onChange(of: customFontScale) { _, newValue in
+        .onChange(of: appConfig.fontScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                customFontScale = normalizedValue
+                appConfig.fontScale = normalizedValue
                 return
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
@@ -169,20 +167,20 @@ struct FontSettingsView: View {
     }
 
     private var fallbackScope: FontFallbackScope {
-        FontFallbackScope(rawValue: fallbackScopeRawValue) ?? .segment
+        FontFallbackScope(rawValue: appConfig.fontFallbackScope) ?? .segment
     }
 
     private var fallbackScopeBinding: Binding<FontFallbackScope> {
         Binding(
             get: { fallbackScope },
-            set: { fallbackScopeRawValue = $0.rawValue }
+            set: { appConfig.fontFallbackScope = $0.rawValue }
         )
     }
 
     private var fontScaleBinding: Binding<Double> {
         Binding(
-            get: { FontLibrary.normalizedFontScale(customFontScale) },
-            set: { customFontScale = FontLibrary.normalizedFontScale($0) }
+            get: { FontLibrary.normalizedFontScale(appConfig.fontScale) },
+            set: { appConfig.fontScale = FontLibrary.normalizedFontScale($0) }
         )
     }
 

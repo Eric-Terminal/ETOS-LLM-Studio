@@ -37,7 +37,7 @@ struct SettingsView: View {
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
-    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -315,7 +315,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func settingsListIcon(_ icon: SettingsListIcon) -> some View {
-        if useColorfulSettingsIcons {
+        if appConfig.settingsUseColorfulIcons {
             SettingsListIconView(icon: icon)
         } else {
             SettingsListPlainIconView(icon: icon)
@@ -451,7 +451,7 @@ extension SettingsListIcon {
 struct SettingsListIconLabel: View {
     let title: String
     let icon: SettingsListIcon
-    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
+    @EnvironmentObject private var appConfig: AppConfigStore
 
     init(_ titleKey: String, icon: SettingsListIcon) {
         self.title = NSLocalizedString(titleKey, comment: "设置列表入口标题")
@@ -460,7 +460,7 @@ struct SettingsListIconLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if useColorfulSettingsIcons {
+            if appConfig.settingsUseColorfulIcons {
                 SettingsListIconView(icon: icon)
             } else {
                 SettingsListPlainIconView(icon: icon)

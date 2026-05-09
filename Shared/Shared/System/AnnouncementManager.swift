@@ -181,16 +181,22 @@ public class AnnouncementManager: ObservableObject {
     /// 是否正在加载
     @Published public var isLoading: Bool = false
     
-    // MARK: - AppStorage 持久化
+    // MARK: - 持久化（委托到 AppConfigStore）
     
-    /// 上次显示的通知ID
-    @AppStorage("lastAnnouncementId") private var lastAnnouncementId: Int = 0
+    private var lastAnnouncementId: Int {
+        get { AppConfigStore.shared.lastAnnouncementId }
+        set { AppConfigStore.shared.lastAnnouncementId = newValue }
+    }
     
-    /// 旧版本隐藏标记（迁移用）
-    @AppStorage("hideAnnouncementSection") private var hideAnnouncementSection: Bool = false
+    private var hideAnnouncementSection: Bool {
+        get { AppConfigStore.shared.hideAnnouncementSection }
+        set { AppConfigStore.shared.hideAnnouncementSection = newValue }
+    }
 
-    /// 已隐藏的公告 key 列表
-    @AppStorage("hiddenAnnouncementKeys") private var hiddenAnnouncementKeysRaw: String = ""
+    private var hiddenAnnouncementKeysRaw: String {
+        get { AppConfigStore.shared.hiddenAnnouncementKeysRaw }
+        set { AppConfigStore.shared.hiddenAnnouncementKeysRaw = newValue }
+    }
     
     // MARK: - 私有属性
     

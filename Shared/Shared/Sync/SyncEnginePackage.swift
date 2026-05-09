@@ -336,6 +336,7 @@ extension SyncEngine {
             summary.skippedAppStorageValues = result.skipped
             if result.imported > 0 {
                 Task { @MainActor in
+                    AppConfigStore.shared.reloadAll()
                     ChatAppearanceProfileManager.shared.reloadFromStorage()
                 }
             }

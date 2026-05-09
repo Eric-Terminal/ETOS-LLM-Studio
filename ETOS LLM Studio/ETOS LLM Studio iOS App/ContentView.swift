@@ -28,10 +28,7 @@ struct ContentView: View {
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
+    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var isNativeChatPresented: Bool = true
     @State private var isNativeSettingsPresented: Bool = false
     
@@ -55,10 +52,10 @@ struct ContentView: View {
     private var baseContent: some View {
         nativeNavigationContent
         .environment(\.font, rootBodyFont)
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appLanguageRawValue))
+        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
         .onAppear {
             normalizeChatNavigationModeIfNeeded()
-            AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
+            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
@@ -67,24 +64,24 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
         }
-        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+        .onChange(of: appConfig.customFontEnabled) { _, isEnabled in
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
-        .onChange(of: customFontScale) { _, newValue in
+        .onChange(of: appConfig.fontScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                customFontScale = normalizedValue
+                appConfig.fontScale = normalizedValue
             }
             refreshRootBodyFont()
         }
-        .onChange(of: chatNavigationModeRawValue) { _, _ in
+        .onChange(of: appConfig.chatNavigationMode) { _, _ in
             normalizeChatNavigationModeIfNeeded()
             isNativeSettingsPresented = false
             isNativeChatPresented = true
         }
-        .onChange(of: appLanguageRawValue) { _, newValue in
+        .onChange(of: appConfig.appLanguage) { _, newValue in
             AppLanguageRuntime.apply(rawValue: newValue)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
@@ -313,8 +310,8 @@ struct ContentView: View {
     }
 
     private func normalizeChatNavigationModeIfNeeded() {
-        guard chatNavigationModeRawValue != ChatNavigationMode.legacyOverlay.rawValue else { return }
-        chatNavigationModeRawValue = ChatNavigationMode.legacyOverlay.rawValue
+        guard appConfig.chatNavigationMode != ChatNavigationMode.legacyOverlay.rawValue else { return }
+        appConfig.chatNavigationMode = ChatNavigationMode.legacyOverlay.rawValue
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {

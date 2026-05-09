@@ -17,10 +17,10 @@ struct ToolCenterView: View {
     @StateObject private var shortcutManager = ShortcutToolManager.shared
     @StateObject private var skillManager = SkillManager.shared
 
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
+    
+    
+    
+    @EnvironmentObject private var appConfig: AppConfigStore
 
     @State private var showEnabledOnly: Bool = false
     @State private var isShowingIntroDetails = false
@@ -31,10 +31,10 @@ struct ToolCenterView: View {
 
     private var builtInStates: [ToolCatalogBuiltInToolState] {
         ToolCatalogSupport.builtInToolStates(
-            enableMemory: enableMemory,
-            enableMemoryWrite: enableMemoryWrite,
-            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-            memoryTopK: memoryTopK,
+            appConfig.enableMemory: appConfig.enableMemory,
+            appConfig.enableMemoryWrite: appConfig.enableMemoryWrite,
+            appConfig.enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
+            appConfig.memoryTopK: appConfig.memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
@@ -260,7 +260,7 @@ struct ToolCenterView: View {
             ) {
                 Toggle(
                     NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                    isOn: $enableMemory
+                    isOn: $appConfig.enableMemory
                 )
 
                 ForEach(filteredBuiltInStates) { state in
@@ -521,7 +521,7 @@ struct ToolCenterView: View {
             case .enabled:
                 return String(
                     format: NSLocalizedString("已允许主动检索，Top K = %d。", comment: "Memory search enabled with top k"),
-                    state.memoryTopK
+                    state.appConfig.memoryTopK
                 )
             case .memoryDisabled:
                 return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
