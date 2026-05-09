@@ -20,6 +20,8 @@ public final class AppToolManager: ObservableObject {
     nonisolated static let chatToolsEnabledUserDefaultsKey = "appTools.chatToolsEnabled"
     nonisolated static let enabledToolIDsUserDefaultsKey = "appTools.enabledToolIDs"
     nonisolated static let toolApprovalPoliciesUserDefaultsKey = "appTools.toolApprovalPolicies"
+    // 记录已经向用户"首次引入"过的默认工具 ID，防止每次启动都强制重新启用
+    nonisolated static let knownDefaultToolIDsUserDefaultsKey = "appTools.knownDefaultToolIDs"
     #if os(watchOS)
     nonisolated static let defaultEnabledToolKinds: Set<AppToolKind> = [.askUserInput, .getSystemTime]
     #else
@@ -33,16 +35,21 @@ public final class AppToolManager: ObservableObject {
 
     private init(defaults: UserDefaults = .standard) {
         chatToolsEnabled = defaults.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
+        let allDefaultIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
+        // 只对"从未见过"的默认工具（版本升级新增）强制启用，已知工具尊重用户自行关闭的设置
+        let knownDefaultIDs = Set(defaults.stringArray(forKey: Self.knownDefaultToolIDsUserDefaultsKey) ?? [])
+        let newDefaultIDs = allDefaultIDs.subtracting(knownDefaultIDs)
         if let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) {
             var migratedIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
-            migratedIDs.formUnion(Self.defaultEnabledToolKinds.map(\.rawValue))
+            migratedIDs.formUnion(newDefaultIDs)
             enabledToolIDs = migratedIDs
             defaults.set(Array(migratedIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
         } else {
-            let defaultIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
-            enabledToolIDs = defaultIDs
-            defaults.set(Array(defaultIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+            enabledToolIDs = allDefaultIDs
+            defaults.set(Array(allDefaultIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
         }
+        // 标记当前所有默认工具为"已知"，下次启动不再重复强制启用
+        defaults.set(Array(allDefaultIDs).sorted(), forKey: Self.knownDefaultToolIDsUserDefaultsKey)
         let storedPolicyRawValues = defaults.dictionary(forKey: Self.toolApprovalPoliciesUserDefaultsKey) as? [String: String] ?? [:]
         toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
             guard let kind = AppToolKind(rawValue: pair.key) else { return }

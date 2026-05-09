@@ -1843,6 +1843,7 @@
 "已启用全局代理，但代理地址为空。" = "Global proxy is enabled, but the proxy address is empty.";
 "已启用独立代理，但代理地址为空。" = "Independent proxy is enabled, but the proxy address is empty.";
 "已启用结构化问答能力。" = "Structured Q&A is enabled.";
+"已启用系统时间获取能力。" = "System time retrieval is enabled.";
 "已启用网页卡片渲染能力。" = "Web card rendering is enabled.";
 "已喜欢" = "Liked";
 "已喜欢 · %@" = "Liked · %@";
@@ -1880,6 +1881,7 @@
 "当前显示%d-%d个对话(总共%d)" = "Showing chats %d-%d of %d";
 "当前显示%d-%d条结果(总共%d)" = "Showing results %d-%d of %d";
 "当前未启用结构化问答能力。" = "Structured Q&A is not enabled.";
+"当前未启用获取系统时间工具。" = "System time retrieval is not enabled.";
 "当前未启用网页卡片渲染能力。" = "Web card rendering is not enabled.";
 "当前未配置语音转写处理器。" = "No speech transcription handler is configured.";
 "当前槽位没有可添加字体。" = "No fonts can be added to the current slot.";

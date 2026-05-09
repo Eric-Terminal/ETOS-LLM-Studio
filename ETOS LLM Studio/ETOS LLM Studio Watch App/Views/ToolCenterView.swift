@@ -561,7 +561,7 @@ struct ToolCenterView: View {
         case .getSystemTime:
             switch state.statusReason {
             case .enabled:
-                return NSLocalizedString("已启用，模型可免审批获取当前系统时间。", comment: "Get system time enabled status")
+                return NSLocalizedString("已启用系统时间获取能力。", comment: "Get system time enabled status")
             case .getSystemTimeDisabled:
                 return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time disabled status")
             case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled, .askUserInputDisabled:
