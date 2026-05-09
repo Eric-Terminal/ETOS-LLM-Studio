@@ -248,14 +248,9 @@ struct UsageAnalyticsView: View {
     }
 
     private var scopeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                sectionHeader("统计范围")
-                Spacer()
-                Text(scopeButtonTitle(viewModel.state.selectedScope))
-                    .etFont(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
+        HStack {
+            sectionHeader("统计范围")
+            Spacer()
             scopeSwitcher
         }
     }
@@ -404,7 +399,7 @@ struct UsageAnalyticsView: View {
                     .tag(scope)
             }
         }
-        .pickerStyle(.segmented)
+        .pickerStyle(.menu)
     }
 
     private func heatCell(day: UsageAnalyticsCalendarDay, side: CGFloat) -> some View {
