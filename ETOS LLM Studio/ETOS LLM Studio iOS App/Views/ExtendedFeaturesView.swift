@@ -208,10 +208,6 @@ struct LongTermMemoryFeatureView: View {
                     }
                 } header: {
                     Text(NSLocalizedString("跨对话记忆", comment: "跨对话记忆分组"))
-                } footer: {
-                    Text(NSLocalizedString("会话摘要会写入会话 JSON；用户画像会保存到 Memory 目录下，并限制为每天最多更新一次。", comment: "跨对话记忆说明"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
                 }
                 
                 Section {
