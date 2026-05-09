@@ -32,16 +32,27 @@ struct DisplaySettingsView: View {
     let allBackgrounds: [String]
 
     var body: some View {
-        Form {
-            Section(NSLocalizedString("背景", comment: "")) {
-                Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
+        TabView {
+            // MARK: - Tab 1：沉浸背景
+            Form {
+                Section(NSLocalizedString("背景图层", comment: "")) {
+                    Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
 
-                if enableBackground {
+                    NavigationLink {
+                        BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
+                    } label: {
+                        Label(NSLocalizedString("选择背景图", comment: ""), systemImage: "photo.on.rectangle")
+                    }
+
                     Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
                         Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
                         Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
                     }
 
+                    Toggle(NSLocalizedString("自动轮换背景", comment: ""), isOn: $enableAutoRotateBackground)
+                }
+
+                Section(NSLocalizedString("质感与特效", comment: "")) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
                         Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
@@ -52,110 +63,105 @@ struct DisplaySettingsView: View {
                         Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
                     }
 
-                    Toggle(NSLocalizedString("自动轮换背景", comment: ""), isOn: $enableAutoRotateBackground)
-
-                    NavigationLink {
-                        BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
-                    } label: {
-                        Label(NSLocalizedString("选择背景图", comment: ""), systemImage: "photo.on.rectangle")
+                    if #available(iOS 26.0, *) {
+                        Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $enableLiquidGlass)
                     }
                 }
             }
+            .tabItem {
+                Label(NSLocalizedString("沉浸背景", comment: ""), systemImage: "photo.fill")
+            }
 
-            Section {
-                Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
-                if enableMarkdown {
-                    Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
+            // MARK: - Tab 2：对话框视觉
+            Form {
+                Section(NSLocalizedString("气泡与排版", comment: "")) {
+                    Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
+                    if enableMarkdown {
+                        Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
+                    }
+                    Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
+                    Toggle(NSLocalizedString("顶部毛玻璃渐隐", comment: ""), isOn: $enableChatTopBlurFade)
                 }
-            } header: {
-                Text(NSLocalizedString("内容表现", comment: ""))
-            } footer: {
-                if enableMarkdown {
-                    Text(NSLocalizedString("启用后可使用更强的 Markdown/LaTeX 渲染能力。", comment: ""))
+
+                Section {
+                    NavigationLink {
+                        ChatAppearanceProfileSettingsView()
+                    } label: {
+                        Label(NSLocalizedString("颜色配置", comment: ""), systemImage: "paintpalette")
+                    }
+                } header: {
+                    Text(NSLocalizedString("个性化色彩", comment: ""))
+                } footer: {
+                    Text(String(format: NSLocalizedString("当前使用：%@", comment: ""), displaySettingsProfileDisplayName(appearanceProfileManager.activeProfile)))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    NavigationLink {
+                        FontSettingsView()
+                    } label: {
+                        Label(NSLocalizedString("字体设置", comment: ""), systemImage: "textformat.alt")
+                    }
+                } header: {
+                    Text(NSLocalizedString("字体排印", comment: ""))
+                }
+
+                Section {
+                    Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
+                } header: {
+                    Text(NSLocalizedString("思考过程展现", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
+            .tabItem {
+                Label(NSLocalizedString("对话框视觉", comment: ""), systemImage: "bubble.left")
+            }
+            .onChange(of: enableMarkdown) { _, isEnabled in
+                if !isEnabled, enableAdvancedRenderer {
+                    enableAdvancedRenderer = false
+                }
+            }
 
-            Section {
-                Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
-                    ForEach(AppLanguagePreference.allCases) { language in
-                        appLanguageLabel(language)
-                            .tag(language.rawValue)
+            // MARK: - Tab 3：界面与交互
+            Form {
+                Section(footer: Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))) {
+                    Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
+                        Text(NSLocalizedString("悬浮面板", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
+                        Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
                     }
                 }
-            } header: {
-                Text(NSLocalizedString("语言", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("手动选择 App 界面语言；跟随系统时会使用设备当前语言。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
 
-            Section(footer: Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))) {
-                Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
-                    Text(NSLocalizedString("悬浮面板", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
-                    Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
-                }
-            }
-
-            Section {
-                Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $useColorfulSettingsIcons)
-            } footer: {
-                Text(NSLocalizedString("开启后，设置入口会使用彩色圆形图标；关闭后恢复单色线条图标。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
-                    FontSettingsView()
-                } label: {
-                    Label(NSLocalizedString("字体设置", comment: ""), systemImage: "textformat.alt")
-                }
-            }
-
-            Section {
-                Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
-                Toggle(NSLocalizedString("顶部毛玻璃渐隐", comment: ""), isOn: $enableChatTopBlurFade)
-            } footer: {
-                Text(NSLocalizedString("无气泡UI会透明化聊天气泡并放宽消息文本宽度；顶部毛玻璃渐隐会让聊天页顶部向消息区自然过渡。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
-            } footer: {
-                Text(NSLocalizedString("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if #available(iOS 26.0, *) {
                 Section {
-                    Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $enableLiquidGlass)
+                    Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
+                        ForEach(AppLanguagePreference.allCases) { language in
+                            appLanguageLabel(language)
+                                .tag(language.rawValue)
+                        }
+                    }
+                    Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $useColorfulSettingsIcons)
+                } header: {
+                    Text(NSLocalizedString("全局外观", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
-
-            Section {
-                NavigationLink {
-                    ChatAppearanceProfileSettingsView()
-                } label: {
-                    Label(NSLocalizedString("颜色配置", comment: ""), systemImage: "paintpalette")
-                }
-            } header: {
-                Text(NSLocalizedString("聊天颜色自定义", comment: ""))
-            } footer: {
-                Text(String(format: NSLocalizedString("当前使用：%@", comment: ""), displaySettingsProfileDisplayName(appearanceProfileManager.activeProfile)))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            .tabItem {
+                Label(NSLocalizedString("界面与交互", comment: ""), systemImage: "slider.horizontal.3")
             }
         }
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
-        .onChange(of: enableMarkdown) { _, isEnabled in
-            if !isEnabled, enableAdvancedRenderer {
-                enableAdvancedRenderer = false
+        .onAppear {
+            // 迁移：将旧版「悬浮面板」默认值更新为「底部抽屉」
+            if ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue) == .legacyOverlay,
+               !UserDefaults.standard.bool(forKey: "chatPickerStyleMigratedToBottomSheet") {
+                chatPickerPresentationStyleRawValue = ChatPickerPresentationStyle.bottomSheet.rawValue
+                UserDefaults.standard.set(true, forKey: "chatPickerStyleMigratedToBottomSheet")
             }
         }
     }
