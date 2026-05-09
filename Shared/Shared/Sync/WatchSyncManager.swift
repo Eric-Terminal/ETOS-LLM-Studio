@@ -262,6 +262,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         return options
     }
 
+    /// 判断同步是否已完全关闭（自动同步关闭且所有同步项均未勾选）。
+    /// 用于 E1 入站文件物理隔离。
+    private func isSyncCompletelyDisabled() -> Bool {
+        let c = AppConfigStore.shared
+        guard !c.syncAutoSyncEnabled else { return false }
+        return buildSyncOptionsFromSettings().isEmpty
+    }
+
     private func validateSessionBeforeTransfer(options: SyncOptions, silent: Bool) -> WCSession? {
         guard let session else {
             if !silent {
@@ -647,6 +655,12 @@ extension WatchSyncManager: WCSessionDelegate {
         _ session: WCSession,
         didReceive file: WCSessionFile
     ) {
+        // E1 物理隔离：同步全关时拒绝所有入站文件传输
+        guard !isSyncCompletelyDisabled() else {
+            logger.info("同步已全部关闭，忽略入站文件传输。")
+            return
+        }
+
         let isResponse = (file.metadata?["response"] as? Bool) ?? false
         let requestID = file.metadata?["requestID"] as? String
         let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
