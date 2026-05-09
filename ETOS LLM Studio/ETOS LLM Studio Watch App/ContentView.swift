@@ -41,7 +41,7 @@ struct ContentView: View {
     @State var isAttachmentImportPresented = false
     @State var attachmentSourceText: String = ""
     @State var importSourceHistory: [String] = []
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @EnvironmentObject var appConfig: AppConfigStore
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontScale, isCustomFontEnabled: appConfig.customFontEnabled))

@@ -172,10 +172,10 @@ struct WatchBuiltInToolDetailView: View {
 
     private var state: ToolCatalogBuiltInToolState {
         ToolCatalogSupport.builtInToolStates(
-            enableMemory: enableMemory,
-            enableMemoryWrite: enableMemoryWrite,
-            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-            memoryTopK: memoryTopK,
+            enableMemory: appConfig.enableMemory,
+            enableMemoryWrite: appConfig.enableMemoryWrite,
+            enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
+            memoryTopK: appConfig.memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
@@ -214,7 +214,7 @@ struct WatchBuiltInToolDetailView: View {
                         NSLocalizedString("允许写入新的记忆", comment: "Allow memory writing"),
                         isOn: $appConfig.enableMemoryWrite
                     )
-                    .disabled(!enableMemory)
+                    .disabled(!appConfig.enableMemory)
                 }
             case .memorySearch:
                 Section(NSLocalizedString("启用状态", comment: "Enable status")) {
@@ -226,7 +226,7 @@ struct WatchBuiltInToolDetailView: View {
                         NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
                         isOn: $appConfig.enableMemoryActiveRetrieval
                     )
-                    .disabled(!enableMemory)
+                    .disabled(!appConfig.enableMemory)
                     HStack {
                         Text(NSLocalizedString("Top K", comment: "Memory search top k label"))
                         Spacer()

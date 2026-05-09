@@ -11,6 +11,7 @@
 import Foundation
 import Combine
 import UserNotifications
+import os.log
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -39,6 +40,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     public static let shared = WatchSyncManager()
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则 WatchConnectivity 同步状态不会稳定自动刷新到双端设置页。
+    private static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "WatchSyncManager")
     
     @Published public private(set) var state: SyncState = .idle
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
@@ -657,7 +659,7 @@ extension WatchSyncManager: WCSessionDelegate {
     ) {
         // E1 物理隔离：同步全关时拒绝所有入站文件传输
         guard !isSyncCompletelyDisabled() else {
-            logger.info("同步已全部关闭，忽略入站文件传输。")
+            Self.logger.info("同步已全部关闭，忽略入站文件传输。")
             return
         }
 

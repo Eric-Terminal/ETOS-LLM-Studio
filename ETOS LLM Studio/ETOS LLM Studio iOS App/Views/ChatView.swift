@@ -67,7 +67,7 @@ struct ChatView: View {
     @State var pendingJumpRequest: MessageJumpRequest?
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @EnvironmentObject var appConfig: AppConfigStore
     @Namespace var modelPickerNamespace
     @Namespace var sessionPickerNamespace
 

@@ -11,6 +11,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import Security
 import LocalAuthentication
 import CommonCrypto
@@ -115,6 +116,9 @@ public final class AppLockManager: ObservableObject {
     /// 使用生物识别解锁（E3）。
     /// - Throws: 生物识别不可用或用户取消时抛出错误
     public func biometricUnlock() async throws {
+#if os(watchOS)
+        throw AppLockError.biometricUnavailable("watchOS 不支持生物识别解锁")
+#else
         guard AppConfigStore.shared.appLockUseBiometrics else {
             throw AppLockError.biometricDisabled
         }
@@ -132,6 +136,7 @@ public final class AppLockManager: ObservableObject {
         } catch {
             throw AppLockError.biometricFailed(error.localizedDescription)
         }
+#endif
     }
 
     // MARK: - 锁定

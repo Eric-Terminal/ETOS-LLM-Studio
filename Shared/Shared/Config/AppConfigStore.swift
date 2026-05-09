@@ -16,6 +16,24 @@ public final class AppConfigStore: ObservableObject {
     // MARK: - 单例
     public static let shared = AppConfigStore()
 
+    // MARK: - Nonisolated 读取（供后台/启动序列使用）
+
+    /// 在 nonisolated 上下文（如 Task.detached）中直接从 GRDB 读取布尔配置，
+    /// 绕过 @MainActor 约束。适用于启动备份检查等不能等待主线程的场景。
+    public static nonisolated func readBoolNonisolated(_ key: AppConfigKey, default defaultValue: Bool = false) -> Bool {
+        (Persistence.readAppConfigInteger(key: key.rawValue).map { $0 != 0 }) ?? defaultValue
+    }
+
+    /// 在 nonisolated 上下文中直接从 GRDB 读取字符串配置。
+    public static nonisolated func readStringNonisolated(_ key: AppConfigKey, default defaultValue: String = "") -> String {
+        Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
+    }
+
+    /// 在 nonisolated 上下文中直接从 GRDB 读取浮点配置。
+    public static nonisolated func readRealNonisolated(_ key: AppConfigKey, default defaultValue: Double = 0.0) -> Double {
+        Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
+    }
+
     // MARK: - AI 参数
 
     @Published public var aiTemperature: Double = 1.0 {

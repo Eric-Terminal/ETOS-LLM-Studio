@@ -85,11 +85,13 @@ struct AppLockSettingsView: View {
                 }
 
                 // MARK: - 生物识别（E3）
-                Section(NSLocalizedString("生物识别", comment: "AppLockSettings biometric section")) {
+                Section {
                     Toggle(
                         NSLocalizedString("使用面容 ID / 触控 ID", comment: "AppLockSettings biometric toggle"),
                         isOn: $appConfig.appLockUseBiometrics
                     )
+                } header: {
+                    Text(NSLocalizedString("生物识别", comment: "AppLockSettings biometric section"))
                 } footer: {
                     Text(NSLocalizedString("开启后，解锁时将优先使用生物识别，失败则回退至密码。", comment: "AppLockSettings biometric footer"))
                 }

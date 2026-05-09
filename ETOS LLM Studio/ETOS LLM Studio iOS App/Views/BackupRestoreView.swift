@@ -369,6 +369,7 @@ struct BackupRestoreView: View {
 
                 // 使用 NSFileCoordinator 安全写入 iCloud Drive
                 var coordinatorError: NSError?
+                var innerCopyError: NSError?
                 NSFileCoordinator().coordinate(
                     writingItemAt: destURL,
                     options: .forReplacing,
@@ -380,9 +381,10 @@ struct BackupRestoreView: View {
                         }
                         try FileManager.default.copyItem(at: finalURL, to: writingURL)
                     } catch {
-                        coordinatorError = error as NSError
+                        innerCopyError = error as NSError
                     }
                 }
+                if coordinatorError == nil { coordinatorError = innerCopyError }
                 try? FileManager.default.removeItem(at: finalURL)
 
                 if let coordinatorError {

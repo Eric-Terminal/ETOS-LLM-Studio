@@ -83,6 +83,10 @@ extension SyncEngine {
                         skipped += 1
                     }
                     continue
+                case .forked:
+                    // Provider 不会产生分叉（只有 Session 才有时序分叉）
+                    skipped += 1
+                    continue
                 }
             }
 

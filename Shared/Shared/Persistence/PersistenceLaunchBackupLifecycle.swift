@@ -12,7 +12,7 @@ import SQLCipher
 
 extension Persistence {
     public static func createLaunchBackupPointIfEnabled() {
-        guard AppConfigStore.shared.syncBackupCreateOnLaunch else { return }
+        guard AppConfigStore.readBoolNonisolated(.syncBackupCreateOnLaunch) else { return }
 
         launchBackupAndRecoveryLock.lock()
         if hasCreatedLaunchBackupPoint {
@@ -38,7 +38,7 @@ extension Persistence {
 
     @discardableResult
     public static func scheduleLaunchBackupPointAfterStartupIfEnabled(delay: TimeInterval) -> Task<Void, Never>? {
-        guard AppConfigStore.shared.syncBackupCreateOnLaunch else { return nil }
+        guard AppConfigStore.readBoolNonisolated(.syncBackupCreateOnLaunch) else { return nil }
 
         launchBackupAndRecoveryLock.lock()
         if hasScheduledLaunchBackupPoint || hasCreatedLaunchBackupPoint {
@@ -67,7 +67,7 @@ extension Persistence {
         hasPreparedLaunchDatabases = true
         launchBackupAndRecoveryLock.unlock()
 
-        guard AppConfigStore.shared.syncBackupCreateOnLaunch else {
+        guard AppConfigStore.readBoolNonisolated(.syncBackupCreateOnLaunch) else {
             UserDefaults.standard.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
             return cacheLaunchPreparationResult(LaunchPreparationResult())
         }

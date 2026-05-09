@@ -145,7 +145,7 @@ extension ContentView {
                         .frame(width: size.width, height: size.height)
                         .position(x: size.width / 2, y: size.height / 2)
                         .clipped()
-                        .opacity(viewModel.resolvedBackgroundOpacity)
+                        .opacity(appConfig.backgroundOpacity)
                 }
                 .frame(width: size.width, height: size.height)
             }

@@ -16,7 +16,7 @@ struct ToolCenterView: View {
     @StateObject var mcpManager = MCPManager.shared
     @StateObject var shortcutManager = ShortcutToolManager.shared
     @StateObject var skillManager = SkillManager.shared
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @EnvironmentObject var appConfig: AppConfigStore
 
     @State var searchText: String = ""
     @State var showEnabledOnly: Bool = false

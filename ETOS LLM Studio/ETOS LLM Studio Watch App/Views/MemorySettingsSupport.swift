@@ -123,8 +123,8 @@ struct ConversationMemorySettingsView: View {
                     TextField("5", value: $appConfig.conversationMemoryRecentLimit, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 70)
-                        .onChange(of: conversationMemoryRecentLimit) { _, newValue in
-                            conversationMemoryRecentLimit = max(1, newValue)
+                        .onChange(of: appConfig.conversationMemoryRecentLimit) { _, newValue in
+                            appConfig.conversationMemoryRecentLimit = max(1, newValue)
                         }
                 }
 
@@ -134,8 +134,8 @@ struct ConversationMemorySettingsView: View {
                     TextField("6", value: $appConfig.conversationMemoryRoundThreshold, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 70)
-                        .onChange(of: conversationMemoryRoundThreshold) { _, newValue in
-                            conversationMemoryRoundThreshold = max(1, newValue)
+                        .onChange(of: appConfig.conversationMemoryRoundThreshold) { _, newValue in
+                            appConfig.conversationMemoryRoundThreshold = max(1, newValue)
                         }
                 }
 
@@ -145,8 +145,8 @@ struct ConversationMemorySettingsView: View {
                     TextField("120", value: $appConfig.conversationMemorySummaryMinIntervalMinutes, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 70)
-                        .onChange(of: conversationMemorySummaryMinIntervalMinutes) { _, newValue in
-                            conversationMemorySummaryMinIntervalMinutes = max(0, newValue)
+                        .onChange(of: appConfig.conversationMemorySummaryMinIntervalMinutes) { _, newValue in
+                            appConfig.conversationMemorySummaryMinIntervalMinutes = max(0, newValue)
                         }
                 }
 

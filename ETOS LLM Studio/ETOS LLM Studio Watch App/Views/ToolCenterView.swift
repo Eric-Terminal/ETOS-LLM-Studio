@@ -31,10 +31,10 @@ struct ToolCenterView: View {
 
     private var builtInStates: [ToolCatalogBuiltInToolState] {
         ToolCatalogSupport.builtInToolStates(
-            appConfig.enableMemory: appConfig.enableMemory,
-            appConfig.enableMemoryWrite: appConfig.enableMemoryWrite,
-            appConfig.enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
-            appConfig.memoryTopK: appConfig.memoryTopK,
+            enableMemory: appConfig.enableMemory,
+            enableMemoryWrite: appConfig.enableMemoryWrite,
+            enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
+            memoryTopK: appConfig.memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
@@ -521,7 +521,7 @@ struct ToolCenterView: View {
             case .enabled:
                 return String(
                     format: NSLocalizedString("已允许主动检索，Top K = %d。", comment: "Memory search enabled with top k"),
-                    state.appConfig.memoryTopK
+                    state.memoryTopK
                 )
             case .memoryDisabled:
                 return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")

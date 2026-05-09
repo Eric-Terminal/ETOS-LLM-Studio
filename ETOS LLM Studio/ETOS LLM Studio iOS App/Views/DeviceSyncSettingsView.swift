@@ -288,7 +288,7 @@ struct DeviceSyncSettingsView: View {
 
     @ViewBuilder
     private var cloudSyncStatusView: some View {
-        if !cloudSyncEnabled {
+        if !appConfig.cloudSyncEnabled {
             Text(NSLocalizedString("iCloud 同步已关闭", comment: ""))
                 .etFont(.footnote)
                 .foregroundColor(.secondary)
@@ -418,7 +418,7 @@ struct DeviceSyncSettingsView: View {
     }
 
     private func uploadDataPackage() {
-        let trimmed = backupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             uploadErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
             return
