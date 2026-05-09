@@ -40,67 +40,7 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
-            Section(header: Text(NSLocalizedString("背景", comment: ""))) {
-                Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
-                
-                if enableBackground {
-                    // 背景填充模式选择
-                    Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
-                        Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
-                        Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
-                    }
-                    
-                    VStack(alignment: .leading) {
-                        Text(String(format: NSLocalizedString("背景模糊: %.1f", comment: ""), backgroundBlur))
-                        Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
-                    }
-                    
-                    VStack(alignment: .leading) {
-                        Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), normalizedBackgroundOpacity))
-                        Slider(value: backgroundOpacityBinding, in: WatchBackgroundOpacitySetting.allowedRange, step: 0.05)
-                    }
-                    
-                    Toggle(NSLocalizedString("背景随机轮换", comment: ""), isOn: $enableAutoRotateBackground)
-                    
-                    NavigationLink(destination: BackgroundPickerView(
-                        allBackgrounds: allBackgrounds,
-                        selectedBackground: $currentBackgroundImage
-                    )) {
-                        Text(NSLocalizedString("选择背景", comment: ""))
-                    }
-                }
-            }
-
-            Section {
-                Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
-                if enableMarkdown {
-                    Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
-                }
-            } header: {
-                Text(NSLocalizedString("内容显示", comment: ""))
-            } footer: {
-                if enableMarkdown {
-                    Text(NSLocalizedString("启用后可使用更强的 Markdown/LaTeX 渲染能力。", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section {
-                Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
-                    ForEach(AppLanguagePreference.allCases) { language in
-                        appLanguageLabel(language)
-                            .tag(language.rawValue)
-                    }
-                }
-            } header: {
-                Text(NSLocalizedString("语言", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("手动选择 App 界面语言；跟随系统时会使用设备当前语言。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
+            // MARK: Section 1：界面架构
             Section(footer: Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))) {
                 Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
                     Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
@@ -108,53 +48,69 @@ struct DisplaySettingsView: View {
                 }
             }
 
-            Section(footer: Text(NSLocalizedString("需要先将界面架构切换为“独立页面”才可开启彩色设置图标；沉浸视窗会继续使用单色线条图标。", comment: ""))) {
-                Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: colorfulSettingsIconsBinding)
-                    .disabled(!canUseColorfulSettingsIcons)
-            }
-
-            Section {
-                NavigationLink {
-                    WatchFontSettingsView()
-                } label: {
-                    Label(NSLocalizedString("字体设置", comment: ""), systemImage: "textformat.alt")
+            // MARK: Section 2：背景与特效
+            Section(header: Text(NSLocalizedString("背景与特效", comment: ""))) {
+                Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
+                NavigationLink(destination: BackgroundPickerView(
+                    allBackgrounds: allBackgrounds,
+                    selectedBackground: $currentBackgroundImage
+                )) {
+                    Text(NSLocalizedString("选择背景", comment: ""))
                 }
-            }
-
-            Section {
-                Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
-            } footer: {
-                Text(NSLocalizedString("开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
-            } footer: {
-                Text(NSLocalizedString("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if #available(watchOS 26.0, *) {
-                Section(header: Text(NSLocalizedString("特效", comment: ""))) {
+                Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
+                    Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
+                    Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
+                }
+                VStack(alignment: .leading) {
+                    Text(String(format: NSLocalizedString("背景模糊: %.1f", comment: ""), backgroundBlur))
+                    Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
+                }
+                VStack(alignment: .leading) {
+                    Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), normalizedBackgroundOpacity))
+                    Slider(value: backgroundOpacityBinding, in: WatchBackgroundOpacitySetting.allowedRange, step: 0.05)
+                }
+                Toggle(NSLocalizedString("背景随机轮换", comment: ""), isOn: $enableAutoRotateBackground)
+                if #available(watchOS 26.0, *) {
                     Toggle(NSLocalizedString("启用液态玻璃", comment: ""), isOn: $enableLiquidGlass)
                 }
             }
 
-            Section {
+            // MARK: Section 3：对话框与内容
+            Section(header: Text(NSLocalizedString("对话框与内容", comment: ""))) {
+                Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
+                if enableMarkdown {
+                    Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
+                }
+                Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
+                Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
                 NavigationLink {
                     WatchChatAppearanceProfileSettingsView()
                 } label: {
-                    Label(NSLocalizedString("颜色配置", comment: ""), systemImage: "paintpalette")
+                    HStack {
+                        Text(NSLocalizedString("颜色配置", comment: ""))
+                        Spacer()
+                        Text(String(format: NSLocalizedString("当前使用：%@", comment: ""), displaySettingsProfileDisplayName(appearanceProfileManager.activeProfile)))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-            } header: {
-                Text(NSLocalizedString("聊天颜色自定义", comment: ""))
-            } footer: {
-                Text(String(format: NSLocalizedString("当前使用：%@", comment: ""), displaySettingsProfileDisplayName(appearanceProfileManager.activeProfile)))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                NavigationLink {
+                    WatchFontSettingsView()
+                } label: {
+                    Text(NSLocalizedString("字体设置", comment: ""))
+                }
+            }
+
+            // MARK: Section 4：全局外观
+            Section(header: Text(NSLocalizedString("全局外观", comment: ""))) {
+                Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
+                    ForEach(AppLanguagePreference.allCases) { language in
+                        appLanguageLabel(language)
+                            .tag(language.rawValue)
+                    }
+                }
+                Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: colorfulSettingsIconsBinding)
+                    .disabled(!canUseColorfulSettingsIcons)
             }
         }
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
@@ -171,7 +127,6 @@ struct DisplaySettingsView: View {
             disableColorfulSettingsIconsIfNeeded()
         }
     }
-
     private var normalizedBackgroundOpacity: Double {
         WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
     }
