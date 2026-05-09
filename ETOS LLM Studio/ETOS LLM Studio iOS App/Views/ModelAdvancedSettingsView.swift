@@ -55,8 +55,10 @@ struct ModelAdvancedSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section(NSLocalizedString("全局系统提示词", comment: "")) {
+        TabView {
+            // MARK: - Tab 1：提示与注入
+            Form {
+            Section(NSLocalizedString("全局与预设", comment: "")) {
                 TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding, axis: .vertical)
                     .lineLimit(3...8)
                     .disabled(selectedGlobalPromptEntry == nil)
@@ -82,7 +84,7 @@ struct ModelAdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(NSLocalizedString("当前会话提示词", comment: "")) {
+            Section(NSLocalizedString("当前会话干预", comment: "")) {
                 TextField(NSLocalizedString("话题提示词", comment: ""), text: Binding(
                     get: { currentSession?.topicPrompt ?? "" },
                     set: { newValue in
@@ -116,17 +118,7 @@ struct ModelAdvancedSettingsView: View {
                             Text(position.displayName).tag(position)
                         }
                     }
-                    .pickerStyle(.segmented)
                 }
-            } header: {
-                Text(NSLocalizedString("系统时间注入", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
                 Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
                 LabeledContent(NSLocalizedString("路标时间（分钟）", comment: "")) {
                     TextField(NSLocalizedString("分钟", comment: ""), value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
@@ -134,8 +126,10 @@ struct ModelAdvancedSettingsView: View {
                         .frame(width: 80)
                         .disabled(!enablePeriodicTimeLandmark)
                 }
+            } header: {
+                Text(NSLocalizedString("动态时间注入", comment: ""))
             } footer: {
-                Text(NSLocalizedString("开启后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
+                Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -144,39 +138,42 @@ struct ModelAdvancedSettingsView: View {
                     periodicTimeLandmarkIntervalMinutes = 1
                 }
             }
+        }
+        .tabItem {
+            Label(NSLocalizedString("提示与注入", comment: ""), systemImage: "text.quote")
+        }
 
-            Section(NSLocalizedString("会话设置", comment: "")) {
+        // MARK: - Tab 2：会话与上下文
+        Form {
+            Section(NSLocalizedString("基础行为", comment: "")) {
                 Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $restoreLastSessionOnLaunch)
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
             }
 
-            Section {
-                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
-            } header: {
-                Text(NSLocalizedString("思考内容", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("开启后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
+            Section(NSLocalizedString("上下文窗口管理", comment: "")) {
+                LabeledContent(NSLocalizedString("最大上下文消息数", comment: "")) {
+                    TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+
+                LabeledContent(NSLocalizedString("懒加载轮次", comment: "")) {
+                    TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+
+                Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+        .tabItem {
+            Label(NSLocalizedString("会话与上下文", comment: ""), systemImage: "bubble.left.and.bubble.right")
+        }
 
-            Section(NSLocalizedString("输出样式", comment: "")) {
-                Toggle(NSLocalizedString("启用流式输出", comment: ""), isOn: $enableStreaming)
-            }
-
-            Section {
-                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
-                Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
-            } header: {
-                Text(NSLocalizedString("响应测速", comment: "Response speed metrics section title"))
-            } footer: {
-                Text(
-                    "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
-                )
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
+        // MARK: - Tab 3：生成与输出
+        Form {
             Section(NSLocalizedString("采样参数", comment: "")) {
                 VStack(alignment: .leading) {
                     Text("Temperature \(String(format: "%.2f", aiTemperature))")
@@ -197,25 +194,36 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("上下文与懒加载", comment: "")) {
-                LabeledContent(NSLocalizedString("最大上下文消息数", comment: "")) {
-                    TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                }
-
-                LabeledContent(NSLocalizedString("懒加载轮次", comment: "")) {
-                    TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                }
-
-                Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
+            Section {
+                Toggle(NSLocalizedString("启用流式输出", comment: ""), isOn: $enableStreaming)
+                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
+            } header: {
+                Text(NSLocalizedString("输出与思考", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
+                Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
+            } header: {
+                Text(NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title"))
+            } footer: {
+                Text(
+                    "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
+                )
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
         }
-        .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
+        .tabItem {
+            Label(NSLocalizedString("生成与输出", comment: ""), systemImage: "waveform")
+        }
+    }
+    .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
     }
 
     private func handleTemperatureChange(_ value: Double) {
