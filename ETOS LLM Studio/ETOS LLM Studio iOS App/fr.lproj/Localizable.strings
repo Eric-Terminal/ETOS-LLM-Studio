@@ -2371,3 +2371,31 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 "OpenAI Responses" = "OpenAI Responses";
 "API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "L'adresse API doit être l'URL de base, par exemple : https://api.openai.com/v1 ; les requêtes de chat utiliseront Responses API.";
+
+// MARK: - Verrouillage d'app (App Lock)
+"应用锁" = "Verrouillage d'app";
+"关闭应用锁" = "Désactiver le verrouillage";
+"修改密码" = "Modifier le mot de passe";
+"设置应用锁密码" = "Définir le mot de passe de verrouillage";
+"应用锁已开启。进入后台超过指定时间后，再次打开需要验证。" = "Verrouillage activé. Une vérification est requise à la réouverture après le délai.";
+"设置密码后，应用在后台超过指定时间将自动锁定。" = "L'app se verrouille automatiquement après le délai en arrière-plan.";
+"自动锁定" = "Verrouillage auto";
+"锁定延迟" = "Délai de verrouillage";
+"立即" = "Immédiatement";
+"1 分钟" = "1 minute";
+"5 分钟" = "5 minutes";
+"15 分钟" = "15 minutes";
+"30 分钟" = "30 minutes";
+"1 小时" = "1 heure";
+"生物识别" = "Biométrie";
+"使用面容 ID / 触控 ID" = "Utiliser Face ID / Touch ID";
+"开启后，解锁时将优先使用生物识别，失败则回退至密码。" = "Si activé, la biométrie est utilisée en priorité ; retour au mot de passe en cas d'échec.";
+"设置密码" = "Définir le mot de passe";
+"新密码" = "Nouveau mot de passe";
+"确认密码" = "Confirmer le mot de passe";
+"输入当前密码" = "Saisir le mot de passe actuel";
+"两次输入的密码不一致。" = "Les mots de passe ne correspondent pas.";
+"密码已设置，应用锁已开启。" = "Mot de passe défini. Verrouillage activé.";
+"应用锁已关闭。" = "Verrouillage désactivé.";
+"解锁" = "Déverrouiller";
+"使用生物识别解锁" = "Déverrouiller avec la biométrie";

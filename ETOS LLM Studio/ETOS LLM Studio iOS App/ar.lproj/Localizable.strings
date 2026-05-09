@@ -2371,3 +2371,31 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 
 "OpenAI Responses" = "OpenAI Responses";
 "API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "يجب أن يكون عنوان API هو العنوان الأساسي، مثل: https://api.openai.com/v1؛ ستستخدم طلبات الدردشة Responses API.";
+
+// MARK: - App Lock
+"应用锁" = "App Lock";
+"关闭应用锁" = "Disable App Lock";
+"修改密码" = "Change Password";
+"设置应用锁密码" = "Set App Lock Password";
+"应用锁已开启。进入后台超过指定时间后，再次打开需要验证。" = "App Lock is enabled. Unlock required when reopening after the timeout.";
+"设置密码后，应用在后台超过指定时间将自动锁定。" = "App will auto-lock after the specified timeout in background.";
+"自动锁定" = "Auto Lock";
+"锁定延迟" = "Lock Delay";
+"立即" = "Immediately";
+"1 分钟" = "1 Minute";
+"5 分钟" = "5 Minutes";
+"15 分钟" = "15 Minutes";
+"30 分钟" = "30 Minutes";
+"1 小时" = "1 Hour";
+"生物识别" = "Biometrics";
+"使用面容 ID / 触控 ID" = "Use Face ID / Touch ID";
+"开启后，解锁时将优先使用生物识别，失败则回退至密码。" = "When enabled, biometrics are tried first; falls back to password on failure.";
+"设置密码" = "Set Password";
+"新密码" = "New Password";
+"确认密码" = "Confirm Password";
+"输入当前密码" = "Enter Current Password";
+"两次输入的密码不一致。" = "Passwords do not match.";
+"密码已设置，应用锁已开启。" = "Password set. App Lock enabled.";
+"应用锁已关闭。" = "App Lock disabled.";
+"解锁" = "Unlock";
+"使用生物识别解锁" = "Unlock with Biometrics";

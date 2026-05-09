@@ -252,7 +252,13 @@ struct SettingsView: View {
                 } label: {
                     SettingsListIconLabel("同步与备份", icon: .sync)
                 }
-                
+
+                NavigationLink {
+                    AppLockSettingsView()
+                } label: {
+                    SettingsListIconLabel("应用锁", icon: .appLock)
+                }
+
                 NavigationLink {
                     AboutView()
                 } label: {
@@ -446,6 +452,7 @@ extension SettingsListIcon {
     static let importData = SettingsListIcon(systemName: "arrow.down", backgroundColor: .green)
     static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint)
     static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange)
+    static let appLock = SettingsListIcon(systemName: "lock", backgroundColor: .red)
 }
 
 struct SettingsListIconLabel: View {

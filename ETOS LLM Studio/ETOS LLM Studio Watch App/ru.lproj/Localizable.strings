@@ -2132,3 +2132,26 @@
 
 "OpenAI Responses" = "OpenAI Responses";
 "API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API-адрес должен быть базовым, например: https://api.openai.com/v1; чат-запросы будут использовать Responses API.";
+
+// MARK: - App Lock
+"应用锁" = "App Lock";
+"关闭应用锁" = "Disable App Lock";
+"修改密码" = "Change Password";
+"设置密码" = "Set Password";
+"应用锁已开启" = "App Lock Enabled";
+"设置密码后启用锁定" = "Set a password to enable locking";
+"锁定延迟" = "Lock Delay";
+"延迟" = "Delay";
+"立即" = "Immediately";
+"1 分钟" = "1 Minute";
+"5 分钟" = "5 Minutes";
+"15 分钟" = "15 Minutes";
+"30 分钟" = "30 Minutes";
+"生物识别解锁" = "Biometric Unlock";
+"开启后优先使用腕部检测/密码双重验证" = "Prioritizes wrist detection when enabled";
+"新密码" = "New Password";
+"确认密码" = "Confirm Password";
+"当前密码" = "Current Password";
+"两次输入的密码不一致。" = "Passwords do not match.";
+"解锁" = "Unlock";
+"使用生物识别解锁" = "Unlock with Biometrics";

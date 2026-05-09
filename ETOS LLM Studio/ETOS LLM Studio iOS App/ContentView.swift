@@ -33,7 +33,10 @@ struct ContentView: View {
     @State private var isNativeSettingsPresented: Bool = false
     
     var body: some View {
-        contentWithMigrationOverlays
+        ZStack {
+            contentWithMigrationOverlays
+            AppLockOverlayView()
+        }
             // 启动时检查公告
             .task {
                 await handleLaunchTasks()
@@ -41,8 +44,12 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    AppLockManager.shared.notifyWillEnterForeground()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
+                case .background:
+                    AppLockManager.shared.notifyDidEnterBackground()
+                    cancelDailyPulsePreparation()
                 default:
                     cancelDailyPulsePreparation()
                 }

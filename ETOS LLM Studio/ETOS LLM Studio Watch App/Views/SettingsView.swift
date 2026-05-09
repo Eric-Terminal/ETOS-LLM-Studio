@@ -239,6 +239,10 @@ struct SettingsView: View {
                     NavigationLink(destination: DeviceSyncSettingsView()) {
                         settingsNavigationLabel("同步与备份", icon: .sync)
                     }
+
+                    NavigationLink(destination: WatchAppLockSettingsView()) {
+                        settingsNavigationLabel("应用锁", icon: .appLock)
+                    }
                     
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
@@ -478,6 +482,7 @@ extension SettingsListIcon {
     )
     static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint, legacySystemName: "person.text.rectangle")
     static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange, legacySystemName: "folder.badge.gearshape")
+    static let appLock = SettingsListIcon(systemName: "lock", backgroundColor: .red)
 }
 
 struct SettingsListIconLabel: View {

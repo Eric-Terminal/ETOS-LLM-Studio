@@ -134,6 +134,9 @@ struct ContentView: View {
                 Spacer()
                 TTSFloatingController()
             }
+
+            // E2 应用锁覆盖层
+            WatchAppLockOverlayView()
         }
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
@@ -141,6 +144,16 @@ struct ContentView: View {
             AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
             refreshRootBodyFont()
             refreshAttachmentSourceHistory()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                AppLockManager.shared.notifyWillEnterForeground()
+            case .background:
+                AppLockManager.shared.notifyDidEnterBackground()
+            default:
+                break
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
