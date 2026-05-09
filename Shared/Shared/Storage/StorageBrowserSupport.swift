@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import SQLite3
+import SQLCipher
 
 public struct StorageTextPage: Identifiable, Hashable, Sendable {
     public let id: Int
@@ -346,6 +346,12 @@ public enum StorageBrowserSupport {
                 sqlite3_close(connection)
             }
             throw StorageSQLiteBrowserError.openFailed(message)
+        }
+
+        // 数据库已由 SQLCipher 加密，需要先提供 passphrase 才能读取
+        if let passphrase = DatabaseEncryptionManager.shared.currentPassphrase() {
+            let passphraseBytes = Array(passphrase.utf8)
+            sqlite3_key(connection, passphraseBytes, Int32(passphraseBytes.count))
         }
 
         defer { sqlite3_close(connection) }

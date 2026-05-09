@@ -60,10 +60,15 @@ final class PersistenceGRDBStore {
         self.chatsDirectory = chatsDirectory
         self.databaseURL = chatsDirectory.appendingPathComponent("chat-store.sqlite")
 
+        // E4-E6：获取 SQLCipher 主密钥，并在必要时执行明文 → 加密迁移
+        let passphrase = try DatabaseEncryptionManager.shared.preparePassphrase(for: databaseURL)
+
         var configuration = Configuration()
         configuration.qos = .userInitiated
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
+            // SQLCipher 密钥必须是 prepareDatabase 中的第一条语句
+            try db.usePassphrase(passphrase)
             try db.execute(sql: "PRAGMA foreign_keys=ON")
             try db.execute(sql: "PRAGMA journal_mode=WAL")
             try db.execute(sql: "PRAGMA synchronous=NORMAL")

@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Foundation
-import SQLite3
+import SQLCipher
 import os.log
 
 public final class SQLiteVectorStore: VectorStoreProtocol {

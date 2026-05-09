@@ -9,8 +9,8 @@
 /* Begin PBXBuildFile section */
 		0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 0704B98D2FA542E60059A02A /* ZIPFoundation */; };
 		072CF2442E92C1B400A8E9D0 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* Shared.framework */; };
+		07856B492FAFC47300B35DB4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 07856B482FAFC47300B35DB4 /* GRDB */; };
 		07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */; };
-		07BB63312F894DC80075BE77 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 07BB63302F894DC80075BE77 /* GRDB */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,8 +55,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07856B492FAFC47300B35DB4 /* GRDB in Frameworks */,
 				07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */,
-				07BB63312F894DC80075BE77 /* GRDB in Frameworks */,
 				0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -137,8 +137,8 @@
 			);
 			name = Shared;
 			packageProductDependencies = (
-				07BB63302F894DC80075BE77 /* GRDB */,
 				0704B98D2FA542E60059A02A /* ZIPFoundation */,
+				07856B482FAFC47300B35DB4 /* GRDB */,
 			);
 			productName = Shared;
 			productReference = 073CA6A52E8CFCF3004516A0 /* Shared.framework */;
@@ -172,8 +172,8 @@
 			mainGroup = 073CA69B2E8CFCF3004516A0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				07BB632F2F894DC80075BE77 /* XCRemoteSwiftPackageReference "GRDB" */,
 				0704B98C2FA542E60059A02A /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				07856B472FAFC47300B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 073CA6A62E8CFCF3004516A0 /* Products */;
@@ -537,12 +537,12 @@
 				minimumVersion = 0.9.20;
 			};
 		};
-		07BB632F2F894DC80075BE77 /* XCRemoteSwiftPackageReference "GRDB" */ = {
+		07856B472FAFC47300B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/groue/GRDB.swift";
+			repositoryURL = "https://github.com/Eric-Terminal/GRDB.swift";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 7.0.0;
+				branch = SQLCipher;
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -553,9 +553,9 @@
 			package = 0704B98C2FA542E60059A02A /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
 		};
-		07BB63302F894DC80075BE77 /* GRDB */ = {
+		07856B482FAFC47300B35DB4 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 07BB632F2F894DC80075BE77 /* XCRemoteSwiftPackageReference "GRDB" */;
+			package = 07856B472FAFC47300B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
 		};
 /* End XCSwiftPackageProductDependency section */

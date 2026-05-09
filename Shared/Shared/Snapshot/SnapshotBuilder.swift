@@ -10,7 +10,7 @@
 // ============================================================================
 
 import Foundation
-import SQLite3
+import SQLCipher
 import ZIPFoundation
 import os.log
 
@@ -63,6 +63,9 @@ public enum SnapshotBuilder {
     // MARK: - SQLite Online Backup
 
     /// 使用 SQLite Online Backup API 将 srcURL 克隆到 dstURL（只读方式打开源库）。
+    ///
+    /// 源库可能是 SQLCipher 加密数据库；克隆到目标库时不设置密钥，
+    /// 使得备份副本为明文 SQLite（外层由 SnapshotEncryptor AES-GCM 加密保护）。
     private static func cloneDatabase(from srcURL: URL, to dstURL: URL) throws {
         // 源库可能不存在（如用户从未开启记忆功能），跳过即可
         guard FileManager.default.fileExists(atPath: srcURL.path) else {
@@ -78,6 +81,15 @@ public enum SnapshotBuilder {
             throw SnapshotError.cannotOpenSource(srcURL.lastPathComponent)
         }
         defer { sqlite3_close(srcDB) }
+
+        // 若数据库已加密，提供 SQLCipher passphrase 解密（以便 Backup API 读取明文 page）
+        if let passphrase = DatabaseEncryptionManager.shared.currentPassphrase() {
+            let passphraseBytes = Array(passphrase.utf8)
+            let keyResult = sqlite3_key(srcDB, passphraseBytes, Int32(passphraseBytes.count))
+            if keyResult != SQLITE_OK {
+                throw SnapshotError.cannotOpenSource(srcURL.lastPathComponent)
+            }
+        }
 
         var dstDB: OpaquePointer?
         guard sqlite3_open_v2(
