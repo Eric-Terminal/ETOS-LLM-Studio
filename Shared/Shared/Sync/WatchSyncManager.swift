@@ -751,6 +751,13 @@ extension WatchSyncManager: WCSessionDelegate {
         }
         #endif
 
+        // E1 物理隔离：同步全关时拒绝所有入站快速通道消息
+        guard !isSyncCompletelyDisabled() else {
+            Self.logger.info("同步已全部关闭，忽略入站 sendMessage 快速通道。")
+            replyHandler(["error": "sync_disabled"])
+            return
+        }
+
         // 快速通道：接收小载荷同步包
         if let packetData = message["syncPacket"] as? Data {
             let isResponse = (message["response"] as? Bool) ?? false
