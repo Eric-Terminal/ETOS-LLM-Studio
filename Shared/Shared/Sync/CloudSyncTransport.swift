@@ -76,7 +76,8 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         record[Self.payloadAssetKey] = CKAsset(fileURL: tempURL)
 
         do {
-            _ = try await save(record)
+            // 使用 allKeys 策略进行幂等写入，无论记录是否已存在均能正确保存
+            try await upsert(record)
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
             throw error
@@ -230,19 +231,25 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
-    private func save(_ record: CKRecord) async throws -> CKRecord {
-        try await withCheckedThrowingContinuation { continuation in
-            database.save(record) { savedRecord, error in
-                if let error {
+    /// 幂等写入：savePolicy = .allKeys，无论记录新建或已存在均可正确保存
+    private func upsert(_ record: CKRecord) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let operation = CKModifyRecordsOperation(
+                recordsToSave: [record],
+                recordIDsToDelete: nil
+            )
+            operation.savePolicy = .allKeys
+            operation.isAtomic = true
+            operation.qualityOfService = .userInitiated
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
                     continuation.resume(throwing: error)
-                    return
-                }
-                if let savedRecord {
-                    continuation.resume(returning: savedRecord)
-                } else {
-                    continuation.resume(throwing: CloudSyncManagerError.invalidAsset)
                 }
             }
+            database.add(operation)
         }
     }
 

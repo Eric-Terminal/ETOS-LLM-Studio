@@ -354,6 +354,17 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     private func sendExchange(payload: SyncExchangePayload) {
         guard let session else { return }
+
+        // 快速通道：对端可达且载荷 < 60KB 时使用 sendMessage
+        if session.isReachable,
+           let fileData = try? Data(contentsOf: payload.fileURL),
+           fileData.count < 60 * 1024 {
+            sendExchangeViaMessage(session: session, fileData: fileData, payload: payload)
+            try? FileManager.default.removeItem(at: payload.fileURL)
+            return
+        }
+
+        // 大载荷或对端不可达：走 transferFile
         var metadata: [String: Any] = [
             "options": payload.optionsRawValue,
             "response": payload.isResponse,
@@ -373,6 +384,89 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             marksSuccessWhenFinished: payload.marksSuccessWhenFinished,
             fileURL: payload.fileURL
         )
+    }
+
+    private func sendExchangeViaMessage(session: WCSession, fileData: Data, payload: SyncExchangePayload) {
+        var message: [String: Any] = [
+            "syncPacket": fileData,
+            "options": payload.optionsRawValue,
+            "response": payload.isResponse,
+            "expectsResponse": payload.expectsResponse,
+            "silent": payload.isSilent,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        if let requestID = payload.requestID {
+            message["requestID"] = requestID
+        }
+
+        let operationID = payload.requestID.flatMap(UUID.init(uuidString:))
+        let isSilent = payload.isSilent
+        let marksSuccessWhenFinished = payload.marksSuccessWhenFinished
+        let expectsResponse = payload.expectsResponse
+
+        session.sendMessage(message, replyHandler: { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !self.isSyncSilent(operationID: operationID, fallback: isSilent) {
+                    if !expectsResponse && marksSuccessWhenFinished {
+                        self.lastSummary = .empty
+                        self.lastUpdatedAt = Date()
+                        self.state = .success(self.lastSummary)
+                    } else if expectsResponse {
+                        self.state = .syncing("等待对端处理…")
+                    }
+                }
+                if !expectsResponse {
+                    self.completeSyncOperationIfNeeded(operationID: operationID)
+                }
+            }
+        }, errorHandler: { [weak self] error in
+            Task { @MainActor [weak self] in
+                self?.failSyncOperation(
+                    operationID: operationID,
+                    fallbackSilent: isSilent,
+                    message: "快速通道发送失败: \(error.localizedDescription)"
+                )
+            }
+        })
+    }
+
+    /// 单键配置变更实时广播给对端（仅 appStorage 通道）
+    public func performQuickSync(key: String, value: Any) {
+        guard let session, session.isReachable else { return }
+        guard AppConfigStore.shared.syncAutoSyncEnabled,
+              AppConfigStore.shared.syncAppStorage else { return }
+
+        let syncOptions: SyncOptions = [.appStorage]
+        let channel = syncChannel
+
+        Task.detached(priority: .background) {
+            let localSnapshot = SyncDeltaEngine.buildLocalSnapshot(
+                options: syncOptions,
+                channel: channel
+            )
+            let emptyManifest = SyncManifest(options: syncOptions, records: [])
+            let delta = SyncDeltaEngine.buildDelta(
+                localSnapshot: localSnapshot,
+                remoteManifest: emptyManifest,
+                channel: channel
+            )
+            let packet = SyncExchangePacket(manifest: localSnapshot.manifest, delta: delta)
+            guard let data = try? JSONEncoder().encode(packet), data.count < 60 * 1024 else { return }
+
+            let message: [String: Any] = [
+                "syncPacket": data,
+                "options": syncOptions.rawValue,
+                "response": false,
+                "expectsResponse": false,
+                "silent": true,
+                "timestamp": Date().timeIntervalSince1970
+            ]
+            await MainActor.run {
+                guard WCSession.isSupported(), WCSession.default.isReachable else { return }
+                WCSession.default.sendMessage(message, replyHandler: nil, errorHandler: nil)
+            }
+        }
     }
 
     private func isSyncSilent(operationID: UUID?, fallback: Bool) -> Bool {
@@ -640,6 +734,38 @@ extension WatchSyncManager: WCSessionDelegate {
             return
         }
         #endif
+
+        // 快速通道：接收小载荷同步包
+        if let packetData = message["syncPacket"] as? Data {
+            let isResponse = (message["response"] as? Bool) ?? false
+            let requestID = message["requestID"] as? String
+            let expectsResponse = (message["expectsResponse"] as? Bool) ?? true
+            let silent = (message["silent"] as? Bool) ?? false
+
+            do {
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("watch-sync-msg-\(UUID().uuidString).json")
+                try packetData.write(to: tempURL, options: [.atomic])
+
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let operationID = requestID.flatMap(UUID.init(uuidString:))
+                    let effectiveSilent = self.isSyncSilent(operationID: operationID, fallback: silent)
+                    await self.applyExchange(
+                        from: tempURL,
+                        isResponse: isResponse,
+                        requestID: requestID,
+                        expectsResponse: expectsResponse,
+                        silent: effectiveSilent
+                    )
+                }
+            } catch {
+                // 写入临时文件失败，忽略此包
+            }
+            replyHandler(["ack": true])
+            return
+        }
+
         // 保留消息处理以兼容旧版本
         replyHandler([:])
     }
