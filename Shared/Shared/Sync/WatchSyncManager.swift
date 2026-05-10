@@ -35,6 +35,31 @@ func stageIncomingSyncExchangeData(
     return stagedURL
 }
 
+@MainActor
+func isWatchConnectivitySyncEnabled(appConfig: AppConfigStore = .shared) -> Bool {
+    appConfig.syncAutoSyncEnabled || !watchConnectivitySyncOptions(appConfig: appConfig).isEmpty
+}
+
+@MainActor
+func watchConnectivitySyncOptions(appConfig: AppConfigStore = .shared) -> SyncOptions {
+    var options: SyncOptions = []
+    if appConfig.syncProviders { options.insert(.providers) }
+    if appConfig.syncSessions { options.insert(.sessions) }
+    if appConfig.syncBackgrounds { options.insert(.backgrounds) }
+    if appConfig.syncMemories { options.insert(.memories) }
+    if appConfig.syncMCPServers { options.insert(.mcpServers) }
+    if appConfig.syncImageFiles { options.insert(.imageFiles) }
+    if appConfig.syncSkills { options.insert(.skills) }
+    if appConfig.syncShortcutTools { options.insert(.shortcutTools) }
+    if appConfig.syncWorldbooks { options.insert(.worldbooks) }
+    if appConfig.syncFeedbackTickets { options.insert(.feedbackTickets) }
+    if appConfig.syncDailyPulse { options.insert(.dailyPulse) }
+    if appConfig.syncUsageStats { options.insert(.usageStats) }
+    if appConfig.syncFontFiles { options.insert(.fontFiles) }
+    if appConfig.syncAppStorage { options.insert(.appStorage) }
+    return options
+}
+
 #if canImport(WatchConnectivity)
 @MainActor
 public final class WatchSyncManager: NSObject, ObservableObject {
@@ -294,29 +319,20 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     /// 从用户设置构建同步选项
     private func buildSyncOptionsFromSettings() -> SyncOptions {
-        let appConfig = AppConfigStore.shared
-        var options: SyncOptions = []
-        if appConfig.syncProviders { options.insert(.providers) }
-        if appConfig.syncSessions { options.insert(.sessions) }
-        if appConfig.syncBackgrounds { options.insert(.backgrounds) }
-        if appConfig.syncMemories { options.insert(.memories) }
-        if appConfig.syncMCPServers { options.insert(.mcpServers) }
-        if appConfig.syncImageFiles { options.insert(.imageFiles) }
-        if appConfig.syncSkills { options.insert(.skills) }
-        if appConfig.syncShortcutTools { options.insert(.shortcutTools) }
-        if appConfig.syncWorldbooks { options.insert(.worldbooks) }
-        if appConfig.syncFeedbackTickets { options.insert(.feedbackTickets) }
-        if appConfig.syncDailyPulse { options.insert(.dailyPulse) }
-        if appConfig.syncUsageStats { options.insert(.usageStats) }
-        if appConfig.syncFontFiles { options.insert(.fontFiles) }
-        if appConfig.syncAppStorage { options.insert(.appStorage) }
-        return options
+        watchConnectivitySyncOptions()
     }
 
     private func validateSessionBeforeTransfer(options: SyncOptions, silent: Bool) -> WCSession? {
         guard let session else {
             if !silent {
                 state = .failed("此设备不支持 WatchConnectivity。")
+            }
+            return nil
+        }
+
+        guard isWatchConnectivitySyncEnabled() else {
+            if !silent {
+                state = .failed("同步已关闭，已阻止向对端传输数据。")
             }
             return nil
         }
@@ -668,6 +684,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         let operationID = requestID.flatMap(UUID.init(uuidString:))
         let silent = (message["silent"] as? Bool) ?? false
 
+        guard isWatchConnectivitySyncEnabled() else {
+            replyHandler(["accepted": false, "reason": "syncDisabled"])
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: silent,
+                message: "同步已关闭，已拒绝接收对端数据。"
+            )
+            return true
+        }
+
         guard let data = message["payload"] as? Data else {
             replyHandler(["accepted": false])
             failSyncOperation(
@@ -712,6 +738,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         replyHandler: @escaping ([String: Any]) -> Void
     ) -> Bool {
         guard message["kind"] as? String == Self.quickAppConfigKind else { return false }
+        guard isWatchConnectivitySyncEnabled() else {
+            replyHandler(["accepted": false, "reason": "syncDisabled"])
+            return true
+        }
         guard let key = message["key"] as? String,
               let value = message["value"],
               SyncEngine.isPropertyListEncodableValue(value),
@@ -768,6 +798,15 @@ extension WatchSyncManager: WCSessionDelegate {
         let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
         let operationID = requestID.flatMap(UUID.init(uuidString:))
         let silent = (file.metadata?["silent"] as? Bool) ?? false
+
+        guard isWatchConnectivitySyncEnabled() else {
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: silent,
+                message: "同步已关闭，已拒绝接收对端数据。"
+            )
+            return
+        }
 
         let stagedFileURL: URL
         do {
