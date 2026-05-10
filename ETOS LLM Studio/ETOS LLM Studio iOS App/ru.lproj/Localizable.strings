@@ -1685,6 +1685,7 @@
 "代理（提供商级）" = "Proxy (Provider-level)";
 "优先级说明" = "Priority Notes";
 "会向输入地址发送 POST(JSON) 请求，内容与导出包一致。上传前请确认地址可信。" = "Sends a POST (JSON) request to the entered address with the same content as the export package. Make sure the address is trusted before uploading.";
+"会生成 .elsbackup 快照并以二进制 POST 上传，上传前请确认地址可信。" = "Создает снимок .elsbackup и отправляет его бинарным POST-запросом. Перед загрузкой убедитесь, что адресу можно доверять.";
 "会话记录" = "Chat Records";
 "位置：%@" = "Location: %@";
 "位置：未分类" = "Location: Uncategorized";

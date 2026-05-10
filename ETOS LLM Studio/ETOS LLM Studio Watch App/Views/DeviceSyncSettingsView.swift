@@ -96,7 +96,7 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(selectedSyncOptions.isEmpty || isUploading)
+                .disabled(isUploading)
 
                 if let uploadSuccessMessage, !uploadSuccessMessage.isEmpty {
                     Text(uploadSuccessMessage)
@@ -111,7 +111,7 @@ struct DeviceSyncSettingsView: View {
                         .lineLimit(3)
                 }
 
-                Text(NSLocalizedString("会向输入地址发送 POST(JSON)，请确认地址可信。", comment: ""))
+                Text(NSLocalizedString("会生成 .elsbackup 快照并以二进制 POST 上传，请确认地址可信。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -411,7 +411,6 @@ struct DeviceSyncSettingsView: View {
         uploadSuccessMessage = nil
         uploadResponsePreview = nil
 
-        let syncOptionsRawValue = selectedSyncOptions.rawValue
         let endpointString = endpoint.absoluteString
         Task.detached(priority: .userInitiated) {
             do {
@@ -423,9 +422,9 @@ struct DeviceSyncSettingsView: View {
                     }
                     return
                 }
-                let syncOptions = SyncOptions(rawValue: syncOptionsRawValue)
-                let package = SyncEngine.buildPackage(options: syncOptions)
-                let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
+                let backupURL = try SnapshotBuilder.buildSnapshot()
+                defer { try? FileManager.default.removeItem(at: backupURL) }
+                let result = try await SyncPackageUploadService.uploadBackup(backupFileURL: backupURL, to: endpoint)
                 await MainActor.run {
                     isUploading = false
                     uploadSuccessMessage = String(format: NSLocalizedString("上传成功（HTTP %d）", comment: ""), result.statusCode)
