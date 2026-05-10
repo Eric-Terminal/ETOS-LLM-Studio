@@ -240,10 +240,25 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .aiTopPEnabled: return true
         case .systemPrompt: return ""
         case .maxChatHistory: return 0
-        case .enableStreaming: return true
-        case .enableResponseSpeedMetrics: return true
+        case .enableStreaming:
+            #if os(watchOS)
+            return false
+            #else
+            return true
+            #endif
+        case .enableResponseSpeedMetrics:
+            #if os(watchOS)
+            return false
+            #else
+            return true
+            #endif
         case .enableOpenAIStreamIncludeUsage: return true
-        case .lazyLoadMessageCount: return 0
+        case .lazyLoadMessageCount:
+            #if os(watchOS)
+            return 3
+            #else
+            return 0
+            #endif
         case .enableAutoSessionNaming: return true
         case .restoreLastSessionOnLaunch: return false
         case .enableMarkdown: return true
@@ -286,7 +301,12 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .dailyPulseModelIdentifier: return ""
         case .conversationSummaryModelIdentifier: return ""
         case .reasoningSummaryModelIdentifier: return ""
-        case .ocrModelIdentifier: return ""
+        case .ocrModelIdentifier:
+            #if canImport(Vision) && !os(watchOS)
+            return ChatService.systemOCRRunnableModel.id
+            #else
+            return ""
+            #endif
         case .imageGenerationModelIdentifier: return ""
         case .imageGenerationParameterExpressionsByModel: return "{}"
         case .sendSpeechAsAudio: return false

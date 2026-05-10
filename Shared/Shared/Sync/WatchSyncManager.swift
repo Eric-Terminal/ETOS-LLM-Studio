@@ -449,7 +449,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     }
 
     /// 单键配置变更实时广播给对端（仅 appStorage 通道）
-    public func performQuickSync(key: String, value: Any) {
+    public func performQuickSync(key _: String, value _: Any) {
         guard let session, session.isReachable else { return }
         guard AppConfigStore.shared.syncAutoSyncEnabled,
               AppConfigStore.shared.syncAppStorage else { return }

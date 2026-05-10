@@ -39,41 +39,45 @@ public final class AppConfigStore: ObservableObject {
 
     /// 在 nonisolated 上下文（如 Task.detached）中直接从 GRDB 读取布尔配置，
     /// 绕过 @MainActor 约束。适用于启动备份检查等不能等待主线程的场景。
-    public static nonisolated func readBoolNonisolated(_ key: AppConfigKey, default defaultValue: Bool = false) -> Bool {
+    public static nonisolated func readBoolNonisolated(_ key: AppConfigKey, default defaultValue: Bool? = nil) -> Bool {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Bool.self) {
             return cached
         }
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Int.self) {
             return cached != 0
         }
-        return (Persistence.readAppConfigInteger(key: key.rawValue).map { $0 != 0 }) ?? defaultValue
+        let resolvedDefault = defaultValue ?? (key.defaultValue as? Bool) ?? false
+        return (Persistence.readAppConfigInteger(key: key.rawValue).map { $0 != 0 }) ?? resolvedDefault
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取字符串配置。
-    public static nonisolated func readStringNonisolated(_ key: AppConfigKey, default defaultValue: String = "") -> String {
+    public static nonisolated func readStringNonisolated(_ key: AppConfigKey, default defaultValue: String? = nil) -> String {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: String.self) {
             return cached
         }
-        return Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
+        let resolvedDefault = defaultValue ?? (key.defaultValue as? String) ?? ""
+        return Persistence.readAppConfigText(key: key.rawValue) ?? resolvedDefault
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取浮点配置。
-    public static nonisolated func readRealNonisolated(_ key: AppConfigKey, default defaultValue: Double = 0.0) -> Double {
+    public static nonisolated func readRealNonisolated(_ key: AppConfigKey, default defaultValue: Double? = nil) -> Double {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Double.self) {
             return cached
         }
-        return Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
+        let resolvedDefault = defaultValue ?? (key.defaultValue as? Double) ?? 0.0
+        return Persistence.readAppConfigReal(key: key.rawValue) ?? resolvedDefault
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取整数配置。
-    public static nonisolated func readIntegerNonisolated(_ key: AppConfigKey, default defaultValue: Int = 0) -> Int {
+    public static nonisolated func readIntegerNonisolated(_ key: AppConfigKey, default defaultValue: Int? = nil) -> Int {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Int.self) {
             return cached
         }
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Bool.self) {
             return cached ? 1 : 0
         }
-        return Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
+        let resolvedDefault = defaultValue ?? (key.defaultValue as? Int) ?? 0
+        return Persistence.readAppConfigInteger(key: key.rawValue) ?? resolvedDefault
     }
 
     // MARK: - AI 参数
@@ -96,16 +100,16 @@ public final class AppConfigStore: ObservableObject {
     @Published public var maxChatHistory: Int = 0 {
         didSet { persistIfChanged(.maxChatHistory, integer: maxChatHistory, previous: oldValue) }
     }
-    @Published public var enableStreaming: Bool = true {
+    @Published public var enableStreaming: Bool = AppConfigKey.enableStreaming.defaultValue as? Bool ?? true {
         didSet { persistIfChanged(.enableStreaming, bool: enableStreaming, previous: oldValue) }
     }
-    @Published public var enableResponseSpeedMetrics: Bool = true {
+    @Published public var enableResponseSpeedMetrics: Bool = AppConfigKey.enableResponseSpeedMetrics.defaultValue as? Bool ?? true {
         didSet { persistIfChanged(.enableResponseSpeedMetrics, bool: enableResponseSpeedMetrics, previous: oldValue) }
     }
     @Published public var enableOpenAIStreamIncludeUsage: Bool = true {
         didSet { persistIfChanged(.enableOpenAIStreamIncludeUsage, bool: enableOpenAIStreamIncludeUsage, previous: oldValue) }
     }
-    @Published public var lazyLoadMessageCount: Int = 0 {
+    @Published public var lazyLoadMessageCount: Int = AppConfigKey.lazyLoadMessageCount.defaultValue as? Int ?? 0 {
         didSet { persistIfChanged(.lazyLoadMessageCount, integer: lazyLoadMessageCount, previous: oldValue) }
     }
     @Published public var enableAutoSessionNaming: Bool = true {
@@ -249,7 +253,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var reasoningSummaryModelIdentifier: String = "" {
         didSet { persistIfChanged(.reasoningSummaryModelIdentifier, text: reasoningSummaryModelIdentifier, previous: oldValue) }
     }
-    @Published public var ocrModelIdentifier: String = "" {
+    @Published public var ocrModelIdentifier: String = AppConfigKey.ocrModelIdentifier.defaultValue as? String ?? "" {
         didSet { persistIfChanged(.ocrModelIdentifier, text: ocrModelIdentifier, previous: oldValue) }
     }
     @Published public var imageGenerationModelIdentifier: String = "" {

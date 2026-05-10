@@ -203,6 +203,13 @@ extension SyncEngine {
         imported += globalPromptMergeResult.imported
         skipped += globalPromptMergeResult.skipped
 
+        let userDefaultsMergeResult = mergeSynchronizedUserDefaultsKeys(
+            in: &incomingSnapshot,
+            userDefaults: userDefaults
+        )
+        imported += userDefaultsMergeResult.imported
+        skipped += userDefaultsMergeResult.skipped
+
         // 构建当前 GRDB 状态用于去重比较
         let currentRows = Persistence.loadAllAppConfigs()
         let currentByKey: [String: Any] = currentRows.reduce(into: [:]) { result, row in
@@ -286,7 +293,43 @@ extension SyncEngine {
             }
             snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] = globalPromptSnapshot.selectedEntryID?.uuidString
         }
+        collectSynchronizedUserDefaultsKeys(from: userDefaults, into: &snapshot)
         return snapshot
+    }
+
+    static func collectSynchronizedUserDefaultsKeys(
+        from userDefaults: UserDefaults,
+        into snapshot: inout [String: Any]
+    ) {
+        for (key, value) in userDefaults.dictionaryRepresentation() {
+            guard isSynchronizedUserDefaultsKey(key), isPropertyListEncodableValue(value) else { continue }
+            snapshot[key] = value
+        }
+    }
+
+    static func mergeSynchronizedUserDefaultsKeys(
+        in snapshot: inout [String: Any],
+        userDefaults: UserDefaults
+    ) -> (imported: Int, skipped: Int) {
+        var imported = 0
+        var skipped = 0
+
+        for key in snapshot.keys.sorted() where isSynchronizedUserDefaultsKey(key) {
+            guard let incomingValue = snapshot.removeValue(forKey: key),
+                  isPropertyListEncodableValue(incomingValue) else {
+                skipped += 1
+                continue
+            }
+            let localValue = userDefaults.object(forKey: key)
+            if appStorageValuesEqual(localValue, incomingValue) {
+                skipped += 1
+                continue
+            }
+            userDefaults.set(incomingValue, forKey: key)
+            imported += 1
+        }
+
+        return (imported, skipped)
     }
 
     static func mergeGlobalSystemPromptStorageKeys(
@@ -359,6 +402,11 @@ extension SyncEngine {
             return false
         }
         return true
+    }
+
+    static func isSynchronizedUserDefaultsKey(_ key: String) -> Bool {
+        key == ChatAppearanceProfileStore.configurationStorageKey
+            || AchievementCenter.isAchievementStorageKey(key)
     }
 
     static func appStorageValuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {

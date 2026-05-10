@@ -354,7 +354,8 @@ struct SyncConflictStrategyTests {
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
         let snapshot = decodeAppStorageSnapshot(package.appStorageSnapshot)
 
-        #expect(snapshot["themeMode"] as? String == "dark")
+        #expect(snapshot[AppConfigKey.enableStreaming.rawValue] != nil)
+        #expect(snapshot["themeMode"] == nil)
         #expect(snapshot["cloudSync.deviceIdentifier"] == nil)
         #expect(snapshot["sync.delta.version-tracker.watch.connectivity"] == nil)
         #expect(snapshot["sync.delta.checkpoint.cloud.sync"] == nil)
@@ -370,11 +371,22 @@ struct SyncConflictStrategyTests {
         defaults.removePersistentDomain(forName: suite)
         defer { defaults.removePersistentDomain(forName: suite) }
 
+        let configKey = AppConfigKey.shortcutBridgeShortcutName.rawValue
+        let previousValue = Persistence.readAppConfigText(key: configKey)
+        defer {
+            if let previousValue {
+                Persistence.writeAppConfig(key: configKey, text: previousValue)
+            } else {
+                Persistence.deleteAppConfig(key: configKey)
+            }
+        }
+
         defaults.set("dark", forKey: "themeMode")
         defaults.set("local-device", forKey: "cloudSync.deviceIdentifier")
         defaults.set(Data([0xAA]), forKey: "sync.delta.checkpoint.cloud.sync")
 
         let incoming: [String: Any] = [
+            configKey: "Remote Bridge",
             "themeMode": "light",
             "cloudSync.deviceIdentifier": "remote-device",
             "sync.delta.checkpoint.cloud.sync": Data([0xBB])
@@ -391,7 +403,8 @@ struct SyncConflictStrategyTests {
 
         _ = await SyncEngine.apply(package: package, userDefaults: defaults)
 
-        #expect(defaults.string(forKey: "themeMode") == "light")
+        #expect(Persistence.readAppConfigText(key: configKey) == "Remote Bridge")
+        #expect(defaults.string(forKey: "themeMode") == "dark")
         #expect(defaults.string(forKey: "cloudSync.deviceIdentifier") == "local-device")
         #expect(defaults.data(forKey: "sync.delta.checkpoint.cloud.sync") == Data([0xAA]))
     }

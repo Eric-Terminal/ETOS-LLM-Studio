@@ -524,7 +524,10 @@ extension ChatService {
     }
 
     func resolveSelectedOCRModel() -> RunnableModel? {
-        let identifier = AppConfigStore.readStringNonisolated(.ocrModelIdentifier)
+        let identifier = AppConfigStore.readStringNonisolated(
+            .ocrModelIdentifier,
+            default: AppConfigKey.ocrModelIdentifier.defaultValue as? String ?? ""
+        )
 #if canImport(Vision) && !os(watchOS)
         guard !identifier.isEmpty else {
             return Self.systemOCRRunnableModel

@@ -345,6 +345,7 @@ extension SyncEngine {
             if result.imported > 0 {
                 Task { @MainActor in
                     AppConfigStore.shared.reloadAll()
+                    AchievementCenter.shared.refreshFromStorage()
                     ChatAppearanceProfileManager.shared.reloadFromStorage()
                 }
             }
