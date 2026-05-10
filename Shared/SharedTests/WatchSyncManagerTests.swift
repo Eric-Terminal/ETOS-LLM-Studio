@@ -21,4 +21,15 @@ struct WatchSyncManagerTests {
         #expect(FileManager.default.fileExists(atPath: stagedURL.path))
         #expect((try? Data(contentsOf: stagedURL)) == sourceData)
     }
+
+    @Test("接收的同步消息载荷会写入稳定临时文件")
+    func testStageIncomingSyncExchangeData() throws {
+        let payload = Data("watch-sync-inline".utf8)
+
+        let stagedURL = try stageIncomingSyncExchangeData(payload)
+        defer { try? FileManager.default.removeItem(at: stagedURL) }
+
+        #expect(FileManager.default.fileExists(atPath: stagedURL.path))
+        #expect((try? Data(contentsOf: stagedURL)) == payload)
+    }
 }

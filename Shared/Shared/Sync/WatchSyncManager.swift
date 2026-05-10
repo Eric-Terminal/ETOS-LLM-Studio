@@ -3,7 +3,7 @@
 // ============================================================================
 // 利用 WatchConnectivity 在 iPhone 与 Apple Watch 之间同步应用数据
 // - 支持双向同步：双方比较差异后合并
-// - 使用文件传输承载 JSON 同步包，避免消息大小限制
+// - 小载荷优先使用 sendMessage，较大载荷继续使用文件传输
 // - 在接收端应用 SyncEngine 合并数据，并自动回传
 // - 支持启动时自动同步，静默处理失败，成功发送通知
 // ============================================================================
@@ -25,6 +25,16 @@ func stageIncomingSyncExchangeFile(
     return stagedURL
 }
 
+func stageIncomingSyncExchangeData(
+    _ data: Data,
+    fileManager: FileManager = .default
+) throws -> URL {
+    let stagedURL = fileManager.temporaryDirectory
+        .appendingPathComponent("watch-sync-\(UUID().uuidString).json", isDirectory: false)
+    try data.write(to: stagedURL, options: [.atomic])
+    return stagedURL
+}
+
 #if canImport(WatchConnectivity)
 @MainActor
 public final class WatchSyncManager: NSObject, ObservableObject {
@@ -39,6 +49,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     public static let shared = WatchSyncManager()
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则 WatchConnectivity 同步状态不会稳定自动刷新到双端设置页。
+    private static let inlineExchangeKind = "com.ETOS.watchSync.exchange.inline.v1"
+    private static let quickAppConfigKind = "com.ETOS.watchSync.appConfig.quick.v1"
+    private static let inlineExchangePayloadLimit = 60 * 1024
     
     @Published public private(set) var state: SyncState = .idle
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
@@ -241,6 +254,28 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             performSync(options: options, silent: true)
         }
     }
+
+    /// 通过近场在线通道广播单个 AppConfig 键，失败时回退到静默设置同步。
+    public func performQuickSync(key: String, value: Any) {
+        guard SyncEngine.isPropertyListEncodableValue(value) else { return }
+        guard let session = validateSessionBeforeTransfer(options: [.appStorage], silent: true) else { return }
+        guard session.isReachable else {
+            performSync(options: [.appStorage], silent: true)
+            return
+        }
+
+        let message: [String: Any] = [
+            "kind": Self.quickAppConfigKind,
+            "key": key,
+            "value": value,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        session.sendMessage(message, replyHandler: nil, errorHandler: { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.performSync(options: [.appStorage], silent: true)
+            }
+        })
+    }
     
     /// 从用户设置构建同步选项
     private func buildSyncOptionsFromSettings() -> SyncOptions {
@@ -355,6 +390,26 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     private func sendExchange(payload: SyncExchangePayload) {
         guard let session else { return }
+        let metadata = makeExchangeMetadata(payload: payload)
+        let context = PendingTransferContext(
+            expectsResponse: payload.expectsResponse,
+            operationID: payload.requestID.flatMap(UUID.init(uuidString:)),
+            isSilent: payload.isSilent,
+            marksSuccessWhenFinished: payload.marksSuccessWhenFinished,
+            fileURL: payload.fileURL
+        )
+
+        if session.isReachable,
+           let data = try? Data(contentsOf: payload.fileURL),
+           data.count <= Self.inlineExchangePayloadLimit {
+            sendInlineExchange(data: data, metadata: metadata, context: context)
+            return
+        }
+
+        transferExchangeFile(metadata: metadata, context: context)
+    }
+
+    private func makeExchangeMetadata(payload: SyncExchangePayload) -> [String: Any] {
         var metadata: [String: Any] = [
             "options": payload.optionsRawValue,
             "response": payload.isResponse,
@@ -365,15 +420,75 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if let requestID = payload.requestID {
             metadata["requestID"] = requestID
         }
-        
-        let transfer = session.transferFile(payload.fileURL, metadata: metadata)
-        pendingTransfers[ObjectIdentifier(transfer)] = PendingTransferContext(
-            expectsResponse: payload.expectsResponse,
-            operationID: payload.requestID.flatMap(UUID.init(uuidString:)),
-            isSilent: payload.isSilent,
-            marksSuccessWhenFinished: payload.marksSuccessWhenFinished,
-            fileURL: payload.fileURL
-        )
+        return metadata
+    }
+
+    private func sendInlineExchange(
+        data: Data,
+        metadata: [String: Any],
+        context: PendingTransferContext
+    ) {
+        guard let session else { return }
+        var message = metadata
+        message["kind"] = Self.inlineExchangeKind
+        message["payload"] = data
+
+        session.sendMessage(message, replyHandler: { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleOutboundExchangeFinished(context: context, error: nil, removeFile: true)
+            }
+        }, errorHandler: { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.transferExchangeFile(metadata: metadata, context: context)
+            }
+        })
+    }
+
+    private func transferExchangeFile(
+        metadata: [String: Any],
+        context: PendingTransferContext
+    ) {
+        guard let session, let fileURL = context.fileURL else { return }
+        let transfer = session.transferFile(fileURL, metadata: metadata)
+        pendingTransfers[ObjectIdentifier(transfer)] = context
+    }
+
+    private func handleOutboundExchangeFinished(
+        context: PendingTransferContext?,
+        error: Error?,
+        removeFile: Bool
+    ) {
+        defer {
+            if removeFile, let fileURL = context?.fileURL {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
+
+        if let error {
+            failSyncOperation(
+                operationID: context?.operationID,
+                fallbackSilent: context?.isSilent ?? false,
+                message: "发送失败: \(error.localizedDescription)"
+            )
+        } else if let context {
+            let isSilent = isSyncSilent(
+                operationID: context.operationID,
+                fallback: context.isSilent
+            )
+            if !isSilent, context.expectsResponse == false {
+                if context.marksSuccessWhenFinished {
+                    lastSummary = .empty
+                }
+                lastUpdatedAt = Date()
+                state = .success(lastSummary)
+            } else if !isSilent {
+                state = .syncing("等待对端处理…")
+            }
+
+            if context.expectsResponse == false {
+                completeSyncOperationIfNeeded(operationID: context.operationID)
+            }
+        }
     }
 
     private func isSyncSilent(operationID: UUID?, fallback: Bool) -> Bool {
@@ -528,6 +643,77 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             )
         }
     }
+
+    private func handleIncomingInlineExchangeMessage(
+        _ message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) -> Bool {
+        guard message["kind"] as? String == Self.inlineExchangeKind else { return false }
+        let requestID = message["requestID"] as? String
+        let operationID = requestID.flatMap(UUID.init(uuidString:))
+        let silent = (message["silent"] as? Bool) ?? false
+
+        guard let data = message["payload"] as? Data else {
+            replyHandler(["accepted": false])
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: silent,
+                message: "接收同步消息失败：载荷为空。"
+            )
+            return true
+        }
+
+        let stagedFileURL: URL
+        do {
+            stagedFileURL = try stageIncomingSyncExchangeData(data)
+        } catch {
+            replyHandler(["accepted": false])
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: silent,
+                message: "接收同步消息失败: \(error.localizedDescription)"
+            )
+            return true
+        }
+
+        let isResponse = (message["response"] as? Bool) ?? false
+        let expectsResponse = (message["expectsResponse"] as? Bool) ?? true
+        let effectiveSilent = isSyncSilent(operationID: operationID, fallback: silent)
+        replyHandler(["accepted": true])
+        Task { @MainActor [weak self] in
+            await self?.applyExchange(
+                from: stagedFileURL,
+                isResponse: isResponse,
+                requestID: requestID,
+                expectsResponse: expectsResponse,
+                silent: effectiveSilent
+            )
+        }
+        return true
+    }
+
+    private func handleIncomingQuickAppConfigMessage(
+        _ message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) -> Bool {
+        guard message["kind"] as? String == Self.quickAppConfigKind else { return false }
+        guard let key = message["key"] as? String,
+              let value = message["value"],
+              SyncEngine.isPropertyListEncodableValue(value),
+              let snapshotData = SyncEngine.encodeAppStorageSnapshot([key: value]) else {
+            replyHandler(["accepted": false])
+            return true
+        }
+
+        replyHandler(["accepted": true])
+        let package = SyncPackage(options: [.appStorage], appStorageSnapshot: snapshotData)
+        Task { @MainActor [weak self] in
+            let summary = await SyncEngine.apply(package: package)
+            self?.lastSummary = summary
+            self?.lastUpdatedAt = Date()
+        }
+        return true
+    }
 }
 
 // MARK: - WCSessionDelegate
@@ -597,37 +783,7 @@ extension WatchSyncManager: WCSessionDelegate {
             let identifier = ObjectIdentifier(fileTransfer)
             let transferContext = pendingTransfers[identifier]
             defer { pendingTransfers.removeValue(forKey: identifier) }
-            defer {
-                if let fileURL = transferContext?.fileURL {
-                    try? FileManager.default.removeItem(at: fileURL)
-                }
-            }
-            
-            if let error {
-                failSyncOperation(
-                    operationID: transferContext?.operationID,
-                    fallbackSilent: transferContext?.isSilent ?? false,
-                    message: "发送失败: \(error.localizedDescription)"
-                )
-            } else if let transferContext {
-                let isSilent = isSyncSilent(
-                    operationID: transferContext.operationID,
-                    fallback: transferContext.isSilent
-                )
-                if !isSilent, transferContext.expectsResponse == false {
-                    if transferContext.marksSuccessWhenFinished {
-                        lastSummary = .empty
-                    }
-                    lastUpdatedAt = Date()
-                    state = .success(lastSummary)
-                } else if !isSilent {
-                    state = .syncing("等待对端处理…")
-                }
-
-                if transferContext.expectsResponse == false {
-                    completeSyncOperationIfNeeded(operationID: transferContext.operationID)
-                }
-            }
+            handleOutboundExchangeFinished(context: transferContext, error: error, removeFile: true)
         }
     }
     
@@ -636,6 +792,12 @@ extension WatchSyncManager: WCSessionDelegate {
         didReceiveMessage message: [String : Any],
         replyHandler: @escaping ([String : Any]) -> Void
     ) {
+        if handleIncomingInlineExchangeMessage(message, replyHandler: replyHandler) {
+            return
+        }
+        if handleIncomingQuickAppConfigMessage(message, replyHandler: replyHandler) {
+            return
+        }
         #if canImport(WatchConnectivity)
         if ShortcutExecutionRelay.shared.handleIncomingMessage(message, replyHandler: replyHandler) {
             return
