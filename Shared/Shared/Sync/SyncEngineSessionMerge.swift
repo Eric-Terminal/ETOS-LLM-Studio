@@ -148,13 +148,18 @@ extension SyncEngine {
             return local
         }
 
-        let canTreatAsSameMessage = local.id == incoming.id
+        let isSameMessageID = local.id == incoming.id
+        let canTreatAsSameMessage = isSameMessageID
             || messagesShareMergeIdentity(local, incoming)
         guard canTreatAsSameMessage else {
             return nil
         }
 
-        guard let contentMerge = mergeMessageVersions(local: local, incoming: incoming) else {
+        guard let contentMerge = mergeMessageVersions(
+            local: local,
+            incoming: incoming,
+            allowsDivergentVersions: isSameMessageID
+        ) else {
             return nil
         }
         guard let reasoningMerge = mergeOptionalStringField(
@@ -300,18 +305,22 @@ extension SyncEngine {
 
     static func mergeMessageVersions(
         local: ChatMessage,
-        incoming: ChatMessage
+        incoming: ChatMessage,
+        allowsDivergentVersions: Bool
     ) -> (versions: [String], currentVersionIndex: Int)? {
         let localCurrent = local.content
         let incomingCurrent = incoming.content
         guard stringsAreCompatible(localCurrent, incomingCurrent) else {
-            return nil
+            guard allowsDivergentVersions else {
+                return nil
+            }
+            return mergeDivergentMessageVersionsByIndex(local: local, incoming: incoming)
         }
 
-        var versions = local.getAllVersions()
-        for version in incoming.getAllVersions() where !versions.contains(version) {
-            versions.append(version)
-        }
+        var versions = orderedMessageVersionUnion(
+            local.getAllVersions(),
+            incoming.getAllVersions()
+        )
 
         let preferredCurrent = preferLongerString(localCurrent, incomingCurrent)
         if !versions.contains(preferredCurrent) {
@@ -319,5 +328,39 @@ extension SyncEngine {
         }
         let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
         return (versions, currentIndex)
+    }
+
+    static func mergeDivergentMessageVersionsByIndex(
+        local: ChatMessage,
+        incoming: ChatMessage
+    ) -> (versions: [String], currentVersionIndex: Int)? {
+        let versions = orderedMessageVersionUnion(
+            local.getAllVersions(),
+            incoming.getAllVersions()
+        )
+        guard !versions.isEmpty else {
+            return nil
+        }
+
+        let preferredCurrent = preferLongerString(local.content, incoming.content)
+        let currentIndex = versions.firstIndex(of: preferredCurrent)
+            ?? versions.firstIndex(of: local.content)
+            ?? versions.firstIndex(of: incoming.content)
+            ?? max(0, versions.count - 1)
+        return (versions, currentIndex)
+    }
+
+    static func orderedMessageVersionUnion(_ local: [String], _ incoming: [String]) -> [String] {
+        var versions: [String] = []
+        let maxCount = max(local.count, incoming.count)
+        for index in 0..<maxCount {
+            if local.indices.contains(index), !versions.contains(local[index]) {
+                versions.append(local[index])
+            }
+            if incoming.indices.contains(index), !versions.contains(incoming[index]) {
+                versions.append(incoming[index])
+            }
+        }
+        return versions
     }
 }

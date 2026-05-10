@@ -59,6 +59,60 @@ struct SyncConflictStrategyTests {
         #expect(mergedMessages[2].content == "继续")
     }
 
+    @Test("同消息双端重试历史会按索引并集合并")
+    func testSameMessageRetryVersionsMergeByIndex() async {
+        let originalSessions = Persistence.loadChatSessions()
+        let originalSnapshots = originalSessions.map { session in
+            SyncedSession(session: session, messages: Persistence.loadMessages(for: session.id))
+        }
+        defer {
+            resetSessions(to: originalSnapshots)
+        }
+
+        resetSessions(to: [])
+        let chatService = ChatService()
+
+        let session = ChatSession(id: UUID(), name: "重试同步会话", isTemporary: false)
+        let userMessage = ChatMessage(id: UUID(), role: .user, content: "生成一段介绍")
+        let assistantID = UUID()
+        var localAssistant = ChatMessage(id: assistantID, role: .assistant, content: "初始回复")
+        localAssistant.addVersion("本地重试")
+        var incomingAssistant = ChatMessage(id: assistantID, role: .assistant, content: "初始回复")
+        incomingAssistant.addVersion("远端重试")
+        incomingAssistant.addVersion("远端第三版")
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([userMessage, localAssistant], for: session.id)
+        chatService.chatSessionsSubject.send([session])
+        chatService.currentSessionSubject.send(session)
+
+        let package = SyncPackage(
+            options: [.sessions],
+            sessions: [
+                SyncedSession(
+                    session: session,
+                    messages: [userMessage, incomingAssistant]
+                )
+            ]
+        )
+
+        let summary = await SyncEngine.apply(package: package, chatService: chatService)
+        let mergedSessions = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
+        let mergedMessages = Persistence.loadMessages(for: session.id)
+
+        #expect(summary.importedSessions == 1)
+        #expect(mergedSessions.count == 1)
+        #expect(mergedMessages.count == 2)
+        #expect(mergedMessages[1].id == assistantID)
+        #expect(mergedMessages[1].getAllVersions() == [
+            "初始回复",
+            "本地重试",
+            "远端重试",
+            "远端第三版"
+        ])
+        #expect(mergedMessages[1].content == "远端第三版")
+    }
+
     @Test("提供商新增嵌套键值时会深度合并")
     func testProvidersDeepMergeWhenIncomingAddsNestedValues() async {
         let originalProviders = ConfigLoader.loadProviders()
