@@ -60,10 +60,9 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         try await ensureAvailableAccount()
         try await ensureCloudSyncZoneExists()
 
-        let record = CKRecord(
-            recordType: cloudSyncSnapshotRecordType,
-            recordID: CKRecord.ID(recordName: snapshot.recordName, zoneID: cloudSyncSnapshotZoneID)
-        )
+        let recordID = CKRecord.ID(recordName: snapshot.recordName, zoneID: cloudSyncSnapshotZoneID)
+        let record = try await fetchExistingSnapshotRecord(recordID: recordID)
+            ?? CKRecord(recordType: cloudSyncSnapshotRecordType, recordID: recordID)
         record[Self.schemaVersionKey] = snapshot.snapshot.schemaVersion as NSNumber
         record[Self.deviceIdentifierKey] = snapshot.deviceID as NSString
         record[Self.updatedAtKey] = snapshot.updatedAt as NSDate
@@ -77,7 +76,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         record[Self.payloadAssetKey] = CKAsset(fileURL: tempURL)
 
         do {
-            _ = try await save(record)
+            _ = try await modifyRecords(saving: [record])
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
             throw error
@@ -215,7 +214,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     private func makeSnapshot(from record: CKRecord) throws -> CloudSyncRemoteSnapshot {
         let recordName = record.recordID.recordName
         let deviceID = record[Self.deviceIdentifierKey] as? String ?? ""
-        let updatedAt = (record[Self.updatedAtKey] as? Date) ?? record.modificationDate ?? .distantPast
+        let updatedAt = record.modificationDate ?? (record[Self.updatedAtKey] as? Date) ?? .distantPast
         let checksum = record[Self.checksumKey] as? String ?? ""
         guard let asset = record[Self.payloadAssetKey] as? CKAsset,
               let assetURL = asset.fileURL else {
@@ -255,19 +254,21 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
-    private func save(_ record: CKRecord) async throws -> CKRecord {
-        try await withCheckedThrowingContinuation { continuation in
-            database.save(record) { savedRecord, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                if let savedRecord {
-                    continuation.resume(returning: savedRecord)
-                } else {
-                    continuation.resume(throwing: CloudSyncManagerError.invalidAsset)
-                }
+    private func fetchExistingSnapshotRecord(recordID: CKRecord.ID) async throws -> CKRecord? {
+        do {
+            return try await database.record(for: recordID)
+        } catch let error as CKError where error.code == .unknownItem {
+            return nil
+        }
+    }
+
+    private func modifyRecords(saving records: [CKRecord]) async throws -> [CKRecord] {
+        let result = try await database.modifyRecords(saving: records, deleting: [])
+        return try records.compactMap { record in
+            guard let saveResult = result.saveResults[record.recordID] else {
+                return nil
             }
+            return try saveResult.get()
         }
     }
 
