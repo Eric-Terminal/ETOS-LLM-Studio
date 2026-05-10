@@ -103,12 +103,12 @@ extension ContentView {
                             source,
                             to: importSourceHistory
                         )
-                        attachmentSourceHistoryRawValue = WatchImportSourceHistory.rawValue(for: updatedHistory)
-                        lastAttachmentSource = updatedHistory.first ?? ""
+                        appConfig.watchAttachmentSourceHistory = WatchImportSourceHistory.rawValue(for: updatedHistory)
+                        appConfig.watchAttachmentLastSource = updatedHistory.first ?? ""
                         importSourceHistory = updatedHistory
                     },
                     importSourceHistory: importSourceHistory,
-                    lastAttachmentSource: lastAttachmentSource,
+                    lastAttachmentSource: appConfig.watchAttachmentLastSource,
                     isQuickModelSelectorPresented: $isQuickModelSelectorPresented,
                     isRequestControlsPresented: $isRequestControlsPresented,
                     isAttachmentImportPresented: $isAttachmentImportPresented,

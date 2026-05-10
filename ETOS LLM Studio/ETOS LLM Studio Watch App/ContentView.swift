@@ -16,6 +16,7 @@ struct ContentView: View {
     @StateObject var announcementManager = AnnouncementManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject var notificationCenter = AppLocalNotificationCenter.shared
+    @ObservedObject var appConfig = AppConfigStore.shared
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @State var isAtBottom = true
     @State var showScrollToBottomButton = false
@@ -41,15 +42,9 @@ struct ContentView: View {
     @State var isAttachmentImportPresented = false
     @State var attachmentSourceText: String = ""
     @State var importSourceHistory: [String] = []
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fontScaleStorageKey) var customFontScale: Double = FontLibrary.defaultFontScale
-    @AppStorage(ChatNavigationMode.storageKey) var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @AppStorage(AppLanguagePreference.storageKey) var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
-    @AppStorage("watch.attachment.lastSource") var lastAttachmentSource: String = ""
-    @AppStorage("watch.attachment.sourceHistory") var attachmentSourceHistoryRawValue: String = "[]"
 
     var effectiveFontScale: CGFloat {
-        CGFloat(FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled))
+        CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
     }
 
     var inputControlHeight: CGFloat {
@@ -69,7 +64,7 @@ struct ContentView: View {
     }
 
     var isNativeNavigationEnabled: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
     }
 
     var body: some View {
@@ -141,28 +136,28 @@ struct ContentView: View {
             }
         }
         .environment(\.font, rootBodyFont)
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appLanguageRawValue))
+        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
         .onAppear {
-            AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
+            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
             refreshRootBodyFont()
             refreshAttachmentSourceHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
         }
-        .onChange(of: isCustomFontEnabled) { _, isEnabled in
+        .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
-        .onChange(of: customFontScale) { _, newValue in
+        .onChange(of: appConfig.fontCustomScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                customFontScale = normalizedValue
+                appConfig.fontCustomScale = normalizedValue
             }
             refreshRootBodyFont()
         }
-        .onChange(of: chatNavigationModeRawValue) { _, _ in
+        .onChange(of: appConfig.chatNavigationMode) { _, _ in
             if !isNativeNavigationEnabled {
                 nativeDestination = nil
             } else {
@@ -171,13 +166,13 @@ struct ContentView: View {
                 isSettingsPresented = false
             }
         }
-        .onChange(of: appLanguageRawValue) { _, newValue in
+        .onChange(of: appConfig.appLanguage) { _, newValue in
             AppLanguageRuntime.apply(rawValue: newValue)
         }
-        .onChange(of: attachmentSourceHistoryRawValue) { _, _ in
+        .onChange(of: appConfig.watchAttachmentSourceHistory) { _, _ in
             refreshAttachmentSourceHistory()
         }
-        .onChange(of: lastAttachmentSource) { _, _ in
+        .onChange(of: appConfig.watchAttachmentLastSource) { _, _ in
             refreshAttachmentSourceHistory()
         }
         .onDisappear {

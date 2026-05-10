@@ -5,7 +5,7 @@ import Combine
 
 @Suite("聊天服务启动会话偏好测试")
 struct ChatServiceLaunchPreferenceTests {
-    private let restoreKey = ChatService.restoreLastSessionOnLaunchEnabledStorageKey
+    private let restoreKey = AppConfigKey.restoreLastSessionOnLaunch.rawValue
     private let lastSessionKey = "launch.lastActiveSessionID"
 
     @MainActor
@@ -22,7 +22,7 @@ struct ChatServiceLaunchPreferenceTests {
         Persistence.saveMessages([ChatMessage(role: .user, content: "历史消息")], for: persisted.id)
 
         let defaults = UserDefaults.standard
-        defaults.set(false, forKey: restoreKey)
+        Persistence.writeAppConfig(key: restoreKey, integer: 0, typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint)
         defaults.set(persisted.id.uuidString, forKey: lastSessionKey)
 
         let service = ChatService()
@@ -47,7 +47,7 @@ struct ChatServiceLaunchPreferenceTests {
         Persistence.saveMessages(expectedMessages, for: sessionB.id)
 
         let defaults = UserDefaults.standard
-        defaults.set(true, forKey: restoreKey)
+        Persistence.writeAppConfig(key: restoreKey, integer: 1, typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint)
         defaults.set(sessionB.id.uuidString, forKey: lastSessionKey)
 
         let service = ChatService()
@@ -71,7 +71,7 @@ struct ChatServiceLaunchPreferenceTests {
         Persistence.saveChatSessions([sessionA, sessionB])
 
         let defaults = UserDefaults.standard
-        defaults.set(false, forKey: restoreKey)
+        Persistence.writeAppConfig(key: restoreKey, integer: 0, typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint)
         defaults.removeObject(forKey: lastSessionKey)
 
         let service = ChatService()
@@ -85,13 +85,17 @@ struct ChatServiceLaunchPreferenceTests {
         clearAllSessions()
 
         let defaults = UserDefaults.standard
-        let previousRestoreValue = defaults.object(forKey: restoreKey)
+        let previousRestoreValue = Persistence.readAppConfigInteger(key: restoreKey)
         let previousLastSessionValue = defaults.object(forKey: lastSessionKey)
         let restoreDefaults = {
             if let previousRestoreValue {
-                defaults.set(previousRestoreValue, forKey: restoreKey)
+                Persistence.writeAppConfig(
+                    key: restoreKey,
+                    integer: previousRestoreValue,
+                    typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint
+                )
             } else {
-                defaults.removeObject(forKey: restoreKey)
+                Persistence.deleteAppConfig(key: restoreKey)
             }
 
             if let previousLastSessionValue {

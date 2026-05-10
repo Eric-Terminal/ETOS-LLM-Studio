@@ -27,8 +27,18 @@ struct ProviderDetailView: View {
     @State private var hasAutoFetchedModels = false
     @State private var searchText = ""
     @State private var isSearchPresented = false
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @FocusState private var isSearchFieldFocused: Bool
-    @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
+    private var groupByFamilySection: Bool {
+        appConfig.providerDetailGroupByMainstream
+    }
+
+    private var groupByFamilySectionBinding: Binding<Bool> {
+        Binding(
+            get: { groupByFamilySection },
+            set: { appConfig.providerDetailGroupByMainstream = $0 }
+        )
+    }
 
     init(
         provider: Provider,
@@ -74,7 +84,7 @@ struct ProviderDetailView: View {
             }
 
             Section(NSLocalizedString("列表设置", comment: "")) {
-                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
+                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: groupByFamilySectionBinding)
                 if groupByFamilySection {
                     Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
                         .etFont(.footnote)

@@ -58,17 +58,24 @@ struct AnnouncementLanguageMatchingTests {
 
     @Test("手动 App 语言会影响内置模型提示语言")
     func manualAppLanguageControlsModelPromptLanguage() {
-        let defaults = UserDefaults.standard
-        let previous = defaults.string(forKey: AppLanguagePreference.storageKey)
+        let previous = Persistence.readAppConfigText(key: AppConfigKey.appLanguage.rawValue)
         defer {
             if let previous {
-                defaults.set(previous, forKey: AppLanguagePreference.storageKey)
+                Persistence.writeAppConfig(
+                    key: AppConfigKey.appLanguage.rawValue,
+                    text: previous,
+                    typeHint: AppConfigKey.appLanguage.typeHint
+                )
             } else {
-                defaults.removeObject(forKey: AppLanguagePreference.storageKey)
+                Persistence.deleteAppConfig(key: AppConfigKey.appLanguage.rawValue)
             }
         }
 
-        defaults.set(AppLanguagePreference.japanese.rawValue, forKey: AppLanguagePreference.storageKey)
+        Persistence.writeAppConfig(
+            key: AppConfigKey.appLanguage.rawValue,
+            text: AppLanguagePreference.japanese.rawValue,
+            typeHint: AppConfigKey.appLanguage.typeHint
+        )
 
         #expect(ModelPromptLanguage.current == .japanese)
     }

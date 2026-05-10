@@ -14,7 +14,7 @@ import Shared
 
 /// 偏好设置视图
 struct ModelAdvancedSettingsView: View {
-    @AppStorage(ChatService.restoreLastSessionOnLaunchEnabledStorageKey) private var restoreLastSessionOnLaunch: Bool = false
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     // MARK: - 绑定
 
@@ -123,7 +123,7 @@ struct ModelAdvancedSettingsView: View {
 
             // MARK: Section 2：会话与上下文
             Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
-                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $restoreLastSessionOnLaunch)
+                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
 
                 HStack {

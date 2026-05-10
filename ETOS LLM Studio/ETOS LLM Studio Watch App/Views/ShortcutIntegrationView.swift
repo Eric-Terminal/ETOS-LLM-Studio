@@ -14,8 +14,8 @@ struct ShortcutIntegrationView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isShowingIntroDetails = false
-    @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     private var countdownNumberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -109,7 +109,7 @@ struct ShortcutIntegrationView: View {
                 Text(NSLocalizedString("若 iPhone 端 urlshim / URL Scheme 跳转失败，请在 iPhone 的快捷设定页直接复制清单到剪贴板，再使用“从剪贴板导入清单”。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
-                Text(String(format: NSLocalizedString("桥接快捷指令：%@", comment: ""), bridgeShortcutName))
+                Text(String(format: NSLocalizedString("桥接快捷指令：%@", comment: ""), appConfig.shortcutBridgeShortcutName))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
 

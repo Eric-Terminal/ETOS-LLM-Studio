@@ -255,14 +255,13 @@ struct FontRouteSyncTests {
 
     @Test("关闭全局自定义字体开关后会统一回退系统字体")
     func testGlobalCustomFontSwitchDisablesFallbackAndResolve() async throws {
-        let defaults = UserDefaults.standard
-        let key = FontLibrary.customFontEnabledStorageKey
-        let previousValue = defaults.object(forKey: key)
+        let key = AppConfigKey.fontUseCustomFonts
+        let previousValue = Persistence.readAppConfigInteger(key: key.rawValue)
         defer {
             if let previousValue {
-                defaults.set(previousValue, forKey: key)
+                Persistence.writeAppConfig(key: key.rawValue, integer: previousValue, typeHint: key.typeHint)
             } else {
-                defaults.removeObject(forKey: key)
+                Persistence.deleteAppConfig(key: key.rawValue)
             }
         }
 
@@ -281,10 +280,10 @@ struct FontRouteSyncTests {
             ]))
             #expect(FontLibrary.saveRouteConfiguration(.init(body: [assetID], emphasis: [], strong: [], code: [])))
 
-            defaults.set(true, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, integer: 1, typeHint: key.typeHint)
             #expect(FontLibrary.fallbackPostScriptNames(for: .body) == ["GlobalSwitchPS"])
 
-            defaults.set(false, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, integer: 0, typeHint: key.typeHint)
             #expect(FontLibrary.fallbackPostScriptNames(for: .body).isEmpty)
             #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == nil)
         }
@@ -292,25 +291,24 @@ struct FontRouteSyncTests {
 
     @Test("自定义字体字号比例会限制范围并刷新适配缓存标记")
     func testCustomFontScaleIsClampedAndIncludedInAdapterCacheToken() async throws {
-        let defaults = UserDefaults.standard
-        let key = FontLibrary.fontScaleStorageKey
-        let previousValue = defaults.object(forKey: key)
+        let key = AppConfigKey.fontCustomScale
+        let previousValue = Persistence.readAppConfigReal(key: key.rawValue)
         defer {
             if let previousValue {
-                defaults.set(previousValue, forKey: key)
+                Persistence.writeAppConfig(key: key.rawValue, real: previousValue, typeHint: key.typeHint)
             } else {
-                defaults.removeObject(forKey: key)
+                Persistence.deleteAppConfig(key: key.rawValue)
             }
             FontLibrary.preloadRuntimeCache(forceReload: true)
         }
 
         try await withIsolatedFontStore {
-            defaults.removeObject(forKey: key)
+            Persistence.deleteAppConfig(key: key.rawValue)
             FontLibrary.preloadRuntimeCache(forceReload: true)
             #expect(FontLibrary.customFontScale == FontLibrary.defaultFontScale)
             let defaultToken = FontLibrary.adapterCacheToken()
 
-            defaults.set(1.75, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, real: 1.75, typeHint: key.typeHint)
             #expect(FontLibrary.customFontScale == 1.75)
             #expect(FontLibrary.scaledPointSize(16) == 28)
             #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: true) == 1.75)
@@ -323,11 +321,11 @@ struct FontRouteSyncTests {
             #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: false) == 16)
             #expect(FontLibrary.adapterCacheToken() != defaultToken)
 
-            defaults.set(9.0, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, real: 9.0, typeHint: key.typeHint)
             #expect(FontLibrary.customFontScale == FontLibrary.maximumFontScale)
             #expect(FontLibrary.scaledPointSize(17) == 34)
 
-            defaults.set(0.1, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, real: 0.1, typeHint: key.typeHint)
             #expect(FontLibrary.customFontScale == FontLibrary.minimumFontScale)
             #expect(FontLibrary.scaledPointSize(20) == 10)
         }
@@ -335,14 +333,13 @@ struct FontRouteSyncTests {
 
     @Test("单字回退模式会优先保留首个可渲染字符的高优先级字体")
     func testCharacterFallbackScopeKeepsHigherPriorityFontForMixedSample() async throws {
-        let defaults = UserDefaults.standard
-        let key = FontLibrary.fallbackScopeStorageKey
-        let previousValue = defaults.object(forKey: key)
+        let key = AppConfigKey.fontFallbackScope
+        let previousValue = Persistence.readAppConfigText(key: key.rawValue)
         defer {
             if let previousValue {
-                defaults.set(previousValue, forKey: key)
+                Persistence.writeAppConfig(key: key.rawValue, text: previousValue, typeHint: key.typeHint)
             } else {
-                defaults.removeObject(forKey: key)
+                Persistence.deleteAppConfig(key: key.rawValue)
             }
         }
 
@@ -356,10 +353,10 @@ struct FontRouteSyncTests {
 
             let mixedSample = "A\u{0378}"
 
-            defaults.set(FontFallbackScope.segment.rawValue, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
             #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == nil)
 
-            defaults.set(FontFallbackScope.character.rawValue, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.character.rawValue, typeHint: key.typeHint)
             #expect(
                 FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == imported.postScriptName
             )
@@ -368,14 +365,13 @@ struct FontRouteSyncTests {
 
     @Test("整段回退模式会沿用旧优先级链路继续尝试后续字体")
     func testSegmentFallbackScopeKeepsLegacyPriorityChain() async throws {
-        let defaults = UserDefaults.standard
-        let key = FontLibrary.fallbackScopeStorageKey
-        let previousValue = defaults.object(forKey: key)
+        let key = AppConfigKey.fontFallbackScope
+        let previousValue = Persistence.readAppConfigText(key: key.rawValue)
         defer {
             if let previousValue {
-                defaults.set(previousValue, forKey: key)
+                Persistence.writeAppConfig(key: key.rawValue, text: previousValue, typeHint: key.typeHint)
             } else {
-                defaults.removeObject(forKey: key)
+                Persistence.deleteAppConfig(key: key.rawValue)
             }
         }
 
@@ -402,7 +398,7 @@ struct FontRouteSyncTests {
             #expect(FontLibrary.saveAssets(assets))
             FontLibrary.updateChain([invalidID, valid.id], for: .body)
 
-            defaults.set(FontFallbackScope.segment.rawValue, forKey: key)
+            Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
             #expect(
                 FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == valid.postScriptName
             )

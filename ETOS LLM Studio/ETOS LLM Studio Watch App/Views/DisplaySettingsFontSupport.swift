@@ -9,9 +9,7 @@ import Foundation
 import Shared
 
 struct WatchFontSettingsView: View {
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
-    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -20,6 +18,21 @@ struct WatchFontSettingsView: View {
     @State private var importURLText: String = ""
     @State private var isImportingFromURL: Bool = false
     @State private var importErrorMessage: String?
+
+    private var isCustomFontEnabled: Bool {
+        get { appConfig.fontUseCustomFonts }
+        nonmutating set { appConfig.fontUseCustomFonts = newValue }
+    }
+
+    private var fallbackScopeRawValue: String {
+        get { appConfig.fontFallbackScope }
+        nonmutating set { appConfig.fontFallbackScope = newValue }
+    }
+
+    private var customFontScale: Double {
+        get { appConfig.fontCustomScale }
+        nonmutating set { appConfig.fontCustomScale = newValue }
+    }
 
     var body: some View {
         List {
@@ -45,7 +58,7 @@ struct WatchFontSettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: $isCustomFontEnabled)
+                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: customFontEnabledBinding)
             } footer: {
                 Text(NSLocalizedString("关闭后会全局回退系统字体；已导入字体与优先级配置会保留。", comment: ""))
                     .etFont(.caption2)
@@ -273,6 +286,13 @@ struct WatchFontSettingsView: View {
     private var availableAssetsForSelectedRole: [FontAssetRecord] {
         let selectedIDs = Set(routes.chain(for: selectedRole))
         return assets.filter { !selectedIDs.contains($0.id) }
+    }
+
+    private var customFontEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isCustomFontEnabled },
+            set: { isCustomFontEnabled = $0 }
+        )
     }
 
     private func reloadData() {

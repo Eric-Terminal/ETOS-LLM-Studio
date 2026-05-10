@@ -12,9 +12,7 @@ import UniformTypeIdentifiers
 
 struct FontSettingsView: View {
     @Environment(\.editMode) private var editMode
-    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
-    @AppStorage(FontLibrary.fallbackScopeStorageKey) private var fallbackScopeRawValue: String = FontFallbackScope.segment.rawValue
-    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var assets: [FontAssetRecord] = []
     @State private var routes: FontRouteConfiguration = .init()
     @State private var selectedRole: FontSemanticRole = .body
@@ -22,6 +20,21 @@ struct FontSettingsView: View {
     @State private var showImporter = false
     @State private var importErrorMessage: String?
     @State private var deleteErrorMessage: String?
+
+    private var isCustomFontEnabled: Bool {
+        get { appConfig.fontUseCustomFonts }
+        nonmutating set { appConfig.fontUseCustomFonts = newValue }
+    }
+
+    private var fallbackScopeRawValue: String {
+        get { appConfig.fontFallbackScope }
+        nonmutating set { appConfig.fontFallbackScope = newValue }
+    }
+
+    private var customFontScale: Double {
+        get { appConfig.fontCustomScale }
+        nonmutating set { appConfig.fontCustomScale = newValue }
+    }
 
     var body: some View {
         Form {
@@ -47,7 +60,7 @@ struct FontSettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: $isCustomFontEnabled)
+                Toggle(NSLocalizedString("启用自定义字体", comment: ""), isOn: customFontEnabledBinding)
             } footer: {
                 Text(NSLocalizedString("关闭后全局回退为系统字体；已导入字体与优先级配置会保留。", comment: ""))
                     .etFont(.footnote)
@@ -166,6 +179,13 @@ struct FontSettingsView: View {
 
     private var isEditing: Bool {
         editMode?.wrappedValue.isEditing == true
+    }
+
+    private var customFontEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isCustomFontEnabled },
+            set: { isCustomFontEnabled = $0 }
+        )
     }
 
     private var fallbackScope: FontFallbackScope {

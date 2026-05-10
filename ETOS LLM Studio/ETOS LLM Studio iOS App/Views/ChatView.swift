@@ -22,6 +22,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) var colorScheme
+    @ObservedObject var appConfig = AppConfigStore.shared
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject var ttsManager = TTSManager.shared
     @State var showScrollToBottom = false
@@ -67,10 +68,18 @@ struct ChatView: View {
     @State var pendingJumpRequest: MessageJumpRequest?
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
-    @AppStorage("chat.composer.draft") var draftText: String = ""
-    @AppStorage(ChatPickerPresentationStyle.storageKey) var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
     @Namespace var modelPickerNamespace
     @Namespace var sessionPickerNamespace
+
+    var draftText: String {
+        get { appConfig.chatComposerDraft }
+        nonmutating set { appConfig.chatComposerDraft = newValue }
+    }
+
+    var chatPickerPresentationStyleRawValue: String {
+        get { appConfig.chatPickerPresentationStyle }
+        nonmutating set { appConfig.chatPickerPresentationStyle = newValue }
+    }
 
     let scrollBottomAnchorID = "chat-scroll-bottom"
     let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)

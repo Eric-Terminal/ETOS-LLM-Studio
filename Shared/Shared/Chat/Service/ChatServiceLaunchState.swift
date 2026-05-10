@@ -117,7 +117,7 @@ extension ChatService {
         newTemporarySession: ChatSession
     ) -> ChatSession {
         let defaults = UserDefaults.standard
-        let shouldRestore = (defaults.object(forKey: restoreLastSessionOnLaunchEnabledStorageKey) as? Bool) ?? false
+        let shouldRestore = (Persistence.readAppConfigInteger(key: AppConfigKey.restoreLastSessionOnLaunch.rawValue) ?? 0) != 0
         guard shouldRestore else { return newTemporarySession }
 
         if let rawID = defaults.string(forKey: lastActiveSessionIDStorageKey),

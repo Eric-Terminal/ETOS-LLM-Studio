@@ -27,7 +27,6 @@ public final class ShortcutToolManager: ObservableObject {
 
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ShortcutToolManager")
     let executionTimeoutSeconds: UInt64 = 45
-    let bridgeShortcutUserDefaultsKey = "shortcut.bridgeShortcutName"
     let officialImportShortcutNameUserDefaultsKey = "shortcut.officialImportShortcutName"
 
     @Published public internal(set) var tools: [ShortcutToolDefinition] = []
@@ -92,11 +91,17 @@ public final class ShortcutToolManager: ObservableObject {
 
     public var bridgeShortcutName: String {
         get {
-            let value = UserDefaults.standard.string(forKey: bridgeShortcutUserDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = Persistence.readAppConfigText(key: AppConfigKey.shortcutBridgeShortcutName.rawValue)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             return (value?.isEmpty == false ? value! : "ETOS Shortcut Bridge")
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: bridgeShortcutUserDefaultsKey)
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            Persistence.writeAppConfig(
+                key: AppConfigKey.shortcutBridgeShortcutName.rawValue,
+                text: trimmed.isEmpty ? "ETOS Shortcut Bridge" : trimmed,
+                typeHint: AppConfigKey.shortcutBridgeShortcutName.typeHint
+            )
         }
     }
 

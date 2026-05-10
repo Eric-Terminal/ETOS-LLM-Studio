@@ -40,6 +40,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     
     // MARK: - 公告管理器
     
@@ -49,8 +50,6 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
-    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
-    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @State private var settingsResearchTask: Task<Void, Never>?
     private let embedsInNavigationStack: Bool
 
@@ -293,8 +292,8 @@ struct SettingsView: View {
     // MARK: - 辅助方法
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
-            && useColorfulSettingsIcons
+        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
+            && appConfig.settingsColorfulIconsEnabled
     }
 
     @ViewBuilder

@@ -18,9 +18,6 @@ public enum FontLibrary {
     private static let manifestFileName = "font-manifest-v1.json"
     private static let routeConfigFileName = "font-routes-v1.json"
     private static let supportedFontFileExtensions: Set<String> = ["ttf", "otf", "ttc", "woff", "woff2"]
-    public static let customFontEnabledStorageKey = "font.useCustomFonts"
-    public static let fallbackScopeStorageKey = "font.fallbackScope"
-    public static let fontScaleStorageKey = "font.customScale"
     public static let minimumFontScale = 0.5
     public static let maximumFontScale = 2.0
     public static let defaultFontScale = 1.0
@@ -114,7 +111,7 @@ public enum FontLibrary {
 
         let assets = loadAssetsFromDisk()
         let routeConfiguration = loadRouteConfigurationFromDisk()
-        let settings = loadFontSettingsFromUserDefaults()
+        let settings = loadFontSettingsFromAppConfig()
 
         if settings.isCustomFontEnabled {
             for asset in assets where asset.isEnabled {
@@ -577,16 +574,16 @@ public enum FontLibrary {
         return configuration
     }
 
-    private static func loadFontSettingsFromUserDefaults() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope, customFontScale: Double) {
-        let customEnabled = (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
+    private static func loadFontSettingsFromAppConfig() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope, customFontScale: Double) {
+        let customEnabled = Persistence.readAppConfigInteger(key: AppConfigKey.fontUseCustomFonts.rawValue).map { $0 != 0 } ?? true
         let scope: FontFallbackScope
-        if let rawValue = UserDefaults.standard.string(forKey: fallbackScopeStorageKey),
+        if let rawValue = Persistence.readAppConfigText(key: AppConfigKey.fontFallbackScope.rawValue),
            let parsedScope = FontFallbackScope(rawValue: rawValue) {
             scope = parsedScope
         } else {
             scope = .segment
         }
-        let scale = normalizedFontScale((UserDefaults.standard.object(forKey: fontScaleStorageKey) as? Double) ?? defaultFontScale)
+        let scale = normalizedFontScale(Persistence.readAppConfigReal(key: AppConfigKey.fontCustomScale.rawValue) ?? defaultFontScale)
         return (customEnabled, scope, scale)
     }
 
