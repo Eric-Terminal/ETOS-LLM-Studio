@@ -11,6 +11,11 @@
 	<key>com.apple.developer.icloud-services</key>
 	<array>
 		<string>CloudKit</string>
+		<string>CloudDocuments</string>
+	</array>
+	<key>com.apple.developer.ubiquity-container-identifiers</key>
+	<array>
+		<string>$(TeamIdentifierPrefix)iCloud.com.ericterminal.els</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
