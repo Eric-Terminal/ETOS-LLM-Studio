@@ -323,13 +323,21 @@ extension SyncEngine {
     ) -> (versions: [String], currentVersionIndex: Int)? {
         let localCurrent = local.content
         let incomingCurrent = incoming.content
-        guard stringsAreCompatible(localCurrent, incomingCurrent) else {
-            return nil
+
+        var versions = mergedVersionList(local: local.getAllVersions(), incoming: incoming.getAllVersions())
+        if local.id == incoming.id {
+            let preferredCurrent = stringsAreCompatible(localCurrent, incomingCurrent)
+                ? preferLongerString(localCurrent, incomingCurrent)
+                : localCurrent
+            if !versions.contains(preferredCurrent) {
+                versions.append(preferredCurrent)
+            }
+            let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
+            return (versions, currentIndex)
         }
 
-        var versions = local.getAllVersions()
-        for version in incoming.getAllVersions() where !versions.contains(version) {
-            versions.append(version)
+        guard stringsAreCompatible(localCurrent, incomingCurrent) else {
+            return nil
         }
 
         let preferredCurrent = preferLongerString(localCurrent, incomingCurrent)
@@ -338,5 +346,13 @@ extension SyncEngine {
         }
         let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
         return (versions, currentIndex)
+    }
+
+    private static func mergedVersionList(local: [String], incoming: [String]) -> [String] {
+        var versions = local.isEmpty ? [""] : local
+        for version in incoming where !versions.contains(version) {
+            versions.append(version)
+        }
+        return versions
     }
 }
