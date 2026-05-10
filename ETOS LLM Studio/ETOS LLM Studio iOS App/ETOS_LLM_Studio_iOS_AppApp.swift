@@ -24,10 +24,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @StateObject private var feedbackService = FeedbackService.shared
     @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var appConfig = AppConfigStore.shared
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
 
     init() {
-        AppLanguageRuntime.apply(rawValue: UserDefaults.standard.string(forKey: AppLanguagePreference.storageKey) ?? AppLanguagePreference.defaultLanguage.rawValue)
+        AppLanguageRuntime.applyConfiguredLanguage()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         Task { @MainActor in
@@ -39,6 +40,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
+                .environmentObject(appConfig)
                 .environmentObject(syncManager)
                 .environmentObject(cloudSyncManager)
                 .onOpenURL { url in

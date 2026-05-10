@@ -22,10 +22,11 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @StateObject private var feedbackService = FeedbackService.shared
+    @StateObject private var appConfig = AppConfigStore.shared
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
     
     init() {
-        AppLanguageRuntime.apply(rawValue: UserDefaults.standard.string(forKey: AppLanguagePreference.storageKey) ?? AppLanguagePreference.defaultLanguage.rawValue)
+        AppLanguageRuntime.applyConfiguredLanguage()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         Task { @MainActor in
@@ -43,6 +44,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(appConfig)
                 .environmentObject(syncManager)
                 .environmentObject(cloudSyncManager)
                 .onOpenURL { url in
