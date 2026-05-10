@@ -410,6 +410,8 @@ public final class AppConfigStore: ObservableObject {
 
     // MARK: - Init
 
+    private var suppressQuickSyncBroadcast = false
+
     private init() {
         migrateFromUserDefaultsIfNeeded()
         loadAllFromDatabase()
@@ -430,6 +432,9 @@ public final class AppConfigStore: ObservableObject {
 
     /// 批量应用同步结果（仅更新参与同步的 key）
     public func apply(snapshot: [String: Any]) {
+        suppressQuickSyncBroadcast = true
+        defer { suppressQuickSyncBroadcast = false }
+
         for (rawKey, value) in snapshot {
             guard let key = AppConfigKey(rawValue: rawKey), key.isSynced else { continue }
             applyValue(value, for: key)
@@ -444,6 +449,9 @@ public final class AppConfigStore: ObservableObject {
     // MARK: - 私有实现
 
     private func loadAllFromDatabase() {
+        suppressQuickSyncBroadcast = true
+        defer { suppressQuickSyncBroadcast = false }
+
         let rows = Persistence.loadAllAppConfigs()
         for row in rows {
             guard let key = AppConfigKey(rawValue: row.key) else { continue }
@@ -489,8 +497,14 @@ public final class AppConfigStore: ObservableObject {
         AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
+        let shouldQuickSync = shouldQuickSync(key)
         Task.detached(priority: .utility) {
             Persistence.writeAppConfig(key: rawKey, text: newValue)
+            if shouldQuickSync {
+                await MainActor.run {
+                    Self.broadcastQuickSync(key: rawKey, value: newValue)
+                }
+            }
         }
     }
 
@@ -498,8 +512,14 @@ public final class AppConfigStore: ObservableObject {
         AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
+        let shouldQuickSync = shouldQuickSync(key)
         Task.detached(priority: .utility) {
             Persistence.writeAppConfig(key: rawKey, real: newValue)
+            if shouldQuickSync {
+                await MainActor.run {
+                    Self.broadcastQuickSync(key: rawKey, value: newValue)
+                }
+            }
         }
     }
 
@@ -507,8 +527,14 @@ public final class AppConfigStore: ObservableObject {
         AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
+        let shouldQuickSync = shouldQuickSync(key)
         Task.detached(priority: .utility) {
             Persistence.writeAppConfig(key: rawKey, integer: newValue)
+            if shouldQuickSync {
+                await MainActor.run {
+                    Self.broadcastQuickSync(key: rawKey, value: newValue)
+                }
+            }
         }
     }
 
@@ -517,9 +543,25 @@ public final class AppConfigStore: ObservableObject {
         guard newValue != previous else { return }
         let rawKey = key.rawValue
         let intVal = newValue ? 1 : 0
+        let shouldQuickSync = shouldQuickSync(key)
         Task.detached(priority: .utility) {
             Persistence.writeAppConfig(key: rawKey, integer: intVal)
+            if shouldQuickSync {
+                await MainActor.run {
+                    Self.broadcastQuickSync(key: rawKey, value: newValue)
+                }
+            }
         }
+    }
+
+    private func shouldQuickSync(_ key: AppConfigKey) -> Bool {
+        key.isSynced && !suppressQuickSyncBroadcast
+    }
+
+    private static func broadcastQuickSync(key: String, value: Any) {
+        #if canImport(WatchConnectivity)
+        WatchSyncManager.shared.performQuickSync(key: key, value: value)
+        #endif
     }
 
     // MARK: - 值映射（用于 snapshot / apply / load）
