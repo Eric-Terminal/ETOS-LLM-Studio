@@ -122,6 +122,8 @@ public struct AppLockSettingsView: View {
 
     public var body: some View {
         List {
+            DatabaseEncryptionSettingsSection()
+
             Section {
                 if lockManager.isEnabled {
                     statusRow(
@@ -290,5 +292,155 @@ public struct AppLockSettingsView: View {
             Text(value)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct DatabaseEncryptionSettingsSection: View {
+    @EnvironmentObject private var appConfig: AppConfigStore
+    @State private var currentPassphrase = ""
+    @State private var newPassphrase = ""
+    @State private var confirmation = ""
+    @State private var isMigrating = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
+
+    var body: some View {
+        Section {
+            HStack {
+                Label(NSLocalizedString("状态", comment: ""), systemImage: statusSystemImage)
+                Spacer()
+                Text(statusText)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isEnabled {
+                SecureField(NSLocalizedString("当前主密码", comment: ""), text: $currentPassphrase)
+                    .textContentType(.password)
+                SecureField(NSLocalizedString("新主密码", comment: ""), text: $newPassphrase)
+                    .textContentType(.newPassword)
+                SecureField(NSLocalizedString("确认新主密码", comment: ""), text: $confirmation)
+                    .textContentType(.newPassword)
+
+                Button(NSLocalizedString("更新数据库主密码", comment: "")) {
+                    updatePassphrase()
+                }
+                .disabled(isMigrating || currentPassphrase.isEmpty || newPassphrase.isEmpty || confirmation.isEmpty)
+
+                Button(NSLocalizedString("关闭数据库物理加密", comment: ""), role: .destructive) {
+                    disableEncryption()
+                }
+                .disabled(isMigrating || currentPassphrase.isEmpty)
+            } else {
+                SecureField(NSLocalizedString("数据库主密码", comment: ""), text: $newPassphrase)
+                    .textContentType(.newPassword)
+                SecureField(NSLocalizedString("确认数据库主密码", comment: ""), text: $confirmation)
+                    .textContentType(.newPassword)
+
+                Button(NSLocalizedString("启用数据库物理加密", comment: "")) {
+                    enableEncryption()
+                }
+                .disabled(isMigrating || newPassphrase.isEmpty || confirmation.isEmpty)
+            }
+
+            if isMigrating {
+                ProgressView(NSLocalizedString("正在迁移数据库…", comment: ""))
+            }
+
+            if let successMessage {
+                Text(successMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text(NSLocalizedString("数据库物理加密", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("启用后，三处分库会使用独立主密码通过 SQLCipher 加密；快照导出仍使用单独的快照密码。", comment: ""))
+        }
+    }
+
+    private var isEnabled: Bool {
+        appConfig.databaseEncryptionEnabled || DatabaseEncryptionManager.shared.hasStoredPassphrase
+    }
+
+    private var statusText: String {
+        isEnabled ? NSLocalizedString("已启用", comment: "") : NSLocalizedString("未启用", comment: "")
+    }
+
+    private var statusSystemImage: String {
+        isEnabled ? "lock.shield.fill" : "lock.open"
+    }
+
+    private func enableEncryption() {
+        let passphrase = newPassphrase
+        let confirmation = confirmation
+        runMigration(successMessage: NSLocalizedString("数据库物理加密已启用。", comment: "")) {
+            try Persistence.enableDatabaseEncryption(
+                passphrase: passphrase,
+                confirmation: confirmation
+            )
+        }
+    }
+
+    private func updatePassphrase() {
+        let currentPassphrase = currentPassphrase
+        let newPassphrase = newPassphrase
+        let confirmation = confirmation
+        runMigration(successMessage: NSLocalizedString("数据库主密码已更新。", comment: "")) {
+            try Persistence.updateDatabaseEncryptionPassphrase(
+                currentPassphrase: currentPassphrase,
+                newPassphrase: newPassphrase,
+                confirmation: confirmation
+            )
+        }
+    }
+
+    private func disableEncryption() {
+        let currentPassphrase = currentPassphrase
+        runMigration(successMessage: NSLocalizedString("数据库物理加密已关闭。", comment: "")) {
+            try Persistence.removeDatabaseEncryption(passphrase: currentPassphrase)
+        }
+    }
+
+    private func runMigration(
+        successMessage: String,
+        operation: @escaping @Sendable () throws -> Void
+    ) {
+        guard !isMigrating else { return }
+        isMigrating = true
+        errorMessage = nil
+        self.successMessage = nil
+
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try operation()
+                }.value
+                await MainActor.run {
+                    clearPassphrases()
+                    self.successMessage = successMessage
+                    errorMessage = nil
+                    appConfig.reloadFromPersistentStore()
+                    isMigrating = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.successMessage = nil
+                    errorMessage = error.localizedDescription
+                    isMigrating = false
+                }
+            }
+        }
+    }
+
+    private func clearPassphrases() {
+        currentPassphrase = ""
+        newPassphrase = ""
+        confirmation = ""
     }
 }

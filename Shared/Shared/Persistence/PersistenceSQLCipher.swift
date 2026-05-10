@@ -173,18 +173,21 @@ extension Persistence {
             )
             try manager.savePassphrase(passphrase, confirmation: confirmation)
             try installDatabaseReplacements(replacements)
-            Task { @MainActor in
-                AppConfigStore.shared.databaseEncryptionEnabled = true
-            }
+            writeDatabaseEncryptionEnabled(true)
             bootstrapGRDBStoreOnLaunch()
         } catch {
             try? manager.deletePassphraseWithoutVerification()
-            Task { @MainActor in
-                AppConfigStore.shared.databaseEncryptionEnabled = false
-            }
+            writeDatabaseEncryptionEnabled(false)
             bootstrapGRDBStoreOnLaunch()
             throw error
         }
+    }
+
+    public static func enableDatabaseEncryption(
+        passphrase: String,
+        confirmation: String
+    ) throws {
+        try setDatabaseEncryptionEnabled(passphrase: passphrase, confirmation: confirmation)
     }
 
     static func disableDatabaseEncryption(passphrase: String) throws {
@@ -211,14 +214,16 @@ extension Persistence {
                 try? manager.savePassphrase(passphrase, confirmation: passphrase)
                 throw error
             }
-            Task { @MainActor in
-                AppConfigStore.shared.databaseEncryptionEnabled = false
-            }
+            writeDatabaseEncryptionEnabled(false)
             bootstrapGRDBStoreOnLaunch()
         } catch {
             bootstrapGRDBStoreOnLaunch()
             throw error
         }
+    }
+
+    public static func removeDatabaseEncryption(passphrase: String) throws {
+        try disableDatabaseEncryption(passphrase: passphrase)
     }
 
     static func changeDatabaseEncryptionPassphrase(
@@ -256,18 +261,36 @@ extension Persistence {
                 try? manager.savePassphrase(currentPassphrase, confirmation: currentPassphrase)
                 throw error
             }
-            Task { @MainActor in
-                AppConfigStore.shared.databaseEncryptionEnabled = true
-            }
+            writeDatabaseEncryptionEnabled(true)
             bootstrapGRDBStoreOnLaunch()
         } catch {
             bootstrapGRDBStoreOnLaunch()
             throw error
         }
     }
+
+    public static func updateDatabaseEncryptionPassphrase(
+        currentPassphrase: String,
+        newPassphrase: String,
+        confirmation: String
+    ) throws {
+        try changeDatabaseEncryptionPassphrase(
+            currentPassphrase: currentPassphrase,
+            newPassphrase: newPassphrase,
+            confirmation: confirmation
+        )
+    }
 }
 
 private extension Persistence {
+    static func writeDatabaseEncryptionEnabled(_ isEnabled: Bool) {
+        writeAppConfig(
+            key: AppConfigKey.databaseEncryptionEnabled.rawValue,
+            integer: isEnabled ? 1 : 0,
+            typeHint: "bool"
+        )
+    }
+
     static func databaseEncryptionTargetURLs() -> SnapshotRestoreDatabaseURLs {
         snapshotRestoreTargetURLs()
     }
