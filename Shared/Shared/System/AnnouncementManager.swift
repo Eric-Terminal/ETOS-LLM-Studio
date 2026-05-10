@@ -6,12 +6,11 @@
 // 功能特性:
 // - 从远程服务器获取公告信息
 // - 根据公告类型(info/warning/blocking)处理显示逻辑
-// - 使用 AppStorage 持久化通知状态
+// - 使用 AppConfig 持久化通知状态
 // - 支持 iOS 和 watchOS
 // ============================================================================
 
 import Foundation
-import SwiftUI
 import Combine
 import os.log
 import CryptoKit
@@ -181,16 +180,22 @@ public class AnnouncementManager: ObservableObject {
     /// 是否正在加载
     @Published public var isLoading: Bool = false
     
-    // MARK: - AppStorage 持久化
-    
-    /// 上次显示的通知ID
-    @AppStorage("lastAnnouncementId") private var lastAnnouncementId: Int = 0
-    
-    /// 旧版本隐藏标记（迁移用）
-    @AppStorage("hideAnnouncementSection") private var hideAnnouncementSection: Bool = false
+    // MARK: - AppConfig 持久化
 
-    /// 已隐藏的公告 key 列表
-    @AppStorage("hiddenAnnouncementKeys") private var hiddenAnnouncementKeysRaw: String = ""
+    private var lastAnnouncementId: Int {
+        get { AppConfigStore.shared.lastAnnouncementId }
+        set { AppConfigStore.shared.lastAnnouncementId = newValue }
+    }
+
+    private var hideAnnouncementSection: Bool {
+        get { AppConfigStore.shared.hideAnnouncementSection }
+        set { AppConfigStore.shared.hideAnnouncementSection = newValue }
+    }
+
+    private var hiddenAnnouncementKeysRaw: String {
+        get { AppConfigStore.shared.hiddenAnnouncementKeys }
+        set { AppConfigStore.shared.hiddenAnnouncementKeys = newValue }
+    }
     
     // MARK: - 私有属性
     
@@ -237,7 +242,7 @@ public class AnnouncementManager: ObservableObject {
             }
         } catch {
             logger.error("获取公告失败: \(error.localizedDescription)")
-            // 网络失败时不修改已有的AppStorage设置
+            // 网络失败时不修改已有的 AppConfig 设置
             // 也不显示任何通知
             currentAnnouncements = []
         }

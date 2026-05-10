@@ -245,8 +245,12 @@ class ChatViewModel: ObservableObject {
     @Published var enableNoBubbleUI: Bool = AppConfigStore.shared.enableNoBubbleUI {
         didSet { AppConfigStore.shared.enableNoBubbleUI = enableNoBubbleUI }
     }
-    @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
-    @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
+    @Published var sendSpeechAsAudio: Bool = AppConfigStore.shared.sendSpeechAsAudio {
+        didSet { AppConfigStore.shared.sendSpeechAsAudio = sendSpeechAsAudio }
+    }
+    @Published var enableSpeechInput: Bool = AppConfigStore.shared.enableSpeechInput {
+        didSet { AppConfigStore.shared.enableSpeechInput = enableSpeechInput }
+    }
     @Published var speechModelIdentifier: String = AppConfigStore.shared.speechModelIdentifier {
         didSet { AppConfigStore.shared.speechModelIdentifier = speechModelIdentifier }
     }
@@ -271,25 +275,41 @@ class ChatViewModel: ObservableObject {
     @Published var ocrModelIdentifier: String = AppConfigStore.shared.ocrModelIdentifier {
         didSet { AppConfigStore.shared.ocrModelIdentifier = ocrModelIdentifier }
     }
-    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
-    @AppStorage("systemTimeInjectionPosition") private var systemTimeInjectionPositionRawValue: String = SystemTimeInjectionPosition.front.rawValue
-    @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
-    @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
-    @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
-    @AppStorage("enableBackgroundReplyNotification") var enableBackgroundReplyNotification: Bool = true {
+    @Published var includeSystemTimeInPrompt: Bool = AppConfigStore.shared.includeSystemTimeInPrompt {
+        didSet { AppConfigStore.shared.includeSystemTimeInPrompt = includeSystemTimeInPrompt }
+    }
+    @Published private var systemTimeInjectionPositionRawValue: String = AppConfigStore.shared.systemTimeInjectionPosition {
+        didSet { AppConfigStore.shared.systemTimeInjectionPosition = systemTimeInjectionPositionRawValue }
+    }
+    @Published var enablePeriodicTimeLandmark: Bool = AppConfigStore.shared.enablePeriodicTimeLandmark {
+        didSet { AppConfigStore.shared.enablePeriodicTimeLandmark = enablePeriodicTimeLandmark }
+    }
+    @Published var periodicTimeLandmarkIntervalMinutes: Int = AppConfigStore.shared.periodicTimeLandmarkIntervalMinutes {
+        didSet { AppConfigStore.shared.periodicTimeLandmarkIntervalMinutes = periodicTimeLandmarkIntervalMinutes }
+    }
+    @Published var audioRecordingFormatRaw: String = AppConfigStore.shared.audioRecordingFormat {
+        didSet { AppConfigStore.shared.audioRecordingFormat = audioRecordingFormatRaw }
+    }
+    @Published var enableBackgroundReplyNotification: Bool = AppConfigStore.shared.enableBackgroundReplyNotification {
         didSet {
 #if canImport(UserNotifications)
             guard enableBackgroundReplyNotification else {
                 enableBackgroundReplyNotification = true
+                AppConfigStore.shared.enableBackgroundReplyNotification = true
                 return
             }
+            AppConfigStore.shared.enableBackgroundReplyNotification = enableBackgroundReplyNotification
             Task {
                 _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
             }
+#else
+            AppConfigStore.shared.enableBackgroundReplyNotification = enableBackgroundReplyNotification
 #endif
         }
     }
-    @AppStorage("hasRequestedBackgroundReplyNotificationPermissionWatch") var hasRequestedBackgroundReplyNotificationPermission: Bool = false
+    @Published var hasRequestedBackgroundReplyNotificationPermission: Bool = AppConfigStore.shared.hasRequestedBackgroundReplyNotificationPermissionWatch {
+        didSet { AppConfigStore.shared.hasRequestedBackgroundReplyNotificationPermissionWatch = hasRequestedBackgroundReplyNotificationPermission }
+    }
     
     var audioRecordingFormat: AudioRecordingFormat {
         get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
