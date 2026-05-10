@@ -17,6 +17,12 @@ struct BackupRestoreView: View {
     @State private var isRestoringSnapshot = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var encryptExport = false
+    @State private var exportPassword = ""
+    @State private var exportPasswordConfirmation = ""
+    @State private var restorePassword = ""
+    @State private var pendingEncryptedSnapshotURL: URL?
+    @State private var isPasswordPromptPresented = false
 
     private let snapshotContentTypes: [UTType] = {
         var types: [UTType] = [.data]
@@ -45,6 +51,17 @@ struct BackupRestoreView: View {
                 }
                 .disabled(isCreatingSnapshot || isRestoringSnapshot)
 
+                Toggle(NSLocalizedString("设置密码", comment: ""), isOn: $encryptExport)
+                    .buttonStyle(.plain)
+                    .disabled(isCreatingSnapshot || isRestoringSnapshot)
+
+                if encryptExport {
+                    SecureField(NSLocalizedString("密码", comment: ""), text: $exportPassword)
+                        .textContentType(.newPassword)
+                    SecureField(NSLocalizedString("确认密码", comment: ""), text: $exportPasswordConfirmation)
+                        .textContentType(.newPassword)
+                }
+
                 if let statusMessage, !statusMessage.isEmpty {
                     Text(statusMessage)
                         .etFont(.footnote)
@@ -53,7 +70,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("手动快照", comment: ""))
             } footer: {
-                Text(NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。", comment: ""))
+                Text(NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。设置密码时将使用简单 AES-GCM 加密。", comment: ""))
             }
 
             Section {
@@ -94,20 +111,45 @@ struct BackupRestoreView: View {
         } message: {
             Text(errorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
+        .alert(NSLocalizedString("输入快照密码", comment: ""), isPresented: $isPasswordPromptPresented) {
+            SecureField(NSLocalizedString("密码", comment: ""), text: $restorePassword)
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
+                pendingEncryptedSnapshotURL = nil
+                restorePassword = ""
+            }
+            Button(NSLocalizedString("恢复", comment: "")) {
+                guard let pendingEncryptedSnapshotURL else { return }
+                restoreSnapshot(from: pendingEncryptedSnapshotURL, password: restorePassword)
+                self.pendingEncryptedSnapshotURL = nil
+                restorePassword = ""
+            }
+            .disabled(restorePassword.isEmpty)
+        } message: {
+            Text(NSLocalizedString("此快照已加密，请输入导出时设置的密码。", comment: ""))
+        }
     }
 
     private func createManualSnapshot() {
+        guard validateExportPasswordIfNeeded() else { return }
         isCreatingSnapshot = true
         statusMessage = nil
         errorMessage = nil
+        let password = encryptExport ? exportPassword : nil
 
         Task.detached(priority: .userInitiated) {
             do {
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 let snapshotURL = try SnapshotBuilder.buildSnapshot()
+                if let password {
+                    try Self.encryptSnapshotInPlace(snapshotURL, password: password)
+                }
                 let destinationURL = try Self.exportSnapshotToDocuments(snapshotURL)
                 try? FileManager.default.removeItem(at: snapshotURL)
                 await MainActor.run {
+                    if password != nil {
+                        exportPassword = ""
+                        exportPasswordConfirmation = ""
+                    }
                     isCreatingSnapshot = false
                     statusMessage = String(
                         format: NSLocalizedString("快照已保存到：%@", comment: ""),
@@ -123,24 +165,51 @@ struct BackupRestoreView: View {
         }
     }
 
+    private func validateExportPasswordIfNeeded() -> Bool {
+        guard encryptExport else { return true }
+        guard !exportPassword.isEmpty else {
+            errorMessage = NSLocalizedString("请输入快照密码。", comment: "")
+            return false
+        }
+        guard exportPassword == exportPasswordConfirmation else {
+            errorMessage = NSLocalizedString("两次输入的快照密码不一致。", comment: "")
+            return false
+        }
+        return true
+    }
+
     private func handleSnapshotImport(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
             guard let fileURL = urls.first else { return }
-            restoreSnapshot(from: fileURL)
+            handleSelectedSnapshot(fileURL)
         case .failure(let error):
             errorMessage = error.localizedDescription
         }
     }
 
-    private func restoreSnapshot(from fileURL: URL) {
+    private func handleSelectedSnapshot(_ fileURL: URL) {
+        do {
+            if try Self.snapshotIsEncrypted(fileURL) {
+                pendingEncryptedSnapshotURL = fileURL
+                restorePassword = ""
+                isPasswordPromptPresented = true
+                return
+            }
+            restoreSnapshot(from: fileURL, password: nil)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func restoreSnapshot(from fileURL: URL, password: String?) {
         isRestoringSnapshot = true
         statusMessage = nil
         errorMessage = nil
 
         Task.detached(priority: .userInitiated) {
             do {
-                try SnapshotRestoreService.restorePlainSnapshot(from: fileURL)
+                try SnapshotRestoreService.restoreSnapshot(from: fileURL, password: password)
                 await MainActor.run {
                     AppConfigStore.shared.reloadFromPersistentStore()
                     isRestoringSnapshot = false
@@ -153,6 +222,23 @@ struct BackupRestoreView: View {
                 }
             }
         }
+    }
+
+    private static func encryptSnapshotInPlace(_ snapshotURL: URL, password: String) throws {
+        let plainData = try Data(contentsOf: snapshotURL)
+        let encryptedData = try SnapshotEncryptor.encryptSimplePassword(data: plainData, password: password)
+        try encryptedData.write(to: snapshotURL, options: .atomic)
+    }
+
+    private static func snapshotIsEncrypted(_ snapshotURL: URL) throws -> Bool {
+        let shouldStopAccess = snapshotURL.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                snapshotURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        let data = try Data(contentsOf: snapshotURL, options: .mappedIfSafe)
+        return try SnapshotEncryptor.encryptedMode(for: data) != nil
     }
 
     private static func exportSnapshotToDocuments(_ snapshotURL: URL) throws -> URL {

@@ -32,6 +32,10 @@ public enum SnapshotRestoreService {
     }
 
     public static func restorePlainSnapshot(from fileURL: URL) throws {
+        try restoreSnapshot(from: fileURL, password: nil)
+    }
+
+    public static func restoreSnapshot(from fileURL: URL, password: String?) throws {
         let fileManager = FileManager.default
         let workingDirectory = fileManager.temporaryDirectory
             .appendingPathComponent("ETOS-Snapshot-Restore-\(UUID().uuidString)", isDirectory: true)
@@ -39,8 +43,8 @@ public enum SnapshotRestoreService {
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
         let readableURL = try makeReadableSnapshotURL(fileURL, in: workingDirectory)
-        try rejectEncryptedSnapshotIfNeeded(readableURL)
-        let databaseURLs = try extractDatabases(from: readableURL, to: workingDirectory)
+        let archiveURL = try decryptedArchiveURLIfNeeded(readableURL, password: password, workingDirectory: workingDirectory)
+        let databaseURLs = try extractDatabases(from: archiveURL, to: workingDirectory)
         try Persistence.installSnapshotDatabases(databaseURLs)
     }
 }
@@ -66,12 +70,20 @@ private extension SnapshotRestoreService {
         return localURL
     }
 
-    static func rejectEncryptedSnapshotIfNeeded(_ fileURL: URL) throws {
+    static func decryptedArchiveURLIfNeeded(_ fileURL: URL, password: String?, workingDirectory: URL) throws -> URL {
         let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-        guard data.count >= 4 else { return }
-        if data.prefix(4) == Data([0x45, 0x4C, 0x53, 0x31]) {
+        guard try SnapshotEncryptor.encryptedMode(for: data) != nil else {
+            return fileURL
+        }
+        guard let password else {
             throw RestoreError.unsupportedEncryptedSnapshot
         }
+        let plainData = try SnapshotEncryptor.decrypt(data: data, password: password)
+        let decryptedURL = workingDirectory
+            .appendingPathComponent("decrypted", isDirectory: false)
+            .appendingPathExtension(SnapshotBuilder.fileExtension)
+        try plainData.write(to: decryptedURL, options: .atomic)
+        return decryptedURL
     }
 
     static func extractDatabases(from archiveURL: URL, to workingDirectory: URL) throws -> SnapshotRestoreDatabaseURLs {
