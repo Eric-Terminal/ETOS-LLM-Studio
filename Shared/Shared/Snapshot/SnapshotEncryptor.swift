@@ -8,16 +8,19 @@
 
 import CryptoKit
 import Foundation
+import CommonCrypto
 
 public enum SnapshotEncryptor {
     public enum Mode: UInt8, Sendable {
         case simplePassword = 0x00
+        case pbkdf2Strong = 0x01
     }
 
     public enum EncryptorError: LocalizedError {
         case emptyPassword
         case invalidHeader
         case unsupportedMode(UInt8)
+        case keyDerivationFailed
 
         public var errorDescription: String? {
             switch self {
@@ -27,6 +30,8 @@ public enum SnapshotEncryptor {
                 return "快照加密文件格式无效。"
             case .unsupportedMode(let mode):
                 return "暂不支持此快照加密模式：\(mode)。"
+            case .keyDerivationFailed:
+                return "快照密码密钥派生失败。"
             }
         }
     }
@@ -34,19 +39,16 @@ public enum SnapshotEncryptor {
     public static let magic = Data([0x45, 0x4C, 0x53, 0x31])
     public static let nonceByteCount = 12
     public static let tagByteCount = 16
+    public static let pbkdf2Iterations: UInt32 = 256_000
 
     public static func encryptSimplePassword(data: Data, password: String) throws -> Data {
         let key = try simplePasswordKey(password)
-        let sealedBox = try AES.GCM.seal(data, using: key)
-        guard let combined = sealedBox.combined else {
-            throw EncryptorError.invalidHeader
-        }
+        return try seal(data: data, key: key, mode: .simplePassword)
+    }
 
-        var encrypted = Data()
-        encrypted.append(magic)
-        encrypted.append(Mode.simplePassword.rawValue)
-        encrypted.append(combined)
-        return encrypted
+    public static func encryptStrongPassword(data: Data, password: String) throws -> Data {
+        let key = try pbkdf2StrongKey(password)
+        return try seal(data: data, key: key, mode: .pbkdf2Strong)
     }
 
     public static func decrypt(data: Data, password: String) throws -> Data {
@@ -59,6 +61,8 @@ public enum SnapshotEncryptor {
         switch mode {
         case Mode.simplePassword.rawValue:
             return try decryptSimplePassword(payload: data.dropFirst(magic.count + 1), password: password)
+        case Mode.pbkdf2Strong.rawValue:
+            return try decryptStrongPassword(payload: data.dropFirst(magic.count + 1), password: password)
         default:
             throw EncryptorError.unsupportedMode(mode)
         }
@@ -76,11 +80,33 @@ public enum SnapshotEncryptor {
 }
 
 private extension SnapshotEncryptor {
+    static func seal(data: Data, key: SymmetricKey, mode: Mode) throws -> Data {
+        let sealedBox = try AES.GCM.seal(data, using: key)
+        guard let combined = sealedBox.combined else {
+            throw EncryptorError.invalidHeader
+        }
+
+        var encrypted = Data()
+        encrypted.append(magic)
+        encrypted.append(mode.rawValue)
+        encrypted.append(combined)
+        return encrypted
+    }
+
     static func decryptSimplePassword(payload: Data.SubSequence, password: String) throws -> Data {
         guard payload.count > nonceByteCount + tagByteCount else {
             throw EncryptorError.invalidHeader
         }
         let key = try simplePasswordKey(password)
+        let sealedBox = try AES.GCM.SealedBox(combined: Data(payload))
+        return try AES.GCM.open(sealedBox, using: key)
+    }
+
+    static func decryptStrongPassword(payload: Data.SubSequence, password: String) throws -> Data {
+        guard payload.count > nonceByteCount + tagByteCount else {
+            throw EncryptorError.invalidHeader
+        }
+        let key = try pbkdf2StrongKey(password)
         let sealedBox = try AES.GCM.SealedBox(combined: Data(payload))
         return try AES.GCM.open(sealedBox, using: key)
     }
@@ -91,5 +117,35 @@ private extension SnapshotEncryptor {
         }
         let digest = SHA256.hash(data: Data(password.utf8))
         return SymmetricKey(data: Data(digest))
+    }
+
+    static func pbkdf2StrongKey(_ password: String) throws -> SymmetricKey {
+        guard !password.isEmpty else {
+            throw EncryptorError.emptyPassword
+        }
+        let salt = Data("ETOS-LLM-Studio-\(password)".utf8)
+        var derivedKey = Data(count: 32)
+        let derivedKeyLength = derivedKey.count
+        let derivationResult = derivedKey.withUnsafeMutableBytes { derivedBytes in
+            password.withCString { passwordPointer in
+                salt.withUnsafeBytes { saltBytes in
+                    CCKeyDerivationPBKDF(
+                        CCPBKDFAlgorithm(kCCPBKDF2),
+                        passwordPointer,
+                        strlen(passwordPointer),
+                        saltBytes.bindMemory(to: UInt8.self).baseAddress,
+                        salt.count,
+                        CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA512),
+                        pbkdf2Iterations,
+                        derivedBytes.bindMemory(to: UInt8.self).baseAddress,
+                        derivedKeyLength
+                    )
+                }
+            }
+        }
+        guard derivationResult == kCCSuccess else {
+            throw EncryptorError.keyDerivationFailed
+        }
+        return SymmetricKey(data: derivedKey)
     }
 }

@@ -259,6 +259,55 @@ extension PersistenceTests {
         #expect(Persistence.loadMessages(for: snapshotSession.id).map(\.content) == ["encrypted-snapshot-source"])
     }
 
+    @Test("高强度密码快照加密使用 PBKDF2 模式并可恢复")
+    func testSnapshotEncryptorStrongPasswordRoundTripAndRestore() throws {
+        cleanup(sessions: [])
+
+        let plainData = Data("snapshot-strong-payload".utf8)
+        let encryptedData = try SnapshotEncryptor.encryptStrongPassword(data: plainData, password: "strong-pass")
+        #expect(encryptedData.prefix(4) == Data([0x45, 0x4C, 0x53, 0x31]))
+        #expect(encryptedData[4] == SnapshotEncryptor.Mode.pbkdf2Strong.rawValue)
+        #expect(encryptedData.count == 5 + SnapshotEncryptor.nonceByteCount + plainData.count + SnapshotEncryptor.tagByteCount)
+        #expect(try SnapshotEncryptor.encryptedMode(for: encryptedData) == .pbkdf2Strong)
+        #expect(try SnapshotEncryptor.decrypt(data: encryptedData, password: "strong-pass") == plainData)
+        #expect(throws: Error.self) {
+            try SnapshotEncryptor.decrypt(data: encryptedData, password: "bad-pass")
+        }
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let snapshotSession = ChatSession(id: UUID(), name: "Strong Snapshot Source", isTemporary: false)
+        let replacementSession = ChatSession(id: UUID(), name: "Strong Snapshot Target", isTemporary: false)
+
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [snapshotSession, replacementSession])
+        }
+
+        Persistence.saveChatSessions([snapshotSession])
+        Persistence.saveMessages([ChatMessage(role: .user, content: "strong-snapshot-source")], for: snapshotSession.id)
+        let snapshotURL = try SnapshotBuilder.buildSnapshot()
+        defer { removeIfExists(snapshotURL) }
+
+        let encryptedSnapshotData = try SnapshotEncryptor.encryptStrongPassword(
+            data: Data(contentsOf: snapshotURL),
+            password: "strong-snapshot-pass"
+        )
+        try encryptedSnapshotData.write(to: snapshotURL, options: .atomic)
+
+        Persistence.saveChatSessions([replacementSession])
+        Persistence.saveMessages([ChatMessage(role: .assistant, content: "strong-snapshot-target")], for: replacementSession.id)
+
+        try SnapshotRestoreService.restoreSnapshot(from: snapshotURL, password: "strong-snapshot-pass")
+
+        let restoredSessions = Persistence.loadChatSessions()
+        #expect(restoredSessions.contains(where: { $0.id == snapshotSession.id }))
+        #expect(!restoredSessions.contains(where: { $0.id == replacementSession.id }))
+        #expect(Persistence.loadMessages(for: snapshotSession.id).map(\.content) == ["strong-snapshot-source"])
+    }
+
     @Test("启动检测到 chat-store 损坏时会按备份重建并重建 FTS")
     func testLaunchBackupRestoresCorruptedChatStoreAndRebuildsFTS() throws {
         cleanup(sessions: [])

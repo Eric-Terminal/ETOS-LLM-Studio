@@ -18,6 +18,7 @@ struct BackupRestoreView: View {
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var encryptExport = false
+    @State private var useStrongPasswordDerivation = false
     @State private var exportPassword = ""
     @State private var exportPasswordConfirmation = ""
     @State private var restorePassword = ""
@@ -56,6 +57,9 @@ struct BackupRestoreView: View {
                     .disabled(isCreatingSnapshot || isRestoringSnapshot)
 
                 if encryptExport {
+                    Toggle(NSLocalizedString("高强度派生", comment: ""), isOn: $useStrongPasswordDerivation)
+                        .buttonStyle(.plain)
+                        .disabled(isCreatingSnapshot || isRestoringSnapshot)
                     SecureField(NSLocalizedString("密码", comment: ""), text: $exportPassword)
                         .textContentType(.newPassword)
                     SecureField(NSLocalizedString("确认密码", comment: ""), text: $exportPasswordConfirmation)
@@ -70,7 +74,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("手动快照", comment: ""))
             } footer: {
-                Text(NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。设置密码时将使用简单 AES-GCM 加密。", comment: ""))
+                Text(NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。", comment: ""))
             }
 
             Section {
@@ -135,13 +139,18 @@ struct BackupRestoreView: View {
         statusMessage = nil
         errorMessage = nil
         let password = encryptExport ? exportPassword : nil
+        let useStrongPasswordDerivation = useStrongPasswordDerivation
 
         Task.detached(priority: .userInitiated) {
             do {
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 let snapshotURL = try SnapshotBuilder.buildSnapshot()
                 if let password {
-                    try Self.encryptSnapshotInPlace(snapshotURL, password: password)
+                    try Self.encryptSnapshotInPlace(
+                        snapshotURL,
+                        password: password,
+                        useStrongDerivation: useStrongPasswordDerivation
+                    )
                 }
                 let destinationURL = try Self.exportSnapshotToDocuments(snapshotURL)
                 try? FileManager.default.removeItem(at: snapshotURL)
@@ -224,9 +233,18 @@ struct BackupRestoreView: View {
         }
     }
 
-    private static func encryptSnapshotInPlace(_ snapshotURL: URL, password: String) throws {
+    private static func encryptSnapshotInPlace(
+        _ snapshotURL: URL,
+        password: String,
+        useStrongDerivation: Bool
+    ) throws {
         let plainData = try Data(contentsOf: snapshotURL)
-        let encryptedData = try SnapshotEncryptor.encryptSimplePassword(data: plainData, password: password)
+        let encryptedData: Data
+        if useStrongDerivation {
+            encryptedData = try SnapshotEncryptor.encryptStrongPassword(data: plainData, password: password)
+        } else {
+            encryptedData = try SnapshotEncryptor.encryptSimplePassword(data: plainData, password: password)
+        }
         try encryptedData.write(to: snapshotURL, options: .atomic)
     }
 
