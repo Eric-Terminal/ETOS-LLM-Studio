@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Foundation
-import SQLCipher
+import SQLite3
 import os.log
 
 public final class SQLiteVectorStore: VectorStoreProtocol {
@@ -21,8 +21,6 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
     public func saveIndex(items: [IndexItem], to url: URL, as name: String) throws -> URL {
         let databaseURL = url.appendingPathComponent("\(name).sqlite", isDirectory: false)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-
-        let passphrase = try DatabaseEncryptionManager.shared.preparePassphrase(for: databaseURL)
         
         var db: OpaquePointer?
         guard sqlite3_open_v2(databaseURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
@@ -30,16 +28,6 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
             throw SQLiteError.openDatabase(databaseURL.path)
         }
         defer { sqlite3_close(db) }
-
-        if let passphrase {
-            let passphraseData = Data(passphrase.utf8)
-            let keyResult = passphraseData.withUnsafeBytes { buffer in
-                sqlite3_key(db, buffer.baseAddress, Int32(passphraseData.count))
-            }
-            guard keyResult == SQLITE_OK else {
-                throw SQLiteError.openDatabase(databaseURL.path)
-            }
-        }
         
         try createTableIfNeeded(in: db)
         try beginExclusiveTransaction(in: db)
@@ -51,24 +39,12 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
     }
     
     public func loadIndex(from url: URL) throws -> [IndexItem] {
-        let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: url)
-
         var db: OpaquePointer?
         guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
               let db else {
             throw SQLiteError.openDatabase(url.path)
         }
         defer { sqlite3_close(db) }
-
-        if let passphrase {
-            let passphraseData = Data(passphrase.utf8)
-            let keyResult = passphraseData.withUnsafeBytes { buffer in
-                sqlite3_key(db, buffer.baseAddress, Int32(passphraseData.count))
-            }
-            guard keyResult == SQLITE_OK else {
-                throw SQLiteError.openDatabase(url.path)
-            }
-        }
         
         return try fetchItems(from: db)
     }

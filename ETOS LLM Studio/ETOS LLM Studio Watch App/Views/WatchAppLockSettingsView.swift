@@ -18,18 +18,11 @@ struct WatchAppLockSettingsView: View {
 
     @State private var newPassword: String = ""
     @State private var confirmPassword: String = ""
+    @State private var oldPasswordForChange: String = ""
     @State private var currentPasswordForDisable: String = ""
     @State private var errorMessage: String?
     @State private var isSetPasswordPresented: Bool = false
     @State private var isDisablePresented: Bool = false
-    @State private var databaseCurrentPassword: String = ""
-    @State private var databaseNewPassword: String = ""
-    @State private var databaseConfirmPassword: String = ""
-    @State private var isDatabasePasswordPresented: Bool = false
-    @State private var isDatabaseDisablePresented: Bool = false
-    @State private var isDatabaseEncryptionEnabled: Bool = DatabaseEncryptionManager.shared.isEncryptionEnabled()
-    @State private var usesLegacyDatabaseKey: Bool = DatabaseEncryptionManager.shared.usesLegacyAutomaticKey()
-    @State private var isDatabaseOperationRunning: Bool = false
     @State private var successMessage: String?
 
     var body: some View {
@@ -103,55 +96,6 @@ struct WatchAppLockSettingsView: View {
                 }
             }
 
-            Section {
-                if isDatabaseEncryptionEnabled {
-                    Button {
-                        isDatabasePasswordPresented = true
-                    } label: {
-                        Label(
-                            usesLegacyDatabaseKey
-                                ? NSLocalizedString("设置数据库主密码", comment: "WatchAppLockSettings set database password button")
-                                : NSLocalizedString("修改数据库主密码", comment: "WatchAppLockSettings change database password button"),
-                            systemImage: "internaldrive.fill.badge.key"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isDatabaseOperationRunning)
-
-                    if !usesLegacyDatabaseKey {
-                        Button(role: .destructive) {
-                            isDatabaseDisablePresented = true
-                        } label: {
-                            Label(
-                                NSLocalizedString("关闭数据库加密", comment: "WatchAppLockSettings disable database encryption button"),
-                                systemImage: "internaldrive.fill.badge.xmark"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isDatabaseOperationRunning)
-                    }
-                } else {
-                    Button {
-                        isDatabasePasswordPresented = true
-                    } label: {
-                        Label(
-                            NSLocalizedString("启用数据库加密", comment: "WatchAppLockSettings enable database encryption button"),
-                            systemImage: "internaldrive.fill.badge.lock"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isDatabaseOperationRunning)
-                }
-
-                if isDatabaseOperationRunning {
-                    ProgressView(NSLocalizedString("正在处理数据库加密…", comment: "WatchAppLockSettings database encryption progress"))
-                }
-            } header: {
-                Text(NSLocalizedString("数据库加密", comment: "WatchAppLockSettings database encryption section"))
-            } footer: {
-                Text(databaseEncryptionFooterText)
-            }
-
             // MARK: - 错误提示
             if let msg = errorMessage {
                 Section {
@@ -170,13 +114,16 @@ struct WatchAppLockSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("应用锁", comment: "WatchAppLockSettings navigation title"))
-        .onAppear(perform: refreshDatabaseEncryptionState)
         // 设置/修改密码弹窗
         .alert(appLockPasswordAlertTitle, isPresented: $isSetPasswordPresented) {
+            if appConfig.appLockEnabled {
+                SecureField(NSLocalizedString("当前密码", comment: "WatchAppLockSettings current password field for change"), text: $oldPasswordForChange)
+            }
             SecureField(NSLocalizedString("新密码", comment: "WatchAppLockSettings new password field"), text: $newPassword)
             SecureField(NSLocalizedString("确认密码", comment: "WatchAppLockSettings confirm password field"), text: $confirmPassword)
             Button(NSLocalizedString("确定", comment: ""), action: applySetPassword)
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
+                oldPasswordForChange = ""
                 newPassword = ""
                 confirmPassword = ""
             }
@@ -192,36 +139,6 @@ struct WatchAppLockSettingsView: View {
                 currentPasswordForDisable = ""
             }
         }
-        .alert(
-            databasePasswordAlertTitle,
-            isPresented: $isDatabasePasswordPresented
-        ) {
-            if isDatabaseEncryptionEnabled && !usesLegacyDatabaseKey {
-                SecureField(NSLocalizedString("当前数据库主密码", comment: "WatchAppLockSettings current database password field"), text: $databaseCurrentPassword)
-            }
-            SecureField(databasePasswordFieldTitle, text: $databaseNewPassword)
-            SecureField(NSLocalizedString("确认数据库主密码", comment: "WatchAppLockSettings confirm database password field"), text: $databaseConfirmPassword)
-            Button(NSLocalizedString("确定", comment: ""), action: applyDatabasePassword)
-            Button(NSLocalizedString("取消", comment: ""), role: .cancel, action: resetDatabasePasswordFields)
-        }
-        .alert(
-            NSLocalizedString("关闭数据库加密", comment: "WatchAppLockSettings disable database encryption alert title"),
-            isPresented: $isDatabaseDisablePresented
-        ) {
-            SecureField(NSLocalizedString("当前数据库主密码", comment: "WatchAppLockSettings disable database password field"), text: $databaseCurrentPassword)
-            Button(NSLocalizedString("关闭", comment: ""), role: .destructive, action: applyDisableDatabaseEncryption)
-            Button(NSLocalizedString("取消", comment: ""), role: .cancel, action: resetDatabasePasswordFields)
-        }
-    }
-
-    private var databasePasswordAlertTitle: String {
-        if !isDatabaseEncryptionEnabled {
-            return NSLocalizedString("启用数据库加密", comment: "WatchAppLockSettings enable database encryption alert title")
-        }
-        if usesLegacyDatabaseKey {
-            return NSLocalizedString("设置数据库主密码", comment: "WatchAppLockSettings adopt legacy database password alert title")
-        }
-        return NSLocalizedString("修改数据库主密码", comment: "WatchAppLockSettings change database password alert title")
     }
 
     private var appLockPasswordAlertTitle: String {
@@ -230,38 +147,31 @@ struct WatchAppLockSettingsView: View {
             : NSLocalizedString("设置密码", comment: "WatchAppLockSettings set password alert title")
     }
 
-    private var databasePasswordFieldTitle: String {
-        isDatabaseEncryptionEnabled
-            ? NSLocalizedString("新数据库主密码", comment: "WatchAppLockSettings new database password field")
-            : NSLocalizedString("数据库主密码", comment: "WatchAppLockSettings database password field")
-    }
-
-    private var databaseEncryptionFooterText: String {
-        if isDatabaseEncryptionEnabled {
-            if usesLegacyDatabaseKey {
-                return NSLocalizedString("检测到旧版自动密钥。请先设置自定义数据库主密码，再决定是否关闭数据库加密。", comment: "WatchAppLockSettings legacy database encryption footer")
-            }
-            return NSLocalizedString("已启用 SQLCipher，聊天、配置、记忆与向量数据库都会使用独立主密码加密。", comment: "WatchAppLockSettings database encryption enabled footer")
-        }
-        return NSLocalizedString("启用后将使用 SQLCipher 加密聊天、配置、记忆与向量数据库。请设置一个独立主密码。", comment: "WatchAppLockSettings database encryption disabled footer")
-    }
-
     // MARK: - 操作
 
     private func applySetPassword() {
         guard newPassword == confirmPassword else {
             errorMessage = NSLocalizedString("两次输入的密码不一致。", comment: "WatchAppLockSettings password mismatch error")
+            oldPasswordForChange = ""
             newPassword = ""
             confirmPassword = ""
             return
         }
         do {
-            try lockManager.setPassword(newPassword)
+            if appConfig.appLockEnabled {
+                try lockManager.changePassword(old: oldPasswordForChange, new: newPassword)
+                successMessage = NSLocalizedString("密码已更新。", comment: "WatchAppLockSettings change success")
+            } else {
+                try lockManager.setPassword(newPassword)
+                successMessage = NSLocalizedString("密码已设置，应用锁已开启。", comment: "WatchAppLockSettings set success")
+            }
+            oldPasswordForChange = ""
             newPassword = ""
             confirmPassword = ""
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+            oldPasswordForChange = ""
             newPassword = ""
             confirmPassword = ""
         }
@@ -272,92 +182,10 @@ struct WatchAppLockSettingsView: View {
             try lockManager.removePassword(currentPassword: currentPasswordForDisable)
             currentPasswordForDisable = ""
             errorMessage = nil
+            successMessage = NSLocalizedString("应用锁已关闭。", comment: "WatchAppLockSettings disabled success")
         } catch {
             errorMessage = error.localizedDescription
             currentPasswordForDisable = ""
-        }
-    }
-
-    private func refreshDatabaseEncryptionState() {
-        isDatabaseEncryptionEnabled = DatabaseEncryptionManager.shared.isEncryptionEnabled()
-        usesLegacyDatabaseKey = DatabaseEncryptionManager.shared.usesLegacyAutomaticKey()
-    }
-
-    private func resetDatabasePasswordFields() {
-        databaseCurrentPassword = ""
-        databaseNewPassword = ""
-        databaseConfirmPassword = ""
-    }
-
-    private func applyDatabasePassword() {
-        guard databaseNewPassword == databaseConfirmPassword else {
-            errorMessage = NSLocalizedString("两次输入的数据库主密码不一致。", comment: "WatchAppLockSettings database password mismatch error")
-            resetDatabasePasswordFields()
-            return
-        }
-
-        let currentPassword = databaseCurrentPassword
-        let newPassword = databaseNewPassword
-        resetDatabasePasswordFields()
-        isDatabaseOperationRunning = true
-        successMessage = nil
-
-        Task {
-            do {
-                if !isDatabaseEncryptionEnabled {
-                    try await DatabaseEncryptionManager.shared.enableEncryption(with: newPassword)
-                    await MainActor.run {
-                        successMessage = NSLocalizedString("数据库加密已开启。", comment: "WatchAppLockSettings enable database encryption success")
-                    }
-                } else if usesLegacyDatabaseKey {
-                    try await DatabaseEncryptionManager.shared.adoptLegacyAutomaticKey(with: newPassword)
-                    await MainActor.run {
-                        successMessage = NSLocalizedString("数据库主密码已设置。", comment: "WatchAppLockSettings adopt database password success")
-                    }
-                } else {
-                    try await DatabaseEncryptionManager.shared.changePassphrase(currentPassphrase: currentPassword, newPassphrase: newPassword)
-                    await MainActor.run {
-                        successMessage = NSLocalizedString("数据库主密码已更新。", comment: "WatchAppLockSettings change database password success")
-                    }
-                }
-
-                await MainActor.run {
-                    refreshDatabaseEncryptionState()
-                    errorMessage = nil
-                    isDatabaseOperationRunning = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isDatabaseOperationRunning = false
-                    refreshDatabaseEncryptionState()
-                }
-            }
-        }
-    }
-
-    private func applyDisableDatabaseEncryption() {
-        let currentPassword = databaseCurrentPassword
-        resetDatabasePasswordFields()
-        isDatabaseOperationRunning = true
-        successMessage = nil
-
-        Task {
-            do {
-                try await DatabaseEncryptionManager.shared.disableEncryption(currentPassphrase: currentPassword)
-                await MainActor.run {
-                    refreshDatabaseEncryptionState()
-                    errorMessage = nil
-                    successMessage = NSLocalizedString("数据库加密已关闭。", comment: "WatchAppLockSettings disable database encryption success")
-                    isDatabaseOperationRunning = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isDatabaseOperationRunning = false
-                    refreshDatabaseEncryptionState()
-                }
-            }
         }
     }
 }

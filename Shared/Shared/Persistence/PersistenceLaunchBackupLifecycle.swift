@@ -8,7 +8,7 @@
 
 import Foundation
 import os.log
-import SQLCipher
+import SQLite3
 
 extension Persistence {
     public static func createLaunchBackupPointIfEnabled() {
@@ -299,13 +299,6 @@ extension Persistence {
         }
         defer { sqlite3_close(sourceDatabase) }
 
-        // 源库已由 SQLCipher 加密，提供 passphrase；目标库（备份副本）保持明文输出
-        let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: sourceURL)
-        if let passphrase {
-            let passphraseBytes = Array(passphrase.utf8)
-            sqlite3_key(sourceDatabase, passphraseBytes, Int32(passphraseBytes.count))
-        }
-
         var destinationDatabase: OpaquePointer?
         guard sqlite3_open_v2(destinationURL.path, &destinationDatabase, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
               let destinationDatabase else {
@@ -347,12 +340,6 @@ extension Persistence {
             return false
         }
         defer { sqlite3_close(database) }
-
-        // 数据库已由 SQLCipher 加密，提供 passphrase 才能执行 quick_check
-        if let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: url) {
-            let passphraseBytes = Array(passphrase.utf8)
-            sqlite3_key(database, passphraseBytes, Int32(passphraseBytes.count))
-        }
 
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, "PRAGMA quick_check(1)", -1, &statement, nil) == SQLITE_OK,

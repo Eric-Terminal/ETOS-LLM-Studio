@@ -2254,3 +2254,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "两次输入的密码不一致。" = "Passwords do not match.";
 "解锁" = "Unlock";
 "使用生物识别解锁" = "Unlock with Biometrics";
+"密码已更新。" = "Contraseña actualizada.";
+"密码已设置，应用锁已开启。" = "Contraseña configurada. Bloqueo de la app activado.";
+"应用锁已关闭。" = "Bloqueo de la app desactivado.";

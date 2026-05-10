@@ -2449,3 +2449,6 @@
 "两次输入的密码不一致。" = "Passwords do not match.";
 "解锁" = "Unlock";
 "使用生物识别解锁" = "Unlock with Biometrics";
+"密码已更新。" = "Password updated.";
+"密码已设置，应用锁已开启。" = "Password set. App Lock enabled.";
+"应用锁已关闭。" = "App Lock disabled.";

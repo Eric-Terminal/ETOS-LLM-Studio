@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import SQLCipher
+import SQLite3
 
 extension AppToolManager {
     private static var sqliteToolDefaultMaxRows: Int { 50 }
@@ -84,12 +84,6 @@ extension AppToolManager {
                     message
                 )
             )
-        }
-
-        // 数据库已由 SQLCipher 加密，需要先提供 passphrase 才能读写
-        if let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: databaseURL) {
-            let passphraseBytes = Array(passphrase.utf8)
-            sqlite3_key(connection, passphraseBytes, Int32(passphraseBytes.count))
         }
 
         defer {
