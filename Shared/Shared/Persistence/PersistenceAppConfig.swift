@@ -98,7 +98,10 @@ extension Persistence {
                 case "real":
                     guard let value: Double = row["value_real"] else { return nil }
                     return (key, value)
-                case "integer", "bool":
+                case "bool":
+                    guard let value: Int = row["value_integer"] else { return nil }
+                    return (key, value != 0)
+                case "integer":
                     guard let value: Int = row["value_integer"] else { return nil }
                     return (key, value)
                 default:
