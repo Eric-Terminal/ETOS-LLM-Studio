@@ -10,6 +10,7 @@ import Foundation
 
 public enum SyncEngine {
     static let legacyGlobalSystemPromptKey = "systemPrompt"
+    static let conversationUserProfileRecordID = "conversation.user.profile"
     static let appStorageExcludedExactKeys: Set<String> = [
         "cloudSync.deviceIdentifier",
         "cloudSync.appliedSnapshotChecksums"

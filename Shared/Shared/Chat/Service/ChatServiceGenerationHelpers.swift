@@ -232,6 +232,51 @@ extension ChatService {
         }
     }
 
+    func deduplicateConversationUserProfileIfNeeded(sessionID: UUID) async {
+        guard let profile = ConversationMemoryManager.loadUserProfile(),
+              profile.needsLLMDedup else {
+            return
+        }
+        guard let runnableModel = resolvedConversationSummaryModel() else { return }
+
+        let systemPrompt = NSLocalizedString("""
+        你是用户画像去重助手。请把拼接后的多端用户画像压缩成一份一致画像。
+        约束：
+        - 保留稳定偏好、长期背景、常见工作方式；
+        - 合并重复语义，删除互相矛盾或一次性噪音；
+        - 中文输出 80~220 字，其他语言输出 70~180 个词；
+        - 仅输出画像正文。
+        """, comment: "Conversation profile dedup system prompt")
+        let userPrompt = String(
+            format: NSLocalizedString("""
+            拼接画像：
+            %@
+            """, comment: "Conversation profile dedup user prompt"),
+            profile.content
+        )
+
+        do {
+            let rawProfile = try await generateDetachedChatCompletion(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                temperature: 0.2,
+                runnableModel: runnableModel,
+                requestSource: .conversationProfile,
+                sessionID: sessionID
+            )
+            let profileContent = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
+            guard !profileContent.isEmpty else { return }
+            try ConversationMemoryManager.saveUserProfile(
+                content: profileContent,
+                updatedAt: Date(),
+                sourceSessionID: profile.sourceSessionID,
+                needsLLMDedup: false
+            )
+        } catch {
+            logger.warning("用户画像同步去重失败: \(error.localizedDescription)")
+        }
+    }
+
     private func normalizedConversationMessagesForSummary(from messages: [ChatMessage]) -> [ChatMessage] {
         messages.compactMap { message in
             guard message.role == .user || message.role == .assistant else { return nil }

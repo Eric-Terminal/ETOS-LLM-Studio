@@ -343,6 +343,45 @@ struct SyncConflictStrategyTests {
         #expect(mergedProviders[0].models.count == 2)
     }
 
+    @Test("双端用户画像更新会拼接并标记待去重")
+    func testConversationUserProfileSyncStitchesAndMarksDedup() async throws {
+        let originalProfile = ConversationMemoryManager.loadUserProfile()
+        defer {
+            if let originalProfile {
+                try? ConversationMemoryManager.saveUserProfile(originalProfile)
+            } else {
+                try? ConversationMemoryManager.clearUserProfile()
+            }
+        }
+
+        let localDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let incomingDate = Date(timeIntervalSince1970: 1_700_000_100)
+        try ConversationMemoryManager.saveUserProfile(
+            content: "用户偏好 SwiftUI 原生体验。",
+            updatedAt: localDate,
+            sourceSessionID: UUID()
+        )
+        let incomingProfile = ConversationUserProfile(
+            content: "用户关注 watchOS 续航和同步稳定性。",
+            updatedAt: incomingDate,
+            sourceSessionID: UUID()
+        )
+
+        let summary = await SyncEngine.apply(
+            package: SyncPackage(
+                options: [.memories],
+                conversationUserProfile: incomingProfile
+            )
+        )
+        let merged = ConversationMemoryManager.loadUserProfile()
+
+        #expect(summary.importedMemories == 1)
+        #expect(merged?.content.split(separator: "\n").contains("用户偏好 SwiftUI 原生体验。"))
+        #expect(merged?.content.split(separator: "\n").contains("用户关注 watchOS 续航和同步稳定性。"))
+        #expect(merged?.updatedAt == incomingDate)
+        #expect(merged?.needsLLMDedup == true)
+    }
+
     @MainActor
     @Test("AppStorage 导出会过滤内部同步状态键")
     func testAppStorageExportFiltersInternalSyncKeys() {

@@ -254,6 +254,7 @@ public enum SyncDeltaEngine {
         var usageStatsDeleted = false
         var fontDeleted = false
         var memoryIDsToDelete = Set<UUID>()
+        var shouldDeleteConversationProfile = false
 
         for deletion in filteredDelta.deletions {
             switch deletion.type {
@@ -278,6 +279,10 @@ public enum SyncDeltaEngine {
                     backgroundDeleted = true
                 }
             case .memory:
+                if deletion.recordID == SyncEngine.conversationUserProfileRecordID {
+                    shouldDeleteConversationProfile = true
+                    continue
+                }
                 guard let id = UUID(uuidString: deletion.recordID) else { continue }
                 memoryIDsToDelete.insert(id)
             case .mcpServer:
@@ -383,6 +388,10 @@ public enum SyncDeltaEngine {
                 await resolvedMemoryManager.deleteMemories(targets)
                 summary.importedMemories += targets.count
             }
+        }
+        if shouldDeleteConversationProfile, ConversationMemoryManager.loadUserProfile() != nil {
+            try? ConversationMemoryManager.clearUserProfile()
+            summary.importedMemories += 1
         }
 
         if providerDeleted {

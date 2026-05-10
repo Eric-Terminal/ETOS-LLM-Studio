@@ -523,9 +523,21 @@ extension PersistenceAuxiliaryGRDBStore {
                         singleton_key INTEGER PRIMARY KEY NOT NULL CHECK(singleton_key = 1),
                         content TEXT NOT NULL,
                         updated_at REAL NOT NULL,
-                        source_session_id TEXT
+                        source_session_id TEXT,
+                        needs_llm_dedup INTEGER NOT NULL DEFAULT 0
                     )
                 """)
+            }
+
+            migrator.registerMigration("v3_add_conversation_profile_dedup_flag") { db in
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(conversation_user_profile)")
+                let hasFlag = columns.contains { row in
+                    let name: String = row["name"]
+                    return name == "needs_llm_dedup"
+                }
+                if !hasFlag {
+                    try db.execute(sql: "ALTER TABLE conversation_user_profile ADD COLUMN needs_llm_dedup INTEGER NOT NULL DEFAULT 0")
+                }
             }
         }
         try migrator.migrate(self.dbPool)

@@ -278,6 +278,16 @@ public enum SyncPackageTransferService {
                     updatedAt: generatedAt
                 )
             })
+            if let profile = package.conversationUserProfile {
+                descriptors.append(
+                    SyncRecordDescriptor(
+                        type: .memory,
+                        recordID: SyncEngine.conversationUserProfileRecordID,
+                        checksum: checksum(for: profile),
+                        updatedAt: profile.updatedAt
+                    )
+                )
+            }
         }
 
         if package.options.contains(.mcpServers) {
@@ -490,6 +500,9 @@ public enum SyncPackageTransferService {
         try writeArrayField("sessions", package.sessions, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("backgrounds", package.backgrounds, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("memories", package.memories, to: writer, encoder: encoder, firstField: &firstField)
+        if let conversationUserProfile = package.conversationUserProfile {
+            try writeEncodedField("conversationUserProfile", conversationUserProfile, to: writer, encoder: encoder, firstField: &firstField)
+        }
         try writeArrayField("mcpServers", package.mcpServers, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("audioFiles", package.audioFiles, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("imageFiles", package.imageFiles, to: writer, encoder: encoder, firstField: &firstField)

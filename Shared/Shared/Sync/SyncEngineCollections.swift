@@ -58,6 +58,96 @@ extension SyncEngine {
         return (imported, skipped)
     }
 
+    static func mergeConversationUserProfile(
+        _ incoming: ConversationUserProfile?
+    ) -> (imported: Int, skipped: Int) {
+        guard let incoming else { return (0, 0) }
+        let incomingContent = incoming.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !incomingContent.isEmpty else { return (0, 1) }
+
+        guard let local = ConversationMemoryManager.loadUserProfile() else {
+            do {
+                try ConversationMemoryManager.saveUserProfile(incoming)
+                return (1, 0)
+            } catch {
+                return (0, 1)
+            }
+        }
+
+        let localContent = local.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizeContent(localContent) == normalizeContent(incomingContent),
+           local.needsLLMDedup == incoming.needsLLMDedup {
+            return (0, 1)
+        }
+
+        let mergedProfile = mergeConversationUserProfile(local: local, incoming: incoming)
+        do {
+            try ConversationMemoryManager.saveUserProfile(mergedProfile)
+            return (1, 0)
+        } catch {
+            return (0, 1)
+        }
+    }
+
+    static func mergeConversationUserProfile(
+        local: ConversationUserProfile,
+        incoming: ConversationUserProfile
+    ) -> ConversationUserProfile {
+        let localContent = local.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let incomingContent = incoming.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let latestUpdatedAt = max(local.updatedAt, incoming.updatedAt)
+        let sourceSessionID = incoming.updatedAt >= local.updatedAt
+            ? incoming.sourceSessionID ?? local.sourceSessionID
+            : local.sourceSessionID ?? incoming.sourceSessionID
+
+        if localContent.isEmpty {
+            return ConversationUserProfile(
+                content: incomingContent,
+                updatedAt: latestUpdatedAt,
+                sourceSessionID: sourceSessionID,
+                needsLLMDedup: incoming.needsLLMDedup
+            )
+        }
+        if incomingContent.isEmpty || normalizeContent(localContent) == normalizeContent(incomingContent) {
+            return ConversationUserProfile(
+                content: localContent,
+                updatedAt: latestUpdatedAt,
+                sourceSessionID: sourceSessionID,
+                needsLLMDedup: local.needsLLMDedup || incoming.needsLLMDedup
+            )
+        }
+
+        let stitchedSegments = mergedConversationProfileSegments(localContent, incomingContent)
+        let stitched = stitchedSegments.joined(separator: "\n\n")
+        return ConversationUserProfile(
+            content: stitched,
+            updatedAt: latestUpdatedAt,
+            sourceSessionID: sourceSessionID,
+            needsLLMDedup: stitchedSegments.count > 1 || local.needsLLMDedup || incoming.needsLLMDedup
+        )
+    }
+
+    static func mergedConversationProfileSegments(_ local: String, _ incoming: String) -> [String] {
+        var uniqueSegments: [String: String] = [:]
+        for segment in conversationProfileSegments(local) + conversationProfileSegments(incoming) {
+            let normalized = normalizeContent(segment)
+            guard !normalized.isEmpty else { continue }
+            uniqueSegments[normalized] = segment
+        }
+        return uniqueSegments
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map(\.value)
+    }
+
+    static func conversationProfileSegments(_ content: String) -> [String] {
+        content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     static func normalizeContent(_ content: String) -> String {
         content
             .trimmingCharacters(in: .whitespacesAndNewlines)

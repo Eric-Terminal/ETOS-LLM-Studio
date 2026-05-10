@@ -69,6 +69,7 @@ extension ChatService {
         let recentConversationSummaries: [ConversationSessionSummary]
         let conversationUserProfile: ConversationUserProfile?
         if conversationMemoryEnabled {
+            await deduplicateConversationUserProfileIfNeeded(sessionID: currentSessionID)
             recentConversationSummaries = ConversationMemoryManager.loadRecentSessionSummaries(
                 limit: resolvedConversationMemoryRecentLimit(),
                 excludingSessionID: currentSessionID

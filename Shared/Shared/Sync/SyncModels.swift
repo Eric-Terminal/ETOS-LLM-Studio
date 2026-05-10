@@ -214,6 +214,7 @@ public struct SyncPackage: Codable {
     public var sessions: [SyncedSession]
     public var backgrounds: [SyncedBackground]
     public var memories: [MemoryItem]
+    public var conversationUserProfile: ConversationUserProfile?
     public var mcpServers: [MCPServerConfiguration]
     public var audioFiles: [SyncedAudio]
     public var imageFiles: [SyncedImage]
@@ -235,7 +236,7 @@ public struct SyncPackage: Codable {
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
+        case options, providers, sessions, backgrounds, memories, conversationUserProfile, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
@@ -244,6 +245,7 @@ public struct SyncPackage: Codable {
         sessions: [SyncedSession] = [],
         backgrounds: [SyncedBackground] = [],
         memories: [MemoryItem] = [],
+        conversationUserProfile: ConversationUserProfile? = nil,
         mcpServers: [MCPServerConfiguration] = [],
         audioFiles: [SyncedAudio] = [],
         imageFiles: [SyncedImage] = [],
@@ -267,6 +269,7 @@ public struct SyncPackage: Codable {
         self.sessions = sessions
         self.backgrounds = backgrounds
         self.memories = memories
+        self.conversationUserProfile = conversationUserProfile
         self.mcpServers = mcpServers
         self.audioFiles = audioFiles
         self.imageFiles = imageFiles
@@ -293,6 +296,7 @@ public struct SyncPackage: Codable {
         sessions = try container.decodeIfPresent([SyncedSession].self, forKey: .sessions) ?? []
         backgrounds = try container.decodeIfPresent([SyncedBackground].self, forKey: .backgrounds) ?? []
         memories = try container.decodeIfPresent([MemoryItem].self, forKey: .memories) ?? []
+        conversationUserProfile = try container.decodeIfPresent(ConversationUserProfile.self, forKey: .conversationUserProfile)
         mcpServers = try container.decodeIfPresent([MCPServerConfiguration].self, forKey: .mcpServers) ?? []
         audioFiles = try container.decodeIfPresent([SyncedAudio].self, forKey: .audioFiles) ?? []
         imageFiles = try container.decodeIfPresent([SyncedImage].self, forKey: .imageFiles) ?? []

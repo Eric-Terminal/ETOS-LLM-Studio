@@ -31,11 +31,33 @@ public struct ConversationUserProfile: Codable, Hashable, Sendable {
     public let content: String
     public let updatedAt: Date
     public let sourceSessionID: UUID?
+    public let needsLLMDedup: Bool
 
-    public init(content: String, updatedAt: Date, sourceSessionID: UUID? = nil) {
+    enum CodingKeys: String, CodingKey {
+        case content
+        case updatedAt
+        case sourceSessionID
+        case needsLLMDedup
+    }
+
+    public init(
+        content: String,
+        updatedAt: Date,
+        sourceSessionID: UUID? = nil,
+        needsLLMDedup: Bool = false
+    ) {
         self.content = content
         self.updatedAt = updatedAt
         self.sourceSessionID = sourceSessionID
+        self.needsLLMDedup = needsLLMDedup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decode(String.self, forKey: .content)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        sourceSessionID = try container.decodeIfPresent(UUID.self, forKey: .sourceSessionID)
+        needsLLMDedup = try container.decodeIfPresent(Bool.self, forKey: .needsLLMDedup) ?? false
     }
 }
 
@@ -84,14 +106,35 @@ public enum ConversationMemoryManager {
         profileStore.loadProfile()
     }
 
-    public static func saveUserProfile(content: String, updatedAt: Date = Date(), sourceSessionID: UUID? = nil) throws {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    public static func saveUserProfile(
+        content: String,
+        updatedAt: Date = Date(),
+        sourceSessionID: UUID? = nil,
+        needsLLMDedup: Bool = false
+    ) throws {
+        try saveUserProfile(
+            ConversationUserProfile(
+                content: content,
+                updatedAt: updatedAt,
+                sourceSessionID: sourceSessionID,
+                needsLLMDedup: needsLLMDedup
+            )
+        )
+    }
+
+    public static func saveUserProfile(_ profile: ConversationUserProfile) throws {
+        let trimmed = profile.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             try clearUserProfile()
             return
         }
-        let profile = ConversationUserProfile(content: trimmed, updatedAt: updatedAt, sourceSessionID: sourceSessionID)
-        try profileStore.saveProfile(profile)
+        let normalized = ConversationUserProfile(
+            content: trimmed,
+            updatedAt: profile.updatedAt,
+            sourceSessionID: profile.sourceSessionID,
+            needsLLMDedup: profile.needsLLMDedup
+        )
+        try profileStore.saveProfile(normalized)
         NotificationCenter.default.post(name: .conversationMemoryDidChange, object: nil)
     }
 
@@ -107,6 +150,7 @@ public enum ConversationMemoryManager {
 
     public static func shouldUpdateUserProfile(existingProfile: ConversationUserProfile?, on now: Date = Date(), calendar: Calendar = .current) -> Bool {
         guard let existingProfile else { return true }
+        if existingProfile.needsLLMDedup { return true }
         return !calendar.isDate(existingProfile.updatedAt, inSameDayAs: now)
     }
 
@@ -196,7 +240,8 @@ private struct ConversationUserProfileStore {
             return ConversationUserProfile(
                 content: record.content,
                 updatedAt: Date(timeIntervalSince1970: record.updatedAt),
-                sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:))
+                sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
+                needsLLMDedup: record.needsLLMDedup != 0
             )
         }) else {
             return (false, nil)
@@ -220,7 +265,8 @@ private struct ConversationUserProfileStore {
                 singletonKey: 1,
                 content: profile.content,
                 updatedAt: profile.updatedAt.timeIntervalSince1970,
-                sourceSessionID: profile.sourceSessionID?.uuidString
+                sourceSessionID: profile.sourceSessionID?.uuidString,
+                needsLLMDedup: profile.needsLLMDedup ? 1 : 0
             )
             try record.save(db)
             return true
@@ -266,11 +312,13 @@ private struct ConversationUserProfileStore {
             case content
             case updatedAt = "updated_at"
             case sourceSessionID = "source_session_id"
+            case needsLLMDedup = "needs_llm_dedup"
         }
 
         var singletonKey: Int
         var content: String
         var updatedAt: Double
         var sourceSessionID: String?
+        var needsLLMDedup: Int
     }
 }

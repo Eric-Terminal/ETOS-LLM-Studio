@@ -61,6 +61,8 @@ extension SyncDeltaEngine {
         let sessions = package.sessions.filter { shouldKeep(.session, $0.session.id.uuidString) }
         let backgrounds = package.backgrounds.filter { shouldKeep(.background, $0.filename) }
         let memories = package.memories.filter { shouldKeep(.memory, $0.id.uuidString) }
+        let shouldFilterConversationProfile = !shouldKeep(.memory, SyncEngine.conversationUserProfileRecordID)
+        let conversationUserProfile = shouldFilterConversationProfile ? nil : package.conversationUserProfile
         let mcpServers = package.mcpServers.filter { shouldKeep(.mcpServer, $0.id.uuidString) }
         let audioFiles = package.audioFiles.filter { shouldKeep(.audioFile, $0.filename) }
         let imageFiles = package.imageFiles.filter { shouldKeep(.imageFile, $0.filename) }
@@ -86,7 +88,12 @@ extension SyncDeltaEngine {
         if package.options.contains(.providers), !package.providers.isEmpty, providers.isEmpty { options.remove(.providers) }
         if package.options.contains(.sessions), !package.sessions.isEmpty, sessions.isEmpty { options.remove(.sessions) }
         if package.options.contains(.backgrounds), !package.backgrounds.isEmpty, backgrounds.isEmpty { options.remove(.backgrounds) }
-        if package.options.contains(.memories), !package.memories.isEmpty, memories.isEmpty { options.remove(.memories) }
+        if package.options.contains(.memories),
+           (!package.memories.isEmpty || package.conversationUserProfile != nil),
+           memories.isEmpty,
+           conversationUserProfile == nil {
+            options.remove(.memories)
+        }
         if package.options.contains(.mcpServers), !package.mcpServers.isEmpty, mcpServers.isEmpty { options.remove(.mcpServers) }
         if package.options.contains(.audioFiles), !package.audioFiles.isEmpty, audioFiles.isEmpty { options.remove(.audioFiles) }
         if package.options.contains(.imageFiles), !package.imageFiles.isEmpty, imageFiles.isEmpty { options.remove(.imageFiles) }
@@ -115,6 +122,7 @@ extension SyncDeltaEngine {
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
+            conversationUserProfile: conversationUserProfile,
             mcpServers: mcpServers,
             audioFiles: audioFiles,
             imageFiles: imageFiles,
@@ -194,6 +202,16 @@ extension SyncDeltaEngine {
                     updatedAt: $0.updatedAt ?? $0.createdAt
                 )
             })
+            if let profile = package.conversationUserProfile {
+                records.append(
+                    SyncRecordDescriptor(
+                        type: .memory,
+                        recordID: SyncEngine.conversationUserProfileRecordID,
+                        checksum: stableChecksum(profile),
+                        updatedAt: profile.updatedAt
+                    )
+                )
+            }
         }
 
         if package.options.contains(.mcpServers) {
@@ -359,6 +377,7 @@ extension SyncDeltaEngine {
         var sessions: [SyncedSession] = []
         var backgrounds: [SyncedBackground] = []
         var memories: [MemoryItem] = []
+        var conversationUserProfile: ConversationUserProfile?
         var mcpServers: [MCPServerConfiguration] = []
         var audioFiles: [SyncedAudio] = []
         var imageFiles: [SyncedImage] = []
@@ -381,6 +400,9 @@ extension SyncDeltaEngine {
         sessions = full.sessions.filter { keys.contains(SyncRecordDescriptor.key(type: .session, recordID: $0.session.id.uuidString)) }
         backgrounds = full.backgrounds.filter { keys.contains(SyncRecordDescriptor.key(type: .background, recordID: $0.filename)) }
         memories = full.memories.filter { keys.contains(SyncRecordDescriptor.key(type: .memory, recordID: $0.id.uuidString)) }
+        if keys.contains(SyncRecordDescriptor.key(type: .memory, recordID: SyncEngine.conversationUserProfileRecordID)) {
+            conversationUserProfile = full.conversationUserProfile
+        }
         mcpServers = full.mcpServers.filter { keys.contains(SyncRecordDescriptor.key(type: .mcpServer, recordID: $0.id.uuidString)) }
         audioFiles = full.audioFiles.filter { keys.contains(SyncRecordDescriptor.key(type: .audioFile, recordID: $0.filename)) }
         imageFiles = full.imageFiles.filter { keys.contains(SyncRecordDescriptor.key(type: .imageFile, recordID: $0.filename)) }
@@ -415,7 +437,7 @@ extension SyncDeltaEngine {
         if !providers.isEmpty { options.insert(.providers) }
         if !sessions.isEmpty { options.insert(.sessions) }
         if !backgrounds.isEmpty { options.insert(.backgrounds) }
-        if !memories.isEmpty { options.insert(.memories) }
+        if !memories.isEmpty || conversationUserProfile != nil { options.insert(.memories) }
         if !mcpServers.isEmpty { options.insert(.mcpServers) }
         if !audioFiles.isEmpty { options.insert(.audioFiles) }
         if !imageFiles.isEmpty { options.insert(.imageFiles) }
@@ -442,6 +464,7 @@ extension SyncDeltaEngine {
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
+            conversationUserProfile: conversationUserProfile,
             mcpServers: mcpServers,
             audioFiles: audioFiles,
             imageFiles: imageFiles,

@@ -24,9 +24,15 @@ struct SyncPackageTransferServiceTests {
             models: [Model(modelName: "test-model", displayName: "Test Model", isActivated: true)]
         )
         let snapshot = Data([0x01, 0x23, 0x45, 0x67])
+        let profile = ConversationUserProfile(
+            content: "用户偏好跨端同步稳定性。",
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_010),
+            needsLLMDedup: true
+        )
         let package = SyncPackage(
-            options: [.providers, .appStorage],
+            options: [.providers, .memories, .appStorage],
             providers: [provider],
+            conversationUserProfile: profile,
             appStorageSnapshot: snapshot
         )
 
@@ -43,6 +49,7 @@ struct SyncPackageTransferServiceTests {
         #expect(decoded.options == package.options)
         #expect(decoded.providers.count == 1)
         #expect(decoded.providers[0].apiKeys == ["export-key"])
+        #expect(decoded.conversationUserProfile == profile)
         #expect(decoded.appStorageSnapshot == snapshot)
     }
 

@@ -23,6 +23,7 @@ extension SyncEngine {
         var sessions: [SyncedSession] = []
         var backgrounds: [SyncedBackground] = []
         var memories: [MemoryItem] = []
+        var conversationUserProfile: ConversationUserProfile?
         var mcpServers: [MCPServerConfiguration] = []
         var audioFiles: [SyncedAudio] = []
         var imageFiles: [SyncedImage] = []
@@ -82,6 +83,7 @@ extension SyncEngine {
         if options.contains(.memories) {
             let rawStore = MemoryRawStore()
             memories = rawStore.loadMemories()
+            conversationUserProfile = ConversationMemoryManager.loadUserProfile()
         }
 
         if options.contains(.mcpServers) {
@@ -177,6 +179,7 @@ extension SyncEngine {
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
+            conversationUserProfile: conversationUserProfile,
             mcpServers: mcpServers,
             audioFiles: audioFiles,
             imageFiles: imageFiles,
@@ -232,9 +235,10 @@ extension SyncEngine {
 
         if package.options.contains(.memories) {
             let manager = memoryManager ?? .shared
-            let result = await mergeMemories(package.memories, memoryManager: manager)
-            summary.importedMemories = result.imported
-            summary.skippedMemories = result.skipped
+            let memoryResult = await mergeMemories(package.memories, memoryManager: manager)
+            let profileResult = mergeConversationUserProfile(package.conversationUserProfile)
+            summary.importedMemories = memoryResult.imported + profileResult.imported
+            summary.skippedMemories = memoryResult.skipped + profileResult.skipped
         }
 
         if package.options.contains(.mcpServers) {

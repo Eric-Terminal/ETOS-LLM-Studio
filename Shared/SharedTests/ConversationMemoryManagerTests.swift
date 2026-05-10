@@ -60,7 +60,8 @@ struct ConversationMemoryManagerTests {
                 try? ConversationMemoryManager.saveUserProfile(
                     content: previousProfile.content,
                     updatedAt: previousProfile.updatedAt,
-                    sourceSessionID: previousProfile.sourceSessionID
+                    sourceSessionID: previousProfile.sourceSessionID,
+                    needsLLMDedup: previousProfile.needsLLMDedup
                 )
             } else {
                 try? ConversationMemoryManager.clearUserProfile()
@@ -72,13 +73,15 @@ struct ConversationMemoryManagerTests {
         try ConversationMemoryManager.saveUserProfile(
             content: "用户长期偏好：偏好技术实现细节，关注跨平台客户端体验。",
             updatedAt: updatedAt,
-            sourceSessionID: sourceSessionID
+            sourceSessionID: sourceSessionID,
+            needsLLMDedup: true
         )
 
         let loaded = ConversationMemoryManager.loadUserProfile()
         #expect(loaded?.content == "用户长期偏好：偏好技术实现细节，关注跨平台客户端体验。")
         #expect(loaded?.updatedAt == updatedAt)
         #expect(loaded?.sourceSessionID == sourceSessionID)
+        #expect(loaded?.needsLLMDedup == true)
 
         try ConversationMemoryManager.clearUserProfile()
         #expect(ConversationMemoryManager.loadUserProfile() == nil)
