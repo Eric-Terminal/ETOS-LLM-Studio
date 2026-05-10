@@ -153,6 +153,52 @@ extension PersistenceTests {
         #expect(sqliteCount(snapshotMemoryStore, sql: "SELECT COUNT(*) FROM conversation_user_profile WHERE source_session_id = '\(session.id.uuidString)'") == 1)
     }
 
+    @Test("数据库物理加密可在三处分库间启用并关闭")
+    @MainActor
+    func testDatabaseEncryptionMigrationRoundTrip() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let previousEncryptionEnabled = AppConfigStore.shared.databaseEncryptionEnabled
+        let session = ChatSession(id: UUID(), name: "SQLCipher Migration", isTemporary: false)
+
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            try? DatabaseEncryptionManager.shared.deletePassphraseWithoutVerification()
+            AppConfigStore.shared.databaseEncryptionEnabled = previousEncryptionEnabled
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([ChatMessage(role: .user, content: "encrypt me")], for: session.id)
+        #expect(Persistence.saveAuxiliaryBlob(["provider": "local"], forKey: "providers_v1"))
+        try ConversationMemoryManager.saveUserProfile(
+            content: "SQLCipher profile",
+            sourceSessionID: session.id
+        )
+
+        try Persistence.setDatabaseEncryptionEnabled(
+            passphrase: "database-passphrase",
+            confirmation: "database-passphrase"
+        )
+
+        #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: true))
+        #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: true))
+        #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: true))
+        #expect(!Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
+        #expect(Persistence.loadMessages(for: session.id).first?.content == "encrypt me")
+
+        try Persistence.disableDatabaseEncryption(passphrase: "database-passphrase")
+
+        #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
+        #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: false))
+        #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: false))
+        #expect(Persistence.loadMessages(for: session.id).first?.content == "encrypt me")
+    }
+
     @Test("明文离线快照可以恢复三处分库")
     func testSnapshotRestoreInstallsOfflineArchive() throws {
         cleanup(sessions: [])

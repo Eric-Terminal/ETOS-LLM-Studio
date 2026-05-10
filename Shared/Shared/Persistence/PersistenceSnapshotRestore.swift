@@ -16,6 +16,11 @@ struct SnapshotRestoreDatabaseURLs {
 }
 
 extension Persistence {
+    struct DatabaseReplacement {
+        let sourceURL: URL
+        let targetURL: URL
+    }
+
     static func installSnapshotDatabases(_ sources: SnapshotRestoreDatabaseURLs) throws {
         let targets = snapshotRestoreTargetURLs()
         let replacements = [
@@ -57,12 +62,7 @@ extension Persistence {
     }
 }
 
-private extension Persistence {
-    struct DatabaseReplacement {
-        let sourceURL: URL
-        let targetURL: URL
-    }
-
+extension Persistence {
     static func closeActiveStoresForSnapshotRestore() throws {
         grdbStoreLock.lock()
         let chatStore = cachedGRDBStore

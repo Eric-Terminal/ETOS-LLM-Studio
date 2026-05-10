@@ -88,12 +88,25 @@ extension Persistence {
         removeSQLiteSidecars(at: destinationURL)
 
         let isEncrypted = databaseEncryptionHasStoredPassphrase()
-        let sourceConfiguration = isEncrypted
-            ? makeEncryptedDatabaseConfiguration(readonly: true)
-            : makePlainDatabaseConfiguration(readonly: true)
-        let destinationConfiguration = isEncrypted
-            ? makeEncryptedDatabaseConfiguration()
-            : makePlainDatabaseConfiguration()
+        if isEncrypted {
+            let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration(readonly: true))
+            defer { try? source.close() }
+            try source.read { db in
+                try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted")
+                try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
+                try db.execute(sql: "DETACH DATABASE encrypted")
+            }
+            let destination = try DatabaseQueue(path: destinationURL.path, configuration: makeEncryptedDatabaseConfiguration())
+            defer { try? destination.close() }
+            try destination.writeWithoutTransaction { db in
+                try db.execute(sql: "PRAGMA journal_mode=DELETE")
+                try db.execute(sql: "PRAGMA synchronous=FULL")
+            }
+            return
+        }
+
+        let sourceConfiguration = makePlainDatabaseConfiguration(readonly: true)
+        let destinationConfiguration = makePlainDatabaseConfiguration()
         let source = try DatabaseQueue(path: sourceURL.path, configuration: sourceConfiguration)
         defer { try? source.close() }
         let destination = try DatabaseQueue(path: destinationURL.path, configuration: destinationConfiguration)
@@ -122,9 +135,304 @@ extension Persistence {
             }
         }
     }
+
+    static func setDatabaseEncryptionEnabled(
+        passphrase: String,
+        confirmation: String
+    ) throws {
+        guard !databaseEncryptionHasStoredPassphrase() else {
+            try changeDatabaseEncryptionPassphrase(
+                currentPassphrase: passphrase,
+                newPassphrase: passphrase,
+                confirmation: confirmation
+            )
+            return
+        }
+
+        guard !passphrase.isEmpty else {
+            throw DatabaseEncryptionManager.DatabaseEncryptionError.emptyPassphrase
+        }
+        guard passphrase == confirmation else {
+            throw DatabaseEncryptionManager.DatabaseEncryptionError.passphraseMismatch
+        }
+
+        let manager = DatabaseEncryptionManager.shared
+        let targets = databaseEncryptionTargetURLs()
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-Database-Encrypt-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        do {
+            try closeActiveStoresForSnapshotRestore()
+            resetLaunchBackupStateForSnapshotRestore()
+            let replacements = try makeEncryptedDatabaseReplacements(
+                targets: targets,
+                temporaryDirectory: temporaryDirectory,
+                newPassphrase: passphrase
+            )
+            try manager.savePassphrase(passphrase, confirmation: confirmation)
+            try installDatabaseReplacements(replacements)
+            Task { @MainActor in
+                AppConfigStore.shared.databaseEncryptionEnabled = true
+            }
+            bootstrapGRDBStoreOnLaunch()
+        } catch {
+            try? manager.deletePassphraseWithoutVerification()
+            Task { @MainActor in
+                AppConfigStore.shared.databaseEncryptionEnabled = false
+            }
+            bootstrapGRDBStoreOnLaunch()
+            throw error
+        }
+    }
+
+    static func disableDatabaseEncryption(passphrase: String) throws {
+        let manager = DatabaseEncryptionManager.shared
+        try manager.verify(passphrase: passphrase)
+
+        let targets = databaseEncryptionTargetURLs()
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-Database-Decrypt-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        do {
+            try closeActiveStoresForSnapshotRestore()
+            resetLaunchBackupStateForSnapshotRestore()
+            let replacements = try makePlainDatabaseReplacements(
+                targets: targets,
+                temporaryDirectory: temporaryDirectory
+            )
+            try manager.deletePassphraseWithoutVerification()
+            do {
+                try installDatabaseReplacements(replacements)
+            } catch {
+                try? manager.savePassphrase(passphrase, confirmation: passphrase)
+                throw error
+            }
+            Task { @MainActor in
+                AppConfigStore.shared.databaseEncryptionEnabled = false
+            }
+            bootstrapGRDBStoreOnLaunch()
+        } catch {
+            bootstrapGRDBStoreOnLaunch()
+            throw error
+        }
+    }
+
+    static func changeDatabaseEncryptionPassphrase(
+        currentPassphrase: String,
+        newPassphrase: String,
+        confirmation: String
+    ) throws {
+        let manager = DatabaseEncryptionManager.shared
+        try manager.verify(passphrase: currentPassphrase)
+        guard !newPassphrase.isEmpty else {
+            throw DatabaseEncryptionManager.DatabaseEncryptionError.emptyPassphrase
+        }
+        guard newPassphrase == confirmation else {
+            throw DatabaseEncryptionManager.DatabaseEncryptionError.passphraseMismatch
+        }
+
+        let targets = databaseEncryptionTargetURLs()
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-Database-Rekey-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        do {
+            try closeActiveStoresForSnapshotRestore()
+            resetLaunchBackupStateForSnapshotRestore()
+            let replacements = try makeEncryptedDatabaseReplacements(
+                targets: targets,
+                temporaryDirectory: temporaryDirectory,
+                newPassphrase: newPassphrase
+            )
+            try manager.savePassphrase(newPassphrase, confirmation: confirmation)
+            do {
+                try installDatabaseReplacements(replacements)
+            } catch {
+                try? manager.savePassphrase(currentPassphrase, confirmation: currentPassphrase)
+                throw error
+            }
+            Task { @MainActor in
+                AppConfigStore.shared.databaseEncryptionEnabled = true
+            }
+            bootstrapGRDBStoreOnLaunch()
+        } catch {
+            bootstrapGRDBStoreOnLaunch()
+            throw error
+        }
+    }
 }
 
 private extension Persistence {
+    static func databaseEncryptionTargetURLs() -> SnapshotRestoreDatabaseURLs {
+        snapshotRestoreTargetURLs()
+    }
+
+    static func makeEncryptedDatabaseReplacements(
+        targets: SnapshotRestoreDatabaseURLs,
+        temporaryDirectory: URL,
+        newPassphrase: String? = nil
+    ) throws -> [DatabaseReplacement] {
+        [
+            try makeEncryptedReplacement(
+                sourceURL: targets.chatStoreURL,
+                fileName: "chat-store.sqlite",
+                temporaryDirectory: temporaryDirectory,
+                newPassphrase: newPassphrase
+            ),
+            try makeEncryptedReplacement(
+                sourceURL: targets.configStoreURL,
+                fileName: "config-store.sqlite",
+                temporaryDirectory: temporaryDirectory,
+                newPassphrase: newPassphrase
+            ),
+            try makeEncryptedReplacement(
+                sourceURL: targets.memoryStoreURL,
+                fileName: "memory-store.sqlite",
+                temporaryDirectory: temporaryDirectory,
+                newPassphrase: newPassphrase
+            )
+        ].compactMap { $0 }
+    }
+
+    static func makePlainDatabaseReplacements(
+        targets: SnapshotRestoreDatabaseURLs,
+        temporaryDirectory: URL
+    ) throws -> [DatabaseReplacement] {
+        [
+            try makePlainReplacement(
+                sourceURL: targets.chatStoreURL,
+                fileName: "chat-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            ),
+            try makePlainReplacement(
+                sourceURL: targets.configStoreURL,
+                fileName: "config-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            ),
+            try makePlainReplacement(
+                sourceURL: targets.memoryStoreURL,
+                fileName: "memory-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            )
+        ].compactMap { $0 }
+    }
+
+    static func makeEncryptedReplacement(
+        sourceURL: URL,
+        fileName: String,
+        temporaryDirectory: URL,
+        newPassphrase: String?
+    ) throws -> DatabaseReplacement? {
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else { return nil }
+        let destinationURL = temporaryDirectory.appendingPathComponent(fileName, isDirectory: false)
+        try removeItemIfExists(at: destinationURL)
+        removeSQLiteSidecars(at: destinationURL)
+
+        let sourceConfiguration = databaseEncryptionHasStoredPassphrase()
+            ? makeEncryptedDatabaseConfiguration(readonly: true)
+            : makePlainDatabaseConfiguration(readonly: true)
+        let source = try DatabaseQueue(path: sourceURL.path, configuration: sourceConfiguration)
+        defer { try? source.close() }
+
+        let passphrase = newPassphrase.map { Data($0.utf8) }
+        try source.read { db in
+            if let passphrase {
+                try attachDatabase(db, path: destinationURL.path, schema: "encrypted", key: passphrase)
+            } else {
+                try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted")
+            }
+            try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
+            try db.execute(sql: "DETACH DATABASE encrypted")
+        }
+
+        guard isDatabaseHealthy(at: destinationURL, encrypted: true) else {
+            throw NSError(domain: "Persistence.SQLCipher", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "加密数据库校验失败：\(fileName)"
+            ])
+        }
+        return DatabaseReplacement(sourceURL: destinationURL, targetURL: sourceURL)
+    }
+
+    static func makePlainReplacement(
+        sourceURL: URL,
+        fileName: String,
+        temporaryDirectory: URL
+    ) throws -> DatabaseReplacement? {
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else { return nil }
+        let destinationURL = temporaryDirectory.appendingPathComponent(fileName, isDirectory: false)
+        try removeItemIfExists(at: destinationURL)
+        removeSQLiteSidecars(at: destinationURL)
+
+        let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration(readonly: true))
+        defer { try? source.close() }
+        try source.read { db in
+            try db.execute(
+                sql: """
+                ATTACH DATABASE ? AS plaintext KEY '';
+                SELECT sqlcipher_export('plaintext');
+                DETACH DATABASE plaintext;
+                """,
+                arguments: [destinationURL.path]
+            )
+        }
+
+        guard isDatabaseHealthy(at: destinationURL, encrypted: false) else {
+            throw NSError(domain: "Persistence.SQLCipher", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "解密数据库校验失败：\(fileName)"
+            ])
+        }
+        return DatabaseReplacement(sourceURL: destinationURL, targetURL: sourceURL)
+    }
+
+    static func installDatabaseReplacements(_ replacements: [DatabaseReplacement]) throws {
+        let rollbackDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-Database-Replacement-Rollback-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: rollbackDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rollbackDirectory) }
+
+        var didPrepareRollback = false
+        do {
+            try prepareSnapshotRestoreRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
+            didPrepareRollback = true
+            for replacement in replacements {
+                try replaceDatabaseFile(replacement)
+            }
+        } catch {
+            if didPrepareRollback {
+                restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)
+            }
+            throw error
+        }
+    }
+
+    static func attachCurrentPassphraseDatabase(
+        _ db: Database,
+        path: String,
+        schema: String
+    ) throws {
+        let didAttach = try DatabaseEncryptionManager.shared.withPassphraseDataIfAvailable { passphrase in
+            try attachDatabase(db, path: path, schema: schema, key: passphrase)
+        }
+        guard didAttach != nil else {
+            throw DatabaseEncryptionManager.DatabaseEncryptionError.passphraseUnavailable
+        }
+    }
+
+    static func attachDatabase(
+        _ db: Database,
+        path: String,
+        schema: String,
+        key: Data
+    ) throws {
+        try db.execute(sql: "ATTACH DATABASE ? AS \(schema) KEY ?", arguments: [path, String(decoding: key, as: UTF8.self)])
+        try db.execute(sql: "PRAGMA \(schema).kdf_iter=\(sqlCipherKDFIterations)")
+    }
+
     static func prepareSQLCipherIfNeeded(_ db: Database) throws {
         guard databaseEncryptionHasStoredPassphrase() else { return }
         try prepareSQLCipher(db)

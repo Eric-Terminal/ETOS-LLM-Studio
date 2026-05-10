@@ -83,6 +83,10 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
 
     public func deletePassphrase(verificationPassphrase: String) throws {
         try verify(passphrase: verificationPassphrase)
+        try deletePassphraseWithoutVerification()
+    }
+
+    public func deletePassphraseWithoutVerification() throws {
         guard passphraseStore.deletePassphrase() else {
             throw DatabaseEncryptionError.storageFailed
         }
