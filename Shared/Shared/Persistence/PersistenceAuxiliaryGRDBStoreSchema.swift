@@ -487,6 +487,20 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN request_body_controls_json TEXT")
                 }
             }
+
+            migrator.registerMigration("v9_create_app_config_table") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS app_config (
+                        key TEXT PRIMARY KEY NOT NULL,
+                        value_text TEXT,
+                        value_real REAL,
+                        value_integer INTEGER,
+                        type_hint TEXT NOT NULL DEFAULT 'text',
+                        updated_at REAL NOT NULL
+                    )
+                """)
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_app_config_updated_at ON app_config(updated_at DESC)")
+            }
         }
 
         if supportsMemoryRelationalSchema {
