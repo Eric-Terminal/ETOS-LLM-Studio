@@ -101,27 +101,44 @@ final class ChatViewModel: ObservableObject {
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
     @Published var activeAskUserInputRequest: AppToolAskUserInputRequest?
     
-    // MARK: - User Preferences (AppStorage)
-    
-    @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
-    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = true
-    @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
-    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = true {
+    // MARK: - User Preferences (AppConfig)
+
+    @Published var enableMarkdown: Bool = AppConfigStore.shared.enableMarkdown {
+        didSet { AppConfigStore.shared.enableMarkdown = enableMarkdown }
+    }
+    @Published var enableAdvancedRenderer: Bool = AppConfigStore.shared.enableAdvancedRenderer {
+        didSet { AppConfigStore.shared.enableAdvancedRenderer = enableAdvancedRenderer }
+    }
+    @Published var enableExperimentalToolResultDisplay: Bool = AppConfigStore.shared.enableExperimentalToolResultDisplay {
+        didSet { AppConfigStore.shared.enableExperimentalToolResultDisplay = enableExperimentalToolResultDisplay }
+    }
+    @Published var enableAutoReasoningPreview: Bool = AppConfigStore.shared.enableAutoReasoningPreview {
         didSet {
+            AppConfigStore.shared.enableAutoReasoningPreview = enableAutoReasoningPreview
             if !enableAutoReasoningPreview {
                 autoReasoningPreviewMessageIDs.removeAll()
                 userControlledReasoningPreviewMessageIDs.removeAll()
             }
         }
     }
-    @AppStorage("enableBackground") var enableBackground: Bool = true {
-        didSet { refreshBlurredBackgroundImage() }
+    @Published var enableBackground: Bool = AppConfigStore.shared.enableBackground {
+        didSet {
+            AppConfigStore.shared.enableBackground = enableBackground
+            refreshBlurredBackgroundImage()
+        }
     }
-    @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0 {
-        didSet { refreshBlurredBackgroundImage() }
+    @Published var backgroundBlur: Double = AppConfigStore.shared.backgroundBlur {
+        didSet {
+            AppConfigStore.shared.backgroundBlur = backgroundBlur
+            refreshBlurredBackgroundImage()
+        }
     }
-    @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
-    @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill"
+    @Published var backgroundOpacity: Double = AppConfigStore.shared.backgroundOpacity {
+        didSet { AppConfigStore.shared.backgroundOpacity = backgroundOpacity }
+    }
+    @Published var backgroundContentMode: String = AppConfigStore.shared.backgroundContentMode {
+        didSet { AppConfigStore.shared.backgroundContentMode = backgroundContentMode }
+    }
     @Published var aiTemperature: Double = AppConfigStore.shared.aiTemperature {
         didSet { AppConfigStore.shared.aiTemperature = aiTemperature }
     }
@@ -152,10 +169,15 @@ final class ChatViewModel: ObservableObject {
     @Published var lazyLoadMessageCount: Int = AppConfigStore.shared.lazyLoadMessageCount {
         didSet { AppConfigStore.shared.lazyLoadMessageCount = lazyLoadMessageCount }
     }
-    @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
-        didSet { refreshBlurredBackgroundImage() }
+    @Published var currentBackgroundImage: String = AppConfigStore.shared.currentBackgroundImage {
+        didSet {
+            AppConfigStore.shared.currentBackgroundImage = currentBackgroundImage
+            refreshBlurredBackgroundImage()
+        }
     }
-    @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = false
+    @Published var enableAutoRotateBackground: Bool = AppConfigStore.shared.enableAutoRotateBackground {
+        didSet { AppConfigStore.shared.enableAutoRotateBackground = enableAutoRotateBackground }
+    }
     @Published var enableAutoSessionNaming: Bool = AppConfigStore.shared.enableAutoSessionNaming {
         didSet { AppConfigStore.shared.enableAutoSessionNaming = enableAutoSessionNaming }
     }
@@ -183,10 +205,18 @@ final class ChatViewModel: ObservableObject {
     @Published var enableConversationProfileDailyUpdate: Bool = AppConfigStore.shared.enableConversationProfileDailyUpdate {
         didSet { AppConfigStore.shared.enableConversationProfileDailyUpdate = enableConversationProfileDailyUpdate }
     }
-    @AppStorage("enableReasoningSummary") var enableReasoningSummary: Bool = true
-    @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
-    @AppStorage("enableChatTopBlurFade") var enableChatTopBlurFade: Bool = true
-    @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
+    @Published var enableReasoningSummary: Bool = AppConfigStore.shared.enableReasoningSummary {
+        didSet { AppConfigStore.shared.enableReasoningSummary = enableReasoningSummary }
+    }
+    @Published var enableLiquidGlass: Bool = AppConfigStore.shared.enableLiquidGlass {
+        didSet { AppConfigStore.shared.enableLiquidGlass = enableLiquidGlass }
+    }
+    @Published var enableChatTopBlurFade: Bool = AppConfigStore.shared.enableChatTopBlurFade {
+        didSet { AppConfigStore.shared.enableChatTopBlurFade = enableChatTopBlurFade }
+    }
+    @Published var enableNoBubbleUI: Bool = AppConfigStore.shared.enableNoBubbleUI {
+        didSet { AppConfigStore.shared.enableNoBubbleUI = enableNoBubbleUI }
+    }
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
     @Published var speechModelIdentifier: String = AppConfigStore.shared.speechModelIdentifier {

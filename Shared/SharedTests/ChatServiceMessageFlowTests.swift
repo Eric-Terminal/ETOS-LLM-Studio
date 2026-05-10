@@ -350,7 +350,11 @@ extension ChatServiceTests {
 
         chatService.setSelectedModel(conversationModel)
         chatService.updateMessages([loadingMessage], for: sessionID)
-        UserDefaults.standard.set(true, forKey: "enableReasoningSummary")
+        Persistence.writeAppConfig(
+            key: AppConfigKey.enableReasoningSummary.rawValue,
+            integer: 1,
+            typeHint: AppConfigKey.enableReasoningSummary.typeHint
+        )
         Persistence.writeAppConfig(key: AppConfigKey.reasoningSummaryModelIdentifier.rawValue, text: dedicatedSummaryModel.id)
         setupMockReasoningSummaryResponse(summary: "比较成本后选稳妥方案")
 
@@ -392,7 +396,11 @@ extension ChatServiceTests {
         let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
 
         chatService.updateMessages([loadingMessage], for: sessionID)
-        UserDefaults.standard.set(false, forKey: "enableReasoningSummary")
+        Persistence.writeAppConfig(
+            key: AppConfigKey.enableReasoningSummary.rawValue,
+            integer: 0,
+            typeHint: AppConfigKey.enableReasoningSummary.typeHint
+        )
 
         await chatService.processResponseMessage(
             responseMessage: ChatMessage(
@@ -430,7 +438,11 @@ extension ChatServiceTests {
         let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
 
         chatService.updateMessages([loadingMessage], for: sessionID)
-        UserDefaults.standard.set(false, forKey: "enableReasoningSummary")
+        Persistence.writeAppConfig(
+            key: AppConfigKey.enableReasoningSummary.rawValue,
+            integer: 0,
+            typeHint: AppConfigKey.enableReasoningSummary.typeHint
+        )
 
         await chatService.processResponseMessage(
             responseMessage: ChatMessage(
@@ -467,7 +479,11 @@ extension ChatServiceTests {
         let content = "如果你在正文里看到 <think> 这个标签，它只是普通文本。"
 
         chatService.updateMessages([loadingMessage], for: sessionID)
-        UserDefaults.standard.set(false, forKey: "enableReasoningSummary")
+        Persistence.writeAppConfig(
+            key: AppConfigKey.enableReasoningSummary.rawValue,
+            integer: 0,
+            typeHint: AppConfigKey.enableReasoningSummary.typeHint
+        )
 
         await chatService.processResponseMessage(
             responseMessage: ChatMessage(

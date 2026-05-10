@@ -76,7 +76,7 @@ struct ChatServiceTests {
             await memoryManager.deleteMemories(allMems)
         }
         Persistence.clearRequestLogs()
-        UserDefaults.standard.removeObject(forKey: "enableReasoningSummary")
+        Persistence.deleteAppConfig(key: AppConfigKey.enableReasoningSummary.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.speechModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.memoryEmbeddingModelIdentifier.rawValue)

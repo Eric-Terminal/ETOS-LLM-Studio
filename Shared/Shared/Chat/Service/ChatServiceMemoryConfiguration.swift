@@ -153,12 +153,15 @@ extension ChatService {
     }
 
     func isReasoningSummaryEnabled() -> Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: Self.reasoningSummaryEnabledKey) == nil {
-            defaults.set(true, forKey: Self.reasoningSummaryEnabledKey)
-            return true
+        if let stored = Persistence.readAppConfigInteger(key: AppConfigKey.enableReasoningSummary.rawValue) {
+            return stored != 0
         }
-        return defaults.bool(forKey: Self.reasoningSummaryEnabledKey)
+        Persistence.writeAppConfig(
+            key: AppConfigKey.enableReasoningSummary.rawValue,
+            integer: 1,
+            typeHint: AppConfigKey.enableReasoningSummary.typeHint
+        )
+        return true
     }
 
     func resolvedReasoningSummaryModel() -> RunnableModel? {

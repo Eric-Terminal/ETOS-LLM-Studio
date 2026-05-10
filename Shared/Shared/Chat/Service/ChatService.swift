@@ -21,7 +21,6 @@ public class ChatService {
     static let selectedRunnableModelStorageKey = "selectedRunnableModelID"
     static let lastActiveSessionIDStorageKey = "launch.lastActiveSessionID"
     public static let restoreLastSessionOnLaunchEnabledStorageKey = "launch.restoreLastSessionOnLaunchEnabled"
-    static let reasoningSummaryEnabledKey = "enableReasoningSummary"
     struct RetryAchievementSignature: Equatable {
         let sessionID: UUID
         let content: String
