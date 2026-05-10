@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 解析明文 .elsbackup 并安装三处分库快照。
+// 检查、解密并安装 .elsbackup 三处分库快照。
 // ============================================================================
 
 import Foundation
@@ -11,6 +11,14 @@ import SQLite3
 import ZIPFoundation
 
 public enum SnapshotRestoreService {
+    public struct InspectionResult: Sendable {
+        public let encryptionMode: SnapshotEncryptor.Mode?
+
+        public var requiresPassword: Bool {
+            encryptionMode != nil
+        }
+    }
+
     public enum RestoreError: LocalizedError {
         case unsupportedEncryptedSnapshot
         case missingDatabase(String)
@@ -33,6 +41,11 @@ public enum SnapshotRestoreService {
 
     public static func restorePlainSnapshot(from fileURL: URL) throws {
         try restoreSnapshot(from: fileURL, password: nil)
+    }
+
+    public static func inspectSnapshot(at fileURL: URL) throws -> InspectionResult {
+        let data = try readSnapshotHeaderData(fileURL)
+        return InspectionResult(encryptionMode: try SnapshotEncryptor.encryptedMode(for: data))
     }
 
     public static func restoreSnapshot(from fileURL: URL, password: String?) throws {
@@ -68,6 +81,18 @@ private extension SnapshotRestoreService {
         }
         try FileManager.default.copyItem(at: sourceURL, to: localURL)
         return localURL
+    }
+
+    static func readSnapshotHeaderData(_ fileURL: URL) throws -> Data {
+        let shouldStopAccess = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        let fileHandle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? fileHandle.close() }
+        return try fileHandle.read(upToCount: SnapshotEncryptor.magic.count + 1) ?? Data()
     }
 
     static func decryptedArchiveURLIfNeeded(_ fileURL: URL, password: String?, workingDirectory: URL) throws -> URL {

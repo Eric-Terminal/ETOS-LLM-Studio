@@ -179,6 +179,7 @@ extension PersistenceTests {
 
         let snapshotURL = try SnapshotBuilder.buildSnapshot()
         defer { removeIfExists(snapshotURL) }
+        #expect(try SnapshotRestoreService.inspectSnapshot(at: snapshotURL).encryptionMode == nil)
 
         Persistence.saveChatSessions([replacementSession])
         Persistence.saveMessages([ChatMessage(role: .assistant, content: "snapshot-restore-target")], for: replacementSession.id)
@@ -242,9 +243,15 @@ extension PersistenceTests {
             password: "snapshot-pass"
         )
         try encryptedData.write(to: snapshotURL, options: .atomic)
+        #expect(try SnapshotRestoreService.inspectSnapshot(at: snapshotURL).encryptionMode == .simplePassword)
 
         Persistence.saveChatSessions([replacementSession])
         Persistence.saveMessages([ChatMessage(role: .assistant, content: "encrypted-snapshot-target")], for: replacementSession.id)
+
+        #expect(throws: Error.self) {
+            try SnapshotRestoreService.restoreSnapshot(from: snapshotURL, password: nil)
+        }
+        #expect(Persistence.loadChatSessions().contains(where: { $0.id == replacementSession.id }))
 
         #expect(throws: Error.self) {
             try SnapshotRestoreService.restoreSnapshot(from: snapshotURL, password: "bad-pass")
@@ -296,6 +303,7 @@ extension PersistenceTests {
             password: "strong-snapshot-pass"
         )
         try encryptedSnapshotData.write(to: snapshotURL, options: .atomic)
+        #expect(try SnapshotRestoreService.inspectSnapshot(at: snapshotURL).encryptionMode == .pbkdf2Strong)
 
         Persistence.saveChatSessions([replacementSession])
         Persistence.saveMessages([ChatMessage(role: .assistant, content: "strong-snapshot-target")], for: replacementSession.id)

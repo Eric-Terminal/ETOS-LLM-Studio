@@ -23,6 +23,7 @@ struct BackupRestoreView: View {
     @State private var exportPasswordConfirmation = ""
     @State private var restorePassword = ""
     @State private var pendingEncryptedSnapshotURL: URL?
+    @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
     @State private var isPasswordPromptPresented = false
 
     private let snapshotContentTypes: [UTType] = {
@@ -96,7 +97,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("恢复", comment: ""))
             } footer: {
-                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库。请选择可信的 .elsbackup 文件；加密快照将在后续安全恢复流中处理。", comment: ""))
+                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库。请选择可信的 .elsbackup 文件；加密快照会先要求输入密码，解密与校验成功后才会替换本机数据。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("数据库快照", comment: ""))
@@ -119,17 +120,19 @@ struct BackupRestoreView: View {
             SecureField(NSLocalizedString("密码", comment: ""), text: $restorePassword)
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
                 pendingEncryptedSnapshotURL = nil
+                pendingSnapshotInspection = nil
                 restorePassword = ""
             }
             Button(NSLocalizedString("恢复", comment: "")) {
                 guard let pendingEncryptedSnapshotURL else { return }
                 restoreSnapshot(from: pendingEncryptedSnapshotURL, password: restorePassword)
                 self.pendingEncryptedSnapshotURL = nil
+                pendingSnapshotInspection = nil
                 restorePassword = ""
             }
             .disabled(restorePassword.isEmpty)
         } message: {
-            Text(NSLocalizedString("此快照已加密，请输入导出时设置的密码。", comment: ""))
+            Text(passwordPromptMessage)
         }
     }
 
@@ -199,8 +202,10 @@ struct BackupRestoreView: View {
 
     private func handleSelectedSnapshot(_ fileURL: URL) {
         do {
-            if try Self.snapshotIsEncrypted(fileURL) {
+            let inspection = try SnapshotRestoreService.inspectSnapshot(at: fileURL)
+            if inspection.requiresPassword {
                 pendingEncryptedSnapshotURL = fileURL
+                pendingSnapshotInspection = inspection
                 restorePassword = ""
                 isPasswordPromptPresented = true
                 return
@@ -208,6 +213,17 @@ struct BackupRestoreView: View {
             restoreSnapshot(from: fileURL, password: nil)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private var passwordPromptMessage: String {
+        switch pendingSnapshotInspection?.encryptionMode {
+        case .simplePassword:
+            return NSLocalizedString("此快照使用简单密码加密，请输入导出时设置的密码。", comment: "")
+        case .pbkdf2Strong:
+            return NSLocalizedString("此快照使用高强度派生加密，请输入导出时设置的密码。", comment: "")
+        case .none:
+            return NSLocalizedString("此快照已加密，请输入导出时设置的密码。", comment: "")
         }
     }
 
@@ -246,17 +262,6 @@ struct BackupRestoreView: View {
             encryptedData = try SnapshotEncryptor.encryptSimplePassword(data: plainData, password: password)
         }
         try encryptedData.write(to: snapshotURL, options: .atomic)
-    }
-
-    private static func snapshotIsEncrypted(_ snapshotURL: URL) throws -> Bool {
-        let shouldStopAccess = snapshotURL.startAccessingSecurityScopedResource()
-        defer {
-            if shouldStopAccess {
-                snapshotURL.stopAccessingSecurityScopedResource()
-            }
-        }
-        let data = try Data(contentsOf: snapshotURL, options: .mappedIfSafe)
-        return try SnapshotEncryptor.encryptedMode(for: data) != nil
     }
 
     private static func exportSnapshotToDocuments(_ snapshotURL: URL) throws -> URL {
