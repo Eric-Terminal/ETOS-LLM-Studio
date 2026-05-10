@@ -222,12 +222,25 @@ public final class AppConfigStore: ObservableObject {
         hiddenAnnouncementKeys = Self.textValue(.hiddenAnnouncementKeys, userDefaults: userDefaults)
     }
 
-    public func snapshot() -> [String: Any] {
+    public nonisolated static func persistentSnapshot() -> [String: Any] {
         var result: [String: Any] = [:]
         for key in AppConfigKey.allCases where key.participatesInSync {
-            result[key.rawValue] = value(for: key).anyValue
+            switch key.defaultValue {
+            case .bool(let defaultValue):
+                result[key.rawValue] = (Persistence.readAppConfigInteger(key: key.rawValue) ?? (defaultValue ? 1 : 0)) != 0
+            case .integer(let defaultValue):
+                result[key.rawValue] = Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
+            case .real(let defaultValue):
+                result[key.rawValue] = Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
+            case .text(let defaultValue):
+                result[key.rawValue] = Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
+            }
         }
         return result
+    }
+
+    public nonisolated func snapshot() -> [String: Any] {
+        Self.persistentSnapshot()
     }
 
     public func apply(snapshot: [String: Any]) {

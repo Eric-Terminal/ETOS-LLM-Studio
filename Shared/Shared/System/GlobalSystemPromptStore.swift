@@ -113,6 +113,48 @@ public enum GlobalSystemPromptStore {
         return snapshot
     }
 
+    /// 仅更新当前生效提示词到数据库与 AppConfig 镜像，不回写旧版 UserDefaults 列表字段。
+    @discardableResult
+    public static func saveActiveSystemPrompt(_ prompt: String) -> GlobalSystemPromptSnapshot {
+        let before = loadFromDatabase()
+        if before?.activeSystemPrompt == prompt {
+            Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: prompt)
+            return before!
+        }
+
+        var entries = before?.entries ?? []
+        var selectedEntryID = before?.selectedEntryID
+        if let selectedEntryID,
+           let index = entries.firstIndex(where: { $0.id == selectedEntryID }) {
+            entries[index].content = prompt
+            entries[index].updatedAt = Date()
+        } else if !entries.isEmpty {
+            entries[0].content = prompt
+            entries[0].updatedAt = Date()
+            selectedEntryID = entries[0].id
+        } else if prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            selectedEntryID = nil
+        } else {
+            let entry = GlobalSystemPromptEntry(
+                title: defaultTitle(for: prompt),
+                content: prompt,
+                updatedAt: Date()
+            )
+            entries = [entry]
+            selectedEntryID = entry.id
+        }
+
+        let snapshot = normalizedSnapshot(
+            entries: entries,
+            selectedEntryID: selectedEntryID,
+            legacyPrompt: prompt
+        )
+        _ = saveToDatabase(snapshot)
+        Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: snapshot.activeSystemPrompt)
+        NotificationCenter.default.post(name: .globalSystemPromptStoreDidChange, object: nil)
+        return snapshot
+    }
+
     private static func shouldUseDatabase(userDefaults: UserDefaults) -> Bool {
         userDefaults === UserDefaults.standard
     }

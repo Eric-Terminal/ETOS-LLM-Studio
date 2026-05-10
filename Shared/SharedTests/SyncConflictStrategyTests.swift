@@ -289,6 +289,7 @@ struct SyncConflictStrategyTests {
         #expect(mergedProviders[0].models.count == 2)
     }
 
+    @MainActor
     @Test("AppStorage 导出会过滤内部同步状态键")
     func testAppStorageExportFiltersInternalSyncKeys() {
         let suite = "com.ETOS.tests.sync.appstorage.export.\(UUID().uuidString)"
@@ -298,8 +299,10 @@ struct SyncConflictStrategyTests {
         }
         defaults.removePersistentDomain(forName: suite)
         defer { defaults.removePersistentDomain(forName: suite) }
+        let backup = backupAppConfigValues([.appLanguage])
+        defer { AppConfigStore.shared.apply(snapshot: backup) }
 
-        defaults.set("dark", forKey: "themeMode")
+        AppConfigStore.shared.appLanguage = "zh-Hans"
         defaults.set("device-a", forKey: "cloudSync.deviceIdentifier")
         defaults.set(Data([0x01]), forKey: "sync.delta.version-tracker.watch.connectivity")
         defaults.set(Data([0x02]), forKey: "sync.delta.checkpoint.cloud.sync")
@@ -307,12 +310,13 @@ struct SyncConflictStrategyTests {
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
         let snapshot = decodeAppStorageSnapshot(package.appStorageSnapshot)
 
-        #expect(snapshot["themeMode"] as? String == "dark")
+        #expect(snapshot[AppConfigKey.appLanguage.rawValue] as? String == "zh-Hans")
         #expect(snapshot["cloudSync.deviceIdentifier"] == nil)
         #expect(snapshot["sync.delta.version-tracker.watch.connectivity"] == nil)
         #expect(snapshot["sync.delta.checkpoint.cloud.sync"] == nil)
     }
 
+    @MainActor
     @Test("AppStorage 导入会忽略内部同步状态键")
     func testAppStorageImportSkipsInternalSyncKeys() async {
         let suite = "com.ETOS.tests.sync.appstorage.apply.\(UUID().uuidString)"
@@ -322,13 +326,15 @@ struct SyncConflictStrategyTests {
         }
         defaults.removePersistentDomain(forName: suite)
         defer { defaults.removePersistentDomain(forName: suite) }
+        let backup = backupAppConfigValues([.appLanguage])
+        defer { AppConfigStore.shared.apply(snapshot: backup) }
 
-        defaults.set("dark", forKey: "themeMode")
+        AppConfigStore.shared.appLanguage = "system"
         defaults.set("local-device", forKey: "cloudSync.deviceIdentifier")
         defaults.set(Data([0xAA]), forKey: "sync.delta.checkpoint.cloud.sync")
 
         let incoming: [String: Any] = [
-            "themeMode": "light",
+            AppConfigKey.appLanguage.rawValue: "zh-Hans",
             "cloudSync.deviceIdentifier": "remote-device",
             "sync.delta.checkpoint.cloud.sync": Data([0xBB])
         ]
@@ -342,11 +348,21 @@ struct SyncConflictStrategyTests {
             appStorageSnapshot: snapshotData
         )
 
-        _ = await SyncEngine.apply(package: package, userDefaults: defaults)
+        let summary = await SyncEngine.apply(package: package, userDefaults: defaults)
 
-        #expect(defaults.string(forKey: "themeMode") == "light")
+        #expect(AppConfigStore.shared.appLanguage == "zh-Hans")
         #expect(defaults.string(forKey: "cloudSync.deviceIdentifier") == "local-device")
         #expect(defaults.data(forKey: "sync.delta.checkpoint.cloud.sync") == Data([0xAA]))
+        #expect(summary.importedAppStorageValues == 1)
+        #expect(summary.skippedAppStorageValues == 2)
+    }
+
+    @MainActor
+    private func backupAppConfigValues(_ keys: [AppConfigKey]) -> [String: Any] {
+        let snapshot = AppConfigStore.shared.snapshot()
+        return keys.reduce(into: [String: Any]()) { result, key in
+            result[key.rawValue] = snapshot[key.rawValue]
+        }
     }
 
     private func resetProviders(to providers: [Provider]) {

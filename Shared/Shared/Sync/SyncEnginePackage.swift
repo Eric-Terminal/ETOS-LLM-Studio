@@ -327,7 +327,7 @@ extension SyncEngine {
         }
 
         if package.options.contains(.appStorage) {
-            let result = mergeAppStorage(
+            let result = await mergeAppStorage(
                 package.appStorageSnapshot,
                 legacyGlobalSystemPrompt: package.globalSystemPrompt,
                 userDefaults: userDefaults

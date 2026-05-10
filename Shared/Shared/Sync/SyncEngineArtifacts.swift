@@ -178,7 +178,7 @@ extension SyncEngine {
         _ snapshotData: Data?,
         legacyGlobalSystemPrompt: String?,
         userDefaults: UserDefaults
-    ) -> (imported: Int, skipped: Int) {
+    ) async -> (imported: Int, skipped: Int) {
         var incomingSnapshot: [String: Any] = [:]
 
         if let snapshotData, let decoded = decodeAppStorageSnapshot(snapshotData) {
@@ -193,29 +193,31 @@ extension SyncEngine {
             return (0, 0)
         }
 
-        var imported = 0
-        var skipped = 0
-        let globalPromptMergeResult = mergeGlobalSystemPromptStorageKeys(
-            in: &incomingSnapshot,
-            legacyGlobalSystemPrompt: legacyGlobalSystemPrompt,
-            userDefaults: userDefaults
+        let normalized = normalizedAppConfigSnapshot(
+            incomingSnapshot,
+            legacyGlobalSystemPrompt: legacyGlobalSystemPrompt
         )
-        imported += globalPromptMergeResult.imported
-        skipped += globalPromptMergeResult.skipped
+        let currentSnapshot = collectAppStorageSnapshot(userDefaults: userDefaults)
+        var imported = 0
+        var skipped = normalized.skipped
+        var acceptedSnapshot: [String: Any] = [:]
 
-        for (key, incomingValue) in incomingSnapshot {
-            guard isCandidateAppStorageKey(key) else {
-                skipped += 1
-                continue
-            }
-            let localValue = userDefaults.object(forKey: key)
+        for (key, incomingValue) in normalized.snapshot {
+            let localValue = currentSnapshot[key]
             if appStorageValuesEqual(localValue, incomingValue) {
                 skipped += 1
                 continue
             }
 
-            userDefaults.set(incomingValue, forKey: key)
+            acceptedSnapshot[key] = incomingValue
             imported += 1
+        }
+
+        if !acceptedSnapshot.isEmpty {
+            await AppConfigStore.shared.apply(snapshot: acceptedSnapshot)
+        }
+        if let prompt = normalized.snapshot[AppConfigKey.systemPrompt.rawValue] as? String {
+            GlobalSystemPromptStore.saveActiveSystemPrompt(prompt)
         }
 
         return (imported, skipped)
@@ -236,85 +238,118 @@ extension SyncEngine {
         return dictionary
     }
 
-    static func collectAppStorageSnapshot(userDefaults: UserDefaults) -> [String: Any] {
-        var snapshot: [String: Any]
-        if userDefaults === UserDefaults.standard,
-           let bundleIdentifier = Bundle.main.bundleIdentifier,
-           let domain = userDefaults.persistentDomain(forName: bundleIdentifier),
-           !domain.isEmpty {
-            snapshot = domain.filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
-        } else {
-            snapshot = userDefaults.dictionaryRepresentation()
-                .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
-        }
-
-        let globalPromptSnapshot = GlobalSystemPromptStore.load(userDefaults: userDefaults)
-        snapshot[legacyGlobalSystemPromptKey] = globalPromptSnapshot.activeSystemPrompt
-        if globalPromptSnapshot.entries.isEmpty {
-            snapshot.removeValue(forKey: GlobalSystemPromptStore.entriesStorageKey)
-            snapshot.removeValue(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
-        } else {
-            if let encoded = try? JSONEncoder().encode(globalPromptSnapshot.entries) {
-                snapshot[GlobalSystemPromptStore.entriesStorageKey] = encoded
-            }
-            snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] = globalPromptSnapshot.selectedEntryID?.uuidString
-        }
-        return snapshot
+    static func collectAppStorageSnapshot(userDefaults _: UserDefaults) -> [String: Any] {
+        AppConfigStore.persistentSnapshot()
+            .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
     }
 
-    static func mergeGlobalSystemPromptStorageKeys(
-        in snapshot: inout [String: Any],
-        legacyGlobalSystemPrompt: String?,
-        userDefaults: UserDefaults
-    ) -> (imported: Int, skipped: Int) {
+    static func normalizedAppConfigSnapshot(
+        _ snapshot: [String: Any],
+        legacyGlobalSystemPrompt: String?
+    ) -> (snapshot: [String: Any], skipped: Int) {
+        var remainingSnapshot = snapshot
+        let legacyPromptResult = extractLegacyGlobalSystemPrompt(
+            from: &remainingSnapshot,
+            fallback: legacyGlobalSystemPrompt
+        )
+        if let prompt = legacyPromptResult.prompt,
+           remainingSnapshot[AppConfigKey.systemPrompt.rawValue] == nil {
+            remainingSnapshot[AppConfigKey.systemPrompt.rawValue] = prompt
+        }
+
+        var normalizedSnapshot: [String: Any] = [:]
+        var skipped = legacyPromptResult.skipped
+        for (rawKey, value) in remainingSnapshot {
+            guard isCandidateAppStorageKey(rawKey),
+                  let key = AppConfigKey(rawValue: rawKey),
+                  key.participatesInSync,
+                  let normalizedValue = normalizedAppConfigValue(value, for: key),
+                  isPropertyListEncodableValue(normalizedValue) else {
+                skipped += 1
+                continue
+            }
+            normalizedSnapshot[rawKey] = normalizedValue
+        }
+        return (normalizedSnapshot, skipped)
+    }
+
+    static func extractLegacyGlobalSystemPrompt(
+        from snapshot: inout [String: Any],
+        fallback: String?
+    ) -> (prompt: String?, skipped: Int) {
         let entriesData = snapshot.removeValue(forKey: GlobalSystemPromptStore.entriesStorageKey) as? Data
         let selectedRawID = snapshot.removeValue(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) as? String
-        let activePrompt = snapshot.removeValue(forKey: legacyGlobalSystemPromptKey) as? String
-        let touchedKeyCount = [entriesData as Any?, selectedRawID as Any?, activePrompt as Any?]
-            .filter { $0 != nil }
-            .count
-
-        if let entriesData {
-            let incomingEntries = (try? JSONDecoder().decode([GlobalSystemPromptEntry].self, from: entriesData)) ?? []
-            let before = GlobalSystemPromptStore.load(userDefaults: userDefaults)
-            let after = GlobalSystemPromptStore.save(
-                entries: incomingEntries,
-                selectedEntryID: selectedRawID.flatMap(UUID.init(uuidString:)),
-                userDefaults: userDefaults
-            )
-            let keyCount = max(1, touchedKeyCount)
-            return before == after ? (0, keyCount) : (keyCount, 0)
+        var skipped = 0
+        if entriesData != nil {
+            skipped += 1
+        }
+        if selectedRawID != nil {
+            skipped += 1
         }
 
-        guard let legacyPrompt = activePrompt ?? legacyGlobalSystemPrompt else {
-            return (0, 0)
+        if let entriesData,
+           let entries = try? JSONDecoder().decode([GlobalSystemPromptEntry].self, from: entriesData) {
+            let selectedID = selectedRawID.flatMap(UUID.init(uuidString:))
+            let selectedEntry = selectedID.flatMap { id in entries.first { $0.id == id } } ?? entries.first
+            if let selectedEntry {
+                return (selectedEntry.content, skipped)
+            }
         }
 
-        let before = GlobalSystemPromptStore.load(userDefaults: userDefaults)
-        if before.activeSystemPrompt == legacyPrompt {
-            return (0, max(1, touchedKeyCount))
-        }
+        return (snapshot[legacyGlobalSystemPromptKey] as? String ?? fallback, skipped)
+    }
 
-        var entries = before.entries
-        if let selectedID = before.selectedEntryID,
-           let index = entries.firstIndex(where: { $0.id == selectedID }) {
-            entries[index].content = legacyPrompt
-            entries[index].updatedAt = Date()
-        } else {
-            let entry = GlobalSystemPromptEntry(
-                title: legacyPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "历史提示词" : "同步提示词",
-                content: legacyPrompt,
-                updatedAt: Date()
-            )
-            entries.insert(entry, at: 0)
+    static func normalizedAppConfigValue(_ value: Any, for key: AppConfigKey) -> Any? {
+        switch key.defaultValue {
+        case .bool:
+            if let value = value as? Bool {
+                return value
+            }
+            if let value = value as? NSNumber {
+                return value.boolValue
+            }
+            if let value = value as? String {
+                switch value.lowercased() {
+                case "true", "1", "yes":
+                    return true
+                case "false", "0", "no":
+                    return false
+                default:
+                    return nil
+                }
+            }
+            return nil
+        case .integer:
+            if let value = value as? Int {
+                return value
+            }
+            if let value = value as? NSNumber {
+                return value.intValue
+            }
+            if let value = value as? String {
+                return Int(value)
+            }
+            return nil
+        case .real:
+            if let value = value as? Double {
+                return value
+            }
+            if let value = value as? NSNumber {
+                return value.doubleValue
+            }
+            if let value = value as? String {
+                return Double(value)
+            }
+            return nil
+        case .text:
+            if let value = value as? String {
+                return value
+            }
+            if let value = value as? NSString {
+                return value as String
+            }
+            return nil
         }
-
-        _ = GlobalSystemPromptStore.save(
-            entries: entries,
-            selectedEntryID: entries.first?.id,
-            userDefaults: userDefaults
-        )
-        return (max(1, touchedKeyCount), 0)
     }
 
     static func isPropertyListEncodableValue(_ value: Any) -> Bool {

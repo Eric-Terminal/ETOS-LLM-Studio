@@ -144,8 +144,8 @@ struct AchievementCenterTests {
         #expect(center.journalEntries.isEmpty)
     }
 
-    @Test("成就记录键会进入 AppStorage 同步快照")
-    func achievementRecordIsIncludedInAppStorageSnapshot() {
+    @Test("成就记录键不会进入 AppConfig 同步快照")
+    func achievementRecordIsNotIncludedInAppStorageSnapshot() {
         let suite = "com.ETOS.tests.achievement.snapshot.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else {
             Issue.record("无法创建测试 UserDefaults")
@@ -165,10 +165,10 @@ struct AchievementCenterTests {
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
         let snapshot = decodeAppStorageSnapshot(package.appStorageSnapshot)
 
-        #expect(snapshot[AchievementCenter.storageKey(for: record)] is Data)
+        #expect(snapshot[AchievementCenter.storageKey(for: record)] == nil)
     }
 
-    @Test("导入 AppStorage 不会删除本地已有成就记录")
+    @Test("导入 AppConfig 同步快照不会写入成就记录键")
     func appStorageImportPreservesIndependentAchievementKeys() async {
         let suite = "com.ETOS.tests.achievement.import.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else {
@@ -202,10 +202,12 @@ struct AchievementCenterTests {
         )
         let package = SyncPackage(options: [.appStorage], appStorageSnapshot: snapshotData)
 
-        _ = await SyncEngine.apply(package: package, userDefaults: defaults)
+        let summary = await SyncEngine.apply(package: package, userDefaults: defaults)
 
         #expect(defaults.data(forKey: AchievementCenter.storageKey(for: localRecord)) != nil)
-        #expect(defaults.data(forKey: AchievementCenter.storageKey(for: remoteRecord)) != nil)
+        #expect(defaults.data(forKey: AchievementCenter.storageKey(for: remoteRecord)) == nil)
+        #expect(summary.importedAppStorageValues == 0)
+        #expect(summary.skippedAppStorageValues == 1)
     }
 
     @Test("稳稳接住成就定义已登记")

@@ -3,7 +3,7 @@
 // ============================================================================
 // 聊天颜色配置测试
 // - 覆盖旧配置迁移、默认 Profile 复制、时间窗命中与重叠校验
-// - 保障颜色配置可通过 AppStorage 同步
+// - 保障颜色配置不会混入 AppConfig 设置快照
 // ============================================================================
 
 import Foundation
@@ -187,8 +187,8 @@ struct ChatAppearanceProfilesTests {
         #expect(window?.endMinuteOfDay == 19 * 60)
     }
 
-    @Test("AppStorage 同步包会携带颜色配置")
-    func appStorageSnapshotContainsColorConfiguration() throws {
+    @Test("AppConfig 同步包不会携带颜色配置")
+    func appStorageSnapshotDoesNotContainColorConfiguration() throws {
         let suite = "com.ETOS.tests.chatAppearance.sync.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else {
             Issue.record("无法创建测试专用 UserDefaults")
@@ -215,15 +215,12 @@ struct ChatAppearanceProfilesTests {
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
         guard let snapshotData = package.appStorageSnapshot,
               let plist = try? PropertyListSerialization.propertyList(from: snapshotData, options: [], format: nil),
-              let snapshot = plist as? [String: Any],
-              let data = snapshot[ChatAppearanceProfileStore.configurationStorageKey] as? Data else {
-            Issue.record("同步包中缺少颜色配置快照")
+              let snapshot = plist as? [String: Any] else {
+            Issue.record("同步包快照解码失败")
             return
         }
 
-        let decoded = try JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data)
-        #expect(decoded.profiles.contains(where: { $0.id == "warm" }))
-        #expect(decoded.scheduleRules.count == 1)
+        #expect(snapshot[ChatAppearanceProfileStore.configurationStorageKey] == nil)
     }
 
     private func makeUTCDate(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date {

@@ -43,36 +43,20 @@ struct ShortcutSyncTests {
         #expect(merged.contains(where: { $0.name == "Sync Imported Tool" }))
     }
 
+    @MainActor
     @Test("appStorage snapshot is exported when sync option is enabled")
     func testAppStorageSnapshotIsExported() {
-        let suiteName = "com.ETOS.tests.appStorage.export.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            Issue.record("无法创建测试专用 UserDefaults")
-            return
-        }
+        let backup = backupAppConfigValues([
+            .systemPrompt,
+            .enableMarkdown,
+            .enableExperimentalToolResultDisplay
+        ])
+        defer { restoreAppConfigValues(backup) }
 
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        defaults.set("旧版镜像提示词", forKey: "systemPrompt")
-        let promptEntries = [
-            GlobalSystemPromptEntry(
-                id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-                title: "绘画助手",
-                content: "请使用二次元插画风格",
-                updatedAt: Date(timeIntervalSince1970: 1_714_000_000)
-            )
-        ]
-        guard let promptEntriesData = try? JSONEncoder().encode(promptEntries) else {
-            Issue.record("编码全局提示词列表失败")
-            return
-        }
-        defaults.set(promptEntriesData, forKey: GlobalSystemPromptStore.entriesStorageKey)
-        defaults.set("11111111-1111-1111-1111-111111111111", forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
-        defaults.set(true, forKey: "enableMarkdown")
-        defaults.set(false, forKey: "enableExperimentalToolResultDisplay")
-        let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
+        AppConfigStore.shared.systemPrompt = "请使用二次元插画风格"
+        AppConfigStore.shared.enableMarkdown = true
+        AppConfigStore.shared.enableExperimentalToolResultDisplay = false
+        let package = SyncEngine.buildPackage(options: [.appStorage])
 
         #expect(package.globalSystemPrompt == "请使用二次元插画风格")
         guard let snapshotData = package.appStorageSnapshot else {
@@ -82,46 +66,33 @@ struct ShortcutSyncTests {
 
         let snapshot = decodeSnapshot(snapshotData)
         #expect(snapshot["systemPrompt"] as? String == "请使用二次元插画风格")
-        #expect(snapshot[GlobalSystemPromptStore.entriesStorageKey] as? Data == promptEntriesData)
-        #expect(snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] as? String == "11111111-1111-1111-1111-111111111111")
-        #expect((snapshot["enableMarkdown"] as? NSNumber)?.boolValue == true)
-        #expect((snapshot["enableExperimentalToolResultDisplay"] as? NSNumber)?.boolValue == false)
+        #expect(snapshot[GlobalSystemPromptStore.entriesStorageKey] == nil)
+        #expect(snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] == nil)
+        #expect(boolValue(snapshot["enableMarkdown"]) == true)
+        #expect(boolValue(snapshot["enableExperimentalToolResultDisplay"]) == false)
     }
 
-    @Test("appStorage snapshot is merged into local defaults")
+    @MainActor
+    @Test("appStorage snapshot is merged into AppConfig")
     func testAppStorageSnapshotIsMerged() async {
-        let suiteName = "com.ETOS.tests.appStorage.merge.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            Issue.record("无法创建测试专用 UserDefaults")
-            return
-        }
+        let backup = backupAppConfigValues([
+            .systemPrompt,
+            .enableStreaming,
+            .maxChatHistory,
+            .enableExperimentalToolResultDisplay
+        ])
+        defer { restoreAppConfigValues(backup) }
 
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        defaults.set("旧提示词", forKey: "systemPrompt")
-        defaults.set(false, forKey: "enableStreaming")
-
-        let incomingEntries = [
-            GlobalSystemPromptEntry(
-                id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
-                title: "代码助手",
-                content: "请优先输出 Swift 代码"
-            )
-        ]
-        guard let incomingEntriesData = try? JSONEncoder().encode(incomingEntries) else {
-            Issue.record("编码待合并全局提示词列表失败")
-            return
-        }
+        AppConfigStore.shared.systemPrompt = "旧提示词"
+        AppConfigStore.shared.enableStreaming = false
+        AppConfigStore.shared.maxChatHistory = 0
+        AppConfigStore.shared.enableExperimentalToolResultDisplay = true
 
         let incomingSnapshot: [String: Any] = [
             "systemPrompt": "请优先输出 Swift 代码",
             "enableStreaming": true,
             "maxChatHistory": 256,
-            "enableExperimentalToolResultDisplay": false,
-            GlobalSystemPromptStore.entriesStorageKey: incomingEntriesData,
-            GlobalSystemPromptStore.selectedEntryIDStorageKey: "22222222-2222-2222-2222-222222222222"
+            "enableExperimentalToolResultDisplay": false
         ]
         let snapshotData = encodeSnapshot(incomingSnapshot)
         let package = SyncPackage(
@@ -129,43 +100,61 @@ struct ShortcutSyncTests {
             appStorageSnapshot: snapshotData
         )
 
-        let summary = await SyncEngine.apply(package: package, userDefaults: defaults)
-        #expect(defaults.string(forKey: "systemPrompt") == "请优先输出 Swift 代码")
-        #expect(defaults.bool(forKey: "enableStreaming") == true)
-        #expect(defaults.integer(forKey: "maxChatHistory") == 256)
-        #expect(defaults.bool(forKey: "enableExperimentalToolResultDisplay") == false)
-        #expect(defaults.data(forKey: GlobalSystemPromptStore.entriesStorageKey) == incomingEntriesData)
-        #expect(defaults.string(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) == "22222222-2222-2222-2222-222222222222")
-        #expect(summary.importedAppStorageValues == 6)
+        let summary = await SyncEngine.apply(package: package)
+        #expect(AppConfigStore.shared.systemPrompt == "请优先输出 Swift 代码")
+        #expect(AppConfigStore.shared.enableStreaming == true)
+        #expect(AppConfigStore.shared.maxChatHistory == 256)
+        #expect(AppConfigStore.shared.enableExperimentalToolResultDisplay == false)
+        #expect(summary.importedAppStorageValues == 4)
         #expect(summary.skippedAppStorageValues == 0)
 
-        let summary2 = await SyncEngine.apply(package: package, userDefaults: defaults)
+        let summary2 = await SyncEngine.apply(package: package)
         #expect(summary2.importedAppStorageValues == 0)
-        #expect(summary2.skippedAppStorageValues == 6)
+        #expect(summary2.skippedAppStorageValues == 4)
     }
 
+    @MainActor
     @Test("legacy global prompt payload is still merged")
     func testLegacyGlobalPromptPayloadStillMerged() async {
-        let suiteName = "com.ETOS.tests.appStorage.legacy.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            Issue.record("无法创建测试专用 UserDefaults")
-            return
-        }
+        let backup = backupAppConfigValues([.systemPrompt])
+        defer { restoreAppConfigValues(backup) }
 
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        defaults.set("旧提示词", forKey: "systemPrompt")
+        AppConfigStore.shared.systemPrompt = "旧提示词"
         let package = SyncPackage(
             options: [.appStorage],
             globalSystemPrompt: "来自旧版本的新提示词"
         )
 
-        let summary = await SyncEngine.apply(package: package, userDefaults: defaults)
-        #expect(defaults.string(forKey: "systemPrompt") == "来自旧版本的新提示词")
+        let summary = await SyncEngine.apply(package: package)
+        #expect(AppConfigStore.shared.systemPrompt == "来自旧版本的新提示词")
         #expect(summary.importedAppStorageValues == 1)
         #expect(summary.skippedAppStorageValues == 0)
+    }
+
+    @MainActor
+    private func backupAppConfigValues(_ keys: [AppConfigKey]) -> [String: Any] {
+        let snapshot = AppConfigStore.shared.snapshot()
+        return keys.reduce(into: [String: Any]()) { result, key in
+            result[key.rawValue] = snapshot[key.rawValue]
+        }
+    }
+
+    @MainActor
+    private func restoreAppConfigValues(_ snapshot: [String: Any]) {
+        AppConfigStore.shared.apply(snapshot: snapshot)
+        if let systemPrompt = snapshot[AppConfigKey.systemPrompt.rawValue] as? String {
+            GlobalSystemPromptStore.saveActiveSystemPrompt(systemPrompt)
+        }
+    }
+
+    private func boolValue(_ value: Any?) -> Bool? {
+        if let value = value as? Bool {
+            return value
+        }
+        if let value = value as? NSNumber {
+            return value.boolValue
+        }
+        return nil
     }
 
     private func encodeSnapshot(_ dictionary: [String: Any]) -> Data {
