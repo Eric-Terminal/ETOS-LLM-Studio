@@ -14,6 +14,7 @@
 
 import Foundation
 import Security
+import SQLCipher
 import GRDB
 import os.log
 
@@ -22,8 +23,15 @@ import os.log
 public enum DatabaseEncryptionError: LocalizedError {
     case keychainReadFailed
     case keychainWriteFailed
+    case missingPassphrase
+    case emptyPassphrase
+    case alreadyEnabled
+    case notEnabled
+    case incorrectCurrentPassphrase
     case migrationFailed(Error)
     case invalidDatabaseFile
+    case openDatabaseFailed(String)
+    case verificationFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -31,10 +39,24 @@ public enum DatabaseEncryptionError: LocalizedError {
             return "无法从 Keychain 读取数据库加密密钥"
         case .keychainWriteFailed:
             return "无法将数据库加密密钥写入 Keychain"
+        case .missingPassphrase:
+            return "数据库已经加密，但当前设备上没有可用的主密码。"
+        case .emptyPassphrase:
+            return "数据库主密码不能为空。"
+        case .alreadyEnabled:
+            return "数据库加密已经开启。"
+        case .notEnabled:
+            return "数据库加密尚未开启。"
+        case .incorrectCurrentPassphrase:
+            return "当前数据库主密码不正确。"
         case .migrationFailed(let underlying):
             return "数据库加密迁移失败：\(underlying.localizedDescription)"
         case .invalidDatabaseFile:
             return "数据库文件格式无效"
+        case .openDatabaseFailed(let reason):
+            return "无法打开数据库：\(reason)"
+        case .verificationFailed(let reason):
+            return "数据库校验失败：\(reason)"
         }
     }
 }
@@ -51,6 +73,7 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
     // Keychain 条目标识符
     private static let keychainService = "com.ericterminal.els.db-encryption"
     private static let keychainAccount = "master-key"
+    private static let userPassphrasePrefix = "user-passphrase:"
 
     // SQLite 文件头魔术字节："SQLite format 3\0"（16 字节）
     private static let sqliteMagicHeader: Data = {
@@ -61,7 +84,29 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
 
     private init() {}
 
+    private struct StoredPassphrase {
+        let passphrase: String
+        let isLegacyAutomaticKey: Bool
+    }
+
+    private struct ManagedDatabaseBackup {
+        let originalURL: URL
+        let backupURL: URL
+        let originalExisted: Bool
+    }
+
     // MARK: - 公开接口
+
+    public func isEncryptionEnabled() -> Bool {
+        if loadStoredPassphrase() != nil {
+            return true
+        }
+        return managedDatabaseURLs().contains(where: isEncryptedSQLite(at:))
+    }
+
+    public func usesLegacyAutomaticKey() -> Bool {
+        loadStoredPassphrase()?.isLegacyAutomaticKey ?? false
+    }
 
     /// 获取或生成数据库 passphrase，并在必要时完成明文数据库的迁移。
     ///
@@ -69,20 +114,33 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
     /// - 线程安全：可在任意线程调用，内部使用 Keychain 序列化
     ///
     /// - Parameter databaseURL: 目标数据库文件 URL
-    /// - Returns: SQLCipher passphrase 字符串
-    public func preparePassphrase(for databaseURL: URL) throws -> String {
-        let passphrase = try getOrCreatePassphrase()
+    /// - Returns: SQLCipher passphrase；若当前数据库应保持明文则返回 nil
+    public func preparePassphrase(for databaseURL: URL) throws -> String? {
+        let stored = loadStoredPassphrase()
+        let fileExists = FileManager.default.fileExists(atPath: databaseURL.path)
 
-        // 仅当文件存在时才检查是否需要迁移
-        if FileManager.default.fileExists(atPath: databaseURL.path) {
-            if isPlaintextSQLite(at: databaseURL) {
-                Self.logger.info("检测到明文 SQLite 数据库，开始加密迁移：\(databaseURL.lastPathComponent)")
-                try migratePlaintextDatabase(at: databaseURL, passphrase: passphrase)
-                Self.logger.info("数据库加密迁移完成：\(databaseURL.lastPathComponent)")
-            }
+        guard fileExists else {
+            return stored?.passphrase
         }
 
-        return passphrase
+        if isPlaintextSQLite(at: databaseURL) {
+            guard let passphrase = stored?.passphrase else {
+                return nil
+            }
+            Self.logger.info("检测到明文 SQLite 数据库，开始加密迁移：\(databaseURL.lastPathComponent)")
+            try migratePlaintextDatabase(at: databaseURL, passphrase: passphrase)
+            Self.logger.info("数据库加密迁移完成：\(databaseURL.lastPathComponent)")
+            return passphrase
+        }
+
+        if isEncryptedSQLite(at: databaseURL) {
+            guard let passphrase = stored?.passphrase else {
+                throw DatabaseEncryptionError.missingPassphrase
+            }
+            return passphrase
+        }
+
+        return stored?.passphrase
     }
 
     /// 从 Keychain 读取当前 passphrase（仅读取，不生成新密钥，不触发迁移）。
@@ -90,41 +148,273 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
     /// - 用途：备份场景下需要解密源数据库时使用，避免触发迁移副作用
     /// - Returns: passphrase 字符串；若 Keychain 中尚无密钥则返回 nil
     public func currentPassphrase() -> String? {
-        guard let key = keychainLoad() else { return nil }
-        return key.base64EncodedString()
+        loadStoredPassphrase()?.passphrase
+    }
+
+    /// 仅在数据库文件已经加密时返回 passphrase；明文数据库不会错误套用 SQLCipher key。
+    public func passphraseForExistingDatabase(at databaseURL: URL) -> String? {
+        guard FileManager.default.fileExists(atPath: databaseURL.path),
+              isEncryptedSQLite(at: databaseURL),
+              let stored = loadStoredPassphrase() else {
+            return nil
+        }
+        return stored.passphrase
+    }
+
+    public func enableEncryption(with passphrase: String) async throws {
+        try validateUserPassphrase(passphrase)
+        guard loadStoredPassphrase() == nil else {
+            throw DatabaseEncryptionError.alreadyEnabled
+        }
+
+        try saveUserPassphrase(passphrase)
+        do {
+            try await migrateManagedDatabasesForExclusiveTransition { databaseURL in
+                guard FileManager.default.fileExists(atPath: databaseURL.path),
+                      self.isPlaintextSQLite(at: databaseURL) else {
+                    return false
+                }
+                try self.migratePlaintextDatabase(at: databaseURL, passphrase: passphrase)
+                return true
+            }
+        } catch {
+            try? keychainDelete()
+            throw error
+        }
+    }
+
+    public func adoptLegacyAutomaticKey(with newPassphrase: String) async throws {
+        try validateUserPassphrase(newPassphrase)
+        guard let stored = loadStoredPassphrase(), stored.isLegacyAutomaticKey else {
+            throw DatabaseEncryptionError.notEnabled
+        }
+
+        try await migrateManagedDatabasesForExclusiveTransition { databaseURL in
+            guard FileManager.default.fileExists(atPath: databaseURL.path) else { return false }
+            if self.isPlaintextSQLite(at: databaseURL) {
+                try self.migratePlaintextDatabase(at: databaseURL, passphrase: newPassphrase)
+                return true
+            } else if self.isEncryptedSQLite(at: databaseURL) {
+                try self.rekeyEncryptedDatabase(at: databaseURL, currentPassphrase: stored.passphrase, newPassphrase: newPassphrase)
+                return true
+            }
+            return false
+        }
+
+        try saveUserPassphrase(newPassphrase)
+    }
+
+    public func changePassphrase(currentPassphrase: String, newPassphrase: String) async throws {
+        try validateUserPassphrase(newPassphrase)
+        guard let stored = loadStoredPassphrase() else {
+            throw DatabaseEncryptionError.notEnabled
+        }
+        guard !stored.isLegacyAutomaticKey else {
+            throw DatabaseEncryptionError.incorrectCurrentPassphrase
+        }
+        guard stored.passphrase == currentPassphrase else {
+            throw DatabaseEncryptionError.incorrectCurrentPassphrase
+        }
+
+        try await migrateManagedDatabasesForExclusiveTransition { databaseURL in
+            guard FileManager.default.fileExists(atPath: databaseURL.path) else { return false }
+            if self.isPlaintextSQLite(at: databaseURL) {
+                try self.migratePlaintextDatabase(at: databaseURL, passphrase: newPassphrase)
+                return true
+            } else if self.isEncryptedSQLite(at: databaseURL) {
+                try self.rekeyEncryptedDatabase(at: databaseURL, currentPassphrase: stored.passphrase, newPassphrase: newPassphrase)
+                return true
+            }
+            return false
+        }
+
+        try saveUserPassphrase(newPassphrase)
+    }
+
+    public func disableEncryption(currentPassphrase: String) async throws {
+        guard let stored = loadStoredPassphrase() else {
+            throw DatabaseEncryptionError.notEnabled
+        }
+        guard !stored.isLegacyAutomaticKey else {
+            throw DatabaseEncryptionError.incorrectCurrentPassphrase
+        }
+        guard stored.passphrase == currentPassphrase else {
+            throw DatabaseEncryptionError.incorrectCurrentPassphrase
+        }
+
+        try await migrateManagedDatabasesForExclusiveTransition { databaseURL in
+            guard FileManager.default.fileExists(atPath: databaseURL.path),
+                  self.isEncryptedSQLite(at: databaseURL) else {
+                return false
+            }
+            try self.decryptEncryptedDatabase(at: databaseURL, currentPassphrase: stored.passphrase)
+            return true
+        }
+
+        try keychainDelete()
     }
 
     // MARK: - 密钥管理
 
-    /// 从 Keychain 读取主密钥；若不存在则生成新密钥并写入。
-    private func getOrCreatePassphrase() throws -> String {
-        if let existing = keychainLoad() {
-            // Base64 字符串形式
-            return existing.base64EncodedString()
+    private func loadStoredPassphrase() -> StoredPassphrase? {
+        guard let data = keychainLoad() else {
+            return nil
         }
 
-        // 首次：生成 32 字节密码学安全随机密钥
-        var keyBytes = [UInt8](repeating: 0, count: 32)
-        let status = SecRandomCopyBytes(kSecRandomDefault, keyBytes.count, &keyBytes)
-        guard status == errSecSuccess else {
+        if let storedString = String(data: data, encoding: .utf8),
+           storedString.hasPrefix(Self.userPassphrasePrefix) {
+            return StoredPassphrase(
+                passphrase: String(storedString.dropFirst(Self.userPassphrasePrefix.count)),
+                isLegacyAutomaticKey: false
+            )
+        }
+
+        // 兼容旧版：历史版本将随机 32 字节密钥直接存入 Keychain，并以 Base64 形式作为 passphrase 使用。
+        return StoredPassphrase(passphrase: data.base64EncodedString(), isLegacyAutomaticKey: true)
+    }
+
+    private func saveUserPassphrase(_ passphrase: String) throws {
+        guard let data = (Self.userPassphrasePrefix + passphrase).data(using: .utf8) else {
             throw DatabaseEncryptionError.keychainWriteFailed
         }
-        let keyData = Data(keyBytes)
-        try keychainSave(keyData)
-        Self.logger.info("已生成新的数据库主加密密钥并存入 Keychain")
-        return keyData.base64EncodedString()
+        try keychainSave(data)
+    }
+
+    private func validateUserPassphrase(_ passphrase: String) throws {
+        guard !passphrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw DatabaseEncryptionError.emptyPassphrase
+        }
+    }
+
+    private func managedDatabaseURLs() -> [URL] {
+        [
+            Persistence.getChatsDirectory().appendingPathComponent("chat-store.sqlite", isDirectory: false),
+            Persistence.documentsDirectory
+                .appendingPathComponent("Config", isDirectory: true)
+                .appendingPathComponent("config-store.sqlite", isDirectory: false),
+            MemoryStoragePaths.rootDirectory()
+                .appendingPathComponent("memory-store.sqlite", isDirectory: false),
+            MemoryStoragePaths.vectorStoreDirectory()
+                .appendingPathComponent("\(MemoryStoragePaths.vectorStoreName).sqlite", isDirectory: false)
+        ]
+    }
+
+    private func migrateManagedDatabasesForExclusiveTransition(
+        operation: @escaping (URL) throws -> Bool
+    ) async throws {
+        await Task.detached(priority: .userInitiated) {
+            Persistence.resetGRDBStoreForTests()
+        }.value
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        let backupDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DatabaseEncryptionTransition-\(UUID().uuidString)", isDirectory: true)
+        let backups = try createManagedDatabaseBackups(in: backupDirectory)
+
+        do {
+            for databaseURL in managedDatabaseURLs() {
+                _ = try operation(databaseURL)
+            }
+            try? FileManager.default.removeItem(at: backupDirectory)
+        } catch {
+            do {
+                try restoreManagedDatabaseBackups(backups)
+            } catch {
+                Self.logger.error("数据库加密切换失败，且回滚失败: \(error.localizedDescription)")
+            }
+            try? FileManager.default.removeItem(at: backupDirectory)
+            await restartManagedDatabasesAfterTransition()
+            throw error
+        }
+
+        await restartManagedDatabasesAfterTransition()
+    }
+
+    private func createManagedDatabaseBackups(in directory: URL) throws -> [ManagedDatabaseBackup] {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        return try managedDatabaseURLs().map { databaseURL in
+            let backupURL = directory.appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(databaseURL.lastPathComponent)
+            let originalExisted = fileManager.fileExists(atPath: databaseURL.path)
+
+            if originalExisted {
+                try fileManager.copyItem(at: databaseURL, to: backupURL)
+            }
+
+            for suffix in ["-wal", "-shm"] {
+                let sourceSidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
+                guard fileManager.fileExists(atPath: sourceSidecarURL.path) else { continue }
+                let backupSidecarURL = URL(fileURLWithPath: backupURL.path + suffix)
+                try fileManager.copyItem(at: sourceSidecarURL, to: backupSidecarURL)
+            }
+
+            return ManagedDatabaseBackup(
+                originalURL: databaseURL,
+                backupURL: backupURL,
+                originalExisted: originalExisted
+            )
+        }
+    }
+
+    private func restoreManagedDatabaseBackups(_ backups: [ManagedDatabaseBackup]) throws {
+        let fileManager = FileManager.default
+
+        for databaseURL in managedDatabaseURLs() {
+            try? fileManager.removeItem(at: databaseURL)
+            removeSQLiteSidecars(for: databaseURL)
+        }
+
+        for backup in backups {
+            guard backup.originalExisted else { continue }
+            try fileManager.copyItem(at: backup.backupURL, to: backup.originalURL)
+            for suffix in ["-wal", "-shm"] {
+                let backupSidecarURL = URL(fileURLWithPath: backup.backupURL.path + suffix)
+                guard fileManager.fileExists(atPath: backupSidecarURL.path) else { continue }
+                let originalSidecarURL = URL(fileURLWithPath: backup.originalURL.path + suffix)
+                try fileManager.copyItem(at: backupSidecarURL, to: originalSidecarURL)
+            }
+        }
+    }
+
+    private func restartManagedDatabasesAfterTransition() async {
+        await Task.detached(priority: .userInitiated) {
+            Persistence.bootstrapGRDBStoreOnLaunch()
+        }.value
+        await MainActor.run {
+            AppConfigStore.shared.reloadAll()
+        }
     }
 
     // MARK: - 明文检测
 
-    /// 检查文件头是否为明文 SQLite（读取前 16 字节对比魔术字符串）。
-    private func isPlaintextSQLite(at url: URL) -> Bool {
+    private func readHeader(of url: URL) -> Data? {
         guard let fileHandle = FileHandle(forReadingAtPath: url.path) else {
-            return false
+            return nil
         }
         defer { fileHandle.closeFile() }
         let header = fileHandle.readData(ofLength: 16)
+        guard !header.isEmpty else {
+            return nil
+        }
+        return header
+    }
+
+    /// 检查文件头是否为明文 SQLite（读取前 16 字节对比魔术字符串）。
+    private func isPlaintextSQLite(at url: URL) -> Bool {
+        guard let header = readHeader(of: url) else {
+            return false
+        }
         return header == Self.sqliteMagicHeader
+    }
+
+    private func isEncryptedSQLite(at url: URL) -> Bool {
+        guard let header = readHeader(of: url) else {
+            return false
+        }
+        return header != Self.sqliteMagicHeader
     }
 
     // MARK: - 明文 → 加密迁移（E6）
@@ -197,6 +487,96 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
         }
     }
 
+    private func rekeyEncryptedDatabase(at url: URL, currentPassphrase: String, newPassphrase: String) throws {
+        try withSQLiteConnection(at: url, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, passphrase: currentPassphrase) { database in
+            try validateSQLiteConnection(database)
+            try applyRekey(newPassphrase, to: database)
+            try validateSQLiteConnection(database)
+        }
+    }
+
+    private func decryptEncryptedDatabase(at url: URL, currentPassphrase: String) throws {
+        try withSQLiteConnection(at: url, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, passphrase: currentPassphrase) { database in
+            try validateSQLiteConnection(database)
+            try applyRekey("", to: database)
+        }
+        removeSQLiteSidecars(for: url)
+    }
+
+    private func withSQLiteConnection<T>(
+        at url: URL,
+        flags: Int32,
+        passphrase: String?,
+        operation: (OpaquePointer) throws -> T
+    ) throws -> T {
+        var database: OpaquePointer?
+        let openResult = sqlite3_open_v2(url.path, &database, flags, nil)
+        guard openResult == SQLITE_OK, let database else {
+            let fallback = database.map { String(cString: sqlite3_errmsg($0)) } ?? url.lastPathComponent
+            if let database {
+                sqlite3_close(database)
+            }
+            throw DatabaseEncryptionError.openDatabaseFailed(fallback)
+        }
+        defer { sqlite3_close(database) }
+
+        if let passphrase {
+            try applyPassphrase(passphrase, to: database)
+        }
+        sqlite3_busy_timeout(database, 5_000)
+        return try operation(database)
+    }
+
+    private func applyPassphrase(_ passphrase: String, to database: OpaquePointer) throws {
+        let data = Data(passphrase.utf8)
+        let result = data.withUnsafeBytes { buffer in
+            sqlite3_key(database, buffer.baseAddress, Int32(data.count))
+        }
+        guard result == SQLITE_OK else {
+            throw DatabaseEncryptionError.openDatabaseFailed(sqliteErrorMessage(for: database))
+        }
+    }
+
+    private func applyRekey(_ newPassphrase: String, to database: OpaquePointer) throws {
+        let data = Data(newPassphrase.utf8)
+        let result = data.withUnsafeBytes { buffer in
+            sqlite3_rekey(database, buffer.baseAddress, Int32(data.count))
+        }
+        guard result == SQLITE_OK else {
+            throw DatabaseEncryptionError.migrationFailed(
+                DatabaseEncryptionError.openDatabaseFailed(sqliteErrorMessage(for: database))
+            )
+        }
+    }
+
+    private func validateSQLiteConnection(_ database: OpaquePointer) throws {
+        var statement: OpaquePointer?
+        let prepareResult = sqlite3_prepare_v2(database, "SELECT count(*) FROM sqlite_master", -1, &statement, nil)
+        guard prepareResult == SQLITE_OK, let statement else {
+            throw DatabaseEncryptionError.verificationFailed(sqliteErrorMessage(for: database))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_ROW || stepResult == SQLITE_DONE else {
+            throw DatabaseEncryptionError.verificationFailed(sqliteErrorMessage(for: database))
+        }
+    }
+
+    private func removeSQLiteSidecars(for url: URL) {
+        for suffix in ["-wal", "-shm"] {
+            let sidecarURL = URL(fileURLWithPath: url.path + suffix)
+            try? FileManager.default.removeItem(at: sidecarURL)
+        }
+    }
+
+    private func sqliteErrorMessage(for database: OpaquePointer) -> String {
+        guard let cString = sqlite3_errmsg(database) else {
+            return "未知 SQLite 错误"
+        }
+        return String(cString: cString)
+    }
+
     // MARK: - Keychain 操作
 
     private func keychainLoad() -> Data? {
@@ -235,6 +615,18 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
         ]
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
+            throw DatabaseEncryptionError.keychainWriteFailed
+        }
+    }
+
+    private func keychainDelete() throws {
+        let deleteQuery: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrService: Self.keychainService,
+            kSecAttrAccount: Self.keychainAccount
+        ]
+        let status = SecItemDelete(deleteQuery as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
             throw DatabaseEncryptionError.keychainWriteFailed
         }
     }

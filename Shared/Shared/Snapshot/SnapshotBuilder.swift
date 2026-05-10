@@ -83,7 +83,7 @@ public enum SnapshotBuilder {
         defer { sqlite3_close(srcDB) }
 
         // 若数据库已加密，提供 SQLCipher passphrase 解密（以便 Backup API 读取明文 page）
-        if let passphrase = DatabaseEncryptionManager.shared.currentPassphrase() {
+        if let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: srcURL) {
             let passphraseBytes = Array(passphrase.utf8)
             let keyResult = sqlite3_key(srcDB, passphraseBytes, Int32(passphraseBytes.count))
             if keyResult != SQLITE_OK {

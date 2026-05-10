@@ -25,6 +25,14 @@ struct AppLockSettingsView: View {
     @State private var isDisablePresented: Bool = false
     @State private var isSuccessAlertPresented: Bool = false
     @State private var successMessage: String = ""
+    @State private var databaseCurrentPassword: String = ""
+    @State private var databaseNewPassword: String = ""
+    @State private var databaseConfirmPassword: String = ""
+    @State private var isDatabasePasswordPresented: Bool = false
+    @State private var isDatabaseDisablePresented: Bool = false
+    @State private var isDatabaseEncryptionEnabled: Bool = DatabaseEncryptionManager.shared.isEncryptionEnabled()
+    @State private var usesLegacyDatabaseKey: Bool = DatabaseEncryptionManager.shared.usesLegacyAutomaticKey()
+    @State private var isDatabaseOperationRunning: Bool = false
 
     var body: some View {
         Form {
@@ -97,6 +105,57 @@ struct AppLockSettingsView: View {
                 }
             }
 
+            Section {
+                if isDatabaseEncryptionEnabled {
+                    Button {
+                        isDatabasePasswordPresented = true
+                    } label: {
+                        Label(
+                            usesLegacyDatabaseKey
+                                ? NSLocalizedString("设置数据库主密码", comment: "AppLockSettings set database password button")
+                                : NSLocalizedString("修改数据库主密码", comment: "AppLockSettings change database password button"),
+                            systemImage: "internaldrive.fill.badge.key"
+                        )
+                    }
+                    .disabled(isDatabaseOperationRunning)
+
+                    if !usesLegacyDatabaseKey {
+                        Button(role: .destructive) {
+                            isDatabaseDisablePresented = true
+                        } label: {
+                            Label(
+                                NSLocalizedString("关闭数据库加密", comment: "AppLockSettings disable database encryption button"),
+                                systemImage: "internaldrive.fill.badge.xmark"
+                            )
+                        }
+                        .disabled(isDatabaseOperationRunning)
+                    }
+                } else {
+                    Button {
+                        isDatabasePasswordPresented = true
+                    } label: {
+                        Label(
+                            NSLocalizedString("启用数据库加密", comment: "AppLockSettings enable database encryption button"),
+                            systemImage: "internaldrive.fill.badge.lock"
+                        )
+                    }
+                    .disabled(isDatabaseOperationRunning)
+                }
+
+                if isDatabaseOperationRunning {
+                    HStack {
+                        ProgressView()
+                        Text(NSLocalizedString("正在处理数据库加密…", comment: "AppLockSettings database encryption progress"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("数据库加密", comment: "AppLockSettings database encryption section"))
+            } footer: {
+                Text(databaseEncryptionFooterText)
+            }
+
             // MARK: - 错误提示
             if let msg = errorMessage {
                 Section {
@@ -107,13 +166,9 @@ struct AppLockSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("应用锁", comment: "AppLockSettings navigation title"))
+        .onAppear(perform: refreshDatabaseEncryptionState)
         // 设置/修改密码弹窗
-        .alert(
-            appConfig.appLockEnabled
-                ? NSLocalizedString("修改密码", comment: "AppLockSettings change password alert title")
-                : NSLocalizedString("设置密码", comment: "AppLockSettings set password alert title"),
-            isPresented: $isSetPasswordPresented
-        ) {
+        .alert(appLockPasswordAlertTitle, isPresented: $isSetPasswordPresented) {
             // 修改密码场景需要验证旧密码，防止旁路认证攻击
             if appConfig.appLockEnabled {
                 SecureField(NSLocalizedString("当前密码", comment: "AppLockSettings current password field for change"), text: $oldPasswordForChange)
@@ -138,10 +193,62 @@ struct AppLockSettingsView: View {
                 currentPasswordForDisable = ""
             }
         }
+        .alert(
+            databasePasswordAlertTitle,
+            isPresented: $isDatabasePasswordPresented
+        ) {
+            if isDatabaseEncryptionEnabled && !usesLegacyDatabaseKey {
+                SecureField(NSLocalizedString("当前数据库主密码", comment: "AppLockSettings current database password field"), text: $databaseCurrentPassword)
+            }
+            SecureField(databasePasswordFieldTitle, text: $databaseNewPassword)
+            SecureField(NSLocalizedString("确认数据库主密码", comment: "AppLockSettings confirm database password field"), text: $databaseConfirmPassword)
+            Button(NSLocalizedString("确定", comment: ""), action: applyDatabasePassword)
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel, action: resetDatabasePasswordFields)
+        }
+        .alert(
+            NSLocalizedString("关闭数据库加密", comment: "AppLockSettings disable database encryption alert title"),
+            isPresented: $isDatabaseDisablePresented
+        ) {
+            SecureField(NSLocalizedString("当前数据库主密码", comment: "AppLockSettings disable database password field"), text: $databaseCurrentPassword)
+            Button(NSLocalizedString("关闭", comment: ""), role: .destructive, action: applyDisableDatabaseEncryption)
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel, action: resetDatabasePasswordFields)
+        }
         // 成功提示
         .alert(successMessage, isPresented: $isSuccessAlertPresented) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) {}
         }
+    }
+
+    private var databasePasswordAlertTitle: String {
+        if !isDatabaseEncryptionEnabled {
+            return NSLocalizedString("启用数据库加密", comment: "AppLockSettings enable database encryption alert title")
+        }
+        if usesLegacyDatabaseKey {
+            return NSLocalizedString("设置数据库主密码", comment: "AppLockSettings adopt legacy database password alert title")
+        }
+        return NSLocalizedString("修改数据库主密码", comment: "AppLockSettings change database password alert title")
+    }
+
+    private var appLockPasswordAlertTitle: String {
+        appConfig.appLockEnabled
+            ? NSLocalizedString("修改密码", comment: "AppLockSettings change password alert title")
+            : NSLocalizedString("设置密码", comment: "AppLockSettings set password alert title")
+    }
+
+    private var databasePasswordFieldTitle: String {
+        isDatabaseEncryptionEnabled
+            ? NSLocalizedString("新数据库主密码", comment: "AppLockSettings new database password field")
+            : NSLocalizedString("数据库主密码", comment: "AppLockSettings database password field")
+    }
+
+    private var databaseEncryptionFooterText: String {
+        if isDatabaseEncryptionEnabled {
+            if usesLegacyDatabaseKey {
+                return NSLocalizedString("检测到旧版自动密钥。请先设置自定义数据库主密码，随后才能关闭数据库加密。", comment: "AppLockSettings legacy database encryption footer")
+            }
+            return NSLocalizedString("已启用 SQLCipher。聊天、配置、记忆与向量数据库会使用独立主密码加密，密码仅保存在当前设备。", comment: "AppLockSettings database encryption enabled footer")
+        }
+        return NSLocalizedString("启用后将使用 SQLCipher 加密聊天、配置、记忆与向量数据库。请设置一个不同于系统锁屏密码的独立主密码。", comment: "AppLockSettings database encryption disabled footer")
     }
 
     // MARK: - 操作
@@ -186,6 +293,89 @@ struct AppLockSettingsView: View {
         } catch {
             errorMessage = error.localizedDescription
             currentPasswordForDisable = ""
+        }
+    }
+
+    private func refreshDatabaseEncryptionState() {
+        isDatabaseEncryptionEnabled = DatabaseEncryptionManager.shared.isEncryptionEnabled()
+        usesLegacyDatabaseKey = DatabaseEncryptionManager.shared.usesLegacyAutomaticKey()
+    }
+
+    private func resetDatabasePasswordFields() {
+        databaseCurrentPassword = ""
+        databaseNewPassword = ""
+        databaseConfirmPassword = ""
+    }
+
+    private func applyDatabasePassword() {
+        guard databaseNewPassword == databaseConfirmPassword else {
+            errorMessage = NSLocalizedString("两次输入的数据库主密码不一致。", comment: "AppLockSettings database password mismatch error")
+            resetDatabasePasswordFields()
+            return
+        }
+
+        let currentPassword = databaseCurrentPassword
+        let newPassword = databaseNewPassword
+        resetDatabasePasswordFields()
+        isDatabaseOperationRunning = true
+
+        Task {
+            do {
+                if !isDatabaseEncryptionEnabled {
+                    try await DatabaseEncryptionManager.shared.enableEncryption(with: newPassword)
+                    await MainActor.run {
+                        successMessage = NSLocalizedString("数据库加密已开启。", comment: "AppLockSettings enable database encryption success")
+                    }
+                } else if usesLegacyDatabaseKey {
+                    try await DatabaseEncryptionManager.shared.adoptLegacyAutomaticKey(with: newPassword)
+                    await MainActor.run {
+                        successMessage = NSLocalizedString("数据库主密码已设置。", comment: "AppLockSettings adopt database password success")
+                    }
+                } else {
+                    try await DatabaseEncryptionManager.shared.changePassphrase(currentPassphrase: currentPassword, newPassphrase: newPassword)
+                    await MainActor.run {
+                        successMessage = NSLocalizedString("数据库主密码已更新。", comment: "AppLockSettings change database password success")
+                    }
+                }
+
+                await MainActor.run {
+                    refreshDatabaseEncryptionState()
+                    errorMessage = nil
+                    isDatabaseOperationRunning = false
+                    isSuccessAlertPresented = true
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isDatabaseOperationRunning = false
+                    refreshDatabaseEncryptionState()
+                }
+            }
+        }
+    }
+
+    private func applyDisableDatabaseEncryption() {
+        let currentPassword = databaseCurrentPassword
+        resetDatabasePasswordFields()
+        isDatabaseOperationRunning = true
+
+        Task {
+            do {
+                try await DatabaseEncryptionManager.shared.disableEncryption(currentPassphrase: currentPassword)
+                await MainActor.run {
+                    refreshDatabaseEncryptionState()
+                    errorMessage = nil
+                    successMessage = NSLocalizedString("数据库加密已关闭。", comment: "AppLockSettings disable database encryption success")
+                    isDatabaseOperationRunning = false
+                    isSuccessAlertPresented = true
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isDatabaseOperationRunning = false
+                    refreshDatabaseEncryptionState()
+                }
+            }
         }
     }
 }

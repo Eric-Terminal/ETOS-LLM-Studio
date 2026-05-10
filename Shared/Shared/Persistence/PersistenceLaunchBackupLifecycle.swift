@@ -299,8 +299,9 @@ extension Persistence {
         }
         defer { sqlite3_close(sourceDatabase) }
 
-        // 源库已由 SQLCipher 加密，提供 passphrase；目标库（备份副本）不设 key → 明文输出
-        if let passphrase = DatabaseEncryptionManager.shared.currentPassphrase() {
+        // 源库已由 SQLCipher 加密，提供 passphrase；目标库（备份副本）保持明文输出
+        let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: sourceURL)
+        if let passphrase {
             let passphraseBytes = Array(passphrase.utf8)
             sqlite3_key(sourceDatabase, passphraseBytes, Int32(passphraseBytes.count))
         }
@@ -348,7 +349,7 @@ extension Persistence {
         defer { sqlite3_close(database) }
 
         // 数据库已由 SQLCipher 加密，提供 passphrase 才能执行 quick_check
-        if let passphrase = DatabaseEncryptionManager.shared.currentPassphrase() {
+        if let passphrase = DatabaseEncryptionManager.shared.passphraseForExistingDatabase(at: url) {
             let passphraseBytes = Array(passphrase.utf8)
             sqlite3_key(database, passphraseBytes, Int32(passphraseBytes.count))
         }

@@ -15,3 +15,9 @@ import Foundation
 @_silgen_name("sqlite3_key")
 @discardableResult
 internal func sqlite3_key(_ db: OpaquePointer!, _ pKey: UnsafeRawPointer!, _ nKey: Int32) -> Int32
+
+/// 对已打开的 sqlite3 原始连接重新设置 SQLCipher passphrase。
+/// 等价于在 SQLCipher 连接上执行 sqlite3_rekey(db, pKey, nKey)。
+@_silgen_name("sqlite3_rekey")
+@discardableResult
+internal func sqlite3_rekey(_ db: OpaquePointer!, _ pKey: UnsafeRawPointer!, _ nKey: Int32) -> Int32

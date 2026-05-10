@@ -68,7 +68,9 @@ final class PersistenceGRDBStore {
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
             // SQLCipher 密钥必须是 prepareDatabase 中的第一条语句
-            try db.usePassphrase(passphrase)
+            if let passphrase {
+                try db.usePassphrase(passphrase)
+            }
             try db.execute(sql: "PRAGMA foreign_keys=ON")
             try db.execute(sql: "PRAGMA journal_mode=WAL")
             try db.execute(sql: "PRAGMA synchronous=NORMAL")
