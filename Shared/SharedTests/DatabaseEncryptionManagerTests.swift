@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import Testing
 @testable import Shared
 
@@ -68,6 +69,41 @@ struct DatabaseEncryptionManagerTests {
         let snapshot = AppConfigStore.shared.snapshot()
 
         #expect(snapshot[AppConfigKey.databaseEncryptionEnabled.rawValue] == nil)
+    }
+
+    @Test("数据库配置会在存在主密码时创建 SQLCipher 加密库")
+    @MainActor
+    func testDatabaseConfigurationCreatesEncryptedDatabase() throws {
+        let backup = AppConfigStore.shared.databaseEncryptionEnabled
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            try? DatabaseEncryptionManager.shared.deletePassphrase(verificationPassphrase: "database-passphrase")
+            AppConfigStore.shared.databaseEncryptionEnabled = backup
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        try DatabaseEncryptionManager.shared.savePassphrase("database-passphrase", confirmation: "database-passphrase")
+        AppConfigStore.shared.databaseEncryptionEnabled = true
+
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-SQLCipher-Test-\(UUID().uuidString)", isDirectory: false)
+            .appendingPathExtension("sqlite")
+        defer { try? FileManager.default.removeItem(at: databaseURL) }
+
+        let configuration = Persistence.makeDatabaseConfiguration(qos: .userInitiated, mmapSize: 1_048_576)
+        let queue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
+        try queue.write { db in
+            try db.execute(sql: "CREATE TABLE encrypted_data(value TEXT)")
+            try db.execute(sql: "INSERT INTO encrypted_data(value) VALUES ('ok')")
+            #expect(try Int.fetchOne(db, sql: "PRAGMA kdf_iter") == DatabaseEncryptionManager.kdfIterations)
+        }
+        try queue.close()
+
+        #expect(Persistence.isDatabaseHealthy(at: databaseURL, encrypted: true) == true)
+        #expect(Persistence.isDatabaseHealthy(at: databaseURL, encrypted: false) == false)
     }
 }
 

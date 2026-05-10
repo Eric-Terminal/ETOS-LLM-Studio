@@ -60,19 +60,10 @@ final class PersistenceGRDBStore {
         self.chatsDirectory = chatsDirectory
         self.databaseURL = chatsDirectory.appendingPathComponent("chat-store.sqlite")
 
-        var configuration = Configuration()
-        configuration.qos = .userInitiated
-        configuration.foreignKeysEnabled = true
-        configuration.prepareDatabase { db in
-            try db.execute(sql: "PRAGMA foreign_keys=ON")
-            try db.execute(sql: "PRAGMA journal_mode=WAL")
-            try db.execute(sql: "PRAGMA synchronous=NORMAL")
-            try db.execute(sql: "PRAGMA busy_timeout=5000")
-            try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
-            try db.execute(sql: "PRAGMA temp_store=MEMORY")
-            try db.execute(sql: "PRAGMA mmap_size=134217728")
-        }
-
+        let configuration = Persistence.makeDatabaseConfiguration(
+            qos: .userInitiated,
+            mmapSize: 134_217_728
+        )
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
         messageWriteQueue.setSpecific(key: messageWriteQueueSpecificKey, value: 1)
 

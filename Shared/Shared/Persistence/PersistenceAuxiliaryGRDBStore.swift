@@ -27,19 +27,10 @@ final class PersistenceAuxiliaryGRDBStore {
         self.supportsConfigRelationalSchema = databaseURL.lastPathComponent == "config-store.sqlite"
         self.supportsMemoryRelationalSchema = databaseURL.lastPathComponent == "memory-store.sqlite"
 
-        var configuration = Configuration()
-        configuration.qos = .userInitiated
-        configuration.foreignKeysEnabled = true
-        configuration.prepareDatabase { db in
-            try db.execute(sql: "PRAGMA foreign_keys=ON")
-            try db.execute(sql: "PRAGMA journal_mode=WAL")
-            try db.execute(sql: "PRAGMA synchronous=NORMAL")
-            try db.execute(sql: "PRAGMA busy_timeout=5000")
-            try db.execute(sql: "PRAGMA wal_autocheckpoint=1000")
-            try db.execute(sql: "PRAGMA temp_store=MEMORY")
-            try db.execute(sql: "PRAGMA mmap_size=67108864")
-        }
-
+        let configuration = Persistence.makeDatabaseConfiguration(
+            qos: .userInitiated,
+            mmapSize: 67_108_864
+        )
         self.dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
         try migrateSchemaIfNeeded()
         scheduleDatabaseMaintenanceIfNeeded()

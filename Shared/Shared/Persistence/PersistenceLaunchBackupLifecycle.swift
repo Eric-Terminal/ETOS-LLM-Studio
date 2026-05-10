@@ -8,7 +8,7 @@
 
 import Foundation
 import os.log
-import SQLite3
+import GRDB
 
 extension Persistence {
     public static func createLaunchBackupPointIfEnabled() {
@@ -280,101 +280,27 @@ extension Persistence {
 
     private static func createChatLaunchBackupWithoutFTS(sourceURL: URL, destinationURL: URL) throws {
         try copySQLiteDatabase(sourceURL: sourceURL, destinationURL: destinationURL)
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(destinationURL.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let database else {
-            throw NSError(domain: "Persistence.LaunchBackup", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "无法打开聊天备份数据库"
-            ])
-        }
-        defer { sqlite3_close(database) }
+        let configuration = databaseEncryptionHasStoredPassphrase()
+            ? makeEncryptedDatabaseConfiguration()
+            : makePlainDatabaseConfiguration()
+        let queue = try DatabaseQueue(path: destinationURL.path, configuration: configuration)
+        defer { try? queue.close() }
 
-        try executeSQLite(database, sql: "DROP TRIGGER IF EXISTS messages_ai")
-        try executeSQLite(database, sql: "DROP TRIGGER IF EXISTS messages_ad")
-        try executeSQLite(database, sql: "DROP TRIGGER IF EXISTS messages_au")
-        try executeSQLite(database, sql: "DROP TABLE IF EXISTS messages_fts")
-        try executeSQLite(database, sql: "VACUUM")
+        try queue.writeWithoutTransaction { db in
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ai")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ad")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
+            try db.execute(sql: "DROP TABLE IF EXISTS messages_fts")
+            try db.execute(sql: "VACUUM")
+        }
     }
 
     private static func copySQLiteDatabase(sourceURL: URL, destinationURL: URL) throws {
-        var sourceDatabase: OpaquePointer?
-        guard sqlite3_open_v2(sourceURL.path, &sourceDatabase, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let sourceDatabase else {
-            throw NSError(domain: "Persistence.LaunchBackup", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "无法打开源数据库：\(sourceURL.lastPathComponent)"
-            ])
-        }
-        defer { sqlite3_close(sourceDatabase) }
-
-        var destinationDatabase: OpaquePointer?
-        guard sqlite3_open_v2(destinationURL.path, &destinationDatabase, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let destinationDatabase else {
-            throw NSError(domain: "Persistence.LaunchBackup", code: 4, userInfo: [
-                NSLocalizedDescriptionKey: "无法创建备份数据库：\(destinationURL.lastPathComponent)"
-            ])
-        }
-        defer { sqlite3_close(destinationDatabase) }
-
-        try executeSQLite(destinationDatabase, sql: "PRAGMA journal_mode=DELETE")
-        try executeSQLite(destinationDatabase, sql: "PRAGMA synchronous=FULL")
-
-        guard let backupHandle = sqlite3_backup_init(destinationDatabase, "main", sourceDatabase, "main") else {
-            throw NSError(domain: "Persistence.LaunchBackup", code: 5, userInfo: [
-                NSLocalizedDescriptionKey: sqliteErrorMessage(for: destinationDatabase, fallback: "初始化 sqlite backup 失败")
-            ])
-        }
-        var stepCode: Int32 = SQLITE_OK
-        repeat {
-            stepCode = sqlite3_backup_step(backupHandle, 128)
-            if stepCode == SQLITE_BUSY || stepCode == SQLITE_LOCKED {
-                sqlite3_sleep(10)
-            }
-        } while stepCode == SQLITE_OK || stepCode == SQLITE_BUSY || stepCode == SQLITE_LOCKED
-        let finishCode = sqlite3_backup_finish(backupHandle)
-        guard stepCode == SQLITE_DONE, finishCode == SQLITE_OK else {
-            throw NSError(domain: "Persistence.LaunchBackup", code: 6, userInfo: [
-                NSLocalizedDescriptionKey: sqliteErrorMessage(for: destinationDatabase, fallback: "执行 sqlite backup 失败")
-            ])
-        }
+        try copyDatabaseForLaunchBackup(sourceURL: sourceURL, destinationURL: destinationURL)
     }
 
     private static func isSQLiteDatabaseHealthy(at url: URL) -> Bool {
-        guard FileManager.default.fileExists(atPath: url.path) else { return true }
-
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let database else {
-            return false
-        }
-        defer { sqlite3_close(database) }
-
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, "PRAGMA quick_check(1)", -1, &statement, nil) == SQLITE_OK,
-              let statement else {
-            return false
-        }
-        defer { sqlite3_finalize(statement) }
-
-        guard sqlite3_step(statement) == SQLITE_ROW,
-              let textPointer = sqlite3_column_text(statement, 0) else {
-            return false
-        }
-        let result = String(cString: textPointer).trimmingCharacters(in: .whitespacesAndNewlines)
-        return result.caseInsensitiveCompare("ok") == .orderedSame
-    }
-
-    private static func executeSQLite(_ database: OpaquePointer, sql: String) throws {
-        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
-            throw NSError(domain: "Persistence.SQLiteExec", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: sqliteErrorMessage(for: database, fallback: "执行 SQL 失败：\(sql)")
-            ])
-        }
-    }
-
-    private static func sqliteErrorMessage(for database: OpaquePointer, fallback: String) -> String {
-        guard let cString = sqlite3_errmsg(database) else { return fallback }
-        let message = String(cString: cString)
-        return message.isEmpty ? fallback : message
+        Persistence.isDatabaseHealthy(at: url)
     }
 
     private static func removeSQLiteFileAndSidecarsIfExists(at url: URL) throws {

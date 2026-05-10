@@ -23,7 +23,7 @@ protocol DatabaseEncryptionPassphraseStore {
     func deletePassphrase() -> Bool
 }
 
-public final class DatabaseEncryptionManager {
+public final class DatabaseEncryptionManager: @unchecked Sendable {
     public enum DatabaseEncryptionError: LocalizedError, Equatable {
         case emptyPassphrase
         case passphraseMismatch

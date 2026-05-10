@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-import SQLite3
 import ZIPFoundation
 
 public enum SnapshotBuilder {
@@ -139,7 +138,7 @@ private extension SnapshotBuilder {
             try cloneDatabase(source, to: databaseURL)
             if case .chat = source {
                 try removeChatFTSObjects(from: databaseURL)
-                guard isSQLiteDatabaseHealthy(at: databaseURL) else {
+                guard Persistence.isDatabaseHealthy(at: databaseURL, encrypted: false) else {
                     throw NSError(domain: "SnapshotBuilder", code: 5, userInfo: [
                         NSLocalizedDescriptionKey: "聊天数据库快照瘦身后完整性检查失败"
                     ])
@@ -164,15 +163,9 @@ private extension SnapshotBuilder {
         try Persistence.removeItemIfExists(at: destinationURL)
         Persistence.removeSQLiteSidecars(at: destinationURL)
 
-        do {
-            let destination = try DatabaseQueue(path: destinationURL.path)
-            try source.dbPool.backup(to: destination)
-            try destination.write { db in
-                try db.execute(sql: "PRAGMA journal_mode=DELETE")
-            }
-        }
+        try Persistence.exportDatabaseForPlainSnapshot(sourcePool: source.dbPool, destinationURL: destinationURL)
 
-        guard isSQLiteDatabaseHealthy(at: destinationURL) else {
+        guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
             throw NSError(domain: "SnapshotBuilder", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "\(source.displayName)快照完整性检查失败"
             ])
@@ -183,31 +176,33 @@ private extension SnapshotBuilder {
     }
 
     static func removeChatFTSObjects(from databaseURL: URL) throws {
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let database else {
-            throw NSError(domain: "SnapshotBuilder", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "无法打开聊天快照数据库"
-            ])
-        }
-        defer { sqlite3_close(database) }
-
-        try executeSQLite(database, sql: "DROP TRIGGER IF EXISTS messages_ai")
-        try executeSQLite(database, sql: "DROP TRIGGER IF EXISTS messages_ad")
-        try executeSQLite(database, sql: "DROP TRIGGER IF EXISTS messages_au")
-        try executeSQLite(database, sql: "DROP TABLE IF EXISTS sessions_fts")
-        try executeSQLite(database, sql: "DROP TABLE IF EXISTS messages_fts")
-        try dropTables(
-            in: database,
-            matching: "SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'sessions_fts_%' OR name LIKE 'messages_fts_%')"
+        let queue = try DatabaseQueue(
+            path: databaseURL.path,
+            configuration: Persistence.makePlainDatabaseConfiguration()
         )
-        try executeSQLite(database, sql: "VACUUM")
+        defer { try? queue.close() }
+
+        try queue.writeWithoutTransaction { db in
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ai")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_ad")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
+            try db.execute(sql: "DROP TABLE IF EXISTS sessions_fts")
+            try db.execute(sql: "DROP TABLE IF EXISTS messages_fts")
+            try dropTables(
+                in: db,
+                matching: """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table' AND (name LIKE 'sessions_fts_%' OR name LIKE 'messages_fts_%')
+                """
+            )
+            try db.execute(sql: "VACUUM")
+        }
     }
 
-    static func dropTables(in database: OpaquePointer, matching sql: String) throws {
-        let tableNames = try fetchTextColumn(database: database, sql: sql)
+    static func dropTables(in db: Database, matching sql: String) throws {
+        let tableNames = try String.fetchAll(db, sql: sql)
         for name in tableNames {
-            try executeSQLite(database, sql: "DROP TABLE IF EXISTS \(quotedIdentifier(name))")
+            try db.execute(sql: "DROP TABLE IF EXISTS \(quotedIdentifier(name))")
         }
     }
 
@@ -245,65 +240,7 @@ private extension SnapshotBuilder {
         }
     }
 
-    static func isSQLiteDatabaseHealthy(at url: URL) -> Bool {
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let database else {
-            return false
-        }
-        defer { sqlite3_close(database) }
-
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, "PRAGMA quick_check(1)", -1, &statement, nil) == SQLITE_OK,
-              let statement else {
-            return false
-        }
-        defer { sqlite3_finalize(statement) }
-
-        guard sqlite3_step(statement) == SQLITE_ROW,
-              let textPointer = sqlite3_column_text(statement, 0) else {
-            return false
-        }
-        let result = String(cString: textPointer).trimmingCharacters(in: .whitespacesAndNewlines)
-        return result.caseInsensitiveCompare("ok") == .orderedSame
-    }
-
-    static func fetchTextColumn(database: OpaquePointer, sql: String) throws -> [String] {
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
-              let statement else {
-            throw NSError(domain: "SnapshotBuilder", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: sqliteErrorMessage(for: database, fallback: "准备 SQL 失败：\(sql)")
-            ])
-        }
-        defer { sqlite3_finalize(statement) }
-
-        var values: [String] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let textPointer = sqlite3_column_text(statement, 0) {
-                values.append(String(cString: textPointer))
-            }
-        }
-        return values
-    }
-
-    static func executeSQLite(_ database: OpaquePointer, sql: String) throws {
-        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
-            throw NSError(domain: "SnapshotBuilder", code: 4, userInfo: [
-                NSLocalizedDescriptionKey: sqliteErrorMessage(for: database, fallback: "执行 SQL 失败：\(sql)")
-            ])
-        }
-    }
-
     static func quotedIdentifier(_ name: String) -> String {
         "\"\(name.replacingOccurrences(of: "\"", with: "\"\""))\""
-    }
-
-    static func sqliteErrorMessage(for database: OpaquePointer, fallback: String) -> String {
-        guard let cString = sqlite3_errmsg(database) else { return fallback }
-        let message = String(cString: cString)
-        return message.isEmpty ? fallback : message
     }
 }

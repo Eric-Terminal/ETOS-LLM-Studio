@@ -7,7 +7,6 @@
 // ============================================================================
 
 import Foundation
-import SQLite3
 import ZIPFoundation
 
 public enum SnapshotRestoreService {
@@ -124,7 +123,7 @@ private extension SnapshotRestoreService {
             }
             let destinationURL = extractedDirectory.appendingPathComponent(item.fileName, isDirectory: false)
             try archive.extract(entry, to: destinationURL)
-            guard isSQLiteDatabaseHealthy(at: destinationURL) else {
+            guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
                 throw RestoreError.invalidDatabase(item.fileName)
             }
             extractedURLs[item.fileName] = destinationURL
@@ -147,26 +146,4 @@ private extension SnapshotRestoreService {
         )
     }
 
-    static func isSQLiteDatabaseHealthy(at url: URL) -> Bool {
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let database else {
-            return false
-        }
-        defer { sqlite3_close(database) }
-
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, "PRAGMA quick_check(1)", -1, &statement, nil) == SQLITE_OK,
-              let statement else {
-            return false
-        }
-        defer { sqlite3_finalize(statement) }
-
-        guard sqlite3_step(statement) == SQLITE_ROW,
-              let textPointer = sqlite3_column_text(statement, 0) else {
-            return false
-        }
-        let result = String(cString: textPointer).trimmingCharacters(in: .whitespacesAndNewlines)
-        return result.caseInsensitiveCompare("ok") == .orderedSame
-    }
 }
