@@ -10,6 +10,25 @@
 import Foundation
 import Combine
 
+private final class AppConfigRuntimeCache: @unchecked Sendable {
+    static let shared = AppConfigRuntimeCache()
+
+    private let lock = NSLock()
+    private var values: [String: Any] = [:]
+
+    func value<T>(for key: String, as type: T.Type = T.self) -> T? {
+        lock.lock()
+        defer { lock.unlock() }
+        return values[key] as? T
+    }
+
+    func set(_ value: Any, for key: String) {
+        lock.lock()
+        values[key] = value
+        lock.unlock()
+    }
+}
+
 @MainActor
 public final class AppConfigStore: ObservableObject {
 
@@ -21,21 +40,39 @@ public final class AppConfigStore: ObservableObject {
     /// 在 nonisolated 上下文（如 Task.detached）中直接从 GRDB 读取布尔配置，
     /// 绕过 @MainActor 约束。适用于启动备份检查等不能等待主线程的场景。
     public static nonisolated func readBoolNonisolated(_ key: AppConfigKey, default defaultValue: Bool = false) -> Bool {
+        if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Bool.self) {
+            return cached
+        }
+        if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Int.self) {
+            return cached != 0
+        }
         (Persistence.readAppConfigInteger(key: key.rawValue).map { $0 != 0 }) ?? defaultValue
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取字符串配置。
     public static nonisolated func readStringNonisolated(_ key: AppConfigKey, default defaultValue: String = "") -> String {
+        if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: String.self) {
+            return cached
+        }
         Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取浮点配置。
     public static nonisolated func readRealNonisolated(_ key: AppConfigKey, default defaultValue: Double = 0.0) -> Double {
+        if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Double.self) {
+            return cached
+        }
         Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取整数配置。
     public static nonisolated func readIntegerNonisolated(_ key: AppConfigKey, default defaultValue: Int = 0) -> Int {
+        if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Int.self) {
+            return cached
+        }
+        if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Bool.self) {
+            return cached ? 1 : 0
+        }
         Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
     }
 
@@ -449,6 +486,7 @@ public final class AppConfigStore: ObservableObject {
     // MARK: - 持久化助手
 
     private func persistIfChanged(_ key: AppConfigKey, text newValue: String, previous: String) {
+        AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
         Task.detached(priority: .utility) {
@@ -457,6 +495,7 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private func persistIfChanged(_ key: AppConfigKey, real newValue: Double, previous: Double) {
+        AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
         Task.detached(priority: .utility) {
@@ -465,6 +504,7 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private func persistIfChanged(_ key: AppConfigKey, integer newValue: Int, previous: Int) {
+        AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
         Task.detached(priority: .utility) {
@@ -473,6 +513,7 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private func persistIfChanged(_ key: AppConfigKey, bool newValue: Bool, previous: Bool) {
+        AppConfigRuntimeCache.shared.set(newValue, for: key.rawValue)
         guard newValue != previous else { return }
         let rawKey = key.rawValue
         let intVal = newValue ? 1 : 0
