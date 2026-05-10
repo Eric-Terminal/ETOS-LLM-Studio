@@ -124,7 +124,7 @@ class ChatViewModel: ObservableObject {
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     @Published var mathRenderOverrides: Set<UUID> = []
     
-    // MARK: - 用户偏好设置（委托到 AppConfigStore，消除 @AppStorage）
+    // MARK: - 用户偏好设置（委托到 AppConfigStore，消除旧持久化属性包装器）
 
     var enableMarkdown: Bool {
         get { AppConfigStore.shared.enableMarkdown }
