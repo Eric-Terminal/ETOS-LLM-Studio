@@ -63,6 +63,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case cloudSyncAutoSyncEnabled = "cloudSync.autoSyncEnabled"
     case syncBackupUploadEndpoint = "sync.backup.uploadEndpoint"
     case syncBackupCreateOnLaunch = "sync.backup.createOnLaunch"
+    case appLockEnabled = "security.appLock.enabled"
+    case appLockTimeoutSeconds = "security.appLock.timeoutSeconds"
 
     case aiTemperature = "aiTemperature"
     case aiTopP = "aiTopP"
@@ -165,10 +167,13 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .syncAutoSyncEnabled,
              .cloudSyncEnabled,
              .cloudSyncAutoSyncEnabled,
-             .syncBackupCreateOnLaunch:
+             .syncBackupCreateOnLaunch,
+             .appLockEnabled:
             return .bool(false)
         case .syncBackupUploadEndpoint:
             return .text("")
+        case .appLockTimeoutSeconds:
+            return .integer(300)
 
         case .aiTemperature:
             return .real(1.0)
@@ -327,7 +332,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .lastAnnouncementId,
              .hideAnnouncementSection,
-             .hiddenAnnouncementKeys:
+             .hiddenAnnouncementKeys,
+             .appLockEnabled,
+             .appLockTimeoutSeconds:
             return false
         default:
             return true
