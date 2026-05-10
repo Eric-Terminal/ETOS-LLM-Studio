@@ -287,6 +287,13 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             return nil
         }
 
+        guard !isSyncCompletelyDisabled() else {
+            if !silent {
+                state = .failed("同步已全部关闭。")
+            }
+            return nil
+        }
+
 #if os(iOS)
         guard session.isPaired else {
             if !silent {

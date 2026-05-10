@@ -167,7 +167,10 @@ public enum SnapshotBuilder {
         // 确保目标文件不存在（Archive 在 .create 模式下要求目标不存在）
         try? FileManager.default.removeItem(at: outputURL)
 
-        guard let archive = Archive(url: outputURL, accessMode: .create) else {
+        let archive: Archive
+        do {
+            archive = try Archive(url: outputURL, accessMode: .create)
+        } catch {
             throw SnapshotError.archiveCreateFailed(outputURL.lastPathComponent)
         }
 

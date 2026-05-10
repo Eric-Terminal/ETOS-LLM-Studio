@@ -239,7 +239,14 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     /// 为 CloudSyncSnapshots zone 注册 CKRecordZoneSubscription，触发 APNs 静默推送。
     /// 已存在时幂等跳过，失败仅记录日志不抛出。
     func subscribeToChanges() async {
-        guard (try? await accountStatus()) == .available else { return }
+        do {
+            try await ensureAvailableAccount()
+            try await ensureCloudSyncZoneExists()
+        } catch {
+            cloudSyncLogger.error("CloudKit zone 订阅准备失败：\(error.localizedDescription, privacy: .public)")
+            return
+        }
+
         let subID = Self.zoneSubscriptionID
 
         // 若本地已记录订阅成功，跳过重复注册

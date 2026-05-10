@@ -46,7 +46,7 @@ public final class AppConfigStore: ObservableObject {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Int.self) {
             return cached != 0
         }
-        (Persistence.readAppConfigInteger(key: key.rawValue).map { $0 != 0 }) ?? defaultValue
+        return (Persistence.readAppConfigInteger(key: key.rawValue).map { $0 != 0 }) ?? defaultValue
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取字符串配置。
@@ -54,7 +54,7 @@ public final class AppConfigStore: ObservableObject {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: String.self) {
             return cached
         }
-        Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
+        return Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取浮点配置。
@@ -62,7 +62,7 @@ public final class AppConfigStore: ObservableObject {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Double.self) {
             return cached
         }
-        Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
+        return Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
     }
 
     /// 在 nonisolated 上下文中直接从 GRDB 读取整数配置。
@@ -73,7 +73,7 @@ public final class AppConfigStore: ObservableObject {
         if let cached = AppConfigRuntimeCache.shared.value(for: key.rawValue, as: Bool.self) {
             return cached ? 1 : 0
         }
-        Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
+        return Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
     }
 
     // MARK: - AI 参数
@@ -141,10 +141,10 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableNoBubbleUI: Bool = false {
         didSet { persistIfChanged(.enableNoBubbleUI, bool: enableNoBubbleUI, previous: oldValue) }
     }
-    @Published public var chatPickerPresentationStyle: String = "sheet" {
+    @Published public var chatPickerPresentationStyle: String = ChatPickerPresentationStyle.defaultStyle.rawValue {
         didSet { persistIfChanged(.chatPickerPresentationStyle, text: chatPickerPresentationStyle, previous: oldValue) }
     }
-    @Published public var chatNavigationMode: String = "stack" {
+    @Published public var chatNavigationMode: String = ChatNavigationMode.defaultMode.rawValue {
         didSet { persistIfChanged(.chatNavigationMode, text: chatNavigationMode, previous: oldValue) }
     }
     @Published public var settingsUseColorfulIcons: Bool = true {

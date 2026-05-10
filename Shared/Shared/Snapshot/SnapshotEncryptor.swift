@@ -58,7 +58,7 @@ public enum SnapshotEncryptor {
     /// 加密数据，返回加密后的完整字节数据（含文件头）。
     public static func encrypt(data plaintext: Data, password: String, mode: EncryptionMode = .strong) throws -> Data {
         let key = try deriveKey(password: password, mode: mode)
-        let nonce = try AES.GCM.Nonce()
+        let nonce = AES.GCM.Nonce()
 
         let sealedBox = try AES.GCM.seal(plaintext, using: key, nonce: nonce)
         let ciphertext = sealedBox.ciphertext

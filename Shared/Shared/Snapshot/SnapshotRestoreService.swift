@@ -180,11 +180,24 @@ public enum SnapshotRestoreService {
 
     /// 解压 ZIP 文件到指定目录。
     private static func extractZIP(from zipURL: URL, to directory: URL) throws {
-        guard let archive = Archive(url: zipURL, accessMode: .read) else {
+        let archive: Archive
+        do {
+            archive = try Archive(url: zipURL, accessMode: .read)
+        } catch {
             throw SnapshotRestoreError.invalidArchive
         }
         for entry in archive where entry.type == .file {
+            let pathComponents = entry.path.split(separator: "/").map(String.init)
+            guard !entry.path.hasPrefix("/"),
+                  !pathComponents.contains(".."),
+                  !pathComponents.isEmpty else {
+                throw SnapshotRestoreError.invalidArchive
+            }
             let entryDst = directory.appendingPathComponent(entry.path)
+            try FileManager.default.createDirectory(
+                at: entryDst.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             _ = try archive.extract(entry, to: entryDst)
         }
     }

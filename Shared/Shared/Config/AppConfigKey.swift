@@ -158,4 +158,178 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case real = "real"
         case integer = "integer"
     }
+
+    public enum ValueKind {
+        case text
+        case real
+        case integer
+        case bool
+    }
+
+    public var valueKind: ValueKind {
+        switch self {
+        case .aiTemperature,
+             .aiTopP,
+             .backgroundBlur,
+             .backgroundOpacity,
+             .fontScale:
+            return .real
+
+        case .maxChatHistory,
+             .lazyLoadMessageCount,
+             .memoryTopK,
+             .conversationMemoryRecentLimit,
+             .conversationMemoryRoundThreshold,
+             .conversationMemorySummaryMinIntervalMinutes,
+             .periodicTimeLandmarkIntervalMinutes,
+             .lastAnnouncementId,
+             .appLockTimeoutSeconds:
+            return .integer
+
+        case .systemPrompt,
+             .chatPickerPresentationStyle,
+             .chatNavigationMode,
+             .appLanguage,
+             .composerDraft,
+             .backgroundContentMode,
+             .currentBackgroundImage,
+             .backgroundCropTarget,
+             .fontFallbackScope,
+             .speechModelIdentifier,
+             .ttsModelIdentifier,
+             .memoryEmbeddingModelIdentifier,
+             .titleGenerationModelIdentifier,
+             .dailyPulseModelIdentifier,
+             .conversationSummaryModelIdentifier,
+             .reasoningSummaryModelIdentifier,
+             .ocrModelIdentifier,
+             .imageGenerationModelIdentifier,
+             .imageGenerationParameterExpressionsByModel,
+             .audioRecordingFormat,
+             .systemTimeInjectionPosition,
+             .watchAttachmentLastSource,
+             .watchAttachmentSourceHistory,
+             .watchBackgroundLastSource,
+             .watchBackgroundSourceHistory,
+             .syncBackupUploadEndpoint,
+             .hiddenAnnouncementKeysRaw,
+             .shortcutBridgeShortcutName:
+            return .text
+
+        default:
+            return .bool
+        }
+    }
+
+    public var typeHint: TypeHint {
+        switch valueKind {
+        case .text:
+            return .text
+        case .real:
+            return .real
+        case .integer, .bool:
+            return .integer
+        }
+    }
+
+    public var defaultValue: Any {
+        switch self {
+        case .aiTemperature: return 1.0
+        case .aiTopP: return 0.95
+        case .aiTemperatureEnabled: return true
+        case .aiTopPEnabled: return true
+        case .systemPrompt: return ""
+        case .maxChatHistory: return 0
+        case .enableStreaming: return true
+        case .enableResponseSpeedMetrics: return true
+        case .enableOpenAIStreamIncludeUsage: return true
+        case .lazyLoadMessageCount: return 0
+        case .enableAutoSessionNaming: return true
+        case .restoreLastSessionOnLaunch: return false
+        case .enableMarkdown: return true
+        case .enableAdvancedRenderer: return true
+        case .enableExperimentalToolResultDisplay: return true
+        case .enableAutoReasoningPreview: return true
+        case .enableReasoningSummary: return true
+        case .enableLiquidGlass: return false
+        case .enableChatTopBlurFade: return true
+        case .enableNoBubbleUI: return false
+        case .chatPickerPresentationStyle: return ChatPickerPresentationStyle.defaultStyle.rawValue
+        case .chatNavigationMode: return ChatNavigationMode.defaultMode.rawValue
+        case .settingsUseColorfulIcons: return true
+        case .appLanguage: return AppLanguagePreference.defaultLanguage.rawValue
+        case .composerDraft: return ""
+        case .providerDetailGroupByMainstream: return true
+        case .enableBackground: return true
+        case .backgroundBlur: return 10.0
+        case .backgroundOpacity: return 0.7
+        case .backgroundContentMode: return "fill"
+        case .currentBackgroundImage: return ""
+        case .enableAutoRotateBackground: return false
+        case .backgroundCropTarget: return "phone"
+        case .customFontEnabled: return true
+        case .fontFallbackScope: return "segment"
+        case .fontScale: return 1.0
+        case .enableMemory: return true
+        case .enableMemoryWrite: return true
+        case .enableMemoryActiveRetrieval: return false
+        case .memoryTopK: return 3
+        case .enableConversationMemoryAsync: return true
+        case .conversationMemoryRecentLimit: return 5
+        case .conversationMemoryRoundThreshold: return 6
+        case .conversationMemorySummaryMinIntervalMinutes: return 120
+        case .enableConversationProfileDailyUpdate: return true
+        case .speechModelIdentifier: return ""
+        case .ttsModelIdentifier: return ""
+        case .memoryEmbeddingModelIdentifier: return ""
+        case .titleGenerationModelIdentifier: return ""
+        case .dailyPulseModelIdentifier: return ""
+        case .conversationSummaryModelIdentifier: return ""
+        case .reasoningSummaryModelIdentifier: return ""
+        case .ocrModelIdentifier: return ""
+        case .imageGenerationModelIdentifier: return ""
+        case .imageGenerationParameterExpressionsByModel: return "{}"
+        case .sendSpeechAsAudio: return false
+        case .enableSpeechInput: return false
+        case .audioRecordingFormat: return "aac"
+        case .includeSystemTimeInPrompt: return false
+        case .systemTimeInjectionPosition: return "front"
+        case .enablePeriodicTimeLandmark: return true
+        case .periodicTimeLandmarkIntervalMinutes: return 30
+        case .enableBackgroundReplyNotification: return true
+        case .hasRequestedBgReplyNotificationPermission: return false
+        case .hasRequestedBgReplyNotificationPermissionWatch: return false
+        case .watchAttachmentLastSource: return ""
+        case .watchAttachmentSourceHistory: return ""
+        case .watchBackgroundLastSource: return ""
+        case .watchBackgroundSourceHistory: return "[]"
+        case .syncAutoSyncEnabled: return false
+        case .syncProviders: return true
+        case .syncSessions: return true
+        case .syncBackgrounds: return true
+        case .syncMemories: return false
+        case .syncMCPServers: return true
+        case .syncImageFiles: return true
+        case .syncSkills: return true
+        case .syncShortcutTools: return true
+        case .syncWorldbooks: return true
+        case .syncFeedbackTickets: return true
+        case .syncDailyPulse: return true
+        case .syncUsageStats: return true
+        case .syncFontFiles: return true
+        case .syncAppStorage: return true
+        case .syncLegacyGlobalPrompt: return true
+        case .syncBackupUploadEndpoint: return ""
+        case .syncBackupCreateOnLaunch: return false
+        case .cloudSyncEnabled: return false
+        case .cloudSyncAutoEnabled: return false
+        case .lastAnnouncementId: return 0
+        case .hideAnnouncementSection: return false
+        case .hiddenAnnouncementKeysRaw: return ""
+        case .appLockEnabled: return false
+        case .appLockTimeoutSeconds: return 60
+        case .appLockUseBiometrics: return false
+        case .shortcutBridgeShortcutName: return "ETOS Shortcut Bridge"
+        }
+    }
 }

@@ -256,15 +256,22 @@ extension SyncEngine {
     }
 
     static func collectAppStorageSnapshot(userDefaults: UserDefaults) -> [String: Any] {
-        // 从 GRDB 读取已迁移的配置（线程安全，无需 @MainActor）
         var snapshot: [String: Any] = [:]
-        let rows = Persistence.loadAllAppConfigs()
-        for row in rows {
-            guard let key = AppConfigKey(rawValue: row.key), key.isSynced else { continue }
-            switch row.typeHint {
-            case "real":    if let v = row.real    { snapshot[row.key] = v }
-            case "integer": if let v = row.integer { snapshot[row.key] = v }
-            default:        if let v = row.text    { snapshot[row.key] = v }
+
+        for key in AppConfigKey.allCases where key.isSynced {
+            switch key.valueKind {
+            case .text:
+                let defaultValue = key.defaultValue as? String ?? ""
+                snapshot[key.rawValue] = AppConfigStore.readStringNonisolated(key, default: defaultValue)
+            case .real:
+                let defaultValue = key.defaultValue as? Double ?? 0
+                snapshot[key.rawValue] = AppConfigStore.readRealNonisolated(key, default: defaultValue)
+            case .integer:
+                let defaultValue = key.defaultValue as? Int ?? 0
+                snapshot[key.rawValue] = AppConfigStore.readIntegerNonisolated(key, default: defaultValue)
+            case .bool:
+                let defaultValue = key.defaultValue as? Bool ?? false
+                snapshot[key.rawValue] = AppConfigStore.readBoolNonisolated(key, default: defaultValue)
             }
         }
 
