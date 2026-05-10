@@ -17,10 +17,7 @@ struct ToolCenterView: View {
     @StateObject var shortcutManager = ShortcutToolManager.shared
     @StateObject var skillManager = SkillManager.shared
 
-    @AppStorage("enableMemory") var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
-    @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("memoryTopK") var memoryTopK: Int = 3
+    @ObservedObject var appConfig = AppConfigStore.shared
 
     @State var searchText: String = ""
     @State var showEnabledOnly: Bool = false
@@ -28,6 +25,22 @@ struct ToolCenterView: View {
 
     var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
+    }
+
+    var enableMemory: Bool {
+        viewModel.enableMemory
+    }
+
+    var enableMemoryWrite: Bool {
+        viewModel.enableMemoryWrite
+    }
+
+    var enableMemoryActiveRetrieval: Bool {
+        viewModel.enableMemoryActiveRetrieval
+    }
+
+    var memoryTopK: Int {
+        appConfig.memoryTopK
     }
 
     var builtInStates: [ToolCatalogBuiltInToolState] {

@@ -273,16 +273,7 @@ extension ChatServiceTests {
     @Test("search_memory tool is provided when active retrieval is enabled and topK > 0")
     func testSearchMemoryToolProvision_Enabled() async throws {
         await cleanup()
-        let defaults = UserDefaults.standard
-        let originalTopK = defaults.object(forKey: "memoryTopK")
-        defer {
-            if let originalTopK {
-                defaults.set(originalTopK, forKey: "memoryTopK")
-            } else {
-                defaults.removeObject(forKey: "memoryTopK")
-            }
-        }
-        defaults.set(3, forKey: "memoryTopK")
+        Persistence.writeAppConfig(key: AppConfigKey.memoryTopK.rawValue, integer: 3, typeHint: AppConfigKey.memoryTopK.typeHint)
 
         await chatService.sendAndProcessMessage(
             content: "hello",
@@ -305,16 +296,7 @@ extension ChatServiceTests {
     @Test("search_memory tool is NOT provided when topK is 0")
     func testSearchMemoryToolProvision_TopKZero() async throws {
         await cleanup()
-        let defaults = UserDefaults.standard
-        let originalTopK = defaults.object(forKey: "memoryTopK")
-        defer {
-            if let originalTopK {
-                defaults.set(originalTopK, forKey: "memoryTopK")
-            } else {
-                defaults.removeObject(forKey: "memoryTopK")
-            }
-        }
-        defaults.set(0, forKey: "memoryTopK")
+        Persistence.writeAppConfig(key: AppConfigKey.memoryTopK.rawValue, integer: 0, typeHint: AppConfigKey.memoryTopK.typeHint)
 
         await chatService.sendAndProcessMessage(
             content: "hello",
@@ -378,17 +360,7 @@ extension ChatServiceTests {
         await cleanup()
         await memoryManager.addMemory(content: "用户喜欢喝抹茶拿铁。")
         await memoryManager.addMemory(content: "用户使用 Swift 做 iOS 开发。")
-
-        let defaults = UserDefaults.standard
-        let originalTopK = defaults.object(forKey: "memoryTopK")
-        defer {
-            if let originalTopK {
-                defaults.set(originalTopK, forKey: "memoryTopK")
-            } else {
-                defaults.removeObject(forKey: "memoryTopK")
-            }
-        }
-        defaults.set(3, forKey: "memoryTopK")
+        Persistence.writeAppConfig(key: AppConfigKey.memoryTopK.rawValue, integer: 3, typeHint: AppConfigKey.memoryTopK.typeHint)
 
         let toolCall = InternalToolCall(
             id: "call_search_1",

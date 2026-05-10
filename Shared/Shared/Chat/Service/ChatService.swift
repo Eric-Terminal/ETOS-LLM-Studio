@@ -26,11 +26,6 @@ public class ChatService {
     static let reasoningSummaryModelStorageKey = "reasoningSummaryModelIdentifier"
     static let lastActiveSessionIDStorageKey = "launch.lastActiveSessionID"
     public static let restoreLastSessionOnLaunchEnabledStorageKey = "launch.restoreLastSessionOnLaunchEnabled"
-    static let conversationMemoryEnabledKey = "enableConversationMemoryAsync"
-    static let conversationMemoryRecentLimitKey = "conversationMemoryRecentLimit"
-    static let conversationMemoryRoundThresholdKey = "conversationMemoryRoundThreshold"
-    static let conversationMemorySummaryMinIntervalMinutesKey = "conversationMemorySummaryMinIntervalMinutes"
-    static let conversationProfileDailyUpdateEnabledKey = "enableConversationProfileDailyUpdate"
     static let reasoningSummaryEnabledKey = "enableReasoningSummary"
     struct RetryAchievementSignature: Equatable {
         let sessionID: UUID

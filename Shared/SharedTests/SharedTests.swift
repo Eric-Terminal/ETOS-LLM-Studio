@@ -79,6 +79,12 @@ struct ChatServiceTests {
         UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
         UserDefaults.standard.removeObject(forKey: "reasoningSummaryModelIdentifier")
         UserDefaults.standard.removeObject(forKey: "enableReasoningSummary")
+        Persistence.deleteAppConfig(key: AppConfigKey.memoryTopK.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.enableConversationMemoryAsync.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.conversationMemoryRecentLimit.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.conversationMemoryRoundThreshold.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.conversationMemorySummaryMinIntervalMinutes.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.enableConversationProfileDailyUpdate.rawValue)
         MockURLProtocol.mockResponses = [:]
         mockAdapter.receivedMessages = nil
         mockAdapter.receivedTitleMessages = nil

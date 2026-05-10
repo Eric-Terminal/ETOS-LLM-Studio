@@ -159,14 +159,30 @@ final class ChatViewModel: ObservableObject {
     @Published var enableAutoSessionNaming: Bool = AppConfigStore.shared.enableAutoSessionNaming {
         didSet { AppConfigStore.shared.enableAutoSessionNaming = enableAutoSessionNaming }
     }
-    @AppStorage("enableMemory") var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
-    @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("enableConversationMemoryAsync") var enableConversationMemoryAsync: Bool = true
-    @AppStorage("conversationMemoryRecentLimit") var conversationMemoryRecentLimit: Int = 5
-    @AppStorage("conversationMemoryRoundThreshold") var conversationMemoryRoundThreshold: Int = 6
-    @AppStorage("conversationMemorySummaryMinIntervalMinutes") var conversationMemorySummaryMinIntervalMinutes: Int = 120
-    @AppStorage("enableConversationProfileDailyUpdate") var enableConversationProfileDailyUpdate: Bool = true
+    @Published var enableMemory: Bool = AppConfigStore.shared.enableMemory {
+        didSet { AppConfigStore.shared.enableMemory = enableMemory }
+    }
+    @Published var enableMemoryWrite: Bool = AppConfigStore.shared.enableMemoryWrite {
+        didSet { AppConfigStore.shared.enableMemoryWrite = enableMemoryWrite }
+    }
+    @Published var enableMemoryActiveRetrieval: Bool = AppConfigStore.shared.enableMemoryActiveRetrieval {
+        didSet { AppConfigStore.shared.enableMemoryActiveRetrieval = enableMemoryActiveRetrieval }
+    }
+    @Published var enableConversationMemoryAsync: Bool = AppConfigStore.shared.enableConversationMemoryAsync {
+        didSet { AppConfigStore.shared.enableConversationMemoryAsync = enableConversationMemoryAsync }
+    }
+    @Published var conversationMemoryRecentLimit: Int = AppConfigStore.shared.conversationMemoryRecentLimit {
+        didSet { AppConfigStore.shared.conversationMemoryRecentLimit = conversationMemoryRecentLimit }
+    }
+    @Published var conversationMemoryRoundThreshold: Int = AppConfigStore.shared.conversationMemoryRoundThreshold {
+        didSet { AppConfigStore.shared.conversationMemoryRoundThreshold = conversationMemoryRoundThreshold }
+    }
+    @Published var conversationMemorySummaryMinIntervalMinutes: Int = AppConfigStore.shared.conversationMemorySummaryMinIntervalMinutes {
+        didSet { AppConfigStore.shared.conversationMemorySummaryMinIntervalMinutes = conversationMemorySummaryMinIntervalMinutes }
+    }
+    @Published var enableConversationProfileDailyUpdate: Bool = AppConfigStore.shared.enableConversationProfileDailyUpdate {
+        didSet { AppConfigStore.shared.enableConversationProfileDailyUpdate = enableConversationProfileDailyUpdate }
+    }
     @AppStorage("enableReasoningSummary") var enableReasoningSummary: Bool = true
     @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
     @AppStorage("enableChatTopBlurFade") var enableChatTopBlurFade: Bool = true

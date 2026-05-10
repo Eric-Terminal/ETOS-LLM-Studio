@@ -311,9 +311,6 @@ public struct ExtendedFeaturesView: View {
 struct LongTermMemoryFeatureView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    @AppStorage("enableConversationMemoryAsync") private var enableConversationMemoryAsync: Bool = true
     @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
     @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @State private var isShowingIntroDetails = false
@@ -339,16 +336,16 @@ struct LongTermMemoryFeatureView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $enableMemory)
+                Toggle(NSLocalizedString("启用记忆功能", comment: "启用记忆功能开关"), isOn: $viewModel.enableMemory)
             } footer: {
                 Text(NSLocalizedString("启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。", comment: "启用记忆功能说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
             
-            if enableMemory {
+            if viewModel.enableMemory {
                 Section {
-                    Toggle(NSLocalizedString("是否记录新的记忆", comment: "是否记录新记忆开关"), isOn: $enableMemoryWrite)
+                    Toggle(NSLocalizedString("是否记录新的记忆", comment: "是否记录新记忆开关"), isOn: $viewModel.enableMemoryWrite)
                 } footer: {
                     Text(NSLocalizedString("关闭后仅读取记忆，不保存新内容。", comment: "关闭记忆写入说明"))
                         .etFont(.footnote)
@@ -356,9 +353,9 @@ struct LongTermMemoryFeatureView: View {
                 }
 
                 Section {
-                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $enableConversationMemoryAsync)
+                    Toggle(NSLocalizedString("启用异步跨对话记忆", comment: "启用异步跨对话记忆开关"), isOn: $viewModel.enableConversationMemoryAsync)
 
-                    if enableConversationMemoryAsync {
+                    if viewModel.enableConversationMemoryAsync {
                         NavigationLink {
                             ConversationMemorySettingsView()
                                 .environmentObject(viewModel)

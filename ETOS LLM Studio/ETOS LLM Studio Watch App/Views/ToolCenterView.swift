@@ -17,16 +17,29 @@ struct ToolCenterView: View {
     @StateObject private var shortcutManager = ShortcutToolManager.shared
     @StateObject private var skillManager = SkillManager.shared
 
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     @State private var showEnabledOnly: Bool = false
     @State private var isShowingIntroDetails = false
 
     private var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
+    }
+
+    private var enableMemory: Bool {
+        viewModel.enableMemory
+    }
+
+    private var enableMemoryWrite: Bool {
+        viewModel.enableMemoryWrite
+    }
+
+    private var enableMemoryActiveRetrieval: Bool {
+        viewModel.enableMemoryActiveRetrieval
+    }
+
+    private var memoryTopK: Int {
+        appConfig.memoryTopK
     }
 
     private var builtInStates: [ToolCatalogBuiltInToolState] {
@@ -260,14 +273,18 @@ struct ToolCenterView: View {
             ) {
                 Toggle(
                     NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                    isOn: $enableMemory
+                    isOn: $viewModel.enableMemory
                 )
 
                 ForEach(filteredBuiltInStates) { state in
                     NavigationLink {
                         WatchBuiltInToolDetailView(
                             kind: state.kind,
-                            currentSessionIsolationActive: currentSessionIsolationActive
+                            currentSessionIsolationActive: currentSessionIsolationActive,
+                            enableMemory: $viewModel.enableMemory,
+                            enableMemoryWrite: $viewModel.enableMemoryWrite,
+                            enableMemoryActiveRetrieval: $viewModel.enableMemoryActiveRetrieval,
+                            memoryTopK: $appConfig.memoryTopK
                         )
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {

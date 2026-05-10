@@ -159,12 +159,12 @@ struct WatchAppToolCenterDetailView: View {
 struct WatchBuiltInToolDetailView: View {
     let kind: ToolCatalogBuiltInToolKind
     let currentSessionIsolationActive: Bool
+    @Binding var enableMemory: Bool
+    @Binding var enableMemoryWrite: Bool
+    @Binding var enableMemoryActiveRetrieval: Bool
+    @Binding var memoryTopK: Int
 
     @ObservedObject private var appToolManager = AppToolManager.shared
-    @AppStorage("enableMemory") private var enableMemory: Bool = true
-    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
-    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
-    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
 
     private var numberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
