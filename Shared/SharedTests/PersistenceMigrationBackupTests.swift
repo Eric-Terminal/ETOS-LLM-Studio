@@ -153,6 +153,54 @@ extension PersistenceTests {
         #expect(sqliteCount(snapshotMemoryStore, sql: "SELECT COUNT(*) FROM conversation_user_profile WHERE source_session_id = '\(session.id.uuidString)'") == 1)
     }
 
+    @Test("明文离线快照可以恢复三处分库")
+    func testSnapshotRestoreInstallsOfflineArchive() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let snapshotSession = ChatSession(id: UUID(), name: "Snapshot Restore Source", isTemporary: false)
+        let replacementSession = ChatSession(id: UUID(), name: "Snapshot Restore Target", isTemporary: false)
+
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [snapshotSession, replacementSession])
+        }
+
+        Persistence.saveChatSessions([snapshotSession])
+        Persistence.saveMessages([ChatMessage(role: .user, content: "snapshot-restore-source")], for: snapshotSession.id)
+        #expect(Persistence.saveAuxiliaryBlob(["value": "snapshot"], forKey: "providers_v1"))
+        try ConversationMemoryManager.saveUserProfile(
+            content: "恢复源用户画像",
+            sourceSessionID: snapshotSession.id
+        )
+
+        let snapshotURL = try SnapshotBuilder.buildSnapshot()
+        defer { removeIfExists(snapshotURL) }
+
+        Persistence.saveChatSessions([replacementSession])
+        Persistence.saveMessages([ChatMessage(role: .assistant, content: "snapshot-restore-target")], for: replacementSession.id)
+        #expect(Persistence.saveAuxiliaryBlob(["value": "target"], forKey: "providers_v1"))
+        try ConversationMemoryManager.saveUserProfile(
+            content: "恢复前用户画像",
+            sourceSessionID: replacementSession.id
+        )
+
+        try SnapshotRestoreService.restorePlainSnapshot(from: snapshotURL)
+
+        let restoredSessions = Persistence.loadChatSessions()
+        #expect(restoredSessions.contains(where: { $0.id == snapshotSession.id }))
+        #expect(!restoredSessions.contains(where: { $0.id == replacementSession.id }))
+        #expect(Persistence.loadMessages(for: snapshotSession.id).map(\.content) == ["snapshot-restore-source"])
+        let restoredProviderBlob = Persistence.loadAuxiliaryBlob([String: String].self, forKey: "providers_v1")
+        #expect(restoredProviderBlob?["value"] == "snapshot")
+        let restoredProfile = ConversationMemoryManager.loadUserProfile()
+        #expect(restoredProfile?.content == "恢复源用户画像")
+        #expect(restoredProfile?.sourceSessionID == snapshotSession.id)
+    }
+
     @Test("启动检测到 chat-store 损坏时会按备份重建并重建 FTS")
     func testLaunchBackupRestoresCorruptedChatStoreAndRebuildsFTS() throws {
         cleanup(sessions: [])

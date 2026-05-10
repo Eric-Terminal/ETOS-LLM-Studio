@@ -181,11 +181,17 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section {
+                NavigationLink {
+                    BackupRestoreView()
+                } label: {
+                    Label(NSLocalizedString("数据库快照", comment: ""), systemImage: "externaldrive.badge.icloud")
+                }
+
                 Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $appConfig.syncBackupCreateOnLaunch)
             } header: {
-                Text(NSLocalizedString("启动保护备份", comment: ""))
+                Text(NSLocalizedString("数据库保护", comment: ""))
             } footer: {
-                Text(NSLocalizedString("用于防止 SQLite 数据库损坏。开启后每次启动会额外 dump 一份可恢复备份并落盘，可能占用更多空间；若检测到数据库损坏，会按这份备份自动重建并恢复检索索引。", comment: ""))
+                Text(NSLocalizedString("手动快照用于跨设备灾难恢复；启动备份用于防止 SQLite 数据库损坏。开启启动备份后，每次启动会额外 dump 一份可恢复备份并落盘。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))

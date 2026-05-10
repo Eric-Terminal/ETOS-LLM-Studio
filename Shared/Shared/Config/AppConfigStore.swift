@@ -15,6 +15,7 @@ public final class AppConfigStore: ObservableObject {
 
     private static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
     private var isApplyingSnapshot = false
+    private var isReloadingFromPersistentStore = false
 
     @Published public var syncProviders: Bool { didSet { write(.syncProviders, syncProviders) } }
     @Published public var syncSessions: Bool { didSet { write(.syncSessions, syncSessions) } }
@@ -222,9 +223,9 @@ public final class AppConfigStore: ObservableObject {
         hiddenAnnouncementKeys = Self.textValue(.hiddenAnnouncementKeys, userDefaults: userDefaults)
     }
 
-    public nonisolated static func persistentSnapshot() -> [String: Any] {
+    public nonisolated static func persistentSnapshot(includeLocalOnly: Bool = false) -> [String: Any] {
         var result: [String: Any] = [:]
-        for key in AppConfigKey.allCases where key.participatesInSync {
+        for key in AppConfigKey.allCases where includeLocalOnly || key.participatesInSync {
             switch key.defaultValue {
             case .bool(let defaultValue):
                 result[key.rawValue] = (Persistence.readAppConfigInteger(key: key.rawValue) ?? (defaultValue ? 1 : 0)) != 0
@@ -241,6 +242,16 @@ public final class AppConfigStore: ObservableObject {
 
     public nonisolated func snapshot() -> [String: Any] {
         Self.persistentSnapshot()
+    }
+
+    public func reloadFromPersistentStore() {
+        isReloadingFromPersistentStore = true
+        defer { isReloadingFromPersistentStore = false }
+
+        for (rawKey, value) in Self.persistentSnapshot(includeLocalOnly: true) {
+            guard let key = AppConfigKey(rawValue: rawKey) else { continue }
+            setValue(value, for: key)
+        }
     }
 
     public func apply(snapshot: [String: Any]) {
@@ -496,21 +507,25 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private func write(_ key: AppConfigKey, _ value: Bool) {
+        guard !isReloadingFromPersistentStore else { return }
         guard !isApplyingSnapshot || key.participatesInSync else { return }
         Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: "bool")
     }
 
     private func write(_ key: AppConfigKey, _ value: Int) {
+        guard !isReloadingFromPersistentStore else { return }
         guard !isApplyingSnapshot || key.participatesInSync else { return }
         Persistence.writeAppConfig(key: key.rawValue, integer: value, typeHint: "integer")
     }
 
     private func write(_ key: AppConfigKey, _ value: Double) {
+        guard !isReloadingFromPersistentStore else { return }
         guard !isApplyingSnapshot || key.participatesInSync else { return }
         Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: "real")
     }
 
     private func write(_ key: AppConfigKey, _ value: String) {
+        guard !isReloadingFromPersistentStore else { return }
         guard !isApplyingSnapshot || key.participatesInSync else { return }
         Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
     }
