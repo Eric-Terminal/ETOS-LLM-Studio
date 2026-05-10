@@ -528,13 +528,12 @@ extension ChatService {
     }
 
     func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage) async {
-        let isAutoNamingEnabled = UserDefaults.standard.object(forKey: "enableAutoSessionNaming") as? Bool ?? true
-        guard isAutoNamingEnabled else {
+        guard AppConfigStore.readBoolNonisolated(.enableAutoSessionNaming, default: true) else {
             logger.info("自动标题功能已禁用，跳过生成。")
             return
         }
 
-        let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
+        let dedicatedModelIdentifier = AppConfigStore.readStringNonisolated(.titleGenerationModelIdentifier)
         guard let runnableModel = resolveTitleGenerationModel() else {
             logger.error("无法获取标题模型，无法生成标题。")
             return
@@ -595,7 +594,7 @@ extension ChatService {
     }
 
     private func resolveTitleGenerationModel() -> RunnableModel? {
-        let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
+        let dedicatedModelIdentifier = AppConfigStore.readStringNonisolated(.titleGenerationModelIdentifier)
         if !dedicatedModelIdentifier.isEmpty,
            let dedicatedModel = activatedRunnableModels.first(
                 where: { $0.id == dedicatedModelIdentifier && $0.model.isChatModel }

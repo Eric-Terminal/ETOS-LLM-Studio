@@ -82,94 +82,27 @@ extension ChatService {
 
     /// 解析长期记忆检索的 Top K 配置，支持旧版本留下的字符串/浮点数形式。
     func resolvedMemoryTopK() -> Int {
-        let defaults = UserDefaults.standard
-        let rawValue = defaults.object(forKey: "memoryTopK")
-
-        if let number = rawValue as? NSNumber {
-            return max(0, number.intValue)
-        }
-
-        if let stringValue = rawValue as? String, let parsed = Int(stringValue) {
-            let clamped = max(0, parsed)
-            defaults.set(clamped, forKey: "memoryTopK")
-            return clamped
-        }
-
-        let fallback = 3
-        defaults.set(fallback, forKey: "memoryTopK")
-        return fallback
+        max(0, AppConfigStore.readIntegerNonisolated(.memoryTopK, default: 3))
     }
 
     func isConversationMemoryEnabled() -> Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: Self.conversationMemoryEnabledKey) == nil {
-            defaults.set(true, forKey: Self.conversationMemoryEnabledKey)
-            return true
-        }
-        return defaults.bool(forKey: Self.conversationMemoryEnabledKey)
+        AppConfigStore.readBoolNonisolated(.enableConversationMemoryAsync, default: true)
     }
 
     func resolvedConversationMemoryRecentLimit() -> Int {
-        let defaults = UserDefaults.standard
-        let rawValue = defaults.object(forKey: Self.conversationMemoryRecentLimitKey)
-        if let number = rawValue as? NSNumber {
-            let value = max(1, number.intValue)
-            defaults.set(value, forKey: Self.conversationMemoryRecentLimitKey)
-            return value
-        }
-        if let text = rawValue as? String, let parsed = Int(text) {
-            let value = max(1, parsed)
-            defaults.set(value, forKey: Self.conversationMemoryRecentLimitKey)
-            return value
-        }
-        let fallback = 5
-        defaults.set(fallback, forKey: Self.conversationMemoryRecentLimitKey)
-        return fallback
+        max(1, AppConfigStore.readIntegerNonisolated(.conversationMemoryRecentLimit, default: 5))
     }
 
     func resolvedConversationMemoryRoundThreshold() -> Int {
-        let defaults = UserDefaults.standard
-        let rawValue = defaults.object(forKey: Self.conversationMemoryRoundThresholdKey)
-        if let number = rawValue as? NSNumber {
-            let value = max(1, number.intValue)
-            defaults.set(value, forKey: Self.conversationMemoryRoundThresholdKey)
-            return value
-        }
-        if let text = rawValue as? String, let parsed = Int(text) {
-            let value = max(1, parsed)
-            defaults.set(value, forKey: Self.conversationMemoryRoundThresholdKey)
-            return value
-        }
-        let fallback = 6
-        defaults.set(fallback, forKey: Self.conversationMemoryRoundThresholdKey)
-        return fallback
+        max(1, AppConfigStore.readIntegerNonisolated(.conversationMemoryRoundThreshold, default: 6))
     }
 
     func resolvedConversationMemorySummaryMinIntervalMinutes() -> Int {
-        let defaults = UserDefaults.standard
-        let rawValue = defaults.object(forKey: Self.conversationMemorySummaryMinIntervalMinutesKey)
-        if let number = rawValue as? NSNumber {
-            let value = max(0, number.intValue)
-            defaults.set(value, forKey: Self.conversationMemorySummaryMinIntervalMinutesKey)
-            return value
-        }
-        if let text = rawValue as? String, let parsed = Int(text) {
-            let value = max(0, parsed)
-            defaults.set(value, forKey: Self.conversationMemorySummaryMinIntervalMinutesKey)
-            return value
-        }
-        let fallback = 120
-        defaults.set(fallback, forKey: Self.conversationMemorySummaryMinIntervalMinutesKey)
-        return fallback
+        max(0, AppConfigStore.readIntegerNonisolated(.conversationMemorySummaryMinIntervalMinutes, default: 120))
     }
 
     func isConversationProfileDailyUpdateEnabled() -> Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: Self.conversationProfileDailyUpdateEnabledKey) == nil {
-            defaults.set(true, forKey: Self.conversationProfileDailyUpdateEnabledKey)
-            return true
-        }
-        return defaults.bool(forKey: Self.conversationProfileDailyUpdateEnabledKey)
+        AppConfigStore.readBoolNonisolated(.enableConversationProfileDailyUpdate, default: true)
     }
 
     func resolvedChatCapableModel(storedIdentifier: String? = nil) -> RunnableModel? {
@@ -190,23 +123,16 @@ extension ChatService {
     }
 
     func resolvedConversationSummaryModel() -> RunnableModel? {
-        let defaults = UserDefaults.standard
-        let storedIdentifier = defaults.string(forKey: Self.conversationSummaryModelStorageKey) ?? ""
+        let storedIdentifier = AppConfigStore.readStringNonisolated(.conversationSummaryModelIdentifier)
         return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
     }
 
     func isReasoningSummaryEnabled() -> Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: Self.reasoningSummaryEnabledKey) == nil {
-            defaults.set(true, forKey: Self.reasoningSummaryEnabledKey)
-            return true
-        }
-        return defaults.bool(forKey: Self.reasoningSummaryEnabledKey)
+        AppConfigStore.readBoolNonisolated(.enableReasoningSummary, default: true)
     }
 
     func resolvedReasoningSummaryModel() -> RunnableModel? {
-        let defaults = UserDefaults.standard
-        let storedIdentifier = defaults.string(forKey: Self.reasoningSummaryModelStorageKey) ?? ""
+        let storedIdentifier = AppConfigStore.readStringNonisolated(.reasoningSummaryModelIdentifier)
         return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
     }
 }

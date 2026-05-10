@@ -41,16 +41,16 @@ extension ChatService {
     }
 
     func resolveSelectedSpeechModel() -> RunnableModel? {
-        let storedIdentifier = UserDefaults.standard.string(forKey: "speechModelIdentifier")
-        if let identifier = storedIdentifier,
-           let match = activatedSpeechModels.first(where: { $0.id == identifier }) {
+        let storedIdentifier = AppConfigStore.readStringNonisolated(.speechModelIdentifier)
+        if !storedIdentifier.isEmpty,
+           let match = activatedSpeechModels.first(where: { $0.id == storedIdentifier }) {
             return match
         }
         return activatedSpeechModels.first
     }
 
     public func resolveSelectedTTSModel() -> RunnableModel? {
-        let storedIdentifier = UserDefaults.standard.string(forKey: Self.ttsModelStorageKey) ?? ""
+        let storedIdentifier = AppConfigStore.readStringNonisolated(.ttsModelIdentifier)
         if !storedIdentifier.isEmpty,
            let match = activatedTTSModels.first(where: { $0.id == storedIdentifier }) {
             return match

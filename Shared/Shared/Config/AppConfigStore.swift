@@ -34,6 +34,11 @@ public final class AppConfigStore: ObservableObject {
         Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
     }
 
+    /// 在 nonisolated 上下文中直接从 GRDB 读取整数配置。
+    public static nonisolated func readIntegerNonisolated(_ key: AppConfigKey, default defaultValue: Int = 0) -> Int {
+        Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
+    }
+
     // MARK: - AI 参数
 
     @Published public var aiTemperature: Double = 1.0 {
@@ -369,8 +374,8 @@ public final class AppConfigStore: ObservableObject {
     // MARK: - Init
 
     private init() {
-        loadAllFromDatabase()
         migrateFromUserDefaultsIfNeeded()
+        loadAllFromDatabase()
     }
 
     // MARK: - 同步快照接口（供 SyncEngine 调用）
@@ -428,13 +433,13 @@ public final class AppConfigStore: ObservableObject {
             guard ud.object(forKey: rawKey) != nil else { continue }
             let udValue = ud.object(forKey: rawKey)
             if let v = udValue as? Bool {
-                applyValue(v, for: key)
+                Persistence.writeAppConfig(key: rawKey, integer: v ? 1 : 0)
             } else if let v = udValue as? Int {
-                applyValue(v, for: key)
+                Persistence.writeAppConfig(key: rawKey, integer: v)
             } else if let v = udValue as? Double {
-                applyValue(v, for: key)
+                Persistence.writeAppConfig(key: rawKey, real: v)
             } else if let v = udValue as? String {
-                applyValue(v, for: key)
+                Persistence.writeAppConfig(key: rawKey, text: v)
             }
         }
 
