@@ -38,6 +38,142 @@ extension SyncEngine {
         )
     }
 
+    static func makeForkedSession(
+        from session: ChatSession,
+        sourcePlatform: String?,
+        existingSessions: [ChatSession]
+    ) -> ChatSession {
+        ChatSession(
+            id: UUID(),
+            name: makeForkedSessionName(
+                for: session,
+                sourcePlatform: sourcePlatform,
+                existingNames: Set(existingSessions.map(\.name))
+            ),
+            topicPrompt: session.topicPrompt,
+            enhancedPrompt: session.enhancedPrompt,
+            lorebookIDs: session.lorebookIDs,
+            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
+            folderID: session.folderID,
+            isTemporary: false
+        )
+    }
+
+    static func makeForkedSessionName(
+        for session: ChatSession,
+        sourcePlatform: String?,
+        existingNames: Set<String>
+    ) -> String {
+        let baseName = session.baseNameWithoutSyncSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBaseName = baseName.isEmpty ? session.name : baseName
+        let platform = normalizedSessionForkPlatform(sourcePlatform)
+            ?? inferredSessionForkPlatform(from: session.name)
+        let firstName = "\(resolvedBaseName) [\(platform) 分支]"
+        guard existingNames.contains(firstName) else { return firstName }
+
+        var index = 2
+        while true {
+            let candidate = "\(firstName) \(index)"
+            if !existingNames.contains(candidate) {
+                return candidate
+            }
+            index += 1
+        }
+    }
+
+    static func normalizedSessionForkPlatform(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        let lowercased = trimmed.lowercased()
+        if lowercased.contains("watchos") || lowercased.contains("watch") {
+            return "watchOS"
+        }
+        if lowercased.contains("ios") || lowercased.contains("iphone") || lowercased.contains("ipad") {
+            return "iOS"
+        }
+        return trimmed
+    }
+
+    static func inferredSessionForkPlatform(from name: String) -> String {
+        let lowercased = name.lowercased()
+        if lowercased.contains("watchos") || lowercased.contains("watch") {
+            return "watchOS"
+        }
+        if lowercased.contains("ios") || lowercased.contains("iphone") || lowercased.contains("ipad") {
+            return "iOS"
+        }
+
+        return currentPlatformName
+    }
+
+    static func cloneMessagesForFork(_ messages: [ChatMessage]) -> [ChatMessage] {
+        var idMapping: [UUID: UUID] = [:]
+        idMapping.reserveCapacity(messages.count)
+        for message in messages {
+            idMapping[message.id] = UUID()
+        }
+
+        return messages.map { message in
+            var cloned = message
+            cloned.id = idMapping[message.id] ?? UUID()
+            if let responseGroupID = message.responseGroupID {
+                cloned.responseGroupID = idMapping[responseGroupID] ?? responseGroupID
+            }
+            if let selectedResponseAttemptID = message.selectedResponseAttemptID {
+                cloned.selectedResponseAttemptID = idMapping[selectedResponseAttemptID] ?? selectedResponseAttemptID
+            }
+            cloneForkAttachments(in: &cloned)
+            return cloned
+        }
+    }
+
+    static func cloneForkAttachments(in message: inout ChatMessage) {
+        if let originalFileName = message.audioFileName,
+           let audioData = Persistence.loadAudio(fileName: originalFileName) {
+            let ext = (originalFileName as NSString).pathExtension
+            let newFileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
+            if Persistence.saveAudio(audioData, fileName: newFileName) != nil {
+                message.audioFileName = newFileName
+            }
+        }
+
+        if let originalImageFileNames = message.imageFileNames, !originalImageFileNames.isEmpty {
+            var newImageFileNames: [String] = []
+            for originalImageFileName in originalImageFileNames {
+                guard let imageData = Persistence.loadImage(fileName: originalImageFileName) else {
+                    continue
+                }
+                let ext = (originalImageFileName as NSString).pathExtension
+                let newImageFileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
+                if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
+                    newImageFileNames.append(newImageFileName)
+                }
+            }
+            if !newImageFileNames.isEmpty {
+                message.imageFileNames = newImageFileNames
+            }
+        }
+
+        if let originalFileNames = message.fileFileNames, !originalFileNames.isEmpty {
+            var newFileNames: [String] = []
+            for originalFileName in originalFileNames {
+                guard let fileData = Persistence.loadFile(fileName: originalFileName) else {
+                    continue
+                }
+                let ext = (originalFileName as NSString).pathExtension
+                let newFileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
+                if Persistence.saveFile(fileData, fileName: newFileName) != nil {
+                    newFileNames.append(newFileName)
+                }
+            }
+            if !newFileNames.isEmpty {
+                message.fileFileNames = newFileNames
+            }
+        }
+    }
+
     static func computeSessionContentHash(session: ChatSession, messages: [ChatMessage]) -> String {
         var hasher = Hasher()
         hasher.combine(session.baseNameWithoutSyncSuffix)

@@ -210,6 +210,7 @@ public struct SyncedFontFile: Codable {
 /// 同步包，依据选项包含不同的数据集合
 public struct SyncPackage: Codable {
     public var options: SyncOptions
+    public var sourcePlatform: String?
     public var providers: [Provider]
     public var sessions: [SyncedSession]
     public var backgrounds: [SyncedBackground]
@@ -236,11 +237,12 @@ public struct SyncPackage: Codable {
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, providers, sessions, backgrounds, memories, conversationUserProfile, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
+        case options, sourcePlatform, providers, sessions, backgrounds, memories, conversationUserProfile, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
         options: SyncOptions,
+        sourcePlatform: String? = nil,
         providers: [Provider] = [],
         sessions: [SyncedSession] = [],
         backgrounds: [SyncedBackground] = [],
@@ -265,6 +267,7 @@ public struct SyncPackage: Codable {
         globalSystemPrompt: String? = nil
     ) {
         self.options = options
+        self.sourcePlatform = sourcePlatform
         self.providers = providers
         self.sessions = sessions
         self.backgrounds = backgrounds
@@ -292,6 +295,7 @@ public struct SyncPackage: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         options = try container.decode(SyncOptions.self, forKey: .options)
+        sourcePlatform = try container.decodeIfPresent(String.self, forKey: .sourcePlatform)
         providers = try container.decodeIfPresent([Provider].self, forKey: .providers) ?? []
         sessions = try container.decodeIfPresent([SyncedSession].self, forKey: .sessions) ?? []
         backgrounds = try container.decodeIfPresent([SyncedBackground].self, forKey: .backgrounds) ?? []

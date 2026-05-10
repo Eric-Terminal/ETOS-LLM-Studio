@@ -496,6 +496,9 @@ public enum SyncPackageTransferService {
         try writer.write("{")
         var firstField = true
         try writeEncodedField("options", package.options, to: writer, encoder: encoder, firstField: &firstField)
+        if let sourcePlatform = package.sourcePlatform {
+            try writeEncodedField("sourcePlatform", sourcePlatform, to: writer, encoder: encoder, firstField: &firstField)
+        }
         try writeArrayField("providers", package.providers, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("sessions", package.sessions, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("backgrounds", package.backgrounds, to: writer, encoder: encoder, firstField: &firstField)

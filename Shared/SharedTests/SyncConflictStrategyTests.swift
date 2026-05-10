@@ -88,6 +88,7 @@ struct SyncConflictStrategyTests {
 
         let package = SyncPackage(
             options: [.sessions],
+            sourcePlatform: "watchOS",
             sessions: [
                 SyncedSession(
                     session: session,
@@ -111,6 +112,100 @@ struct SyncConflictStrategyTests {
             "远端第三版"
         ])
         #expect(mergedMessages[1].content == "远端第三版")
+    }
+
+    @Test("离线会话分歧会克隆远端为独立分支")
+    func testOfflineSessionDivergenceCreatesForkedSession() async {
+        let originalSessions = Persistence.loadChatSessions()
+        let originalSnapshots = originalSessions.map { session in
+            SyncedSession(session: session, messages: Persistence.loadMessages(for: session.id))
+        }
+        defer {
+            resetSessions(to: originalSnapshots)
+        }
+
+        resetSessions(to: [])
+        let chatService = ChatService()
+
+        let session = ChatSession(id: UUID(), name: "离线同步会话", isTemporary: false)
+        let firstUser = ChatMessage(id: UUID(), role: .user, content: "我们讨论同步引擎")
+        let firstAssistant = ChatMessage(id: UUID(), role: .assistant, content: "先确认需求")
+        let localFollowup = ChatMessage(id: UUID(), role: .user, content: "本地继续")
+        let remoteFollowup = ChatMessage(id: UUID(), role: .user, content: "远端继续")
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([firstUser, firstAssistant, localFollowup], for: session.id)
+        chatService.chatSessionsSubject.send([session])
+        chatService.currentSessionSubject.send(session)
+
+        let package = SyncPackage(
+            options: [.sessions],
+            sessions: [
+                SyncedSession(
+                    session: session,
+                    messages: [firstUser, firstAssistant, remoteFollowup]
+                )
+            ]
+        )
+
+        let summary = await SyncEngine.apply(package: package, chatService: chatService)
+        let mergedSessions = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
+        let originalMessages = Persistence.loadMessages(for: session.id)
+        let forkedSession = mergedSessions.first { $0.id != session.id }
+        let forkedMessages = forkedSession.map { Persistence.loadMessages(for: $0.id) } ?? []
+        let repeatSummary = await SyncEngine.apply(package: package, chatService: chatService)
+        let sessionsAfterRepeat = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
+
+        #expect(summary.importedSessions == 1)
+        #expect(mergedSessions.count == 2)
+        #expect(originalMessages.map(\.content) == ["我们讨论同步引擎", "先确认需求", "本地继续"])
+        #expect(forkedSession?.name == "离线同步会话 [watchOS 分支]")
+        #expect(forkedMessages.map(\.content) == ["我们讨论同步引擎", "先确认需求", "远端继续"])
+        #expect(Set(originalMessages.map(\.id)).isDisjoint(with: Set(forkedMessages.map(\.id))))
+        #expect(repeatSummary.skippedSessions == 1)
+        #expect(sessionsAfterRepeat.count == 2)
+    }
+
+    @Test("远端尾部追加不会误判为离线分支")
+    func testRemoteTailAppendStillMergesOriginalSession() async {
+        let originalSessions = Persistence.loadChatSessions()
+        let originalSnapshots = originalSessions.map { session in
+            SyncedSession(session: session, messages: Persistence.loadMessages(for: session.id))
+        }
+        defer {
+            resetSessions(to: originalSnapshots)
+        }
+
+        resetSessions(to: [])
+        let chatService = ChatService()
+
+        let session = ChatSession(id: UUID(), name: "尾部追加会话", isTemporary: false)
+        let firstUser = ChatMessage(id: UUID(), role: .user, content: "先说一点")
+        let firstAssistant = ChatMessage(id: UUID(), role: .assistant, content: "收到")
+        let remoteFollowup = ChatMessage(id: UUID(), role: .user, content: "远端追加")
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([firstUser, firstAssistant], for: session.id)
+        chatService.chatSessionsSubject.send([session])
+        chatService.currentSessionSubject.send(session)
+
+        let package = SyncPackage(
+            options: [.sessions],
+            sessions: [
+                SyncedSession(
+                    session: session,
+                    messages: [firstUser, firstAssistant, remoteFollowup]
+                )
+            ]
+        )
+
+        let summary = await SyncEngine.apply(package: package, chatService: chatService)
+        let mergedSessions = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
+        let mergedMessages = Persistence.loadMessages(for: session.id)
+
+        #expect(summary.importedSessions == 1)
+        #expect(mergedSessions.count == 1)
+        #expect(mergedMessages.map(\.content) == ["先说一点", "收到", "远端追加"])
     }
 
     @Test("提供商新增嵌套键值时会深度合并")

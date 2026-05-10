@@ -59,6 +59,38 @@ extension SyncEngine {
         return .merged(payload)
     }
 
+    static func shouldForkParallelSession(
+        localMessages: [ChatMessage],
+        incomingMessages: [ChatMessage]
+    ) -> Bool {
+        let commonPrefixCount = commonTimelinePrefixCount(
+            localMessages,
+            incomingMessages
+        )
+        return localMessages.count > commonPrefixCount
+            && incomingMessages.count > commonPrefixCount
+    }
+
+    static func commonTimelinePrefixCount(
+        _ local: [ChatMessage],
+        _ incoming: [ChatMessage]
+    ) -> Int {
+        let overlapCount = min(local.count, incoming.count)
+        for index in 0..<overlapCount {
+            guard messagesShareTimelineIdentity(local[index], incoming[index]) else {
+                return index
+            }
+        }
+        return overlapCount
+    }
+
+    static func messagesShareTimelineIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
+        if local == incoming || local.id == incoming.id {
+            return true
+        }
+        return messagesShareMergeIdentity(local, incoming)
+    }
+
     static func mergeChatSessionMetadata(local: ChatSession, incoming: ChatSession) -> ChatSession? {
         guard local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix else {
             return nil

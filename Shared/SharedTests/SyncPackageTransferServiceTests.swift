@@ -31,6 +31,7 @@ struct SyncPackageTransferServiceTests {
         )
         let package = SyncPackage(
             options: [.providers, .memories, .appStorage],
+            sourcePlatform: "watchOS",
             providers: [provider],
             conversationUserProfile: profile,
             appStorageSnapshot: snapshot
@@ -47,6 +48,7 @@ struct SyncPackageTransferServiceTests {
         #expect(envelope.schemaVersion == SyncPackageTransferService.currentSchemaVersion)
         #expect(envelope.delta.options == package.options)
         #expect(decoded.options == package.options)
+        #expect(decoded.sourcePlatform == "watchOS")
         #expect(decoded.providers.count == 1)
         #expect(decoded.providers[0].apiKeys == ["export-key"])
         #expect(decoded.conversationUserProfile == profile)

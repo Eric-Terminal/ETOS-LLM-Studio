@@ -135,6 +135,23 @@ extension SyncEngine {
                     cache: &messagesBySessionID
                 )
 
+                if shouldForkParallelSession(
+                    localMessages: localMessages,
+                    incomingMessages: payload.messages
+                ) {
+                    session = makeForkedSession(
+                        from: session,
+                        sourcePlatform: payload.sourcePlatform,
+                        existingSessions: sessions
+                    )
+                    let forkedMessages = cloneMessagesForFork(payload.messages)
+                    Persistence.saveMessages(forkedMessages, for: session.id)
+                    sessions.insert(session, at: 0)
+                    messagesBySessionID[session.id] = forkedMessages
+                    imported += 1
+                    continue
+                }
+
                 switch mergeSessionDeep(
                     localSession: localSession,
                     localMessages: localMessages,

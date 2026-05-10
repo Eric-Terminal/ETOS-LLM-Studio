@@ -175,6 +175,7 @@ extension SyncEngine {
 
         return SyncPackage(
             options: options,
+            sourcePlatform: currentPlatformName,
             providers: providers,
             sessions: sessions,
             backgrounds: backgrounds,

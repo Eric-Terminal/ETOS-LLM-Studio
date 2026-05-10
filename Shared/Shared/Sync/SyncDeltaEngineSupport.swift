@@ -118,6 +118,7 @@ extension SyncDeltaEngine {
 
         return SyncPackage(
             options: options,
+            sourcePlatform: package.sourcePlatform,
             providers: providers,
             sessions: sessions,
             backgrounds: backgrounds,
@@ -460,6 +461,7 @@ extension SyncDeltaEngine {
 
         return SyncPackage(
             options: options,
+            sourcePlatform: full.sourcePlatform,
             providers: providers,
             sessions: sessions,
             backgrounds: backgrounds,

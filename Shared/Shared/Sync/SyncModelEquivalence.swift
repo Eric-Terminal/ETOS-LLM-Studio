@@ -14,7 +14,7 @@ import CryptoKit
 // MARK: - 模型等价辅助
 
 /// 同步后缀模式（用于识别和移除）
-private let syncSuffixPattern = /（同步副本）|（同步冲突）|（同步）/
+private let syncSuffixPattern = #/（同步副本）|（同步冲突）|（同步）|\s*\[[^\]]+ 分支\]/#
 
 /// 去除字符串中所有同步后缀
 private func removeSyncSuffixes(from name: String) -> String {

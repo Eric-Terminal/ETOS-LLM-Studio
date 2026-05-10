@@ -19,4 +19,14 @@ public enum SyncEngine {
         "sync.delta.version-tracker.",
         "sync.delta.checkpoint."
     ]
+
+    public static var currentPlatformName: String {
+        #if os(watchOS)
+        return "watchOS"
+        #elseif os(iOS)
+        return "iOS"
+        #else
+        return "远端"
+        #endif
+    }
 }
