@@ -32,10 +32,14 @@ final class ETOSAppDelegate: NSObject, UIApplicationDelegate {
         }
         // 触发 CloudSync 自动同步，再接力通知 Watch 端
         Task { @MainActor in
-            CloudSyncManager.shared.performAutoSyncIfEnabled()
-            // 同步完成后接力推送给 Apple Watch
-            WatchSyncManager.shared.performAutoSyncIfEnabled()
-            completionHandler(.newData)
+            let didSync = await CloudSyncManager.shared.performAutoSyncIfEnabledAsync(delayNanoseconds: 0)
+            if didSync {
+                // 同步完成后接力推送给 Apple Watch
+                WatchSyncManager.shared.performAutoSyncIfEnabled()
+                completionHandler(.newData)
+            } else {
+                completionHandler(.noData)
+            }
         }
     }
 }

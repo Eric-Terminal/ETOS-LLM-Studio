@@ -157,6 +157,7 @@ public final class CloudSyncManager: ObservableObject {
             }
             return
         }
+        activateCloudKitSubscriptionIfNeeded()
 
         guard !options.isEmpty else {
             if !silent {
@@ -212,16 +213,24 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performAutoSyncIfEnabled() {
-        guard isEnabled else { return }
-        guard AppConfigStore.shared.cloudSyncAutoEnabled else { return }
+        Task { @MainActor in
+            _ = await performAutoSyncIfEnabledAsync()
+        }
+    }
+
+    @discardableResult
+    public func performAutoSyncIfEnabledAsync(delayNanoseconds: UInt64 = 2_000_000_000) async -> Bool {
+        guard isEnabled else { return false }
+        guard AppConfigStore.shared.cloudSyncAutoEnabled else { return false }
 
         let options = buildSyncOptionsFromSettings()
-        guard !options.isEmpty else { return }
+        guard !options.isEmpty else { return false }
 
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            await performSync(options: options, silent: true)
+        if delayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
         }
+        await performSync(options: options, silent: true)
+        return true
     }
 
     /// 激活 CloudKit zone 订阅（B2）：注册 APNs 静默推送，首次调用后幂等。
@@ -229,6 +238,7 @@ public final class CloudSyncManager: ObservableObject {
     public func activateCloudKitSubscriptionIfNeeded() {
         guard isEnabled else { return }
         #if canImport(CloudKit)
+        guard transport is CloudKitCloudSyncTransport else { return }
         let transport = CloudKitCloudSyncTransport()
         Task.detached(priority: .utility) {
             await transport.subscribeToChanges()
