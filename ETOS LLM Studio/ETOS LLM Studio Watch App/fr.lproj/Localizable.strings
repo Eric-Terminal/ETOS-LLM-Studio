@@ -1567,7 +1567,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "优先级说明" = "Priority Notes";
 "会优先参考最近聊天、记忆系统、请求日志、反馈历史、明日策展与当前关注焦点，并可选结合外部上下文生成约 3 张卡片。" = "Uses recent chats, memory, request logs, feedback history, tomorrow curation, and current focus first, and can optionally include external context to generate about 3 cards.";
 "会向输入地址发送 POST(JSON)，请确认地址可信。" = "Sends POST (JSON) to the entered address. Make sure it is trusted.";
-"会生成 .elsbackup 快照并以二进制 POST 上传，请确认地址可信。" = "Génère un instantané .elsbackup et l'envoie en POST binaire. Vérifiez que l'adresse est fiable.";
 "会话 %d/%d" = "Sessions %d/%d";
 "会话列表操作" = "Session List Actions";
 "会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。" = "Conversation summaries are saved in session JSON, and the user profile is saved in Memory/user_profile.json.";
@@ -2231,29 +2230,3 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 "OpenAI Responses" = "OpenAI Responses";
 "API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API base URL Exemple : https://api.openai.com/v1 ; les requêtes de chat utiliseront Responses API.";
-
-// MARK: - App Lock
-"应用锁" = "App Lock";
-"关闭应用锁" = "Disable App Lock";
-"修改密码" = "Change Password";
-"设置密码" = "Set Password";
-"应用锁已开启" = "App Lock Enabled";
-"设置密码后启用锁定" = "Set a password to enable locking";
-"锁定延迟" = "Lock Delay";
-"延迟" = "Delay";
-"立即" = "Immediately";
-"1 分钟" = "1 Minute";
-"5 分钟" = "5 Minutes";
-"15 分钟" = "15 Minutes";
-"30 分钟" = "30 Minutes";
-"生物识别解锁" = "Biometric Unlock";
-"开启后优先使用腕部检测/密码双重验证" = "Prioritizes wrist detection when enabled";
-"新密码" = "New Password";
-"确认密码" = "Confirm Password";
-"当前密码" = "Current Password";
-"两次输入的密码不一致。" = "Passwords do not match.";
-"解锁" = "Unlock";
-"使用生物识别解锁" = "Unlock with Biometrics";
-"密码已更新。" = "Mot de passe mis à jour.";
-"密码已设置，应用锁已开启。" = "Mot de passe défini. Verrouillage de l'app activé.";
-"应用锁已关闭。" = "Verrouillage de l'app désactivé.";

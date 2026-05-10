@@ -23,8 +23,7 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         
         var db: OpaquePointer?
-        guard sqlite3_open_v2(databaseURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let db else {
+        guard sqlite3_open(databaseURL.path, &db) == SQLITE_OK else {
             throw SQLiteError.openDatabase(databaseURL.path)
         }
         defer { sqlite3_close(db) }
@@ -40,8 +39,7 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
     
     public func loadIndex(from url: URL) throws -> [IndexItem] {
         var db: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let db else {
+        guard sqlite3_open(url.path, &db) == SQLITE_OK else {
             throw SQLiteError.openDatabase(url.path)
         }
         defer { sqlite3_close(db) }

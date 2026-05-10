@@ -20,8 +20,8 @@ extension ContentView {
 
     func refreshAttachmentSourceHistory() {
         importSourceHistory = WatchImportSourceHistory.values(
-            from: appConfig.watchAttachmentSourceHistory,
-            fallback: appConfig.watchAttachmentLastSource
+            from: attachmentSourceHistoryRawValue,
+            fallback: lastAttachmentSource
         )
     }
 

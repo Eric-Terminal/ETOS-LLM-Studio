@@ -28,15 +28,15 @@ struct ContentView: View {
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @State private var isNativeChatPresented: Bool = true
     @State private var isNativeSettingsPresented: Bool = false
     
     var body: some View {
-        ZStack {
-            contentWithMigrationOverlays
-            AppLockOverlayView()
-        }
+        contentWithMigrationOverlays
             // 启动时检查公告
             .task {
                 await handleLaunchTasks()
@@ -44,12 +44,8 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
-                    AppLockManager.shared.notifyWillEnterForeground()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
-                case .background:
-                    AppLockManager.shared.notifyDidEnterBackground()
-                    cancelDailyPulsePreparation()
                 default:
                     cancelDailyPulsePreparation()
                 }
@@ -59,10 +55,10 @@ struct ContentView: View {
     private var baseContent: some View {
         nativeNavigationContent
         .environment(\.font, rootBodyFont)
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
+        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appLanguageRawValue))
         .onAppear {
             normalizeChatNavigationModeIfNeeded()
-            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
+            AppLanguageRuntime.apply(rawValue: appLanguageRawValue)
             refreshRootBodyFont()
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
@@ -71,24 +67,24 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
             refreshRootBodyFont()
         }
-        .onChange(of: appConfig.customFontEnabled) { _, isEnabled in
+        .onChange(of: isCustomFontEnabled) { _, isEnabled in
             _ = isEnabled
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
-        .onChange(of: appConfig.fontScale) { _, newValue in
+        .onChange(of: customFontScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                appConfig.fontScale = normalizedValue
+                customFontScale = normalizedValue
             }
             refreshRootBodyFont()
         }
-        .onChange(of: appConfig.chatNavigationMode) { _, _ in
+        .onChange(of: chatNavigationModeRawValue) { _, _ in
             normalizeChatNavigationModeIfNeeded()
             isNativeSettingsPresented = false
             isNativeChatPresented = true
         }
-        .onChange(of: appConfig.appLanguage) { _, newValue in
+        .onChange(of: appLanguageRawValue) { _, newValue in
             AppLanguageRuntime.apply(rawValue: newValue)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
@@ -317,8 +313,8 @@ struct ContentView: View {
     }
 
     private func normalizeChatNavigationModeIfNeeded() {
-        guard appConfig.chatNavigationMode != ChatNavigationMode.legacyOverlay.rawValue else { return }
-        appConfig.chatNavigationMode = ChatNavigationMode.legacyOverlay.rawValue
+        guard chatNavigationModeRawValue != ChatNavigationMode.legacyOverlay.rawValue else { return }
+        chatNavigationModeRawValue = ChatNavigationMode.legacyOverlay.rawValue
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {

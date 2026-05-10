@@ -45,11 +45,6 @@ extension SyncEngine {
         incomingSession: ChatSession,
         incomingMessages: [ChatMessage]
     ) -> DeepMergeResult<(ChatSession, [ChatMessage])> {
-        // 优先检测真分叉：双方均在公共祖先之后有新消息
-        if detectMessageFork(local: localMessages, incoming: incomingMessages) {
-            return .forked((incomingSession, incomingMessages))
-        }
-
         guard let mergedSession = mergeChatSessionMetadata(local: localSession, incoming: incomingSession) else {
             return .conflict
         }
@@ -62,20 +57,6 @@ extension SyncEngine {
             return .unchanged(payload)
         }
         return .merged(payload)
-    }
-
-    /// 检测两条消息序列是否存在真分叉（双方均在最后公共祖先之后有新消息）
-    static func detectMessageFork(local: [ChatMessage], incoming: [ChatMessage]) -> Bool {
-        let overlapCount = min(local.count, incoming.count)
-        guard overlapCount > 0 else { return false }
-
-        for index in 0..<overlapCount {
-            if mergeChatMessage(local[index], incoming[index]) == nil {
-                // 在重叠范围内发现消息无法合并 → 双方在此处分叉
-                return true
-            }
-        }
-        return false
     }
 
     static func mergeChatSessionMetadata(local: ChatSession, incoming: ChatSession) -> ChatSession? {
@@ -323,21 +304,13 @@ extension SyncEngine {
     ) -> (versions: [String], currentVersionIndex: Int)? {
         let localCurrent = local.content
         let incomingCurrent = incoming.content
-
-        var versions = mergedVersionList(local: local.getAllVersions(), incoming: incoming.getAllVersions())
-        if local.id == incoming.id {
-            let preferredCurrent = stringsAreCompatible(localCurrent, incomingCurrent)
-                ? preferLongerString(localCurrent, incomingCurrent)
-                : localCurrent
-            if !versions.contains(preferredCurrent) {
-                versions.append(preferredCurrent)
-            }
-            let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
-            return (versions, currentIndex)
-        }
-
         guard stringsAreCompatible(localCurrent, incomingCurrent) else {
             return nil
+        }
+
+        var versions = local.getAllVersions()
+        for version in incoming.getAllVersions() where !versions.contains(version) {
+            versions.append(version)
         }
 
         let preferredCurrent = preferLongerString(localCurrent, incomingCurrent)
@@ -346,13 +319,5 @@ extension SyncEngine {
         }
         let currentIndex = versions.firstIndex(of: preferredCurrent) ?? max(0, versions.count - 1)
         return (versions, currentIndex)
-    }
-
-    private static func mergedVersionList(local: [String], incoming: [String]) -> [String] {
-        var versions = local.isEmpty ? [""] : local
-        for version in incoming where !versions.contains(version) {
-            versions.append(version)
-        }
-        return versions
     }
 }

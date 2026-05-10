@@ -17,8 +17,8 @@ public struct MemorySettingsView: View {
     @State private var isReembeddingMemories = false
     @State private var showReembedConfirmation = false
     @State private var reembedAlert: MemoryReembedAlert?
-    
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("memoryTopK") var memoryTopK: Int = 3
+    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
 
     private var embeddingModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -152,17 +152,17 @@ public struct MemorySettingsView: View {
                 HStack {
                     Text(NSLocalizedString("检索数量 (Top K)", comment: ""))
                     Spacer()
-                    TextField(NSLocalizedString("数量", comment: ""), value: $appConfig.memoryTopK, formatter: numberFormatter)
+                    TextField(NSLocalizedString("数量", comment: ""), value: $memoryTopK, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
-                        .onChange(of: appConfig.memoryTopK) { _, newValue in
-                            appConfig.memoryTopK = max(0, newValue)
+                        .onChange(of: memoryTopK) { _, newValue in
+                            memoryTopK = max(0, newValue)
                         }
                 }
-                if appConfig.memoryTopK > 0 {
+                if memoryTopK > 0 {
                     Toggle(
                         NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
-                        isOn: $appConfig.enableMemoryActiveRetrieval
+                        isOn: $enableMemoryActiveRetrieval
                     )
                     Text(
                         NSLocalizedString(

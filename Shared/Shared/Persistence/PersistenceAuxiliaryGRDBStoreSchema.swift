@@ -487,20 +487,6 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN request_body_controls_json TEXT")
                 }
             }
-
-            migrator.registerMigration("v9_create_app_config_table") { db in
-                try db.execute(sql: """
-                    CREATE TABLE IF NOT EXISTS app_config (
-                        key TEXT PRIMARY KEY NOT NULL,
-                        value_text TEXT,
-                        value_real REAL,
-                        value_integer INTEGER,
-                        type_hint TEXT NOT NULL DEFAULT 'text',
-                        updated_at REAL NOT NULL
-                    )
-                """)
-                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_app_config_updated_at ON app_config(updated_at DESC)")
-            }
         }
 
         if supportsMemoryRelationalSchema {
@@ -525,13 +511,6 @@ extension PersistenceAuxiliaryGRDBStore {
                         updated_at REAL NOT NULL,
                         source_session_id TEXT
                     )
-                """)
-            }
-
-            migrator.registerMigration("v3_add_needs_llm_dedup_to_user_profile") { db in
-                try db.execute(sql: """
-                    ALTER TABLE conversation_user_profile
-                    ADD COLUMN needs_llm_dedup INTEGER NOT NULL DEFAULT 0
                 """)
             }
         }

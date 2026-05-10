@@ -203,44 +203,18 @@ extension SyncEngine {
         imported += globalPromptMergeResult.imported
         skipped += globalPromptMergeResult.skipped
 
-        let userDefaultsMergeResult = mergeSynchronizedUserDefaultsKeys(
-            in: &incomingSnapshot,
-            userDefaults: userDefaults
-        )
-        imported += userDefaultsMergeResult.imported
-        skipped += userDefaultsMergeResult.skipped
-
-        // 构建当前 GRDB 状态用于去重比较
-        let currentRows = Persistence.loadAllAppConfigs()
-        let currentByKey: [String: Any] = currentRows.reduce(into: [:]) { result, row in
-            switch row.typeHint {
-            case "real":    if let v = row.real    { result[row.key] = v }
-            case "integer": if let v = row.integer { result[row.key] = v }
-            default:        if let v = row.text    { result[row.key] = v }
-            }
-        }
-
         for (key, incomingValue) in incomingSnapshot {
-            guard isCandidateAppStorageKey(key),
-                  let configKey = AppConfigKey(rawValue: key), configKey.isSynced else {
+            guard isCandidateAppStorageKey(key) else {
                 skipped += 1
                 continue
             }
-            let localValue = currentByKey[key]
+            let localValue = userDefaults.object(forKey: key)
             if appStorageValuesEqual(localValue, incomingValue) {
                 skipped += 1
                 continue
             }
-            // 直接写入 GRDB，合并完成后由调用方刷新 AppConfigStore
-            if let v = incomingValue as? Bool {
-                Persistence.writeAppConfig(key: key, integer: v ? 1 : 0)
-            } else if let v = incomingValue as? Int {
-                Persistence.writeAppConfig(key: key, integer: v)
-            } else if let v = incomingValue as? Double {
-                Persistence.writeAppConfig(key: key, real: v)
-            } else if let v = incomingValue as? String {
-                Persistence.writeAppConfig(key: key, text: v)
-            }
+
+            userDefaults.set(incomingValue, forKey: key)
             imported += 1
         }
 
@@ -263,23 +237,15 @@ extension SyncEngine {
     }
 
     static func collectAppStorageSnapshot(userDefaults: UserDefaults) -> [String: Any] {
-        var snapshot: [String: Any] = [:]
-
-        for key in AppConfigKey.allCases where key.isSynced {
-            switch key.valueKind {
-            case .text:
-                let defaultValue = key.defaultValue as? String ?? ""
-                snapshot[key.rawValue] = AppConfigStore.readStringNonisolated(key, default: defaultValue)
-            case .real:
-                let defaultValue = key.defaultValue as? Double ?? 0
-                snapshot[key.rawValue] = AppConfigStore.readRealNonisolated(key, default: defaultValue)
-            case .integer:
-                let defaultValue = key.defaultValue as? Int ?? 0
-                snapshot[key.rawValue] = AppConfigStore.readIntegerNonisolated(key, default: defaultValue)
-            case .bool:
-                let defaultValue = key.defaultValue as? Bool ?? false
-                snapshot[key.rawValue] = AppConfigStore.readBoolNonisolated(key, default: defaultValue)
-            }
+        var snapshot: [String: Any]
+        if userDefaults === UserDefaults.standard,
+           let bundleIdentifier = Bundle.main.bundleIdentifier,
+           let domain = userDefaults.persistentDomain(forName: bundleIdentifier),
+           !domain.isEmpty {
+            snapshot = domain.filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
+        } else {
+            snapshot = userDefaults.dictionaryRepresentation()
+                .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
         }
 
         let globalPromptSnapshot = GlobalSystemPromptStore.load(userDefaults: userDefaults)
@@ -293,43 +259,7 @@ extension SyncEngine {
             }
             snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] = globalPromptSnapshot.selectedEntryID?.uuidString
         }
-        collectSynchronizedUserDefaultsKeys(from: userDefaults, into: &snapshot)
         return snapshot
-    }
-
-    static func collectSynchronizedUserDefaultsKeys(
-        from userDefaults: UserDefaults,
-        into snapshot: inout [String: Any]
-    ) {
-        for (key, value) in userDefaults.dictionaryRepresentation() {
-            guard isSynchronizedUserDefaultsKey(key), isPropertyListEncodableValue(value) else { continue }
-            snapshot[key] = value
-        }
-    }
-
-    static func mergeSynchronizedUserDefaultsKeys(
-        in snapshot: inout [String: Any],
-        userDefaults: UserDefaults
-    ) -> (imported: Int, skipped: Int) {
-        var imported = 0
-        var skipped = 0
-
-        for key in snapshot.keys.sorted() where isSynchronizedUserDefaultsKey(key) {
-            guard let incomingValue = snapshot.removeValue(forKey: key),
-                  isPropertyListEncodableValue(incomingValue) else {
-                skipped += 1
-                continue
-            }
-            let localValue = userDefaults.object(forKey: key)
-            if appStorageValuesEqual(localValue, incomingValue) {
-                skipped += 1
-                continue
-            }
-            userDefaults.set(incomingValue, forKey: key)
-            imported += 1
-        }
-
-        return (imported, skipped)
     }
 
     static func mergeGlobalSystemPromptStorageKeys(
@@ -402,11 +332,6 @@ extension SyncEngine {
             return false
         }
         return true
-    }
-
-    static func isSynchronizedUserDefaultsKey(_ key: String) -> Bool {
-        key == ChatAppearanceProfileStore.configurationStorageKey
-            || AchievementCenter.isAchievementStorageKey(key)
     }
 
     static func appStorageValuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {

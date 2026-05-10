@@ -93,7 +93,10 @@ struct ConversationMemorySettingsView: View {
     @State private var isEditingConversationProfile = false
     @State private var conversationProfileDraft: String = ""
     @State private var conversationMemoryAlert: ConversationMemoryAlert?
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("conversationMemoryRecentLimit") private var conversationMemoryRecentLimit: Int = 5
+    @AppStorage("conversationMemoryRoundThreshold") private var conversationMemoryRoundThreshold: Int = 6
+    @AppStorage("conversationMemorySummaryMinIntervalMinutes") private var conversationMemorySummaryMinIntervalMinutes: Int = 120
+    @AppStorage("enableConversationProfileDailyUpdate") private var enableConversationProfileDailyUpdate: Bool = true
 
     private var conversationSummaryModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -120,37 +123,37 @@ struct ConversationMemorySettingsView: View {
                 HStack {
                     Text(NSLocalizedString("注入最近摘要数", comment: ""))
                     Spacer()
-                    TextField("5", value: $appConfig.conversationMemoryRecentLimit, formatter: numberFormatter)
+                    TextField("5", value: $conversationMemoryRecentLimit, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 70)
-                        .onChange(of: appConfig.conversationMemoryRecentLimit) { _, newValue in
-                            appConfig.conversationMemoryRecentLimit = max(1, newValue)
+                        .onChange(of: conversationMemoryRecentLimit) { _, newValue in
+                            conversationMemoryRecentLimit = max(1, newValue)
                         }
                 }
 
                 HStack {
                     Text(NSLocalizedString("摘要触发轮次阈值", comment: ""))
                     Spacer()
-                    TextField("6", value: $appConfig.conversationMemoryRoundThreshold, formatter: numberFormatter)
+                    TextField("6", value: $conversationMemoryRoundThreshold, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 70)
-                        .onChange(of: appConfig.conversationMemoryRoundThreshold) { _, newValue in
-                            appConfig.conversationMemoryRoundThreshold = max(1, newValue)
+                        .onChange(of: conversationMemoryRoundThreshold) { _, newValue in
+                            conversationMemoryRoundThreshold = max(1, newValue)
                         }
                 }
 
                 HStack {
                     Text(NSLocalizedString("摘要最小间隔(分钟)", comment: ""))
                     Spacer()
-                    TextField("120", value: $appConfig.conversationMemorySummaryMinIntervalMinutes, formatter: numberFormatter)
+                    TextField("120", value: $conversationMemorySummaryMinIntervalMinutes, formatter: numberFormatter)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 70)
-                        .onChange(of: appConfig.conversationMemorySummaryMinIntervalMinutes) { _, newValue in
-                            appConfig.conversationMemorySummaryMinIntervalMinutes = max(0, newValue)
+                        .onChange(of: conversationMemorySummaryMinIntervalMinutes) { _, newValue in
+                            conversationMemorySummaryMinIntervalMinutes = max(0, newValue)
                         }
                 }
 
-                Toggle(NSLocalizedString("用户画像每天自动更新一次", comment: ""), isOn: $appConfig.enableConversationProfileDailyUpdate)
+                Toggle(NSLocalizedString("用户画像每天自动更新一次", comment: ""), isOn: $enableConversationProfileDailyUpdate)
 
                 let options = viewModel.conversationSummaryModelOptions
                 if options.isEmpty {

@@ -13,8 +13,7 @@ import os.log
 
 extension MemoryManager {
     func preferredEmbeddingModelIdentifier() -> String? {
-        let identifier = AppConfigStore.readStringNonisolated(.memoryEmbeddingModelIdentifier)
-        return identifier.isEmpty ? nil : identifier
+        UserDefaults.standard.string(forKey: preferredEmbeddingModelKey)
     }
 
     public func isEmbeddingModelConfigured() -> Bool {

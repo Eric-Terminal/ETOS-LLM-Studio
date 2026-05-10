@@ -39,7 +39,6 @@ extension SyncEngine {
         var fontFiles: [SyncedFontFile] = []
         var fontRouteConfigurationData: Data?
         var appStorageSnapshot: Data?
-        var conversationUserProfile: ConversationUserProfile?
         var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
@@ -83,7 +82,6 @@ extension SyncEngine {
         if options.contains(.memories) {
             let rawStore = MemoryRawStore()
             memories = rawStore.loadMemories()
-            conversationUserProfile = ConversationMemoryManager.loadUserProfile()
         }
 
         if options.contains(.mcpServers) {
@@ -195,7 +193,6 @@ extension SyncEngine {
             fontFiles: fontFiles,
             fontRouteConfigurationData: fontRouteConfigurationData,
             appStorageSnapshot: appStorageSnapshot,
-            conversationUserProfile: conversationUserProfile,
             globalSystemPrompt: legacyGlobalSystemPrompt
         )
     }
@@ -238,11 +235,6 @@ extension SyncEngine {
             let result = await mergeMemories(package.memories, memoryManager: manager)
             summary.importedMemories = result.imported
             summary.skippedMemories = result.skipped
-
-            // 合并用户画像：双端均有更新时拼接并标记 LLM 去重
-            if let incoming = package.conversationUserProfile {
-                mergeConversationUserProfile(incoming)
-            }
         }
 
         if package.options.contains(.mcpServers) {
@@ -344,48 +336,11 @@ extension SyncEngine {
             summary.skippedAppStorageValues = result.skipped
             if result.imported > 0 {
                 Task { @MainActor in
-                    AppConfigStore.shared.reloadAll()
-                    AchievementCenter.shared.refreshFromStorage()
                     ChatAppearanceProfileManager.shared.reloadFromStorage()
                 }
             }
         }
 
         return summary
-    }
-
-    // MARK: - 用户画像合并
-
-    /// 将远端用户画像与本地合并：双端均有内容时拼接并标记 LLM 去重
-    private static func mergeConversationUserProfile(_ incoming: ConversationUserProfile) {
-        let local = ConversationMemoryManager.loadUserProfile()
-
-        let separator = "\n\n---\n\n"
-        let mergedContent: String
-        let mergedUpdatedAt: Date
-        let needsDedup: Bool
-
-        if let local {
-            if local.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                == incoming.content.trimmingCharacters(in: .whitespacesAndNewlines) {
-                // 内容相同，无需合并
-                return
-            }
-            // 双端内容不同，拼接并标记去重
-            mergedContent = local.content + separator + incoming.content
-            mergedUpdatedAt = max(local.updatedAt, incoming.updatedAt)
-            needsDedup = true
-        } else {
-            // 本地无画像，直接采用远端
-            mergedContent = incoming.content
-            mergedUpdatedAt = incoming.updatedAt
-            needsDedup = incoming.needsLlmDedup
-        }
-
-        try? ConversationMemoryManager.saveUserProfile(
-            content: mergedContent,
-            updatedAt: mergedUpdatedAt,
-            needsLlmDedup: needsDedup
-        )
     }
 }

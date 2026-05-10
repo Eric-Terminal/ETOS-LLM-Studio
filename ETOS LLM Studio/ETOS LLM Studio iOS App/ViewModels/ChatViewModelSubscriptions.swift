@@ -137,58 +137,6 @@ extension ChatViewModel {
     }
 
     func setupSubscriptions() {
-        // 将 AppConfigStore 的变更转发给 VM，保持 SwiftUI 视图更新
-        AppConfigStore.shared.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.objectWillChange.send() }
-            .store(in: &cancellables)
-
-        // enableAutoReasoningPreview 关闭时清空预览集合
-        AppConfigStore.shared.$enableAutoReasoningPreview
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] newValue in
-                guard let self, !newValue else { return }
-                autoReasoningPreviewMessageIDs.removeAll()
-                userControlledReasoningPreviewMessageIDs.removeAll()
-            }
-            .store(in: &cancellables)
-
-        // 背景相关属性变更时刷新模糊背景缓存
-        AppConfigStore.shared.$enableBackground
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refreshBlurredBackgroundImage() }
-            .store(in: &cancellables)
-
-        AppConfigStore.shared.$backgroundBlur
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refreshBlurredBackgroundImage() }
-            .store(in: &cancellables)
-
-        AppConfigStore.shared.$currentBackgroundImage
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refreshBlurredBackgroundImage() }
-            .store(in: &cancellables)
-
-        // enableBackgroundReplyNotification：强制保持 true，并申请权限
-        AppConfigStore.shared.$enableBackgroundReplyNotification
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] newValue in
-                guard let self else { return }
-#if canImport(UserNotifications)
-                guard newValue else {
-                    AppConfigStore.shared.enableBackgroundReplyNotification = true
-                    return
-                }
-                Task { _ = await self.requestBackgroundReplyNotificationAuthorizationIfNeeded() }
-#endif
-            }
-            .store(in: &cancellables)
-
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] sessions in

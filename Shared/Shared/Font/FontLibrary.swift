@@ -578,15 +578,15 @@ public enum FontLibrary {
     }
 
     private static func loadFontSettingsFromUserDefaults() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope, customFontScale: Double) {
-        let customEnabled = AppConfigStore.readBoolNonisolated(.customFontEnabled, default: true)
+        let customEnabled = (UserDefaults.standard.object(forKey: customFontEnabledStorageKey) as? Bool) ?? true
         let scope: FontFallbackScope
-        let rawScopeValue = AppConfigStore.readStringNonisolated(.fontFallbackScope, default: "segment")
-        if let parsedScope = FontFallbackScope(rawValue: rawScopeValue) {
+        if let rawValue = UserDefaults.standard.string(forKey: fallbackScopeStorageKey),
+           let parsedScope = FontFallbackScope(rawValue: rawValue) {
             scope = parsedScope
         } else {
             scope = .segment
         }
-        let scale = normalizedFontScale(AppConfigStore.readRealNonisolated(.fontScale, default: 1.0))
+        let scale = normalizedFontScale((UserDefaults.standard.object(forKey: fontScaleStorageKey) as? Double) ?? defaultFontScale)
         return (customEnabled, scope, scale)
     }
 

@@ -28,7 +28,7 @@ struct ProviderDetailView: View {
     @State private var searchText = ""
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("providerDetail.groupByMainstream") private var groupByFamilySection = true
 
     init(
         provider: Provider,
@@ -74,8 +74,8 @@ struct ProviderDetailView: View {
             }
 
             Section(NSLocalizedString("列表设置", comment: "")) {
-                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $appConfig.providerDetailGroupByMainstream)
-                if appConfig.providerDetailGroupByMainstream {
+                Toggle(NSLocalizedString("按模型家族分组", comment: ""), isOn: $groupByFamilySection)
+                if groupByFamilySection {
                     Text(NSLocalizedString("将按模型家族拆分显示。", comment: ""))
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
@@ -85,7 +85,7 @@ struct ProviderDetailView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            if appConfig.providerDetailGroupByMainstream {
+            if groupByFamilySection {
                 let activeSections = sections(forActive: true)
                 let inactiveSections = sections(forActive: false)
 
@@ -117,7 +117,7 @@ struct ProviderDetailView: View {
                 )
             }
         }
-        .id(appConfig.providerDetailGroupByMainstream ? "family-grouped" : "flat-grouped")
+        .id(groupByFamilySection ? "family-grouped" : "flat-grouped")
         .overlay {
             if isShowingFetchProgress {
                 ProgressView(NSLocalizedString("正在获取...", comment: ""))
@@ -248,7 +248,7 @@ struct ProviderDetailView: View {
         let indices = filteredIndices(forActive: isActive)
         let sectionPrefix = isActive ? NSLocalizedString("已添加", comment: "") : NSLocalizedString("未添加", comment: "")
 
-        guard appConfig.providerDetailGroupByMainstream else {
+        guard groupByFamilySection else {
             return [ModelListSection(title: sectionPrefix, indices: indices, isActive: isActive)]
         }
 

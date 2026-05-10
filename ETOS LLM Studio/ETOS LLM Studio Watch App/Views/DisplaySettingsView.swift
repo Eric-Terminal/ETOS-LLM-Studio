@@ -27,9 +27,9 @@ struct DisplaySettingsView: View {
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
 
-    
-    
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
+    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
     
     // MARK: - 属性
@@ -123,7 +123,7 @@ struct DisplaySettingsView: View {
             normalizeBackgroundOpacityIfNeeded()
             disableColorfulSettingsIconsIfNeeded()
         }
-        .onChange(of: appConfig.chatNavigationMode) { _, _ in
+        .onChange(of: chatNavigationModeRawValue) { _, _ in
             disableColorfulSettingsIconsIfNeeded()
         }
     }
@@ -140,25 +140,25 @@ struct DisplaySettingsView: View {
 
     private var chatNavigationModeBinding: Binding<ChatNavigationMode> {
         Binding(
-            get: { ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) },
-            set: { appConfig.chatNavigationMode = $0.rawValue }
+            get: { ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) },
+            set: { chatNavigationModeRawValue = $0.rawValue }
         )
     }
 
     private var canUseColorfulSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
     }
 
     private var colorfulSettingsIconsBinding: Binding<Bool> {
         Binding(
-            get: { canUseColorfulSettingsIcons && appConfig.settingsUseColorfulIcons },
-            set: { appConfig.settingsUseColorfulIcons = canUseColorfulSettingsIcons && $0 }
+            get: { canUseColorfulSettingsIcons && useColorfulSettingsIcons },
+            set: { useColorfulSettingsIcons = canUseColorfulSettingsIcons && $0 }
         )
     }
 
     private func disableColorfulSettingsIconsIfNeeded() {
         if !canUseColorfulSettingsIcons {
-            appConfig.settingsUseColorfulIcons = false
+            useColorfulSettingsIcons = false
         }
     }
 
@@ -170,9 +170,9 @@ struct DisplaySettingsView: View {
 
     private var appLanguageBinding: Binding<String> {
         Binding(
-            get: { appConfig.appLanguage },
+            get: { appLanguageRawValue },
             set: { newValue in
-                appConfig.appLanguage = newValue
+                appLanguageRawValue = newValue
                 AppLanguageRuntime.apply(rawValue: newValue)
             }
         )

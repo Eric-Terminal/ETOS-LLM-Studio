@@ -75,39 +75,6 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedFileURL == fileURL)
     }
 
-    @Test("快照上传会使用二进制内容类型与备份文件名")
-    func testUploadBackupFileSuccess() async throws {
-        let endpoint = try #require(URL(string: "https://example.com/backup"))
-        let fileURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ETOS-Backup-\(UUID().uuidString).elsbackup")
-        try Data([0x45, 0x4c, 0x53, 0x31]).write(to: fileURL)
-        defer { try? FileManager.default.removeItem(at: fileURL) }
-
-        var capturedRequest: URLRequest?
-        var capturedFileURL: URL?
-
-        let result = try await SyncPackageUploadService.uploadBackup(
-            backupFileURL: fileURL,
-            to: endpoint,
-            transport: { request, bodyFileURL in
-                capturedRequest = request
-                capturedFileURL = bodyFileURL
-                let response = try #require(
-                    HTTPURLResponse(url: endpoint, statusCode: 202, httpVersion: nil, headerFields: nil)
-                )
-                return (Data("accepted".utf8), response)
-            }
-        )
-
-        #expect(result.statusCode == 202)
-        #expect(result.responseBodyPreview == "accepted")
-        #expect(capturedRequest?.httpBody == nil)
-        #expect(capturedRequest?.httpMethod == "POST")
-        #expect(capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
-        #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-FileName") == fileURL.lastPathComponent)
-        #expect(capturedFileURL == fileURL)
-    }
-
     @Test("非 2xx 响应会抛出状态码错误")
     func testUploadThrowsForUnexpectedStatusCode() async throws {
         let endpoint = try #require(URL(string: "https://example.com/backup"))

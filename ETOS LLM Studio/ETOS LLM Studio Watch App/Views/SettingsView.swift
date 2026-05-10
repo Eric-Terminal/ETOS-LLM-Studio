@@ -49,8 +49,8 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
-    
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage(ChatNavigationMode.storageKey) private var chatNavigationModeRawValue: String = ChatNavigationMode.defaultMode.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = false
     @State private var settingsResearchTask: Task<Void, Never>?
     private let embedsInNavigationStack: Bool
 
@@ -239,10 +239,6 @@ struct SettingsView: View {
                     NavigationLink(destination: DeviceSyncSettingsView()) {
                         settingsNavigationLabel("同步与备份", icon: .sync)
                     }
-
-                    NavigationLink(destination: WatchAppLockSettingsView()) {
-                        settingsNavigationLabel("应用锁", icon: .appLock)
-                    }
                     
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
@@ -297,8 +293,8 @@ struct SettingsView: View {
     // MARK: - 辅助方法
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
-            && appConfig.settingsUseColorfulIcons
+        ChatNavigationMode.resolvedMode(rawValue: chatNavigationModeRawValue) == .nativeNavigation
+            && useColorfulSettingsIcons
     }
 
     @ViewBuilder
@@ -482,7 +478,6 @@ extension SettingsListIcon {
     )
     static let conversationMemory = SettingsListIcon(systemName: "person", backgroundColor: .mint, legacySystemName: "person.text.rectangle")
     static let memoryLibrary = SettingsListIcon(systemName: "folder", backgroundColor: .orange, legacySystemName: "folder.badge.gearshape")
-    static let appLock = SettingsListIcon(systemName: "lock", backgroundColor: .red)
 }
 
 struct SettingsListIconLabel: View {

@@ -129,7 +129,7 @@ public enum AppLanguagePreference: String, CaseIterable, Identifiable {
     }
 
     public static var storedPreference: AppLanguagePreference {
-        let rawValue = AppConfigStore.readStringNonisolated(.appLanguage, default: defaultLanguage.rawValue)
+        let rawValue = UserDefaults.standard.string(forKey: storageKey) ?? defaultLanguage.rawValue
         return resolved(rawValue: rawValue)
     }
 }

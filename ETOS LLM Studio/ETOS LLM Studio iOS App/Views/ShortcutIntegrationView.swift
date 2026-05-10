@@ -14,9 +14,9 @@ struct ShortcutIntegrationView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var manager = ShortcutToolManager.shared
     @StateObject private var toolPermissionCenter = ToolPermissionCenter.shared
-    @State private var localError: String? = nil
+    @State private var localError: String?
     @State private var isShowingIntroDetails = false
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("shortcut.bridgeShortcutName") private var bridgeShortcutName: String = "ETOS Shortcut Bridge"
 
     var body: some View {
         List {
@@ -193,7 +193,7 @@ struct ShortcutIntegrationView: View {
                     }
                 }
 
-                TextField(NSLocalizedString("桥接快捷指令名称", comment: ""), text: $appConfig.shortcutBridgeShortcutName)
+                TextField(NSLocalizedString("桥接快捷指令名称", comment: ""), text: $bridgeShortcutName)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 

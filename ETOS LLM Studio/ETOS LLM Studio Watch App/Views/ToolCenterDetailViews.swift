@@ -161,7 +161,10 @@ struct WatchBuiltInToolDetailView: View {
     let currentSessionIsolationActive: Bool
 
     @ObservedObject private var appToolManager = AppToolManager.shared
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("enableMemory") private var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
+    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
 
     private var numberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -172,10 +175,10 @@ struct WatchBuiltInToolDetailView: View {
 
     private var state: ToolCatalogBuiltInToolState {
         ToolCatalogSupport.builtInToolStates(
-            enableMemory: appConfig.enableMemory,
-            enableMemoryWrite: appConfig.enableMemoryWrite,
-            enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
-            memoryTopK: appConfig.memoryTopK,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            memoryTopK: memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
@@ -208,31 +211,31 @@ struct WatchBuiltInToolDetailView: View {
                 Section(NSLocalizedString("启用状态", comment: "Enable status")) {
                     Toggle(
                         NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                        isOn: $appConfig.enableMemory
+                        isOn: $enableMemory
                     )
                     Toggle(
                         NSLocalizedString("允许写入新的记忆", comment: "Allow memory writing"),
-                        isOn: $appConfig.enableMemoryWrite
+                        isOn: $enableMemoryWrite
                     )
-                    .disabled(!appConfig.enableMemory)
+                    .disabled(!enableMemory)
                 }
             case .memorySearch:
                 Section(NSLocalizedString("启用状态", comment: "Enable status")) {
                     Toggle(
                         NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                        isOn: $appConfig.enableMemory
+                        isOn: $enableMemory
                     )
                     Toggle(
                         NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
-                        isOn: $appConfig.enableMemoryActiveRetrieval
+                        isOn: $enableMemoryActiveRetrieval
                     )
-                    .disabled(!appConfig.enableMemory)
+                    .disabled(!enableMemory)
                     HStack {
                         Text(NSLocalizedString("Top K", comment: "Memory search top k label"))
                         Spacer()
                         TextField(
                             "0",
-                            value: $appConfig.memoryTopK,
+                            value: $memoryTopK,
                             formatter: numberFormatter
                         )
                         .multilineTextAlignment(.trailing)

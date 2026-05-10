@@ -277,13 +277,13 @@ extension ChatService {
         messagesToSend = filePreprocessing.messages
         fileAttachments = filePreprocessing.fileAttachments
 
-        let temperatureEnabled = AppConfigStore.readBoolNonisolated(.aiTemperatureEnabled, default: true)
-        let topPEnabled = AppConfigStore.readBoolNonisolated(.aiTopPEnabled, default: true)
+        let temperatureEnabled = UserDefaults.standard.object(forKey: "aiTemperatureEnabled") as? Bool ?? true
+        let topPEnabled = UserDefaults.standard.object(forKey: "aiTopPEnabled") as? Bool ?? true
         var commonPayload: [String: Any] = ["stream": enableStreaming]
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
         if adapter is OpenAIAdapter {
-            let includeUsageInStream = AppConfigStore.readBoolNonisolated(.enableOpenAIStreamIncludeUsage, default: true)
+            let includeUsageInStream = UserDefaults.standard.object(forKey: "enableOpenAIStreamIncludeUsage") as? Bool ?? true
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
         }
         let effectiveTools = runnableModel.model.supportsToolCalling ? tools : nil
@@ -524,10 +524,7 @@ extension ChatService {
     }
 
     func resolveSelectedOCRModel() -> RunnableModel? {
-        let identifier = AppConfigStore.readStringNonisolated(
-            .ocrModelIdentifier,
-            default: AppConfigKey.ocrModelIdentifier.defaultValue as? String ?? ""
-        )
+        let identifier = UserDefaults.standard.string(forKey: Self.ocrModelStorageKey) ?? ""
 #if canImport(Vision) && !os(watchOS)
         guard !identifier.isEmpty else {
             return Self.systemOCRRunnableModel

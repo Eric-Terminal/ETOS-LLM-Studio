@@ -17,10 +17,10 @@ struct ToolCenterView: View {
     @StateObject private var shortcutManager = ShortcutToolManager.shared
     @StateObject private var skillManager = SkillManager.shared
 
-    
-    
-    
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("enableMemory") private var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") private var enableMemoryWrite: Bool = true
+    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
+    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
 
     @State private var showEnabledOnly: Bool = false
     @State private var isShowingIntroDetails = false
@@ -31,10 +31,10 @@ struct ToolCenterView: View {
 
     private var builtInStates: [ToolCatalogBuiltInToolState] {
         ToolCatalogSupport.builtInToolStates(
-            enableMemory: appConfig.enableMemory,
-            enableMemoryWrite: appConfig.enableMemoryWrite,
-            enableMemoryActiveRetrieval: appConfig.enableMemoryActiveRetrieval,
-            memoryTopK: appConfig.memoryTopK,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            memoryTopK: memoryTopK,
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
@@ -260,7 +260,7 @@ struct ToolCenterView: View {
             ) {
                 Toggle(
                     NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                    isOn: $appConfig.enableMemory
+                    isOn: $enableMemory
                 )
 
                 ForEach(filteredBuiltInStates) { state in

@@ -12,12 +12,13 @@ import Shared
 
 struct MemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
-    @EnvironmentObject private var appConfig: AppConfigStore
     @State private var isAddingMemory = false
     @State private var isReembeddingMemories = false
     @State private var showReembedConfirmation = false
     @State private var reembedAlert: MemoryReembedAlert?
     @State private var editingMemory: MemoryItem?
+    @AppStorage("memoryTopK") private var memoryTopK: Int = 3
+    @AppStorage("enableMemoryActiveRetrieval") private var enableMemoryActiveRetrieval: Bool = false
     
     private var embeddingModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -110,18 +111,18 @@ struct MemorySettingsView: View {
 
             Section {
                 LabeledContent(NSLocalizedString("检索数量 (Top K)", comment: "")) {
-                    TextField(NSLocalizedString("0 表示关闭检索", comment: ""), value: $appConfig.memoryTopK, formatter: numberFormatter)
+                    TextField(NSLocalizedString("0 表示关闭检索", comment: ""), value: $memoryTopK, formatter: numberFormatter)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 80)
-                        .onChange(of: appConfig.memoryTopK) { _, newValue in
-                            appConfig.memoryTopK = max(0, newValue)
+                        .onChange(of: memoryTopK) { _, newValue in
+                            memoryTopK = max(0, newValue)
                         }
                 }
-                if appConfig.memoryTopK > 0 {
+                if memoryTopK > 0 {
                     Toggle(
                         NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
-                        isOn: $appConfig.enableMemoryActiveRetrieval
+                        isOn: $enableMemoryActiveRetrieval
                     )
                     Text(
                         NSLocalizedString(

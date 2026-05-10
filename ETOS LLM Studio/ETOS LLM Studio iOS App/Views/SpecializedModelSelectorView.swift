@@ -11,7 +11,7 @@ import Shared
 
 struct SpecializedModelSelectorView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("imageGenerationModelIdentifier") private var imageGenerationModelIdentifier: String = ""
 
     var body: some View {
         Form {
@@ -152,8 +152,8 @@ struct SpecializedModelSelectorView: View {
 
     private var imageGenerationModelIdentifierBinding: Binding<String> {
         Binding(
-            get: { appConfig.imageGenerationModelIdentifier },
-            set: { appConfig.imageGenerationModelIdentifier = $0 }
+            get: { imageGenerationModelIdentifier },
+            set: { imageGenerationModelIdentifier = $0 }
         )
     }
 
@@ -227,16 +227,16 @@ struct SpecializedModelSelectorView: View {
     private func syncImageGenerationSelection() {
         let options = viewModel.imageGenerationModelOptions
         guard !options.isEmpty else {
-            appConfig.imageGenerationModelIdentifier = ""
+            imageGenerationModelIdentifier = ""
             return
         }
 
-        if let matched = viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) {
-            appConfig.imageGenerationModelIdentifier = matched.id
+        if let matched = viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) {
+            imageGenerationModelIdentifier = matched.id
             return
         }
 
-        appConfig.imageGenerationModelIdentifier = options[0].id
+        imageGenerationModelIdentifier = options[0].id
     }
 
     private func selectedModelLabel(

@@ -24,7 +24,9 @@ struct DisplaySettingsView: View {
     @Binding var enableAutoReasoningPreview: Bool
     @Binding var enableNoBubbleUI: Bool
 
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage(ChatPickerPresentationStyle.storageKey) private var chatPickerPresentationStyleRawValue: String = ChatPickerPresentationStyle.defaultStyle.rawValue
+    @AppStorage(SettingsIconAppearancePreference.storageKey) private var useColorfulSettingsIcons: Bool = true
+    @AppStorage(AppLanguagePreference.storageKey) private var appLanguageRawValue: String = AppLanguagePreference.defaultLanguage.rawValue
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
 
     let allBackgrounds: [String]
@@ -140,7 +142,7 @@ struct DisplaySettingsView: View {
                                 .tag(language.rawValue)
                         }
                     }
-                    Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $appConfig.settingsUseColorfulIcons)
+                    Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $useColorfulSettingsIcons)
                 } header: {
                     Text(NSLocalizedString("全局外观", comment: ""))
                 } footer: {
@@ -156,9 +158,9 @@ struct DisplaySettingsView: View {
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
         .onAppear {
             // 迁移：将旧版「悬浮面板」默认值更新为「底部抽屉」
-            if ChatPickerPresentationStyle.resolvedStyle(rawValue: appConfig.chatPickerPresentationStyle) == .legacyOverlay,
+            if ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue) == .legacyOverlay,
                !UserDefaults.standard.bool(forKey: "chatPickerStyleMigratedToBottomSheet") {
-                appConfig.chatPickerPresentationStyle = ChatPickerPresentationStyle.bottomSheet.rawValue
+                chatPickerPresentationStyleRawValue = ChatPickerPresentationStyle.bottomSheet.rawValue
                 UserDefaults.standard.set(true, forKey: "chatPickerStyleMigratedToBottomSheet")
             }
         }
@@ -166,16 +168,16 @@ struct DisplaySettingsView: View {
 
     private var chatPickerPresentationStyleBinding: Binding<ChatPickerPresentationStyle> {
         Binding(
-            get: { ChatPickerPresentationStyle.resolvedStyle(rawValue: appConfig.chatPickerPresentationStyle) },
-            set: { appConfig.chatPickerPresentationStyle = $0.rawValue }
+            get: { ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue) },
+            set: { chatPickerPresentationStyleRawValue = $0.rawValue }
         )
     }
 
     private var appLanguageBinding: Binding<String> {
         Binding(
-            get: { appConfig.appLanguage },
+            get: { appLanguageRawValue },
             set: { newValue in
-                appConfig.appLanguage = newValue
+                appLanguageRawValue = newValue
                 AppLanguageRuntime.apply(rawValue: newValue)
             }
         )

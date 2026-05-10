@@ -20,7 +20,8 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableMathRendering: Bool
     let customTextColor: Color?
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage(FontLibrary.customFontEnabledStorageKey) private var isCustomFontEnabled: Bool = true
+    @AppStorage(FontLibrary.fontScaleStorageKey) private var customFontScale: Double = FontLibrary.defaultFontScale
 
     private var effectivePreparedContent: ETPreparedMarkdownRenderPayload? {
         guard let preparedContent, preparedContent.sourceText == content else {
@@ -31,7 +32,7 @@ struct ETAdvancedMarkdownRenderer: View {
 
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
-        let fontScale = FontLibrary.effectiveFontScale(appConfig.fontScale, isCustomFontEnabled: appConfig.customFontEnabled)
+        let fontScale = FontLibrary.effectiveFontScale(customFontScale, isCustomFontEnabled: isCustomFontEnabled)
         if enableMarkdown {
             if let prepared = effectivePreparedContent {
                 if shouldUseWebRenderer(prepared) {

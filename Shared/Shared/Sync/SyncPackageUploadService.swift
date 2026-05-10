@@ -109,44 +109,6 @@ public enum SyncPackageUploadService {
         )
     }
 
-    /// 上传加密快照文件（.elsbackup），使用流式文件传输避免占用过多内存。
-    /// - Parameters:
-    ///   - backupFileURL: .elsbackup 文件 URL（明文 ZIP 或加密 ZIP 均可）
-    ///   - endpoint: 上传目标 URL（R2 / 自有服务器等）
-    ///   - timeout: 超时时间（默认 60 秒，快照文件通常比 JSON 包大）
-    ///   - transport: 可选自定义传输层，主要用于单元测试
-    public static func uploadBackup(
-        backupFileURL: URL,
-        to endpoint: URL,
-        timeout: TimeInterval = 60,
-        transport: FileTransport? = nil
-    ) async throws -> SyncPackageUploadResult {
-        let request = makeBackupUploadRequest(
-            fileName: backupFileURL.lastPathComponent,
-            endpoint: endpoint,
-            timeout: timeout
-        )
-
-        let sender = transport ?? { request, fileURL in
-            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
-        }
-        let (responseData, response) = try await sender(request, backupFileURL)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw SyncPackageUploadError.invalidHTTPResponse
-        }
-
-        let preview = responsePreview(from: responseData)
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
-        }
-
-        return SyncPackageUploadResult(
-            statusCode: httpResponse.statusCode,
-            responseBodyPreview: preview
-        )
-    }
-
     /// 从同步包导出后直接上传。
     public static func upload(
         package: SyncPackage,
@@ -189,20 +151,6 @@ private extension SyncPackageUploadService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(suggestedFileName, forHTTPHeaderField: "X-ETOS-Backup-FileName")
         request.setValue("\(SyncPackageTransferService.currentSchemaVersion)", forHTTPHeaderField: "X-ETOS-Backup-Schema")
-        return request
-    }
-
-    /// 构造 .elsbackup 上传请求（二进制流，Content-Type: application/octet-stream）。
-    static func makeBackupUploadRequest(
-        fileName: String,
-        endpoint: URL,
-        timeout: TimeInterval
-    ) -> URLRequest {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = timeout
-        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        request.setValue(fileName, forHTTPHeaderField: "X-ETOS-Backup-FileName")
         return request
     }
 

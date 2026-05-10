@@ -124,9 +124,6 @@ extension SyncEngine {
                         merged[existingIndex] = conservative.model
                         changed = true
                     }
-                case .forked:
-                    // Model 不会产生分叉，视为无变化
-                    break
                 }
                 continue
             }
@@ -383,9 +380,6 @@ extension SyncEngine {
                     changed = true
                 case .conflict:
                     return nil
-                case .forked:
-                    // Model 不会产生分叉，视为无变化
-                    break
                 }
                 continue
             }

@@ -232,7 +232,7 @@ public struct ChatTranscriptExportService {
     private func appendPromptLinesIfNeeded(for session: ChatSession?, markdownLines lines: inout [String]) {
         guard let session else { return }
 
-        let globalPrompt = AppConfigStore.readStringNonisolated(.systemPrompt)
+        let globalPrompt = UserDefaults.standard.string(forKey: "systemPrompt")
         let topicPrompt = trimmedOrNil(session.topicPrompt)
         let enhancedPrompt = trimmedOrNil(session.enhancedPrompt)
 
@@ -265,7 +265,7 @@ public struct ChatTranscriptExportService {
     private func appendPromptLinesIfNeeded(for session: ChatSession?, plainLines lines: inout [String]) {
         guard let session else { return }
 
-        let globalPrompt = AppConfigStore.readStringNonisolated(.systemPrompt)
+        let globalPrompt = UserDefaults.standard.string(forKey: "systemPrompt")
         let topicPrompt = trimmedOrNil(session.topicPrompt)
         let enhancedPrompt = trimmedOrNil(session.enhancedPrompt)
 

@@ -1469,7 +1469,6 @@
 "优先级说明" = "Priority Notes";
 "会优先参考最近聊天、记忆系统、请求日志、反馈历史、明日策展与当前关注焦点，并可选结合外部上下文生成约 3 张卡片。" = "Uses recent chats, memory, request logs, feedback history, tomorrow curation, and current focus first, and can optionally include external context to generate about 3 cards.";
 "会向输入地址发送 POST(JSON)，请确认地址可信。" = "Sends POST (JSON) to the entered address. Make sure it is trusted.";
-"会生成 .elsbackup 快照并以二进制 POST 上传，请确认地址可信。" = ".elsbackup スナップショットを生成し、バイナリ POST としてアップロードします。送信先が信頼できることを確認してください。";
 "会话 %d/%d" = "Sessions %d/%d";
 "会话列表操作" = "Session List Actions";
 "会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。" = "Conversation summaries are saved in session JSON, and the user profile is saved in Memory/user_profile.json.";
@@ -2133,29 +2132,3 @@
 
 "OpenAI Responses" = "OpenAI Responses";
 "API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。" = "API のベースURL例: https://api.openai.com/v1。チャットリクエストには Responses API を使用します。";
-
-// MARK: - アプリロック
-"应用锁" = "アプリロック";
-"关闭应用锁" = "アプリロックを無効化";
-"修改密码" = "パスワードを変更";
-"设置密码" = "パスワードを設定";
-"应用锁已开启" = "アプリロック有効";
-"设置密码后启用锁定" = "パスワードを設定してロックを有効化";
-"锁定延迟" = "ロック遅延";
-"延迟" = "遅延";
-"立即" = "即時";
-"1 分钟" = "1分";
-"5 分钟" = "5分";
-"15 分钟" = "15分";
-"30 分钟" = "30分";
-"生物识别解锁" = "生体認証で解除";
-"开启后优先使用腕部检测/密码双重验证" = "有効時は手首検出/パスワードを優先使用";
-"新密码" = "新しいパスワード";
-"确认密码" = "パスワードを確認";
-"当前密码" = "現在のパスワード";
-"两次输入的密码不一致。" = "パスワードが一致しません。";
-"解锁" = "ロック解除";
-"使用生物识别解锁" = "生体認証で解除";
-"密码已更新。" = "パスワードを更新しました。";
-"密码已设置，应用锁已开启。" = "パスワードを設定しました。アプリロックが有効です。";
-"应用锁已关闭。" = "アプリロックを無効にしました。";

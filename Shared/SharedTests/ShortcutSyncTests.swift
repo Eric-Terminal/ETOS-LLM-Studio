@@ -70,6 +70,8 @@ struct ShortcutSyncTests {
         }
         defaults.set(promptEntriesData, forKey: GlobalSystemPromptStore.entriesStorageKey)
         defaults.set("11111111-1111-1111-1111-111111111111", forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
+        defaults.set(true, forKey: "enableMarkdown")
+        defaults.set(false, forKey: "enableExperimentalToolResultDisplay")
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
 
         #expect(package.globalSystemPrompt == "请使用二次元插画风格")
@@ -82,8 +84,8 @@ struct ShortcutSyncTests {
         #expect(snapshot["systemPrompt"] as? String == "请使用二次元插画风格")
         #expect(snapshot[GlobalSystemPromptStore.entriesStorageKey] as? Data == promptEntriesData)
         #expect(snapshot[GlobalSystemPromptStore.selectedEntryIDStorageKey] as? String == "11111111-1111-1111-1111-111111111111")
-        #expect(snapshot[AppConfigKey.enableMarkdown.rawValue] != nil)
-        #expect(snapshot[AppConfigKey.enableExperimentalToolResultDisplay.rawValue] != nil)
+        #expect((snapshot["enableMarkdown"] as? NSNumber)?.boolValue == true)
+        #expect((snapshot["enableExperimentalToolResultDisplay"] as? NSNumber)?.boolValue == false)
     }
 
     @Test("appStorage snapshot is merged into local defaults")
@@ -99,17 +101,7 @@ struct ShortcutSyncTests {
         }
 
         defaults.set("旧提示词", forKey: "systemPrompt")
-        let previousStreaming = Persistence.readAppConfigInteger(key: AppConfigKey.enableStreaming.rawValue)
-        let previousMaxHistory = Persistence.readAppConfigInteger(key: AppConfigKey.maxChatHistory.rawValue)
-        let previousToolDisplay = Persistence.readAppConfigInteger(key: AppConfigKey.enableExperimentalToolResultDisplay.rawValue)
-        defer {
-            restoreAppConfigInteger(previousStreaming, for: .enableStreaming)
-            restoreAppConfigInteger(previousMaxHistory, for: .maxChatHistory)
-            restoreAppConfigInteger(previousToolDisplay, for: .enableExperimentalToolResultDisplay)
-        }
-        Persistence.deleteAppConfig(key: AppConfigKey.enableStreaming.rawValue)
-        Persistence.deleteAppConfig(key: AppConfigKey.maxChatHistory.rawValue)
-        Persistence.deleteAppConfig(key: AppConfigKey.enableExperimentalToolResultDisplay.rawValue)
+        defaults.set(false, forKey: "enableStreaming")
 
         let incomingEntries = [
             GlobalSystemPromptEntry(
@@ -139,9 +131,9 @@ struct ShortcutSyncTests {
 
         let summary = await SyncEngine.apply(package: package, userDefaults: defaults)
         #expect(defaults.string(forKey: "systemPrompt") == "请优先输出 Swift 代码")
-        #expect(Persistence.readAppConfigInteger(key: AppConfigKey.enableStreaming.rawValue) == 1)
-        #expect(Persistence.readAppConfigInteger(key: AppConfigKey.maxChatHistory.rawValue) == 256)
-        #expect(Persistence.readAppConfigInteger(key: AppConfigKey.enableExperimentalToolResultDisplay.rawValue) == 0)
+        #expect(defaults.bool(forKey: "enableStreaming") == true)
+        #expect(defaults.integer(forKey: "maxChatHistory") == 256)
+        #expect(defaults.bool(forKey: "enableExperimentalToolResultDisplay") == false)
         #expect(defaults.data(forKey: GlobalSystemPromptStore.entriesStorageKey) == incomingEntriesData)
         #expect(defaults.string(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) == "22222222-2222-2222-2222-222222222222")
         #expect(summary.importedAppStorageValues == 6)
@@ -192,14 +184,6 @@ struct ShortcutSyncTests {
         } catch {
             Issue.record("解码 appStorageSnapshot 失败：\(error.localizedDescription)")
             return [:]
-        }
-    }
-
-    private func restoreAppConfigInteger(_ value: Int?, for key: AppConfigKey) {
-        if let value {
-            Persistence.writeAppConfig(key: key.rawValue, integer: value)
-        } else {
-            Persistence.deleteAppConfig(key: key.rawValue)
         }
     }
 }

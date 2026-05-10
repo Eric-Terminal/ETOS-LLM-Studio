@@ -29,7 +29,26 @@ private struct DeviceSyncActivityShareSheet: UIViewControllerRepresentable {
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
     @EnvironmentObject private var cloudSyncManager: CloudSyncManager
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("sync.options.providers") private var syncProviders = true
+    @AppStorage("sync.options.sessions") private var syncSessions = true
+    @AppStorage("sync.options.backgrounds") private var syncBackgrounds = true
+    @AppStorage("sync.options.memories") private var syncMemories = false
+    @AppStorage("sync.options.mcpServers") private var syncMCPServers = true
+    @AppStorage("sync.options.imageFiles") private var syncImageFiles = true
+    @AppStorage("sync.options.skills") private var syncSkills = true
+    @AppStorage("sync.options.shortcutTools") private var syncShortcutTools = true
+    @AppStorage("sync.options.worldbooks") private var syncWorldbooks = true
+    @AppStorage("sync.options.feedbackTickets") private var syncFeedbackTickets = true
+    @AppStorage("sync.options.dailyPulse") private var syncDailyPulse = true
+    @AppStorage("sync.options.usageStats") private var syncUsageStats = true
+    @AppStorage("sync.options.fontFiles") private var syncFontFiles = true
+    @AppStorage("sync.options.appStorage") private var syncAppStorage = true
+    @AppStorage("sync.options.globalPrompt") private var legacySyncGlobalPrompt = true
+    @AppStorage("sync.backup.uploadEndpoint") private var backupUploadEndpoint = ""
+    @AppStorage(Persistence.launchBackupEnabledKey) private var launchBackupEnabled = false
+    @AppStorage(WatchSyncManager.autoSyncEnabledKey) private var autoSyncEnabled = false
+    @AppStorage(CloudSyncManager.enabledKey) private var cloudSyncEnabled = false
+    @AppStorage(CloudSyncManager.autoSyncEnabledKey) private var cloudAutoSyncEnabled = false
     @State private var exportSharePayload: DeviceSyncExportSharePayload?
     @State private var exportErrorMessage: String?
     @State private var isExporting: Bool = false
@@ -41,20 +60,20 @@ struct DeviceSyncSettingsView: View {
     var body: some View {
         List {
             Section(NSLocalizedString("同步内容", comment: "")) {
-                Toggle(NSLocalizedString("提供商配置", comment: ""), isOn: $appConfig.syncProviders)
-                Toggle(NSLocalizedString("会话记录", comment: ""), isOn: $appConfig.syncSessions)
-                Toggle(NSLocalizedString("背景图片", comment: ""), isOn: $appConfig.syncBackgrounds)
-                Toggle(NSLocalizedString("记忆（仅合并文本）", comment: ""), isOn: $appConfig.syncMemories)
-                Toggle(NSLocalizedString("MCP 服务器", comment: ""), isOn: $appConfig.syncMCPServers)
-                Toggle(NSLocalizedString("图片文件", comment: ""), isOn: $appConfig.syncImageFiles)
-                Toggle("Agent Skills", isOn: $appConfig.syncSkills)
-                Toggle(NSLocalizedString("快捷指令工具", comment: ""), isOn: $appConfig.syncShortcutTools)
-                Toggle(NSLocalizedString("世界书", comment: ""), isOn: $appConfig.syncWorldbooks)
-                Toggle(NSLocalizedString("反馈工单", comment: ""), isOn: $appConfig.syncFeedbackTickets)
-                Toggle(NSLocalizedString("每日脉冲", comment: ""), isOn: $appConfig.syncDailyPulse)
-                Toggle(NSLocalizedString("用量统计", comment: ""), isOn: $appConfig.syncUsageStats)
-                Toggle(NSLocalizedString("字体文件与字体规则", comment: ""), isOn: $appConfig.syncFontFiles)
-                Toggle(NSLocalizedString("软件设置（AppStorage）", comment: ""), isOn: $appConfig.syncAppStorage)
+                Toggle(NSLocalizedString("提供商配置", comment: ""), isOn: $syncProviders)
+                Toggle(NSLocalizedString("会话记录", comment: ""), isOn: $syncSessions)
+                Toggle(NSLocalizedString("背景图片", comment: ""), isOn: $syncBackgrounds)
+                Toggle(NSLocalizedString("记忆（仅合并文本）", comment: ""), isOn: $syncMemories)
+                Toggle(NSLocalizedString("MCP 服务器", comment: ""), isOn: $syncMCPServers)
+                Toggle(NSLocalizedString("图片文件", comment: ""), isOn: $syncImageFiles)
+                Toggle("Agent Skills", isOn: $syncSkills)
+                Toggle(NSLocalizedString("快捷指令工具", comment: ""), isOn: $syncShortcutTools)
+                Toggle(NSLocalizedString("世界书", comment: ""), isOn: $syncWorldbooks)
+                Toggle(NSLocalizedString("反馈工单", comment: ""), isOn: $syncFeedbackTickets)
+                Toggle(NSLocalizedString("每日脉冲", comment: ""), isOn: $syncDailyPulse)
+                Toggle(NSLocalizedString("用量统计", comment: ""), isOn: $syncUsageStats)
+                Toggle(NSLocalizedString("字体文件与字体规则", comment: ""), isOn: $syncFontFiles)
+                Toggle(NSLocalizedString("软件设置（AppStorage）", comment: ""), isOn: $syncAppStorage)
             }
 
             Section {
@@ -80,7 +99,7 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section {
-                TextField("https://example.com/backup", text: $appConfig.syncBackupUploadEndpoint)
+                TextField("https://example.com/backup", text: $backupUploadEndpoint)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
@@ -99,7 +118,7 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(isUploading)
+                .disabled(selectedSyncOptions.isEmpty || isUploading)
 
                 if let uploadSuccessMessage, !uploadSuccessMessage.isEmpty {
                     Text(uploadSuccessMessage)
@@ -116,11 +135,11 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("上传备份（POST）", comment: ""))
             } footer: {
-                Text(NSLocalizedString("会生成 .elsbackup 快照并以二进制 POST 上传，上传前请确认地址可信。", comment: ""))
+                Text(NSLocalizedString("会向输入地址发送 POST(JSON) 请求，内容与导出包一致。上传前请确认地址可信。", comment: ""))
             }
 
             Section {
-                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
+                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $autoSyncEnabled)
 
                 Button {
                     syncManager.performSync(options: selectedSyncOptions)
@@ -148,10 +167,10 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
+                Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $cloudSyncEnabled)
 
-                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.cloudSyncAutoEnabled)
-                    .disabled(!appConfig.cloudSyncEnabled)
+                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $cloudAutoSyncEnabled)
+                    .disabled(!cloudSyncEnabled)
 
                 Button {
                     Task {
@@ -169,7 +188,7 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(!appConfig.cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
+                .disabled(!cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
             } header: {
                 Text(NSLocalizedString("iCloud 同步", comment: ""))
             } footer: {
@@ -181,7 +200,7 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $appConfig.syncBackupCreateOnLaunch)
+                Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $launchBackupEnabled)
             } header: {
                 Text(NSLocalizedString("启动保护备份", comment: ""))
             } footer: {
@@ -217,20 +236,20 @@ struct DeviceSyncSettingsView: View {
     
     private var selectedSyncOptions: SyncOptions {
         var option: SyncOptions = []
-        if appConfig.syncProviders { option.insert(.providers) }
-        if appConfig.syncSessions { option.insert(.sessions) }
-        if appConfig.syncBackgrounds { option.insert(.backgrounds) }
-        if appConfig.syncMemories { option.insert(.memories) }
-        if appConfig.syncMCPServers { option.insert(.mcpServers) }
-        if appConfig.syncImageFiles { option.insert(.imageFiles) }
-        if appConfig.syncSkills { option.insert(.skills) }
-        if appConfig.syncShortcutTools { option.insert(.shortcutTools) }
-        if appConfig.syncWorldbooks { option.insert(.worldbooks) }
-        if appConfig.syncFeedbackTickets { option.insert(.feedbackTickets) }
-        if appConfig.syncDailyPulse { option.insert(.dailyPulse) }
-        if appConfig.syncUsageStats { option.insert(.usageStats) }
-        if appConfig.syncFontFiles { option.insert(.fontFiles) }
-        if appConfig.syncAppStorage { option.insert(.appStorage) }
+        if syncProviders { option.insert(.providers) }
+        if syncSessions { option.insert(.sessions) }
+        if syncBackgrounds { option.insert(.backgrounds) }
+        if syncMemories { option.insert(.memories) }
+        if syncMCPServers { option.insert(.mcpServers) }
+        if syncImageFiles { option.insert(.imageFiles) }
+        if syncSkills { option.insert(.skills) }
+        if syncShortcutTools { option.insert(.shortcutTools) }
+        if syncWorldbooks { option.insert(.worldbooks) }
+        if syncFeedbackTickets { option.insert(.feedbackTickets) }
+        if syncDailyPulse { option.insert(.dailyPulse) }
+        if syncUsageStats { option.insert(.usageStats) }
+        if syncFontFiles { option.insert(.fontFiles) }
+        if syncAppStorage { option.insert(.appStorage) }
         return option
     }
     
@@ -288,7 +307,7 @@ struct DeviceSyncSettingsView: View {
 
     @ViewBuilder
     private var cloudSyncStatusView: some View {
-        if !appConfig.cloudSyncEnabled {
+        if !cloudSyncEnabled {
             Text(NSLocalizedString("iCloud 同步已关闭", comment: ""))
                 .etFont(.footnote)
                 .foregroundColor(.secondary)
@@ -418,7 +437,7 @@ struct DeviceSyncSettingsView: View {
     }
 
     private func uploadDataPackage() {
-        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = backupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             uploadErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
             return
@@ -435,6 +454,7 @@ struct DeviceSyncSettingsView: View {
         uploadSuccessMessage = nil
         uploadResponsePreview = nil
 
+        let syncOptionsRawValue = selectedSyncOptions.rawValue
         let endpointString = endpoint.absoluteString
         Task.detached(priority: .userInitiated) {
             do {
@@ -446,9 +466,9 @@ struct DeviceSyncSettingsView: View {
                     }
                     return
                 }
-                let backupURL = try SnapshotBuilder.buildSnapshot()
-                defer { try? FileManager.default.removeItem(at: backupURL) }
-                let result = try await SyncPackageUploadService.uploadBackup(backupFileURL: backupURL, to: endpoint)
+                let syncOptions = SyncOptions(rawValue: syncOptionsRawValue)
+                let package = SyncEngine.buildPackage(options: syncOptions)
+                let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
                 await MainActor.run {
                     isUploading = false
                     uploadSuccessMessage = String(format: NSLocalizedString("上传成功（HTTP %d）", comment: ""), result.statusCode)
@@ -465,11 +485,10 @@ struct DeviceSyncSettingsView: View {
 
     private func migrateLegacyAppStorageOptionIfNeeded() {
         let defaults = UserDefaults.standard
-        // 兼容旧版 sync.options.globalPrompt → sync.options.appStorage 的迁移
         guard defaults.object(forKey: "sync.options.appStorage") == nil,
-              let legacyValue = defaults.object(forKey: "sync.options.globalPrompt") as? Bool else {
+              defaults.object(forKey: "sync.options.globalPrompt") != nil else {
             return
         }
-        appConfig.syncAppStorage = legacyValue
+        syncAppStorage = legacySyncGlobalPrompt
     }
 }

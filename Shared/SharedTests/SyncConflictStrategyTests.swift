@@ -59,53 +59,6 @@ struct SyncConflictStrategyTests {
         #expect(mergedMessages[2].content == "继续")
     }
 
-    @Test("同一消息的不同重试版本会并集合并而不是创建分支")
-    func testSameMessageRetryVersionsMergeWithoutForkingSession() async {
-        let originalSessions = Persistence.loadChatSessions()
-        let originalSnapshots = originalSessions.map { session in
-            SyncedSession(session: session, messages: Persistence.loadMessages(for: session.id))
-        }
-        defer {
-            resetSessions(to: originalSnapshots)
-        }
-
-        resetSessions(to: [])
-        let chatService = ChatService()
-
-        let session = ChatSession(id: UUID(), name: "重试合并会话", isTemporary: false)
-        let userMessage = ChatMessage(id: UUID(), role: .user, content: "讲个短故事")
-        let assistantID = UUID()
-        var localAssistant = ChatMessage(id: assistantID, role: .assistant, content: "从前有座山。")
-        localAssistant.addVersion("本地重试版本。")
-        var incomingAssistant = ChatMessage(id: assistantID, role: .assistant, content: "从前有座山。")
-        incomingAssistant.addVersion("远端重试版本。")
-
-        Persistence.saveChatSessions([session])
-        Persistence.saveMessages([userMessage, localAssistant], for: session.id)
-        chatService.chatSessionsSubject.send([session])
-        chatService.currentSessionSubject.send(session)
-
-        let package = SyncPackage(
-            options: [.sessions],
-            sessions: [
-                SyncedSession(
-                    session: session,
-                    messages: [userMessage, incomingAssistant]
-                )
-            ]
-        )
-
-        let summary = await SyncEngine.apply(package: package, chatService: chatService)
-        let mergedSessions = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
-        let mergedMessages = Persistence.loadMessages(for: session.id)
-        let assistantVersions = mergedMessages.first { $0.id == assistantID }?.getAllVersions() ?? []
-
-        #expect(summary.importedSessions == 1)
-        #expect(mergedSessions.count == 1)
-        #expect(assistantVersions == ["从前有座山。", "本地重试版本。", "远端重试版本。"])
-        #expect(mergedMessages.first { $0.id == assistantID }?.content == "本地重试版本。")
-    }
-
     @Test("提供商新增嵌套键值时会深度合并")
     func testProvidersDeepMergeWhenIncomingAddsNestedValues() async {
         let originalProviders = ConfigLoader.loadProviders()
@@ -354,8 +307,7 @@ struct SyncConflictStrategyTests {
         let package = SyncEngine.buildPackage(options: [.appStorage], userDefaults: defaults)
         let snapshot = decodeAppStorageSnapshot(package.appStorageSnapshot)
 
-        #expect(snapshot[AppConfigKey.enableStreaming.rawValue] != nil)
-        #expect(snapshot["themeMode"] == nil)
+        #expect(snapshot["themeMode"] as? String == "dark")
         #expect(snapshot["cloudSync.deviceIdentifier"] == nil)
         #expect(snapshot["sync.delta.version-tracker.watch.connectivity"] == nil)
         #expect(snapshot["sync.delta.checkpoint.cloud.sync"] == nil)
@@ -371,22 +323,11 @@ struct SyncConflictStrategyTests {
         defaults.removePersistentDomain(forName: suite)
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        let configKey = AppConfigKey.shortcutBridgeShortcutName.rawValue
-        let previousValue = Persistence.readAppConfigText(key: configKey)
-        defer {
-            if let previousValue {
-                Persistence.writeAppConfig(key: configKey, text: previousValue)
-            } else {
-                Persistence.deleteAppConfig(key: configKey)
-            }
-        }
-
         defaults.set("dark", forKey: "themeMode")
         defaults.set("local-device", forKey: "cloudSync.deviceIdentifier")
         defaults.set(Data([0xAA]), forKey: "sync.delta.checkpoint.cloud.sync")
 
         let incoming: [String: Any] = [
-            configKey: "Remote Bridge",
             "themeMode": "light",
             "cloudSync.deviceIdentifier": "remote-device",
             "sync.delta.checkpoint.cloud.sync": Data([0xBB])
@@ -403,8 +344,7 @@ struct SyncConflictStrategyTests {
 
         _ = await SyncEngine.apply(package: package, userDefaults: defaults)
 
-        #expect(Persistence.readAppConfigText(key: configKey) == "Remote Bridge")
-        #expect(defaults.string(forKey: "themeMode") == "dark")
+        #expect(defaults.string(forKey: "themeMode") == "light")
         #expect(defaults.string(forKey: "cloudSync.deviceIdentifier") == "local-device")
         #expect(defaults.data(forKey: "sync.delta.checkpoint.cloud.sync") == Data([0xAA]))
     }

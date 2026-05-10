@@ -157,7 +157,6 @@ public final class CloudSyncManager: ObservableObject {
             }
             return
         }
-        activateCloudKitSubscriptionIfNeeded()
 
         guard !options.isEmpty else {
             if !silent {
@@ -213,37 +212,16 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performAutoSyncIfEnabled() {
-        Task { @MainActor in
-            _ = await performAutoSyncIfEnabledAsync()
-        }
-    }
-
-    @discardableResult
-    public func performAutoSyncIfEnabledAsync(delayNanoseconds: UInt64 = 2_000_000_000) async -> Bool {
-        guard isEnabled else { return false }
-        guard AppConfigStore.shared.cloudSyncAutoEnabled else { return false }
+        guard isEnabled else { return }
+        guard userDefaults.bool(forKey: Self.autoSyncEnabledKey) else { return }
 
         let options = buildSyncOptionsFromSettings()
-        guard !options.isEmpty else { return false }
+        guard !options.isEmpty else { return }
 
-        if delayNanoseconds > 0 {
-            try? await Task.sleep(nanoseconds: delayNanoseconds)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await performSync(options: options, silent: true)
         }
-        await performSync(options: options, silent: true)
-        return true
-    }
-
-    /// 激活 CloudKit zone 订阅（B2）：注册 APNs 静默推送，首次调用后幂等。
-    /// 应在应用启动且 CloudSync 已启用时调用。
-    public func activateCloudKitSubscriptionIfNeeded() {
-        guard isEnabled else { return }
-        #if canImport(CloudKit)
-        guard transport is CloudKitCloudSyncTransport else { return }
-        let transport = CloudKitCloudSyncTransport()
-        Task.detached(priority: .utility) {
-            await transport.subscribeToChanges()
-        }
-        #endif
     }
 
     private var currentDeviceIdentifier: String {
@@ -258,7 +236,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public var isEnabled: Bool {
-        AppConfigStore.shared.cloudSyncEnabled
+        userDefaults.bool(forKey: Self.enabledKey)
     }
 
     private func buildLocalSnapshot(
@@ -393,22 +371,27 @@ public final class CloudSyncManager: ObservableObject {
 
     private func buildSyncOptionsFromSettings() -> SyncOptions {
         var options: SyncOptions = []
-        let c = AppConfigStore.shared
-        if c.syncProviders         { options.insert(.providers) }
-        if c.syncSessions          { options.insert(.sessions) }
-        if c.syncBackgrounds       { options.insert(.backgrounds) }
-        if c.syncMemories          { options.insert(.memories) }
-        if c.syncMCPServers        { options.insert(.mcpServers) }
-        if c.syncImageFiles        { options.insert(.imageFiles) }
-        if c.syncSkills            { options.insert(.skills) }
-        if c.syncShortcutTools     { options.insert(.shortcutTools) }
-        if c.syncWorldbooks        { options.insert(.worldbooks) }
-        if c.syncFeedbackTickets   { options.insert(.feedbackTickets) }
-        if c.syncDailyPulse        { options.insert(.dailyPulse) }
-        if c.syncUsageStats        { options.insert(.usageStats) }
-        if c.syncFontFiles         { options.insert(.fontFiles) }
-        if c.syncAppStorage        { options.insert(.appStorage) }
+        if isSyncOptionEnabled(key: "sync.options.providers", defaultValue: true) { options.insert(.providers) }
+        if isSyncOptionEnabled(key: "sync.options.sessions", defaultValue: true) { options.insert(.sessions) }
+        if isSyncOptionEnabled(key: "sync.options.backgrounds", defaultValue: true) { options.insert(.backgrounds) }
+        if isSyncOptionEnabled(key: "sync.options.memories", defaultValue: false) { options.insert(.memories) }
+        if isSyncOptionEnabled(key: "sync.options.mcpServers", defaultValue: true) { options.insert(.mcpServers) }
+        if isSyncOptionEnabled(key: "sync.options.imageFiles", defaultValue: true) { options.insert(.imageFiles) }
+        if isSyncOptionEnabled(key: "sync.options.skills", defaultValue: true) { options.insert(.skills) }
+        if isSyncOptionEnabled(key: "sync.options.shortcutTools", defaultValue: true) { options.insert(.shortcutTools) }
+        if isSyncOptionEnabled(key: "sync.options.worldbooks", defaultValue: true) { options.insert(.worldbooks) }
+        if isSyncOptionEnabled(key: "sync.options.feedbackTickets", defaultValue: true) { options.insert(.feedbackTickets) }
+        if isSyncOptionEnabled(key: "sync.options.dailyPulse", defaultValue: true) { options.insert(.dailyPulse) }
+        if isSyncOptionEnabled(key: "sync.options.usageStats", defaultValue: true) { options.insert(.usageStats) }
+        if isSyncOptionEnabled(key: "sync.options.fontFiles", defaultValue: true) { options.insert(.fontFiles) }
+        let legacyAppStorageDefault = isSyncOptionEnabled(key: "sync.options.globalPrompt", defaultValue: true)
+        if isSyncOptionEnabled(key: "sync.options.appStorage", defaultValue: legacyAppStorageDefault) { options.insert(.appStorage) }
         return normalizedCloudOptions(from: options)
+    }
+
+    private func isSyncOptionEnabled(key: String, defaultValue: Bool) -> Bool {
+        guard userDefaults.object(forKey: key) != nil else { return defaultValue }
+        return userDefaults.bool(forKey: key)
     }
 
     private func normalizedCloudOptions(from options: SyncOptions) -> SyncOptions {

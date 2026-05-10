@@ -13,8 +13,6 @@ extension SyncEngine {
         case unchanged(Value)
         case merged(Value)
         case conflict
-        /// 真分叉：本地与远端均在 LCA 之后有新消息，远端克隆为独立分支
-        case forked(Value)
     }
 
     struct ProviderCompactionResult {
@@ -31,23 +29,6 @@ extension SyncEngine {
         ChatSession(
             id: UUID(),
             name: session.name,
-            topicPrompt: session.topicPrompt,
-            enhancedPrompt: session.enhancedPrompt,
-            lorebookIDs: session.lorebookIDs,
-            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
-            folderID: session.folderID,
-            isTemporary: false
-        )
-    }
-
-    /// 克隆远端分叉会话：分配新 UUID，名称追加「[同步分支]」标签
-    static func makeBranchSession(from session: ChatSession) -> ChatSession {
-        let branchSuffix = NSLocalizedString("[同步分支]", comment: "会话平行分支后缀标签")
-        let baseName = session.baseNameWithoutSyncSuffix
-        let branchedName = "\(baseName) \(branchSuffix)"
-        return ChatSession(
-            id: UUID(),
-            name: branchedName,
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,

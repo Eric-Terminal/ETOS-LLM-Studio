@@ -124,207 +124,115 @@ class ChatViewModel: ObservableObject {
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     @Published var mathRenderOverrides: Set<UUID> = []
     
-    // MARK: - 用户偏好设置（委托到 AppConfigStore，消除旧持久化属性包装器）
-
-    var enableMarkdown: Bool {
-        get { AppConfigStore.shared.enableMarkdown }
-        set { AppConfigStore.shared.enableMarkdown = newValue }
+    // MARK: - 用户偏好设置 (AppStorage)
+    
+    @AppStorage("enableMarkdown") var enableMarkdown: Bool = true
+    @AppStorage("enableAdvancedRenderer") var enableAdvancedRenderer: Bool = true {
+        didSet {
+            if !enableAdvancedRenderer {
+                mathRenderOverrides.removeAll()
+            }
+        }
     }
-    var enableAdvancedRenderer: Bool {
-        get { AppConfigStore.shared.enableAdvancedRenderer }
-        set { AppConfigStore.shared.enableAdvancedRenderer = newValue }
+    @AppStorage("enableExperimentalToolResultDisplay") var enableExperimentalToolResultDisplay: Bool = true
+    @AppStorage("enableAutoReasoningPreview") var enableAutoReasoningPreview: Bool = true {
+        didSet {
+            if !enableAutoReasoningPreview {
+                autoReasoningPreviewMessageIDs.removeAll()
+                userControlledReasoningPreviewMessageIDs.removeAll()
+            }
+        }
     }
-    var enableExperimentalToolResultDisplay: Bool {
-        get { AppConfigStore.shared.enableExperimentalToolResultDisplay }
-        set { AppConfigStore.shared.enableExperimentalToolResultDisplay = newValue }
+    @AppStorage("enableBackground") var enableBackground: Bool = true {
+        didSet { refreshBlurredBackgroundImage() }
     }
-    var enableAutoReasoningPreview: Bool {
-        get { AppConfigStore.shared.enableAutoReasoningPreview }
-        set { AppConfigStore.shared.enableAutoReasoningPreview = newValue }
+    @AppStorage("backgroundBlur") var backgroundBlur: Double = 10.0 {
+        didSet { refreshBlurredBackgroundImage() }
     }
-    var enableBackground: Bool {
-        get { AppConfigStore.shared.enableBackground }
-        set { AppConfigStore.shared.enableBackground = newValue }
+    @AppStorage("backgroundOpacity") var backgroundOpacity: Double = WatchBackgroundOpacitySetting.defaultValue {
+        didSet { normalizeBackgroundOpacityIfNeeded() }
     }
-    var backgroundBlur: Double {
-        get { AppConfigStore.shared.backgroundBlur }
-        set { AppConfigStore.shared.backgroundBlur = newValue }
+    @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill" // "fill" 或 "fit"
+    @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
+    @AppStorage("aiTopP") var aiTopP: Double = 0.95
+    @AppStorage("aiTemperatureEnabled") var aiTemperatureEnabled: Bool = true
+    @AppStorage("aiTopPEnabled") var aiTopPEnabled: Bool = true
+    @AppStorage("systemPrompt") var systemPrompt: String = ""
+    @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
+    @AppStorage("enableStreaming") var enableStreaming: Bool = false
+    @AppStorage("enableResponseSpeedMetrics") var enableResponseSpeedMetrics: Bool = false
+    @AppStorage("enableOpenAIStreamIncludeUsage") var enableOpenAIStreamIncludeUsage: Bool = true
+    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 3
+    @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
+        didSet { refreshBlurredBackgroundImage() }
     }
-    var backgroundOpacity: Double {
-        get { AppConfigStore.shared.backgroundOpacity }
-        set { AppConfigStore.shared.backgroundOpacity = newValue }
+    @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = false
+    @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
+    @AppStorage("enableMemory") var enableMemory: Bool = true
+    @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
+    @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
+    @AppStorage("enableConversationMemoryAsync") var enableConversationMemoryAsync: Bool = true
+    @AppStorage("conversationMemoryRecentLimit") var conversationMemoryRecentLimit: Int = 5
+    @AppStorage("conversationMemoryRoundThreshold") var conversationMemoryRoundThreshold: Int = 6
+    @AppStorage("conversationMemorySummaryMinIntervalMinutes") var conversationMemorySummaryMinIntervalMinutes: Int = 120
+    @AppStorage("enableConversationProfileDailyUpdate") var enableConversationProfileDailyUpdate: Bool = true
+    @AppStorage("enableReasoningSummary") var enableReasoningSummary: Bool = true
+    @AppStorage("enableLiquidGlass") var enableLiquidGlass: Bool = false
+    @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
+    @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
+    @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
+    @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
+    @AppStorage("ttsModelIdentifier") var ttsModelIdentifier: String = ""
+    @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
+    @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
+    @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
+    @AppStorage("conversationSummaryModelIdentifier") var conversationSummaryModelIdentifier: String = ""
+    @AppStorage("reasoningSummaryModelIdentifier") var reasoningSummaryModelIdentifier: String = ""
+    @AppStorage(ChatService.ocrModelStorageKey) var ocrModelIdentifier: String = ""
+    @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
+    @AppStorage("systemTimeInjectionPosition") private var systemTimeInjectionPositionRawValue: String = SystemTimeInjectionPosition.front.rawValue
+    @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true
+    @AppStorage("periodicTimeLandmarkIntervalMinutes") var periodicTimeLandmarkIntervalMinutes: Int = 30
+    @AppStorage("audioRecordingFormat") var audioRecordingFormatRaw: String = AudioRecordingFormat.aac.rawValue
+    @AppStorage("enableBackgroundReplyNotification") var enableBackgroundReplyNotification: Bool = true {
+        didSet {
+#if canImport(UserNotifications)
+            guard enableBackgroundReplyNotification else {
+                enableBackgroundReplyNotification = true
+                return
+            }
+            Task {
+                _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
+            }
+#endif
+        }
     }
-    var backgroundContentMode: String {
-        get { AppConfigStore.shared.backgroundContentMode }
-        set { AppConfigStore.shared.backgroundContentMode = newValue }
-    }
-    var aiTemperature: Double {
-        get { AppConfigStore.shared.aiTemperature }
-        set { AppConfigStore.shared.aiTemperature = newValue }
-    }
-    var aiTopP: Double {
-        get { AppConfigStore.shared.aiTopP }
-        set { AppConfigStore.shared.aiTopP = newValue }
-    }
-    var aiTemperatureEnabled: Bool {
-        get { AppConfigStore.shared.aiTemperatureEnabled }
-        set { AppConfigStore.shared.aiTemperatureEnabled = newValue }
-    }
-    var aiTopPEnabled: Bool {
-        get { AppConfigStore.shared.aiTopPEnabled }
-        set { AppConfigStore.shared.aiTopPEnabled = newValue }
-    }
-    var systemPrompt: String {
-        get { AppConfigStore.shared.systemPrompt }
-        set { AppConfigStore.shared.systemPrompt = newValue }
-    }
-    var maxChatHistory: Int {
-        get { AppConfigStore.shared.maxChatHistory }
-        set { AppConfigStore.shared.maxChatHistory = newValue }
-    }
-    var enableStreaming: Bool {
-        get { AppConfigStore.shared.enableStreaming }
-        set { AppConfigStore.shared.enableStreaming = newValue }
-    }
-    var enableResponseSpeedMetrics: Bool {
-        get { AppConfigStore.shared.enableResponseSpeedMetrics }
-        set { AppConfigStore.shared.enableResponseSpeedMetrics = newValue }
-    }
-    var enableOpenAIStreamIncludeUsage: Bool {
-        get { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
-        set { AppConfigStore.shared.enableOpenAIStreamIncludeUsage = newValue }
-    }
-    var lazyLoadMessageCount: Int {
-        get { AppConfigStore.shared.lazyLoadMessageCount }
-        set { AppConfigStore.shared.lazyLoadMessageCount = newValue }
-    }
-    var currentBackgroundImage: String {
-        get { AppConfigStore.shared.currentBackgroundImage }
-        set { AppConfigStore.shared.currentBackgroundImage = newValue }
-    }
-    var enableAutoRotateBackground: Bool {
-        get { AppConfigStore.shared.enableAutoRotateBackground }
-        set { AppConfigStore.shared.enableAutoRotateBackground = newValue }
-    }
-    var enableAutoSessionNaming: Bool {
-        get { AppConfigStore.shared.enableAutoSessionNaming }
-        set { AppConfigStore.shared.enableAutoSessionNaming = newValue }
-    }
-    var enableMemory: Bool {
-        get { AppConfigStore.shared.enableMemory }
-        set { AppConfigStore.shared.enableMemory = newValue }
-    }
-    var enableMemoryWrite: Bool {
-        get { AppConfigStore.shared.enableMemoryWrite }
-        set { AppConfigStore.shared.enableMemoryWrite = newValue }
-    }
-    var enableMemoryActiveRetrieval: Bool {
-        get { AppConfigStore.shared.enableMemoryActiveRetrieval }
-        set { AppConfigStore.shared.enableMemoryActiveRetrieval = newValue }
-    }
-    var enableConversationMemoryAsync: Bool {
-        get { AppConfigStore.shared.enableConversationMemoryAsync }
-        set { AppConfigStore.shared.enableConversationMemoryAsync = newValue }
-    }
-    var conversationMemoryRecentLimit: Int {
-        get { AppConfigStore.shared.conversationMemoryRecentLimit }
-        set { AppConfigStore.shared.conversationMemoryRecentLimit = newValue }
-    }
-    var conversationMemoryRoundThreshold: Int {
-        get { AppConfigStore.shared.conversationMemoryRoundThreshold }
-        set { AppConfigStore.shared.conversationMemoryRoundThreshold = newValue }
-    }
-    var conversationMemorySummaryMinIntervalMinutes: Int {
-        get { AppConfigStore.shared.conversationMemorySummaryMinIntervalMinutes }
-        set { AppConfigStore.shared.conversationMemorySummaryMinIntervalMinutes = newValue }
-    }
-    var enableConversationProfileDailyUpdate: Bool {
-        get { AppConfigStore.shared.enableConversationProfileDailyUpdate }
-        set { AppConfigStore.shared.enableConversationProfileDailyUpdate = newValue }
-    }
-    var enableReasoningSummary: Bool {
-        get { AppConfigStore.shared.enableReasoningSummary }
-        set { AppConfigStore.shared.enableReasoningSummary = newValue }
-    }
-    var enableLiquidGlass: Bool {
-        get { AppConfigStore.shared.enableLiquidGlass }
-        set { AppConfigStore.shared.enableLiquidGlass = newValue }
-    }
-    var enableNoBubbleUI: Bool {
-        get { AppConfigStore.shared.enableNoBubbleUI }
-        set { AppConfigStore.shared.enableNoBubbleUI = newValue }
-    }
-    var sendSpeechAsAudio: Bool {
-        get { AppConfigStore.shared.sendSpeechAsAudio }
-        set { AppConfigStore.shared.sendSpeechAsAudio = newValue }
-    }
-    var enableSpeechInput: Bool {
-        get { AppConfigStore.shared.enableSpeechInput }
-        set { AppConfigStore.shared.enableSpeechInput = newValue }
-    }
-    var speechModelIdentifier: String {
-        get { AppConfigStore.shared.speechModelIdentifier }
-        set { AppConfigStore.shared.speechModelIdentifier = newValue }
-    }
-    var ttsModelIdentifier: String {
-        get { AppConfigStore.shared.ttsModelIdentifier }
-        set { AppConfigStore.shared.ttsModelIdentifier = newValue }
-    }
-    var memoryEmbeddingModelIdentifier: String {
-        get { AppConfigStore.shared.memoryEmbeddingModelIdentifier }
-        set { AppConfigStore.shared.memoryEmbeddingModelIdentifier = newValue }
-    }
-    var titleGenerationModelIdentifier: String {
-        get { AppConfigStore.shared.titleGenerationModelIdentifier }
-        set { AppConfigStore.shared.titleGenerationModelIdentifier = newValue }
-    }
-    var dailyPulseModelIdentifier: String {
-        get { AppConfigStore.shared.dailyPulseModelIdentifier }
-        set { AppConfigStore.shared.dailyPulseModelIdentifier = newValue }
-    }
-    var conversationSummaryModelIdentifier: String {
-        get { AppConfigStore.shared.conversationSummaryModelIdentifier }
-        set { AppConfigStore.shared.conversationSummaryModelIdentifier = newValue }
-    }
-    var reasoningSummaryModelIdentifier: String {
-        get { AppConfigStore.shared.reasoningSummaryModelIdentifier }
-        set { AppConfigStore.shared.reasoningSummaryModelIdentifier = newValue }
-    }
-    var ocrModelIdentifier: String {
-        get { AppConfigStore.shared.ocrModelIdentifier }
-        set { AppConfigStore.shared.ocrModelIdentifier = newValue }
-    }
-    var includeSystemTimeInPrompt: Bool {
-        get { AppConfigStore.shared.includeSystemTimeInPrompt }
-        set { AppConfigStore.shared.includeSystemTimeInPrompt = newValue }
-    }
-    var enablePeriodicTimeLandmark: Bool {
-        get { AppConfigStore.shared.enablePeriodicTimeLandmark }
-        set { AppConfigStore.shared.enablePeriodicTimeLandmark = newValue }
-    }
-    var periodicTimeLandmarkIntervalMinutes: Int {
-        get { AppConfigStore.shared.periodicTimeLandmarkIntervalMinutes }
-        set { AppConfigStore.shared.periodicTimeLandmarkIntervalMinutes = newValue }
-    }
-    var enableBackgroundReplyNotification: Bool {
-        get { AppConfigStore.shared.enableBackgroundReplyNotification }
-        set { AppConfigStore.shared.enableBackgroundReplyNotification = newValue }
-    }
-    var hasRequestedBackgroundReplyNotificationPermission: Bool {
-        get { AppConfigStore.shared.hasRequestedBgReplyNotificationPermissionWatch }
-        set { AppConfigStore.shared.hasRequestedBgReplyNotificationPermissionWatch = newValue }
-    }
-
+    @AppStorage("hasRequestedBackgroundReplyNotificationPermissionWatch") var hasRequestedBackgroundReplyNotificationPermission: Bool = false
+    
     var audioRecordingFormat: AudioRecordingFormat {
-        get { AudioRecordingFormat(rawValue: AppConfigStore.shared.audioRecordingFormat) ?? .aac }
-        set { AppConfigStore.shared.audioRecordingFormat = newValue.rawValue }
+        get { AudioRecordingFormat(rawValue: audioRecordingFormatRaw) ?? .aac }
+        set { audioRecordingFormatRaw = newValue.rawValue }
     }
 
     var systemTimeInjectionPosition: SystemTimeInjectionPosition {
-        get { SystemTimeInjectionPosition(rawValue: AppConfigStore.shared.systemTimeInjectionPosition) ?? .front }
-        set { AppConfigStore.shared.systemTimeInjectionPosition = newValue.rawValue }
+        get { SystemTimeInjectionPosition(rawValue: systemTimeInjectionPositionRawValue) ?? .front }
+        set { systemTimeInjectionPositionRawValue = newValue.rawValue }
+    }
+    
+    // MARK: - 公开属性
+    
+    @Published var backgroundImages: [String] = []
+    @Published var currentBackgroundImageBlurredUIImage: UIImage?
+    
+    var currentBackgroundImageUIImage: UIImage? {
+        guard !currentBackgroundImage.isEmpty else { return nil }
+        return loadBackgroundImage(named: currentBackgroundImage)
     }
 
+    var resolvedBackgroundOpacity: Double {
+        WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
+    }
+    
     var historyLoadChunkSize: Int {
         incrementalHistoryBatchSize
     }
@@ -340,17 +248,7 @@ class ChatViewModel: ObservableObject {
     var isMemoryEmbeddingInProgress: Bool {
         memoryEmbeddingProgress?.phase == .running
     }
-
-    // MARK: - 公开属性
-
-    @Published var backgroundImages: [String] = []
-    @Published var currentBackgroundImageBlurredUIImage: UIImage?
-
-    var currentBackgroundImageUIImage: UIImage? {
-        guard !currentBackgroundImage.isEmpty else { return nil }
-        return loadBackgroundImage(named: currentBackgroundImage)
-    }
-
+    
     // MARK: - 私有属性
     
     var extendedSession: WKExtendedRuntimeSession?

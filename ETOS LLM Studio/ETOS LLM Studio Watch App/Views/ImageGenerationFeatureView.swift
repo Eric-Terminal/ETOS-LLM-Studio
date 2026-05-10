@@ -11,7 +11,8 @@ import Shared
 
 struct ImageGenerationFeatureView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("imageGenerationModelIdentifier") private var imageGenerationModelIdentifier: String = ""
+    @AppStorage("imageGenerationParameterExpressionsByModel") private var imageGenerationParameterExpressionsByModel: String = "{}"
     @State private var prompt: String = ""
     @State private var showGalleryFromStatus: Bool = false
     @State private var parameterExpressionEntries: [WatchImageParameterExpressionEntry] = [WatchImageParameterExpressionEntry(text: "")]
@@ -21,7 +22,7 @@ struct ImageGenerationFeatureView: View {
     }
 
     private var selectedImageModel: RunnableModel? {
-        if let matched = viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) {
+        if let matched = viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) {
             return matched
         }
         return availableImageModels.first
@@ -82,7 +83,7 @@ struct ImageGenerationFeatureView: View {
                     NavigationLink {
                         WatchImageModelSelectionListView(
                             models: availableImageModels,
-                            selectedModelIdentifier: $appConfig.imageGenerationModelIdentifier
+                            selectedModelIdentifier: $imageGenerationModelIdentifier
                         )
                     } label: {
                         HStack {
@@ -122,7 +123,7 @@ struct ImageGenerationFeatureView: View {
                     WatchImageParameterExpressionRow(entry: $entry)
                         .onChange(of: entry.text) { _, _ in
                             validateParameterExpressionEntry(withId: entry.id)
-                            saveParameterExpressions(for: appConfig.imageGenerationModelIdentifier)
+                            saveParameterExpressions(for: imageGenerationModelIdentifier)
                         }
                 }
                 .onDelete(perform: deleteParameterExpressionEntries)
@@ -205,18 +206,18 @@ struct ImageGenerationFeatureView: View {
         .navigationTitle(NSLocalizedString("图片生成", comment: "Image generation view title"))
         .onAppear {
             syncSelectedImageModel()
-            loadParameterExpressions(for: appConfig.imageGenerationModelIdentifier)
+            loadParameterExpressions(for: imageGenerationModelIdentifier)
             validateParameterExpressions()
         }
         .onChange(of: viewModel.activatedModelListVersion) { _, _ in
-            let previousIdentifier = appConfig.imageGenerationModelIdentifier
+            let previousIdentifier = imageGenerationModelIdentifier
             syncSelectedImageModel()
-            if previousIdentifier != appConfig.imageGenerationModelIdentifier {
-                loadParameterExpressions(for: appConfig.imageGenerationModelIdentifier)
+            if previousIdentifier != imageGenerationModelIdentifier {
+                loadParameterExpressions(for: imageGenerationModelIdentifier)
             }
             validateParameterExpressions()
         }
-        .onChange(of: appConfig.imageGenerationModelIdentifier) { oldValue, newValue in
+        .onChange(of: imageGenerationModelIdentifier) { oldValue, newValue in
             saveParameterExpressions(for: oldValue)
             loadParameterExpressions(for: newValue)
             validateParameterExpressions()
@@ -365,15 +366,15 @@ struct ImageGenerationFeatureView: View {
     }
 
     private func syncSelectedImageModel() {
-        if let matched = viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) {
-            appConfig.imageGenerationModelIdentifier = matched.id
+        if let matched = viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) {
+            imageGenerationModelIdentifier = matched.id
             return
         }
 
         if let firstModel = availableImageModels.first {
-            appConfig.imageGenerationModelIdentifier = firstModel.id
+            imageGenerationModelIdentifier = firstModel.id
         } else {
-            appConfig.imageGenerationModelIdentifier = ""
+            imageGenerationModelIdentifier = ""
         }
     }
 
@@ -442,7 +443,7 @@ struct ImageGenerationFeatureView: View {
         if parameterExpressionEntries.isEmpty {
             addParameterExpressionEntry()
         }
-        saveParameterExpressions(for: appConfig.imageGenerationModelIdentifier)
+        saveParameterExpressions(for: imageGenerationModelIdentifier)
         validateParameterExpressions()
     }
 
@@ -541,7 +542,7 @@ struct ImageGenerationFeatureView: View {
     }
 
     private func decodeParameterExpressionStore() -> [String: String] {
-        guard let data = appConfig.imageGenerationParameterExpressionsByModel.data(using: .utf8),
+        guard let data = imageGenerationParameterExpressionsByModel.data(using: .utf8),
               let map = try? JSONDecoder().decode([String: String].self, from: data) else {
             return [:]
         }
@@ -551,9 +552,9 @@ struct ImageGenerationFeatureView: View {
     private func encodeParameterExpressionStore(_ map: [String: String]) {
         guard let data = try? JSONEncoder().encode(map),
               let string = String(data: data, encoding: .utf8) else {
-            appConfig.imageGenerationParameterExpressionsByModel = "{}"
+            imageGenerationParameterExpressionsByModel = "{}"
             return
         }
-        appConfig.imageGenerationParameterExpressionsByModel = string
+        imageGenerationParameterExpressionsByModel = string
     }
 }

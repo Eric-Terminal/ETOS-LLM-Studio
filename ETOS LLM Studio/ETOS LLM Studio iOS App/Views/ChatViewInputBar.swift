@@ -7,7 +7,6 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
 
 extension ChatView {
     /// Telegram 风格输入栏
@@ -18,12 +17,12 @@ extension ChatView {
                 request: request,
                 submitAction: { answers in
                     composerFocused = false
-                    appConfig.composerDraft = ""
+                    draftText = ""
                     viewModel.submitAskUserInputAnswers(answers, for: request)
                 },
                 cancelAction: {
                     composerFocused = false
-                    appConfig.composerDraft = ""
+                    draftText = ""
                     viewModel.cancelAskUserInputRequest(using: request)
                 }
             )
@@ -32,9 +31,9 @@ extension ChatView {
         } else {
             TelegramMessageComposer(
                 text: Binding(
-                    get: { appConfig.composerDraft },
+                    get: { draftText },
                     set: { newValue in
-                        appConfig.composerDraft = newValue
+                        draftText = newValue
                         viewModel.userInput = newValue
                     }
                 ),
@@ -42,7 +41,7 @@ extension ChatView {
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
                     viewModel.sendMessage()
-                    appConfig.composerDraft = ""
+                    draftText = ""
                 },
                 stopAction: {
                     viewModel.cancelSending()
@@ -50,7 +49,7 @@ extension ChatView {
                 focus: $composerFocused
             )
             .onAppear {
-                viewModel.userInput = appConfig.composerDraft
+                viewModel.userInput = draftText
             }
             .padding(.bottom, -tabBarCompensation)
         }

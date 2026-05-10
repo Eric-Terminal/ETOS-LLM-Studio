@@ -25,7 +25,7 @@ struct BackgroundPickerView: View {
     @State private var deleteCandidate: String?
     @State private var isShowingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
-    @EnvironmentObject private var appConfig: AppConfigStore
+    @AppStorage("backgroundCropTarget") private var backgroundCropTargetRawValue = BackgroundCropTarget.phone.rawValue
     
     private let gridSpacing: CGFloat = 16
     private let gridPadding: CGFloat = 16
@@ -36,8 +36,8 @@ struct BackgroundPickerView: View {
     }
     
     private var selectedCropTarget: BackgroundCropTarget {
-        get { BackgroundCropTarget(rawValue: appConfig.backgroundCropTarget) ?? .phone }
-        nonmutating set { appConfig.backgroundCropTarget = newValue.rawValue }
+        get { BackgroundCropTarget(rawValue: backgroundCropTargetRawValue) ?? .phone }
+        nonmutating set { backgroundCropTargetRawValue = newValue.rawValue }
     }
     
     var body: some View {
