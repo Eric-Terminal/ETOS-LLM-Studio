@@ -75,6 +75,42 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedFileURL == fileURL)
     }
 
+    @Test("离线快照上传会使用二进制请求头")
+    func testUploadSnapshotUsesBinaryRequestHeaders() async throws {
+        let endpoint = try #require(URL(string: "https://example.com/backup"))
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sync-snapshot-\(UUID().uuidString).elsbackup")
+        try Data("encrypted-backup".utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        var capturedRequest: URLRequest?
+        var capturedFileURL: URL?
+
+        let result = try await SyncPackageUploadService.uploadSnapshot(
+            fileURL: fileURL,
+            suggestedFileName: "encrypted.elsbackup",
+            to: endpoint,
+            transport: { request, bodyFileURL in
+                capturedRequest = request
+                capturedFileURL = bodyFileURL
+                let response = try #require(
+                    HTTPURLResponse(url: endpoint, statusCode: 202, httpVersion: nil, headerFields: nil)
+                )
+                return (Data("queued".utf8), response)
+            }
+        )
+
+        #expect(result.statusCode == 202)
+        #expect(result.responseBodyPreview == "queued")
+        #expect(capturedRequest?.httpBody == nil)
+        #expect(capturedRequest?.httpMethod == "POST")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-FileName") == "encrypted.elsbackup")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-Schema") == nil)
+        #expect(capturedFileURL == fileURL)
+    }
+
     @Test("非 2xx 响应会抛出状态码错误")
     func testUploadThrowsForUnexpectedStatusCode() async throws {
         let endpoint = try #require(URL(string: "https://example.com/backup"))

@@ -3,6 +3,7 @@
 // ============================================================================
 // 同步数据包上传服务
 // - 将导出的 JSON 数据包通过 HTTP POST 上传到指定地址
+// - 将离线 .elsbackup 快照以二进制文件上传到指定地址
 // - 统一处理状态码与错误信息，供 iOS/watchOS 复用
 // ============================================================================
 
@@ -136,21 +137,62 @@ public enum SyncPackageUploadService {
             timeout: timeout
         )
     }
+
+    /// 上传离线快照文件，供 R2 或自有对象存储端点接收。
+    public static func uploadSnapshot(
+        fileURL: URL,
+        suggestedFileName: String? = nil,
+        to endpoint: URL,
+        timeout: TimeInterval = 30,
+        transport: FileTransport? = nil
+    ) async throws -> SyncPackageUploadResult {
+        let fileName = suggestedFileName ?? fileURL.lastPathComponent
+        let request = makeUploadRequest(
+            suggestedFileName: fileName.isEmpty ? "ETOS-Snapshot.\(SnapshotBuilder.fileExtension)" : fileName,
+            endpoint: endpoint,
+            timeout: timeout,
+            contentType: "application/octet-stream",
+            schemaVersion: nil
+        )
+
+        let sender = transport ?? { request, fileURL in
+            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+        }
+        let (responseData, response) = try await sender(request, fileURL)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncPackageUploadError.invalidHTTPResponse
+        }
+
+        let preview = responsePreview(from: responseData)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
+        }
+
+        return SyncPackageUploadResult(
+            statusCode: httpResponse.statusCode,
+            responseBodyPreview: preview
+        )
+    }
 }
 
 private extension SyncPackageUploadService {
     static func makeUploadRequest(
         suggestedFileName: String,
         endpoint: URL,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        contentType: String = "application/json",
+        schemaVersion: Int? = SyncPackageTransferService.currentSchemaVersion
     ) -> URLRequest {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(suggestedFileName, forHTTPHeaderField: "X-ETOS-Backup-FileName")
-        request.setValue("\(SyncPackageTransferService.currentSchemaVersion)", forHTTPHeaderField: "X-ETOS-Backup-Schema")
+        if let schemaVersion {
+            request.setValue("\(schemaVersion)", forHTTPHeaderField: "X-ETOS-Backup-Schema")
+        }
         return request
     }
 
