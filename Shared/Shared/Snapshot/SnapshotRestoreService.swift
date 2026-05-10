@@ -47,7 +47,10 @@ public enum SnapshotRestoreService {
             return nil
         }
         let modeByte = header[4]
-        return SnapshotEncryptor.EncryptionMode(rawValue: modeByte)
+        guard let mode = SnapshotEncryptor.EncryptionMode(rawValue: modeByte) else {
+            throw SnapshotEncryptorError.unsupportedMode(modeByte)
+        }
+        return mode
     }
 
     // MARK: - 恢复流程
@@ -102,6 +105,8 @@ public enum SnapshotRestoreService {
             .appendingPathComponent("config-store.sqlite", isDirectory: false)
         let memoryDst = MemoryStoragePaths.rootDirectory()
             .appendingPathComponent("memory-store.sqlite", isDirectory: false)
+        let vectorDst = MemoryStoragePaths.vectorStoreDirectory()
+            .appendingPathComponent("\(MemoryStoragePaths.vectorStoreName).sqlite", isDirectory: false)
 
         // 4. 关闭所有 GRDB 连接（释放 DatabasePool ARC 引用）
         //    在主线程之外执行，避免在 @MainActor 上阻塞 UI
@@ -117,7 +122,10 @@ public enum SnapshotRestoreService {
         try replaceDatabase(src: configBackup, dst: configDst)
         if fm.fileExists(atPath: memoryBackup.path) {
             try replaceDatabase(src: memoryBackup, dst: memoryDst)
+        } else {
+            try removeDatabaseIfExists(memoryDst)
         }
+        try removeDatabaseIfExists(vectorDst)
 
         logger.info("数据库替换完成，准备重新启动数据层。")
 
@@ -157,6 +165,17 @@ public enum SnapshotRestoreService {
         }
 
         logger.debug("数据库替换完成：\(dst.lastPathComponent)")
+    }
+
+    private static func removeDatabaseIfExists(_ url: URL) throws {
+        let fm = FileManager.default
+        let basePath = url.path
+        for suffix in ["", "-wal", "-shm"] {
+            let targetURL = URL(fileURLWithPath: basePath + suffix)
+            if fm.fileExists(atPath: targetURL.path) {
+                try fm.removeItem(at: targetURL)
+            }
+        }
     }
 
     /// 解压 ZIP 文件到指定目录。

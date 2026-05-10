@@ -112,7 +112,12 @@ public enum SnapshotEncryptor {
 
         let key = try deriveKey(password: password, mode: mode)
         let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertext, tag: tag)
-        let plaintext = try AES.GCM.open(sealedBox, using: key)
+        let plaintext: Data
+        do {
+            plaintext = try AES.GCM.open(sealedBox, using: key)
+        } catch {
+            throw SnapshotEncryptorError.decryptionFailed
+        }
 
         logger.debug("解密完成，模式=\(mode.rawValue, privacy: .public)，明文大小=\(plaintext.count) 字节")
         return plaintext
