@@ -511,6 +511,10 @@ public final class AppConfigStore: ObservableObject {
             let value = userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue
             persist(value, for: key)
         }
+        if userDefaults.object(forKey: AppConfigKey.syncAppStorage.rawValue) == nil,
+           let legacyValue = userDefaultsValue(for: .syncGlobalPrompt, userDefaults: userDefaults) {
+            persist(legacyValue, for: .syncAppStorage)
+        }
         Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
     }
 

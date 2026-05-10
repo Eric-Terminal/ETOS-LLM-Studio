@@ -12,7 +12,7 @@ import SQLite3
 
 extension Persistence {
     public static func createLaunchBackupPointIfEnabled() {
-        guard UserDefaults.standard.bool(forKey: launchBackupEnabledKey) else { return }
+        guard isLaunchBackupEnabled() else { return }
 
         launchBackupAndRecoveryLock.lock()
         if hasCreatedLaunchBackupPoint {
@@ -38,7 +38,7 @@ extension Persistence {
 
     @discardableResult
     public static func scheduleLaunchBackupPointAfterStartupIfEnabled(delay: TimeInterval) -> Task<Void, Never>? {
-        guard UserDefaults.standard.bool(forKey: launchBackupEnabledKey) else { return nil }
+        guard isLaunchBackupEnabled() else { return nil }
 
         launchBackupAndRecoveryLock.lock()
         if hasScheduledLaunchBackupPoint || hasCreatedLaunchBackupPoint {
@@ -67,7 +67,7 @@ extension Persistence {
         hasPreparedLaunchDatabases = true
         launchBackupAndRecoveryLock.unlock()
 
-        guard UserDefaults.standard.bool(forKey: launchBackupEnabledKey) else {
+        guard isLaunchBackupEnabled() else {
             UserDefaults.standard.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
             return cacheLaunchPreparationResult(LaunchPreparationResult())
         }
@@ -102,6 +102,13 @@ extension Persistence {
         launchPreparationResult = result
         launchBackupAndRecoveryLock.unlock()
         return result
+    }
+
+    private static func isLaunchBackupEnabled() -> Bool {
+        if let value = readAppConfigInteger(key: launchBackupEnabledKey) {
+            return value != 0
+        }
+        return UserDefaults.standard.bool(forKey: launchBackupEnabledKey)
     }
 
     private enum LaunchBackupRestoreResult {
