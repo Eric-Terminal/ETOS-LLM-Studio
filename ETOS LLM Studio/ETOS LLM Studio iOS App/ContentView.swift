@@ -23,6 +23,7 @@ struct ContentView: View {
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var appLockManager = AppLockManager.shared
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
@@ -41,8 +42,12 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    appLockManager.handleSceneDidBecomeActive()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
+                case .background:
+                    appLockManager.handleSceneDidEnterBackground()
+                    cancelDailyPulsePreparation()
                 default:
                     cancelDailyPulsePreparation()
                 }
@@ -192,6 +197,12 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
                 viewModel.reloadPersistedDataAfterLegacyJSONMigration()
+            }
+            .overlay {
+                if appLockManager.state == .locked {
+                    AppLockOverlayView()
+                        .zIndex(1_000)
+                }
             }
     }
 

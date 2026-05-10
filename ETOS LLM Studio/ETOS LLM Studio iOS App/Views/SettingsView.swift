@@ -252,7 +252,17 @@ struct SettingsView: View {
                 } label: {
                     SettingsListIconLabel("同步与备份", icon: .sync)
                 }
-                
+            }
+
+            Section(NSLocalizedString("安全", comment: "设置安全分组")) {
+                NavigationLink {
+                    AppLockSettingsView()
+                } label: {
+                    SettingsListIconLabel("应用锁", icon: .security)
+                }
+            }
+
+            Section(NSLocalizedString("关于", comment: "设置关于分组")) {
                 NavigationLink {
                     AboutView()
                 } label: {
@@ -438,6 +448,7 @@ extension SettingsListIcon {
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green)
+    static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)
     static let about = SettingsListIcon(systemName: "info.circle", backgroundColor: .gray)
     static let achievementJournal = SettingsListIcon(systemName: "star", backgroundColor: .yellow)
     static let feedback = SettingsListIcon(systemName: "bubble", backgroundColor: .blue)

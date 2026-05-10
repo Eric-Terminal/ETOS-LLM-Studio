@@ -17,6 +17,7 @@ struct ContentView: View {
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject var appConfig = AppConfigStore.shared
+    @ObservedObject var appLockManager = AppLockManager.shared
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @State var isAtBottom = true
     @State var showScrollToBottomButton = false
@@ -134,6 +135,11 @@ struct ContentView: View {
                 Spacer()
                 TTSFloatingController()
             }
+
+            if appLockManager.state == .locked {
+                AppLockOverlayView()
+                    .zIndex(1_000)
+            }
         }
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
@@ -223,8 +229,19 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
             viewModel.reloadPersistedDataAfterLegacyJSONMigration()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                appLockManager.handleSceneDidBecomeActive()
+            case .background:
+                appLockManager.handleSceneDidEnterBackground()
+            default:
+                break
+            }
+        }
         .task {
             legacyJSONMigrationManager.refreshStatus()
+            appLockManager.refreshState()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
     }
