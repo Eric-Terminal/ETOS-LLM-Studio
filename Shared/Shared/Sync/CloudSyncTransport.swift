@@ -39,6 +39,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     private static let checksumKey = "checksum"
     private static let optionsRawValueKey = "optionsRawValue"
     private static let payloadAssetKey = "payloadAsset"
+    private static let databaseSubscriptionID = "cloudSync.snapshots.database.subscription.v1"
     private let userDefaults: UserDefaults
     private static let containerIdentifier = "iCloud.com.ericterminal.els"
 
@@ -159,6 +160,21 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
+    func subscribeToChanges() async throws {
+        try await ensureAvailableAccount()
+        try await ensureCloudSyncZoneExists()
+
+        if try await hasSubscription(withID: Self.databaseSubscriptionID) {
+            return
+        }
+
+        let subscription = CKDatabaseSubscription(subscriptionID: Self.databaseSubscriptionID)
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+        _ = try await save(subscription)
+    }
+
     private func ensureCloudSyncZoneExists() async throws {
         let fetched = try await database.recordZones(for: [cloudSyncSnapshotZoneID])
         if case .success = fetched[cloudSyncSnapshotZoneID] {
@@ -169,6 +185,15 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             saving: [CKRecordZone(zoneID: cloudSyncSnapshotZoneID)],
             deleting: []
         )
+    }
+
+    private func hasSubscription(withID subscriptionID: String) async throws -> Bool {
+        do {
+            _ = try await fetchSubscription(withID: subscriptionID)
+            return true
+        } catch let error as CKError where error.code == .unknownItem {
+            return false
+        }
     }
 
     private func loadZoneChangeTokenData() -> Data? {
@@ -246,6 +271,38 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
+    private func fetchSubscription(withID subscriptionID: String) async throws -> CKSubscription {
+        try await withCheckedThrowingContinuation { continuation in
+            database.fetch(withSubscriptionID: subscriptionID) { subscription, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                if let subscription {
+                    continuation.resume(returning: subscription)
+                } else {
+                    continuation.resume(throwing: CloudSyncManagerError.subscriptionUnavailable)
+                }
+            }
+        }
+    }
+
+    private func save(_ subscription: CKSubscription) async throws -> CKSubscription {
+        try await withCheckedThrowingContinuation { continuation in
+            database.save(subscription) { savedSubscription, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                if let savedSubscription {
+                    continuation.resume(returning: savedSubscription)
+                } else {
+                    continuation.resume(throwing: CloudSyncManagerError.subscriptionUnavailable)
+                }
+            }
+        }
+    }
+
     private static let zoneChangeTokenKey = "cloudSync.snapshotChangeToken"
 }
 #else
@@ -255,6 +312,10 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     }
 
     func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot] {
+        throw CloudSyncManagerError.unavailableAccount
+    }
+
+    func subscribeToChanges() async throws {
         throw CloudSyncManagerError.unavailableAccount
     }
 }

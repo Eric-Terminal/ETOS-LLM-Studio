@@ -51,6 +51,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     // 否则 WatchConnectivity 同步状态不会稳定自动刷新到双端设置页。
     private static let inlineExchangeKind = "com.ETOS.watchSync.exchange.inline.v1"
     private static let quickAppConfigKind = "com.ETOS.watchSync.appConfig.quick.v1"
+    private static let cloudSyncRemoteChangeKind = "com.ETOS.watchSync.cloudSync.remoteChange.v1"
     private static let inlineExchangePayloadLimit = 60 * 1024
     
     @Published public private(set) var state: SyncState = .idle
@@ -275,6 +276,20 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 self?.performSync(options: [.appStorage], silent: true)
             }
         })
+    }
+
+    /// 将 iCloud 远端变化信号转发给配对端，让 watchOS 在无 APNs 入口时也能拉取云端变更。
+    public func relayCloudSyncSignalToCompanion() {
+        guard let session else { return }
+        let message: [String: Any] = [
+            "kind": Self.cloudSyncRemoteChangeKind,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil, errorHandler: nil)
+        } else {
+            session.transferUserInfo(message)
+        }
     }
     
     /// 从用户设置构建同步选项
@@ -714,6 +729,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
         return true
     }
+
+    private func handleIncomingCloudSyncSignal(_ message: [String: Any]) -> Bool {
+        guard message["kind"] as? String == Self.cloudSyncRemoteChangeKind else { return false }
+        Task { @MainActor in
+            await CloudSyncManager.shared.performAutoSyncNowIfEnabled()
+        }
+        return true
+    }
 }
 
 // MARK: - WCSessionDelegate
@@ -792,6 +815,10 @@ extension WatchSyncManager: WCSessionDelegate {
         didReceiveMessage message: [String : Any],
         replyHandler: @escaping ([String : Any]) -> Void
     ) {
+        if handleIncomingCloudSyncSignal(message) {
+            replyHandler(["accepted": true])
+            return
+        }
         if handleIncomingInlineExchangeMessage(message, replyHandler: replyHandler) {
             return
         }
@@ -805,6 +832,10 @@ extension WatchSyncManager: WCSessionDelegate {
         #endif
         // 保留消息处理以兼容旧版本
         replyHandler([:])
+    }
+
+    public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        _ = handleIncomingCloudSyncSignal(userInfo)
     }
 }
 #endif

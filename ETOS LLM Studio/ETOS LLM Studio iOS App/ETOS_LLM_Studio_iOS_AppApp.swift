@@ -13,9 +13,42 @@
 import SwiftUI
 import BackgroundTasks
 import Shared
+#if canImport(UIKit)
+import UIKit
+#endif
+
+#if canImport(UIKit)
+final class ETOSCloudSyncAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        application.registerForRemoteNotifications()
+        Task { @MainActor in
+            await CloudSyncManager.shared.ensureRemoteChangeSubscriptionIfEnabled()
+        }
+        return true
+    }
+
+    func application(
+        _: UIApplication,
+        didReceiveRemoteNotification _: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task { @MainActor in
+            let imported = await CloudSyncManager.shared.performAutoSyncNowIfEnabled()
+            WatchSyncManager.shared.relayCloudSyncSignalToCompanion()
+            completionHandler(imported ? .newData : .noData)
+        }
+    }
+}
+#endif
 
 @main
 struct ETOS_LLM_Studio_iOS_AppApp: App {
+#if canImport(UIKit)
+    @UIApplicationDelegateAdaptor(ETOSCloudSyncAppDelegate.self) private var appDelegate
+#endif
     @StateObject private var launchStateMachine = AppLaunchStateMachine()
     @StateObject private var syncManager = WatchSyncManager.shared
     @StateObject private var cloudSyncManager = CloudSyncManager.shared

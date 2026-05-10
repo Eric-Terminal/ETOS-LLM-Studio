@@ -62,6 +62,7 @@ struct CloudSyncRemoteSnapshot {
 protocol CloudSyncTransport {
     func upload(snapshot: CloudSyncRemoteSnapshot) async throws
     func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot]
+    func subscribeToChanges() async throws
 }
 
 @MainActor
@@ -212,15 +213,31 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performAutoSyncIfEnabled() {
-        guard isEnabled else { return }
-        guard AppConfigStore.shared.cloudSyncAutoSyncEnabled else { return }
-
-        let options = buildSyncOptionsFromSettings()
-        guard !options.isEmpty else { return }
-
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            await performSync(options: options, silent: true)
+            await performAutoSyncNowIfEnabled()
+        }
+    }
+
+    @discardableResult
+    public func performAutoSyncNowIfEnabled() async -> Bool {
+        guard isEnabled else { return false }
+        guard AppConfigStore.shared.cloudSyncAutoSyncEnabled else { return false }
+
+        let options = buildSyncOptionsFromSettings()
+        guard !options.isEmpty else { return false }
+
+        await ensureRemoteChangeSubscriptionIfEnabled()
+        await performSync(options: options, silent: true)
+        return lastSummary.hasAnyImportedChange
+    }
+
+    public func ensureRemoteChangeSubscriptionIfEnabled() async {
+        guard isEnabled else { return }
+        do {
+            try await transport.subscribeToChanges()
+        } catch {
+            cloudSyncLogger.error("注册 CloudKit 静默订阅失败: \(error.localizedDescription)")
         }
     }
 
@@ -421,6 +438,7 @@ enum CloudSyncManagerError: LocalizedError {
     case unavailableAccount
     case invalidAsset
     case decodeFailed
+    case subscriptionUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -430,6 +448,8 @@ enum CloudSyncManagerError: LocalizedError {
             return "iCloud 同步快照损坏，无法读取。"
         case .decodeFailed:
             return "iCloud 同步快照解析失败。"
+        case .subscriptionUnavailable:
+            return "CloudKit 订阅不可用。"
         }
     }
 }

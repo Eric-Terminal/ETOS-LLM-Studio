@@ -437,6 +437,8 @@ private actor MockCloudSyncTransport: CloudSyncTransport {
     func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot] {
         remoteSnapshots.filter { $0.deviceID != deviceID }
     }
+
+    func subscribeToChanges() async throws {}
 }
 
 private actor AppliedPackageRecorder {
