@@ -480,7 +480,9 @@ extension ChatService {
     }
 
     func generateAndApplySessionTitle(for sessionID: UUID, firstUserMessage: ChatMessage) async {
-        let isAutoNamingEnabled = UserDefaults.standard.object(forKey: "enableAutoSessionNaming") as? Bool ?? true
+        let isAutoNamingEnabled = await MainActor.run {
+            AppConfigStore.shared.enableAutoSessionNaming
+        }
         guard isAutoNamingEnabled else {
             logger.info("自动标题功能已禁用，跳过生成。")
             return

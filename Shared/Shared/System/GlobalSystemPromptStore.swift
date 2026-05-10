@@ -237,6 +237,9 @@ public enum GlobalSystemPromptStore {
         }
 
         didChange = setStringIfNeeded(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: snapshot.activeSystemPrompt)
+        }
         return didChange
     }
 

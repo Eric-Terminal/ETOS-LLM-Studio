@@ -122,21 +122,43 @@ final class ChatViewModel: ObservableObject {
     }
     @AppStorage("backgroundOpacity") var backgroundOpacity: Double = 0.7
     @AppStorage("backgroundContentMode") var backgroundContentMode: String = "fill"
-    @AppStorage("aiTemperature") var aiTemperature: Double = 1.0
-    @AppStorage("aiTopP") var aiTopP: Double = 0.95
-    @AppStorage("aiTemperatureEnabled") var aiTemperatureEnabled: Bool = true
-    @AppStorage("aiTopPEnabled") var aiTopPEnabled: Bool = true
-    @AppStorage("systemPrompt") var systemPrompt: String = ""
-    @AppStorage("maxChatHistory") var maxChatHistory: Int = 0
-    @AppStorage("enableStreaming") var enableStreaming: Bool = true
-    @AppStorage("enableResponseSpeedMetrics") var enableResponseSpeedMetrics: Bool = true
-    @AppStorage("enableOpenAIStreamIncludeUsage") var enableOpenAIStreamIncludeUsage: Bool = true
-    @AppStorage("lazyLoadMessageCount") var lazyLoadMessageCount: Int = 0
+    @Published var aiTemperature: Double = AppConfigStore.shared.aiTemperature {
+        didSet { AppConfigStore.shared.aiTemperature = aiTemperature }
+    }
+    @Published var aiTopP: Double = AppConfigStore.shared.aiTopP {
+        didSet { AppConfigStore.shared.aiTopP = aiTopP }
+    }
+    @Published var aiTemperatureEnabled: Bool = AppConfigStore.shared.aiTemperatureEnabled {
+        didSet { AppConfigStore.shared.aiTemperatureEnabled = aiTemperatureEnabled }
+    }
+    @Published var aiTopPEnabled: Bool = AppConfigStore.shared.aiTopPEnabled {
+        didSet { AppConfigStore.shared.aiTopPEnabled = aiTopPEnabled }
+    }
+    @Published var systemPrompt: String = AppConfigStore.shared.systemPrompt {
+        didSet { AppConfigStore.shared.systemPrompt = systemPrompt }
+    }
+    @Published var maxChatHistory: Int = AppConfigStore.shared.maxChatHistory {
+        didSet { AppConfigStore.shared.maxChatHistory = maxChatHistory }
+    }
+    @Published var enableStreaming: Bool = AppConfigStore.shared.enableStreaming {
+        didSet { AppConfigStore.shared.enableStreaming = enableStreaming }
+    }
+    @Published var enableResponseSpeedMetrics: Bool = AppConfigStore.shared.enableResponseSpeedMetrics {
+        didSet { AppConfigStore.shared.enableResponseSpeedMetrics = enableResponseSpeedMetrics }
+    }
+    @Published var enableOpenAIStreamIncludeUsage: Bool = AppConfigStore.shared.enableOpenAIStreamIncludeUsage {
+        didSet { AppConfigStore.shared.enableOpenAIStreamIncludeUsage = enableOpenAIStreamIncludeUsage }
+    }
+    @Published var lazyLoadMessageCount: Int = AppConfigStore.shared.lazyLoadMessageCount {
+        didSet { AppConfigStore.shared.lazyLoadMessageCount = lazyLoadMessageCount }
+    }
     @AppStorage("currentBackgroundImage") var currentBackgroundImage: String = "" {
         didSet { refreshBlurredBackgroundImage() }
     }
     @AppStorage("enableAutoRotateBackground") var enableAutoRotateBackground: Bool = false
-    @AppStorage("enableAutoSessionNaming") var enableAutoSessionNaming: Bool = true
+    @Published var enableAutoSessionNaming: Bool = AppConfigStore.shared.enableAutoSessionNaming {
+        didSet { AppConfigStore.shared.enableAutoSessionNaming = enableAutoSessionNaming }
+    }
     @AppStorage("enableMemory") var enableMemory: Bool = true
     @AppStorage("enableMemoryWrite") var enableMemoryWrite: Bool = true
     @AppStorage("enableMemoryActiveRetrieval") var enableMemoryActiveRetrieval: Bool = false
