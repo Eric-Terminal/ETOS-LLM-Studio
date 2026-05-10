@@ -90,6 +90,69 @@ extension PersistenceTests {
         #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
     }
 
+    @Test("离线快照会打包三处分库并排除 FTS 与向量库")
+    func testSnapshotBuilderCreatesOfflineArchive() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "Snapshot Session", isTemporary: false)
+        let messages = [
+            ChatMessage(role: .user, content: "snapshot-user"),
+            ChatMessage(role: .assistant, content: "snapshot-assistant")
+        ]
+
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+        }
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+        #expect(Persistence.saveAuxiliaryBlob(["theme": "dark"], forKey: "providers_v1"))
+        try ConversationMemoryManager.saveUserProfile(
+            content: "偏好离线快照。",
+            sourceSessionID: session.id
+        )
+
+        let result = try SnapshotBuilder.buildSnapshotResult()
+        defer { removeIfExists(result.fileURL) }
+
+        let entries = try readStoredZipEntries(from: result.fileURL)
+        let entryPaths = Set(entries.keys)
+        #expect(entryPaths.contains("manifest.json"))
+        #expect(entryPaths.contains("Databases/chat-store.sqlite"))
+        #expect(entryPaths.contains("Databases/config-store.sqlite"))
+        #expect(entryPaths.contains("Databases/memory-store.sqlite"))
+        #expect(!entryPaths.contains("memory_vectors.sqlite"))
+
+        let extractDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-Snapshot-Test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
+        defer { removeIfExists(extractDirectory) }
+
+        for (path, data) in entries {
+            let destinationURL = extractDirectory.appendingPathComponent(path, isDirectory: false)
+            try FileManager.default.createDirectory(
+                at: destinationURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: destinationURL, options: .atomic)
+        }
+
+        let snapshotChatStore = extractDirectory.appendingPathComponent("Databases/chat-store.sqlite", isDirectory: false)
+        let snapshotConfigStore = extractDirectory.appendingPathComponent("Databases/config-store.sqlite", isDirectory: false)
+        let snapshotMemoryStore = extractDirectory.appendingPathComponent("Databases/memory-store.sqlite", isDirectory: false)
+
+        #expect(sqliteCount(snapshotChatStore, sql: "SELECT COUNT(*) FROM messages") == messages.count)
+        #expect(!sqliteExists(snapshotChatStore, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
+        #expect(!sqliteExists(snapshotChatStore, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'messages_fts_%'"))
+        #expect(sqliteCount(snapshotConfigStore, sql: "SELECT COUNT(*) FROM json_blobs WHERE key = 'providers_v1'") == 1)
+        #expect(sqliteCount(snapshotMemoryStore, sql: "SELECT COUNT(*) FROM conversation_user_profile WHERE source_session_id = '\(session.id.uuidString)'") == 1)
+    }
+
     @Test("启动检测到 chat-store 损坏时会按备份重建并重建 FTS")
     func testLaunchBackupRestoresCorruptedChatStoreAndRebuildsFTS() throws {
         cleanup(sessions: [])

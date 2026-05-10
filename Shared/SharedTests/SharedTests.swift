@@ -362,6 +362,38 @@ struct PersistenceTests {
         _ = sqlite3_exec(database, sql, nil, nil, nil)
     }
 
+    func readStoredZipEntries(from archiveURL: URL) throws -> [String: Data] {
+        let archiveData = try Data(contentsOf: archiveURL)
+        var offset = 0
+        var entries: [String: Data] = [:]
+
+        while offset + 30 <= archiveData.count {
+            let signature = archiveData.littleEndianUInt32(at: offset)
+            guard signature == 0x0403_4B50 else { break }
+
+            let compressionMethod = archiveData.littleEndianUInt16(at: offset + 8)
+            let compressedSize = Int(archiveData.littleEndianUInt32(at: offset + 18))
+            let fileNameLength = Int(archiveData.littleEndianUInt16(at: offset + 26))
+            let extraFieldLength = Int(archiveData.littleEndianUInt16(at: offset + 28))
+            let fileNameStart = offset + 30
+            let fileNameEnd = fileNameStart + fileNameLength
+            let dataStart = fileNameEnd + extraFieldLength
+            let dataEnd = dataStart + compressedSize
+
+            guard compressionMethod == 0,
+                  fileNameEnd <= archiveData.count,
+                  dataEnd <= archiveData.count,
+                  let path = String(data: archiveData[fileNameStart..<fileNameEnd], encoding: .utf8) else {
+                break
+            }
+
+            entries[path] = archiveData.subdata(in: dataStart..<dataEnd)
+            offset = dataEnd
+        }
+
+        return entries
+    }
+
     func cleanup(sessions: [ChatSession]) {
         Persistence.saveChatSessions([])
         Persistence.clearRequestLogs()
@@ -406,5 +438,15 @@ struct PersistenceTests {
         removeIfExists(legacyMemoryStoreSQLiteURL)
         removeIfExists(legacyMemoryStoreSQLiteWALURL)
         removeIfExists(legacyMemoryStoreSQLiteSHMURL)
+    }
+}
+
+private extension Data {
+    func littleEndianUInt16(at offset: Int) -> UInt16 {
+        UInt16(self[offset]) | (UInt16(self[offset + 1]) << 8)
+    }
+
+    func littleEndianUInt32(at offset: Int) -> UInt32 {
+        UInt32(littleEndianUInt16(at: offset)) | (UInt32(littleEndianUInt16(at: offset + 2)) << 16)
     }
 }

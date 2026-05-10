@@ -78,7 +78,7 @@ extension Persistence {
         activeAuxiliaryStore(kind: auxiliaryStoreKind(forKey: key))
     }
 
-    private static func activeAuxiliaryStore(kind: AuxiliaryStoreKind) -> PersistenceAuxiliaryGRDBStore? {
+    static func activeAuxiliaryStore(kind: AuxiliaryStoreKind) -> PersistenceAuxiliaryGRDBStore? {
         guard shouldUseGRDBStore() else { return nil }
         if let store = cachedAuxiliaryStores[kind] {
             return store
