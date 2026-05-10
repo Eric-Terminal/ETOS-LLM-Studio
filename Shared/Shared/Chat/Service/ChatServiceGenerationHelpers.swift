@@ -488,7 +488,7 @@ extension ChatService {
             return
         }
 
-        let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
+        let dedicatedModelIdentifier = Persistence.readAppConfigText(key: AppConfigKey.titleGenerationModelIdentifier.rawValue) ?? ""
         guard let runnableModel = resolveTitleGenerationModel() else {
             logger.error("无法获取标题模型，无法生成标题。")
             return
@@ -549,7 +549,7 @@ extension ChatService {
     }
 
     private func resolveTitleGenerationModel() -> RunnableModel? {
-        let dedicatedModelIdentifier = UserDefaults.standard.string(forKey: Self.titleGenerationModelStorageKey) ?? ""
+        let dedicatedModelIdentifier = Persistence.readAppConfigText(key: AppConfigKey.titleGenerationModelIdentifier.rawValue) ?? ""
         if !dedicatedModelIdentifier.isEmpty,
            let dedicatedModel = activatedRunnableModels.first(
                 where: { $0.id == dedicatedModelIdentifier && $0.model.isChatModel }

@@ -19,11 +19,6 @@ public class ChatService {
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatService")
     static let modelOrderStorageKey = "modelOrder.runnableModels"
     static let selectedRunnableModelStorageKey = "selectedRunnableModelID"
-    static let titleGenerationModelStorageKey = "titleGenerationModelIdentifier"
-    public static let ocrModelStorageKey = "ocrModelIdentifier"
-    static let ttsModelStorageKey = "ttsModelIdentifier"
-    static let conversationSummaryModelStorageKey = "conversationSummaryModelIdentifier"
-    static let reasoningSummaryModelStorageKey = "reasoningSummaryModelIdentifier"
     static let lastActiveSessionIDStorageKey = "launch.lastActiveSessionID"
     public static let restoreLastSessionOnLaunchEnabledStorageKey = "launch.restoreLastSessionOnLaunchEnabled"
     static let reasoningSummaryEnabledKey = "enableReasoningSummary"

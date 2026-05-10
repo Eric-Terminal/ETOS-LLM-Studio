@@ -148,8 +148,7 @@ extension ChatService {
     }
 
     func resolvedConversationSummaryModel() -> RunnableModel? {
-        let defaults = UserDefaults.standard
-        let storedIdentifier = defaults.string(forKey: Self.conversationSummaryModelStorageKey) ?? ""
+        let storedIdentifier = Persistence.readAppConfigText(key: AppConfigKey.conversationSummaryModelIdentifier.rawValue) ?? ""
         return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
     }
 
@@ -163,8 +162,7 @@ extension ChatService {
     }
 
     func resolvedReasoningSummaryModel() -> RunnableModel? {
-        let defaults = UserDefaults.standard
-        let storedIdentifier = defaults.string(forKey: Self.reasoningSummaryModelStorageKey) ?? ""
+        let storedIdentifier = Persistence.readAppConfigText(key: AppConfigKey.reasoningSummaryModelIdentifier.rawValue) ?? ""
         return resolvedChatCapableModel(storedIdentifier: storedIdentifier)
     }
 }

@@ -11,14 +11,30 @@ import Shared
 
 struct ImageGenerationFeatureView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @AppStorage("imageGenerationModelIdentifier") private var imageGenerationModelIdentifier: String = ""
-    @AppStorage("imageGenerationParameterExpressionsByModel") private var imageGenerationParameterExpressionsByModel: String = "{}"
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var prompt: String = ""
     @State private var showGalleryFromStatus: Bool = false
     @State private var parameterExpressionEntries: [WatchImageParameterExpressionEntry] = [WatchImageParameterExpressionEntry(text: "")]
 
     private var availableImageModels: [RunnableModel] {
         viewModel.imageGenerationModelOptions
+    }
+
+    private var imageGenerationModelIdentifier: String {
+        get { appConfig.imageGenerationModelIdentifier }
+        nonmutating set { appConfig.imageGenerationModelIdentifier = newValue }
+    }
+
+    private var imageGenerationModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { appConfig.imageGenerationModelIdentifier },
+            set: { appConfig.imageGenerationModelIdentifier = $0 }
+        )
+    }
+
+    private var imageGenerationParameterExpressionsByModel: String {
+        get { appConfig.imageGenerationParameterExpressionsByModel }
+        nonmutating set { appConfig.imageGenerationParameterExpressionsByModel = newValue }
     }
 
     private var selectedImageModel: RunnableModel? {
@@ -83,7 +99,7 @@ struct ImageGenerationFeatureView: View {
                     NavigationLink {
                         WatchImageModelSelectionListView(
                             models: availableImageModels,
-                            selectedModelIdentifier: $imageGenerationModelIdentifier
+                            selectedModelIdentifier: imageGenerationModelIdentifierBinding
                         )
                     } label: {
                         HStack {

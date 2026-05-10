@@ -15,7 +15,7 @@ import UIKit
 
 extension DailyPulseManager {
     func resolveGenerationModel() -> RunnableModel? {
-        let dedicatedModelIdentifier = defaults.string(forKey: Self.dedicatedModelDefaultsKey) ?? ""
+        let dedicatedModelIdentifier = Persistence.readAppConfigText(key: AppConfigKey.dailyPulseModelIdentifier.rawValue) ?? ""
         return Self.resolveGenerationModel(
             dedicatedModelIdentifier: dedicatedModelIdentifier,
             selectedModel: chatService.selectedModelSubject.value,

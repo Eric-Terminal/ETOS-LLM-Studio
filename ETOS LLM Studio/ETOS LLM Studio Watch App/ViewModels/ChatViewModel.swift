@@ -219,14 +219,30 @@ class ChatViewModel: ObservableObject {
     @AppStorage("enableNoBubbleUI") var enableNoBubbleUI: Bool = false
     @AppStorage("sendSpeechAsAudio") var sendSpeechAsAudio: Bool = false
     @AppStorage("enableSpeechInput") var enableSpeechInput: Bool = false
-    @AppStorage("speechModelIdentifier") var speechModelIdentifier: String = ""
-    @AppStorage("ttsModelIdentifier") var ttsModelIdentifier: String = ""
-    @AppStorage("memoryEmbeddingModelIdentifier") var memoryEmbeddingModelIdentifier: String = ""
-    @AppStorage("titleGenerationModelIdentifier") var titleGenerationModelIdentifier: String = ""
-    @AppStorage("dailyPulseModelIdentifier") var dailyPulseModelIdentifier: String = ""
-    @AppStorage("conversationSummaryModelIdentifier") var conversationSummaryModelIdentifier: String = ""
-    @AppStorage("reasoningSummaryModelIdentifier") var reasoningSummaryModelIdentifier: String = ""
-    @AppStorage(ChatService.ocrModelStorageKey) var ocrModelIdentifier: String = ""
+    @Published var speechModelIdentifier: String = AppConfigStore.shared.speechModelIdentifier {
+        didSet { AppConfigStore.shared.speechModelIdentifier = speechModelIdentifier }
+    }
+    @Published var ttsModelIdentifier: String = AppConfigStore.shared.ttsModelIdentifier {
+        didSet { AppConfigStore.shared.ttsModelIdentifier = ttsModelIdentifier }
+    }
+    @Published var memoryEmbeddingModelIdentifier: String = AppConfigStore.shared.memoryEmbeddingModelIdentifier {
+        didSet { AppConfigStore.shared.memoryEmbeddingModelIdentifier = memoryEmbeddingModelIdentifier }
+    }
+    @Published var titleGenerationModelIdentifier: String = AppConfigStore.shared.titleGenerationModelIdentifier {
+        didSet { AppConfigStore.shared.titleGenerationModelIdentifier = titleGenerationModelIdentifier }
+    }
+    @Published var dailyPulseModelIdentifier: String = AppConfigStore.shared.dailyPulseModelIdentifier {
+        didSet { AppConfigStore.shared.dailyPulseModelIdentifier = dailyPulseModelIdentifier }
+    }
+    @Published var conversationSummaryModelIdentifier: String = AppConfigStore.shared.conversationSummaryModelIdentifier {
+        didSet { AppConfigStore.shared.conversationSummaryModelIdentifier = conversationSummaryModelIdentifier }
+    }
+    @Published var reasoningSummaryModelIdentifier: String = AppConfigStore.shared.reasoningSummaryModelIdentifier {
+        didSet { AppConfigStore.shared.reasoningSummaryModelIdentifier = reasoningSummaryModelIdentifier }
+    }
+    @Published var ocrModelIdentifier: String = AppConfigStore.shared.ocrModelIdentifier {
+        didSet { AppConfigStore.shared.ocrModelIdentifier = ocrModelIdentifier }
+    }
     @AppStorage("includeSystemTimeInPrompt") var includeSystemTimeInPrompt: Bool = false
     @AppStorage("systemTimeInjectionPosition") private var systemTimeInjectionPositionRawValue: String = SystemTimeInjectionPosition.front.rawValue
     @AppStorage("enablePeriodicTimeLandmark") var enablePeriodicTimeLandmark: Bool = true

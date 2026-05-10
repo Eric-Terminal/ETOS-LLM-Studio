@@ -90,7 +90,6 @@ public final class DailyPulseManager: ObservableObject {
     private static let includeShortcutContextDefaultsKey = "dailyPulse.includeShortcutContext"
     private static let includeRecentExternalResultsDefaultsKey = "dailyPulse.includeRecentExternalResults"
     private static let includeTrendContextDefaultsKey = "dailyPulse.includeTrendContext"
-    static let dedicatedModelDefaultsKey = "dailyPulseModelIdentifier"
     private static let lastViewedDayKeyDefaultsKey = "dailyPulse.lastViewedDayKey"
     private static let lastDeliveryAttemptDayKeyDefaultsKey = "dailyPulse.lastDeliveryAttemptDayKey"
 #if os(iOS)

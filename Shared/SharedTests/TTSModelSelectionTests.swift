@@ -15,13 +15,13 @@ struct TTSModelSelectionTests {
     @Test("存在 TTS 能力模型时优先返回可 TTS 模型")
     func testActivatedTTSModelsPrefersCapableModels() {
         let backupProviders = ConfigLoader.loadProviders()
-        let backupTTSIdentifier = UserDefaults.standard.string(forKey: "ttsModelIdentifier")
+        let backupTTSIdentifier = Persistence.readAppConfigText(key: AppConfigKey.ttsModelIdentifier.rawValue)
         defer {
             restoreProviders(backupProviders)
             if let backupTTSIdentifier {
-                UserDefaults.standard.set(backupTTSIdentifier, forKey: "ttsModelIdentifier")
+                Persistence.writeAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue, text: backupTTSIdentifier)
             } else {
-                UserDefaults.standard.removeObject(forKey: "ttsModelIdentifier")
+                Persistence.deleteAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue)
             }
         }
 
@@ -45,7 +45,7 @@ struct TTSModelSelectionTests {
         #expect(activated.first?.model.modelName == "gpt-4o-mini-tts")
 
         if let chosen = activated.first {
-            UserDefaults.standard.set(chosen.id, forKey: "ttsModelIdentifier")
+            Persistence.writeAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue, text: chosen.id)
             let resolved = service.resolveSelectedTTSModel()
             #expect(resolved?.id == chosen.id)
         } else {

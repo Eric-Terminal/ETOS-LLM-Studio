@@ -11,7 +11,7 @@ import Shared
 
 struct SpecializedModelSelectorView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @AppStorage("imageGenerationModelIdentifier") private var imageGenerationModelIdentifier: String = ""
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     private var speechModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -64,8 +64,8 @@ struct SpecializedModelSelectorView: View {
 
     private var imageGenerationModelBinding: Binding<RunnableModel?> {
         Binding(
-            get: { viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) },
-            set: { imageGenerationModelIdentifier = $0?.id ?? "" }
+            get: { viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) },
+            set: { appConfig.imageGenerationModelIdentifier = $0?.id ?? "" }
         )
     }
 
@@ -186,9 +186,9 @@ struct SpecializedModelSelectorView: View {
     }
 
     private func syncImageGenerationSelection() {
-        guard !imageGenerationModelIdentifier.isEmpty else { return }
-        if viewModel.imageGenerationModel(with: imageGenerationModelIdentifier) == nil {
-            imageGenerationModelIdentifier = ""
+        guard !appConfig.imageGenerationModelIdentifier.isEmpty else { return }
+        if viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) == nil {
+            appConfig.imageGenerationModelIdentifier = ""
         }
     }
 }

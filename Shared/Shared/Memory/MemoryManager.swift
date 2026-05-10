@@ -56,7 +56,6 @@ public class MemoryManager {
     let dateFormatter = ISO8601DateFormatter()
     let chunker: MemoryChunker
     let embeddingGenerator: MemoryEmbeddingGenerating
-    let preferredEmbeddingModelKey = "memoryEmbeddingModelIdentifier"
     let embeddingRetryPolicy: MemoryEmbeddingRetryPolicy
     let consistencyCheckDefaultDelay: TimeInterval = 2.0
     let storageRootDirectory: URL?

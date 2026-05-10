@@ -524,7 +524,7 @@ extension ChatService {
     }
 
     func resolveSelectedOCRModel() -> RunnableModel? {
-        let identifier = UserDefaults.standard.string(forKey: Self.ocrModelStorageKey) ?? ""
+        let identifier = Persistence.readAppConfigText(key: AppConfigKey.ocrModelIdentifier.rawValue) ?? ""
 #if canImport(Vision) && !os(watchOS)
         guard !identifier.isEmpty else {
             return Self.systemOCRRunnableModel

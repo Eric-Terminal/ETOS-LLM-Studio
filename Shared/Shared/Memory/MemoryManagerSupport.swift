@@ -13,7 +13,7 @@ import os.log
 
 extension MemoryManager {
     func preferredEmbeddingModelIdentifier() -> String? {
-        UserDefaults.standard.string(forKey: preferredEmbeddingModelKey)
+        Persistence.readAppConfigText(key: AppConfigKey.memoryEmbeddingModelIdentifier.rawValue)
     }
 
     public func isEmbeddingModelConfigured() -> Bool {

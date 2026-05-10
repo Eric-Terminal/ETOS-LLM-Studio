@@ -245,7 +245,7 @@ extension ChatServiceTests {
         let conversationModel = chatModels[0]
         let dedicatedTitleModel = chatModels[1]
         chatService.setSelectedModel(conversationModel)
-        UserDefaults.standard.set(dedicatedTitleModel.id, forKey: "titleGenerationModelIdentifier")
+        Persistence.writeAppConfig(key: AppConfigKey.titleGenerationModelIdentifier.rawValue, text: dedicatedTitleModel.id)
 
         setupMockResponsesForChatAndTitle(title: "独立标题模型命名")
 
@@ -278,7 +278,7 @@ extension ChatServiceTests {
             return
         }
         chatService.setSelectedModel(selectedChatModel)
-        UserDefaults.standard.removeObject(forKey: "titleGenerationModelIdentifier")
+        Persistence.deleteAppConfig(key: AppConfigKey.titleGenerationModelIdentifier.rawValue)
 
         setupMockResponsesForChatAndTitle(title: "回退到主模型")
 
@@ -310,7 +310,7 @@ extension ChatServiceTests {
             return
         }
         chatService.setSelectedModel(selectedChatModel)
-        UserDefaults.standard.set("non-existent-model-id", forKey: "titleGenerationModelIdentifier")
+        Persistence.writeAppConfig(key: AppConfigKey.titleGenerationModelIdentifier.rawValue, text: "non-existent-model-id")
 
         setupMockResponsesForChatAndTitle(title: "无效配置回退")
 
@@ -351,7 +351,7 @@ extension ChatServiceTests {
         chatService.setSelectedModel(conversationModel)
         chatService.updateMessages([loadingMessage], for: sessionID)
         UserDefaults.standard.set(true, forKey: "enableReasoningSummary")
-        UserDefaults.standard.set(dedicatedSummaryModel.id, forKey: "reasoningSummaryModelIdentifier")
+        Persistence.writeAppConfig(key: AppConfigKey.reasoningSummaryModelIdentifier.rawValue, text: dedicatedSummaryModel.id)
         setupMockReasoningSummaryResponse(summary: "比较成本后选稳妥方案")
 
         await chatService.processResponseMessage(
