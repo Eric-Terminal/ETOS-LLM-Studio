@@ -65,6 +65,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncBackupCreateOnLaunch = "sync.backup.createOnLaunch"
     case appLockEnabled = "security.appLock.enabled"
     case appLockTimeoutSeconds = "security.appLock.timeoutSeconds"
+    case appLockBiometricEnabled = "security.appLock.biometricEnabled"
 
     case aiTemperature = "aiTemperature"
     case aiTopP = "aiTopP"
@@ -168,7 +169,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .cloudSyncEnabled,
              .cloudSyncAutoSyncEnabled,
              .syncBackupCreateOnLaunch,
-             .appLockEnabled:
+             .appLockEnabled,
+             .appLockBiometricEnabled:
             return .bool(false)
         case .syncBackupUploadEndpoint:
             return .text("")
@@ -334,7 +336,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .hideAnnouncementSection,
              .hiddenAnnouncementKeys,
              .appLockEnabled,
-             .appLockTimeoutSeconds:
+             .appLockTimeoutSeconds,
+             .appLockBiometricEnabled:
             return false
         default:
             return true

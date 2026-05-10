@@ -12,6 +12,8 @@ public struct AppLockOverlayView: View {
     @ObservedObject private var lockManager = AppLockManager.shared
     @State private var password = ""
     @State private var errorMessage: String?
+    @State private var hasAttemptedBiometricUnlock = false
+    @State private var isBiometricUnlocking = false
 
     public init() {}
 
@@ -47,6 +49,17 @@ public struct AppLockOverlayView: View {
                         .multilineTextAlignment(.center)
                 }
 
+                if lockManager.isBiometricEnabled {
+                    Button {
+                        startBiometricUnlock()
+                    } label: {
+                        Label(NSLocalizedString("使用生物识别", comment: ""), systemImage: "faceid")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isBiometricUnlocking)
+                }
+
                 Button {
                     unlock()
                 } label: {
@@ -62,6 +75,7 @@ public struct AppLockOverlayView: View {
         .onAppear {
             password = ""
             errorMessage = nil
+            startBiometricUnlockIfNeeded()
         }
     }
 
@@ -72,6 +86,26 @@ public struct AppLockOverlayView: View {
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func startBiometricUnlockIfNeeded() {
+        guard lockManager.isBiometricEnabled, !hasAttemptedBiometricUnlock else { return }
+        hasAttemptedBiometricUnlock = true
+        startBiometricUnlock()
+    }
+
+    private func startBiometricUnlock() {
+        guard !isBiometricUnlocking else { return }
+        isBiometricUnlocking = true
+        Task { @MainActor in
+            defer { isBiometricUnlocking = false }
+            do {
+                try await lockManager.biometricUnlock()
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -114,6 +148,17 @@ public struct AppLockSettingsView: View {
                 Text(NSLocalizedString("应用锁", comment: ""))
             } footer: {
                 Text(NSLocalizedString("应用锁只保护本机界面，不会随同步发送到其他设备。", comment: ""))
+            }
+
+            if lockManager.isEnabled {
+                Section {
+                    Toggle(NSLocalizedString("生物识别解锁", comment: ""), isOn: biometricBinding)
+                        .disabled(!lockManager.canEvaluateBiometrics())
+                } header: {
+                    Text(NSLocalizedString("生物识别", comment: ""))
+                } footer: {
+                    Text(biometricFooterText)
+                }
             }
 
             Section {
@@ -173,6 +218,20 @@ public struct AppLockSettingsView: View {
             get: { lockManager.timeoutSeconds },
             set: { lockManager.setTimeout(seconds: $0) }
         )
+    }
+
+    private var biometricBinding: Binding<Bool> {
+        Binding(
+            get: { lockManager.isBiometricEnabled },
+            set: { lockManager.setBiometricEnabled($0) }
+        )
+    }
+
+    private var biometricFooterText: String {
+        if lockManager.canEvaluateBiometrics() {
+            return NSLocalizedString("开启后可使用 Face ID、Touch ID 或设备支持的生物识别解锁；失败后仍可输入应用锁密码。", comment: "")
+        }
+        return NSLocalizedString("当前设备未启用或不支持生物识别，请继续使用应用锁密码。", comment: "")
     }
 
     private var timeoutOptions: [(seconds: Int, title: String)] {

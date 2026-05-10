@@ -40,6 +40,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var syncBackupCreateOnLaunch: Bool { didSet { write(.syncBackupCreateOnLaunch, syncBackupCreateOnLaunch) } }
     @Published public var appLockEnabled: Bool { didSet { write(.appLockEnabled, appLockEnabled) } }
     @Published public var appLockTimeoutSeconds: Int { didSet { write(.appLockTimeoutSeconds, appLockTimeoutSeconds) } }
+    @Published public var appLockBiometricEnabled: Bool { didSet { write(.appLockBiometricEnabled, appLockBiometricEnabled) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -146,6 +147,7 @@ public final class AppConfigStore: ObservableObject {
         syncBackupCreateOnLaunch = Self.boolValue(.syncBackupCreateOnLaunch, userDefaults: userDefaults)
         appLockEnabled = Self.boolValue(.appLockEnabled, userDefaults: userDefaults)
         appLockTimeoutSeconds = Self.integerValue(.appLockTimeoutSeconds, userDefaults: userDefaults)
+        appLockBiometricEnabled = Self.boolValue(.appLockBiometricEnabled, userDefaults: userDefaults)
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
         aiTopP = Self.realValue(.aiTopP, userDefaults: userDefaults)
@@ -295,6 +297,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncBackupCreateOnLaunch: return .bool(syncBackupCreateOnLaunch)
         case .appLockEnabled: return .bool(appLockEnabled)
         case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
+        case .appLockBiometricEnabled: return .bool(appLockBiometricEnabled)
 
         case .aiTemperature: return .real(aiTemperature)
         case .aiTopP: return .real(aiTopP)
@@ -417,6 +420,7 @@ public final class AppConfigStore: ObservableObject {
         case .cloudSyncAutoSyncEnabled: cloudSyncAutoSyncEnabled = value
         case .syncBackupCreateOnLaunch: syncBackupCreateOnLaunch = value
         case .appLockEnabled: appLockEnabled = value
+        case .appLockBiometricEnabled: appLockBiometricEnabled = value
         case .aiTemperatureEnabled: aiTemperatureEnabled = value
         case .aiTopPEnabled: aiTopPEnabled = value
         case .enableStreaming: enableStreaming = value

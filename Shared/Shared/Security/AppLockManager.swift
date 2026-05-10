@@ -10,6 +10,9 @@ import Combine
 import CommonCrypto
 import Foundation
 import os.log
+#if canImport(LocalAuthentication)
+import LocalAuthentication
+#endif
 #if canImport(Security)
 import Security
 #endif
@@ -47,6 +50,8 @@ public final class AppLockManager: ObservableObject {
         case invalidPassword
         case storageFailed
         case locked
+        case biometricUnavailable
+        case biometricFailed
 
         public var errorDescription: String? {
             switch self {
@@ -62,6 +67,10 @@ public final class AppLockManager: ObservableObject {
                 return "保存应用锁凭据失败。"
             case .locked:
                 return "请先解锁应用。"
+            case .biometricUnavailable:
+                return "当前设备不可用生物识别。"
+            case .biometricFailed:
+                return "生物识别未通过，请输入应用锁密码。"
             }
         }
     }
@@ -97,6 +106,10 @@ public final class AppLockManager: ObservableObject {
 
     public var timeoutSeconds: Int {
         Self.normalizedTimeoutSeconds(appConfig.appLockTimeoutSeconds)
+    }
+
+    public var isBiometricEnabled: Bool {
+        isEnabled && appConfig.appLockBiometricEnabled
     }
 
     public func refreshState() {
@@ -140,6 +153,7 @@ public final class AppLockManager: ObservableObject {
             throw AppLockError.storageFailed
         }
         appConfig.appLockEnabled = false
+        appConfig.appLockBiometricEnabled = false
         state = .disabled
         backgroundEnteredAt = nil
     }
@@ -183,6 +197,46 @@ public final class AppLockManager: ObservableObject {
 
     public func setTimeout(seconds: Int) {
         appConfig.appLockTimeoutSeconds = Self.normalizedTimeoutSeconds(seconds)
+    }
+
+    public func setBiometricEnabled(_ isEnabled: Bool) {
+        appConfig.appLockBiometricEnabled = self.isEnabled && isEnabled
+    }
+
+    public func canEvaluateBiometrics() -> Bool {
+        #if canImport(LocalAuthentication)
+        let context = LAContext()
+        var error: NSError?
+        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+        #else
+        return false
+        #endif
+    }
+
+    public func biometricUnlock() async throws {
+        guard isBiometricEnabled else {
+            throw AppLockError.biometricUnavailable
+        }
+        #if canImport(LocalAuthentication)
+        let context = LAContext()
+        context.localizedCancelTitle = NSLocalizedString("输入密码", comment: "")
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            throw AppLockError.biometricUnavailable
+        }
+        let reason = NSLocalizedString("使用生物识别解锁 ETOS LLM Studio。", comment: "")
+        let success = try await context.evaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            localizedReason: reason
+        )
+        guard success else {
+            throw AppLockError.biometricFailed
+        }
+        state = .unlocked
+        backgroundEnteredAt = nil
+        #else
+        throw AppLockError.biometricUnavailable
+        #endif
     }
 
     public static func normalizedTimeoutSeconds(_ seconds: Int) -> Int {

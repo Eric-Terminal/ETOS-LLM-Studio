@@ -91,6 +91,23 @@ struct AppLockManagerTests {
         #expect(store.loadCredential() == nil)
     }
 
+    @Test("关闭应用锁会同时关闭生物识别开关")
+    func testDisableAlsoTurnsOffBiometrics() throws {
+        let backup = backupAppLockConfig()
+        defer { restoreAppLockConfig(backup) }
+
+        let manager = AppLockManager(credentialStore: InMemoryAppLockCredentialStore())
+        try manager.enable(password: "passcode", confirmation: "passcode")
+        manager.setBiometricEnabled(true)
+
+        #expect(AppConfigStore.shared.appLockBiometricEnabled == true)
+
+        try manager.disable()
+
+        #expect(AppConfigStore.shared.appLockBiometricEnabled == false)
+        #expect(manager.isBiometricEnabled == false)
+    }
+
     @Test("应用锁设置不会进入 AppConfig 同步快照")
     func testAppLockSettingsAreLocalOnly() {
         let backup = backupAppLockConfig()
@@ -98,23 +115,27 @@ struct AppLockManagerTests {
 
         AppConfigStore.shared.appLockEnabled = true
         AppConfigStore.shared.appLockTimeoutSeconds = 60
+        AppConfigStore.shared.appLockBiometricEnabled = true
 
         let snapshot = AppConfigStore.shared.snapshot()
 
         #expect(snapshot[AppConfigKey.appLockEnabled.rawValue] == nil)
         #expect(snapshot[AppConfigKey.appLockTimeoutSeconds.rawValue] == nil)
+        #expect(snapshot[AppConfigKey.appLockBiometricEnabled.rawValue] == nil)
     }
 
-    private func backupAppLockConfig() -> (enabled: Bool, timeout: Int) {
+    private func backupAppLockConfig() -> (enabled: Bool, timeout: Int, biometricEnabled: Bool) {
         (
             enabled: AppConfigStore.shared.appLockEnabled,
-            timeout: AppConfigStore.shared.appLockTimeoutSeconds
+            timeout: AppConfigStore.shared.appLockTimeoutSeconds,
+            biometricEnabled: AppConfigStore.shared.appLockBiometricEnabled
         )
     }
 
-    private func restoreAppLockConfig(_ backup: (enabled: Bool, timeout: Int)) {
+    private func restoreAppLockConfig(_ backup: (enabled: Bool, timeout: Int, biometricEnabled: Bool)) {
         AppConfigStore.shared.appLockEnabled = backup.enabled
         AppConfigStore.shared.appLockTimeoutSeconds = backup.timeout
+        AppConfigStore.shared.appLockBiometricEnabled = backup.biometricEnabled
     }
 }
 
