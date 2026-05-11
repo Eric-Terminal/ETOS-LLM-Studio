@@ -507,7 +507,7 @@ public enum FontLibrary {
     }
 
     private static func ensureRuntimeSettingsSynchronized() {
-        let settings = loadFontSettingsFromUserDefaults()
+        let settings = loadFontSettingsFromAppConfig()
         let needReload = withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return false }
             return snapshot.isCustomFontEnabled != settings.isCustomFontEnabled
