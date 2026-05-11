@@ -38,15 +38,7 @@ struct DisplaySettingsView: View {
     
     var body: some View {
         Form {
-            // MARK: Section 1：界面架构
-            Section(footer: Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))) {
-                Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
-                    Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
-                    Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
-                }
-            }
-
-            // MARK: Section 2：背景与特效
+            // MARK: Section 1：背景与特效
             Section(header: Text(NSLocalizedString("背景与特效", comment: ""))) {
                 Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
                 NavigationLink(destination: BackgroundPickerView(
@@ -73,7 +65,7 @@ struct DisplaySettingsView: View {
                 }
             }
 
-            // MARK: Section 3：对话框与内容
+            // MARK: Section 2：对话框与内容
             Section(header: Text(NSLocalizedString("对话框与内容", comment: ""))) {
                 Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
                 if enableMarkdown {
@@ -99,8 +91,15 @@ struct DisplaySettingsView: View {
                 }
             }
 
-            // MARK: Section 4：全局外观
-            Section(header: Text(NSLocalizedString("全局外观", comment: ""))) {
+            // MARK: Section 3：全局外观
+            Section(
+                header: Text(NSLocalizedString("全局外观", comment: "")),
+                footer: Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))
+            ) {
+                Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
+                    Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
+                    Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
+                }
                 Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
                     ForEach(AppLanguagePreference.allCases) { language in
                         appLanguageLabel(language)
