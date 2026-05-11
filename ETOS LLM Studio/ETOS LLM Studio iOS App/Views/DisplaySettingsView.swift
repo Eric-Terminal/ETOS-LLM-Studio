@@ -36,33 +36,37 @@ struct DisplaySettingsView: View {
                 Section(NSLocalizedString("背景图层", comment: "")) {
                     Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
 
-                    NavigationLink {
-                        BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
-                    } label: {
-                        Label(NSLocalizedString("选择背景图", comment: ""), systemImage: "photo.on.rectangle")
-                    }
+                    if enableBackground {
+                        NavigationLink {
+                            BackgroundPickerView(allBackgrounds: allBackgrounds, selectedBackground: $currentBackgroundImage)
+                        } label: {
+                            Label(NSLocalizedString("选择背景图", comment: ""), systemImage: "photo.on.rectangle")
+                        }
 
-                    Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
-                        Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
-                        Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
-                    }
+                        Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
+                            Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
+                            Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
+                        }
 
-                    Toggle(NSLocalizedString("自动轮换背景", comment: ""), isOn: $enableAutoRotateBackground)
+                        Toggle(NSLocalizedString("自动轮换背景", comment: ""), isOn: $enableAutoRotateBackground)
+                    }
                 }
 
-                Section(NSLocalizedString("质感与特效", comment: "")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
-                        Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
-                    }
+                if enableBackground {
+                    Section(NSLocalizedString("质感与特效", comment: "")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(format: NSLocalizedString("模糊 %.1f", comment: ""), backgroundBlur))
+                            Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
+                        }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(format: NSLocalizedString("不透明度 %.2f", comment: ""), backgroundOpacity))
-                        Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
-                    }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(format: NSLocalizedString("不透明度 %.2f", comment: ""), backgroundOpacity))
+                            Slider(value: $backgroundOpacity, in: 0.1...1.0, step: 0.05)
+                        }
 
-                    if #available(iOS 26.0, *) {
-                        Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $enableLiquidGlass)
+                        if #available(iOS 26.0, *) {
+                            Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $enableLiquidGlass)
+                        }
                     }
                 }
             }

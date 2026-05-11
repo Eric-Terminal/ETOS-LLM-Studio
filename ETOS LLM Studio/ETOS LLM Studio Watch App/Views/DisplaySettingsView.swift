@@ -41,27 +41,29 @@ struct DisplaySettingsView: View {
             // MARK: Section 1：背景与特效
             Section(header: Text(NSLocalizedString("背景与特效", comment: ""))) {
                 Toggle(NSLocalizedString("显示背景", comment: ""), isOn: $enableBackground)
-                NavigationLink(destination: BackgroundPickerView(
-                    allBackgrounds: allBackgrounds,
-                    selectedBackground: $currentBackgroundImage
-                )) {
-                    Text(NSLocalizedString("选择背景", comment: ""))
-                }
-                Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
-                    Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
-                    Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
-                }
-                VStack(alignment: .leading) {
-                    Text(String(format: NSLocalizedString("背景模糊: %.1f", comment: ""), backgroundBlur))
-                    Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
-                }
-                VStack(alignment: .leading) {
-                    Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), normalizedBackgroundOpacity))
-                    Slider(value: backgroundOpacityBinding, in: WatchBackgroundOpacitySetting.allowedRange, step: 0.05)
-                }
-                Toggle(NSLocalizedString("背景随机轮换", comment: ""), isOn: $enableAutoRotateBackground)
-                if #available(watchOS 26.0, *) {
-                    Toggle(NSLocalizedString("启用液态玻璃", comment: ""), isOn: $enableLiquidGlass)
+                if enableBackground {
+                    NavigationLink(destination: BackgroundPickerView(
+                        allBackgrounds: allBackgrounds,
+                        selectedBackground: $currentBackgroundImage
+                    )) {
+                        Text(NSLocalizedString("选择背景", comment: ""))
+                    }
+                    Picker(NSLocalizedString("填充模式", comment: ""), selection: $backgroundContentMode) {
+                        Text(NSLocalizedString("填充 (居中裁剪)", comment: "")).tag("fill")
+                        Text(NSLocalizedString("适应 (完整显示)", comment: "")).tag("fit")
+                    }
+                    VStack(alignment: .leading) {
+                        Text(String(format: NSLocalizedString("背景模糊: %.1f", comment: ""), backgroundBlur))
+                        Slider(value: $backgroundBlur, in: 0...25, step: 0.5)
+                    }
+                    VStack(alignment: .leading) {
+                        Text(String(format: NSLocalizedString("背景不透明度: %.2f", comment: ""), normalizedBackgroundOpacity))
+                        Slider(value: backgroundOpacityBinding, in: WatchBackgroundOpacitySetting.allowedRange, step: 0.05)
+                    }
+                    Toggle(NSLocalizedString("背景随机轮换", comment: ""), isOn: $enableAutoRotateBackground)
+                    if #available(watchOS 26.0, *) {
+                        Toggle(NSLocalizedString("启用液态玻璃", comment: ""), isOn: $enableLiquidGlass)
+                    }
                 }
             }
 
