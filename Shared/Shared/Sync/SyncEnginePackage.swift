@@ -220,7 +220,11 @@ extension SyncEngine {
         }
 
         if package.options.contains(.sessions) {
-            let result = mergeSessions(package.sessions, chatService: chatService)
+            let result = mergeSessions(
+                package.sessions,
+                chatService: chatService,
+                sourcePlatform: package.sourcePlatform
+            )
             summary.importedSessions = result.imported
             summary.skippedSessions = result.skipped
         }

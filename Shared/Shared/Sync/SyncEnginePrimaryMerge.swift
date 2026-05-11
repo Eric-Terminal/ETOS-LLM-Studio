@@ -105,7 +105,8 @@ extension SyncEngine {
 
     static func mergeSessions(
         _ incoming: [SyncedSession],
-        chatService: ChatService
+        chatService: ChatService,
+        sourcePlatform: String? = nil
     ) -> (imported: Int, skipped: Int) {
         guard !incoming.isEmpty else { return (0, 0) }
 
@@ -141,7 +142,7 @@ extension SyncEngine {
                 ) {
                     session = makeForkedSession(
                         from: session,
-                        sourcePlatform: payload.sourcePlatform,
+                        sourcePlatform: sourcePlatform,
                         existingSessions: sessions
                     )
                     let forkedMessages = cloneMessagesForFork(payload.messages)
