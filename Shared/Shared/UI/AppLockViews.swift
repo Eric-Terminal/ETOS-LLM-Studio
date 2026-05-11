@@ -360,7 +360,7 @@ private struct DatabaseEncryptionSettingsSection: View {
         } header: {
             Text(NSLocalizedString("数据库物理加密", comment: ""))
         } footer: {
-            Text(NSLocalizedString("启用后，三处分库会使用独立主密码通过 SQLCipher 加密；快照导出仍使用单独的快照密码。", comment: ""))
+            Text(NSLocalizedString("启用后，三处分库会使用独立主密码通过 SQLCipher 加密；主密码会保存在本机 Keychain 中，用于应用启动时透明解锁。它主要防止数据库文件被离线提取；若要防范已解锁设备上的直接访问，请同时启用应用锁。快照导出仍使用单独的快照密码。", comment: ""))
         }
     }
 
