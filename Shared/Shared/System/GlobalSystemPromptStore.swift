@@ -118,7 +118,7 @@ public enum GlobalSystemPromptStore {
     public static func saveActiveSystemPrompt(_ prompt: String) -> GlobalSystemPromptSnapshot {
         let before = loadFromDatabase()
         if before?.activeSystemPrompt == prompt {
-            Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: prompt)
+            AppConfigStore.persistSynchronously(.text(prompt), for: .systemPrompt)
             return before!
         }
 
@@ -150,7 +150,7 @@ public enum GlobalSystemPromptStore {
             legacyPrompt: prompt
         )
         _ = saveToDatabase(snapshot)
-        Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: snapshot.activeSystemPrompt)
+        AppConfigStore.persistSynchronously(.text(snapshot.activeSystemPrompt), for: .systemPrompt)
         NotificationCenter.default.post(name: .globalSystemPromptStoreDidChange, object: nil)
         return snapshot
     }
@@ -280,7 +280,7 @@ public enum GlobalSystemPromptStore {
 
         didChange = setStringIfNeeded(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
         if userDefaults === UserDefaults.standard {
-            Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: snapshot.activeSystemPrompt)
+            AppConfigStore.persistSynchronously(.text(snapshot.activeSystemPrompt), for: .systemPrompt)
         }
         return didChange
     }
