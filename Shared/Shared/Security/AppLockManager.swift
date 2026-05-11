@@ -216,6 +216,9 @@ public final class AppLockManager: ObservableObject {
     }
 
     public func canEvaluateBiometrics() -> Bool {
+        #if os(watchOS)
+        return false
+        #else
         #if canImport(LocalAuthentication)
         let context = LAContext()
         var error: NSError?
@@ -223,12 +226,16 @@ public final class AppLockManager: ObservableObject {
         #else
         return false
         #endif
+        #endif
     }
 
     public func biometricUnlock() async throws {
         guard isBiometricEnabled else {
             throw AppLockError.biometricUnavailable
         }
+        #if os(watchOS)
+        throw AppLockError.biometricUnavailable
+        #else
         #if canImport(LocalAuthentication)
         let context = LAContext()
         context.localizedCancelTitle = NSLocalizedString("输入密码", comment: "")
@@ -248,6 +255,7 @@ public final class AppLockManager: ObservableObject {
         backgroundEnteredAt = nil
         #else
         throw AppLockError.biometricUnavailable
+        #endif
         #endif
     }
 

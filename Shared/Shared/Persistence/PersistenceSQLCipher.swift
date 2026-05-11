@@ -21,7 +21,7 @@ extension Persistence {
         mmapSize: Int64
     ) -> Configuration {
         var configuration = Configuration()
-        configuration.qos = qos
+        configuration.qos = DispatchQoS(qosClass: qos, relativePriority: 0)
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
             try prepareSQLCipherIfNeeded(db)
@@ -41,7 +41,7 @@ extension Persistence {
         readonly: Bool = false
     ) -> Configuration {
         var configuration = Configuration()
-        configuration.qos = qos
+        configuration.qos = DispatchQoS(qosClass: qos, relativePriority: 0)
         configuration.readonly = readonly
         configuration.foreignKeysEnabled = true
         return configuration
@@ -53,7 +53,7 @@ extension Persistence {
         passphrase: Data? = nil
     ) -> Configuration {
         var configuration = Configuration()
-        configuration.qos = qos
+        configuration.qos = DispatchQoS(qosClass: qos, relativePriority: 0)
         configuration.readonly = readonly
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
@@ -443,10 +443,11 @@ private extension Persistence {
         path: String,
         schema: String
     ) throws {
-        let didAttach = try DatabaseEncryptionManager.shared.withPassphraseDataIfAvailable { passphrase in
+        let didAttach = try DatabaseEncryptionManager.shared.withPassphraseDataIfAvailable { passphrase -> Bool in
             try attachDatabase(db, path: path, schema: schema, key: passphrase)
+            return true
         }
-        guard didAttach != nil else {
+        guard didAttach == true else {
             throw DatabaseEncryptionManager.DatabaseEncryptionError.passphraseUnavailable
         }
     }
@@ -467,10 +468,11 @@ private extension Persistence {
     }
 
     static func prepareSQLCipher(_ db: Database) throws {
-        let didUsePassphrase = try DatabaseEncryptionManager.shared.withPassphraseDataIfAvailable { passphrase in
+        let didUsePassphrase = try DatabaseEncryptionManager.shared.withPassphraseDataIfAvailable { passphrase -> Bool in
             try prepareSQLCipher(db, passphrase: passphrase)
+            return true
         }
-        guard didUsePassphrase != nil else {
+        guard didUsePassphrase == true else {
             throw DatabaseEncryptionManager.DatabaseEncryptionError.passphraseUnavailable
         }
     }
