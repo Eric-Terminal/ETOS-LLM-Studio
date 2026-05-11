@@ -233,10 +233,10 @@ private extension SnapshotBuilder {
         try archive.addEntry(
             with: "manifest.json",
             fileURL: payloadDirectory.appendingPathComponent("manifest.json", isDirectory: false),
-            compressionMethod: .none
+            compressionMethod: .deflate
         )
         for item in databaseItems {
-            try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .none)
+            try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
         }
     }
 

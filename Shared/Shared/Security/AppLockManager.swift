@@ -149,6 +149,18 @@ public final class AppLockManager: ObservableObject {
         guard state != .locked else {
             throw AppLockError.locked
         }
+        try disableVerified()
+    }
+
+    public func disable(password: String) throws {
+        guard state != .locked else {
+            throw AppLockError.locked
+        }
+        try verify(password: password)
+        try disableVerified()
+    }
+
+    private func disableVerified() throws {
         guard credentialStore.deleteCredential() else {
             throw AppLockError.storageFailed
         }

@@ -139,6 +139,7 @@ public struct AppLockSettingsView: View {
                     Button(NSLocalizedString("关闭应用锁", comment: ""), role: .destructive) {
                         disable()
                     }
+                    .disabled(currentPassword.isEmpty)
                 } else {
                     statusRow(
                         title: NSLocalizedString("状态", comment: ""),
@@ -177,9 +178,13 @@ public struct AppLockSettingsView: View {
                     savePassword()
                 }
                 .disabled(newPassword.isEmpty || confirmation.isEmpty || (lockManager.isEnabled && currentPassword.isEmpty))
-            } header: {
-                Text(NSLocalizedString("密码", comment: ""))
-            }
+                } header: {
+                    Text(NSLocalizedString("密码", comment: ""))
+                } footer: {
+                    if lockManager.isEnabled {
+                        Text(NSLocalizedString("更新或关闭应用锁前需要输入当前密码。", comment: ""))
+                    }
+                }
 
             Section {
                 Picker(NSLocalizedString("后台后锁定", comment: ""), selection: timeoutBinding) {
@@ -269,7 +274,7 @@ public struct AppLockSettingsView: View {
 
     private func disable() {
         do {
-            try lockManager.disable()
+            try lockManager.disable(password: currentPassword)
             clearPasswords()
             errorMessage = nil
             successMessage = NSLocalizedString("应用锁已关闭。", comment: "")
