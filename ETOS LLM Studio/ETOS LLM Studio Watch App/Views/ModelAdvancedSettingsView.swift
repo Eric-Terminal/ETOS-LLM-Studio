@@ -126,8 +126,23 @@ struct ModelAdvancedSettingsView: View {
                 .lineLimit(3...8)
             }
 
-            Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
+            Section(
+                header: Text(NSLocalizedString("系统时间注入", comment: "")),
+                footer: Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
                 Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
+                if includeSystemTimeInPrompt {
+                    Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
+                        ForEach(SystemTimeInjectionPosition.allCases) { position in
+                            Text(position.displayName).tag(position)
+                        }
+                    }
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
                 Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
             }
 
