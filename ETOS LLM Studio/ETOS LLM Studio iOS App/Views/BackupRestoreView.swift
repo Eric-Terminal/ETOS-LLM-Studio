@@ -81,7 +81,7 @@ struct BackupRestoreView: View {
             }
 
             Section {
-                TextField("https://example.com/backup", text: $appConfig.syncBackupUploadEndpoint)
+                TextField(NSLocalizedString("https://example.com/backup", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)

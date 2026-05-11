@@ -25,13 +25,13 @@ public enum SnapshotEncryptor {
         public var errorDescription: String? {
             switch self {
             case .emptyPassword:
-                return "密码不能为空。"
+                return NSLocalizedString("密码不能为空。", comment: "")
             case .invalidHeader:
-                return "快照加密文件格式无效。"
+                return NSLocalizedString("快照加密文件格式无效。", comment: "")
             case .unsupportedMode(let mode):
-                return "暂不支持此快照加密模式：\(mode)。"
+                return String(format: NSLocalizedString("暂不支持此快照加密模式：%d。", comment: ""), Int(mode))
             case .keyDerivationFailed:
-                return "快照密码密钥派生失败。"
+                return NSLocalizedString("快照密码密钥派生失败。", comment: "")
             }
         }
     }

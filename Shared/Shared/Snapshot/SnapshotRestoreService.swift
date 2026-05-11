@@ -27,13 +27,13 @@ public enum SnapshotRestoreService {
         public var errorDescription: String? {
             switch self {
             case .unsupportedEncryptedSnapshot:
-                return "当前快照已加密，请使用安全恢复入口导入。"
+                return NSLocalizedString("当前快照已加密，请使用安全恢复入口导入。", comment: "")
             case .missingDatabase(let name):
-                return "快照缺少数据库文件：\(name)"
+                return String(format: NSLocalizedString("快照缺少数据库文件：%@", comment: ""), name)
             case .invalidDatabase(let name):
-                return "快照中的数据库校验失败：\(name)"
+                return String(format: NSLocalizedString("快照中的数据库校验失败：%@", comment: ""), name)
             case .unreadableArchive:
-                return "无法读取快照归档。"
+                return NSLocalizedString("无法读取快照归档。", comment: "")
             }
         }
     }

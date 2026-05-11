@@ -26,9 +26,9 @@ public enum SnapshotBuilder {
         public var errorDescription: String? {
             switch self {
             case .chatStoreUnavailable:
-                return "当前无法访问聊天数据库，不能创建离线快照。"
+                return NSLocalizedString("当前无法访问聊天数据库，不能创建离线快照。", comment: "")
             case .auxiliaryStoreUnavailable(let name):
-                return "当前无法访问\(name)，不能创建离线快照。"
+                return String(format: NSLocalizedString("当前无法访问%@，不能创建离线快照。", comment: ""), name)
             }
         }
     }
@@ -99,9 +99,9 @@ private extension SnapshotBuilder {
         var displayName: String {
             switch self {
             case .chat:
-                return "聊天数据库"
+                return NSLocalizedString("聊天数据库", comment: "")
             case .auxiliary(let kind, _):
-                return kind == .config ? "配置数据库" : "记忆数据库"
+                return kind == .config ? NSLocalizedString("配置数据库", comment: "") : NSLocalizedString("记忆数据库", comment: "")
             }
         }
 
@@ -120,10 +120,10 @@ private extension SnapshotBuilder {
             throw SnapshotError.chatStoreUnavailable
         }
         guard let configStore = Persistence.activeAuxiliaryStore(kind: .config) else {
-            throw SnapshotError.auxiliaryStoreUnavailable("配置数据库")
+            throw SnapshotError.auxiliaryStoreUnavailable(NSLocalizedString("配置数据库", comment: ""))
         }
         guard let memoryStore = Persistence.activeAuxiliaryStore(kind: .memory) else {
-            throw SnapshotError.auxiliaryStoreUnavailable("记忆数据库")
+            throw SnapshotError.auxiliaryStoreUnavailable(NSLocalizedString("记忆数据库", comment: ""))
         }
 
         let sources: [SourceDatabase] = [
@@ -140,7 +140,7 @@ private extension SnapshotBuilder {
                 try removeChatFTSObjects(from: databaseURL)
                 guard Persistence.isDatabaseHealthy(at: databaseURL, encrypted: false) else {
                     throw NSError(domain: "SnapshotBuilder", code: 5, userInfo: [
-                        NSLocalizedDescriptionKey: "聊天数据库快照瘦身后完整性检查失败"
+                        NSLocalizedDescriptionKey: NSLocalizedString("聊天数据库快照瘦身后完整性检查失败", comment: "")
                     ])
                 }
             }
@@ -167,7 +167,7 @@ private extension SnapshotBuilder {
 
         guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
             throw NSError(domain: "SnapshotBuilder", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "\(source.displayName)快照完整性检查失败"
+                NSLocalizedDescriptionKey: String(format: NSLocalizedString("%@快照完整性检查失败", comment: ""), source.displayName)
             ])
         }
 

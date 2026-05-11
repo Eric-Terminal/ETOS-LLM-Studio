@@ -56,21 +56,21 @@ public final class AppLockManager: ObservableObject {
         public var errorDescription: String? {
             switch self {
             case .emptyPassword:
-                return "密码不能为空。"
+                return NSLocalizedString("密码不能为空。", comment: "")
             case .passwordMismatch:
-                return "两次输入的密码不一致。"
+                return NSLocalizedString("两次输入的密码不一致。", comment: "")
             case .credentialUnavailable:
-                return "应用锁凭据不可用，请重新设置密码。"
+                return NSLocalizedString("应用锁凭据不可用，请重新设置密码。", comment: "")
             case .invalidPassword:
-                return "密码错误。"
+                return NSLocalizedString("密码错误。", comment: "")
             case .storageFailed:
-                return "保存应用锁凭据失败。"
+                return NSLocalizedString("保存应用锁凭据失败。", comment: "")
             case .locked:
-                return "请先解锁应用。"
+                return NSLocalizedString("请先解锁应用。", comment: "")
             case .biometricUnavailable:
-                return "当前设备不可用生物识别。"
+                return NSLocalizedString("当前设备不可用生物识别。", comment: "")
             case .biometricFailed:
-                return "生物识别未通过，请输入应用锁密码。"
+                return NSLocalizedString("生物识别未通过，请输入应用锁密码。", comment: "")
             }
         }
     }

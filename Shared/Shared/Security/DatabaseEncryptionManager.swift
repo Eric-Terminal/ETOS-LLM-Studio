@@ -34,15 +34,15 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
         public var errorDescription: String? {
             switch self {
             case .emptyPassphrase:
-                return "数据库主密码不能为空。"
+                return NSLocalizedString("数据库主密码不能为空。", comment: "")
             case .passphraseMismatch:
-                return "两次输入的数据库主密码不一致。"
+                return NSLocalizedString("两次输入的数据库主密码不一致。", comment: "")
             case .passphraseUnavailable:
-                return "数据库主密码不可用，请重新输入。"
+                return NSLocalizedString("数据库主密码不可用，请重新输入。", comment: "")
             case .invalidPassphrase:
-                return "数据库主密码错误。"
+                return NSLocalizedString("数据库主密码错误。", comment: "")
             case .storageFailed:
-                return "保存数据库主密码失败。"
+                return NSLocalizedString("保存数据库主密码失败。", comment: "")
             }
         }
     }

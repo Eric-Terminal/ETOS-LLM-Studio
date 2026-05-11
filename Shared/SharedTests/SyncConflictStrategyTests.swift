@@ -40,6 +40,7 @@ struct SyncConflictStrategyTests {
 
         let package = SyncPackage(
             options: [.sessions],
+            sourcePlatform: "watchOS",
             sessions: [
                 SyncedSession(
                     session: session,

@@ -80,7 +80,7 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section(NSLocalizedString("上传备份（POST）", comment: "")) {
-                TextField("https://example.com/backup", text: $appConfig.syncBackupUploadEndpoint.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("https://example.com/backup", comment: ""), text: $appConfig.syncBackupUploadEndpoint.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 

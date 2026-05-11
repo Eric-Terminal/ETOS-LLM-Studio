@@ -429,13 +429,13 @@ public final class CloudSyncManager: ObservableObject {
         if let ckError = error as? CKError {
             switch ckError.code {
             case .notAuthenticated:
-                return "当前设备未登录 iCloud，无法进行云同步。"
+                return NSLocalizedString("当前设备未登录 iCloud，无法进行云同步。", comment: "")
             case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited:
-                return "当前网络无法连接 iCloud，请稍后重试。"
+                return NSLocalizedString("当前网络无法连接 iCloud，请稍后重试。", comment: "")
             case .quotaExceeded:
-                return "iCloud 空间不足，无法完成同步。"
+                return NSLocalizedString("iCloud 空间不足，无法完成同步。", comment: "")
             case .permissionFailure:
-                return "当前 Apple ID 没有可用的 iCloud 同步权限。"
+                return NSLocalizedString("当前 Apple ID 没有可用的 iCloud 同步权限。", comment: "")
             default:
                 return ckError.localizedDescription
             }
@@ -454,13 +454,13 @@ enum CloudSyncManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailableAccount:
-            return "当前设备未启用可用的 iCloud 账户。"
+            return NSLocalizedString("当前设备未启用可用的 iCloud 账户。", comment: "")
         case .invalidAsset:
-            return "iCloud 同步快照损坏，无法读取。"
+            return NSLocalizedString("iCloud 同步快照损坏，无法读取。", comment: "")
         case .decodeFailed:
-            return "iCloud 同步快照解析失败。"
+            return NSLocalizedString("iCloud 同步快照解析失败。", comment: "")
         case .subscriptionUnavailable:
-            return "CloudKit 订阅不可用。"
+            return NSLocalizedString("CloudKit 订阅不可用。", comment: "")
         }
     }
 }
