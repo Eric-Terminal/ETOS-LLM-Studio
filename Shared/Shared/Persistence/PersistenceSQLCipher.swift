@@ -285,9 +285,7 @@ extension Persistence {
             confirmation: confirmation
         )
     }
-}
 
-private extension Persistence {
     static func writeDatabaseEncryptionEnabled(_ isEnabled: Bool) {
         writeAppConfig(
             key: AppConfigKey.databaseEncryptionEnabled.rawValue,
@@ -296,6 +294,35 @@ private extension Persistence {
         )
     }
 
+    static func makeEncryptedSnapshotRestoreReplacements(
+        sources: SnapshotRestoreDatabaseURLs,
+        targets: SnapshotRestoreDatabaseURLs,
+        temporaryDirectory: URL
+    ) throws -> [DatabaseReplacement] {
+        [
+            try makeEncryptedSnapshotRestoreReplacement(
+                sourceURL: sources.chatStoreURL,
+                targetURL: targets.chatStoreURL,
+                fileName: "chat-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            ),
+            try makeEncryptedSnapshotRestoreReplacement(
+                sourceURL: sources.configStoreURL,
+                targetURL: targets.configStoreURL,
+                fileName: "config-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            ),
+            try makeEncryptedSnapshotRestoreReplacement(
+                sourceURL: sources.memoryStoreURL,
+                targetURL: targets.memoryStoreURL,
+                fileName: "memory-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            )
+        ]
+    }
+}
+
+private extension Persistence {
     static func databaseEncryptionTargetURLs() -> SnapshotRestoreDatabaseURLs {
         snapshotRestoreTargetURLs()
     }
@@ -384,6 +411,38 @@ private extension Persistence {
             ])
         }
         return DatabaseReplacement(sourceURL: destinationURL, targetURL: sourceURL)
+    }
+
+    static func makeEncryptedSnapshotRestoreReplacement(
+        sourceURL: URL,
+        targetURL: URL,
+        fileName: String,
+        temporaryDirectory: URL
+    ) throws -> DatabaseReplacement {
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            throw NSError(domain: "Persistence.SnapshotRestore", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "快照缺少数据库文件：\(sourceURL.lastPathComponent)"
+            ])
+        }
+
+        let destinationURL = temporaryDirectory.appendingPathComponent(fileName, isDirectory: false)
+        try removeItemIfExists(at: destinationURL)
+        removeSQLiteSidecars(at: destinationURL)
+
+        let source = try DatabaseQueue(path: sourceURL.path, configuration: makePlainDatabaseConfiguration(readonly: true))
+        defer { try? source.close() }
+        try source.read { db in
+            try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted")
+            try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
+            try db.execute(sql: "DETACH DATABASE encrypted")
+        }
+
+        guard isDatabaseHealthy(at: destinationURL, encrypted: true) else {
+            throw NSError(domain: "Persistence.SQLCipher", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "快照数据库加密校验失败：\(fileName)"
+            ])
+        }
+        return DatabaseReplacement(sourceURL: destinationURL, targetURL: targetURL)
     }
 
     static func makePlainReplacement(

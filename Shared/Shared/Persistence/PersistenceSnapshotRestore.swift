@@ -22,13 +22,36 @@ extension Persistence {
     }
 
     static func installSnapshotDatabases(_ sources: SnapshotRestoreDatabaseURLs) throws {
-        let targets = snapshotRestoreTargetURLs()
-        let replacements = [
-            DatabaseReplacement(sourceURL: sources.chatStoreURL, targetURL: targets.chatStoreURL),
-            DatabaseReplacement(sourceURL: sources.configStoreURL, targetURL: targets.configStoreURL),
-            DatabaseReplacement(sourceURL: sources.memoryStoreURL, targetURL: targets.memoryStoreURL)
-        ]
         let fileManager = FileManager.default
+        let targets = snapshotRestoreTargetURLs()
+        let shouldPreserveDatabaseEncryption = databaseEncryptionHasStoredPassphrase()
+        let conversionDirectory = shouldPreserveDatabaseEncryption
+            ? fileManager.temporaryDirectory
+                .appendingPathComponent("ETOS-Snapshot-Encrypt-\(UUID().uuidString)", isDirectory: true)
+            : nil
+        if let conversionDirectory {
+            try fileManager.createDirectory(at: conversionDirectory, withIntermediateDirectories: true)
+        }
+        defer {
+            if let conversionDirectory {
+                try? fileManager.removeItem(at: conversionDirectory)
+            }
+        }
+
+        let replacements: [DatabaseReplacement]
+        if shouldPreserveDatabaseEncryption, let conversionDirectory {
+            replacements = try makeEncryptedSnapshotRestoreReplacements(
+                sources: sources,
+                targets: targets,
+                temporaryDirectory: conversionDirectory
+            )
+        } else {
+            replacements = [
+                DatabaseReplacement(sourceURL: sources.chatStoreURL, targetURL: targets.chatStoreURL),
+                DatabaseReplacement(sourceURL: sources.configStoreURL, targetURL: targets.configStoreURL),
+                DatabaseReplacement(sourceURL: sources.memoryStoreURL, targetURL: targets.memoryStoreURL)
+            ]
+        }
         let rollbackDirectory = fileManager.temporaryDirectory
             .appendingPathComponent("ETOS-Snapshot-Rollback-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: rollbackDirectory, withIntermediateDirectories: true)
@@ -44,6 +67,9 @@ extension Persistence {
                 try replaceDatabaseFile(replacement)
             }
             bootstrapGRDBStoreOnLaunch()
+            if shouldPreserveDatabaseEncryption {
+                writeDatabaseEncryptionEnabled(true)
+            }
         } catch {
             if didPrepareRollback {
                 restoreSnapshotRollback(replacements: replacements, rollbackDirectory: rollbackDirectory)

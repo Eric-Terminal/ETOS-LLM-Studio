@@ -248,6 +248,77 @@ extension PersistenceTests {
         #expect(restoredProfile?.sourceSessionID == snapshotSession.id)
     }
 
+    @Test("数据库物理加密开启时恢复快照会保持三处分库加密")
+    @MainActor
+    func testSnapshotRestoreKeepsEncryptedDatabasesWhenDatabaseEncryptionIsEnabled() throws {
+        cleanup(sessions: [])
+
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let previousEncryptionEnabled = AppConfigStore.shared.databaseEncryptionEnabled
+        let snapshotSession = ChatSession(id: UUID(), name: "Encrypted Restore Source", isTemporary: false)
+        let replacementSession = ChatSession(id: UUID(), name: "Encrypted Restore Target", isTemporary: false)
+
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        try? DatabaseEncryptionManager.shared.deletePassphraseWithoutVerification()
+        AppConfigStore.shared.databaseEncryptionEnabled = false
+        defer {
+            if DatabaseEncryptionManager.shared.hasStoredPassphrase {
+                try? Persistence.disableDatabaseEncryption(passphrase: "database-passphrase")
+            }
+            try? DatabaseEncryptionManager.shared.deletePassphraseWithoutVerification()
+            AppConfigStore.shared.databaseEncryptionEnabled = previousEncryptionEnabled
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [snapshotSession, replacementSession])
+        }
+
+        Persistence.saveChatSessions([snapshotSession])
+        Persistence.saveMessages([ChatMessage(role: .user, content: "encrypted-restore-source")], for: snapshotSession.id)
+        #expect(Persistence.saveAuxiliaryBlob(["value": "snapshot"], forKey: "providers_v1"))
+        try ConversationMemoryManager.saveUserProfile(
+            content: "加密恢复源用户画像",
+            sourceSessionID: snapshotSession.id
+        )
+
+        let snapshotURL = try SnapshotBuilder.buildSnapshot()
+        defer { removeIfExists(snapshotURL) }
+
+        Persistence.saveChatSessions([replacementSession])
+        Persistence.saveMessages([ChatMessage(role: .assistant, content: "encrypted-restore-target")], for: replacementSession.id)
+        #expect(Persistence.saveAuxiliaryBlob(["value": "target"], forKey: "providers_v1"))
+        try ConversationMemoryManager.saveUserProfile(
+            content: "加密恢复前用户画像",
+            sourceSessionID: replacementSession.id
+        )
+
+        try Persistence.setDatabaseEncryptionEnabled(
+            passphrase: "database-passphrase",
+            confirmation: "database-passphrase"
+        )
+
+        try SnapshotRestoreService.restorePlainSnapshot(from: snapshotURL)
+
+        #expect(DatabaseEncryptionManager.shared.hasStoredPassphrase)
+        #expect(Persistence.readAppConfigInteger(key: AppConfigKey.databaseEncryptionEnabled.rawValue) == 1)
+        #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: true))
+        #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: true))
+        #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: true))
+        #expect(!Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
+        #expect(!Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: false))
+        #expect(!Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: false))
+
+        let restoredSessions = Persistence.loadChatSessions()
+        #expect(restoredSessions.contains(where: { $0.id == snapshotSession.id }))
+        #expect(!restoredSessions.contains(where: { $0.id == replacementSession.id }))
+        #expect(Persistence.loadMessages(for: snapshotSession.id).map(\.content) == ["encrypted-restore-source"])
+        let restoredProviderBlob = Persistence.loadAuxiliaryBlob([String: String].self, forKey: "providers_v1")
+        #expect(restoredProviderBlob?["value"] == "snapshot")
+        let restoredProfile = ConversationMemoryManager.loadUserProfile()
+        #expect(restoredProfile?.content == "加密恢复源用户画像")
+        #expect(restoredProfile?.sourceSessionID == snapshotSession.id)
+    }
+
     @Test("简单密码快照加密会写入 ELS1 头并可解密")
     func testSnapshotEncryptorSimplePasswordRoundTrip() throws {
         let plainData = Data("snapshot-plain-payload".utf8)
