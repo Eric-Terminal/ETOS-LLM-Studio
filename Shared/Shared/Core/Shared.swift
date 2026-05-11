@@ -136,7 +136,8 @@ public enum AppLanguagePreference: String, CaseIterable, Identifiable {
 
 public enum AppLanguageRuntime {
     public static func applyConfiguredLanguage() {
-        let rawValue = AppConfigStore.persistentSnapshot()[AppConfigKey.appLanguage.rawValue] as? String
+        let rawValue = Persistence.readAppConfigText(key: AppConfigKey.appLanguage.rawValue)
+            ?? (AppConfigStore.persistentSnapshot()[AppConfigKey.appLanguage.rawValue] as? String)
         apply(rawValue: rawValue ?? AppLanguagePreference.defaultLanguage.rawValue)
     }
 
