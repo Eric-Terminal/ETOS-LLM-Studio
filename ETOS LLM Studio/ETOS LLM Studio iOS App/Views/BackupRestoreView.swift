@@ -12,9 +12,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct BackupRestoreView: View {
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isCreatingSnapshot = false
     @State private var isImportingSnapshot = false
     @State private var isRestoringSnapshot = false
+    @State private var isUploadingSnapshot = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var encryptExport = false
@@ -51,16 +53,16 @@ struct BackupRestoreView: View {
                         Spacer()
                     }
                 }
-                .disabled(isCreatingSnapshot || isRestoringSnapshot)
+                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
                 Toggle(NSLocalizedString("设置密码", comment: ""), isOn: $encryptExport)
                     .buttonStyle(.plain)
-                    .disabled(isCreatingSnapshot || isRestoringSnapshot)
+                    .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
                 if encryptExport {
                     Toggle(NSLocalizedString("高强度派生", comment: ""), isOn: $useStrongPasswordDerivation)
                         .buttonStyle(.plain)
-                        .disabled(isCreatingSnapshot || isRestoringSnapshot)
+                        .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
                     SecureField(NSLocalizedString("密码", comment: ""), text: $exportPassword)
                         .textContentType(.newPassword)
                     SecureField(NSLocalizedString("确认密码", comment: ""), text: $exportPasswordConfirmation)
@@ -79,6 +81,33 @@ struct BackupRestoreView: View {
             }
 
             Section {
+                TextField("https://example.com/backup", text: $appConfig.syncBackupUploadEndpoint)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+
+                Button {
+                    createAndUploadSnapshot()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isUploadingSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label(NSLocalizedString("创建并上传快照", comment: ""), systemImage: "externaldrive.badge.icloud")
+                            .etFont(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+            } header: {
+                Text(NSLocalizedString("上传快照", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("会使用上方密码设置生成 .elsbackup，并以二进制 POST 上传到自定义端点。请仅使用可信的 R2 或自有服务器地址。", comment: ""))
+            }
+
+            Section {
                 Button(role: .destructive) {
                     isImportingSnapshot = true
                 } label: {
@@ -93,7 +122,7 @@ struct BackupRestoreView: View {
                         Spacer()
                     }
                 }
-                .disabled(isCreatingSnapshot || isRestoringSnapshot)
+                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
             } header: {
                 Text(NSLocalizedString("恢复", comment: ""))
             } footer: {
@@ -188,6 +217,80 @@ struct BackupRestoreView: View {
             return false
         }
         return true
+    }
+
+    private func validatedUploadEndpoint() -> URL? {
+        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            errorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
+            return nil
+        }
+        guard let endpoint = URL(string: trimmed),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            errorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+            return nil
+        }
+        return endpoint
+    }
+
+    private func createAndUploadSnapshot() {
+        guard validateExportPasswordIfNeeded(),
+              let endpoint = validatedUploadEndpoint() else { return }
+
+        isUploadingSnapshot = true
+        statusMessage = nil
+        errorMessage = nil
+        let password = encryptExport ? exportPassword : nil
+        let useStrongPasswordDerivation = useStrongPasswordDerivation
+        let endpointString = endpoint.absoluteString
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                guard let endpoint = URL(string: endpointString) else {
+                    throw SnapshotUploadError.invalidEndpoint
+                }
+
+                let snapshotURL = try SnapshotBuilder.buildSnapshot()
+                defer { try? FileManager.default.removeItem(at: snapshotURL) }
+                if let password {
+                    try Self.encryptSnapshotInPlace(
+                        snapshotURL,
+                        password: password,
+                        useStrongDerivation: useStrongPasswordDerivation
+                    )
+                }
+
+                let result = try await SyncPackageUploadService.uploadSnapshot(
+                    fileURL: snapshotURL,
+                    to: endpoint
+                )
+                await MainActor.run {
+                    if password != nil {
+                        exportPassword = ""
+                        exportPasswordConfirmation = ""
+                    }
+                    isUploadingSnapshot = false
+                    statusMessage = String(
+                        format: NSLocalizedString("快照已上传（HTTP %d）。", comment: ""),
+                        result.statusCode
+                    )
+                    if let preview = result.responseBodyPreview, !preview.isEmpty {
+                        statusMessage = String(
+                            format: NSLocalizedString("快照已上传（HTTP %d）：%@", comment: ""),
+                            result.statusCode,
+                            preview
+                        )
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isUploadingSnapshot = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func handleSnapshotImport(_ result: Result<[URL], Error>) {
@@ -299,5 +402,16 @@ struct BackupRestoreView: View {
             throw writeError
         }
         return destinationURL
+    }
+}
+
+private enum SnapshotUploadError: LocalizedError {
+    case invalidEndpoint
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEndpoint:
+            return NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+        }
     }
 }
