@@ -306,8 +306,4 @@ extension Persistence {
         Persistence.isDatabaseHealthy(at: url)
     }
 
-    private static func removeSQLiteFileAndSidecarsIfExists(at url: URL) throws {
-        try removeItemIfExists(at: url)
-        removeSQLiteSidecars(at: url)
-    }
 }

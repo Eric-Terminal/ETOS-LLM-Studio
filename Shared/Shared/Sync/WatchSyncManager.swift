@@ -36,12 +36,22 @@ func stageIncomingSyncExchangeData(
 }
 
 @MainActor
-func isWatchConnectivitySyncEnabled(appConfig: AppConfigStore = .shared) -> Bool {
+func isWatchConnectivitySyncEnabled() -> Bool {
+    isWatchConnectivitySyncEnabled(appConfig: AppConfigStore.shared)
+}
+
+@MainActor
+func isWatchConnectivitySyncEnabled(appConfig: AppConfigStore) -> Bool {
     appConfig.syncAutoSyncEnabled || !watchConnectivitySyncOptions(appConfig: appConfig).isEmpty
 }
 
 @MainActor
-func watchConnectivitySyncOptions(appConfig: AppConfigStore = .shared) -> SyncOptions {
+func watchConnectivitySyncOptions() -> SyncOptions {
+    watchConnectivitySyncOptions(appConfig: AppConfigStore.shared)
+}
+
+@MainActor
+func watchConnectivitySyncOptions(appConfig: AppConfigStore) -> SyncOptions {
     var options: SyncOptions = []
     if appConfig.syncProviders { options.insert(.providers) }
     if appConfig.syncSessions { options.insert(.sessions) }
