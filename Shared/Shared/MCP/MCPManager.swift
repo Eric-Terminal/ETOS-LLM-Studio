@@ -123,7 +123,11 @@ public final class MCPManager: ObservableObject {
     let governanceLogLimit = 1200
 
     private init() {
-        chatToolsEnabled = UserDefaults.standard.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
+        chatToolsEnabled = AppConfigStore.boolValue(
+            for: .mcpChatToolsEnabled,
+            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
         reloadServers()
         startConfigObservationIfNeeded()
         connectSelectedServersIfNeeded()

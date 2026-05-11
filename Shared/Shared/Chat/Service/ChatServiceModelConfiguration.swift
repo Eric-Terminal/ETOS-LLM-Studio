@@ -61,7 +61,11 @@ extension ChatService {
     func orderedRunnableModels(from models: [RunnableModel]) -> [RunnableModel] {
         guard !models.isEmpty else { return [] }
         let currentIDs = models.map(\.id)
-        let storedIDs = UserDefaults.standard.stringArray(forKey: Self.modelOrderStorageKey) ?? []
+        let storedIDs = AppConfigStore.stringArrayValue(
+            for: .modelOrderRunnableModels,
+            legacyUserDefaultsKey: Self.modelOrderStorageKey,
+            defaultValue: []
+        ) ?? []
         let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
         let rankByID = Dictionary(uniqueKeysWithValues: mergedIDs.enumerated().map { ($1, $0) })
 
@@ -81,10 +85,14 @@ extension ChatService {
         let currentIDs = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
-        let storedIDs = UserDefaults.standard.stringArray(forKey: Self.modelOrderStorageKey) ?? []
+        let storedIDs = AppConfigStore.stringArrayValue(
+            for: .modelOrderRunnableModels,
+            legacyUserDefaultsKey: Self.modelOrderStorageKey,
+            defaultValue: []
+        ) ?? []
         let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
         guard mergedIDs != storedIDs else { return }
-        UserDefaults.standard.set(mergedIDs, forKey: Self.modelOrderStorageKey)
+        AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
     }
 
     public func setConfiguredModelOrder(_ orderedModelIDs: [String], notifyChange: Bool = true) {
@@ -92,17 +100,31 @@ extension ChatService {
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
         let mergedIDs = ModelOrderIndex.merge(storedIDs: orderedModelIDs, currentIDs: currentIDs)
-        UserDefaults.standard.set(mergedIDs, forKey: Self.modelOrderStorageKey)
+        AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
         if notifyChange {
             providersSubject.send(providers)
         }
     }
 
     func persistSelectedRunnableModelID(_ modelID: String?) {
-        if let modelID {
-            UserDefaults.standard.set(modelID, forKey: Self.selectedRunnableModelStorageKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: Self.selectedRunnableModelStorageKey)
+        AppConfigStore.persistSynchronously(
+            .text(modelID ?? ""),
+            for: .selectedRunnableModelID
+        )
+    }
+
+    public func reloadAppConfigBackedModelState() {
+        reconcileStoredModelOrder()
+        providersSubject.send(providers)
+        let selectedID = AppConfigStore.textValue(
+            for: .selectedRunnableModelID,
+            legacyUserDefaultsKey: Self.selectedRunnableModelStorageKey
+        )
+        let nextModel = selectedID.isEmpty
+            ? activatedRunnableModels.first
+            : activatedRunnableModels.first { $0.id == selectedID } ?? activatedRunnableModels.first
+        if selectedModelSubject.value?.id != nextModel?.id {
+            selectedModelSubject.send(nextModel)
         }
     }
 

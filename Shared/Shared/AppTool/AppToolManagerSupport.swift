@@ -32,10 +32,10 @@ extension AppToolManager {
             guard pair.value != .askEveryTime else { return }
             result[pair.key.rawValue] = pair.value
         }
-        UserDefaults.standard.set(chatToolsEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
-        UserDefaults.standard.set(Array(enabledToolIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+        AppConfigStore.persistSynchronously(.bool(chatToolsEnabled), for: .appToolsChatToolsEnabled)
+        AppConfigStore.persistStringArray(Array(enabledToolIDs).sorted(), for: .appToolsEnabledToolIDs)
         let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
-        UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
+        AppConfigStore.persistStringDictionary(rawPolicyValues, for: .appToolsToolApprovalPolicies)
         objectWillChange.send()
     }
 
@@ -68,13 +68,13 @@ extension AppToolManager {
     }
 
     func persistEnabledToolIDs() {
-        UserDefaults.standard.set(Array(enabledToolIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+        AppConfigStore.persistStringArray(Array(enabledToolIDs).sorted(), for: .appToolsEnabledToolIDs)
         objectWillChange.send()
     }
 
     func persistToolApprovalPolicies() {
         let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
-        UserDefaults.standard.set(rawPolicyValues, forKey: Self.toolApprovalPoliciesUserDefaultsKey)
+        AppConfigStore.persistStringDictionary(rawPolicyValues, for: .appToolsToolApprovalPolicies)
         objectWillChange.send()
     }
 

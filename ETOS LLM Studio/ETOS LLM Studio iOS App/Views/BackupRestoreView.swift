@@ -175,6 +175,7 @@ struct BackupRestoreView: View {
 
         Task.detached(priority: .userInitiated) {
             do {
+                await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 let snapshotURL = try SnapshotBuilder.buildSnapshot()
                 if let password {
@@ -247,6 +248,7 @@ struct BackupRestoreView: View {
 
         Task.detached(priority: .userInitiated) {
             do {
+                await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 guard let endpoint = URL(string: endpointString) else {
                     throw SnapshotUploadError.invalidEndpoint

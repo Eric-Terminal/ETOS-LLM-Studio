@@ -34,23 +34,41 @@ public final class AppToolManager: ObservableObject {
     @Published var toolApprovalPolicies: [String: AppToolApprovalPolicy]
 
     private init(defaults: UserDefaults = .standard) {
-        chatToolsEnabled = defaults.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
+        chatToolsEnabled = AppConfigStore.boolValue(
+            for: .appToolsChatToolsEnabled,
+            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            userDefaults: defaults,
+            defaultValue: true
+        )
         let allDefaultIDs = Set(Self.defaultEnabledToolKinds.map(\.rawValue))
         // 只对"从未见过"的默认工具（版本升级新增）强制启用，已知工具尊重用户自行关闭的设置
-        let knownDefaultIDs = Set(defaults.stringArray(forKey: Self.knownDefaultToolIDsUserDefaultsKey) ?? [])
+        let knownDefaultIDs = Set(AppConfigStore.stringArrayValue(
+            for: .appToolsKnownDefaultToolIDs,
+            legacyUserDefaultsKey: Self.knownDefaultToolIDsUserDefaultsKey,
+            userDefaults: defaults,
+            defaultValue: []
+        ) ?? [])
         let newDefaultIDs = allDefaultIDs.subtracting(knownDefaultIDs)
-        if let storedIDs = defaults.stringArray(forKey: Self.enabledToolIDsUserDefaultsKey) {
+        if let storedIDs = AppConfigStore.stringArrayValue(
+            for: .appToolsEnabledToolIDs,
+            legacyUserDefaultsKey: Self.enabledToolIDsUserDefaultsKey,
+            userDefaults: defaults
+        ) {
             var migratedIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
             migratedIDs.formUnion(newDefaultIDs)
             enabledToolIDs = migratedIDs
-            defaults.set(Array(migratedIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+            AppConfigStore.persistStringArray(Array(migratedIDs).sorted(), for: .appToolsEnabledToolIDs)
         } else {
             enabledToolIDs = allDefaultIDs
-            defaults.set(Array(allDefaultIDs).sorted(), forKey: Self.enabledToolIDsUserDefaultsKey)
+            AppConfigStore.persistStringArray(Array(allDefaultIDs).sorted(), for: .appToolsEnabledToolIDs)
         }
         // 标记当前所有默认工具为"已知"，下次启动不再重复强制启用
-        defaults.set(Array(allDefaultIDs).sorted(), forKey: Self.knownDefaultToolIDsUserDefaultsKey)
-        let storedPolicyRawValues = defaults.dictionary(forKey: Self.toolApprovalPoliciesUserDefaultsKey) as? [String: String] ?? [:]
+        AppConfigStore.persistStringArray(Array(allDefaultIDs).sorted(), for: .appToolsKnownDefaultToolIDs)
+        let storedPolicyRawValues = AppConfigStore.stringDictionaryValue(
+            for: .appToolsToolApprovalPolicies,
+            legacyUserDefaultsKey: Self.toolApprovalPoliciesUserDefaultsKey,
+            userDefaults: defaults
+        )
         toolApprovalPolicies = storedPolicyRawValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
             guard let kind = AppToolKind(rawValue: pair.key) else { return }
             guard kind.requiresApproval else { return }
@@ -85,10 +103,34 @@ public final class AppToolManager: ObservableObject {
         }
     }
 
+    public func reloadAppConfigBackedState() {
+        chatToolsEnabled = AppConfigStore.boolValue(
+            for: .appToolsChatToolsEnabled,
+            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
+        let storedIDs = AppConfigStore.stringArrayValue(
+            for: .appToolsEnabledToolIDs,
+            legacyUserDefaultsKey: Self.enabledToolIDsUserDefaultsKey,
+            defaultValue: Array(Self.defaultEnabledToolKinds.map(\.rawValue)).sorted()
+        ) ?? []
+        enabledToolIDs = Set(storedIDs.filter { AppToolKind(rawValue: $0) != nil })
+        let rawPolicyValues = AppConfigStore.stringDictionaryValue(
+            for: .appToolsToolApprovalPolicies,
+            legacyUserDefaultsKey: Self.toolApprovalPoliciesUserDefaultsKey
+        )
+        toolApprovalPolicies = rawPolicyValues.reduce(into: [String: AppToolApprovalPolicy]()) { result, pair in
+            guard let kind = AppToolKind(rawValue: pair.key), kind.requiresApproval else { return }
+            guard let policy = AppToolApprovalPolicy(rawValue: pair.value), policy != .askEveryTime else { return }
+            result[pair.key] = policy
+        }
+        objectWillChange.send()
+    }
+
     public func setChatToolsEnabled(_ isEnabled: Bool) {
         guard chatToolsEnabled != isEnabled else { return }
         chatToolsEnabled = isEnabled
-        UserDefaults.standard.set(isEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
+        AppConfigStore.persistSynchronously(.bool(isEnabled), for: .appToolsChatToolsEnabled)
         Self.logger.info("本地拓展工具总开关已\(isEnabled ? "开启" : "关闭")。")
     }
 

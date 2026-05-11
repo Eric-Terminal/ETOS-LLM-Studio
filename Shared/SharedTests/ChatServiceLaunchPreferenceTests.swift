@@ -6,7 +6,7 @@ import Combine
 @Suite("聊天服务启动会话偏好测试")
 struct ChatServiceLaunchPreferenceTests {
     private let restoreKey = AppConfigKey.restoreLastSessionOnLaunch.rawValue
-    private let lastSessionKey = "launch.lastActiveSessionID"
+    private let lastSessionKey = AppConfigKey.lastActiveSessionID.rawValue
 
     @MainActor
     @Test("默认关闭时启动仍进入新对话")
@@ -21,9 +21,8 @@ struct ChatServiceLaunchPreferenceTests {
         Persistence.saveChatSessions([persisted])
         Persistence.saveMessages([ChatMessage(role: .user, content: "历史消息")], for: persisted.id)
 
-        let defaults = UserDefaults.standard
         Persistence.writeAppConfig(key: restoreKey, integer: 0, typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint)
-        defaults.set(persisted.id.uuidString, forKey: lastSessionKey)
+        Persistence.writeAppConfig(key: lastSessionKey, text: persisted.id.uuidString, typeHint: AppConfigKey.lastActiveSessionID.typeHint)
 
         let service = ChatService()
 
@@ -46,9 +45,8 @@ struct ChatServiceLaunchPreferenceTests {
         let expectedMessages = [ChatMessage(role: .assistant, content: "恢复成功")]
         Persistence.saveMessages(expectedMessages, for: sessionB.id)
 
-        let defaults = UserDefaults.standard
         Persistence.writeAppConfig(key: restoreKey, integer: 1, typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint)
-        defaults.set(sessionB.id.uuidString, forKey: lastSessionKey)
+        Persistence.writeAppConfig(key: lastSessionKey, text: sessionB.id.uuidString, typeHint: AppConfigKey.lastActiveSessionID.typeHint)
 
         let service = ChatService()
 
@@ -70,23 +68,21 @@ struct ChatServiceLaunchPreferenceTests {
         let sessionB = ChatSession(id: UUID(), name: "会话B", isTemporary: false)
         Persistence.saveChatSessions([sessionA, sessionB])
 
-        let defaults = UserDefaults.standard
         Persistence.writeAppConfig(key: restoreKey, integer: 0, typeHint: AppConfigKey.restoreLastSessionOnLaunch.typeHint)
-        defaults.removeObject(forKey: lastSessionKey)
+        Persistence.deleteAppConfig(key: lastSessionKey)
 
         let service = ChatService()
         service.setCurrentSession(sessionB)
 
-        #expect(defaults.string(forKey: lastSessionKey) == sessionB.id.uuidString)
+        #expect(Persistence.readAppConfigText(key: lastSessionKey) == sessionB.id.uuidString)
     }
 
     private func prepareIsolatedState() -> (snapshot: [SessionSnapshot], restoreDefaults: () -> Void) {
         let snapshot = captureCurrentSessions()
         clearAllSessions()
 
-        let defaults = UserDefaults.standard
         let previousRestoreValue = Persistence.readAppConfigInteger(key: restoreKey)
-        let previousLastSessionValue = defaults.object(forKey: lastSessionKey)
+        let previousLastSessionValue = Persistence.readAppConfigText(key: lastSessionKey)
         let restoreDefaults = {
             if let previousRestoreValue {
                 Persistence.writeAppConfig(
@@ -99,9 +95,13 @@ struct ChatServiceLaunchPreferenceTests {
             }
 
             if let previousLastSessionValue {
-                defaults.set(previousLastSessionValue, forKey: lastSessionKey)
+                Persistence.writeAppConfig(
+                    key: lastSessionKey,
+                    text: previousLastSessionValue,
+                    typeHint: AppConfigKey.lastActiveSessionID.typeHint
+                )
             } else {
-                defaults.removeObject(forKey: lastSessionKey)
+                Persistence.deleteAppConfig(key: lastSessionKey)
             }
         }
         return (snapshot, restoreDefaults)

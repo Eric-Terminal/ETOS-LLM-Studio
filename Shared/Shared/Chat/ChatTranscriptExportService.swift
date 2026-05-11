@@ -415,7 +415,6 @@ public struct ChatTranscriptExportService {
 
     private func globalSystemPrompt() -> String? {
         Persistence.readAppConfigText(key: AppConfigKey.systemPrompt.rawValue)
-            ?? UserDefaults.standard.string(forKey: AppConfigKey.systemPrompt.rawValue)
     }
 
     private func messageBodyOrPlaceholder(_ raw: String) -> String {

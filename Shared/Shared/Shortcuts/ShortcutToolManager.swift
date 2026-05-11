@@ -71,7 +71,11 @@ public final class ShortcutToolManager: ObservableObject {
     }
 
     private init() {
-        chatToolsEnabled = UserDefaults.standard.object(forKey: Self.chatToolsEnabledUserDefaultsKey) as? Bool ?? true
+        chatToolsEnabled = AppConfigStore.boolValue(
+            for: .shortcutChatToolsEnabled,
+            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
         reloadFromDisk()
     }
 
@@ -91,16 +95,18 @@ public final class ShortcutToolManager: ObservableObject {
 
     public var bridgeShortcutName: String {
         get {
-            let value = Persistence.readAppConfigText(key: AppConfigKey.shortcutBridgeShortcutName.rawValue)?
+            let value = AppConfigStore.textValue(
+                for: .shortcutBridgeShortcutName,
+                defaultValue: "ETOS Shortcut Bridge"
+            )
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return (value?.isEmpty == false ? value! : "ETOS Shortcut Bridge")
+            return value.isEmpty ? "ETOS Shortcut Bridge" : value
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            Persistence.writeAppConfig(
-                key: AppConfigKey.shortcutBridgeShortcutName.rawValue,
-                text: trimmed.isEmpty ? "ETOS Shortcut Bridge" : trimmed,
-                typeHint: AppConfigKey.shortcutBridgeShortcutName.typeHint
+            AppConfigStore.persistSynchronously(
+                .text(trimmed.isEmpty ? "ETOS Shortcut Bridge" : trimmed),
+                for: .shortcutBridgeShortcutName
             )
         }
     }
@@ -111,14 +117,18 @@ public final class ShortcutToolManager: ObservableObject {
 
     public var officialImportShortcutName: String {
         get {
-            let value = UserDefaults.standard.string(forKey: officialImportShortcutNameUserDefaultsKey)?
+            let value = AppConfigStore.textValue(
+                for: .shortcutOfficialImportShortcutName,
+                legacyUserDefaultsKey: officialImportShortcutNameUserDefaultsKey,
+                defaultValue: Self.officialImportShortcutDefaultName
+            )
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return (value?.isEmpty == false ? value! : Self.officialImportShortcutDefaultName)
+            return value.isEmpty ? Self.officialImportShortcutDefaultName : value
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let next = trimmed.isEmpty ? Self.officialImportShortcutDefaultName : trimmed
-            UserDefaults.standard.set(next, forKey: officialImportShortcutNameUserDefaultsKey)
+            AppConfigStore.persistSynchronously(.text(next), for: .shortcutOfficialImportShortcutName)
             objectWillChange.send()
         }
     }
@@ -126,8 +136,17 @@ public final class ShortcutToolManager: ObservableObject {
     public func setChatToolsEnabled(_ isEnabled: Bool) {
         guard chatToolsEnabled != isEnabled else { return }
         chatToolsEnabled = isEnabled
-        UserDefaults.standard.set(isEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
+        AppConfigStore.persistSynchronously(.bool(isEnabled), for: .shortcutChatToolsEnabled)
         logger.info("快捷指令聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
+    }
+
+    public func reloadAppConfigBackedState() {
+        chatToolsEnabled = AppConfigStore.boolValue(
+            for: .shortcutChatToolsEnabled,
+            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
+        objectWillChange.send()
     }
 
     // MARK: - CRUD

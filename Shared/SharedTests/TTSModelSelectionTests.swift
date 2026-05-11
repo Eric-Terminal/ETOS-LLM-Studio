@@ -79,15 +79,18 @@ struct TTSModelSelectionTests {
 
     @Test("删除当前选中提供商后会切换到可用模型")
     func testDeletingSelectedProviderReconcilesSelectedModel() {
-        let selectedModelKey = "selectedRunnableModelID"
         let backupProviders = ConfigLoader.loadProviders()
-        let backupSelectedModelID = UserDefaults.standard.string(forKey: selectedModelKey)
+        let backupSelectedModelID = Persistence.readAppConfigText(key: AppConfigKey.selectedRunnableModelID.rawValue)
         defer {
             restoreProviders(backupProviders)
             if let backupSelectedModelID {
-                UserDefaults.standard.set(backupSelectedModelID, forKey: selectedModelKey)
+                Persistence.writeAppConfig(
+                    key: AppConfigKey.selectedRunnableModelID.rawValue,
+                    text: backupSelectedModelID,
+                    typeHint: AppConfigKey.selectedRunnableModelID.typeHint
+                )
             } else {
-                UserDefaults.standard.removeObject(forKey: selectedModelKey)
+                Persistence.deleteAppConfig(key: AppConfigKey.selectedRunnableModelID.rawValue)
             }
         }
 
@@ -134,7 +137,7 @@ struct TTSModelSelectionTests {
         #expect(!service.providersSubject.value.contains(where: { $0.id == deletedProvider.id }))
         #expect(!service.configuredRunnableModels.contains(where: { $0.id == deletedRunnable.id }))
         #expect(service.selectedModelSubject.value?.id == fallbackRunnable.id)
-        #expect(UserDefaults.standard.string(forKey: selectedModelKey) == fallbackRunnable.id)
+        #expect(Persistence.readAppConfigText(key: AppConfigKey.selectedRunnableModelID.rawValue) == fallbackRunnable.id)
     }
 
     @Test("文本分片函数会按标点与长度切分")

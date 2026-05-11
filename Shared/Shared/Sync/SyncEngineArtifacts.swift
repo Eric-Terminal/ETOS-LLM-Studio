@@ -215,12 +215,32 @@ extension SyncEngine {
 
         if !acceptedSnapshot.isEmpty {
             await AppConfigStore.shared.apply(snapshot: acceptedSnapshot)
+            await reloadAppConfigBackedManagersIfNeeded(changedKeys: Set(acceptedSnapshot.keys))
         }
         if let prompt = normalized.snapshot[AppConfigKey.systemPrompt.rawValue] as? String {
             GlobalSystemPromptStore.saveActiveSystemPrompt(prompt)
         }
 
         return (imported, skipped)
+    }
+
+    @MainActor
+    private static func reloadAppConfigBackedManagersIfNeeded(changedKeys: Set<String>) {
+        if changedKeys.contains(AppConfigKey.appToolsChatToolsEnabled.rawValue)
+            || changedKeys.contains(AppConfigKey.appToolsEnabledToolIDs.rawValue)
+            || changedKeys.contains(AppConfigKey.appToolsToolApprovalPolicies.rawValue) {
+            AppToolManager.shared.reloadAppConfigBackedState()
+        }
+        if changedKeys.contains(AppConfigKey.mcpChatToolsEnabled.rawValue) {
+            MCPManager.shared.reloadAppConfigBackedState()
+        }
+        if changedKeys.contains(AppConfigKey.shortcutChatToolsEnabled.rawValue) {
+            ShortcutToolManager.shared.reloadAppConfigBackedState()
+        }
+        if changedKeys.contains(AppConfigKey.modelOrderRunnableModels.rawValue)
+            || changedKeys.contains(AppConfigKey.selectedRunnableModelID.rawValue) {
+            ChatService.shared.reloadAppConfigBackedModelState()
+        }
     }
 
     static func encodeAppStorageSnapshot(_ snapshot: [String: Any]) -> Data? {

@@ -116,11 +116,14 @@ extension ChatService {
         loadedSessionsWithTemporary: [ChatSession],
         newTemporarySession: ChatSession
     ) -> ChatSession {
-        let defaults = UserDefaults.standard
         let shouldRestore = (Persistence.readAppConfigInteger(key: AppConfigKey.restoreLastSessionOnLaunch.rawValue) ?? 0) != 0
         guard shouldRestore else { return newTemporarySession }
 
-        if let rawID = defaults.string(forKey: lastActiveSessionIDStorageKey),
+        let rawID = AppConfigStore.textValue(
+            for: .lastActiveSessionID,
+            legacyUserDefaultsKey: lastActiveSessionIDStorageKey
+        )
+        if !rawID.isEmpty,
            let sessionID = UUID(uuidString: rawID),
            let restored = loadedSessionsWithTemporary.first(where: { $0.id == sessionID }) {
             return restored
@@ -135,6 +138,6 @@ extension ChatService {
 
     func persistLastActiveSessionIDIfNeeded(_ session: ChatSession?) {
         guard let session, !session.isTemporary else { return }
-        UserDefaults.standard.set(session.id.uuidString, forKey: Self.lastActiveSessionIDStorageKey)
+        AppConfigStore.persistSynchronously(.text(session.id.uuidString), for: .lastActiveSessionID)
     }
 }

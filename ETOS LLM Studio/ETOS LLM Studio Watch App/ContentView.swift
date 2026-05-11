@@ -235,6 +235,9 @@ struct ContentView: View {
                 appLockManager.handleSceneDidBecomeActive()
             case .background:
                 appLockManager.handleSceneDidEnterBackground()
+                Task {
+                    await AppConfigStore.shared.flushPendingWrites()
+                }
             default:
                 break
             }

@@ -63,6 +63,16 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case cloudSyncAutoSyncEnabled = "cloudSync.autoSyncEnabled"
     case syncBackupUploadEndpoint = "sync.backup.uploadEndpoint"
     case syncBackupCreateOnLaunch = "sync.backup.createOnLaunch"
+    case modelOrderRunnableModels = "modelOrder.runnableModels"
+    case selectedRunnableModelID = "selectedRunnableModelID"
+    case lastActiveSessionID = "launch.lastActiveSessionID"
+    case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
+    case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
+    case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
+    case appToolsToolApprovalPolicies = "appTools.toolApprovalPolicies"
+    case mcpChatToolsEnabled = "mcp.chatToolsEnabled"
+    case shortcutChatToolsEnabled = "shortcut.chatToolsEnabled"
+    case shortcutOfficialImportShortcutName = "shortcut.officialImportShortcutName"
     case appLockEnabled = "security.appLock.enabled"
     case appLockTimeoutSeconds = "security.appLock.timeoutSeconds"
     case appLockBiometricEnabled = "security.appLock.biometricEnabled"
@@ -127,6 +137,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchBackgroundSourceHistory = "watch.background.sourceHistory"
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
     case chatPickerPresentationStyle = "ui.chatPickerPresentationStyle"
+    case chatPickerStyleMigratedToBottomSheet = "chatPickerStyleMigratedToBottomSheet"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case providerDetailGroupByMainstream = "providerDetail.groupByMainstream"
@@ -176,6 +187,27 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .syncBackupUploadEndpoint:
             return .text("")
+        case .modelOrderRunnableModels:
+            return .text("[]")
+        case .selectedRunnableModelID,
+             .lastActiveSessionID:
+            return .text("")
+        case .appToolsChatToolsEnabled,
+             .mcpChatToolsEnabled,
+             .shortcutChatToolsEnabled:
+            return .bool(true)
+        case .appToolsEnabledToolIDs:
+            #if os(watchOS)
+            return .text("[\"ask_user_input\",\"get_system_time\"]")
+            #else
+            return .text("[\"ask_user_input\",\"get_system_time\",\"show_widget\"]")
+            #endif
+        case .appToolsKnownDefaultToolIDs:
+            return .text("[]")
+        case .appToolsToolApprovalPolicies:
+            return .text("{}")
+        case .shortcutOfficialImportShortcutName:
+            return .text("ELS Export")
         case .appLockTimeoutSeconds:
             return .integer(300)
 
@@ -291,6 +323,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #endif
         case .chatPickerPresentationStyle:
             return .text("bottomSheet")
+        case .chatPickerStyleMigratedToBottomSheet:
+            return .bool(false)
         case .restoreLastSessionOnLaunch:
             return .bool(false)
         case .providerDetailGroupByMainstream:
@@ -332,6 +366,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     public var participatesInSync: Bool {
         switch self {
         case .chatComposerDraft,
+             .lastActiveSessionID,
+             .appToolsKnownDefaultToolIDs,
+             .chatPickerStyleMigratedToBottomSheet,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .lastAnnouncementId,

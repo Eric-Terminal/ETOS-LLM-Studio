@@ -108,7 +108,10 @@ extension Persistence {
         if let value = readAppConfigInteger(key: launchBackupEnabledKey) {
             return value != 0
         }
-        return UserDefaults.standard.bool(forKey: launchBackupEnabledKey)
+        return AppConfigStore.boolValue(
+            for: .syncBackupCreateOnLaunch,
+            legacyUserDefaultsKey: launchBackupEnabledKey
+        )
     }
 
     private enum LaunchBackupRestoreResult {

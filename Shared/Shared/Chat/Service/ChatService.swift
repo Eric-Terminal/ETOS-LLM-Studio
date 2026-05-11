@@ -469,7 +469,10 @@ public class ChatService {
             }
             .store(in: &cancellables)
 
-        let savedModelID = UserDefaults.standard.string(forKey: Self.selectedRunnableModelStorageKey)
+        let savedModelID = AppConfigStore.textValue(
+            for: .selectedRunnableModelID,
+            legacyUserDefaultsKey: Self.selectedRunnableModelStorageKey
+        )
         let allRunnable = activatedRunnableModels
         var initialModel: RunnableModel? = allRunnable.first { $0.id == savedModelID }
         if initialModel == nil {

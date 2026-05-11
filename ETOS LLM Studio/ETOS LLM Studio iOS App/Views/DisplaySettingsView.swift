@@ -156,10 +156,14 @@ struct DisplaySettingsView: View {
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
         .onAppear {
             // 迁移：将旧版「悬浮面板」默认值更新为「底部抽屉」
+            let hasMigratedPickerStyle = AppConfigStore.boolValue(
+                for: .chatPickerStyleMigratedToBottomSheet,
+                legacyUserDefaultsKey: "chatPickerStyleMigratedToBottomSheet"
+            )
             if ChatPickerPresentationStyle.resolvedStyle(rawValue: appConfig.chatPickerPresentationStyle) == .legacyOverlay,
-               !UserDefaults.standard.bool(forKey: "chatPickerStyleMigratedToBottomSheet") {
+               !hasMigratedPickerStyle {
                 appConfig.chatPickerPresentationStyle = ChatPickerPresentationStyle.bottomSheet.rawValue
-                UserDefaults.standard.set(true, forKey: "chatPickerStyleMigratedToBottomSheet")
+                AppConfigStore.persistSynchronously(.bool(true), for: .chatPickerStyleMigratedToBottomSheet)
             }
         }
     }

@@ -207,8 +207,17 @@ extension MCPManager {
     public func setChatToolsEnabled(_ isEnabled: Bool) {
         guard chatToolsEnabled != isEnabled else { return }
         chatToolsEnabled = isEnabled
-        UserDefaults.standard.set(isEnabled, forKey: Self.chatToolsEnabledUserDefaultsKey)
+        AppConfigStore.persistSynchronously(.bool(isEnabled), for: .mcpChatToolsEnabled)
         appendGovernanceLog(level: .info, category: .routing, message: "MCP 聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
+    }
+
+    public func reloadAppConfigBackedState() {
+        chatToolsEnabled = AppConfigStore.boolValue(
+            for: .mcpChatToolsEnabled,
+            legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
+        objectWillChange.send()
     }
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {

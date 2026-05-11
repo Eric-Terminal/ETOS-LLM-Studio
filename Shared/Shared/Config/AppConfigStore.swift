@@ -103,9 +103,10 @@ public final class AppConfigStore: ObservableObject {
     )
     private var isApplyingSnapshot = false
     private var isReloadingFromPersistentStore = false
+    private var pendingWriteTasks: [UUID: Task<Void, Never>] = [:]
     @Published public private(set) var didLoadPersistentStore = false
     private var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
-    private static var shouldSkipQuickSyncForCurrentProcess: Bool {
+    private nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
@@ -216,6 +217,7 @@ public final class AppConfigStore: ObservableObject {
 
     public init(userDefaults: UserDefaults = .standard) {
         let initialValues = Self.initialValues(userDefaults: userDefaults)
+            .merging(Self.initialValuesFromPersistentStore()) { _, persistent in persistent }
         Self.snapshotCache.replace(with: Self.snapshot(from: initialValues, includeLocalOnly: true))
 
         syncProviders = Self.boolValue(.syncProviders, userDefaults: userDefaults)
@@ -323,7 +325,7 @@ public final class AppConfigStore: ObservableObject {
         hideAnnouncementSection = Self.boolValue(.hideAnnouncementSection, userDefaults: userDefaults)
         hiddenAnnouncementKeys = Self.textValue(.hiddenAnnouncementKeys, userDefaults: userDefaults)
 
-        loadPersistentStoreInBackground(initialValues: initialValues)
+        loadPersistentStoreInBackground(initialValues: initialValues, userDefaults: userDefaults)
     }
 
     public nonisolated static func persistentSnapshot(includeLocalOnly: Bool = false) -> [String: Any] {
@@ -351,6 +353,163 @@ public final class AppConfigStore: ObservableObject {
         Self.snapshotCache.snapshot(includeLocalOnly: includeLocalOnly)
     }
 
+    public nonisolated static func textValue(
+        for key: AppConfigKey,
+        legacyUserDefaultsKey: String? = nil,
+        userDefaults: UserDefaults = .standard,
+        defaultValue: String? = nil
+    ) -> String {
+        if let stored = Persistence.readAppConfigText(key: key.rawValue) {
+            snapshotCache.set(stored, for: key)
+            return stored
+        }
+
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let legacy = userDefaults.string(forKey: rawKey) {
+            if persistSynchronously(.text(legacy), for: key) {
+                userDefaults.removeObject(forKey: rawKey)
+            }
+            return legacy
+        }
+
+        if let defaultValue {
+            return defaultValue
+        }
+        if case .text(let value) = key.defaultValue {
+            return value
+        }
+        return ""
+    }
+
+    public nonisolated static func boolValue(
+        for key: AppConfigKey,
+        legacyUserDefaultsKey: String? = nil,
+        userDefaults: UserDefaults = .standard,
+        defaultValue: Bool? = nil
+    ) -> Bool {
+        if let stored = Persistence.readAppConfigInteger(key: key.rawValue) {
+            let value = stored != 0
+            snapshotCache.set(value, for: key)
+            return value
+        }
+
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if userDefaults.object(forKey: rawKey) != nil {
+            let legacy = userDefaults.bool(forKey: rawKey)
+            if persistSynchronously(.bool(legacy), for: key) {
+                userDefaults.removeObject(forKey: rawKey)
+            }
+            return legacy
+        }
+
+        if let defaultValue {
+            return defaultValue
+        }
+        if case .bool(let value) = key.defaultValue {
+            return value
+        }
+        return false
+    }
+
+    public nonisolated static func stringArrayValue(
+        for key: AppConfigKey,
+        legacyUserDefaultsKey: String? = nil,
+        userDefaults: UserDefaults = .standard,
+        defaultValue: [String]? = nil
+    ) -> [String]? {
+        if let stored = Persistence.readAppConfigText(key: key.rawValue),
+           let decoded = decodeStringArray(from: stored) {
+            snapshotCache.set(stored, for: key)
+            return decoded
+        }
+
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let legacy = userDefaults.stringArray(forKey: rawKey) {
+            if persistStringArray(legacy, for: key) {
+                userDefaults.removeObject(forKey: rawKey)
+            }
+            return legacy
+        }
+
+        if let defaultValue {
+            return defaultValue
+        }
+        if case .text(let rawDefault) = key.defaultValue {
+            return decodeStringArray(from: rawDefault)
+        }
+        return nil
+    }
+
+    @discardableResult
+    public nonisolated static func persistStringArray(
+        _ values: [String],
+        for key: AppConfigKey,
+        quickSync: Bool = true
+    ) -> Bool {
+        persistSynchronously(.text(encodeStringArray(values)), for: key, quickSync: quickSync)
+    }
+
+    public nonisolated static func stringDictionaryValue(
+        for key: AppConfigKey,
+        legacyUserDefaultsKey: String? = nil,
+        userDefaults: UserDefaults = .standard
+    ) -> [String: String] {
+        if let stored = Persistence.readAppConfigText(key: key.rawValue),
+           let decoded = decodeStringDictionary(from: stored) {
+            snapshotCache.set(stored, for: key)
+            return decoded
+        }
+
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let legacy = userDefaults.dictionary(forKey: rawKey) as? [String: String] {
+            if persistStringDictionary(legacy, for: key) {
+                userDefaults.removeObject(forKey: rawKey)
+            }
+            return legacy
+        }
+
+        if case .text(let rawDefault) = key.defaultValue {
+            return decodeStringDictionary(from: rawDefault) ?? [:]
+        }
+        return [:]
+    }
+
+    @discardableResult
+    public nonisolated static func persistStringDictionary(
+        _ values: [String: String],
+        for key: AppConfigKey,
+        quickSync: Bool = true
+    ) -> Bool {
+        persistSynchronously(.text(encodeStringDictionary(values)), for: key, quickSync: quickSync)
+    }
+
+    @discardableResult
+    public nonisolated static func persistSynchronously(
+        _ value: AppConfigValue,
+        for key: AppConfigKey,
+        quickSync: Bool = true
+    ) -> Bool {
+        guard persist(value, for: key) else { return false }
+        snapshotCache.set(value.anyValue, for: key)
+        #if canImport(WatchConnectivity)
+        if quickSync,
+           !shouldSkipQuickSyncForCurrentProcess,
+           key.participatesInSync {
+            Task { @MainActor in
+                WatchSyncManager.shared.performQuickSync(key: key.rawValue, value: value.anyValue)
+            }
+        }
+        #endif
+        return true
+    }
+
+    public func flushPendingWrites() async {
+        let tasks = Array(pendingWriteTasks.values)
+        for task in tasks {
+            await task.value
+        }
+    }
+
     public func reloadFromPersistentStore() {
         Task(priority: .utility) { [weak self] in
             let snapshot = await AppConfigPersistenceWorker.shared.loadSnapshot(includeLocalOnly: true)
@@ -365,12 +524,19 @@ public final class AppConfigStore: ObservableObject {
         }
     }
 
-    private func loadPersistentStoreInBackground(initialValues: [AppConfigKey: AppConfigValue]) {
+    private func loadPersistentStoreInBackground(
+        initialValues: [AppConfigKey: AppConfigValue],
+        userDefaults: UserDefaults
+    ) {
+        let shouldRemoveStandardLegacyValues = userDefaults === UserDefaults.standard
         Task(priority: .utility) { [weak self] in
             let snapshot = await AppConfigPersistenceWorker.shared.bootstrap(
                 migrationFlagKey: Self.migrationFlagKey,
                 initialValues: initialValues
             )
+            if shouldRemoveStandardLegacyValues {
+                Self.removeMigratedLegacyValues(from: .standard)
+            }
             self?.applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: true)
         }
     }
@@ -437,6 +603,17 @@ public final class AppConfigStore: ObservableObject {
         case .cloudSyncAutoSyncEnabled: return .bool(cloudSyncAutoSyncEnabled)
         case .syncBackupUploadEndpoint: return .text(syncBackupUploadEndpoint)
         case .syncBackupCreateOnLaunch: return .bool(syncBackupCreateOnLaunch)
+        case .modelOrderRunnableModels,
+             .selectedRunnableModelID,
+             .lastActiveSessionID,
+             .appToolsChatToolsEnabled,
+             .appToolsEnabledToolIDs,
+             .appToolsKnownDefaultToolIDs,
+             .appToolsToolApprovalPolicies,
+             .mcpChatToolsEnabled,
+             .shortcutChatToolsEnabled,
+             .shortcutOfficialImportShortcutName:
+            return Self.cachedValue(for: key) ?? key.defaultValue
         case .appLockEnabled: return .bool(appLockEnabled)
         case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
         case .appLockBiometricEnabled: return .bool(appLockBiometricEnabled)
@@ -501,6 +678,8 @@ public final class AppConfigStore: ObservableObject {
         case .watchBackgroundSourceHistory: return .text(watchBackgroundSourceHistory)
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
         case .chatPickerPresentationStyle: return .text(chatPickerPresentationStyle)
+        case .chatPickerStyleMigratedToBottomSheet:
+            return Self.cachedValue(for: key) ?? key.defaultValue
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
         case .providerDetailGroupByMainstream: return .bool(providerDetailGroupByMainstream)
@@ -562,6 +741,11 @@ public final class AppConfigStore: ObservableObject {
         case .cloudSyncEnabled: cloudSyncEnabled = value
         case .cloudSyncAutoSyncEnabled: cloudSyncAutoSyncEnabled = value
         case .syncBackupCreateOnLaunch: syncBackupCreateOnLaunch = value
+        case .appToolsChatToolsEnabled,
+             .mcpChatToolsEnabled,
+             .shortcutChatToolsEnabled,
+             .chatPickerStyleMigratedToBottomSheet:
+            Self.persistSynchronously(.bool(value), for: key, quickSync: false)
         case .appLockEnabled: appLockEnabled = value
         case .appLockBiometricEnabled: appLockBiometricEnabled = value
         case .databaseEncryptionEnabled: databaseEncryptionEnabled = value
@@ -631,6 +815,14 @@ public final class AppConfigStore: ObservableObject {
     private func setText(_ value: String, for key: AppConfigKey) {
         switch key {
         case .syncBackupUploadEndpoint: syncBackupUploadEndpoint = value
+        case .modelOrderRunnableModels,
+             .selectedRunnableModelID,
+             .lastActiveSessionID,
+             .appToolsEnabledToolIDs,
+             .appToolsKnownDefaultToolIDs,
+             .appToolsToolApprovalPolicies,
+             .shortcutOfficialImportShortcutName:
+            Self.persistSynchronously(.text(value), for: key, quickSync: false)
         case .systemPrompt: systemPrompt = value
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
@@ -689,8 +881,16 @@ public final class AppConfigStore: ObservableObject {
         }
 
         let rawKey = key.rawValue
-        Task(priority: .utility) {
+        let writeID = UUID()
+        let task = Task(priority: .utility) {
             await AppConfigPersistenceWorker.shared.write(key: rawKey, value: value)
+        }
+        pendingWriteTasks[writeID] = task
+        Task { [weak self] in
+            await task.value
+            await MainActor.run {
+                self?.pendingWriteTasks[writeID] = nil
+            }
         }
 
         #if canImport(WatchConnectivity)
@@ -711,6 +911,23 @@ public final class AppConfigStore: ObservableObject {
             values[.syncAppStorage] = legacyValue
         }
         return values
+    }
+
+    private static func removeMigratedLegacyValues(from userDefaults: UserDefaults) {
+        guard userDefaults === UserDefaults.standard else { return }
+        for key in AppConfigKey.allCases where userDefaults.object(forKey: key.rawValue) != nil {
+            userDefaults.removeObject(forKey: key.rawValue)
+        }
+    }
+
+    private static func initialValuesFromPersistentStore() -> [AppConfigKey: AppConfigValue] {
+        loadPersistentSnapshotFromDatabase(includeLocalOnly: true).reduce(into: [AppConfigKey: AppConfigValue]()) { result, element in
+            guard let key = AppConfigKey(rawValue: element.key),
+                  let value = appConfigValue(from: element.value, for: key) else {
+                return
+            }
+            result[key] = value
+        }
     }
 
     private static func snapshot(
@@ -765,6 +982,10 @@ public final class AppConfigStore: ObservableObject {
             return nil
         }
 
+        return appConfigValue(from: object, for: key)
+    }
+
+    private static func appConfigValue(from object: Any, for key: AppConfigKey) -> AppConfigValue? {
         switch key.defaultValue {
         case .bool:
             return coerceBool(object).map(AppConfigValue.bool)
@@ -773,20 +994,27 @@ public final class AppConfigStore: ObservableObject {
         case .real:
             return coerceDouble(object).map(AppConfigValue.real)
         case .text:
+            if let values = object as? [String] {
+                return .text(encodeStringArray(values))
+            }
+            if let values = object as? [String: String] {
+                return .text(encodeStringDictionary(values))
+            }
             return coerceString(object).map(AppConfigValue.text)
         }
     }
 
-    fileprivate nonisolated static func persist(_ value: AppConfigValue, for key: AppConfigKey) {
+    @discardableResult
+    fileprivate nonisolated static func persist(_ value: AppConfigValue, for key: AppConfigKey) -> Bool {
         switch value {
         case .bool(let value):
-            Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: "bool")
+            return Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: "bool")
         case .integer(let value):
-            Persistence.writeAppConfig(key: key.rawValue, integer: value, typeHint: "integer")
+            return Persistence.writeAppConfig(key: key.rawValue, integer: value, typeHint: "integer")
         case .real(let value):
-            Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: "real")
+            return Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: "real")
         case .text(let value):
-            Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
+            return Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
         }
     }
 
@@ -802,6 +1030,38 @@ public final class AppConfigStore: ObservableObject {
         case .text:
             return coerceString(value).map(AppConfigValue.text)
         }
+    }
+
+    private nonisolated static func encodeStringArray(_ values: [String]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return encoded
+    }
+
+    private nonisolated static func decodeStringArray(from raw: String) -> [String]? {
+        guard let data = raw.data(using: .utf8),
+              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String] else {
+            return nil
+        }
+        return decoded
+    }
+
+    private nonisolated static func encodeStringDictionary(_ values: [String: String]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return encoded
+    }
+
+    private nonisolated static func decodeStringDictionary(from raw: String) -> [String: String]? {
+        guard let data = raw.data(using: .utf8),
+              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
+            return nil
+        }
+        return decoded
     }
 
     private nonisolated static func coerceBool(_ value: Any) -> Bool? {

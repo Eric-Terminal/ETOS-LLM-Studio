@@ -47,6 +47,9 @@ struct ContentView: View {
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
                     appLockManager.handleSceneDidEnterBackground()
+                    Task {
+                        await AppConfigStore.shared.flushPendingWrites()
+                    }
                     cancelDailyPulsePreparation()
                 default:
                     cancelDailyPulsePreparation()
