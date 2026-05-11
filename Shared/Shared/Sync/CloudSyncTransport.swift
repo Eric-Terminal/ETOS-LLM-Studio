@@ -85,7 +85,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         try? FileManager.default.removeItem(at: tempURL)
     }
 
-    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot] {
+    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> CloudSyncFetchResult {
         try await ensureAvailableAccount()
         try await ensureCloudSyncZoneExists()
 
@@ -106,7 +106,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     private func fetchSnapshots(
         excludingDeviceID deviceID: String,
         previousServerChangeTokenData: Data?
-    ) async throws -> [CloudSyncRemoteSnapshot] {
+    ) async throws -> CloudSyncFetchResult {
         let token: CKServerChangeToken?
         if let previousServerChangeTokenData {
             token = try? NSKeyedUnarchiver.unarchivedObject(
@@ -150,13 +150,17 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             hasMoreChanges = result.moreComing
         } while hasMoreChanges
 
-        if let latestChangeTokenData {
-            saveZoneChangeTokenData(latestChangeTokenData)
-        }
+        return CloudSyncFetchResult(
+            snapshots: snapshots.sorted { lhs, rhs in
+                lhs.updatedAt > rhs.updatedAt
+            },
+            changeTokenData: latestChangeTokenData
+        )
+    }
 
-        return snapshots.sorted { lhs, rhs in
-            lhs.updatedAt > rhs.updatedAt
-        }
+    func commitFetchedChanges(_ result: CloudSyncFetchResult) async {
+        guard let changeTokenData = result.changeTokenData else { return }
+        saveZoneChangeTokenData(changeTokenData)
     }
 
     func subscribeToChanges() async throws {
@@ -312,9 +316,11 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         throw CloudSyncManagerError.unavailableAccount
     }
 
-    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot] {
+    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> CloudSyncFetchResult {
         throw CloudSyncManagerError.unavailableAccount
     }
+
+    func commitFetchedChanges(_ result: CloudSyncFetchResult) async {}
 
     func subscribeToChanges() async throws {
         throw CloudSyncManagerError.unavailableAccount

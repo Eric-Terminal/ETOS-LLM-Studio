@@ -64,10 +64,12 @@ struct CloudSyncManagerTests {
         await manager.performSync(options: [.providers])
 
         let uploadedSnapshots = await transport.uploadedSnapshots
+        let committedChangeTokens = await transport.committedChangeTokens
         let appliedPackages = await appliedRecorder.packages
         let appliedManifests = await appliedRecorder.manifests
 
         #expect(uploadedSnapshots.count == 2)
+        #expect(committedChangeTokens.compactMap { $0 } == [Data("mock-token".utf8)])
         #expect(uploadedSnapshots.first?.recordName == uploadedSnapshots.last?.recordName)
         #expect(uploadedSnapshots.first?.deviceID == uploadedSnapshots.last?.deviceID)
         #expect(uploadedSnapshots.first?.snapshot.options == SyncOptions.providers)
@@ -424,6 +426,7 @@ struct CloudSyncManagerTests {
 
 private actor MockCloudSyncTransport: CloudSyncTransport {
     private(set) var uploadedSnapshots: [CloudSyncRemoteSnapshot] = []
+    private(set) var committedChangeTokens: [Data?] = []
     private let remoteSnapshots: [CloudSyncRemoteSnapshot]
 
     init(remoteSnapshots: [CloudSyncRemoteSnapshot]) {
@@ -434,8 +437,15 @@ private actor MockCloudSyncTransport: CloudSyncTransport {
         uploadedSnapshots.append(snapshot)
     }
 
-    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot] {
-        remoteSnapshots.filter { $0.deviceID != deviceID }
+    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> CloudSyncFetchResult {
+        CloudSyncFetchResult(
+            snapshots: remoteSnapshots.filter { $0.deviceID != deviceID },
+            changeTokenData: Data("mock-token".utf8)
+        )
+    }
+
+    func commitFetchedChanges(_ result: CloudSyncFetchResult) async {
+        committedChangeTokens.append(result.changeTokenData)
     }
 
     func subscribeToChanges() async throws {}

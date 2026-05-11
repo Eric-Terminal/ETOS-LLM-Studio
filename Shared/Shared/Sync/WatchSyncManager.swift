@@ -48,6 +48,7 @@ func watchConnectivitySyncOptions(appConfig: AppConfigStore = .shared) -> SyncOp
     if appConfig.syncBackgrounds { options.insert(.backgrounds) }
     if appConfig.syncMemories { options.insert(.memories) }
     if appConfig.syncMCPServers { options.insert(.mcpServers) }
+    if appConfig.syncAudioFiles { options.insert(.audioFiles) }
     if appConfig.syncImageFiles { options.insert(.imageFiles) }
     if appConfig.syncSkills { options.insert(.skills) }
     if appConfig.syncShortcutTools { options.insert(.shortcutTools) }
@@ -283,6 +284,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 
     /// 通过近场在线通道广播单个 AppConfig 键，失败时回退到静默设置同步。
     public func performQuickSync(key: String, value: Any) {
+        guard watchConnectivitySyncOptions().contains(.appStorage) else { return }
         guard SyncEngine.isPropertyListEncodableValue(value) else { return }
         guard let session = validateSessionBeforeTransfer(options: [.appStorage], silent: true) else { return }
         guard session.isReachable else {
@@ -396,6 +398,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if summary.importedBackgrounds > 0 { parts.append("背景 +\(summary.importedBackgrounds)") }
         if summary.importedMemories > 0 { parts.append("记忆 +\(summary.importedMemories)") }
         if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
+        if summary.importedAudioFiles > 0 { parts.append("音频 +\(summary.importedAudioFiles)") }
         if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
         if summary.importedSkills > 0 { parts.append("Skills +\(summary.importedSkills)") }
         if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }

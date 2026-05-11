@@ -46,6 +46,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle(NSLocalizedString("背景图片", comment: ""), isOn: $appConfig.syncBackgrounds)
                 Toggle(NSLocalizedString("记忆（仅合并文本）", comment: ""), isOn: $appConfig.syncMemories)
                 Toggle(NSLocalizedString("MCP 服务器", comment: ""), isOn: $appConfig.syncMCPServers)
+                Toggle(NSLocalizedString("音频文件", comment: ""), isOn: $appConfig.syncAudioFiles)
                 Toggle(NSLocalizedString("图片文件", comment: ""), isOn: $appConfig.syncImageFiles)
                 Toggle("Agent Skills", isOn: $appConfig.syncSkills)
                 Toggle(NSLocalizedString("快捷指令工具", comment: ""), isOn: $appConfig.syncShortcutTools)
@@ -227,6 +228,7 @@ struct DeviceSyncSettingsView: View {
         if appConfig.syncBackgrounds { option.insert(.backgrounds) }
         if appConfig.syncMemories { option.insert(.memories) }
         if appConfig.syncMCPServers { option.insert(.mcpServers) }
+        if appConfig.syncAudioFiles { option.insert(.audioFiles) }
         if appConfig.syncImageFiles { option.insert(.imageFiles) }
         if appConfig.syncSkills { option.insert(.skills) }
         if appConfig.syncShortcutTools { option.insert(.shortcutTools) }
@@ -351,6 +353,9 @@ struct DeviceSyncSettingsView: View {
         }
         if summary.importedMCPServers > 0 {
             parts.append(String(format: NSLocalizedString("MCP +%d", comment: ""), summary.importedMCPServers))
+        }
+        if summary.importedAudioFiles > 0 {
+            parts.append(String(format: NSLocalizedString("音频 +%d", comment: ""), summary.importedAudioFiles))
         }
         if summary.importedImageFiles > 0 {
             parts.append(String(format: NSLocalizedString("图片 +%d", comment: ""), summary.importedImageFiles))

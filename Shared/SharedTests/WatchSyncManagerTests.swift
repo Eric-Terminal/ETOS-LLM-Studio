@@ -13,6 +13,7 @@ struct WatchSyncManagerTests {
             .syncBackgrounds,
             .syncMemories,
             .syncMCPServers,
+            .syncAudioFiles,
             .syncImageFiles,
             .syncSkills,
             .syncShortcutTools,
@@ -31,6 +32,7 @@ struct WatchSyncManagerTests {
         AppConfigStore.shared.syncBackgrounds = false
         AppConfigStore.shared.syncMemories = false
         AppConfigStore.shared.syncMCPServers = false
+        AppConfigStore.shared.syncAudioFiles = false
         AppConfigStore.shared.syncImageFiles = false
         AppConfigStore.shared.syncSkills = false
         AppConfigStore.shared.syncShortcutTools = false

@@ -59,9 +59,15 @@ struct CloudSyncRemoteSnapshot {
     let snapshot: CloudSyncSnapshot
 }
 
+struct CloudSyncFetchResult {
+    let snapshots: [CloudSyncRemoteSnapshot]
+    let changeTokenData: Data?
+}
+
 protocol CloudSyncTransport {
     func upload(snapshot: CloudSyncRemoteSnapshot) async throws
-    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> [CloudSyncRemoteSnapshot]
+    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> CloudSyncFetchResult
+    func commitFetchedChanges(_ result: CloudSyncFetchResult) async
     func subscribeToChanges() async throws
 }
 
@@ -174,7 +180,8 @@ public final class CloudSyncManager: ObservableObject {
 
         do {
             let localOptions = normalizedCloudOptions(from: options)
-            let remoteSnapshots = try await transport.fetchSnapshots(excludingDeviceID: currentDeviceIdentifier)
+            let fetchResult = try await transport.fetchSnapshots(excludingDeviceID: currentDeviceIdentifier)
+            let remoteSnapshots = fetchResult.snapshots
             let remoteManifest = mergedRemoteManifest(from: remoteSnapshots, fallbackOptions: localOptions)
 
             if !silent {
@@ -199,6 +206,7 @@ public final class CloudSyncManager: ObservableObject {
                 try await transport.upload(snapshot: mergedSnapshot)
             }
 
+            await transport.commitFetchedChanges(fetchResult)
             lastSummary = appliedSummary
             lastUpdatedAt = now()
             if !silent {
@@ -394,6 +402,7 @@ public final class CloudSyncManager: ObservableObject {
         if appConfig.syncBackgrounds { options.insert(.backgrounds) }
         if appConfig.syncMemories { options.insert(.memories) }
         if appConfig.syncMCPServers { options.insert(.mcpServers) }
+        if appConfig.syncAudioFiles { options.insert(.audioFiles) }
         if appConfig.syncImageFiles { options.insert(.imageFiles) }
         if appConfig.syncSkills { options.insert(.skills) }
         if appConfig.syncShortcutTools { options.insert(.shortcutTools) }
