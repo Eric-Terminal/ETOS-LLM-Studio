@@ -16,6 +16,66 @@ import UIKit
 #endif
 
 extension ChatViewModel {
+    func applyAppConfigSnapshotToLocalState() {
+        let appConfig = AppConfigStore.shared
+        enableMarkdown = appConfig.enableMarkdown
+        enableAdvancedRenderer = appConfig.enableAdvancedRenderer
+        enableExperimentalToolResultDisplay = appConfig.enableExperimentalToolResultDisplay
+        enableAutoReasoningPreview = appConfig.enableAutoReasoningPreview
+        enableBackground = appConfig.enableBackground
+        backgroundBlur = appConfig.backgroundBlur
+        backgroundOpacity = appConfig.backgroundOpacity
+        backgroundContentMode = appConfig.backgroundContentMode
+        aiTemperature = appConfig.aiTemperature
+        aiTopP = appConfig.aiTopP
+        aiTemperatureEnabled = appConfig.aiTemperatureEnabled
+        aiTopPEnabled = appConfig.aiTopPEnabled
+        systemPrompt = appConfig.systemPrompt
+        maxChatHistory = appConfig.maxChatHistory
+        enableStreaming = appConfig.enableStreaming
+        enableResponseSpeedMetrics = appConfig.enableResponseSpeedMetrics
+        enableOpenAIStreamIncludeUsage = appConfig.enableOpenAIStreamIncludeUsage
+        lazyLoadMessageCount = appConfig.lazyLoadMessageCount
+        currentBackgroundImage = appConfig.currentBackgroundImage
+        enableAutoRotateBackground = appConfig.enableAutoRotateBackground
+        enableAutoSessionNaming = appConfig.enableAutoSessionNaming
+        enableMemory = appConfig.enableMemory
+        enableMemoryWrite = appConfig.enableMemoryWrite
+        enableMemoryActiveRetrieval = appConfig.enableMemoryActiveRetrieval
+        enableConversationMemoryAsync = appConfig.enableConversationMemoryAsync
+        conversationMemoryRecentLimit = appConfig.conversationMemoryRecentLimit
+        conversationMemoryRoundThreshold = appConfig.conversationMemoryRoundThreshold
+        conversationMemorySummaryMinIntervalMinutes = appConfig.conversationMemorySummaryMinIntervalMinutes
+        enableConversationProfileDailyUpdate = appConfig.enableConversationProfileDailyUpdate
+        enableReasoningSummary = appConfig.enableReasoningSummary
+        enableLiquidGlass = appConfig.enableLiquidGlass
+        enableChatTopBlurFade = appConfig.enableChatTopBlurFade
+        enableNoBubbleUI = appConfig.enableNoBubbleUI
+        sendSpeechAsAudio = appConfig.sendSpeechAsAudio
+        enableSpeechInput = appConfig.enableSpeechInput
+        speechModelIdentifier = appConfig.speechModelIdentifier
+        ttsModelIdentifier = appConfig.ttsModelIdentifier
+        memoryEmbeddingModelIdentifier = appConfig.memoryEmbeddingModelIdentifier
+        titleGenerationModelIdentifier = appConfig.titleGenerationModelIdentifier
+        dailyPulseModelIdentifier = appConfig.dailyPulseModelIdentifier
+        conversationSummaryModelIdentifier = appConfig.conversationSummaryModelIdentifier
+        reasoningSummaryModelIdentifier = appConfig.reasoningSummaryModelIdentifier
+        ocrModelIdentifier = appConfig.ocrModelIdentifier
+        includeSystemTimeInPrompt = appConfig.includeSystemTimeInPrompt
+        systemTimeInjectionPositionRawValue = appConfig.systemTimeInjectionPosition
+        enablePeriodicTimeLandmark = appConfig.enablePeriodicTimeLandmark
+        periodicTimeLandmarkIntervalMinutes = appConfig.periodicTimeLandmarkIntervalMinutes
+        audioRecordingFormatRaw = appConfig.audioRecordingFormat
+        enableBackgroundReplyNotification = appConfig.enableBackgroundReplyNotification
+        hasRequestedBackgroundReplyNotificationPermission = appConfig.hasRequestedBackgroundReplyNotificationPermission
+    }
+
+    func refreshAfterAppConfigPersistentStoreLoad() {
+        applyAppConfigSnapshotToLocalState()
+        reloadGlobalSystemPromptEntries()
+        reloadConversationMemoryState()
+    }
+
     func reloadGlobalSystemPromptEntries() {
         guard !isPersistingGlobalSystemPrompts else { return }
         globalSystemPromptReloadTask?.cancel()
@@ -137,6 +197,16 @@ extension ChatViewModel {
     }
 
     func setupSubscriptions() {
+        NotificationCenter.default.publisher(for: AppConfigStore.persistentStoreDidLoadNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshAfterAppConfigPersistentStoreLoad()
+            }
+            .store(in: &cancellables)
+        if AppConfigStore.shared.didLoadPersistentStore {
+            refreshAfterAppConfigPersistentStoreLoad()
+        }
+
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] sessions in

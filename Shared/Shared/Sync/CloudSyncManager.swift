@@ -229,6 +229,7 @@ public final class CloudSyncManager: ObservableObject {
 
     @discardableResult
     public func performAutoSyncNowIfEnabled() async -> Bool {
+        await AppConfigStore.shared.waitForPersistentStoreLoaded()
         guard isEnabled else { return false }
         guard AppConfigStore.shared.cloudSyncAutoSyncEnabled else { return false }
 
@@ -241,6 +242,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func ensureRemoteChangeSubscriptionIfEnabled() async {
+        await AppConfigStore.shared.waitForPersistentStoreLoaded()
         guard isEnabled else { return }
         do {
             try await transport.subscribeToChanges()

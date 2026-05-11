@@ -268,16 +268,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     /// 启动时自动同步（静默模式）
     public func performAutoSyncIfEnabled() {
-        let appConfig = AppConfigStore.shared
-        guard appConfig.syncAutoSyncEnabled else { return }
-        
-        // 构建同步选项
-        let options = buildSyncOptionsFromSettings()
-        guard !options.isEmpty else { return }
-        
-        // 延迟一小段时间确保 WCSession 已激活
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2秒
+            let appConfig = AppConfigStore.shared
+            await appConfig.waitForPersistentStoreLoaded()
+            guard appConfig.syncAutoSyncEnabled else { return }
+
+            let options = buildSyncOptionsFromSettings()
+            guard !options.isEmpty else { return }
+
+            // 延迟一小段时间确保 WCSession 已激活
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             performSync(options: options, silent: true)
         }
     }

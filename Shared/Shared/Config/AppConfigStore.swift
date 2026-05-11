@@ -47,6 +47,13 @@ private final class AppConfigSnapshotCache: @unchecked Sendable {
             return includeLocalOnly || key.participatesInSync
         }
     }
+
+    func value(for key: AppConfigKey) -> Any? {
+        lock.lock()
+        let value = values[key.rawValue]
+        lock.unlock()
+        return value
+    }
 }
 
 private actor AppConfigPersistenceWorker {
@@ -86,6 +93,7 @@ private actor AppConfigPersistenceWorker {
 @MainActor
 public final class AppConfigStore: ObservableObject {
     public static let shared = AppConfigStore()
+    public nonisolated static let persistentStoreDidLoadNotification = Notification.Name("com.ETOS.appConfig.persistentStoreDidLoad")
 
     private nonisolated static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
     private nonisolated static let snapshotCache = AppConfigSnapshotCache(
@@ -95,7 +103,7 @@ public final class AppConfigStore: ObservableObject {
     )
     private var isApplyingSnapshot = false
     private var isReloadingFromPersistentStore = false
-    private var didLoadPersistentStore = false
+    @Published public private(set) var didLoadPersistentStore = false
     private var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
     private static var shouldSkipQuickSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -350,6 +358,13 @@ public final class AppConfigStore: ObservableObject {
         }
     }
 
+    public func waitForPersistentStoreLoaded() async {
+        if didLoadPersistentStore { return }
+        for await loaded in $didLoadPersistentStore.values where loaded {
+            return
+        }
+    }
+
     private func loadPersistentStoreInBackground(initialValues: [AppConfigKey: AppConfigValue]) {
         Task(priority: .utility) { [weak self] in
             let snapshot = await AppConfigPersistenceWorker.shared.bootstrap(
@@ -378,6 +393,7 @@ public final class AppConfigStore: ObservableObject {
             if preservingLocalBootstrapChanges {
                 locallyChangedKeysBeforePersistentLoad.removeAll()
             }
+            NotificationCenter.default.post(name: Self.persistentStoreDidLoadNotification, object: self)
         }
 
         for (rawKey, value) in acceptedSnapshot {
@@ -665,6 +681,7 @@ public final class AppConfigStore: ObservableObject {
     private func write(_ key: AppConfigKey, _ value: AppConfigValue) {
         guard !isReloadingFromPersistentStore else { return }
         guard !isApplyingSnapshot || key.participatesInSync else { return }
+        guard Self.cachedValue(for: key) != value else { return }
 
         Self.snapshotCache.set(value.anyValue, for: key)
         if !didLoadPersistentStore {
@@ -773,7 +790,21 @@ public final class AppConfigStore: ObservableObject {
         }
     }
 
-    private static func coerceBool(_ value: Any) -> Bool? {
+    private nonisolated static func cachedValue(for key: AppConfigKey) -> AppConfigValue? {
+        guard let value = snapshotCache.value(for: key) else { return nil }
+        switch key.defaultValue {
+        case .bool:
+            return coerceBool(value).map(AppConfigValue.bool)
+        case .integer:
+            return coerceInt(value).map(AppConfigValue.integer)
+        case .real:
+            return coerceDouble(value).map(AppConfigValue.real)
+        case .text:
+            return coerceString(value).map(AppConfigValue.text)
+        }
+    }
+
+    private nonisolated static func coerceBool(_ value: Any) -> Bool? {
         if let value = value as? Bool {
             return value
         }
@@ -793,7 +824,7 @@ public final class AppConfigStore: ObservableObject {
         return nil
     }
 
-    private static func coerceInt(_ value: Any) -> Int? {
+    private nonisolated static func coerceInt(_ value: Any) -> Int? {
         if let value = value as? Int {
             return value
         }
@@ -806,7 +837,7 @@ public final class AppConfigStore: ObservableObject {
         return nil
     }
 
-    private static func coerceDouble(_ value: Any) -> Double? {
+    private nonisolated static func coerceDouble(_ value: Any) -> Double? {
         if let value = value as? Double {
             return value
         }
@@ -819,7 +850,7 @@ public final class AppConfigStore: ObservableObject {
         return nil
     }
 
-    private static func coerceString(_ value: Any) -> String? {
+    private nonisolated static func coerceString(_ value: Any) -> String? {
         if let value = value as? String {
             return value
         }
