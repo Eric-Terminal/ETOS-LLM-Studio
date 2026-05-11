@@ -174,7 +174,7 @@ extension Persistence {
 
         do {
             try ensureDirectoryExists(databaseURL.deletingLastPathComponent())
-            try removeSQLiteFileAndSidecarsIfExists(at: databaseURL)
+            try removeSQLiteDatabaseAndSidecarsIfPresent(at: databaseURL)
             try fileManager.copyItem(at: backupURL, to: databaseURL)
             removeSQLiteSidecars(at: databaseURL)
             guard isSQLiteDatabaseHealthy(at: databaseURL) else {

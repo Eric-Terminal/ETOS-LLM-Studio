@@ -126,7 +126,7 @@ extension Persistence {
         }
 
         try ensureDirectoryExists(replacement.targetURL.deletingLastPathComponent())
-        try removeSQLiteFileAndSidecarsIfExists(at: replacement.targetURL)
+        try removeSQLiteDatabaseAndSidecarsIfPresent(at: replacement.targetURL)
         try fileManager.copyItem(at: replacement.sourceURL, to: replacement.targetURL)
         try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: replacement.targetURL.path)
         removeSQLiteSidecars(at: replacement.targetURL)
@@ -139,7 +139,7 @@ extension Persistence {
         for replacement in replacements {
             let rollbackURL = rollbackURL(for: replacement, in: rollbackDirectory)
             do {
-                try removeSQLiteFileAndSidecarsIfExists(at: replacement.targetURL)
+                try removeSQLiteDatabaseAndSidecarsIfPresent(at: replacement.targetURL)
                 try copySQLiteFileAndSidecarsIfExists(at: rollbackURL, to: replacement.targetURL)
             } catch {
                 logger.error("恢复快照回滚文件失败：\(error.localizedDescription)")
@@ -163,7 +163,7 @@ extension Persistence {
         }
     }
 
-    static func removeSQLiteFileAndSidecarsIfExists(at url: URL) throws {
+    static func removeSQLiteDatabaseAndSidecarsIfPresent(at url: URL) throws {
         try removeItemIfExists(at: url)
         try removeItemIfExists(at: URL(fileURLWithPath: url.path + "-wal"))
         try removeItemIfExists(at: URL(fileURLWithPath: url.path + "-shm"))
