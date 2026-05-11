@@ -49,23 +49,28 @@ extension Persistence {
 
     static func makeEncryptedDatabaseConfiguration(
         qos: DispatchQoS.QoSClass = .userInitiated,
-        readonly: Bool = false
+        readonly: Bool = false,
+        passphrase: Data? = nil
     ) -> Configuration {
         var configuration = Configuration()
         configuration.qos = qos
         configuration.readonly = readonly
         configuration.foreignKeysEnabled = true
         configuration.prepareDatabase { db in
-            try prepareSQLCipher(db)
+            if let passphrase {
+                try prepareSQLCipher(db, passphrase: passphrase)
+            } else {
+                try prepareSQLCipher(db)
+            }
         }
         return configuration
     }
 
-    static func isDatabaseHealthy(at url: URL, encrypted: Bool? = nil) -> Bool {
+    static func isDatabaseHealthy(at url: URL, encrypted: Bool? = nil, passphrase: Data? = nil) -> Bool {
         guard FileManager.default.fileExists(atPath: url.path) else { return true }
         do {
             let configuration = encrypted == true
-                ? makeEncryptedDatabaseConfiguration(readonly: true)
+                ? makeEncryptedDatabaseConfiguration(readonly: true, passphrase: passphrase)
                 : makePlainDatabaseConfiguration(readonly: true)
             let queue = try DatabaseQueue(path: url.path, configuration: configuration)
             defer { try? queue.close() }
@@ -373,7 +378,7 @@ private extension Persistence {
             try db.execute(sql: "DETACH DATABASE encrypted")
         }
 
-        guard isDatabaseHealthy(at: destinationURL, encrypted: true) else {
+        guard isDatabaseHealthy(at: destinationURL, encrypted: true, passphrase: passphrase) else {
             throw NSError(domain: "Persistence.SQLCipher", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "加密数据库校验失败：\(fileName)"
             ])
@@ -463,11 +468,15 @@ private extension Persistence {
 
     static func prepareSQLCipher(_ db: Database) throws {
         let didUsePassphrase = try DatabaseEncryptionManager.shared.withPassphraseDataIfAvailable { passphrase in
-            try db.usePassphrase(passphrase)
+            try prepareSQLCipher(db, passphrase: passphrase)
         }
         guard didUsePassphrase != nil else {
             throw DatabaseEncryptionManager.DatabaseEncryptionError.passphraseUnavailable
         }
+    }
+
+    static func prepareSQLCipher(_ db: Database, passphrase: Data) throws {
+        try db.usePassphrase(passphrase)
         try db.execute(sql: "PRAGMA kdf_iter=\(sqlCipherKDFIterations)")
     }
 
