@@ -67,9 +67,14 @@ struct ModelAdvancedSettingsView: View {
     // MARK: - 视图主体
 
     var body: some View {
-        Form {
+        List {
             // MARK: Section 1：提示与注入
-            Section(header: Text(NSLocalizedString("全局系统提示词", comment: ""))) {
+            Section(
+                header: Text(NSLocalizedString("全局系统提示词", comment: "")),
+                footer: Text(NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
                 TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(5...10)
                     .disabled(selectedGlobalPromptEntry == nil)
@@ -92,10 +97,6 @@ struct ModelAdvancedSettingsView: View {
                             .lineLimit(1)
                     }
                 }
-            } footer: {
-                Text(NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section(header: Text(NSLocalizedString("当前话题提示词", comment: "")), footer: Text(NSLocalizedString("仅对当前对话生效。", comment: ""))) {
@@ -342,7 +343,7 @@ private struct GlobalSystemPromptEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 TextField(NSLocalizedString("提示词名称", comment: ""), text: $title.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("提示词内容", comment: ""), text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(4...10)

@@ -122,7 +122,7 @@ private extension SnapshotRestoreService {
                 throw RestoreError.missingDatabase(item.fileName)
             }
             let destinationURL = extractedDirectory.appendingPathComponent(item.fileName, isDirectory: false)
-            try archive.extract(entry, to: destinationURL)
+            _ = try archive.extract(entry, to: destinationURL)
             guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
                 throw RestoreError.invalidDatabase(item.fileName)
             }

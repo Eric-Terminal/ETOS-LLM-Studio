@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 import GRDB
 
 struct SnapshotRestoreDatabaseURLs {

@@ -250,7 +250,7 @@ final class ChatViewModel: ObservableObject {
     @Published var includeSystemTimeInPrompt: Bool = AppConfigStore.shared.includeSystemTimeInPrompt {
         didSet { AppConfigStore.shared.includeSystemTimeInPrompt = includeSystemTimeInPrompt }
     }
-    @Published private var systemTimeInjectionPositionRawValue: String = AppConfigStore.shared.systemTimeInjectionPosition {
+    @Published var systemTimeInjectionPositionRawValue: String = AppConfigStore.shared.systemTimeInjectionPosition {
         didSet { AppConfigStore.shared.systemTimeInjectionPosition = systemTimeInjectionPositionRawValue }
     }
     @Published var enablePeriodicTimeLandmark: Bool = AppConfigStore.shared.enablePeriodicTimeLandmark {

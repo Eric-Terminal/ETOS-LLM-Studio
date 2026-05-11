@@ -179,13 +179,13 @@ struct BackupRestoreView: View {
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
                 let snapshotURL = try SnapshotBuilder.buildSnapshot()
                 if let password {
-                    try Self.encryptSnapshotInPlace(
+                    try BackupRestoreFileWriter.encryptSnapshotInPlace(
                         snapshotURL,
                         password: password,
                         useStrongDerivation: useStrongPasswordDerivation
                     )
                 }
-                let destinationURL = try Self.exportSnapshotToDocuments(snapshotURL)
+                let destinationURL = try BackupRestoreFileWriter.exportSnapshotToDocuments(snapshotURL)
                 try? FileManager.default.removeItem(at: snapshotURL)
                 await MainActor.run {
                     if password != nil {
@@ -257,7 +257,7 @@ struct BackupRestoreView: View {
                 let snapshotURL = try SnapshotBuilder.buildSnapshot()
                 defer { try? FileManager.default.removeItem(at: snapshotURL) }
                 if let password {
-                    try Self.encryptSnapshotInPlace(
+                    try BackupRestoreFileWriter.encryptSnapshotInPlace(
                         snapshotURL,
                         password: password,
                         useStrongDerivation: useStrongPasswordDerivation
@@ -354,7 +354,10 @@ struct BackupRestoreView: View {
         }
     }
 
-    private static func encryptSnapshotInPlace(
+}
+
+private enum BackupRestoreFileWriter {
+    nonisolated static func encryptSnapshotInPlace(
         _ snapshotURL: URL,
         password: String,
         useStrongDerivation: Bool
@@ -369,7 +372,7 @@ struct BackupRestoreView: View {
         try encryptedData.write(to: snapshotURL, options: .atomic)
     }
 
-    private static func exportSnapshotToDocuments(_ snapshotURL: URL) throws -> URL {
+    nonisolated static func exportSnapshotToDocuments(_ snapshotURL: URL) throws -> URL {
         let fileManager = FileManager.default
         let containerDirectory = fileManager.url(forUbiquityContainerIdentifier: nil)?
             .appendingPathComponent("Documents", isDirectory: true)

@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 
 extension MCPManager {
     @discardableResult
