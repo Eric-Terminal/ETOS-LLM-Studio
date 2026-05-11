@@ -69,7 +69,7 @@ struct ModelAdvancedSettingsView: View {
     var body: some View {
         Form {
             // MARK: Section 1：提示与注入
-            Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
+            Section(header: Text(NSLocalizedString("全局系统提示词", comment: ""))) {
                 TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(5...10)
                     .disabled(selectedGlobalPromptEntry == nil)
@@ -92,8 +92,14 @@ struct ModelAdvancedSettingsView: View {
                             .lineLimit(1)
                     }
                 }
+            } footer: {
+                Text(NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
-                TextField(NSLocalizedString("话题提示词", comment: ""), text: Binding(
+            Section(header: Text(NSLocalizedString("当前话题提示词", comment: "")), footer: Text(NSLocalizedString("仅对当前对话生效。", comment: ""))) {
+                TextField(NSLocalizedString("自定义话题提示词", comment: ""), text: Binding(
                     get: { currentSession?.topicPrompt ?? "" },
                     set: { newValue in
                         if var session = currentSession {
@@ -104,8 +110,10 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ).watchKeyboardNewlineBinding(), axis: .vertical)
                 .lineLimit(3...8)
+            }
 
-                TextField(NSLocalizedString("增强提示词", comment: ""), text: Binding(
+            Section(header: Text(NSLocalizedString("增强提示词", comment: "")), footer: Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))) {
+                TextField(NSLocalizedString("自定义增强提示词", comment: ""), text: Binding(
                     get: { currentSession?.enhancedPrompt ?? "" },
                     set: { newValue in
                         if var session = currentSession {
@@ -116,7 +124,9 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ).watchKeyboardNewlineBinding(), axis: .vertical)
                 .lineLimit(3...8)
+            }
 
+            Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
                 Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
                 Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
             }

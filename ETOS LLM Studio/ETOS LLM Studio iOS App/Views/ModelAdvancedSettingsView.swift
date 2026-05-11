@@ -60,90 +60,106 @@ struct ModelAdvancedSettingsView: View {
         TabView {
             // MARK: - Tab 1：提示与注入
             Form {
-            Section(NSLocalizedString("全局与预设", comment: "")) {
-                TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding, axis: .vertical)
-                    .lineLimit(3...8)
-                    .disabled(selectedGlobalPromptEntry == nil)
+                Section {
+                    TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding, axis: .vertical)
+                        .lineLimit(3...8)
+                        .disabled(selectedGlobalPromptEntry == nil)
 
-                NavigationLink {
-                    GlobalSystemPromptPickerView(
-                        entries: globalSystemPromptEntries,
-                        selectedEntryID: selectedGlobalSystemPromptEntryID,
-                        addGlobalSystemPromptEntry: addGlobalSystemPromptEntry,
-                        selectGlobalSystemPromptEntry: selectGlobalSystemPromptEntry,
-                        updateGlobalSystemPromptEntry: updateGlobalSystemPromptEntry,
-                        deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
-                    )
-                } label: {
-                    LabeledContent(NSLocalizedString("提示词列表", comment: "")) {
-                        Text(displayTitle(for: selectedGlobalPromptEntry))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text(NSLocalizedString("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section(NSLocalizedString("当前会话干预", comment: "")) {
-                TextField(NSLocalizedString("话题提示词", comment: ""), text: Binding(
-                    get: { currentSession?.topicPrompt ?? "" },
-                    set: { newValue in
-                        if var session = currentSession {
-                            session.topicPrompt = newValue
-                            currentSession = session
-                            ChatService.shared.updateSession(session)
+                    NavigationLink {
+                        GlobalSystemPromptPickerView(
+                            entries: globalSystemPromptEntries,
+                            selectedEntryID: selectedGlobalSystemPromptEntryID,
+                            addGlobalSystemPromptEntry: addGlobalSystemPromptEntry,
+                            selectGlobalSystemPromptEntry: selectGlobalSystemPromptEntry,
+                            updateGlobalSystemPromptEntry: updateGlobalSystemPromptEntry,
+                            deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
+                        )
+                    } label: {
+                        LabeledContent(NSLocalizedString("提示词列表", comment: "")) {
+                            Text(displayTitle(for: selectedGlobalPromptEntry))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                ), axis: .vertical)
-                .lineLimit(2...6)
+                } header: {
+                    Text(NSLocalizedString("全局系统提示词", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
-                TextField(NSLocalizedString("增强提示词", comment: ""), text: Binding(
-                    get: { currentSession?.enhancedPrompt ?? "" },
-                    set: { newValue in
-                        if var session = currentSession {
-                            session.enhancedPrompt = newValue
-                            currentSession = session
-                            ChatService.shared.updateSession(session)
+                Section {
+                    TextField(NSLocalizedString("自定义话题提示词", comment: ""), text: Binding(
+                        get: { currentSession?.topicPrompt ?? "" },
+                        set: { newValue in
+                            if var session = currentSession {
+                                session.topicPrompt = newValue
+                                currentSession = session
+                                ChatService.shared.updateSession(session)
+                            }
+                        }
+                    ), axis: .vertical)
+                    .lineLimit(2...6)
+                } header: {
+                    Text(NSLocalizedString("当前话题提示词", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("仅对当前对话生效。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    TextField(NSLocalizedString("自定义增强提示词", comment: ""), text: Binding(
+                        get: { currentSession?.enhancedPrompt ?? "" },
+                        set: { newValue in
+                            if var session = currentSession {
+                                session.enhancedPrompt = newValue
+                                currentSession = session
+                                ChatService.shared.updateSession(session)
+                            }
+                        }
+                    ), axis: .vertical)
+                    .lineLimit(2...6)
+                } header: {
+                    Text(NSLocalizedString("增强提示词", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
+                    if includeSystemTimeInPrompt {
+                        Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
+                            ForEach(SystemTimeInjectionPosition.allCases) { position in
+                                Text(position.displayName).tag(position)
+                            }
                         }
                     }
-                ), axis: .vertical)
-                .lineLimit(2...6)
-            }
-
-            Section {
-                Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
-                if includeSystemTimeInPrompt {
-                    Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
-                        ForEach(SystemTimeInjectionPosition.allCases) { position in
-                            Text(position.displayName).tag(position)
-                        }
+                    Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
+                    LabeledContent(NSLocalizedString("路标时间（分钟）", comment: "")) {
+                        TextField(NSLocalizedString("分钟", comment: ""), value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                            .disabled(!enablePeriodicTimeLandmark)
+                    }
+                } header: {
+                    Text(NSLocalizedString("动态时间注入", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
+                    if newValue < 1 {
+                        periodicTimeLandmarkIntervalMinutes = 1
                     }
                 }
-                Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
-                LabeledContent(NSLocalizedString("路标时间（分钟）", comment: "")) {
-                    TextField(NSLocalizedString("分钟", comment: ""), value: $periodicTimeLandmarkIntervalMinutes, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                        .disabled(!enablePeriodicTimeLandmark)
-                }
-            } header: {
-                Text(NSLocalizedString("动态时间注入", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
-            .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
-                if newValue < 1 {
-                    periodicTimeLandmarkIntervalMinutes = 1
-                }
+            .tabItem {
+                Label(NSLocalizedString("提示与注入", comment: ""), systemImage: "text.quote")
             }
-        }
-        .tabItem {
-            Label(NSLocalizedString("提示与注入", comment: ""), systemImage: "text.quote")
-        }
 
         // MARK: - Tab 2：会话与上下文
         Form {
