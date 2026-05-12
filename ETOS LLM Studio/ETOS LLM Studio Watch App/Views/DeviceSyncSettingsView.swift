@@ -9,6 +9,7 @@
 import SwiftUI
 import Foundation
 import Shared
+import UniformTypeIdentifiers
 
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
@@ -21,6 +22,28 @@ struct DeviceSyncSettingsView: View {
     @State private var uploadErrorMessage: String?
     @State private var uploadSuccessMessage: String?
     @State private var uploadResponsePreview: String?
+    @State private var snapshotFileURL: URL?
+    @State private var snapshotStatusMessage: String?
+    @State private var snapshotErrorMessage: String?
+    @State private var isCreatingSnapshot: Bool = false
+    @State private var isUploadingSnapshot: Bool = false
+    @State private var encryptSnapshot: Bool = false
+    @State private var useStrongSnapshotPasswordDerivation: Bool = false
+    @State private var snapshotPassword: String = ""
+    @State private var snapshotPasswordConfirmation: String = ""
+    @State private var isImportingSnapshot: Bool = false
+    @State private var isRestoringSnapshot: Bool = false
+    @State private var restorePassword: String = ""
+    @State private var pendingEncryptedSnapshotURL: URL?
+    @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
+
+    private let snapshotContentTypes: [UTType] = {
+        var types: [UTType] = [.data]
+        if let elsBackupType = UTType(filenameExtension: SnapshotBuilder.fileExtension) {
+            types.insert(elsBackupType, at: 0)
+        }
+        return types
+    }()
     
     var body: some View {
         List {
@@ -117,6 +140,122 @@ struct DeviceSyncSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(NSLocalizedString("数据库快照", comment: "")) {
+                Toggle(NSLocalizedString("设置密码", comment: ""), isOn: $encryptSnapshot)
+                    .buttonStyle(.plain)
+                    .disabled(isSnapshotBusy)
+
+                if encryptSnapshot {
+                    Toggle(NSLocalizedString("高强度派生", comment: ""), isOn: $useStrongSnapshotPasswordDerivation)
+                        .buttonStyle(.plain)
+                        .disabled(isSnapshotBusy)
+                    SecureField(NSLocalizedString("密码", comment: ""), text: $snapshotPassword.watchKeyboardNewlineBinding())
+                        .textContentType(.newPassword)
+                    SecureField(NSLocalizedString("确认密码", comment: ""), text: $snapshotPasswordConfirmation.watchKeyboardNewlineBinding())
+                        .textContentType(.newPassword)
+                }
+
+                Button {
+                    createSnapshotFile()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isCreatingSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label(NSLocalizedString("生成快照文件", comment: ""), systemImage: "externaldrive.badge.icloud")
+                        Spacer()
+                    }
+                }
+                .disabled(isSnapshotBusy)
+
+                if let snapshotFileURL {
+                    if #available(watchOS 9.0, *) {
+                        ShareLink(item: snapshotFileURL) {
+                            HStack {
+                                Spacer()
+                                Label(NSLocalizedString("分享快照文件", comment: ""), systemImage: "square.and.arrow.up")
+                                Spacer()
+                            }
+                        }
+                    } else {
+                        Text(NSLocalizedString("当前系统暂不支持直接分享导出文件。", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button {
+                    uploadSnapshotFile()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isUploadingSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label(NSLocalizedString("创建并上传快照", comment: ""), systemImage: "externaldrive.badge.icloud")
+                        Spacer()
+                    }
+                }
+                .disabled(isSnapshotBusy)
+
+                Button(role: .destructive) {
+                    isImportingSnapshot = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isRestoringSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label(NSLocalizedString("从快照恢复", comment: ""), systemImage: "arrow.counterclockwise.icloud")
+                        Spacer()
+                    }
+                }
+                .disabled(isSnapshotBusy)
+
+                if pendingEncryptedSnapshotURL != nil {
+                    Text(snapshotPasswordPromptMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    SecureField(NSLocalizedString("密码", comment: ""), text: $restorePassword.watchKeyboardNewlineBinding())
+                        .textContentType(.password)
+
+                    Button(role: .destructive) {
+                        restorePendingEncryptedSnapshot()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label(NSLocalizedString("恢复", comment: ""), systemImage: "arrow.counterclockwise")
+                            Spacer()
+                        }
+                    }
+                    .disabled(restorePassword.isEmpty || isSnapshotBusy)
+
+                    Button(NSLocalizedString("取消", comment: "")) {
+                        clearPendingEncryptedSnapshot()
+                    }
+                    .disabled(isSnapshotBusy)
+                }
+
+                if let snapshotStatusMessage, !snapshotStatusMessage.isEmpty {
+                    Text(snapshotStatusMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(NSLocalizedString("快照会包含聊天、配置与记忆数据库，不包含 memory_vectors.sqlite；加密快照需要在恢复时输入这里设置的密码。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库。请选择可信的 .elsbackup 文件；加密快照会先要求输入密码，解密与校验成功后才会替换本机数据。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(NSLocalizedString("Apple Watch 同步", comment: "")) {
                 Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
 
@@ -191,12 +330,32 @@ struct DeviceSyncSettingsView: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            if let snapshotErrorMessage, !snapshotErrorMessage.isEmpty {
+                Section(NSLocalizedString("快照操作失败", comment: "")) {
+                    Text(snapshotErrorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
         .onAppear {
             SyncPackageTransferService.cleanupTemporaryExportFiles()
+            WatchSnapshotFileWriter.cleanupTemporaryImportFiles()
         }
-        .onDisappear(perform: cleanupExportFile)
+        .onDisappear {
+            cleanupExportFile()
+            cleanupSnapshotFile()
+            clearPendingEncryptedSnapshot()
+        }
+        .fileImporter(
+            isPresented: $isImportingSnapshot,
+            allowedContentTypes: snapshotContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            handleSnapshotImport(result)
+        }
     }
     
     private var selectedSyncOptions: SyncOptions {
@@ -231,6 +390,10 @@ struct DeviceSyncSettingsView: View {
             return true
         }
         return false
+    }
+
+    private var isSnapshotBusy: Bool {
+        isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot
     }
     
     @ViewBuilder
@@ -442,5 +605,283 @@ struct DeviceSyncSettingsView: View {
                 }
             }
         }
+    }
+
+    private func createSnapshotFile() {
+        guard validateSnapshotPasswordIfNeeded() else { return }
+
+        isCreatingSnapshot = true
+        snapshotErrorMessage = nil
+        snapshotStatusMessage = nil
+        let password = encryptSnapshot ? snapshotPassword : nil
+        let useStrongDerivation = useStrongSnapshotPasswordDerivation
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                await AppConfigStore.shared.flushPendingWrites()
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                let fileURL = try SnapshotBuilder.buildSnapshot()
+                if let password {
+                    try WatchSnapshotFileWriter.encryptSnapshotInPlace(
+                        fileURL,
+                        password: password,
+                        useStrongDerivation: useStrongDerivation
+                    )
+                }
+
+                await MainActor.run {
+                    if let existing = snapshotFileURL {
+                        try? FileManager.default.removeItem(at: existing)
+                    }
+                    snapshotFileURL = fileURL
+                    if password != nil {
+                        snapshotPassword = ""
+                        snapshotPasswordConfirmation = ""
+                    }
+                    isCreatingSnapshot = false
+                    snapshotStatusMessage = NSLocalizedString("快照已生成，可通过分享发送到其他设备。", comment: "")
+                }
+            } catch {
+                await MainActor.run {
+                    isCreatingSnapshot = false
+                    snapshotErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func uploadSnapshotFile() {
+        guard validateSnapshotPasswordIfNeeded() else { return }
+        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            snapshotErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
+            return
+        }
+        guard let endpoint = URL(string: trimmed),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            snapshotErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+            return
+        }
+
+        isUploadingSnapshot = true
+        snapshotErrorMessage = nil
+        snapshotStatusMessage = nil
+        let password = encryptSnapshot ? snapshotPassword : nil
+        let useStrongDerivation = useStrongSnapshotPasswordDerivation
+        let endpointString = endpoint.absoluteString
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                await AppConfigStore.shared.flushPendingWrites()
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                guard let endpoint = URL(string: endpointString) else {
+                    await MainActor.run {
+                        isUploadingSnapshot = false
+                        snapshotErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+                    }
+                    return
+                }
+
+                let fileURL = try SnapshotBuilder.buildSnapshot()
+                defer { try? FileManager.default.removeItem(at: fileURL) }
+                if let password {
+                    try WatchSnapshotFileWriter.encryptSnapshotInPlace(
+                        fileURL,
+                        password: password,
+                        useStrongDerivation: useStrongDerivation
+                    )
+                }
+
+                let result = try await SyncPackageUploadService.uploadSnapshot(fileURL: fileURL, to: endpoint)
+                await MainActor.run {
+                    if password != nil {
+                        snapshotPassword = ""
+                        snapshotPasswordConfirmation = ""
+                    }
+                    isUploadingSnapshot = false
+                    snapshotStatusMessage = String(format: NSLocalizedString("快照已上传（HTTP %d）。", comment: ""), result.statusCode)
+                    if let preview = result.responseBodyPreview, !preview.isEmpty {
+                        snapshotStatusMessage = String(
+                            format: NSLocalizedString("快照已上传（HTTP %d）：%@", comment: ""),
+                            result.statusCode,
+                            preview
+                        )
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isUploadingSnapshot = false
+                    snapshotErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func handleSnapshotImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let fileURL = urls.first else { return }
+            prepareSnapshotRestore(from: fileURL)
+        case .failure(let error):
+            snapshotErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func prepareSnapshotRestore(from fileURL: URL) {
+        isRestoringSnapshot = true
+        snapshotErrorMessage = nil
+        snapshotStatusMessage = nil
+        clearPendingEncryptedSnapshot()
+
+        Task.detached(priority: .userInitiated) {
+            var stagedSnapshotURL: URL?
+            do {
+                let stagedURL = try WatchSnapshotFileWriter.stageSnapshotForRestore(fileURL)
+                stagedSnapshotURL = stagedURL
+                let inspection = try SnapshotRestoreService.inspectSnapshot(at: stagedURL)
+
+                await MainActor.run {
+                    isRestoringSnapshot = false
+                    if inspection.requiresPassword {
+                        pendingEncryptedSnapshotURL = stagedURL
+                        pendingSnapshotInspection = inspection
+                        restorePassword = ""
+                        snapshotStatusMessage = NSLocalizedString("请输入快照密码后恢复。", comment: "")
+                    } else {
+                        restoreSnapshot(from: stagedURL, password: nil, removeWhenFinished: true)
+                    }
+                }
+            } catch {
+                if let stagedSnapshotURL {
+                    try? FileManager.default.removeItem(at: stagedSnapshotURL)
+                }
+                await MainActor.run {
+                    isRestoringSnapshot = false
+                    snapshotErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func restorePendingEncryptedSnapshot() {
+        guard let pendingEncryptedSnapshotURL else { return }
+        let password = restorePassword
+        self.pendingEncryptedSnapshotURL = nil
+        pendingSnapshotInspection = nil
+        restorePassword = ""
+        restoreSnapshot(from: pendingEncryptedSnapshotURL, password: password, removeWhenFinished: true)
+    }
+
+    private func restoreSnapshot(
+        from fileURL: URL,
+        password: String?,
+        removeWhenFinished: Bool
+    ) {
+        isRestoringSnapshot = true
+        snapshotErrorMessage = nil
+        snapshotStatusMessage = nil
+
+        Task.detached(priority: .userInitiated) {
+            defer {
+                if removeWhenFinished {
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+            }
+
+            do {
+                try SnapshotRestoreService.restoreSnapshot(from: fileURL, password: password)
+                await MainActor.run {
+                    AppConfigStore.shared.reloadFromPersistentStore()
+                    isRestoringSnapshot = false
+                    snapshotStatusMessage = NSLocalizedString("快照已恢复。若当前界面仍显示旧数据，请返回聊天列表后重新进入。", comment: "")
+                }
+            } catch {
+                await MainActor.run {
+                    isRestoringSnapshot = false
+                    snapshotErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private var snapshotPasswordPromptMessage: String {
+        switch pendingSnapshotInspection?.encryptionMode {
+        case .simplePassword:
+            return NSLocalizedString("此快照使用简单密码加密，请输入导出时设置的密码。", comment: "")
+        case .pbkdf2Strong:
+            return NSLocalizedString("此快照使用高强度派生加密，请输入导出时设置的密码。", comment: "")
+        case .none:
+            return NSLocalizedString("此快照已加密，请输入导出时设置的密码。", comment: "")
+        }
+    }
+
+    private func validateSnapshotPasswordIfNeeded() -> Bool {
+        guard encryptSnapshot else { return true }
+        guard !snapshotPassword.isEmpty else {
+            snapshotErrorMessage = NSLocalizedString("请输入快照密码。", comment: "")
+            return false
+        }
+        guard snapshotPassword == snapshotPasswordConfirmation else {
+            snapshotErrorMessage = NSLocalizedString("两次输入的快照密码不一致。", comment: "")
+            return false
+        }
+        return true
+    }
+
+    private func cleanupSnapshotFile() {
+        guard let fileURL = snapshotFileURL else { return }
+        try? FileManager.default.removeItem(at: fileURL)
+        snapshotFileURL = nil
+    }
+
+    private func clearPendingEncryptedSnapshot() {
+        if let pendingEncryptedSnapshotURL {
+            try? FileManager.default.removeItem(at: pendingEncryptedSnapshotURL)
+        }
+        pendingEncryptedSnapshotURL = nil
+        pendingSnapshotInspection = nil
+        restorePassword = ""
+    }
+}
+
+private enum WatchSnapshotFileWriter {
+    nonisolated static func encryptSnapshotInPlace(
+        _ snapshotURL: URL,
+        password: String,
+        useStrongDerivation: Bool
+    ) throws {
+        let plainData = try Data(contentsOf: snapshotURL)
+        let encryptedData = useStrongDerivation
+            ? try SnapshotEncryptor.encryptStrongPassword(data: plainData, password: password)
+            : try SnapshotEncryptor.encryptSimplePassword(data: plainData, password: password)
+        try encryptedData.write(to: snapshotURL, options: .atomic)
+    }
+
+    nonisolated static func stageSnapshotForRestore(_ sourceURL: URL) throws -> URL {
+        let fileManager = FileManager.default
+        let importDirectory = temporaryImportDirectory
+        try fileManager.createDirectory(at: importDirectory, withIntermediateDirectories: true)
+        let destinationURL = importDirectory
+            .appendingPathComponent("ETOS-Snapshot-\(UUID().uuidString)", isDirectory: false)
+            .appendingPathExtension(SnapshotBuilder.fileExtension)
+
+        let isSecurityScoped = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if isSecurityScoped {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        try fileManager.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
+
+    nonisolated static func cleanupTemporaryImportFiles() {
+        try? FileManager.default.removeItem(at: temporaryImportDirectory)
+    }
+
+    private static var temporaryImportDirectory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("ETOSWatchSnapshotImports", isDirectory: true)
     }
 }

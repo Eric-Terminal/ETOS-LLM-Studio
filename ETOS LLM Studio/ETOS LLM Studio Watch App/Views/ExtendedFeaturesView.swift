@@ -359,7 +359,7 @@ struct LongTermMemoryFeatureView: View {
                 } header: {
                     Text(NSLocalizedString("跨对话记忆", comment: "跨对话记忆分组"))
                 } footer: {
-                    Text(NSLocalizedString("会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。", comment: "跨对话记忆说明"))
+                    Text(NSLocalizedString("会话摘要与用户画像优先存入 SQLite 分库，旧文件仅作为兼容回退。", comment: "跨对话记忆说明"))
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }

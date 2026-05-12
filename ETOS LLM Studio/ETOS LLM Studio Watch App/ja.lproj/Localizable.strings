@@ -1471,7 +1471,6 @@
 "会向输入地址发送 POST(JSON)，请确认地址可信。" = "Sends POST (JSON) to the entered address. Make sure it is trusted.";
 "会话 %d/%d" = "Sessions %d/%d";
 "会话列表操作" = "Session List Actions";
-"会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。" = "Conversation summaries are saved in session JSON, and the user profile is saved in Memory/user_profile.json.";
 "会话摘要管理" = "Session Summary Management";
 "会话记录" = "Chat Records";
 "你对每日脉冲点过喜欢、降权、隐藏或保存之后，历史会显示在这里。" = "After you like, downrank, hide, or save Daily Pulse cards, the history appears here.";
@@ -2270,3 +2269,9 @@
 "上传失败：HTTP %d。" = "Upload failed: HTTP %d.";
 "MCP" = "MCP";
 "Agent Skills" = "エージェント スキル";
+"生成快照文件" = "Generate Snapshot File";
+"分享快照文件" = "Share Snapshot File";
+"快照已生成，可通过分享发送到其他设备。" = "Snapshot generated and ready to share with another device.";
+"快照会包含聊天、配置与记忆数据库，不包含 memory_vectors.sqlite；加密快照需要在恢复时输入这里设置的密码。" = "Snapshots include the chat, configuration, and memory databases, but not memory_vectors.sqlite. Encrypted snapshots require this password during restore.";
+"请输入快照密码后恢复。" = "Enter the snapshot password to restore.";
+"会话摘要与用户画像优先存入 SQLite 分库，旧文件仅作为兼容回退。" = "Conversation summaries and user profiles are stored in SQLite databases first; old files are only compatibility fallbacks.";

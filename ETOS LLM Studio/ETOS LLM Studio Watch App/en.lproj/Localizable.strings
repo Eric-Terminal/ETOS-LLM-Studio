@@ -1469,7 +1469,6 @@
 "能力说明\n• 记忆系统会在回复前检索历史信息，提升连续性。\n• 写入开关仅影响“新增记忆”，不影响读取已有记忆。\n\n推荐流程\n1. 先开启总开关体验效果。\n2. 对噪声敏感时可先关闭写入，仅保留读取。\n3. 定期到记忆库管理清理低质量记忆。" = "How it works\n• The memory system retrieves historical information before replies to improve continuity.\n• The write switch only affects new memories; existing memories can still be read.\n\nRecommended flow\n1. Turn on the main switch first and try the effect.\n2. If you are sensitive to noisy memories, disable writing and keep reading only.\n3. Clean up low-quality memories regularly in Memory Library.";
 "启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。" = "When enabled, AI gains memory capabilities. It retrieves relevant memories before each chat and can actively learn through tools.";
 "关闭后仅读取记忆，不保存新内容。" = "When off, existing memories can still be read, but new content is not saved.";
-"会话摘要存入会话 JSON，用户画像存入 Memory/user_profile.json。" = "Conversation summaries are saved in session JSON, and the user profile is saved in Memory/user_profile.json.";
 "统一查看聊天可用工具，并集中调整启用状态。" = "Review chat-available tools and adjust enablement in one place.";
 "页面作用\n• 快速判断各类工具在“配置层”与“会话层”是否真正可用。\n\n指标怎么读\n• 配置已启用：你在设置里已经打开。\n• 当前会话实际可用：在总开关、审批策略、隔离策略后仍可用。\n\n推荐流程\n1. 先看汇总数字，确认问题范围。\n2. 开启“仅显示已启用”缩小排查范围。\n3. 进入具体工具页调整策略与状态。\n\n常见情况\n• 如果显示世界书隔离生效，记忆、MCP、Agent Skills、快捷指令可能被会话策略屏蔽。" = "What this page does\n• Quickly check whether each tool category is truly available at the configuration and session layers.\n\nHow to read metrics\n• Configured enabled: enabled in Settings.\n• Available in current session: still available after the main switch, approval policy, and isolation policy.\n\nRecommended flow\n1. Check summary numbers first to narrow the issue.\n2. Enable Enabled Only to reduce the search scope.\n3. Open the specific tool page to adjust policy and status.\n\nCommon case\n• If Worldbook isolation is active, memory, MCP, Agent Skills, and Shortcuts may be blocked by session policy.";
 "当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。" = "Worldbook isolation is enabled for this session, so memory, MCP, Agent Skills, and Shortcuts tools will not be sent during chat.";
@@ -2563,3 +2562,9 @@
 "上传失败：HTTP %d。" = "Upload failed: HTTP %d.";
 "MCP" = "MCP";
 "Agent Skills" = "Agent Skills";
+"生成快照文件" = "Generate Snapshot File";
+"分享快照文件" = "Share Snapshot File";
+"快照已生成，可通过分享发送到其他设备。" = "Snapshot generated and ready to share with another device.";
+"快照会包含聊天、配置与记忆数据库，不包含 memory_vectors.sqlite；加密快照需要在恢复时输入这里设置的密码。" = "Snapshots include the chat, configuration, and memory databases, but not memory_vectors.sqlite. Encrypted snapshots require this password during restore.";
+"请输入快照密码后恢复。" = "Enter the snapshot password to restore.";
+"会话摘要与用户画像优先存入 SQLite 分库，旧文件仅作为兼容回退。" = "Conversation summaries and user profiles are stored in SQLite databases first; old files are only compatibility fallbacks.";
