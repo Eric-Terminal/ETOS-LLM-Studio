@@ -2327,6 +2327,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "自定义Body有误，无法预览" = "Custom Body est invalide, aperçu impossible";
 "Key" = "Key";
 "Value" = "Value";
+"覆盖参数" = "Paramètres de remplacement";
 "无法将“%@”转换为纯文本。" = "Impossible de convertir \"%@\" en texte brut.";
 "“%@”没有可发送的文本内容。" = "\"%@\" ne contient pas de texte envoyable.";
 "无法读取“%@”中的必要内容：%@。" = "Impossible de lire le contenu requis dans \"%@\" : %@.";

@@ -2189,6 +2189,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "自定义Body有误，无法预览" = "Custom Body no es válido, no se puede previsualizar";
 "Key" = "Key";
 "Value" = "Value";
+"覆盖参数" = "Parámetros de anulación";
 "无法将“%@”转换为纯文本。" = "No se puede convertir \"%@\" a texto sin formato.";
 "“%@”没有可发送的文本内容。" = "\"%@\" no contiene texto enviable.";
 "无法读取“%@”中的必要内容：%@。" = "No se pudo leer el contenido necesario de \"%@\": %@.";

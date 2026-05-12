@@ -82,32 +82,31 @@ struct MessageInfoSheet: View {
                         )
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
+                }
+
+                Section(NSLocalizedString("快速定位", comment: "Quick message jump section title")) {
+                    TextField(
+                        String(
+                            format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
+                            payload.totalCount
+                        ),
+                        text: $jumpInput
+                    )
+                    .keyboardType(.numberPad)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    Button {
+                        submitJump()
+                    } label: {
+                        Label(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title"), systemImage: "location")
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    if let jumpError, !jumpError.isEmpty {
+                        Text(jumpError)
                             .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-
-                        TextField(
-                            String(
-                                format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
-                                payload.totalCount
-                            ),
-                            text: $jumpInput
-                        )
-                        .keyboardType(.numberPad)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                        Button(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title")) {
-                            submitJump()
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        if let jumpError, !jumpError.isEmpty {
-                            Text(jumpError)
-                                .etFont(.footnote)
-                                .foregroundStyle(.red)
-                        }
+                            .foregroundStyle(.red)
                     }
                 }
 

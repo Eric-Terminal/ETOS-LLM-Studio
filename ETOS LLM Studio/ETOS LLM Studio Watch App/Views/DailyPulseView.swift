@@ -20,7 +20,6 @@ struct DailyPulseView: View {
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
 
     @State private var expandedCardIDs: Set<UUID> = []
-    @State private var reminderTimeDraft = ""
     @State private var statusMessage: String?
 
     var body: some View {
@@ -41,16 +40,12 @@ struct DailyPulseView: View {
         }
         .navigationTitle(NSLocalizedString("每日脉冲", comment: ""))
         .task {
-            syncReminderTimeDraft()
             await pulseManager.generateIfNeeded()
             pulseManager.markTodayRunViewed()
             await notificationCenter.refreshAuthorizationStatus()
         }
         .onChange(of: pulseManager.todayRun?.dayKey) { _, _ in
             pulseManager.markTodayRunViewed()
-        }
-        .onChange(of: deliveryCoordinator.reminderTimeText) { _, _ in
-            syncReminderTimeDraft()
         }
         .alert(NSLocalizedString("每日脉冲", comment: ""), isPresented: alertBinding) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
@@ -117,20 +112,11 @@ struct DailyPulseView: View {
             Toggle(NSLocalizedString("晨间提醒", comment: ""), isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(NSLocalizedString("提醒时间", comment: ""))
-                        .etFont(.footnote.weight(.semibold))
-                    TextField("08:30", text: $reminderTimeDraft.watchKeyboardNewlineBinding())
-                        .onChange(of: reminderTimeDraft) { _, newValue in
-                            applyReminderTimeDraftIfPossible(newValue, showErrorWhenInvalid: false)
-                        }
-                        .onSubmit {
-                            applyReminderTimeDraftIfPossible(reminderTimeDraft, showErrorWhenInvalid: true)
-                        }
-                    Text(NSLocalizedString("请用 24 小时制输入，例如 08:30。", comment: ""))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                DatePicker(
+                    NSLocalizedString("提醒时间", comment: ""),
+                    selection: reminderTimeBinding,
+                    displayedComponents: .hourAndMinute
+                )
 
                 if notificationCenter.authorizationStatus == .denied {
                     Text(NSLocalizedString("通知权限未开启，请在 iPhone 的 Watch 通知设置里允许 ETOS LLM Studio 发送提醒。", comment: ""))
@@ -537,31 +523,21 @@ struct DailyPulseView: View {
         )
     }
 
-    private func syncReminderTimeDraft() {
-        reminderTimeDraft = deliveryCoordinator.reminderTimeText
-    }
-
-    private func applyReminderTimeDraftIfPossible(_ input: String, showErrorWhenInvalid: Bool) {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            syncReminderTimeDraft()
-            return
-        }
-        guard let components = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: trimmed) else {
-            if showErrorWhenInvalid {
-                statusMessage = NSLocalizedString("提醒时间请输入 24 小时制，例如 08:30。", comment: "")
-                syncReminderTimeDraft()
+    private var reminderTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var components = DateComponents()
+                components.calendar = Calendar(identifier: .gregorian)
+                components.hour = deliveryCoordinator.reminderHour
+                components.minute = deliveryCoordinator.reminderMinute
+                return components.date ?? Date()
+            },
+            set: { newValue in
+                let components = Calendar(identifier: .gregorian).dateComponents([.hour, .minute], from: newValue)
+                deliveryCoordinator.reminderHour = components.hour ?? deliveryCoordinator.reminderHour
+                deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
             }
-            return
-        }
-
-        deliveryCoordinator.reminderHour = components.hour
-        deliveryCoordinator.reminderMinute = components.minute
-
-        let normalized = deliveryCoordinator.reminderTimeText
-        if reminderTimeDraft != normalized {
-            reminderTimeDraft = normalized
-        }
+        )
     }
 }
 

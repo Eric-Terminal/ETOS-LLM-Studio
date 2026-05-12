@@ -241,13 +241,13 @@ struct RequestBodyPayloadEditor: View {
                 )
             case .keyValue, .expression:
                 textPayloadEditor(
-                    title: NSLocalizedString("Value", comment: ""),
+                    title: NSLocalizedString("覆盖参数", comment: "Request body structured control override parameters label"),
                     placeholder: NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""),
                     lineLimit: 2...8
                 )
             @unknown default:
                 textPayloadEditor(
-                    title: NSLocalizedString("Value", comment: ""),
+                    title: NSLocalizedString("覆盖参数", comment: "Request body structured control override parameters label"),
                     placeholder: NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""),
                     lineLimit: 2...8
                 )
@@ -334,21 +334,25 @@ struct KeyValueRow: View {
     @Binding var entry: ModelSettingsView.KeyValueEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(NSLocalizedString("Key", comment: ""))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            TextField(NSLocalizedString("Key", comment: ""), text: $entry.key.watchKeyboardNewlineBinding())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+        Group {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("Key", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("Key", comment: ""), text: $entry.key.watchKeyboardNewlineBinding())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
 
-            Text(NSLocalizedString("Value", comment: ""))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            TextField(NSLocalizedString("Value", comment: ""), text: $entry.value.watchKeyboardNewlineBinding(), axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...4)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("Value", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("Value", comment: ""), text: $entry.value.watchKeyboardNewlineBinding(), axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(1...4)
+            }
 
             if let error = entry.error {
                 Text(error)
@@ -356,7 +360,6 @@ struct KeyValueRow: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 2)
     }
 }
 

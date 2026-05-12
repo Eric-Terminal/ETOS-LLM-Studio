@@ -271,32 +271,29 @@ struct MessageActionsView: View {
                         .etFont(.caption2)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))
-                        .etFont(.caption)
-                        .foregroundColor(.secondary)
+            }
 
-                    TextField(
-                        String(
-                            format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
-                            totalMessages
-                        ),
-                        text: $jumpInput
-                    )
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+            Section(header: Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))) {
+                TextField(
+                    String(
+                        format: NSLocalizedString("输入消息序号（1-%d）", comment: "Message index input placeholder"),
+                        totalMessages
+                    ),
+                    text: $jumpInput.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
 
-                    Button {
-                        submitJump()
-                    } label: {
-                        Label(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title"), systemImage: "location")
-                    }
+                Button {
+                    submitJump()
+                } label: {
+                    Label(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title"), systemImage: "location")
+                }
 
-                    if let jumpError, !jumpError.isEmpty {
-                        Text(jumpError)
-                            .etFont(.caption2)
-                            .foregroundStyle(.red)
-                    }
+                if let jumpError, !jumpError.isEmpty {
+                    Text(jumpError)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
                 }
             }
             

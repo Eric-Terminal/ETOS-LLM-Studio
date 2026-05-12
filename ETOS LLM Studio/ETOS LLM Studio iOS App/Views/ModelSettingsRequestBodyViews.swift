@@ -245,7 +245,7 @@ struct RequestBodyPayloadEditor: View {
                 )
             default:
                 textPayloadEditor(
-                    title: NSLocalizedString("Value", comment: ""),
+                    title: NSLocalizedString("覆盖参数", comment: "Request body structured control override parameters label"),
                     placeholder: NSLocalizedString("参数表达式，比如 temperature = 0.8", comment: ""),
                     lineLimit: 2...8
                 )
@@ -342,18 +342,16 @@ struct RequestBodyPayloadKeyValueEditor: View {
     @State private var entries: [RequestBodyPayloadKeyValueEntry] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(entries) { entry in
-                if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-                    RequestBodyPayloadKeyValueRow(
-                        entry: $entries[index],
-                        canDelete: entries.count > 1,
-                        onDelete: {
-                            deleteEntry(withID: entry.id)
-                        },
-                        onChange: updatePayload
-                    )
-                }
+        Group {
+            ForEach($entries) { $entry in
+                RequestBodyPayloadKeyValueRow(
+                    entry: $entry,
+                    canDelete: entries.count > 1,
+                    onDelete: {
+                        deleteEntry(withID: entry.id)
+                    },
+                    onChange: updatePayload
+                )
             }
 
             Button {
@@ -433,39 +431,37 @@ struct RequestBodyPayloadKeyValueRow: View {
     let onChange: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("Key", comment: ""))
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if canDelete {
-                    Button(role: .destructive, action: onDelete) {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("删除", comment: ""))
-                }
+        Group {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("Key", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
 
-            Text(NSLocalizedString("Value", comment: ""))
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-            TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...4)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("Value", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(1...4)
+            }
 
             if let error = entry.error {
                 Text(error)
                     .etFont(.footnote)
                     .foregroundStyle(.red)
+            }
+
+            if canDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                }
+                .buttonStyle(.borderless)
             }
         }
         .onChange(of: entry.key) { _, _ in onChange() }
@@ -477,23 +473,27 @@ struct KeyValueRow: View {
     @Binding var entry: ModelSettingsView.KeyValueEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NSLocalizedString("Key", comment: ""))
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-            TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .etFont(.body.monospaced())
+        Group {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("Key", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("Key", comment: ""), text: $entry.key)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .etFont(.body.monospaced())
+            }
 
-            Text(NSLocalizedString("Value", comment: ""))
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-            TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(1...4)
-                .etFont(.body.monospaced())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("Value", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(NSLocalizedString("Value", comment: ""), text: $entry.value, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(1...4)
+                    .etFont(.body.monospaced())
+            }
 
             if let error = entry.error {
                 Text(error)
@@ -501,7 +501,6 @@ struct KeyValueRow: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 4)
     }
 }
 

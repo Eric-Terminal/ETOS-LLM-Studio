@@ -2507,6 +2507,7 @@
 "自定义Body有误，无法预览" = "Custom Body is invalid, cannot preview";
 "Key" = "Key";
 "Value" = "Value";
+"覆盖参数" = "Override Parameters";
 "无法将“%@”转换为纯文本。" = "Unable to convert \"%@\" to plain text.";
 "“%@”没有可发送的文本内容。" = "\"%@\" does not contain sendable text.";
 "无法读取“%@”中的必要内容：%@。" = "Could not read required content from \"%@\": %@.";

@@ -2384,6 +2384,7 @@
 "自定义Body有误，无法预览" = "Custom Body is invalid, cannot preview";
 "Key" = "Key";
 "Value" = "Value";
+"覆盖参数" = "Override Parameters";
 "值里用 \\n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "Use \\n in values to enter line breaks. For straight quotes, long-press the directional quotes in the keyboard.";
 "用 \\n 可以打出换行；无方向引号需要长按输入法里的有方向引号。" = "Use \\n to enter line breaks. For straight quotes, long-press the directional quotes in the keyboard.";
 "无法将“%@”转换为纯文本。" = "Unable to convert \"%@\" to plain text.";
