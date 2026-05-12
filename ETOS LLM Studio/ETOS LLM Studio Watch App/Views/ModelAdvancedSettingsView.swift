@@ -43,6 +43,10 @@ struct ModelAdvancedSettingsView: View {
     let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
     let deleteGlobalSystemPromptEntry: (UUID) -> Void
 
+    private let samplingParameterStep = 0.01
+    private let temperatureRange = 0.0...2.0
+    private let topPRange = 0.0...1.0
+
     // MARK: - 私有属性
 
     private var numberFormatter: NumberFormatter {
@@ -177,43 +181,77 @@ struct ModelAdvancedSettingsView: View {
 
                 Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                 if aiTemperatureEnabled {
-                    VStack(alignment: .leading) {
+                    Stepper(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep) {
                         Text(
                             String(
                                 format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
-                                aiTemperature
+                                temperatureBinding.wrappedValue
                             )
                         )
-                        Slider(value: $aiTemperature, in: 0.0...2.0, step: 0.01)
-                            .onChange(of: aiTemperature) {
-                                handleTemperatureChange(aiTemperature)
-                            }
                     }
+
+                    Slider(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep)
                 }
 
                 Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
                 if aiTopPEnabled {
-                    VStack(alignment: .leading) {
+                    Stepper(value: topPBinding, in: topPRange, step: samplingParameterStep) {
                         Text(
                             String(
                                 format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
-                                aiTopP
+                                topPBinding.wrappedValue
                             )
                         )
-                        Slider(value: $aiTopP, in: 0.0...1.0, step: 0.01)
-                            .onChange(of: aiTopP) {
-                                aiTopP = (aiTopP * 100).rounded() / 100
-                            }
                     }
+
+                    Slider(value: topPBinding, in: topPRange, step: samplingParameterStep)
                 }
             }
         }
         .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
+        .onAppear {
+            normalizeSamplingParametersIfNeeded()
+        }
     }
+
+    private var temperatureBinding: Binding<Double> {
+        Binding(
+            get: { normalizedSamplingValue(aiTemperature, in: temperatureRange) },
+            set: { handleTemperatureChange($0) }
+        )
+    }
+
+    private var topPBinding: Binding<Double> {
+        Binding(
+            get: { normalizedSamplingValue(aiTopP, in: topPRange) },
+            set: { handleTopPChange($0) }
+        )
+    }
+
     private func handleTemperatureChange(_ value: Double) {
-        let roundedValue = (value * 100).rounded() / 100
-        aiTemperature = roundedValue
+        let roundedValue = normalizedSamplingValue(value, in: temperatureRange)
+        if aiTemperature != roundedValue {
+            aiTemperature = roundedValue
+        }
         unlockTemperatureBoundaryAchievementIfNeeded(roundedValue)
+    }
+
+    private func handleTopPChange(_ value: Double) {
+        let roundedValue = normalizedSamplingValue(value, in: topPRange)
+        if aiTopP != roundedValue {
+            aiTopP = roundedValue
+        }
+    }
+
+    private func normalizeSamplingParametersIfNeeded() {
+        handleTemperatureChange(aiTemperature)
+        handleTopPChange(aiTopP)
+    }
+
+    private func normalizedSamplingValue(_ value: Double, in range: ClosedRange<Double>) -> Double {
+        guard value.isFinite else { return range.lowerBound }
+        let clampedValue = min(max(value, range.lowerBound), range.upperBound)
+        return (clampedValue / samplingParameterStep).rounded() * samplingParameterStep
     }
 
     private func unlockTemperatureBoundaryAchievementIfNeeded(_ value: Double) {
