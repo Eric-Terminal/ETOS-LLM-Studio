@@ -19,7 +19,6 @@ struct DailyPulseView: View {
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
 
-    @State private var expandedCardIDs: Set<UUID> = []
     @State private var statusMessage: String?
 
     var body: some View {
@@ -354,7 +353,14 @@ struct DailyPulseView: View {
     }
 
     private func cardView(_ card: DailyPulseCard, runID: UUID) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        NavigationLink {
+            DailyPulseCardDetailView(
+                cardID: card.id,
+                runID: runID,
+                fallbackCard: card,
+                statusMessage: $statusMessage
+            )
+        } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 8) {
                     Text(card.title)
@@ -371,76 +377,8 @@ struct DailyPulseView: View {
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            DisclosureGroup(isExpanded: expansionBinding(for: card.id)) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Markdown(card.detailsMarkdown)
-                        .etFont(.subheadline)
-                        .etDailyPulseMarkdownFontStyle(sampleText: card.detailsMarkdown)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            feedbackButton(title: NSLocalizedString("喜欢", comment: ""), systemImage: card.feedback == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
-                                pulseManager.applyFeedback(.liked, cardID: card.id, runID: runID)
-                            }
-
-                            feedbackButton(title: NSLocalizedString("暂不感兴趣", comment: ""), systemImage: card.feedback == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown") {
-                                pulseManager.applyFeedback(.disliked, cardID: card.id, runID: runID)
-                            }
-                        }
-
-                        HStack(spacing: 10) {
-                            Button {
-                                let hadSavedSession = card.savedSessionID != nil
-                                viewModel.continueDailyPulseCard(card, from: runID)
-                                statusMessage = hadSavedSession
-                                    ? NSLocalizedString("已打开这张卡片对应的会话，并为你填好继续追问。", comment: "")
-                                    : NSLocalizedString("已为这张卡片创建正式会话，并为你填好继续追问。", comment: "")
-                            } label: {
-                                Label(NSLocalizedString("继续聊", comment: ""), systemImage: "arrow.up.right.circle")
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-
-                        Button {
-                            let existing = pulseManager.linkedTask(cardID: card.id, runID: runID)
-                            if pulseManager.addTaskFromCard(cardID: card.id, runID: runID) != nil {
-                                statusMessage = existing == nil ? NSLocalizedString("已加入 Pulse 任务。", comment: "") : NSLocalizedString("这张卡片已经在 Pulse 任务列表里。", comment: "")
-                            }
-                        } label: {
-                            Label(
-                                pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? NSLocalizedString("加入 Pulse 任务", comment: "") : NSLocalizedString("已在 Pulse 任务中", comment: ""),
-                                systemImage: pulseManager.linkedTask(cardID: card.id, runID: runID) == nil ? "checklist" : "checkmark.circle"
-                            )
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.mint)
-
-                        Button(role: .destructive) {
-                            pulseManager.applyFeedback(.hidden, cardID: card.id, runID: runID)
-                        } label: {
-                            Label(NSLocalizedString("隐藏这张卡片", comment: ""), systemImage: "eye.slash")
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
-                .padding(.top, 6)
-            } label: {
-                Label(
-                    expandedCardIDs.contains(card.id) ? NSLocalizedString("收起更多", comment: "") : NSLocalizedString("展开更多", comment: ""),
-                    systemImage: expandedCardIDs.contains(card.id) ? "chevron.up.circle" : "ellipsis.circle"
-                )
-                .etFont(.subheadline)
-            }
         }
         .padding(.vertical, 6)
-    }
-
-    private func feedbackButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(NSLocalizedString(title, comment: "每日脉冲反馈按钮"), systemImage: systemImage)
-        }
-        .buttonStyle(.bordered)
     }
 
     @ViewBuilder
@@ -465,19 +403,6 @@ struct DailyPulseView: View {
                     .foregroundStyle(.blue)
             }
         }
-    }
-
-    private func expansionBinding(for cardID: UUID) -> Binding<Bool> {
-        Binding(
-            get: { expandedCardIDs.contains(cardID) },
-            set: { isExpanded in
-                if isExpanded {
-                    expandedCardIDs.insert(cardID)
-                } else {
-                    expandedCardIDs.remove(cardID)
-                }
-            }
-        )
     }
 
     private func summaryText(for run: DailyPulseRun) -> String {
@@ -551,6 +476,109 @@ struct DailyPulseView: View {
                 deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
             }
         )
+    }
+}
+
+private struct DailyPulseCardDetailView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var pulseManager = DailyPulseManager.shared
+
+    let cardID: UUID
+    let runID: UUID
+    let fallbackCard: DailyPulseCard
+    @Binding var statusMessage: String?
+
+    private var card: DailyPulseCard {
+        pulseManager.runs.first(where: { $0.id == runID })?.cards.first(where: { $0.id == cardID }) ?? fallbackCard
+    }
+
+    var body: some View {
+        let currentCard = card
+        let linkedTask = pulseManager.linkedTask(cardID: currentCard.id, runID: runID)
+
+        List {
+            Section(NSLocalizedString("内容", comment: "")) {
+                Text(currentCard.summary)
+                    .etFont(.body)
+
+                Text(currentCard.whyRecommended)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+
+                feedbackBadge(for: currentCard)
+            }
+
+            Section(NSLocalizedString("详情", comment: "")) {
+                Markdown(currentCard.detailsMarkdown)
+                    .etFont(.subheadline)
+                    .etDailyPulseMarkdownFontStyle(sampleText: currentCard.detailsMarkdown)
+            }
+
+            Section(NSLocalizedString("操作", comment: "")) {
+                Button {
+                    let hadSavedSession = currentCard.savedSessionID != nil
+                    viewModel.continueDailyPulseCard(currentCard, from: runID)
+                    statusMessage = hadSavedSession
+                        ? NSLocalizedString("已打开这张卡片对应的会话，并为你填好继续追问。", comment: "")
+                        : NSLocalizedString("已为这张卡片创建正式会话，并为你填好继续追问。", comment: "")
+                } label: {
+                    Label(NSLocalizedString("继续聊", comment: ""), systemImage: "arrow.up.right.circle")
+                }
+
+                Button {
+                    if pulseManager.addTaskFromCard(cardID: currentCard.id, runID: runID) != nil {
+                        statusMessage = linkedTask == nil ? NSLocalizedString("已加入 Pulse 任务。", comment: "") : NSLocalizedString("这张卡片已经在 Pulse 任务列表里。", comment: "")
+                    }
+                } label: {
+                    Label(
+                        linkedTask == nil ? NSLocalizedString("加入 Pulse 任务", comment: "") : NSLocalizedString("已在 Pulse 任务中", comment: ""),
+                        systemImage: linkedTask == nil ? "checklist" : "checkmark.circle"
+                    )
+                }
+
+                Button {
+                    pulseManager.applyFeedback(.liked, cardID: currentCard.id, runID: runID)
+                } label: {
+                    Label(NSLocalizedString("喜欢", comment: ""), systemImage: currentCard.feedback == .liked ? "hand.thumbsup.fill" : "hand.thumbsup")
+                }
+
+                Button {
+                    pulseManager.applyFeedback(.disliked, cardID: currentCard.id, runID: runID)
+                } label: {
+                    Label(NSLocalizedString("暂不感兴趣", comment: ""), systemImage: currentCard.feedback == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                }
+
+                Button(role: .destructive) {
+                    pulseManager.applyFeedback(.hidden, cardID: currentCard.id, runID: runID)
+                    dismiss()
+                } label: {
+                    Label(NSLocalizedString("隐藏这张卡片", comment: ""), systemImage: "eye.slash")
+                }
+            }
+        }
+        .navigationTitle(currentCard.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func feedbackBadge(for card: DailyPulseCard) -> some View {
+        switch card.feedback {
+        case .liked:
+            Label(NSLocalizedString("已喜欢", comment: ""), systemImage: "heart.fill")
+                .foregroundStyle(.pink)
+        case .disliked:
+            Label(NSLocalizedString("已降权", comment: ""), systemImage: "hand.thumbsdown.fill")
+                .foregroundStyle(.orange)
+        case .hidden:
+            Label(NSLocalizedString("已隐藏", comment: ""), systemImage: "eye.slash.fill")
+                .foregroundStyle(.secondary)
+        case .none:
+            if card.savedSessionID != nil {
+                Label(NSLocalizedString("已保存", comment: ""), systemImage: "bookmark.fill")
+                    .foregroundStyle(.blue)
+            }
+        }
     }
 }
 
