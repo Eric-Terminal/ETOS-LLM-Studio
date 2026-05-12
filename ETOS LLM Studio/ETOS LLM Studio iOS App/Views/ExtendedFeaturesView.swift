@@ -49,6 +49,14 @@ struct ExtendedFeaturesView: View {
                 }
             }
 
+            Section(NSLocalizedString("安全", comment: "设置安全分组")) {
+                NavigationLink {
+                    AppLockSettingsView()
+                } label: {
+                    SettingsListIconLabel("应用锁", icon: .security)
+                }
+            }
+
             Section {
                 NavigationLink {
                     FeedbackCenterView()

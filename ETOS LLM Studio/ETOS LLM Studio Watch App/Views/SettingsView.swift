@@ -241,14 +241,6 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    NavigationLink(destination: AppLockSettingsView()) {
-                        settingsNavigationLabel("应用锁", icon: .security)
-                    }
-                } header: {
-                    Text(NSLocalizedString("安全", comment: "设置安全分组"))
-                }
-
-                Section {
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
                     }

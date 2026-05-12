@@ -57,6 +57,18 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    AppLockSettingsView()
+                } label: {
+                    settingsNavigationLabel("应用锁", icon: .security)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } header: {
+                Text(NSLocalizedString("安全", comment: "设置安全分组"))
+            }
+
+            Section {
+                NavigationLink {
                     ToolCenterView()
                         .environmentObject(viewModel)
                 } label: {
