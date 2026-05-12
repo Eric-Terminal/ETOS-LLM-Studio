@@ -9,6 +9,10 @@
 import Foundation
 import ZIPFoundation
 
+public extension Notification.Name {
+    static let snapshotRestoreDidFinish = Notification.Name("com.ETOS.snapshot.restoreDidFinish")
+}
+
 public enum SnapshotRestoreService {
     public struct InspectionResult: Sendable {
         public let encryptionMode: SnapshotEncryptor.Mode?
@@ -58,6 +62,7 @@ public enum SnapshotRestoreService {
         let archiveURL = try decryptedArchiveURLIfNeeded(readableURL, password: password, workingDirectory: workingDirectory)
         let databaseURLs = try extractDatabases(from: archiveURL, to: workingDirectory)
         try Persistence.installSnapshotDatabases(databaseURLs)
+        NotificationCenter.default.post(name: .snapshotRestoreDidFinish, object: nil)
     }
 }
 

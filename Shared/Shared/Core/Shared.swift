@@ -236,15 +236,14 @@ public final class ToolPermissionCenter: ObservableObject {
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let storedEnabled = defaults.object(forKey: DefaultsKey.autoApproveEnabled) as? Bool
-        autoApproveEnabled = storedEnabled ?? false
-        let storedCountdown = defaults.integer(forKey: DefaultsKey.autoApproveCountdownSeconds)
+        autoApproveEnabled = Self.boolValue(forKey: DefaultsKey.autoApproveEnabled, defaults: defaults, defaultValue: false)
+        let storedCountdown = Self.integerValue(forKey: DefaultsKey.autoApproveCountdownSeconds, defaults: defaults, defaultValue: 8)
         if storedCountdown > 0 {
             autoApproveCountdownSeconds = min(max(storedCountdown, autoApproveCountdownMin), autoApproveCountdownMax)
         } else {
             autoApproveCountdownSeconds = 8
         }
-        let storedDisabledTools = defaults.stringArray(forKey: DefaultsKey.disabledAutoApproveTools) ?? []
+        let storedDisabledTools = Self.stringArrayValue(forKey: DefaultsKey.disabledAutoApproveTools, defaults: defaults)
         disabledAutoApproveToolSet = Set(storedDisabledTools.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
         disabledAutoApproveTools = disabledAutoApproveToolSet.sorted()
     }
@@ -287,7 +286,7 @@ public final class ToolPermissionCenter: ObservableObject {
 
     public func setAutoApproveEnabled(_ enabled: Bool) {
         autoApproveEnabled = enabled
-        defaults.set(enabled, forKey: DefaultsKey.autoApproveEnabled)
+        Self.save(enabled, forKey: DefaultsKey.autoApproveEnabled, defaults: defaults)
         if let activeRequest {
             scheduleAutoApproveIfNeeded(for: activeRequest)
         } else {
@@ -298,7 +297,7 @@ public final class ToolPermissionCenter: ObservableObject {
     public func setAutoApproveCountdownSeconds(_ seconds: Int) {
         let sanitized = min(max(seconds, autoApproveCountdownMin), autoApproveCountdownMax)
         autoApproveCountdownSeconds = sanitized
-        defaults.set(sanitized, forKey: DefaultsKey.autoApproveCountdownSeconds)
+        Self.save(sanitized, forKey: DefaultsKey.autoApproveCountdownSeconds, defaults: defaults)
         if let activeRequest {
             scheduleAutoApproveIfNeeded(for: activeRequest)
         }
@@ -404,7 +403,100 @@ public final class ToolPermissionCenter: ObservableObject {
 
     private func persistDisabledAutoApproveTools() {
         disabledAutoApproveTools = disabledAutoApproveToolSet.sorted()
-        defaults.set(disabledAutoApproveTools, forKey: DefaultsKey.disabledAutoApproveTools)
+        Self.save(disabledAutoApproveTools, forKey: DefaultsKey.disabledAutoApproveTools, defaults: defaults)
+    }
+
+    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+        defaults === UserDefaults.standard
+    }
+
+    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Bool ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored != 0
+        }
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Int ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.stringArray(forKey: key) ?? []
+        }
+        if let stored = Persistence.readAppConfigText(key: key),
+           let decoded = decodeStringArray(stored) {
+            return decoded
+        }
+        guard let legacy = defaults.stringArray(forKey: key) else { return [] }
+        if let encoded = encodeStringArray(legacy),
+           Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: [String], forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        guard let encoded = encodeStringArray(value) else { return }
+        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func encodeStringArray(_ value: [String]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodeStringArray(_ value: String) -> [String]? {
+        guard let data = value.data(using: .utf8) else { return nil }
+        guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return object as? [String]
     }
 }
 

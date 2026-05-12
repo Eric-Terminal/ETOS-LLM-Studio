@@ -76,6 +76,18 @@ extension ChatViewModel {
         reloadConversationMemoryState()
     }
 
+    func reloadAfterSnapshotRestore() {
+        AppConfigStore.shared.reloadFromPersistentStore()
+        chatService.reloadProviders()
+        chatService.reloadSessionStateFromPersistenceAfterMigration()
+        MemoryManager.shared.reloadFromPersistenceAfterSnapshotRestore()
+        DailyPulseManager.shared.reloadPersistedRuns()
+        DailyPulseDeliveryCoordinator.shared.reloadFromStorage()
+        reloadGlobalSystemPromptEntries()
+        reloadConversationMemoryState()
+        refreshBackgroundImages()
+    }
+
     func reloadGlobalSystemPromptEntries() {
         guard !isPersistingGlobalSystemPrompts else { return }
         globalSystemPromptReloadTask?.cancel()
@@ -206,6 +218,13 @@ extension ChatViewModel {
         if AppConfigStore.shared.didLoadPersistentStore {
             refreshAfterAppConfigPersistentStoreLoad()
         }
+
+        NotificationCenter.default.publisher(for: .snapshotRestoreDidFinish)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadAfterSnapshotRestore()
+            }
+            .store(in: &cancellables)
 
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)

@@ -22,7 +22,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     @Published public var reminderEnabled: Bool {
         didSet {
-            defaults.set(reminderEnabled, forKey: Self.reminderEnabledDefaultsKey)
+            Self.save(reminderEnabled, forKey: Self.reminderEnabledDefaultsKey, defaults: defaults)
+            guard !isApplyingStoredSettings else { return }
             Task {
                 await refreshReminderSchedule()
             }
@@ -35,7 +36,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
                 reminderHour = normalizedHour
                 return
             }
-            defaults.set(reminderHour, forKey: Self.reminderHourDefaultsKey)
+            Self.save(reminderHour, forKey: Self.reminderHourDefaultsKey, defaults: defaults)
+            guard !isApplyingStoredSettings else { return }
             Task {
                 await refreshReminderSchedule()
             }
@@ -48,7 +50,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
                 reminderMinute = normalizedMinute
                 return
             }
-            defaults.set(reminderMinute, forKey: Self.reminderMinuteDefaultsKey)
+            Self.save(reminderMinute, forKey: Self.reminderMinuteDefaultsKey, defaults: defaults)
+            guard !isApplyingStoredSettings else { return }
             Task {
                 await refreshReminderSchedule()
             }
@@ -56,6 +59,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     }
 
     private let defaults: UserDefaults
+    private var isApplyingStoredSettings = false
 
     private static let reminderIdentifier = "dailyPulse.reminder.daily"
     private static let readyIdentifierPrefix = "dailyPulse.ready."
@@ -68,23 +72,28 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if defaults.object(forKey: Self.reminderEnabledDefaultsKey) == nil {
-            defaults.set(false, forKey: Self.reminderEnabledDefaultsKey)
-        }
-        if defaults.object(forKey: Self.reminderHourDefaultsKey) == nil {
-            defaults.set(8, forKey: Self.reminderHourDefaultsKey)
-        }
-        if defaults.object(forKey: Self.reminderMinuteDefaultsKey) == nil {
-            defaults.set(30, forKey: Self.reminderMinuteDefaultsKey)
-        }
-        self.reminderEnabled = defaults.object(forKey: Self.reminderEnabledDefaultsKey) as? Bool ?? false
-        self.reminderHour = Self.normalizedHour(defaults.object(forKey: Self.reminderHourDefaultsKey) as? Int ?? 8)
-        self.reminderMinute = Self.normalizedMinute(defaults.object(forKey: Self.reminderMinuteDefaultsKey) as? Int ?? 30)
-        self.lastReadyDayKey = defaults.string(forKey: Self.lastReadyDayKeyDefaultsKey)
+        self.reminderEnabled = Self.boolValue(forKey: Self.reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false)
+        self.reminderHour = Self.normalizedHour(Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8))
+        self.reminderMinute = Self.normalizedMinute(Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30))
+        let storedLastReadyDayKey = Self.textValue(forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
+        self.lastReadyDayKey = storedLastReadyDayKey.isEmpty ? nil : storedLastReadyDayKey
     }
 
     public func activate() {
         AppLocalNotificationCenter.shared.configureIfNeeded()
+        Task {
+            await refreshReminderSchedule()
+        }
+    }
+
+    public func reloadFromStorage() {
+        isApplyingStoredSettings = true
+        reminderEnabled = Self.boolValue(forKey: Self.reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false)
+        reminderHour = Self.normalizedHour(Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8))
+        reminderMinute = Self.normalizedMinute(Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30))
+        let storedLastReadyDayKey = Self.textValue(forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
+        lastReadyDayKey = storedLastReadyDayKey.isEmpty ? nil : storedLastReadyDayKey
+        isApplyingStoredSettings = false
         Task {
             await refreshReminderSchedule()
         }
@@ -192,7 +201,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         let didSchedule = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
         if didSchedule {
             lastReadyDayKey = run.dayKey
-            defaults.set(run.dayKey, forKey: Self.lastReadyDayKeyDefaultsKey)
+            Self.save(run.dayKey, forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults)
         }
 #endif
     }
@@ -325,5 +334,82 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
     internal nonisolated static func normalizedMinute(_ minute: Int) -> Int {
         min(max(minute, 0), 59)
+    }
+
+    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+        defaults === UserDefaults.standard
+    }
+
+    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Bool ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored != 0
+        }
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Int ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.string(forKey: key) ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigText(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.string(forKey: key) else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: String, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, text: value, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
     }
 }

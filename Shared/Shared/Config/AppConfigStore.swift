@@ -64,7 +64,9 @@ private actor AppConfigPersistenceWorker {
         initialValues: [AppConfigKey: AppConfigValue]
     ) -> [String: Any] {
         if Persistence.readAppConfigInteger(key: migrationFlagKey) != 1 {
+            let existingKeys = Set(Persistence.loadAllAppConfigs().map { $0.key })
             for key in AppConfigKey.allCases {
+                guard !existingKeys.contains(key.rawValue) else { continue }
                 AppConfigStore.persist(initialValues[key] ?? key.defaultValue, for: key)
             }
             Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
@@ -217,7 +219,6 @@ public final class AppConfigStore: ObservableObject {
 
     public init(userDefaults: UserDefaults = .standard) {
         let initialValues = Self.initialValues(userDefaults: userDefaults)
-            .merging(Self.initialValuesFromPersistentStore()) { _, persistent in persistent }
         Self.snapshotCache.replace(with: Self.snapshot(from: initialValues, includeLocalOnly: true))
 
         syncProviders = Self.boolValue(.syncProviders, userDefaults: userDefaults)
@@ -917,16 +918,6 @@ public final class AppConfigStore: ObservableObject {
         guard userDefaults === UserDefaults.standard else { return }
         for key in AppConfigKey.allCases where userDefaults.object(forKey: key.rawValue) != nil {
             userDefaults.removeObject(forKey: key.rawValue)
-        }
-    }
-
-    private static func initialValuesFromPersistentStore() -> [AppConfigKey: AppConfigValue] {
-        loadPersistentSnapshotFromDatabase(includeLocalOnly: true).reduce(into: [AppConfigKey: AppConfigValue]()) { result, element in
-            guard let key = AppConfigKey(rawValue: element.key),
-                  let value = appConfigValue(from: element.value, for: key) else {
-                return
-            }
-            result[key] = value
         }
     }
 

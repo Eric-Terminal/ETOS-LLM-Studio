@@ -137,6 +137,16 @@ public class MemoryManager {
         await initializationTask.value
     }
 
+    /// 快照恢复会替换底层数据库，恢复完成后需要重新加载原文记忆与向量索引。
+    public func reloadFromPersistenceAfterSnapshotRestore() {
+        initializationTask.cancel()
+        resetAllAutoRetryState()
+        initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            await self.setup()
+        }
+    }
+
     /// 返回当前内存中的记忆快照，按显示时间倒序排列。
     public func currentMemoriesSnapshot() -> [MemoryItem] {
         cachedMemories.sorted(by: { $0.displayDate > $1.displayDate })

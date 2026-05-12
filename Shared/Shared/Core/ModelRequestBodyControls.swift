@@ -292,7 +292,7 @@ public enum ModelRequestBodyControlRuntimeStore {
     }
 
     private static func loadState(forKey key: String, userDefaults: UserDefaults) -> ModelRequestBodyControlState? {
-        guard let data = userDefaults.data(forKey: key) else { return nil }
+        guard let data = dataValue(forKey: key, userDefaults: userDefaults) else { return nil }
         return try? JSONDecoder().decode(ModelRequestBodyControlState.self, from: data)
     }
 
@@ -302,7 +302,40 @@ public enum ModelRequestBodyControlRuntimeStore {
         userDefaults: UserDefaults
     ) {
         guard let data = try? JSONEncoder().encode(state) else { return }
-        userDefaults.set(data, forKey: key)
+        saveData(data, forKey: key, userDefaults: userDefaults)
+    }
+
+    private static func usesDatabase(userDefaults: UserDefaults) -> Bool {
+        userDefaults === UserDefaults.standard
+    }
+
+    private static func dataValue(forKey key: String, userDefaults: UserDefaults) -> Data? {
+        guard usesDatabase(userDefaults: userDefaults) else {
+            return userDefaults.data(forKey: key)
+        }
+        if let stored = Persistence.readAppConfigText(key: key),
+           let data = stored.data(using: .utf8) {
+            return data
+        }
+        guard let legacy = userDefaults.data(forKey: key),
+              let encoded = String(data: legacy, encoding: .utf8) else {
+            return nil
+        }
+        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            userDefaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func saveData(_ data: Data, forKey key: String, userDefaults: UserDefaults) {
+        guard usesDatabase(userDefaults: userDefaults) else {
+            userDefaults.set(data, forKey: key)
+            return
+        }
+        guard let encoded = String(data: data, encoding: .utf8) else { return }
+        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            userDefaults.removeObject(forKey: key)
+        }
     }
 
     private static func signature(for controls: [ModelRequestBodyControl]) -> String {

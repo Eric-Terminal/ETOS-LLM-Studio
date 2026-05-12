@@ -148,7 +148,10 @@ extension Persistence {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: replacement.sourceURL.path) else {
             throw NSError(domain: "Persistence.SnapshotRestore", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "快照缺少数据库文件：\(replacement.sourceURL.lastPathComponent)"
+                NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString("快照缺少数据库文件：%@", comment: ""),
+                    replacement.sourceURL.lastPathComponent
+                )
             ])
         }
 

@@ -407,7 +407,10 @@ private extension Persistence {
 
         guard isDatabaseHealthy(at: destinationURL, encrypted: true, passphrase: passphrase) else {
             throw NSError(domain: "Persistence.SQLCipher", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "加密数据库校验失败：\(fileName)"
+                NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString("快照中的数据库校验失败：%@", comment: ""),
+                    fileName
+                )
             ])
         }
         return DatabaseReplacement(sourceURL: destinationURL, targetURL: sourceURL)
@@ -421,7 +424,10 @@ private extension Persistence {
     ) throws -> DatabaseReplacement {
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
             throw NSError(domain: "Persistence.SnapshotRestore", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "快照缺少数据库文件：\(sourceURL.lastPathComponent)"
+                NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString("快照缺少数据库文件：%@", comment: ""),
+                    sourceURL.lastPathComponent
+                )
             ])
         }
 
@@ -439,7 +445,10 @@ private extension Persistence {
 
         guard isDatabaseHealthy(at: destinationURL, encrypted: true) else {
             throw NSError(domain: "Persistence.SQLCipher", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "快照数据库加密校验失败：\(fileName)"
+                NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString("快照中的数据库校验失败：%@", comment: ""),
+                    fileName
+                )
             ])
         }
         return DatabaseReplacement(sourceURL: destinationURL, targetURL: targetURL)
@@ -470,7 +479,10 @@ private extension Persistence {
 
         guard isDatabaseHealthy(at: destinationURL, encrypted: false) else {
             throw NSError(domain: "Persistence.SQLCipher", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "解密数据库校验失败：\(fileName)"
+                NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString("快照中的数据库校验失败：%@", comment: ""),
+                    fileName
+                )
             ])
         }
         return DatabaseReplacement(sourceURL: destinationURL, targetURL: sourceURL)

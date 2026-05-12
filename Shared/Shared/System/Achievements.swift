@@ -540,7 +540,7 @@ public final class AchievementCenter: ObservableObject {
             originDeviceID: UsageAnalyticsRuntimeContext.currentDeviceIdentifier(userDefaults: defaults)
         )
         guard let data = try? encoder.encode(record) else { return nil }
-        defaults.set(data, forKey: Self.storageKey(for: record))
+        Self.saveUnlockRecordData(data, key: Self.storageKey(for: record), defaults: defaults)
         refreshFromStorage(records: existingRecords + [record])
 
         let entry = AchievementJournalEntry(definition: definition, record: record)
@@ -592,15 +592,41 @@ public final class AchievementCenter: ObservableObject {
     ) -> [AchievementUnlockRecord] {
         let decoder = JSONDecoder()
         var records: [AchievementUnlockRecord] = []
+        if defaults === UserDefaults.standard {
+            for item in Persistence.loadAllAppConfigs() where isAchievementStorageKey(item.key) {
+                guard let raw = item.value as? String,
+                      let data = raw.data(using: .utf8),
+                      let record = try? decoder.decode(AchievementUnlockRecord.self, from: data) else {
+                    continue
+                }
+                records.append(record)
+            }
+        }
         for (key, value) in defaults.dictionaryRepresentation() {
             guard isAchievementStorageKey(key),
                   let data = value as? Data,
                   let record = try? decoder.decode(AchievementUnlockRecord.self, from: data) else {
                 continue
             }
+            if defaults === UserDefaults.standard,
+               let raw = String(data: data, encoding: .utf8),
+               Persistence.writeAppConfig(key: key, text: raw, typeHint: "text") {
+                defaults.removeObject(forKey: key)
+            }
             records.append(record)
         }
         return records
+    }
+
+    private nonisolated static func saveUnlockRecordData(_ data: Data, key: String, defaults: UserDefaults) {
+        guard defaults === UserDefaults.standard else {
+            defaults.set(data, forKey: key)
+            return
+        }
+        guard let raw = String(data: data, encoding: .utf8) else { return }
+        if Persistence.writeAppConfig(key: key, text: raw, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     private nonisolated static func makeJournalEntries(

@@ -34,8 +34,8 @@ public final class SkillManager: ObservableObject {
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.enabledSkillNames = Set(defaults.stringArray(forKey: DefaultsKey.enabledSkillNames) ?? [])
-        self.chatToolsEnabled = defaults.object(forKey: DefaultsKey.chatToolsEnabled) as? Bool ?? true
+        self.enabledSkillNames = Set(Self.stringArrayValue(forKey: DefaultsKey.enabledSkillNames, defaults: defaults))
+        self.chatToolsEnabled = Self.boolValue(forKey: DefaultsKey.chatToolsEnabled, defaults: defaults, defaultValue: true)
         reloadFromDisk()
     }
 
@@ -51,7 +51,7 @@ public final class SkillManager: ObservableObject {
     public func setChatToolsEnabled(_ isEnabled: Bool) {
         guard chatToolsEnabled != isEnabled else { return }
         chatToolsEnabled = isEnabled
-        defaults.set(isEnabled, forKey: DefaultsKey.chatToolsEnabled)
+        Self.save(isEnabled, forKey: DefaultsKey.chatToolsEnabled, defaults: defaults)
         logger.info("Agent Skills 聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
     }
 
@@ -334,7 +334,76 @@ public final class SkillManager: ObservableObject {
     }
 
     private func persistEnabledSkillNames() {
-        defaults.set(enabledSkillNames.sorted(), forKey: DefaultsKey.enabledSkillNames)
+        Self.save(enabledSkillNames.sorted(), forKey: DefaultsKey.enabledSkillNames, defaults: defaults)
+    }
+
+    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+        defaults === UserDefaults.standard
+    }
+
+    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Bool ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored != 0
+        }
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.stringArray(forKey: key) ?? []
+        }
+        if let stored = Persistence.readAppConfigText(key: key),
+           let decoded = decodeStringArray(stored) {
+            return decoded
+        }
+        guard let legacy = defaults.stringArray(forKey: key) else { return [] }
+        if let encoded = encodeStringArray(legacy),
+           Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: [String], forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        guard let encoded = encodeStringArray(value) else { return }
+        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func encodeStringArray(_ value: [String]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodeStringArray(_ value: String) -> [String]? {
+        guard let data = value.data(using: .utf8) else { return nil }
+        guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return object as? [String]
     }
 }
 

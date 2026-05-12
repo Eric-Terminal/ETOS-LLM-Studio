@@ -121,23 +121,23 @@ public final class TTSSettingsStore: ObservableObject {
     private let defaults: UserDefaults
 
     @Published public var playbackMode: TTSPlaybackMode {
-        didSet { defaults.set(playbackMode.rawValue, forKey: Keys.playbackMode) }
+        didSet { Self.save(playbackMode.rawValue, forKey: Keys.playbackMode, defaults: defaults) }
     }
 
     @Published public var providerKind: TTSProviderKind {
-        didSet { defaults.set(providerKind.rawValue, forKey: Keys.providerKind) }
+        didSet { Self.save(providerKind.rawValue, forKey: Keys.providerKind, defaults: defaults) }
     }
 
     @Published public var autoPlayAfterAssistantResponse: Bool {
-        didSet { defaults.set(autoPlayAfterAssistantResponse, forKey: Keys.autoPlayAfterAssistantResponse) }
+        didSet { Self.save(autoPlayAfterAssistantResponse, forKey: Keys.autoPlayAfterAssistantResponse, defaults: defaults) }
     }
 
     @Published public var onlyReadQuotedContent: Bool {
-        didSet { defaults.set(onlyReadQuotedContent, forKey: Keys.onlyReadQuotedContent) }
+        didSet { Self.save(onlyReadQuotedContent, forKey: Keys.onlyReadQuotedContent, defaults: defaults) }
     }
 
     @Published public var watchUseLightweightPreprocess: Bool {
-        didSet { defaults.set(watchUseLightweightPreprocess, forKey: Keys.watchUseLightweightPreprocess) }
+        didSet { Self.save(watchUseLightweightPreprocess, forKey: Keys.watchUseLightweightPreprocess, defaults: defaults) }
     }
 
     @Published public var watchSpeechMaxCharacters: Int {
@@ -147,7 +147,7 @@ public final class TTSSettingsStore: ObservableObject {
                 watchSpeechMaxCharacters = clamped
                 return
             }
-            defaults.set(clamped, forKey: Keys.watchSpeechMaxCharacters)
+            Self.save(clamped, forKey: Keys.watchSpeechMaxCharacters, defaults: defaults)
         }
     }
 
@@ -158,7 +158,7 @@ public final class TTSSettingsStore: ObservableObject {
                 speechRate = clamped
                 return
             }
-            defaults.set(clamped, forKey: Keys.speechRate)
+            Self.save(clamped, forKey: Keys.speechRate, defaults: defaults)
         }
     }
 
@@ -169,7 +169,7 @@ public final class TTSSettingsStore: ObservableObject {
                 pitch = clamped
                 return
             }
-            defaults.set(clamped, forKey: Keys.pitch)
+            Self.save(clamped, forKey: Keys.pitch, defaults: defaults)
         }
     }
 
@@ -180,24 +180,24 @@ public final class TTSSettingsStore: ObservableObject {
                 playbackSpeed = clamped
                 return
             }
-            defaults.set(clamped, forKey: Keys.playbackSpeed)
+            Self.save(clamped, forKey: Keys.playbackSpeed, defaults: defaults)
         }
     }
 
     @Published public var voice: String {
-        didSet { defaults.set(voice, forKey: Keys.voice) }
+        didSet { Self.save(voice, forKey: Keys.voice, defaults: defaults) }
     }
 
     @Published public var responseFormat: String {
-        didSet { defaults.set(responseFormat, forKey: Keys.responseFormat) }
+        didSet { Self.save(responseFormat, forKey: Keys.responseFormat, defaults: defaults) }
     }
 
     @Published public var languageType: String {
-        didSet { defaults.set(languageType, forKey: Keys.languageType) }
+        didSet { Self.save(languageType, forKey: Keys.languageType, defaults: defaults) }
     }
 
     @Published public var miniMaxEmotion: String {
-        didSet { defaults.set(miniMaxEmotion, forKey: Keys.miniMaxEmotion) }
+        didSet { Self.save(miniMaxEmotion, forKey: Keys.miniMaxEmotion, defaults: defaults) }
     }
 
     public var snapshot: TTSSettingsSnapshot {
@@ -221,32 +221,147 @@ public final class TTSSettingsStore: ObservableObject {
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
-        let modeRaw = defaults.string(forKey: Keys.playbackMode) ?? TTSPlaybackMode.auto.rawValue
+        let modeRaw = Self.textValue(forKey: Keys.playbackMode, defaults: defaults, defaultValue: TTSPlaybackMode.auto.rawValue)
         playbackMode = TTSPlaybackMode(rawValue: modeRaw) ?? .auto
 
-        let providerRaw = defaults.string(forKey: Keys.providerKind) ?? TTSProviderKind.openAICompatible.rawValue
+        let providerRaw = Self.textValue(forKey: Keys.providerKind, defaults: defaults, defaultValue: TTSProviderKind.openAICompatible.rawValue)
         providerKind = TTSProviderKind(rawValue: providerRaw) ?? .openAICompatible
 
-        autoPlayAfterAssistantResponse = defaults.object(forKey: Keys.autoPlayAfterAssistantResponse) as? Bool ?? false
-        onlyReadQuotedContent = defaults.object(forKey: Keys.onlyReadQuotedContent) as? Bool ?? false
-        watchUseLightweightPreprocess = defaults.object(forKey: Keys.watchUseLightweightPreprocess) as? Bool ?? true
+        autoPlayAfterAssistantResponse = Self.boolValue(forKey: Keys.autoPlayAfterAssistantResponse, defaults: defaults, defaultValue: false)
+        onlyReadQuotedContent = Self.boolValue(forKey: Keys.onlyReadQuotedContent, defaults: defaults, defaultValue: false)
+        watchUseLightweightPreprocess = Self.boolValue(forKey: Keys.watchUseLightweightPreprocess, defaults: defaults, defaultValue: true)
 
-        let rawWatchSpeechMaxCharacters = defaults.object(forKey: Keys.watchSpeechMaxCharacters) as? Int ?? 2_000
+        let rawWatchSpeechMaxCharacters = Self.integerValue(forKey: Keys.watchSpeechMaxCharacters, defaults: defaults, defaultValue: 2_000)
         watchSpeechMaxCharacters = rawWatchSpeechMaxCharacters.clamped(to: 500...6_000)
 
-        let rawSpeechRate = defaults.object(forKey: Keys.speechRate) as? Float ?? 1.0
+        let rawSpeechRate = Self.floatValue(forKey: Keys.speechRate, defaults: defaults, defaultValue: 1.0)
         speechRate = rawSpeechRate.clamped(to: 0.1...3.0)
 
-        let rawPitch = defaults.object(forKey: Keys.pitch) as? Float ?? 1.0
+        let rawPitch = Self.floatValue(forKey: Keys.pitch, defaults: defaults, defaultValue: 1.0)
         pitch = rawPitch.clamped(to: 0.1...2.0)
 
-        let rawPlaybackSpeed = defaults.object(forKey: Keys.playbackSpeed) as? Float ?? 1.0
+        let rawPlaybackSpeed = Self.floatValue(forKey: Keys.playbackSpeed, defaults: defaults, defaultValue: 1.0)
         playbackSpeed = rawPlaybackSpeed.clamped(to: 0.5...2.0)
 
-        voice = defaults.string(forKey: Keys.voice) ?? "alloy"
-        responseFormat = defaults.string(forKey: Keys.responseFormat) ?? "mp3"
-        languageType = defaults.string(forKey: Keys.languageType) ?? "Auto"
-        miniMaxEmotion = defaults.string(forKey: Keys.miniMaxEmotion) ?? "calm"
+        voice = Self.textValue(forKey: Keys.voice, defaults: defaults, defaultValue: "alloy")
+        responseFormat = Self.textValue(forKey: Keys.responseFormat, defaults: defaults, defaultValue: "mp3")
+        languageType = Self.textValue(forKey: Keys.languageType, defaults: defaults, defaultValue: "Auto")
+        miniMaxEmotion = Self.textValue(forKey: Keys.miniMaxEmotion, defaults: defaults, defaultValue: "calm")
+    }
+
+    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+        defaults === UserDefaults.standard
+    }
+
+    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Bool ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored != 0
+        }
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Int ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func floatValue(forKey key: String, defaults: UserDefaults, defaultValue: Float) -> Float {
+        guard usesDatabase(defaults: defaults) else {
+            if let value = defaults.object(forKey: key) as? Float {
+                return value
+            }
+            if let value = defaults.object(forKey: key) as? NSNumber {
+                return value.floatValue
+            }
+            return defaultValue
+        }
+        if let stored = Persistence.readAppConfigReal(key: key) {
+            return Float(stored)
+        }
+        guard let object = defaults.object(forKey: key) else { return defaultValue }
+        let legacy: Float
+        if let value = object as? Float {
+            legacy = value
+        } else if let value = object as? NSNumber {
+            legacy = value.floatValue
+        } else {
+            return defaultValue
+        }
+        if Persistence.writeAppConfig(key: key, real: Double(legacy), typeHint: "real") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.string(forKey: key) ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigText(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.string(forKey: key) else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: Float, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, real: Double(value), typeHint: "real") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: String, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, text: value, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
     }
 }
 

@@ -332,8 +332,7 @@ public enum ChatAppearanceProfileStore {
     private static let legacyDarkTextHexKey = "customDarkTextColorHex"
 
     public static func loadConfiguration(userDefaults: UserDefaults = .standard) -> ChatAppearanceProfileConfiguration {
-        if let data = userDefaults.data(forKey: configurationStorageKey),
-           let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) {
+        if let decoded = loadStoredConfiguration(userDefaults: userDefaults) {
             let normalized = decoded.normalized()
             if (try? normalized.validateScheduleRules()) == nil {
                 var safeConfiguration = normalized
@@ -366,8 +365,17 @@ public enum ChatAppearanceProfileStore {
             throw ChatAppearanceProfileError.saveFailed
         }
 
-        userDefaults.set(data, forKey: configurationStorageKey)
-        mirrorDefaultProfile(normalized.defaultProfile, to: userDefaults)
+        if usesDatabase(userDefaults: userDefaults) {
+            guard let encoded = String(data: data, encoding: .utf8),
+                  Persistence.writeAppConfig(key: configurationStorageKey, text: encoded, typeHint: "text") else {
+                throw ChatAppearanceProfileError.saveFailed
+            }
+            userDefaults.removeObject(forKey: configurationStorageKey)
+            clearLegacyColorKeys(in: userDefaults)
+        } else {
+            userDefaults.set(data, forKey: configurationStorageKey)
+            mirrorDefaultProfile(normalized.defaultProfile, to: userDefaults)
+        }
         return normalized
     }
 
@@ -395,6 +403,29 @@ public enum ChatAppearanceProfileStore {
         return ChatAppearanceProfileConfiguration(profiles: [defaultProfile], scheduleRules: [])
     }
 
+    private static func usesDatabase(userDefaults: UserDefaults) -> Bool {
+        userDefaults === UserDefaults.standard
+    }
+
+    private static func loadStoredConfiguration(userDefaults: UserDefaults) -> ChatAppearanceProfileConfiguration? {
+        if usesDatabase(userDefaults: userDefaults),
+           let raw = Persistence.readAppConfigText(key: configurationStorageKey),
+           let data = raw.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) {
+            return decoded
+        }
+
+        guard let data = userDefaults.data(forKey: configurationStorageKey),
+              let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) else {
+            return nil
+        }
+        if usesDatabase(userDefaults: userDefaults),
+           Persistence.readAppConfigText(key: configurationStorageKey) == nil {
+            _ = try? saveConfiguration(decoded.normalized(), userDefaults: userDefaults)
+        }
+        return decoded
+    }
+
     private static func mirrorDefaultProfile(_ profile: ChatAppearanceProfile, to userDefaults: UserDefaults) {
         userDefaults.set(profile.userBubble.isEnabled, forKey: legacyEnableUserBubbleKey)
         userDefaults.set(profile.userBubble.hex, forKey: legacyUserBubbleHexKey)
@@ -404,6 +435,19 @@ public enum ChatAppearanceProfileStore {
         userDefaults.set(profile.lightText.hex, forKey: legacyLightTextHexKey)
         userDefaults.set(profile.darkText.isEnabled, forKey: legacyEnableDarkTextKey)
         userDefaults.set(profile.darkText.hex, forKey: legacyDarkTextHexKey)
+    }
+
+    private static func clearLegacyColorKeys(in userDefaults: UserDefaults) {
+        [
+            legacyEnableUserBubbleKey,
+            legacyUserBubbleHexKey,
+            legacyEnableAssistantBubbleKey,
+            legacyAssistantBubbleHexKey,
+            legacyEnableLightTextKey,
+            legacyLightTextHexKey,
+            legacyEnableDarkTextKey,
+            legacyDarkTextHexKey
+        ].forEach { userDefaults.removeObject(forKey: $0) }
     }
 }
 

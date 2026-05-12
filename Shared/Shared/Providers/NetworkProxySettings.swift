@@ -15,17 +15,17 @@ public enum NetworkProxySettings {
     }
 
     public static func loadGlobalConfiguration(defaults: UserDefaults = .standard) -> NetworkProxyConfiguration {
-        let storedType = defaults.string(forKey: Keys.type) ?? NetworkProxyType.http.rawValue
+        let storedType = textValue(forKey: Keys.type, defaults: defaults, defaultValue: NetworkProxyType.http.rawValue)
         let type = NetworkProxyType(rawValue: storedType) ?? .http
-        let storedPort = defaults.object(forKey: Keys.port) as? Int ?? 8080
+        let storedPort = integerValue(forKey: Keys.port, defaults: defaults, defaultValue: 8080)
         let validPort = (1...65535).contains(storedPort) ? storedPort : 8080
         return NetworkProxyConfiguration(
-            isEnabled: defaults.object(forKey: Keys.isEnabled) as? Bool ?? false,
+            isEnabled: boolValue(forKey: Keys.isEnabled, defaults: defaults, defaultValue: false),
             type: type,
-            host: defaults.string(forKey: Keys.host) ?? "",
+            host: textValue(forKey: Keys.host, defaults: defaults, defaultValue: ""),
             port: validPort,
-            username: defaults.string(forKey: Keys.username) ?? "",
-            password: defaults.string(forKey: Keys.password) ?? ""
+            username: textValue(forKey: Keys.username, defaults: defaults, defaultValue: ""),
+            password: textValue(forKey: Keys.password, defaults: defaults, defaultValue: "")
         )
     }
 
@@ -33,12 +33,12 @@ public enum NetworkProxySettings {
         _ configuration: NetworkProxyConfiguration,
         defaults: UserDefaults = .standard
     ) {
-        defaults.set(configuration.isEnabled, forKey: Keys.isEnabled)
-        defaults.set(configuration.type.rawValue, forKey: Keys.type)
-        defaults.set(configuration.host, forKey: Keys.host)
-        defaults.set(configuration.port, forKey: Keys.port)
-        defaults.set(configuration.username, forKey: Keys.username)
-        defaults.set(configuration.password, forKey: Keys.password)
+        save(configuration.isEnabled, forKey: Keys.isEnabled, defaults: defaults)
+        save(configuration.type.rawValue, forKey: Keys.type, defaults: defaults)
+        save(configuration.host, forKey: Keys.host, defaults: defaults)
+        save(configuration.port, forKey: Keys.port, defaults: defaults)
+        save(configuration.username, forKey: Keys.username, defaults: defaults)
+        save(configuration.password, forKey: Keys.password, defaults: defaults)
     }
 
     /// 解析最终代理配置：提供商独立配置优先；无独立配置时回退到全局配置。
@@ -110,6 +110,83 @@ public enum NetworkProxySettings {
             forHTTPHeaderField: "Proxy-Authorization"
         )
         return updatedRequest
+    }
+
+    private static func usesDatabase(defaults: UserDefaults) -> Bool {
+        defaults === UserDefaults.standard
+    }
+
+    private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Bool ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored != 0
+        }
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.object(forKey: key) as? Int ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
+        guard usesDatabase(defaults: defaults) else {
+            return defaults.string(forKey: key) ?? defaultValue
+        }
+        if let stored = Persistence.readAppConfigText(key: key) {
+            return stored
+        }
+        guard let legacy = defaults.string(forKey: key) else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
+    }
+
+    private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func save(_ value: String, forKey key: String, defaults: UserDefaults) {
+        guard usesDatabase(defaults: defaults) else {
+            defaults.set(value, forKey: key)
+            return
+        }
+        if Persistence.writeAppConfig(key: key, text: value, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
     }
 }
 
