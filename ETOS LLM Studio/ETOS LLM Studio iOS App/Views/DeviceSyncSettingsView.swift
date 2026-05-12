@@ -48,7 +48,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle(NSLocalizedString("MCP 服务器", comment: ""), isOn: $appConfig.syncMCPServers)
                 Toggle(NSLocalizedString("音频文件", comment: ""), isOn: $appConfig.syncAudioFiles)
                 Toggle(NSLocalizedString("图片文件", comment: ""), isOn: $appConfig.syncImageFiles)
-                Toggle("Agent Skills", isOn: $appConfig.syncSkills)
+                Toggle(NSLocalizedString("Agent Skills", comment: ""), isOn: $appConfig.syncSkills)
                 Toggle(NSLocalizedString("快捷指令工具", comment: ""), isOn: $appConfig.syncShortcutTools)
                 Toggle(NSLocalizedString("世界书", comment: ""), isOn: $appConfig.syncWorldbooks)
                 Toggle(NSLocalizedString("反馈工单", comment: ""), isOn: $appConfig.syncFeedbackTickets)

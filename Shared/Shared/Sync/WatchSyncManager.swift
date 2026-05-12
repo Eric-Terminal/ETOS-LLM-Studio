@@ -152,7 +152,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard let operationID = beginSyncOperation(
             silent: silent,
             allowReuseExisting: true,
-            stateMessage: "正在同步数据…"
+            stateMessage: NSLocalizedString("正在同步数据…", comment: "")
         ) else { return }
 
         let syncChannel = self.syncChannel
@@ -177,7 +177,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                     self?.failSyncOperation(
                         operationID: operationID,
                         fallbackSilent: silent,
-                        message: "无法编码同步数据。"
+                        message: NSLocalizedString("无法编码同步数据。", comment: "")
                     )
                 }
                 return
@@ -191,7 +191,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                     self?.failSyncOperation(
                         operationID: operationID,
                         fallbackSilent: silent,
-                        message: "写入同步文件失败: \(error.localizedDescription)"
+                        message: String(
+                            format: NSLocalizedString("写入同步文件失败：%@", comment: ""),
+                            error.localizedDescription
+                        )
                     )
                 }
                 return
@@ -218,14 +221,17 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard let selectedSession = ChatService.shared.chatSessionsSubject.value.first(where: {
             $0.id == sessionID && !$0.isTemporary
         }) else {
-            state = .failed("未找到可发送的会话。")
+            state = .failed(NSLocalizedString("未找到可发送的会话。", comment: ""))
             return
         }
 
         guard let operationID = beginSyncOperation(
             silent: false,
             allowReuseExisting: false,
-            stateMessage: "正在发送“\(selectedSession.name)”…"
+            stateMessage: String(
+                format: NSLocalizedString("正在发送“%@”…", comment: ""),
+                selectedSession.name
+            )
         ) else { return }
 
         let syncChannel = self.syncChannel
@@ -247,7 +253,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             let packet = SyncExchangePacket(manifest: snapshot.manifest, delta: delta)
             guard let data = try? JSONEncoder().encode(packet) else {
                 await MainActor.run { [weak self] in
-                    self?.state = .failed("无法编码同步数据。")
+                    self?.state = .failed(NSLocalizedString("无法编码同步数据。", comment: ""))
                 }
                 return
             }
@@ -257,7 +263,12 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 try data.write(to: tempURL, options: [.atomic])
             } catch {
                 await MainActor.run { [weak self] in
-                    self?.state = .failed("写入同步文件失败: \(error.localizedDescription)")
+                    self?.state = .failed(
+                        String(
+                            format: NSLocalizedString("写入同步文件失败：%@", comment: ""),
+                            error.localizedDescription
+                        )
+                    )
                 }
                 return
             }
@@ -337,21 +348,21 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private func validateSessionBeforeTransfer(options: SyncOptions, silent: Bool) -> WCSession? {
         guard let session else {
             if !silent {
-                state = .failed("此设备不支持 WatchConnectivity。")
+                state = .failed(NSLocalizedString("此设备不支持 WatchConnectivity。", comment: ""))
             }
             return nil
         }
 
         guard isWatchConnectivitySyncEnabled() else {
             if !silent {
-                state = .failed("同步已关闭，已阻止向对端传输数据。")
+                state = .failed(NSLocalizedString("同步已关闭，已阻止向对端传输数据。", comment: ""))
             }
             return nil
         }
 
         guard !options.isEmpty else {
             if !silent {
-                state = .failed("请至少勾选一项同步内容。")
+                state = .failed(NSLocalizedString("请至少勾选一项同步内容。", comment: ""))
             }
             return nil
         }
@@ -359,14 +370,14 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 #if os(iOS)
         guard session.isPaired else {
             if !silent {
-                state = .failed("未检测到已配对的对端设备。")
+                state = .failed(NSLocalizedString("未检测到已配对的对端设备。", comment: ""))
             }
             return nil
         }
 #elseif os(watchOS)
         guard session.isCompanionAppInstalled else {
             if !silent {
-                state = .failed("未检测到配套的 iPhone 应用。")
+                state = .failed(NSLocalizedString("未检测到配套的 iPhone 应用。", comment: ""))
             }
             return nil
         }
@@ -388,7 +399,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard summary != .empty else { return } // 没有变化不通知
         
         let content = UNMutableNotificationContent()
-        content.title = "同步完成"
+        content.title = NSLocalizedString("同步完成", comment: "")
         content.body = buildNotificationBody(summary)
         content.sound = .default
         
@@ -403,21 +414,23 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     private func buildNotificationBody(_ summary: SyncMergeSummary) -> String {
         var parts: [String] = []
-        if summary.importedProviders > 0 { parts.append("提供商 +\(summary.importedProviders)") }
-        if summary.importedSessions > 0 { parts.append("会话 +\(summary.importedSessions)") }
-        if summary.importedBackgrounds > 0 { parts.append("背景 +\(summary.importedBackgrounds)") }
-        if summary.importedMemories > 0 { parts.append("记忆 +\(summary.importedMemories)") }
-        if summary.importedMCPServers > 0 { parts.append("MCP +\(summary.importedMCPServers)") }
-        if summary.importedAudioFiles > 0 { parts.append("音频 +\(summary.importedAudioFiles)") }
-        if summary.importedImageFiles > 0 { parts.append("图片 +\(summary.importedImageFiles)") }
-        if summary.importedSkills > 0 { parts.append("Skills +\(summary.importedSkills)") }
-        if summary.importedShortcutTools > 0 { parts.append("快捷指令工具 +\(summary.importedShortcutTools)") }
-        if summary.importedWorldbooks > 0 { parts.append("世界书 +\(summary.importedWorldbooks)") }
-        if summary.importedFeedbackTickets > 0 { parts.append("工单 +\(summary.importedFeedbackTickets)") }
-        if summary.importedDailyPulseRuns > 0 { parts.append("每日脉冲 +\(summary.importedDailyPulseRuns)") }
-        if summary.importedUsageEvents > 0 { parts.append("用量事件 +\(summary.importedUsageEvents)") }
-        if summary.importedAppStorageValues > 0 { parts.append("软件设置 +\(summary.importedAppStorageValues)") }
-        return parts.isEmpty ? "两端数据已一致" : parts.joined(separator: "，")
+        if summary.importedProviders > 0 { parts.append(String(format: NSLocalizedString("提供商 +%d", comment: ""), summary.importedProviders)) }
+        if summary.importedSessions > 0 { parts.append(String(format: NSLocalizedString("会话 +%d", comment: ""), summary.importedSessions)) }
+        if summary.importedBackgrounds > 0 { parts.append(String(format: NSLocalizedString("背景 +%d", comment: ""), summary.importedBackgrounds)) }
+        if summary.importedMemories > 0 { parts.append(String(format: NSLocalizedString("记忆 +%d", comment: ""), summary.importedMemories)) }
+        if summary.importedMCPServers > 0 { parts.append(String(format: NSLocalizedString("MCP +%d", comment: ""), summary.importedMCPServers)) }
+        if summary.importedAudioFiles > 0 { parts.append(String(format: NSLocalizedString("音频 +%d", comment: ""), summary.importedAudioFiles)) }
+        if summary.importedImageFiles > 0 { parts.append(String(format: NSLocalizedString("图片 +%d", comment: ""), summary.importedImageFiles)) }
+        if summary.importedSkills > 0 { parts.append(String(format: NSLocalizedString("Skills +%d", comment: ""), summary.importedSkills)) }
+        if summary.importedShortcutTools > 0 { parts.append(String(format: NSLocalizedString("快捷指令工具 +%d", comment: ""), summary.importedShortcutTools)) }
+        if summary.importedWorldbooks > 0 { parts.append(String(format: NSLocalizedString("世界书 +%d", comment: ""), summary.importedWorldbooks)) }
+        if summary.importedFeedbackTickets > 0 { parts.append(String(format: NSLocalizedString("工单 +%d", comment: ""), summary.importedFeedbackTickets)) }
+        if summary.importedDailyPulseRuns > 0 { parts.append(String(format: NSLocalizedString("每日脉冲 +%d", comment: ""), summary.importedDailyPulseRuns)) }
+        if summary.importedUsageEvents > 0 { parts.append(String(format: NSLocalizedString("用量事件 +%d", comment: ""), summary.importedUsageEvents)) }
+        if summary.importedAppStorageValues > 0 { parts.append(String(format: NSLocalizedString("软件设置 +%d", comment: ""), summary.importedAppStorageValues)) }
+        return parts.isEmpty
+            ? NSLocalizedString("两端数据已一致", comment: "")
+            : parts.joined(separator: NSLocalizedString("，", comment: ""))
     }
     
     // MARK: - Session Handling
@@ -512,7 +525,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             failSyncOperation(
                 operationID: context?.operationID,
                 fallbackSilent: context?.isSilent ?? false,
-                message: "发送失败: \(error.localizedDescription)"
+                message: String(
+                    format: NSLocalizedString("发送失败：%@", comment: ""),
+                    error.localizedDescription
+                )
             )
         } else if let context {
             let isSilent = isSyncSilent(
@@ -526,7 +542,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 lastUpdatedAt = Date()
                 state = .success(lastSummary)
             } else if !isSilent {
-                state = .syncing("等待对端处理…")
+                state = .syncing(NSLocalizedString("等待对端处理…", comment: ""))
             }
 
             if context.expectsResponse == false {
@@ -636,7 +652,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                             self?.failSyncOperation(
                                 operationID: operationID,
                                 fallbackSilent: effectiveSilent,
-                                message: "无法编码同步数据。"
+                                message: NSLocalizedString("无法编码同步数据。", comment: "")
                             )
                         }
                         return
@@ -650,7 +666,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                             self?.failSyncOperation(
                                 operationID: operationID,
                                 fallbackSilent: effectiveSilent,
-                                message: "写入同步文件失败: \(error.localizedDescription)"
+                                message: String(
+                                    format: NSLocalizedString("写入同步文件失败：%@", comment: ""),
+                                    error.localizedDescription
+                                )
                             )
                         }
                         return
@@ -667,7 +686,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                     await MainActor.run { [weak self] in
                         guard let self else { return }
                         if !self.isSyncSilent(operationID: operationID, fallback: effectiveSilent) {
-                            self.state = .syncing("正在回传差异…")
+                            self.state = .syncing(NSLocalizedString("正在回传差异…", comment: ""))
                         }
                         self.sendExchange(payload: payload)
                     }
@@ -683,7 +702,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             failSyncOperation(
                 operationID: operationID,
                 fallbackSilent: effectiveSilent,
-                message: "解析同步包失败: \(error.localizedDescription)"
+                message: String(
+                    format: NSLocalizedString("解析同步包失败：%@", comment: ""),
+                    error.localizedDescription
+                )
             )
         }
     }
@@ -702,7 +724,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             failSyncOperation(
                 operationID: operationID,
                 fallbackSilent: silent,
-                message: "同步已关闭，已拒绝接收对端数据。"
+                message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
             )
             return true
         }
@@ -712,7 +734,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             failSyncOperation(
                 operationID: operationID,
                 fallbackSilent: silent,
-                message: "接收同步消息失败：载荷为空。"
+                message: NSLocalizedString("接收同步消息失败：载荷为空。", comment: "")
             )
             return true
         }
@@ -725,7 +747,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             failSyncOperation(
                 operationID: operationID,
                 fallbackSilent: silent,
-                message: "接收同步消息失败: \(error.localizedDescription)"
+                message: String(
+                    format: NSLocalizedString("接收同步消息失败：%@", comment: ""),
+                    error.localizedDescription
+                )
             )
             return true
         }
@@ -791,7 +816,12 @@ extension WatchSyncManager: WCSessionDelegate {
         error: Error?
     ) {
         if let error, activeSyncOperation?.isSilent != true {
-            state = .failed("会话激活失败: \(error.localizedDescription)")
+            state = .failed(
+                String(
+                    format: NSLocalizedString("会话激活失败：%@", comment: ""),
+                    error.localizedDescription
+                )
+            )
         }
     }
     
@@ -816,7 +846,7 @@ extension WatchSyncManager: WCSessionDelegate {
             failSyncOperation(
                 operationID: operationID,
                 fallbackSilent: silent,
-                message: "同步已关闭，已拒绝接收对端数据。"
+                message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
             )
             return
         }
@@ -830,7 +860,10 @@ extension WatchSyncManager: WCSessionDelegate {
                 self.failSyncOperation(
                     operationID: operationID,
                     fallbackSilent: silent,
-                    message: "接收同步文件失败: \(error.localizedDescription)"
+                    message: String(
+                        format: NSLocalizedString("接收同步文件失败：%@", comment: ""),
+                        error.localizedDescription
+                    )
                 )
             }
             return

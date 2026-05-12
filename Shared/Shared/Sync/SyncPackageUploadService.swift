@@ -26,12 +26,16 @@ public enum SyncPackageUploadError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidHTTPResponse:
-            return "上传失败：服务端返回了无效响应。"
+            return NSLocalizedString("上传失败：服务端返回了无效响应。", comment: "")
         case .unexpectedStatusCode(let statusCode, let preview):
             if let preview, !preview.isEmpty {
-                return "上传失败：HTTP \(statusCode)，响应：\(preview)"
+                return String(
+                    format: NSLocalizedString("上传失败：HTTP %d，响应：%@", comment: ""),
+                    statusCode,
+                    preview
+                )
             }
-            return "上传失败：HTTP \(statusCode)。"
+            return String(format: NSLocalizedString("上传失败：HTTP %d。", comment: ""), statusCode)
         }
     }
 }

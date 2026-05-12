@@ -29,7 +29,9 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
-        defaults.set(true, forKey: CloudSyncManager.enabledKey)
+        let appConfigBackup = backupCloudSyncAppConfig()
+        defer { restoreCloudSyncAppConfig(appConfigBackup) }
+        AppConfigStore.shared.cloudSyncEnabled = true
 
         let now = Date(timeIntervalSince1970: 1_730_000_000)
         let localPackage = makeLocalProviderPackage()
@@ -104,6 +106,9 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
+        let appConfigBackup = backupCloudSyncAppConfig()
+        defer { restoreCloudSyncAppConfig(appConfigBackup) }
+        AppConfigStore.shared.cloudSyncEnabled = false
 
         let localPackage = makeLocalProviderPackage()
         let remotePackage = SyncPackage(options: [.sessions])
@@ -141,7 +146,7 @@ struct CloudSyncManagerTests {
         #expect(appliedPackages.isEmpty)
 
         if case .failed(let message) = manager.state {
-            #expect(message == "iCloud 同步已关闭。")
+            #expect(message == NSLocalizedString("iCloud 同步已关闭。", comment: ""))
         } else {
             Issue.record("关闭状态下手动同步没有返回关闭提示")
         }
@@ -160,7 +165,9 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
-        defaults.set(true, forKey: CloudSyncManager.enabledKey)
+        let appConfigBackup = backupCloudSyncAppConfig()
+        defer { restoreCloudSyncAppConfig(appConfigBackup) }
+        AppConfigStore.shared.cloudSyncEnabled = true
 
         let now = Date(timeIntervalSince1970: 1_730_100_000)
         let localPackage = makeLocalProviderPackage()
@@ -223,7 +230,9 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
-        defaults.set(true, forKey: CloudSyncManager.enabledKey)
+        let appConfigBackup = backupCloudSyncAppConfig()
+        defer { restoreCloudSyncAppConfig(appConfigBackup) }
+        AppConfigStore.shared.cloudSyncEnabled = true
 
         let now = Date(timeIntervalSince1970: 1_730_200_000)
         let localPackage = makeLocalProviderPackage()
@@ -278,7 +287,9 @@ struct CloudSyncManagerTests {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
-        defaults.set(true, forKey: CloudSyncManager.enabledKey)
+        let appConfigBackup = backupCloudSyncAppConfig()
+        defer { restoreCloudSyncAppConfig(appConfigBackup) }
+        AppConfigStore.shared.cloudSyncEnabled = true
 
         let now = Date(timeIntervalSince1970: 1_730_300_000)
         let provider = Provider(
@@ -421,6 +432,20 @@ struct CloudSyncManagerTests {
             options: [.providers],
             providers: [provider]
         )
+    }
+
+    @MainActor
+    private func backupCloudSyncAppConfig() -> (enabled: Bool, autoSyncEnabled: Bool) {
+        (
+            enabled: AppConfigStore.shared.cloudSyncEnabled,
+            autoSyncEnabled: AppConfigStore.shared.cloudSyncAutoSyncEnabled
+        )
+    }
+
+    @MainActor
+    private func restoreCloudSyncAppConfig(_ backup: (enabled: Bool, autoSyncEnabled: Bool)) {
+        AppConfigStore.shared.cloudSyncEnabled = backup.enabled
+        AppConfigStore.shared.cloudSyncAutoSyncEnabled = backup.autoSyncEnabled
     }
 }
 

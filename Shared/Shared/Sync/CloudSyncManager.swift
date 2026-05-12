@@ -160,14 +160,14 @@ public final class CloudSyncManager: ObservableObject {
     public func performSync(options: SyncOptions, silent: Bool = false) async {
         guard isEnabled else {
             if !silent {
-                state = .failed("iCloud 同步已关闭。")
+                state = .failed(NSLocalizedString("iCloud 同步已关闭。", comment: ""))
             }
             return
         }
 
         guard !options.isEmpty else {
             if !silent {
-                state = .failed("请至少勾选一项同步内容。")
+                state = .failed(NSLocalizedString("请至少勾选一项同步内容。", comment: ""))
             }
             return
         }
@@ -175,7 +175,7 @@ public final class CloudSyncManager: ObservableObject {
         lastSummary = .empty
 
         if !silent {
-            state = .syncing("正在从 iCloud 获取其他设备快照…")
+            state = .syncing(NSLocalizedString("正在从 iCloud 获取其他设备快照…", comment: ""))
         }
 
         do {
@@ -185,7 +185,7 @@ public final class CloudSyncManager: ObservableObject {
             let remoteManifest = mergedRemoteManifest(from: remoteSnapshots, fallbackOptions: localOptions)
 
             if !silent {
-                state = .syncing("正在上传本机 iCloud 快照…")
+                state = .syncing(NSLocalizedString("正在上传本机 iCloud 快照…", comment: ""))
             }
 
             let initialSnapshot = await buildLocalSnapshot(
@@ -197,7 +197,7 @@ public final class CloudSyncManager: ObservableObject {
 
             if appliedSummary.hasAnyImportedChange {
                 if !silent {
-                    state = .syncing("检测到远端变更，正在回传合并后的本机状态…")
+                    state = .syncing(NSLocalizedString("检测到远端变更，正在回传合并后的本机状态…", comment: ""))
                 }
                 let mergedSnapshot = await buildLocalSnapshot(
                     options: localOptions,
