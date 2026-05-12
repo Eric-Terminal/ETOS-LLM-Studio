@@ -214,6 +214,10 @@ struct SettingsView: View {
                         settingsNavigationLabel("用量统计", icon: .usageAnalytics)
                     }
 
+                    NavigationLink(destination: ToolCenterView().environmentObject(viewModel)) {
+                        settingsNavigationLabel("工具中心", icon: .toolCenter)
+                    }
+
                     NavigationLink(destination: ExtendedFeaturesView().environmentObject(viewModel)) {
                         settingsNavigationLabel("拓展功能", icon: .extendedFeatures)
                     }

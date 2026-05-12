@@ -30,7 +30,6 @@ public struct ExtendedFeaturesView: View {
                     • 快速定位语音、工具集成、导入和维护能力。
 
                     入口建议
-                    • 工具中心：排查工具是否在当前会话可用。
                     • 记忆系统 / 世界书：管理长期偏好与规则知识。
                     • MCP / 快捷指令：接入外部能力和自动化流程。
                     • 存储管理 / 远程文件访问：做维护与清理。
@@ -65,21 +64,6 @@ public struct ExtendedFeaturesView: View {
                 }
             } header: {
                 Text(NSLocalizedString("安全", comment: "设置安全分组"))
-            }
-
-            Section {
-                NavigationLink {
-                    ToolCenterView()
-                        .environmentObject(viewModel)
-                } label: {
-                    settingsNavigationLabel("工具中心", icon: .toolCenter)
-                        .etFont(.headline)
-                        .padding(.vertical, 4)
-                }
-            } footer: {
-                Text(NSLocalizedString("统一预览和调整聊天工具启用状态。", comment: "工具中心入口说明"))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
             }
 
             Section {
