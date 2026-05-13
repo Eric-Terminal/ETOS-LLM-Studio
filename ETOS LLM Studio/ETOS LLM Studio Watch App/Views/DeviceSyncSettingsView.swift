@@ -9,7 +9,6 @@
 import SwiftUI
 import Foundation
 import Shared
-import UniformTypeIdentifiers
 
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
@@ -31,19 +30,10 @@ struct DeviceSyncSettingsView: View {
     @State private var useStrongSnapshotPasswordDerivation: Bool = false
     @State private var snapshotPassword: String = ""
     @State private var snapshotPasswordConfirmation: String = ""
-    @State private var isImportingSnapshot: Bool = false
     @State private var isRestoringSnapshot: Bool = false
     @State private var restorePassword: String = ""
     @State private var pendingEncryptedSnapshotURL: URL?
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
-
-    private let snapshotContentTypes: [UTType] = {
-        var types: [UTType] = [.data]
-        if let elsBackupType = UTType(filenameExtension: SnapshotBuilder.fileExtension) {
-            types.insert(elsBackupType, at: 0)
-        }
-        return types
-    }()
     
     var body: some View {
         List {
@@ -202,7 +192,7 @@ struct DeviceSyncSettingsView: View {
                 .disabled(isSnapshotBusy)
 
                 Button(role: .destructive) {
-                    isImportingSnapshot = true
+                    snapshotErrorMessage = NSLocalizedString("watchOS 暂不支持直接选择 .elsbackup 文件。请先在 iPhone 端恢复快照，再通过同步下发到手表。", comment: "")
                 } label: {
                     HStack {
                         Spacer()
@@ -348,13 +338,6 @@ struct DeviceSyncSettingsView: View {
             cleanupExportFile()
             cleanupSnapshotFile()
             clearPendingEncryptedSnapshot()
-        }
-        .fileImporter(
-            isPresented: $isImportingSnapshot,
-            allowedContentTypes: snapshotContentTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            handleSnapshotImport(result)
         }
     }
     
@@ -718,16 +701,6 @@ struct DeviceSyncSettingsView: View {
         }
     }
 
-    private func handleSnapshotImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let fileURL = urls.first else { return }
-            prepareSnapshotRestore(from: fileURL)
-        case .failure(let error):
-            snapshotErrorMessage = error.localizedDescription
-        }
-    }
-
     private func prepareSnapshotRestore(from fileURL: URL) {
         isRestoringSnapshot = true
         snapshotErrorMessage = nil
@@ -881,7 +854,7 @@ private enum WatchSnapshotFileWriter {
         try? FileManager.default.removeItem(at: temporaryImportDirectory)
     }
 
-    private static var temporaryImportDirectory: URL {
+    private nonisolated static var temporaryImportDirectory: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("ETOSWatchSnapshotImports", isDirectory: true)
     }
 }
