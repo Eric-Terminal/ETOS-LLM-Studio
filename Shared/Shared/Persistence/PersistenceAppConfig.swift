@@ -20,6 +20,19 @@ extension Persistence {
         } ?? nil
     }
 
+    public static func readAppConfigText(key: String, legacyUserDefaultsKey: String) -> String? {
+        if let value = readAppConfigText(key: key) {
+            return value
+        }
+        guard let legacy = UserDefaults.standard.string(forKey: legacyUserDefaultsKey) else {
+            return nil
+        }
+        if writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            UserDefaults.standard.removeObject(forKey: legacyUserDefaultsKey)
+        }
+        return legacy
+    }
+
     public static func readAppConfigReal(key: String) -> Double? {
         withConfigDatabaseRead { db in
             try Double.fetchOne(
@@ -40,6 +53,24 @@ extension Persistence {
         } ?? nil
     }
 
+    public static func readAppConfigData(key: String) -> Data? {
+        guard let encoded = readAppConfigText(key: key) else { return nil }
+        return Data(base64Encoded: encoded)
+    }
+
+    public static func readAppConfigData(key: String, legacyUserDefaultsKey: String) -> Data? {
+        if let data = readAppConfigData(key: key) {
+            return data
+        }
+        guard let legacy = UserDefaults.standard.data(forKey: legacyUserDefaultsKey) else {
+            return nil
+        }
+        if writeAppConfig(key: key, data: legacy) {
+            UserDefaults.standard.removeObject(forKey: legacyUserDefaultsKey)
+        }
+        return legacy
+    }
+
     @discardableResult
     public static func writeAppConfig(key: String, text: String?, typeHint: String = "text") -> Bool {
         writeAppConfigValue(
@@ -48,6 +79,15 @@ extension Persistence {
             valueReal: nil,
             valueInteger: nil,
             typeHint: typeHint
+        )
+    }
+
+    @discardableResult
+    public static func writeAppConfig(key: String, data: Data?) -> Bool {
+        writeAppConfig(
+            key: key,
+            text: data?.base64EncodedString(),
+            typeHint: "data"
         )
     }
 

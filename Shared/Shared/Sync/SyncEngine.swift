@@ -13,7 +13,8 @@ public enum SyncEngine {
     static let conversationUserProfileRecordID = "conversation.user.profile"
     static let appStorageExcludedExactKeys: Set<String> = [
         "cloudSync.deviceIdentifier",
-        "cloudSync.appliedSnapshotChecksums"
+        "cloudSync.appliedSnapshotChecksums",
+        "cloudSync.snapshotChangeToken"
     ]
     static let appStorageExcludedPrefixes: [String] = [
         "sync.delta.version-tracker.",

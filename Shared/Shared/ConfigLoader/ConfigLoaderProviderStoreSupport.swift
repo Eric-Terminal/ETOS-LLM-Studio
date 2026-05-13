@@ -205,22 +205,18 @@ extension ConfigLoader {
         ) {
             return true
         }
-        guard UserDefaults.standard.bool(forKey: legacyToolCapabilityMigrationFlagKey) else {
-            return false
-        }
-        markToolCapabilityMigrated()
-        return true
+        return AppConfigStore.boolValue(
+            for: .configLoaderToolCapabilityMigrated,
+            legacyUserDefaultsKey: legacyToolCapabilityMigrationFlagKey
+        )
     }
 
     static func markToolCapabilityMigrated() {
-        if AppConfigStore.persistSynchronously(
+        _ = AppConfigStore.persistSynchronously(
             .bool(true),
             for: .configLoaderToolCapabilityMigrated,
             quickSync: false
-        ) {
-            UserDefaults.standard.removeObject(forKey: toolCapabilityMigrationFlagKey)
-            UserDefaults.standard.removeObject(forKey: legacyToolCapabilityMigrationFlagKey)
-        }
+        )
     }
 
     static func cleanupLegacyProviderFiles() {

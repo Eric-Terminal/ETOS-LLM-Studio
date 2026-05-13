@@ -279,14 +279,19 @@ extension Persistence {
         launchPreparationResult = LaunchPreparationResult()
         hasCreatedLaunchBackupPoint = false
         hasScheduledLaunchBackupPoint = false
+        pendingLaunchRecoveryNotice = nil
         launchBackupAndRecoveryLock.unlock()
-        UserDefaults.standard.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
+        deleteAppConfig(key: launchRecoveryNoticeKey)
     }
 
     public static func consumeLaunchRecoveryNotice() -> String? {
-        let defaults = UserDefaults.standard
-        let message = defaults.string(forKey: launchRecoveryNoticeUserDefaultsKey)
-        defaults.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
+        launchBackupAndRecoveryLock.lock()
+        let pending = pendingLaunchRecoveryNotice
+        pendingLaunchRecoveryNotice = nil
+        launchBackupAndRecoveryLock.unlock()
+
+        let message = pending ?? readAppConfigText(key: launchRecoveryNoticeKey)
+        deleteAppConfig(key: launchRecoveryNoticeKey)
         return message
     }
 

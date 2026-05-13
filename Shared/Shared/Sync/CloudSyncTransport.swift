@@ -200,11 +200,23 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     }
 
     private func loadZoneChangeTokenData() -> Data? {
-        userDefaults.data(forKey: Self.zoneChangeTokenKey)
+        if userDefaults === UserDefaults.standard {
+            return Persistence.readAppConfigData(
+                key: Self.zoneChangeTokenKey,
+                legacyUserDefaultsKey: Self.zoneChangeTokenKey
+            )
+        }
+        return userDefaults.data(forKey: Self.zoneChangeTokenKey)
     }
 
     private func saveZoneChangeTokenData(_ data: Data?) {
-        if let data {
+        if userDefaults === UserDefaults.standard {
+            if let data {
+                Persistence.writeAppConfig(key: Self.zoneChangeTokenKey, data: data)
+            } else {
+                Persistence.deleteAppConfig(key: Self.zoneChangeTokenKey)
+            }
+        } else if let data {
             userDefaults.set(data, forKey: Self.zoneChangeTokenKey)
         } else {
             userDefaults.removeObject(forKey: Self.zoneChangeTokenKey)

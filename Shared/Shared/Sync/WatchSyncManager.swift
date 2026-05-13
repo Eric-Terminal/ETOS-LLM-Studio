@@ -94,7 +94,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
     @Published public private(set) var lastUpdatedAt: Date?
     
-    /// 自动同步开关的 UserDefaults key
+    /// 自动同步开关的配置键
     public static let autoSyncEnabledKey = "sync.autoSyncEnabled"
     
     private var session: WCSession? {

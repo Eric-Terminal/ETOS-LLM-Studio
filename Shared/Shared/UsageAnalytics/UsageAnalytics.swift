@@ -202,13 +202,26 @@ public enum UsageAnalyticsRuntimeContext {
     }
 
     public static func currentDeviceIdentifier(userDefaults: UserDefaults = .standard) -> String {
-        if let existing = userDefaults.string(forKey: deviceIdentifierKey),
+        let existing: String?
+        if userDefaults === UserDefaults.standard {
+            existing = Persistence.readAppConfigText(
+                key: deviceIdentifierKey,
+                legacyUserDefaultsKey: deviceIdentifierKey
+            )
+        } else {
+            existing = userDefaults.string(forKey: deviceIdentifierKey)
+        }
+        if let existing,
            !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return existing
         }
 
         let value = UUID().uuidString
-        userDefaults.set(value, forKey: deviceIdentifierKey)
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(key: deviceIdentifierKey, text: value, typeHint: "text")
+        } else {
+            userDefaults.set(value, forKey: deviceIdentifierKey)
+        }
         return value
     }
 

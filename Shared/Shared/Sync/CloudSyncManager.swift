@@ -252,13 +252,13 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     private var currentDeviceIdentifier: String {
-        if let existing = userDefaults.string(forKey: Self.deviceIdentifierKey),
+        if let existing = loadTextState(forKey: Self.deviceIdentifierKey),
            !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return existing
         }
 
         let value = UUID().uuidString
-        userDefaults.set(value, forKey: Self.deviceIdentifierKey)
+        saveTextState(value, forKey: Self.deviceIdentifierKey)
         return value
     }
 
@@ -384,7 +384,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     private func loadAppliedChecksums() -> [String: String] {
-        guard let data = userDefaults.data(forKey: Self.appliedSnapshotChecksumsKey),
+        guard let data = loadDataState(forKey: Self.appliedSnapshotChecksumsKey),
               let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
             return [:]
         }
@@ -393,7 +393,37 @@ public final class CloudSyncManager: ObservableObject {
 
     private func saveAppliedChecksums(_ checksums: [String: String]) {
         guard let data = try? JSONEncoder().encode(checksums) else { return }
-        userDefaults.set(data, forKey: Self.appliedSnapshotChecksumsKey)
+        saveDataState(data, forKey: Self.appliedSnapshotChecksumsKey)
+    }
+
+    private func loadTextState(forKey key: String) -> String? {
+        if userDefaults === UserDefaults.standard {
+            return Persistence.readAppConfigText(key: key, legacyUserDefaultsKey: key)
+        }
+        return userDefaults.string(forKey: key)
+    }
+
+    private func saveTextState(_ value: String, forKey key: String) {
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(key: key, text: value, typeHint: "text")
+        } else {
+            userDefaults.set(value, forKey: key)
+        }
+    }
+
+    private func loadDataState(forKey key: String) -> Data? {
+        if userDefaults === UserDefaults.standard {
+            return Persistence.readAppConfigData(key: key, legacyUserDefaultsKey: key)
+        }
+        return userDefaults.data(forKey: key)
+    }
+
+    private func saveDataState(_ data: Data, forKey key: String) {
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(key: key, data: data)
+        } else {
+            userDefaults.set(data, forKey: key)
+        }
     }
 
     private func buildSyncOptionsFromSettings() -> SyncOptions {

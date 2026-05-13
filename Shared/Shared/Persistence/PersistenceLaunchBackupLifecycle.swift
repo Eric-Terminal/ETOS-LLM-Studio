@@ -68,7 +68,7 @@ extension Persistence {
         launchBackupAndRecoveryLock.unlock()
 
         guard isLaunchBackupEnabled() else {
-            UserDefaults.standard.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
+            clearLaunchRecoveryNotice()
             return cacheLaunchPreparationResult(LaunchPreparationResult())
         }
 
@@ -87,11 +87,7 @@ extension Persistence {
             }
         }
 
-        if let noticeMessage = makeLaunchRecoveryNotice(from: result) {
-            UserDefaults.standard.set(noticeMessage, forKey: launchRecoveryNoticeUserDefaultsKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: launchRecoveryNoticeUserDefaultsKey)
-        }
+        setLaunchRecoveryNotice(makeLaunchRecoveryNotice(from: result))
 
         return cacheLaunchPreparationResult(result)
     }
@@ -142,6 +138,22 @@ extension Persistence {
             parts.append("聊天检索索引会在启动阶段自动重建。")
         }
         return parts.joined(separator: "\n")
+    }
+
+    private static func setLaunchRecoveryNotice(_ message: String?) {
+        launchBackupAndRecoveryLock.lock()
+        pendingLaunchRecoveryNotice = message
+        launchBackupAndRecoveryLock.unlock()
+
+        if let message {
+            writeAppConfig(key: launchRecoveryNoticeKey, text: message, typeHint: "text")
+        } else {
+            deleteAppConfig(key: launchRecoveryNoticeKey)
+        }
+    }
+
+    private static func clearLaunchRecoveryNotice() {
+        setLaunchRecoveryNotice(nil)
     }
 
     private static func databaseURL(for kind: LaunchDatabaseKind) -> URL {
@@ -214,10 +226,7 @@ extension Persistence {
                 from: URL(fileURLWithPath: sourceURL.path + "-shm"),
                 to: URL(fileURLWithPath: destinationURL.path + "-shm")
             )
-            UserDefaults.standard.set(
-                "检测到\(kind.displayName)无法打开或迁移，已隔离损坏文件并自动重建。",
-                forKey: launchRecoveryNoticeUserDefaultsKey
-            )
+            setLaunchRecoveryNotice("检测到\(kind.displayName)无法打开或迁移，已隔离损坏文件并自动重建。")
             logger.error("数据库初始化失败，已隔离后自动重建(\(kind.displayName)): \(error.localizedDescription)")
             return true
         } catch {

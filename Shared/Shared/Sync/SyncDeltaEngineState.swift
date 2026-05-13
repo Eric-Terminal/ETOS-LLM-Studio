@@ -30,7 +30,13 @@ enum SyncVersionTrackerStore {
 
     static func load(channel: String, userDefaults: UserDefaults) -> SyncVersionTrackerState {
         let key = keyPrefix + normalized(channel)
-        guard let data = userDefaults.data(forKey: key),
+        let data: Data?
+        if userDefaults === UserDefaults.standard {
+            data = Persistence.readAppConfigData(key: key, legacyUserDefaultsKey: key)
+        } else {
+            data = userDefaults.data(forKey: key)
+        }
+        guard let data,
               let state = try? JSONDecoder().decode(SyncVersionTrackerState.self, from: data) else {
             return SyncVersionTrackerState()
         }
@@ -40,7 +46,11 @@ enum SyncVersionTrackerStore {
     static func save(_ state: SyncVersionTrackerState, channel: String, userDefaults: UserDefaults) {
         let key = keyPrefix + normalized(channel)
         guard let data = try? JSONEncoder().encode(state) else { return }
-        userDefaults.set(data, forKey: key)
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(key: key, data: data)
+        } else {
+            userDefaults.set(data, forKey: key)
+        }
     }
 
     private static func normalized(_ channel: String) -> String {
@@ -58,7 +68,13 @@ enum SyncCheckpointStore {
 
     static func load(channel: String, userDefaults: UserDefaults) -> SyncCheckpointState {
         let key = keyPrefix + normalized(channel)
-        guard let data = userDefaults.data(forKey: key),
+        let data: Data?
+        if userDefaults === UserDefaults.standard {
+            data = Persistence.readAppConfigData(key: key, legacyUserDefaultsKey: key)
+        } else {
+            data = userDefaults.data(forKey: key)
+        }
+        guard let data,
               let state = try? JSONDecoder().decode(SyncCheckpointState.self, from: data) else {
             return SyncCheckpointState()
         }
@@ -68,7 +84,11 @@ enum SyncCheckpointStore {
     static func save(_ state: SyncCheckpointState, channel: String, userDefaults: UserDefaults) {
         let key = keyPrefix + normalized(channel)
         guard let data = try? JSONEncoder().encode(state) else { return }
-        userDefaults.set(data, forKey: key)
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(key: key, data: data)
+        } else {
+            userDefaults.set(data, forKey: key)
+        }
     }
 
     private static func normalized(_ channel: String) -> String {

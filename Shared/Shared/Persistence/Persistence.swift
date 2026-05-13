@@ -51,11 +51,12 @@ public enum Persistence {
     static var requestLogRetentionLimitOverride: Int?
     static var hasLoggedCompatibilityReminder = false
     public static let launchBackupEnabledKey = "sync.backup.createOnLaunch"
-    static let launchRecoveryNoticeUserDefaultsKey = "persistence.launchRecoveryNotice"
+    static let launchRecoveryNoticeKey = "persistence.launchRecoveryNotice"
     static let launchBackupDirectoryName = "StartupBackups"
     static let launchBackupAndRecoveryLock = NSLock()
     static var hasPreparedLaunchDatabases = false
     static var launchPreparationResult = LaunchPreparationResult()
+    static var pendingLaunchRecoveryNotice: String?
     static var hasCreatedLaunchBackupPoint = false
     static var hasScheduledLaunchBackupPoint = false
 
