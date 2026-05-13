@@ -39,7 +39,8 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     private static let checksumKey = "checksum"
     private static let optionsRawValueKey = "optionsRawValue"
     private static let payloadAssetKey = "payloadAsset"
-    private static let databaseSubscriptionID = "cloudSync.snapshots.database.subscription.v1"
+    private static let zoneSubscriptionID = "cloudSync.snapshots.zone.subscription.v1"
+    private static let legacyDatabaseSubscriptionID = "cloudSync.snapshots.database.subscription.v1"
     private let userDefaults: UserDefaults
     private static let containerIdentifier = "iCloud.com.ericterminal.els"
 
@@ -167,15 +168,20 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         try await ensureAvailableAccount()
         try await ensureCloudSyncZoneExists()
 
-        if try await hasSubscription(withID: Self.databaseSubscriptionID) {
+        if try await hasSubscription(withID: Self.zoneSubscriptionID) {
+            try? await deleteSubscription(withID: Self.legacyDatabaseSubscriptionID)
             return
         }
 
-        let subscription = CKDatabaseSubscription(subscriptionID: Self.databaseSubscriptionID)
+        let subscription = CKRecordZoneSubscription(
+            zoneID: cloudSyncSnapshotZoneID,
+            subscriptionID: Self.zoneSubscriptionID
+        )
         let notificationInfo = CKSubscription.NotificationInfo()
         notificationInfo.shouldSendContentAvailable = true
         subscription.notificationInfo = notificationInfo
         _ = try await save(subscription)
+        try? await deleteSubscription(withID: Self.legacyDatabaseSubscriptionID)
     }
 
     private func ensureCloudSyncZoneExists() async throws {
@@ -316,6 +322,22 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
                 } else {
                     continuation.resume(throwing: CloudSyncManagerError.subscriptionUnavailable)
                 }
+            }
+        }
+    }
+
+    private func deleteSubscription(withID subscriptionID: String) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            database.delete(withSubscriptionID: subscriptionID) { _, error in
+                if let error {
+                    if let ckError = error as? CKError, ckError.code == .unknownItem {
+                        continuation.resume(returning: ())
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                continuation.resume(returning: ())
             }
         }
     }
