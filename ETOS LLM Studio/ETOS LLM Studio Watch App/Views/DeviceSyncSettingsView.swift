@@ -30,6 +30,7 @@ struct DeviceSyncSettingsView: View {
     @State private var useStrongSnapshotPasswordDerivation: Bool = false
     @State private var snapshotPassword: String = ""
     @State private var snapshotPasswordConfirmation: String = ""
+    @State private var snapshotRestoreDownloadURL: String = ""
     @State private var isRestoringSnapshot: Bool = false
     @State private var restorePassword: String = ""
     @State private var pendingEncryptedSnapshotURL: URL?
@@ -191,8 +192,15 @@ struct DeviceSyncSettingsView: View {
                 }
                 .disabled(isSnapshotBusy)
 
+                TextField(
+                    NSLocalizedString("https://example.com/backup.elsbackup", comment: ""),
+                    text: $snapshotRestoreDownloadURL.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
                 Button(role: .destructive) {
-                    snapshotErrorMessage = NSLocalizedString("watchOS 暂不支持直接选择 .elsbackup 文件。请先在 iPhone 端恢复快照，再通过同步下发到手表。", comment: "")
+                    downloadSnapshotForRestore()
                 } label: {
                     HStack {
                         Spacer()
@@ -200,11 +208,11 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label(NSLocalizedString("从快照恢复", comment: ""), systemImage: "arrow.counterclockwise.icloud")
+                        Label(NSLocalizedString("下载并恢复快照", comment: ""), systemImage: "arrow.counterclockwise.icloud")
                         Spacer()
                     }
                 }
-                .disabled(isSnapshotBusy)
+                .disabled(isSnapshotBusy || snapshotRestoreDownloadURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 if pendingEncryptedSnapshotURL != nil {
                     Text(snapshotPasswordPromptMessage)
@@ -701,6 +709,50 @@ struct DeviceSyncSettingsView: View {
         }
     }
 
+    private func downloadSnapshotForRestore() {
+        let trimmed = snapshotRestoreDownloadURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            snapshotErrorMessage = NSLocalizedString("快照下载地址格式无效，请输入完整的 http/https URL。", comment: "")
+            return
+        }
+
+        isRestoringSnapshot = true
+        snapshotErrorMessage = nil
+        snapshotStatusMessage = NSLocalizedString("正在下载快照…", comment: "")
+        clearPendingEncryptedSnapshot()
+
+        Task.detached(priority: .userInitiated) {
+            var stagedSnapshotURL: URL?
+            do {
+                let stagedURL = try await WatchSnapshotFileWriter.downloadSnapshotForRestore(from: url)
+                stagedSnapshotURL = stagedURL
+                let inspection = try SnapshotRestoreService.inspectSnapshot(at: stagedURL)
+
+                await MainActor.run {
+                    isRestoringSnapshot = false
+                    if inspection.requiresPassword {
+                        pendingEncryptedSnapshotURL = stagedURL
+                        pendingSnapshotInspection = inspection
+                        restorePassword = ""
+                        snapshotStatusMessage = NSLocalizedString("请输入快照密码后恢复。", comment: "")
+                    } else {
+                        restoreSnapshot(from: stagedURL, password: nil, removeWhenFinished: true)
+                    }
+                }
+            } catch {
+                if let stagedSnapshotURL {
+                    try? FileManager.default.removeItem(at: stagedSnapshotURL)
+                }
+                await MainActor.run {
+                    isRestoringSnapshot = false
+                    snapshotErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func prepareSnapshotRestore(from fileURL: URL) {
         isRestoringSnapshot = true
         snapshotErrorMessage = nil
@@ -848,6 +900,20 @@ private enum WatchSnapshotFileWriter {
 
         try fileManager.copyItem(at: sourceURL, to: destinationURL)
         return destinationURL
+    }
+
+    nonisolated static func downloadSnapshotForRestore(from sourceURL: URL) async throws -> URL {
+        let (downloadedURL, response) = try await URLSession.shared.download(from: sourceURL)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200..<300).contains(httpResponse.statusCode) {
+            throw NSError(domain: "ETOSWatchSnapshotRestore", code: httpResponse.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: String(
+                    format: NSLocalizedString("下载快照失败（HTTP %d）。", comment: ""),
+                    httpResponse.statusCode
+                )
+            ])
+        }
+        return try stageSnapshotForRestore(downloadedURL)
     }
 
     nonisolated static func cleanupTemporaryImportFiles() {
