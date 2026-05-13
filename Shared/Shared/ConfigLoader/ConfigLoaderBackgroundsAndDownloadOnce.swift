@@ -79,11 +79,25 @@ extension ConfigLoader {
     }
 
     static func isDownloadOnceCompleted(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: downloadOnceCompletedFlagKey)
+        guard defaults === UserDefaults.standard else {
+            return defaults.bool(forKey: downloadOnceCompletedFlagKey)
+        }
+        return AppConfigStore.boolValue(
+            for: .configLoaderDownloadOnceCompleted,
+            legacyUserDefaultsKey: downloadOnceCompletedFlagKey
+        )
     }
 
     static func setDownloadOnceCompleted(_ completed: Bool, defaults: UserDefaults = .standard) {
-        defaults.set(completed, forKey: downloadOnceCompletedFlagKey)
+        guard defaults === UserDefaults.standard else {
+            defaults.set(completed, forKey: downloadOnceCompletedFlagKey)
+            return
+        }
+        _ = AppConfigStore.persistSynchronously(
+            .bool(completed),
+            for: .configLoaderDownloadOnceCompleted,
+            quickSync: false
+        )
     }
 
     static func isDownloadOnceFileReady(at fileURL: URL, fileManager: FileManager = .default) -> Bool {

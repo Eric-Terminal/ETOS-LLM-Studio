@@ -42,7 +42,19 @@ public struct FeedbackServiceConfig: Sendable {
     }
 
     public static var `default`: FeedbackServiceConfig {
-        let override = UserDefaults.standard.string(forKey: "feedback.apiBaseURL")
+        makeDefault()
+    }
+
+    static func makeDefault(userDefaults: UserDefaults = .standard) -> FeedbackServiceConfig {
+        let override: String?
+        if userDefaults === UserDefaults.standard {
+            override = AppConfigStore.textValue(
+                for: .feedbackAPIBaseURL,
+                legacyUserDefaultsKey: AppConfigKey.feedbackAPIBaseURL.rawValue
+            )
+        } else {
+            override = userDefaults.string(forKey: AppConfigKey.feedbackAPIBaseURL.rawValue)
+        }
         let fallback = "https://feedback.els.ericterminal.com"
         let value = override?.trimmingCharacters(in: .whitespacesAndNewlines)
         let url = URL(string: value?.isEmpty == false ? value! : fallback) ?? URL(string: fallback)!

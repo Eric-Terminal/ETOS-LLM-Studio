@@ -12,7 +12,7 @@ import os.log
 extension ConfigLoader {
     /// 从 SQLite 优先加载提供商配置，必要时回退旧版 JSON 并迁移到 SQLite。
     public static func loadProviders() -> [Provider] {
-        let shouldMigrateToolCapability = !UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
+        let shouldMigrateToolCapability = !hasMigratedToolCapability()
 
         if var providers = loadProvidersFromSQLite() {
             if providers.isEmpty {
@@ -33,7 +33,7 @@ extension ConfigLoader {
                         didRepair = true
                     }
                 }
-                UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+                markToolCapabilityMigrated()
             }
 
             if didRepair {
@@ -47,7 +47,7 @@ extension ConfigLoader {
         logger.info("正在从 \(providersDirectory.path) 加载所有提供商...")
         let legacyResult = loadProvidersFromLegacyFiles(shouldMigrateToolCapability: shouldMigrateToolCapability)
         if shouldMigrateToolCapability, legacyResult.didScanProviderDirectory {
-            UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
+            markToolCapabilityMigrated()
         }
 
         if !legacyResult.providers.isEmpty, saveProvidersToSQLite(legacyResult.providers) {
@@ -199,13 +199,28 @@ extension ConfigLoader {
     }
 
     static func hasMigratedToolCapability() -> Bool {
-        UserDefaults.standard.bool(forKey: toolCapabilityMigrationFlagKey)
-        || UserDefaults.standard.bool(forKey: legacyToolCapabilityMigrationFlagKey)
+        if AppConfigStore.boolValue(
+            for: .configLoaderToolCapabilityMigrated,
+            legacyUserDefaultsKey: toolCapabilityMigrationFlagKey
+        ) {
+            return true
+        }
+        guard UserDefaults.standard.bool(forKey: legacyToolCapabilityMigrationFlagKey) else {
+            return false
+        }
+        markToolCapabilityMigrated()
+        return true
     }
 
     static func markToolCapabilityMigrated() {
-        UserDefaults.standard.set(true, forKey: toolCapabilityMigrationFlagKey)
-        UserDefaults.standard.set(true, forKey: legacyToolCapabilityMigrationFlagKey)
+        if AppConfigStore.persistSynchronously(
+            .bool(true),
+            for: .configLoaderToolCapabilityMigrated,
+            quickSync: false
+        ) {
+            UserDefaults.standard.removeObject(forKey: toolCapabilityMigrationFlagKey)
+            UserDefaults.standard.removeObject(forKey: legacyToolCapabilityMigrationFlagKey)
+        }
     }
 
     static func cleanupLegacyProviderFiles() {

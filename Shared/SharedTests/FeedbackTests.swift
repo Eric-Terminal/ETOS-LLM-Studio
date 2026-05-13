@@ -190,6 +190,25 @@ struct FeedbackLaunchRefreshTests {
     }
 }
 
+@Suite("FeedbackServiceConfig Tests")
+struct FeedbackServiceConfigTests {
+    @Test("反馈服务地址覆盖值会从配置存储读取")
+    func defaultConfigReadsOverrideFromConfigStorage() {
+        let suiteName = "FeedbackServiceConfigTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(" https://feedback.example.test ", forKey: AppConfigKey.feedbackAPIBaseURL.rawValue)
+
+        let config = FeedbackServiceConfig.makeDefault(userDefaults: defaults)
+
+        #expect(config.baseURL.absoluteString == "https://feedback.example.test")
+    }
+}
+
 @Suite("FeedbackTicket Tests")
 struct FeedbackTicketTests {
     @Test("审核字段可正常编码与解码")

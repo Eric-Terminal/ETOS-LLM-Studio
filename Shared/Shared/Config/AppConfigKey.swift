@@ -73,6 +73,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case mcpChatToolsEnabled = "mcp.chatToolsEnabled"
     case shortcutChatToolsEnabled = "shortcut.chatToolsEnabled"
     case shortcutOfficialImportShortcutName = "shortcut.officialImportShortcutName"
+    case configLoaderDownloadOnceCompleted = "com.ETOS.LLM.Studio.download_once.completed"
+    case configLoaderToolCapabilityMigrated = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated"
+    case feedbackAPIBaseURL = "feedback.apiBaseURL"
     case appLockEnabled = "security.appLock.enabled"
     case appLockTimeoutSeconds = "security.appLock.timeoutSeconds"
     case appLockBiometricEnabled = "security.appLock.biometricEnabled"
@@ -208,6 +211,12 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("{}")
         case .shortcutOfficialImportShortcutName:
             return .text("ELS Export")
+        case .configLoaderDownloadOnceCompleted:
+            return .bool(false)
+        case .configLoaderToolCapabilityMigrated:
+            return .bool(false)
+        case .feedbackAPIBaseURL:
+            return .text("")
         case .appLockTimeoutSeconds:
             return .integer(300)
 
@@ -368,6 +377,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .chatComposerDraft,
              .lastActiveSessionID,
              .appToolsKnownDefaultToolIDs,
+             .configLoaderDownloadOnceCompleted,
+             .configLoaderToolCapabilityMigrated,
+             .feedbackAPIBaseURL,
              .chatPickerStyleMigratedToBottomSheet,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,

@@ -613,7 +613,10 @@ public final class AppConfigStore: ObservableObject {
              .appToolsToolApprovalPolicies,
              .mcpChatToolsEnabled,
              .shortcutChatToolsEnabled,
-             .shortcutOfficialImportShortcutName:
+             .shortcutOfficialImportShortcutName,
+             .configLoaderDownloadOnceCompleted,
+             .configLoaderToolCapabilityMigrated,
+             .feedbackAPIBaseURL:
             return Self.cachedValue(for: key) ?? key.defaultValue
         case .appLockEnabled: return .bool(appLockEnabled)
         case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
