@@ -17,6 +17,20 @@ struct DeviceSyncSettingsView: View {
     
     var body: some View {
         List {
+            Section {
+                NavigationLink {
+                    BackupRestoreView()
+                } label: {
+                    Label(NSLocalizedString("数据库快照", comment: ""), systemImage: "externaldrive.badge.icloud")
+                }
+
+                Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $appConfig.syncBackupCreateOnLaunch)
+            } header: {
+                Text(NSLocalizedString("数据库保护", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("手动快照用于跨设备灾难恢复；启动备份用于防止 SQLite 数据库损坏。开启启动备份后，每次启动会额外 dump 一份可恢复备份并落盘。", comment: ""))
+            }
+
             if syncManager.isCompanionAvailable {
                 Section {
                     Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
@@ -75,20 +89,6 @@ struct DeviceSyncSettingsView: View {
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
                 cloudSyncStatusView
-            }
-
-            Section {
-                NavigationLink {
-                    BackupRestoreView()
-                } label: {
-                    Label(NSLocalizedString("数据库快照", comment: ""), systemImage: "externaldrive.badge.icloud")
-                }
-
-                Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $appConfig.syncBackupCreateOnLaunch)
-            } header: {
-                Text(NSLocalizedString("数据库保护", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("手动快照用于跨设备灾难恢复；启动备份用于防止 SQLite 数据库损坏。开启启动备份后，每次启动会额外 dump 一份可恢复备份并落盘。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
