@@ -2413,5 +2413,5 @@
 "MCP" = "MCP";
 "启用 Apple Watch 同步" = "Enable Apple Watch Sync";
 "开启后，iPhone 与 Apple Watch 会全量漫游支持的数据；关闭后会拒绝近场同步入站数据。" = "When enabled, iPhone and Apple Watch roam all supported data. When disabled, incoming nearby sync data is rejected.";
-"开启后，iCloud 会自动全量漫游支持的数据；关闭后停止上传和拉取云端快照。提供商配置中的 API Key 也会在您的设备间同步。" = "When enabled, iCloud automatically roams all supported data. When disabled, cloud snapshot uploads and fetches stop. API keys in provider settings also sync between your devices.";
+"用于同一 Apple ID 下多台设备间漫游数据。只有一台设备使用本应用时可以保持关闭；开启后会上传本机快照并合并其他设备快照，提供商 API Key 也会在您的设备间同步。" = "同じ Apple ID でサインインした複数のデバイス間でデータをローミングするための機能です。このアプリを1台のデバイスだけで使う場合はオフのままで構いません。オンにすると、このデバイスのスナップショットをアップロードし、他のデバイスのスナップショットをマージします。プロバイダーの API キーもデバイス間で同期されます。";
 "同步范围为空，无法开始同步。" = "Sync scope is empty, so sync cannot start.";

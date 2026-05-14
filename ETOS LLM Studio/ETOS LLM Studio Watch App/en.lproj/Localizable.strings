@@ -2067,7 +2067,7 @@
 "预计新增会话" = "Estimated New Sessions";
 "预计新增提供商" = "Estimated New Providers";
 "默认“每次询问”，可按工具单独设置。" = "Default is “Ask Every Time.” You can set this per tool.";
-"默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。若勾选“提供商配置”，包含 API Key 的配置数据可能会随同步包在您的设备间同步。" = "Off by default. When enabled, iCloud Sync uploads the current device snapshot first, then pulls and merges snapshots from other devices. If “Provider Configs” is selected, configuration data containing API keys may sync across your devices.";
+"用于同一 Apple ID 下多台设备间漫游数据。只有一台设备使用本应用时可以保持关闭；开启后会上传本机快照并合并其他设备快照，提供商 API Key 也会在您的设备间同步。" = "Use this to roam data between multiple devices signed in with the same Apple ID. If you only use this app on one device, leave it off. When enabled, this device uploads its snapshot and merges snapshots from your other devices; provider API keys also sync across your devices.";
 "Agent Skills：当前会话实际可用 %d / %d" = "Agent Skills: available in current session %d / %d";
 "Agent Skills：配置已启用 %d / %d" = "Agent Skills: configured enabled %d / %d";
 "SKILL.md 内容" = "SKILL.md Content";

@@ -196,6 +196,10 @@ struct DeviceSyncSettingsView: View {
                     }
                 }
                 .disabled(!appConfig.cloudSyncEnabled || isCloudSyncing)
+
+                Text(NSLocalizedString("用于同一 Apple ID 下多台设备间漫游数据。只有一台设备使用本应用时可以保持关闭；开启后会上传本机快照并合并其他设备快照，提供商 API Key 也会在您的设备间同步。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {

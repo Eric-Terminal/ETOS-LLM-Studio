@@ -1665,6 +1665,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "启用" = "Enable";
 "设为默认" = "Set as Default";
 "启用 iCloud 同步" = "Enable iCloud Sync";
+"用于同一 Apple ID 下多台设备间漫游数据。只有一台设备使用本应用时可以保持关闭；开启后会上传本机快照并合并其他设备快照，提供商 API Key 也会在您的设备间同步。" = "Use esta opción para itinerar datos entre varios dispositivos con el mismo Apple ID. Si usa esta app en un solo dispositivo, puede dejarla desactivada. Al activarla, este dispositivo sube su instantánea y fusiona las de otros dispositivos; las claves API de proveedores también se sincronizan entre sus dispositivos.";
 "启用全局代理" = "Enable Global Proxy";
 "启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。" = "When enabled, AI gains memory capabilities. It retrieves relevant memories before each chat and can actively learn through tools.";
 "启用异步跨对话记忆" = "Enable Async Cross-Session Memory";

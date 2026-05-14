@@ -70,7 +70,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("iCloud 同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("开启后，iCloud 会自动全量漫游支持的数据；关闭后停止上传和拉取云端快照。提供商配置中的 API Key 也会在您的设备间同步。", comment: ""))
+                Text(NSLocalizedString("用于同一 Apple ID 下多台设备间漫游数据。只有一台设备使用本应用时可以保持关闭；开启后会上传本机快照并合并其他设备快照，提供商 API Key 也会在您的设备间同步。", comment: ""))
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
