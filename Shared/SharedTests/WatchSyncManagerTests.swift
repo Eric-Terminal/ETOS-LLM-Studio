@@ -5,8 +5,8 @@ import Testing
 @Suite("Watch 同步文件测试")
 struct WatchSyncManagerTests {
     @MainActor
-    @Test("同步开关全关时会关闭 WatchConnectivity 通道")
-    func testWatchConnectivitySyncDisabledWhenAllOptionsAreOff() {
+    @Test("Watch 同步开启后始终使用完整同步范围")
+    func testWatchConnectivityUsesFullSyncWhenEnabled() {
         let backup = backupAppConfigValues([
             .syncProviders,
             .syncSessions,
@@ -48,6 +48,7 @@ struct WatchSyncManagerTests {
         #expect(isWatchConnectivitySyncEnabled() == false)
 
         AppConfigStore.shared.syncAutoSyncEnabled = true
+        #expect(watchConnectivitySyncOptions() == .fullSync)
         #expect(isWatchConnectivitySyncEnabled() == true)
     }
 

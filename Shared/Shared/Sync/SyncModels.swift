@@ -33,6 +33,24 @@ public struct SyncOptions: OptionSet, Codable {
     public static let fontFiles = SyncOptions(rawValue: 1 << 12) // 字体文件与字体路由同步选项
     public static let skills = SyncOptions(rawValue: 1 << 13) // Agent Skills 同步选项
     public static let usageStats = SyncOptions(rawValue: 1 << 14) // 用量统计同步选项
+    /// 新版自动漫游使用的完整同步范围；用户只控制通道开关，不再维护细项掩码。
+    public static let fullSync: SyncOptions = [
+        .providers,
+        .sessions,
+        .backgrounds,
+        .memories,
+        .mcpServers,
+        .audioFiles,
+        .imageFiles,
+        .skills,
+        .shortcutTools,
+        .worldbooks,
+        .feedbackTickets,
+        .dailyPulse,
+        .usageStats,
+        .fontFiles,
+        .appStorage
+    ]
     @available(*, deprecated, message: "请改用 appStorage 选项。")
     public static let globalSystemPrompt = appStorage
     

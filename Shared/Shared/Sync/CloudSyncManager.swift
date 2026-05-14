@@ -167,7 +167,7 @@ public final class CloudSyncManager: ObservableObject {
 
         guard !options.isEmpty else {
             if !silent {
-                state = .failed(NSLocalizedString("请至少勾选一项同步内容。", comment: ""))
+                state = .failed(NSLocalizedString("同步范围为空，无法开始同步。", comment: ""))
             }
             return
         }
@@ -231,7 +231,6 @@ public final class CloudSyncManager: ObservableObject {
     public func performAutoSyncNowIfEnabled() async -> Bool {
         await AppConfigStore.shared.waitForPersistentStoreLoaded()
         guard isEnabled else { return false }
-        guard AppConfigStore.shared.cloudSyncAutoSyncEnabled else { return false }
 
         let options = buildSyncOptionsFromSettings()
         guard !options.isEmpty else { return false }
@@ -427,24 +426,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     private func buildSyncOptionsFromSettings() -> SyncOptions {
-        let appConfig = AppConfigStore.shared
-        var options: SyncOptions = []
-        if appConfig.syncProviders { options.insert(.providers) }
-        if appConfig.syncSessions { options.insert(.sessions) }
-        if appConfig.syncBackgrounds { options.insert(.backgrounds) }
-        if appConfig.syncMemories { options.insert(.memories) }
-        if appConfig.syncMCPServers { options.insert(.mcpServers) }
-        if appConfig.syncAudioFiles { options.insert(.audioFiles) }
-        if appConfig.syncImageFiles { options.insert(.imageFiles) }
-        if appConfig.syncSkills { options.insert(.skills) }
-        if appConfig.syncShortcutTools { options.insert(.shortcutTools) }
-        if appConfig.syncWorldbooks { options.insert(.worldbooks) }
-        if appConfig.syncFeedbackTickets { options.insert(.feedbackTickets) }
-        if appConfig.syncDailyPulse { options.insert(.dailyPulse) }
-        if appConfig.syncUsageStats { options.insert(.usageStats) }
-        if appConfig.syncFontFiles { options.insert(.fontFiles) }
-        if appConfig.syncAppStorage { options.insert(.appStorage) }
-        return normalizedCloudOptions(from: options)
+        normalizedCloudOptions(from: .fullSync)
     }
 
     private func normalizedCloudOptions(from options: SyncOptions) -> SyncOptions {

@@ -31,24 +31,6 @@ struct DeviceSyncSettingsView: View {
     
     var body: some View {
         List {
-            Section(NSLocalizedString("同步内容", comment: "")) {
-                Toggle(NSLocalizedString("提供商", comment: ""), isOn: $appConfig.syncProviders)
-                Toggle(NSLocalizedString("会话", comment: ""), isOn: $appConfig.syncSessions)
-                Toggle(NSLocalizedString("背景", comment: ""), isOn: $appConfig.syncBackgrounds)
-                Toggle(NSLocalizedString("记忆", comment: ""), isOn: $appConfig.syncMemories)
-                Toggle(NSLocalizedString("MCP", comment: ""), isOn: $appConfig.syncMCPServers)
-                Toggle(NSLocalizedString("音频", comment: ""), isOn: $appConfig.syncAudioFiles)
-                Toggle(NSLocalizedString("图片", comment: ""), isOn: $appConfig.syncImageFiles)
-                Toggle(NSLocalizedString("Agent Skills", comment: ""), isOn: $appConfig.syncSkills)
-                Toggle(NSLocalizedString("快捷指令", comment: ""), isOn: $appConfig.syncShortcutTools)
-                Toggle(NSLocalizedString("世界书", comment: ""), isOn: $appConfig.syncWorldbooks)
-                Toggle(NSLocalizedString("反馈工单", comment: ""), isOn: $appConfig.syncFeedbackTickets)
-                Toggle(NSLocalizedString("每日脉冲", comment: ""), isOn: $appConfig.syncDailyPulse)
-                Toggle(NSLocalizedString("用量统计", comment: ""), isOn: $appConfig.syncUsageStats)
-                Toggle(NSLocalizedString("字体文件与规则", comment: ""), isOn: $appConfig.syncFontFiles)
-                Toggle(NSLocalizedString("软件设置", comment: ""), isOn: $appConfig.syncAppStorage)
-            }
-
             Section(NSLocalizedString("数据库快照", comment: "")) {
                 Toggle(NSLocalizedString("设置密码", comment: ""), isOn: $encryptSnapshot)
                     .buttonStyle(.plain)
@@ -173,10 +155,10 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section(NSLocalizedString("Apple Watch 同步", comment: "")) {
-                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
+                Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
 
                 Button {
-                    syncManager.performSync(options: selectedSyncOptions)
+                    syncManager.performSync(options: .fullSync)
                 } label: {
                     HStack {
                         Spacer()
@@ -188,7 +170,7 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(selectedSyncOptions.isEmpty || isSyncing)
+                .disabled(!appConfig.syncAutoSyncEnabled || isSyncing)
             }
             
             Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
@@ -198,12 +180,9 @@ struct DeviceSyncSettingsView: View {
             Section(NSLocalizedString("iCloud 同步", comment: "")) {
                 Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
 
-                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.cloudSyncAutoSyncEnabled)
-                    .disabled(!appConfig.cloudSyncEnabled)
-
                 Button {
                     Task {
-                        await cloudSyncManager.performSync(options: selectedSyncOptions)
+                        await cloudSyncManager.performSync(options: .fullSync)
                     }
                 } label: {
                     HStack {
@@ -216,7 +195,7 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(!appConfig.cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
+                .disabled(!appConfig.cloudSyncEnabled || isCloudSyncing)
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
@@ -247,26 +226,6 @@ struct DeviceSyncSettingsView: View {
             cleanupSnapshotFile()
             clearPendingEncryptedSnapshot()
         }
-    }
-    
-    private var selectedSyncOptions: SyncOptions {
-        var option: SyncOptions = []
-        if appConfig.syncProviders { option.insert(.providers) }
-        if appConfig.syncSessions { option.insert(.sessions) }
-        if appConfig.syncBackgrounds { option.insert(.backgrounds) }
-        if appConfig.syncMemories { option.insert(.memories) }
-        if appConfig.syncMCPServers { option.insert(.mcpServers) }
-        if appConfig.syncAudioFiles { option.insert(.audioFiles) }
-        if appConfig.syncImageFiles { option.insert(.imageFiles) }
-        if appConfig.syncSkills { option.insert(.skills) }
-        if appConfig.syncShortcutTools { option.insert(.shortcutTools) }
-        if appConfig.syncWorldbooks { option.insert(.worldbooks) }
-        if appConfig.syncFeedbackTickets { option.insert(.feedbackTickets) }
-        if appConfig.syncDailyPulse { option.insert(.dailyPulse) }
-        if appConfig.syncUsageStats { option.insert(.usageStats) }
-        if appConfig.syncFontFiles { option.insert(.fontFiles) }
-        if appConfig.syncAppStorage { option.insert(.appStorage) }
-        return option
     }
     
     private var isSyncing: Bool {

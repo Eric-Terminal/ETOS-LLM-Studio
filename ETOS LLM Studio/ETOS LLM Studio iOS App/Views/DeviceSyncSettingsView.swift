@@ -17,29 +17,11 @@ struct DeviceSyncSettingsView: View {
     
     var body: some View {
         List {
-            Section(NSLocalizedString("同步内容", comment: "")) {
-                Toggle(NSLocalizedString("提供商配置", comment: ""), isOn: $appConfig.syncProviders)
-                Toggle(NSLocalizedString("会话记录", comment: ""), isOn: $appConfig.syncSessions)
-                Toggle(NSLocalizedString("背景图片", comment: ""), isOn: $appConfig.syncBackgrounds)
-                Toggle(NSLocalizedString("记忆（仅合并文本）", comment: ""), isOn: $appConfig.syncMemories)
-                Toggle(NSLocalizedString("MCP 服务器", comment: ""), isOn: $appConfig.syncMCPServers)
-                Toggle(NSLocalizedString("音频文件", comment: ""), isOn: $appConfig.syncAudioFiles)
-                Toggle(NSLocalizedString("图片文件", comment: ""), isOn: $appConfig.syncImageFiles)
-                Toggle(NSLocalizedString("Agent Skills", comment: ""), isOn: $appConfig.syncSkills)
-                Toggle(NSLocalizedString("快捷指令工具", comment: ""), isOn: $appConfig.syncShortcutTools)
-                Toggle(NSLocalizedString("世界书", comment: ""), isOn: $appConfig.syncWorldbooks)
-                Toggle(NSLocalizedString("反馈工单", comment: ""), isOn: $appConfig.syncFeedbackTickets)
-                Toggle(NSLocalizedString("每日脉冲", comment: ""), isOn: $appConfig.syncDailyPulse)
-                Toggle(NSLocalizedString("用量统计", comment: ""), isOn: $appConfig.syncUsageStats)
-                Toggle(NSLocalizedString("字体文件与字体规则", comment: ""), isOn: $appConfig.syncFontFiles)
-                Toggle(NSLocalizedString("软件设置", comment: ""), isOn: $appConfig.syncAppStorage)
-            }
-
             Section {
-                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
+                Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
 
                 Button {
-                    syncManager.performSync(options: selectedSyncOptions)
+                    syncManager.performSync(options: .fullSync)
                 } label: {
                     HStack {
                         Spacer()
@@ -52,11 +34,11 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(selectedSyncOptions.isEmpty || isSyncing)
+                .disabled(!appConfig.syncAutoSyncEnabled || isSyncing)
             } header: {
                 Text(NSLocalizedString("Apple Watch 同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("点击后将与 Apple Watch 双向同步数据：比较双方差异后，把对方有而本地没有的数据传过来。", comment: ""))
+                Text(NSLocalizedString("开启后，iPhone 与 Apple Watch 会全量漫游支持的数据；关闭后会拒绝近场同步入站数据。", comment: ""))
             }
             
             Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
@@ -66,12 +48,9 @@ struct DeviceSyncSettingsView: View {
             Section {
                 Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
 
-                Toggle(NSLocalizedString("启动时自动同步", comment: ""), isOn: $appConfig.cloudSyncAutoSyncEnabled)
-                    .disabled(!appConfig.cloudSyncEnabled)
-
                 Button {
                     Task {
-                        await cloudSyncManager.performSync(options: selectedSyncOptions)
+                        await cloudSyncManager.performSync(options: .fullSync)
                     }
                 } label: {
                     HStack {
@@ -85,11 +64,11 @@ struct DeviceSyncSettingsView: View {
                         Spacer()
                     }
                 }
-                .disabled(!appConfig.cloudSyncEnabled || selectedSyncOptions.isEmpty || isCloudSyncing)
+                .disabled(!appConfig.cloudSyncEnabled || isCloudSyncing)
             } header: {
                 Text(NSLocalizedString("iCloud 同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("默认关闭。开启后，iCloud 同步会先上传当前设备快照，再拉取其他设备快照并合并。若勾选“提供商配置”，包含 API Key 的配置数据可能会随同步包在您的设备间同步。", comment: ""))
+                Text(NSLocalizedString("开启后，iCloud 会自动全量漫游支持的数据；关闭后停止上传和拉取云端快照。提供商配置中的 API Key 也会在您的设备间同步。", comment: ""))
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
@@ -111,26 +90,6 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
-    }
-    
-    private var selectedSyncOptions: SyncOptions {
-        var option: SyncOptions = []
-        if appConfig.syncProviders { option.insert(.providers) }
-        if appConfig.syncSessions { option.insert(.sessions) }
-        if appConfig.syncBackgrounds { option.insert(.backgrounds) }
-        if appConfig.syncMemories { option.insert(.memories) }
-        if appConfig.syncMCPServers { option.insert(.mcpServers) }
-        if appConfig.syncAudioFiles { option.insert(.audioFiles) }
-        if appConfig.syncImageFiles { option.insert(.imageFiles) }
-        if appConfig.syncSkills { option.insert(.skills) }
-        if appConfig.syncShortcutTools { option.insert(.shortcutTools) }
-        if appConfig.syncWorldbooks { option.insert(.worldbooks) }
-        if appConfig.syncFeedbackTickets { option.insert(.feedbackTickets) }
-        if appConfig.syncDailyPulse { option.insert(.dailyPulse) }
-        if appConfig.syncUsageStats { option.insert(.usageStats) }
-        if appConfig.syncFontFiles { option.insert(.fontFiles) }
-        if appConfig.syncAppStorage { option.insert(.appStorage) }
-        return option
     }
     
     private var isSyncing: Bool {

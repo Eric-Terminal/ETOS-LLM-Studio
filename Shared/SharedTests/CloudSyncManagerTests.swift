@@ -435,17 +435,13 @@ struct CloudSyncManagerTests {
     }
 
     @MainActor
-    private func backupCloudSyncAppConfig() -> (enabled: Bool, autoSyncEnabled: Bool) {
-        (
-            enabled: AppConfigStore.shared.cloudSyncEnabled,
-            autoSyncEnabled: AppConfigStore.shared.cloudSyncAutoSyncEnabled
-        )
+    private func backupCloudSyncAppConfig() -> Bool {
+        AppConfigStore.shared.cloudSyncEnabled
     }
 
     @MainActor
-    private func restoreCloudSyncAppConfig(_ backup: (enabled: Bool, autoSyncEnabled: Bool)) {
-        AppConfigStore.shared.cloudSyncEnabled = backup.enabled
-        AppConfigStore.shared.cloudSyncAutoSyncEnabled = backup.autoSyncEnabled
+    private func restoreCloudSyncAppConfig(_ backup: Bool) {
+        AppConfigStore.shared.cloudSyncEnabled = backup
     }
 }
 
