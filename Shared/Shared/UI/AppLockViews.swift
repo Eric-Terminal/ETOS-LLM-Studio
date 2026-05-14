@@ -120,7 +120,7 @@ public struct AppLockSettingsView: View {
 
     public var body: some View {
         List {
-            Section(NSLocalizedString("应用锁", comment: "")) {
+            Section {
                 Toggle(NSLocalizedString("应用锁", comment: ""), isOn: appLockEnabledBinding)
 
                 if lockManager.isEnabled {
@@ -138,6 +138,8 @@ public struct AppLockSettingsView: View {
                         Label(NSLocalizedString("立即锁定", comment: ""), systemImage: "lock.fill")
                     }
                 }
+            } header: {
+                Text(NSLocalizedString("应用锁", comment: ""))
             } footer: {
                 Text(NSLocalizedString("应用锁只保护本机界面，不会随同步发送到其他设备。", comment: ""))
             }
@@ -165,7 +167,7 @@ public struct AppLockSettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("数据库物理加密", comment: "")) {
+            Section {
                 Toggle(NSLocalizedString("数据库物理加密", comment: ""), isOn: databaseEncryptionEnabledBinding)
 
                 if isDatabaseEncryptionEnabled {
@@ -177,6 +179,8 @@ public struct AppLockSettingsView: View {
                         Label(NSLocalizedString("更新数据库主密码", comment: ""), systemImage: "key")
                     }
                 }
+            } header: {
+                Text(NSLocalizedString("数据库物理加密", comment: ""))
             } footer: {
                 Text(NSLocalizedString("启用后，三处分库会使用独立主密码通过 SQLCipher 加密；主密码会保存在本机 Keychain 中，用于应用启动时透明解锁。它主要防止数据库文件被离线提取；若要防范已解锁设备上的直接访问，请同时启用应用锁。快照导出仍使用单独的快照密码。", comment: ""))
             }
