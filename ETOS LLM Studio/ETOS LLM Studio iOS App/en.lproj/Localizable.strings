@@ -2178,6 +2178,7 @@
 "软件设置 +%d" = "App Settings +%d";
 "软件设置（AppStorage）" = "App Settings (AppStorage)";
 "软件设置" = "App Settings";
+"支持导入旧版 ETOS JSON 数据包。" = "Supports importing legacy ETOS JSON packages.";
 "迁移中" = "Migrating";
 "迁移失败" = "Migration Failed";
 "迁移完成后会再次询问是否删除旧 JSON 文件。" = "After migration completes, you will be asked again whether to delete old JSON files.";

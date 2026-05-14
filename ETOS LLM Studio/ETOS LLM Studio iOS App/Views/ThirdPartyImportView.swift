@@ -263,7 +263,7 @@ struct ThirdPartyImportView: View {
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
         case .etosBackup:
-            return NSLocalizedString("支持导入 ETOS 导出的 JSON 数据包（包含“同步与备份”页导出的备份）。", comment: "ETOS source hint")
+            return NSLocalizedString("支持导入旧版 ETOS JSON 数据包。", comment: "ETOS source hint")
         case .cherryStudio:
             return NSLocalizedString("支持 Cherry Studio 的 .json 或解压后的备份目录；若是 .zip / .bak，请先解压后再导入。", comment: "Cherry source hint")
         case .rikkahub:

@@ -9,34 +9,11 @@
 import SwiftUI
 import Foundation
 import Shared
-import UIKit
-
-private struct DeviceSyncExportSharePayload: Identifiable {
-    let id = UUID()
-    let fileURL: URL
-}
-
-private struct DeviceSyncActivityShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
 
 struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
     @EnvironmentObject private var cloudSyncManager: CloudSyncManager
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var exportSharePayload: DeviceSyncExportSharePayload?
-    @State private var exportErrorMessage: String?
-    @State private var isExporting: Bool = false
-    @State private var isUploading: Bool = false
-    @State private var uploadErrorMessage: String?
-    @State private var uploadSuccessMessage: String?
-    @State private var uploadResponsePreview: String?
     
     var body: some View {
         List {
@@ -55,69 +32,7 @@ struct DeviceSyncSettingsView: View {
                 Toggle(NSLocalizedString("每日脉冲", comment: ""), isOn: $appConfig.syncDailyPulse)
                 Toggle(NSLocalizedString("用量统计", comment: ""), isOn: $appConfig.syncUsageStats)
                 Toggle(NSLocalizedString("字体文件与字体规则", comment: ""), isOn: $appConfig.syncFontFiles)
-                Toggle(NSLocalizedString("软件设置（AppStorage）", comment: ""), isOn: $appConfig.syncAppStorage)
-            }
-
-            Section {
-                Button {
-                    exportDataPackage()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isExporting {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Label(NSLocalizedString("导出数据", comment: ""), systemImage: "square.and.arrow.up")
-                            .etFont(.headline)
-                        Spacer()
-                    }
-                }
-                .disabled(selectedSyncOptions.isEmpty || isExporting)
-            } header: {
-                Text(NSLocalizedString("导出备份", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("导出内容与上方同步勾选项一致。导出包可能包含 API Key 等敏感配置，请仅分享给可信对象。", comment: ""))
-            }
-
-            Section {
-                TextField(NSLocalizedString("https://example.com/backup", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-
-                Button {
-                    uploadDataPackage()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isUploading {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Label(NSLocalizedString("上传到地址", comment: ""), systemImage: "icloud.and.arrow.up")
-                            .etFont(.headline)
-                        Spacer()
-                    }
-                }
-                .disabled(selectedSyncOptions.isEmpty || isUploading)
-
-                if let uploadSuccessMessage, !uploadSuccessMessage.isEmpty {
-                    Text(uploadSuccessMessage)
-                        .etFont(.footnote)
-                        .foregroundStyle(.green)
-                }
-
-                if let uploadResponsePreview, !uploadResponsePreview.isEmpty {
-                    Text(String(format: NSLocalizedString("响应：%@", comment: ""), uploadResponsePreview))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                }
-            } header: {
-                Text(NSLocalizedString("上传备份（POST）", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("会向输入地址发送 POST(JSON) 请求，内容与导出包一致。上传前请确认地址可信。", comment: ""))
+                Toggle(NSLocalizedString("软件设置", comment: ""), isOn: $appConfig.syncAppStorage)
             }
 
             Section {
@@ -196,29 +111,6 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
-        .onAppear {
-            SyncPackageTransferService.cleanupTemporaryExportFiles()
-        }
-        .onDisappear(perform: cleanupExportSharePayload)
-        .sheet(item: $exportSharePayload, onDismiss: cleanupExportSharePayload) { payload in
-            DeviceSyncActivityShareSheet(activityItems: [payload.fileURL])
-        }
-        .alert(NSLocalizedString("导出失败", comment: ""), isPresented: Binding(
-            get: { exportErrorMessage != nil },
-            set: { if !$0 { exportErrorMessage = nil } }
-        )) {
-            Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
-        } message: {
-            Text(exportErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
-        }
-        .alert(NSLocalizedString("上传失败", comment: ""), isPresented: Binding(
-            get: { uploadErrorMessage != nil },
-            set: { if !$0 { uploadErrorMessage = nil } }
-        )) {
-            Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
-        } message: {
-            Text(uploadErrorMessage ?? NSLocalizedString("未知错误", comment: ""))
-        }
     }
     
     private var selectedSyncOptions: SyncOptions {
@@ -391,86 +283,4 @@ struct DeviceSyncSettingsView: View {
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
     }
 
-    private func exportDataPackage() {
-        isExporting = true
-        let syncOptionsRawValue = selectedSyncOptions.rawValue
-        Task.detached(priority: .userInitiated) {
-            do {
-                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                let syncOptions = SyncOptions(rawValue: syncOptionsRawValue)
-                let package = SyncEngine.buildPackage(options: syncOptions)
-                let output = try SyncPackageTransferService.exportPackageToTemporaryFile(package)
-
-                await MainActor.run {
-                    if let existing = exportSharePayload?.fileURL {
-                        try? FileManager.default.removeItem(at: existing)
-                    }
-                    exportSharePayload = DeviceSyncExportSharePayload(fileURL: output.fileURL)
-                    exportErrorMessage = nil
-                    isExporting = false
-                }
-            } catch {
-                await MainActor.run {
-                    exportErrorMessage = String(
-                        format: NSLocalizedString("导出失败：%@", comment: ""),
-                        error.localizedDescription
-                    )
-                    isExporting = false
-                }
-            }
-        }
-    }
-
-    private func cleanupExportSharePayload() {
-        guard let fileURL = exportSharePayload?.fileURL else { return }
-        try? FileManager.default.removeItem(at: fileURL)
-        exportSharePayload = nil
-    }
-
-    private func uploadDataPackage() {
-        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            uploadErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
-            return
-        }
-        guard let endpoint = URL(string: trimmed),
-              let scheme = endpoint.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            uploadErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
-            return
-        }
-
-        isUploading = true
-        uploadErrorMessage = nil
-        uploadSuccessMessage = nil
-        uploadResponsePreview = nil
-
-        let syncOptionsRawValue = selectedSyncOptions.rawValue
-        let endpointString = endpoint.absoluteString
-        Task.detached(priority: .userInitiated) {
-            do {
-                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                guard let endpoint = URL(string: endpointString) else {
-                    await MainActor.run {
-                        isUploading = false
-                        uploadErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
-                    }
-                    return
-                }
-                let syncOptions = SyncOptions(rawValue: syncOptionsRawValue)
-                let package = SyncEngine.buildPackage(options: syncOptions)
-                let result = try await SyncPackageUploadService.upload(package: package, to: endpoint)
-                await MainActor.run {
-                    isUploading = false
-                    uploadSuccessMessage = String(format: NSLocalizedString("上传成功（HTTP %d）", comment: ""), result.statusCode)
-                    uploadResponsePreview = result.responseBodyPreview
-                }
-            } catch {
-                await MainActor.run {
-                    isUploading = false
-                    uploadErrorMessage = error.localizedDescription
-                }
-            }
-        }
-    }
 }

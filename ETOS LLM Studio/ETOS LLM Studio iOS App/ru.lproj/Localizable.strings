@@ -2154,6 +2154,7 @@
 "跳过会话" = "Skipped Sessions";
 "跳过提供商" = "Skipped Providers";
 "软件设置" = "App Settings";
+"支持导入旧版 ETOS JSON 数据包。" = "Поддерживается импорт устаревших JSON-пакетов ETOS.";
 "软件设置 +%d" = "App Settings +%d";
 "软件设置（AppStorage）" = "App Settings (AppStorage)";
 "输入 Schema：%@" = "Input Schema: %@";

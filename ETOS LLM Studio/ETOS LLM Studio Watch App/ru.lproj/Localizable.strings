@@ -2013,6 +2013,7 @@
 "路标时间（分钟）" = "Marker Interval (minutes)";
 "跳过" = "Skip";
 "软件设置" = "App Settings";
+"支持导入旧版 ETOS JSON 数据包。" = "Поддерживается импорт устаревших JSON-пакетов ETOS.";
 "软件设置 +%d" = "App Settings +%d";
 "轻量预处理（推荐）" = "Lightweight Preprocessing (Recommended)";
 "输入关键词" = "Enter Keywords";
