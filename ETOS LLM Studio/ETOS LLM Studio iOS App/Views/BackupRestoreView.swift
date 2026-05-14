@@ -81,7 +81,7 @@ struct BackupRestoreView: View {
             }
 
             Section {
-                TextField(NSLocalizedString("https://example.com/backup", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
+                TextField(NSLocalizedString("https://example.com/upload", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
@@ -95,16 +95,16 @@ struct BackupRestoreView: View {
                             ProgressView()
                                 .padding(.trailing, 8)
                         }
-                        Label(NSLocalizedString("创建并上传快照", comment: ""), systemImage: "externaldrive.badge.icloud")
+                        Label(NSLocalizedString("上传到自定义地址", comment: ""), systemImage: "tray.and.arrow.up")
                             .etFont(.headline)
                         Spacer()
                     }
                 }
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
             } header: {
-                Text(NSLocalizedString("上传快照", comment: ""))
+                Text(NSLocalizedString("自定义地址上传", comment: ""))
             } footer: {
-                Text(NSLocalizedString("会使用上方密码设置生成 .elsbackup，并以二进制 POST 上传到自定义端点。请仅使用可信的 R2 或自有服务器地址。", comment: ""))
+                Text(NSLocalizedString("会使用上方密码设置生成 .elsbackup，并以 HTTP POST 上传到自定义地址；这不是 iCloud 同步。请仅使用可信的 R2 或自有服务器。", comment: ""))
             }
 
             Section {
@@ -223,13 +223,13 @@ struct BackupRestoreView: View {
     private func validatedUploadEndpoint() -> URL? {
         let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            errorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
+            errorMessage = NSLocalizedString("请先输入自定义上传地址。", comment: "")
             return nil
         }
         guard let endpoint = URL(string: trimmed),
               let scheme = endpoint.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            errorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+            errorMessage = NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
             return nil
         }
         return endpoint
@@ -416,7 +416,7 @@ private enum SnapshotUploadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidEndpoint:
-            return NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+            return NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
         }
     }
 }

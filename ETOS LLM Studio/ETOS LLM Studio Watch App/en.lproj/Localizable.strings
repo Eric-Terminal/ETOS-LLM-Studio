@@ -2268,7 +2268,9 @@
 "五" = "Fri";
 "%d月" = "%d mo";
 "请先输入上传地址。" = "Enter an upload URL first.";
+"请先输入自定义上传地址。" = "Enter a custom upload URL first.";
 "上传地址格式无效，请输入完整的 http/https URL。" = "The upload URL is invalid. Enter a complete http/https URL.";
+"自定义上传地址格式无效，请输入完整的 http/https URL。" = "The custom upload URL is invalid. Enter a complete http/https URL.";
 "上传成功（HTTP %d）" = "Upload succeeded (HTTP %d)";
 "全局" = "Global";
 "重连中（第%d次，约 %ds）" = "Reconnecting (attempt %d, about %ds)";
@@ -2442,6 +2444,10 @@
 "关闭数据库物理加密" = "Turn Off Database Encryption";
 "创建 iCloud Drive 快照" = "Create iCloud Drive Snapshot";
 "创建并上传快照" = "Create and Upload Snapshot";
+"上传到自定义地址" = "Upload to Custom URL";
+"从 URL 下载并恢复" = "Download from URL and Restore";
+"会先生成 .elsbackup，再以 HTTP POST 上传到已配置的自定义地址；这不是 iCloud 同步。" = "This first creates a .elsbackup, then uploads it to the configured custom URL with HTTP POST. This is not iCloud Sync.";
+"快照下载 URL 无效，请输入完整的 http/https URL。" = "The snapshot download URL is invalid. Enter a complete http/https URL.";
 "后台后锁定" = "Lock After Backgrounding";
 "启用后，三处分库会使用独立主密码通过 SQLCipher 加密；主密码会保存在本机 Keychain 中，用于应用启动时透明解锁。它主要防止数据库文件被离线提取；若要防范已解锁设备上的直接访问，请同时启用应用锁。快照导出仍使用单独的快照密码。" = "When enabled, the three databases are encrypted with SQLCipher using an independent master password. The master password is stored in the local Keychain for transparent unlock on launch. This mainly protects against offline database extraction. Enable App Lock as well to protect access on an unlocked device. Snapshot exports still use a separate snapshot password.";
 "启用应用锁" = "Enable App Lock";

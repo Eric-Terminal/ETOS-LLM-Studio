@@ -86,11 +86,15 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label(NSLocalizedString("创建并上传快照", comment: ""), systemImage: "externaldrive.badge.icloud")
+                        Label(NSLocalizedString("上传到自定义地址", comment: ""), systemImage: "tray.and.arrow.up")
                         Spacer()
                     }
                 }
                 .disabled(isSnapshotBusy)
+
+                Text(NSLocalizedString("会先生成 .elsbackup，再以 HTTP POST 上传到已配置的自定义地址；这不是 iCloud 同步。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
 
                 TextField(
                     NSLocalizedString("https://example.com/backup.elsbackup", comment: ""),
@@ -108,7 +112,7 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label(NSLocalizedString("下载并恢复快照", comment: ""), systemImage: "arrow.counterclockwise.icloud")
+                        Label(NSLocalizedString("从 URL 下载并恢复", comment: ""), systemImage: "arrow.down.doc")
                         Spacer()
                     }
                 }
@@ -426,13 +430,13 @@ struct DeviceSyncSettingsView: View {
         guard validateSnapshotPasswordIfNeeded() else { return }
         let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            snapshotErrorMessage = NSLocalizedString("请先输入上传地址。", comment: "")
+            snapshotErrorMessage = NSLocalizedString("请先输入自定义上传地址。", comment: "")
             return
         }
         guard let endpoint = URL(string: trimmed),
               let scheme = endpoint.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            snapshotErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+            snapshotErrorMessage = NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
             return
         }
 
@@ -450,7 +454,7 @@ struct DeviceSyncSettingsView: View {
                 guard let endpoint = URL(string: endpointString) else {
                     await MainActor.run {
                         isUploadingSnapshot = false
-                        snapshotErrorMessage = NSLocalizedString("上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+                        snapshotErrorMessage = NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
                     }
                     return
                 }
@@ -495,7 +499,7 @@ struct DeviceSyncSettingsView: View {
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            snapshotErrorMessage = NSLocalizedString("快照下载地址格式无效，请输入完整的 http/https URL。", comment: "")
+            snapshotErrorMessage = NSLocalizedString("快照下载 URL 无效，请输入完整的 http/https URL。", comment: "")
             return
         }
 
