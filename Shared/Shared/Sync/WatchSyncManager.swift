@@ -77,6 +77,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     @Published public private(set) var state: SyncState = .idle
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
     @Published public private(set) var lastUpdatedAt: Date?
+    @Published public private(set) var isCompanionAvailable: Bool = false
     
     /// 自动同步开关的配置键
     public static let autoSyncEnabledKey = "sync.autoSyncEnabled"
@@ -124,6 +125,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private override init() {
         super.init()
         activateSessionIfNeeded()
+        refreshCompanionAvailability()
         requestNotificationPermission()
     }
     
@@ -277,6 +279,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             let appConfig = AppConfigStore.shared
             await appConfig.waitForPersistentStoreLoaded()
             guard appConfig.syncAutoSyncEnabled else { return }
+            guard isCompanionAvailable else { return }
 
             let options = buildSyncOptionsFromSettings()
             guard !options.isEmpty else { return }
@@ -427,6 +430,20 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         if session.activationState == .notActivated {
             session.activate()
         }
+    }
+
+    private func refreshCompanionAvailability() {
+        guard let session else {
+            isCompanionAvailable = false
+            return
+        }
+#if os(iOS)
+        isCompanionAvailable = session.isPaired && session.isWatchAppInstalled
+#elseif os(watchOS)
+        isCompanionAvailable = session.isCompanionAppInstalled
+#else
+        isCompanionAvailable = false
+#endif
     }
     
     private func sendExchange(payload: SyncExchangePayload) {
@@ -799,6 +816,7 @@ extension WatchSyncManager: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
+        refreshCompanionAvailability()
         if let error, activeSyncOperation?.isSilent != true {
             state = .failed(
                 String(
@@ -813,6 +831,9 @@ extension WatchSyncManager: WCSessionDelegate {
     public func sessionDidBecomeInactive(_ session: WCSession) {}
     public func sessionDidDeactivate(_ session: WCSession) {
         session.activate()
+    }
+    public func sessionWatchStateDidChange(_ session: WCSession) {
+        refreshCompanionAvailability()
     }
 #endif
     

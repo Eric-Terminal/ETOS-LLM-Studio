@@ -17,32 +17,34 @@ struct DeviceSyncSettingsView: View {
     
     var body: some View {
         List {
-            Section {
-                Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
+            if syncManager.isCompanionAvailable {
+                Section {
+                    Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
 
-                Button {
-                    syncManager.performSync(options: .fullSync)
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isSyncing {
-                            ProgressView()
-                                .padding(.trailing, 8)
+                    Button {
+                        syncManager.performSync(options: .fullSync)
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isSyncing {
+                                ProgressView()
+                                    .padding(.trailing, 8)
+                            }
+                            Label(NSLocalizedString("同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
+                                .etFont(.headline)
+                            Spacer()
                         }
-                        Label(NSLocalizedString("同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
-                            .etFont(.headline)
-                        Spacer()
                     }
+                    .disabled(!appConfig.syncAutoSyncEnabled || isSyncing)
+                } header: {
+                    Text(NSLocalizedString("Apple Watch 同步", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("开启后，iPhone 与 Apple Watch 会全量漫游支持的数据；关闭后会拒绝近场同步入站数据。", comment: ""))
                 }
-                .disabled(!appConfig.syncAutoSyncEnabled || isSyncing)
-            } header: {
-                Text(NSLocalizedString("Apple Watch 同步", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("开启后，iPhone 与 Apple Watch 会全量漫游支持的数据；关闭后会拒绝近场同步入站数据。", comment: ""))
-            }
-            
-            Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
-                syncStatusView
+
+                Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
+                    syncStatusView
+                }
             }
 
             Section {
