@@ -125,7 +125,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private override init() {
         super.init()
         activateSessionIfNeeded()
-        refreshCompanionAvailability()
+        Task { @MainActor [weak self] in
+            self?.refreshCompanionAvailability()
+        }
         requestNotificationPermission()
     }
     
@@ -435,8 +437,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private func refreshCompanionAvailability() {
         let isAvailable: Bool
         guard let session else {
-            isAvailable = false
-            isCompanionAvailable = isAvailable
+            updateCompanionAvailability(false)
             return
         }
 #if os(iOS)
@@ -446,6 +447,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 #else
         isAvailable = false
 #endif
+        updateCompanionAvailability(isAvailable)
+    }
+
+    private func updateCompanionAvailability(_ isAvailable: Bool) {
+        guard Thread.isMainThread else {
+            Task { @MainActor [weak self] in
+                self?.updateCompanionAvailability(isAvailable)
+            }
+            return
+        }
         if isCompanionAvailable != isAvailable {
             isCompanionAvailable = isAvailable
         }
