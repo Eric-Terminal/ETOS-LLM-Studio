@@ -30,6 +30,18 @@
 	<string>语音输入需要访问语音识别</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>用于通过 Face ID 解锁应用锁</string>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.ericterminal.els</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerName</key>
+			<string>ETOS LLM Studio</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
