@@ -120,8 +120,8 @@ struct GlobalSystemPromptStoreTests {
         #expect(snapshot.entries.first?.title == "A")
     }
 
-    @Test("GRDB 模式下多版本提示词迁入配置数据库")
-    func testRelationalStoreMigration() {
+    @Test("GRDB 模式下标准环境忽略旧版提示词字段")
+    func testRelationalStoreIgnoresStandardUserDefaultsLegacyFields() {
         let defaults = UserDefaults.standard
         let originalEntriesObject = defaults.object(forKey: GlobalSystemPromptStore.entriesStorageKey)
         let originalSelectedObject = defaults.object(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey)
@@ -148,6 +148,7 @@ struct GlobalSystemPromptStoreTests {
             try db.execute(sql: "DELETE FROM global_system_prompt_entries")
             try db.execute(sql: "DELETE FROM global_system_prompt_selection")
         }
+        Persistence.writeAppConfig(key: AppConfigKey.systemPrompt.rawValue, text: "", typeHint: "text")
 
         let entry = GlobalSystemPromptEntry(
             id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
@@ -164,25 +165,18 @@ struct GlobalSystemPromptStoreTests {
 
         let snapshot = GlobalSystemPromptStore.load(userDefaults: defaults)
 
-        #expect(snapshot.entries == [entry])
-        #expect(snapshot.selectedEntryID == entry.id)
+        #expect(snapshot.entries.isEmpty)
+        #expect(snapshot.selectedEntryID == nil)
+        #expect(snapshot.activeSystemPrompt.isEmpty)
         #expect(defaults.data(forKey: GlobalSystemPromptStore.entriesStorageKey) == nil)
         #expect(defaults.string(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) == nil)
-        #expect(defaults.string(forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey) == entry.content)
+        #expect(defaults.string(forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey) == nil)
 
         let storedCount = Persistence.withConfigDatabaseRead { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM global_system_prompt_entries")
         } ?? -1
-        let storedContent = Persistence.withConfigDatabaseRead { db in
-            try String.fetchOne(
-                db,
-                sql: "SELECT content FROM global_system_prompt_entries WHERE id = ?",
-                arguments: [entry.id.uuidString]
-            )
-        } ?? ""
 
-        #expect(storedCount == 1)
-        #expect(storedContent == entry.content)
+        #expect(storedCount == 0)
     }
 
     private func restore(_ value: Any?, forKey key: String, in defaults: UserDefaults) {

@@ -81,6 +81,196 @@ extension PersistenceTests {
         #expect(Persistence.readAppConfigText(key: key.rawValue) == legacyIdentifier)
     }
 
+    @Test("标准 UserDefaults 在首次迁移时会写入 app_config")
+    @MainActor
+    func testAppConfigBootstrapMigratesStandardLegacyValueBeforeFlag() async throws {
+        let defaults = UserDefaults.standard
+        let key = AppConfigKey.titleGenerationModelIdentifier
+        let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
+        let extraMigrationFlagKey = "appConfig.extraUserDefaultsKeysMigrated.v1"
+        let legacyIdentifier = "standard-legacy-title-model-\(UUID().uuidString)"
+        let previousConfigValues = Dictionary(
+            uniqueKeysWithValues: Persistence.loadAllAppConfigs().map { ($0.key, $0.value) }
+        )
+        let previousMigrationFlag = Persistence.readAppConfigInteger(key: migrationFlagKey)
+        let previousExtraMigrationFlag = Persistence.readAppConfigInteger(key: extraMigrationFlagKey)
+        let previousStandardValues = Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.compactMap { key -> (String, Any)? in
+            guard let value = defaults.object(forKey: key.rawValue) else { return nil }
+            return (key.rawValue, value)
+        })
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            for key in AppConfigKey.allCases {
+                if let value = previousConfigValues[key.rawValue] {
+                    restoreAppConfigValue(value, for: key)
+                } else {
+                    Persistence.deleteAppConfig(key: key.rawValue)
+                }
+                if let value = previousStandardValues[key.rawValue] {
+                    defaults.set(value, forKey: key.rawValue)
+                } else {
+                    defaults.removeObject(forKey: key.rawValue)
+                }
+            }
+            if let previousMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: migrationFlagKey,
+                    integer: previousMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: migrationFlagKey)
+            }
+            if let previousExtraMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: extraMigrationFlagKey,
+                    integer: previousExtraMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: extraMigrationFlagKey)
+            }
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        Persistence.deleteAppConfig(key: key.rawValue)
+        Persistence.deleteAppConfig(key: migrationFlagKey)
+        Persistence.writeAppConfig(key: extraMigrationFlagKey, integer: 1, typeHint: "integer")
+        defaults.set(legacyIdentifier, forKey: key.rawValue)
+
+        let store = AppConfigStore(userDefaults: defaults)
+        await store.waitForPersistentStoreLoaded()
+
+        #expect(Persistence.readAppConfigText(key: key.rawValue) == legacyIdentifier)
+        #expect(defaults.object(forKey: key.rawValue) == nil)
+    }
+
+    @Test("迁移标记存在时标准 UserDefaults 残留值不会覆盖数据库")
+    @MainActor
+    func testAppConfigBootstrapIgnoresStandardLegacyValueAfterFlag() async throws {
+        let defaults = UserDefaults.standard
+        let key = AppConfigKey.titleGenerationModelIdentifier
+        let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
+        let extraMigrationFlagKey = "appConfig.extraUserDefaultsKeysMigrated.v1"
+        let databaseIdentifier = "database-title-model-\(UUID().uuidString)"
+        let staleIdentifier = "stale-title-model-\(UUID().uuidString)"
+        let previousConfigValues = Dictionary(
+            uniqueKeysWithValues: Persistence.loadAllAppConfigs().map { ($0.key, $0.value) }
+        )
+        let previousMigrationFlag = Persistence.readAppConfigInteger(key: migrationFlagKey)
+        let previousExtraMigrationFlag = Persistence.readAppConfigInteger(key: extraMigrationFlagKey)
+        let previousStandardValues = Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.compactMap { key -> (String, Any)? in
+            guard let value = defaults.object(forKey: key.rawValue) else { return nil }
+            return (key.rawValue, value)
+        })
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            for key in AppConfigKey.allCases {
+                if let value = previousConfigValues[key.rawValue] {
+                    restoreAppConfigValue(value, for: key)
+                } else {
+                    Persistence.deleteAppConfig(key: key.rawValue)
+                }
+                if let value = previousStandardValues[key.rawValue] {
+                    defaults.set(value, forKey: key.rawValue)
+                } else {
+                    defaults.removeObject(forKey: key.rawValue)
+                }
+            }
+            if let previousMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: migrationFlagKey,
+                    integer: previousMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: migrationFlagKey)
+            }
+            if let previousExtraMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: extraMigrationFlagKey,
+                    integer: previousExtraMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: extraMigrationFlagKey)
+            }
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        Persistence.writeAppConfig(key: key.rawValue, text: databaseIdentifier, typeHint: "text")
+        Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
+        Persistence.writeAppConfig(key: extraMigrationFlagKey, integer: 1, typeHint: "integer")
+        defaults.set(staleIdentifier, forKey: key.rawValue)
+
+        let store = AppConfigStore(userDefaults: defaults)
+        await store.waitForPersistentStoreLoaded()
+
+        #expect(Persistence.readAppConfigText(key: key.rawValue) == databaseIdentifier)
+        #expect(defaults.object(forKey: key.rawValue) == nil)
+    }
+
+    @Test("标准 UserDefaults 的额外设置键首次迁移到 app_config")
+    @MainActor
+    func testAppConfigBootstrapMigratesExtraStandardLegacySetting() async throws {
+        let defaults = UserDefaults.standard
+        let key = "tts.voice"
+        let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
+        let extraMigrationFlagKey = "appConfig.extraUserDefaultsKeysMigrated.v1"
+        let legacyVoice = "legacy-voice-\(UUID().uuidString)"
+        let previousStoredValue = Persistence.readAppConfigText(key: key)
+        let previousMigrationFlag = Persistence.readAppConfigInteger(key: migrationFlagKey)
+        let previousExtraMigrationFlag = Persistence.readAppConfigInteger(key: extraMigrationFlagKey)
+        let previousDefaultsValue = defaults.object(forKey: key)
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            if let previousStoredValue {
+                Persistence.writeAppConfig(key: key, text: previousStoredValue, typeHint: "text")
+            } else {
+                Persistence.deleteAppConfig(key: key)
+            }
+            if let previousMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: migrationFlagKey,
+                    integer: previousMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: migrationFlagKey)
+            }
+            if let previousExtraMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: extraMigrationFlagKey,
+                    integer: previousExtraMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: extraMigrationFlagKey)
+            }
+            if let previousDefaultsValue {
+                defaults.set(previousDefaultsValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        Persistence.deleteAppConfig(key: key)
+        Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
+        Persistence.deleteAppConfig(key: extraMigrationFlagKey)
+        defaults.set(legacyVoice, forKey: key)
+
+        let store = AppConfigStore(userDefaults: defaults)
+        await store.waitForPersistentStoreLoaded()
+
+        #expect(Persistence.readAppConfigText(key: key) == legacyVoice)
+        #expect(defaults.object(forKey: key) == nil)
+        #expect(Persistence.readAppConfigInteger(key: extraMigrationFlagKey) == 1)
+    }
+
     private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
         switch key.defaultValue {
         case .bool:

@@ -348,12 +348,7 @@ public final class SkillManager: ObservableObject {
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored != 0
         }
-        guard defaults.object(forKey: key) != nil else { return defaultValue }
-        let legacy = defaults.bool(forKey: key)
-        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return defaultValue
     }
 
     private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
@@ -364,12 +359,7 @@ public final class SkillManager: ObservableObject {
            let decoded = decodeStringArray(stored) {
             return decoded
         }
-        guard let legacy = defaults.stringArray(forKey: key) else { return [] }
-        if let encoded = encodeStringArray(legacy),
-           Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return []
     }
 
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
