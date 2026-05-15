@@ -153,7 +153,7 @@ struct SpecializedModelSelectorView: View {
     private var imageGenerationModelIdentifierBinding: Binding<String> {
         Binding(
             get: { appConfig.imageGenerationModelIdentifier },
-            set: { appConfig.imageGenerationModelIdentifier = $0 }
+            set: { setImageGenerationModelIdentifier($0) }
         )
     }
 
@@ -227,16 +227,21 @@ struct SpecializedModelSelectorView: View {
     private func syncImageGenerationSelection() {
         let options = viewModel.imageGenerationModelOptions
         guard !options.isEmpty else {
-            appConfig.imageGenerationModelIdentifier = ""
+            setImageGenerationModelIdentifier("")
             return
         }
 
         if let matched = viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) {
-            appConfig.imageGenerationModelIdentifier = matched.id
+            setImageGenerationModelIdentifier(matched.id)
             return
         }
 
-        appConfig.imageGenerationModelIdentifier = options[0].id
+        setImageGenerationModelIdentifier(options[0].id)
+    }
+
+    private func setImageGenerationModelIdentifier(_ identifier: String) {
+        AppConfigStore.persistSynchronously(.text(identifier), for: .imageGenerationModelIdentifier)
+        appConfig.imageGenerationModelIdentifier = identifier
     }
 
     private func selectedModelLabel(

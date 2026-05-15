@@ -22,13 +22,13 @@ struct ImageGenerationFeatureView: View {
 
     private var imageGenerationModelIdentifier: String {
         get { appConfig.imageGenerationModelIdentifier }
-        nonmutating set { appConfig.imageGenerationModelIdentifier = newValue }
+        nonmutating set { setImageGenerationModelIdentifier(newValue) }
     }
 
     private var imageGenerationModelIdentifierBinding: Binding<String> {
         Binding(
             get: { appConfig.imageGenerationModelIdentifier },
-            set: { appConfig.imageGenerationModelIdentifier = $0 }
+            set: { setImageGenerationModelIdentifier($0) }
         )
     }
 
@@ -42,6 +42,11 @@ struct ImageGenerationFeatureView: View {
             return matched
         }
         return availableImageModels.first
+    }
+
+    private func setImageGenerationModelIdentifier(_ identifier: String) {
+        AppConfigStore.persistSynchronously(.text(identifier), for: .imageGenerationModelIdentifier)
+        appConfig.imageGenerationModelIdentifier = identifier
     }
 
     private var trimmedPrompt: String {

@@ -63,12 +63,12 @@ private actor AppConfigPersistenceWorker {
         migrationFlagKey: String,
         initialValues: [AppConfigKey: AppConfigValue]
     ) -> [String: Any] {
+        let existingKeys = Set(Persistence.loadAllAppConfigs().map { $0.key })
+        for key in AppConfigKey.allCases {
+            guard !existingKeys.contains(key.rawValue) else { continue }
+            AppConfigStore.persist(initialValues[key] ?? key.defaultValue, for: key)
+        }
         if Persistence.readAppConfigInteger(key: migrationFlagKey) != 1 {
-            let existingKeys = Set(Persistence.loadAllAppConfigs().map { $0.key })
-            for key in AppConfigKey.allCases {
-                guard !existingKeys.contains(key.rawValue) else { continue }
-                AppConfigStore.persist(initialValues[key] ?? key.defaultValue, for: key)
-            }
             Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
         }
         return AppConfigStore.loadPersistentSnapshotFromDatabase(includeLocalOnly: true)

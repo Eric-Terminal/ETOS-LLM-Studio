@@ -36,6 +36,68 @@ extension PersistenceTests {
         }
     }
 
+    @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
+    @MainActor
+    func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {
+        let suiteName = "AppConfigBackfill-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let key = AppConfigKey.titleGenerationModelIdentifier
+        let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
+        let legacyIdentifier = "legacy-title-model-\(UUID().uuidString)"
+        let previousConfigValues = Dictionary(
+            uniqueKeysWithValues: Persistence.loadAllAppConfigs().map { ($0.key, $0.value) }
+        )
+        let previousMigrationFlag = Persistence.readAppConfigInteger(key: migrationFlagKey)
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            for key in AppConfigKey.allCases {
+                if let value = previousConfigValues[key.rawValue] {
+                    restoreAppConfigValue(value, for: key)
+                } else {
+                    Persistence.deleteAppConfig(key: key.rawValue)
+                }
+            }
+            if let previousMigrationFlag {
+                Persistence.writeAppConfig(
+                    key: migrationFlagKey,
+                    integer: previousMigrationFlag,
+                    typeHint: "integer"
+                )
+            } else {
+                Persistence.deleteAppConfig(key: migrationFlagKey)
+            }
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        Persistence.deleteAppConfig(key: key.rawValue)
+        Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
+        defaults.set(legacyIdentifier, forKey: key.rawValue)
+
+        let store = AppConfigStore(userDefaults: defaults)
+        await store.waitForPersistentStoreLoaded()
+
+        #expect(Persistence.readAppConfigText(key: key.rawValue) == legacyIdentifier)
+    }
+
+    private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
+        switch key.defaultValue {
+        case .bool:
+            guard let value = value as? Bool else { return }
+            Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: key.typeHint)
+        case .integer:
+            guard let value = value as? Int else { return }
+            Persistence.writeAppConfig(key: key.rawValue, integer: value, typeHint: key.typeHint)
+        case .real:
+            guard let value = value as? Double else { return }
+            Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: key.typeHint)
+        case .text:
+            guard let value = value as? String else { return }
+            Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: key.typeHint)
+        }
+    }
+
     private var providersDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Providers")

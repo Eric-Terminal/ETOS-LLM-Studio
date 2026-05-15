@@ -37,9 +37,14 @@ extension ChatViewModel {
         return options
     }
 
+    private func persistSpecializedModelIdentifier(_ identifier: String, for key: AppConfigKey) {
+        AppConfigStore.persistSynchronously(.text(identifier), for: key)
+    }
+
     func setSelectedSpeechModel(_ model: RunnableModel?) {
         selectedSpeechModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .speechModelIdentifier)
         if speechModelIdentifier != newIdentifier {
             speechModelIdentifier = newIdentifier
         }
@@ -48,6 +53,7 @@ extension ChatViewModel {
     func setSelectedTTSModel(_ model: RunnableModel?) {
         selectedTTSModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .ttsModelIdentifier)
         if ttsModelIdentifier != newIdentifier {
             ttsModelIdentifier = newIdentifier
         }
@@ -57,6 +63,7 @@ extension ChatViewModel {
     func setSelectedEmbeddingModel(_ model: RunnableModel?) {
         selectedEmbeddingModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .memoryEmbeddingModelIdentifier)
         if memoryEmbeddingModelIdentifier != newIdentifier {
             memoryEmbeddingModelIdentifier = newIdentifier
         }
@@ -65,6 +72,7 @@ extension ChatViewModel {
     func setSelectedTitleGenerationModel(_ model: RunnableModel?) {
         selectedTitleGenerationModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .titleGenerationModelIdentifier)
         if titleGenerationModelIdentifier != newIdentifier {
             titleGenerationModelIdentifier = newIdentifier
         }
@@ -73,6 +81,7 @@ extension ChatViewModel {
     func setSelectedDailyPulseModel(_ model: RunnableModel?) {
         selectedDailyPulseModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .dailyPulseModelIdentifier)
         if dailyPulseModelIdentifier != newIdentifier {
             dailyPulseModelIdentifier = newIdentifier
         }
@@ -81,6 +90,7 @@ extension ChatViewModel {
     func setSelectedConversationSummaryModel(_ model: RunnableModel?) {
         selectedConversationSummaryModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .conversationSummaryModelIdentifier)
         if conversationSummaryModelIdentifier != newIdentifier {
             conversationSummaryModelIdentifier = newIdentifier
         }
@@ -89,6 +99,7 @@ extension ChatViewModel {
     func setSelectedReasoningSummaryModel(_ model: RunnableModel?) {
         selectedReasoningSummaryModel = model
         let newIdentifier = model?.id ?? ""
+        persistSpecializedModelIdentifier(newIdentifier, for: .reasoningSummaryModelIdentifier)
         if reasoningSummaryModelIdentifier != newIdentifier {
             reasoningSummaryModelIdentifier = newIdentifier
         }
@@ -97,6 +108,7 @@ extension ChatViewModel {
     func setSelectedOCRModel(_ model: RunnableModel?) {
         selectedOCRModel = model
         let newIdentifier = model?.id ?? ChatService.systemOCRRunnableModel.id
+        persistSpecializedModelIdentifier(newIdentifier, for: .ocrModelIdentifier)
         if ocrModelIdentifier != newIdentifier {
             ocrModelIdentifier = newIdentifier
         }
@@ -119,6 +131,7 @@ extension ChatViewModel {
         guard !speechModels.isEmpty else { return }
 
         selectedSpeechModel = nil
+        persistSpecializedModelIdentifier("", for: .speechModelIdentifier)
         speechModelIdentifier = ""
     }
 
@@ -140,6 +153,7 @@ extension ChatViewModel {
         guard !ttsModels.isEmpty else { return }
 
         selectedTTSModel = nil
+        persistSpecializedModelIdentifier("", for: .ttsModelIdentifier)
         ttsModelIdentifier = ""
         ttsManager.updateSelectedModel(nil)
     }
@@ -160,6 +174,7 @@ extension ChatViewModel {
         guard !configuredModels.isEmpty else { return }
 
         selectedEmbeddingModel = nil
+        persistSpecializedModelIdentifier("", for: .memoryEmbeddingModelIdentifier)
         memoryEmbeddingModelIdentifier = ""
     }
 
@@ -179,6 +194,7 @@ extension ChatViewModel {
         guard !titleGenerationModelOptions.isEmpty else { return }
 
         selectedTitleGenerationModel = nil
+        persistSpecializedModelIdentifier("", for: .titleGenerationModelIdentifier)
         titleGenerationModelIdentifier = ""
     }
 
@@ -198,6 +214,7 @@ extension ChatViewModel {
         guard !dailyPulseModelOptions.isEmpty else { return }
 
         selectedDailyPulseModel = nil
+        persistSpecializedModelIdentifier("", for: .dailyPulseModelIdentifier)
         dailyPulseModelIdentifier = ""
     }
 
@@ -217,6 +234,7 @@ extension ChatViewModel {
         guard !conversationSummaryModelOptions.isEmpty else { return }
 
         selectedConversationSummaryModel = nil
+        persistSpecializedModelIdentifier("", for: .conversationSummaryModelIdentifier)
         conversationSummaryModelIdentifier = ""
     }
 
@@ -236,11 +254,13 @@ extension ChatViewModel {
         guard !reasoningSummaryModelOptions.isEmpty else { return }
 
         selectedReasoningSummaryModel = nil
+        persistSpecializedModelIdentifier("", for: .reasoningSummaryModelIdentifier)
         reasoningSummaryModelIdentifier = ""
     }
 
     func syncOCRModelSelection() {
         if ocrModelIdentifier.isEmpty {
+            persistSpecializedModelIdentifier(ChatService.systemOCRRunnableModel.id, for: .ocrModelIdentifier)
             ocrModelIdentifier = ChatService.systemOCRRunnableModel.id
         }
         if let match = ocrModelOptions.first(where: { $0.id == ocrModelIdentifier }) {
@@ -251,6 +271,7 @@ extension ChatViewModel {
         }
 
         selectedOCRModel = ChatService.systemOCRRunnableModel
+        persistSpecializedModelIdentifier(ChatService.systemOCRRunnableModel.id, for: .ocrModelIdentifier)
         ocrModelIdentifier = ChatService.systemOCRRunnableModel.id
     }
 }

@@ -72,6 +72,14 @@ extension ChatViewModel {
 
     func refreshAfterAppConfigPersistentStoreLoad() {
         applyAppConfigSnapshotToLocalState()
+        syncSpeechModelSelection()
+        syncTTSModelSelection()
+        syncEmbeddingModelSelection()
+        syncTitleGenerationModelSelection()
+        syncDailyPulseModelSelection()
+        syncConversationSummaryModelSelection()
+        syncReasoningSummaryModelSelection()
+        syncOCRModelSelection()
         reloadGlobalSystemPromptEntries()
         reloadConversationMemoryState()
     }
