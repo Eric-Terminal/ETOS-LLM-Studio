@@ -438,8 +438,8 @@ private extension SyncPackageUploadService {
         let signedHeaders = sortedHeaderNames.joined(separator: ";")
         let canonicalRequest = [
             method,
-            url.percentEncodedPath.isEmpty ? "/" : url.percentEncodedPath,
-            url.percentEncodedQuery ?? "",
+            canonicalPath(for: url),
+            canonicalQuery(for: url),
             canonicalHeaders,
             signedHeaders,
             payloadHash
@@ -458,6 +458,18 @@ private extension SyncPackageUploadService {
         )
 
         return "\(s3Algorithm) Credential=\(configuration.accessKeyID)/\(credentialScope), SignedHeaders=\(signedHeaders), Signature=\(signature)"
+    }
+
+    static func canonicalPath(for url: URL) -> String {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              !components.percentEncodedPath.isEmpty else {
+            return "/"
+        }
+        return components.percentEncodedPath
+    }
+
+    static func canonicalQuery(for url: URL) -> String {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery ?? ""
     }
 
     static func s3Signature(
