@@ -433,17 +433,22 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     }
 
     private func refreshCompanionAvailability() {
+        let isAvailable: Bool
         guard let session else {
-            isCompanionAvailable = false
+            isAvailable = false
+            isCompanionAvailable = isAvailable
             return
         }
 #if os(iOS)
-        isCompanionAvailable = session.isPaired && session.isWatchAppInstalled
+        isAvailable = session.isPaired && session.isWatchAppInstalled
 #elseif os(watchOS)
-        isCompanionAvailable = session.isCompanionAppInstalled
+        isAvailable = session.isCompanionAppInstalled
 #else
-        isCompanionAvailable = false
+        isAvailable = false
 #endif
+        if isCompanionAvailable != isAvailable {
+            isCompanionAvailable = isAvailable
+        }
     }
     
     private func sendExchange(payload: SyncExchangePayload) {
@@ -816,14 +821,17 @@ extension WatchSyncManager: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        refreshCompanionAvailability()
-        if let error, activeSyncOperation?.isSilent != true {
-            state = .failed(
-                String(
-                    format: NSLocalizedString("会话激活失败：%@", comment: ""),
-                    error.localizedDescription
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.refreshCompanionAvailability()
+            if let error, self.activeSyncOperation?.isSilent != true {
+                self.state = .failed(
+                    String(
+                        format: NSLocalizedString("会话激活失败：%@", comment: ""),
+                        error.localizedDescription
+                    )
                 )
-            )
+            }
         }
     }
     
@@ -833,7 +841,9 @@ extension WatchSyncManager: WCSessionDelegate {
         session.activate()
     }
     public func sessionWatchStateDidChange(_ session: WCSession) {
-        refreshCompanionAvailability()
+        Task { @MainActor [weak self] in
+            self?.refreshCompanionAvailability()
+        }
     }
 #endif
     
@@ -846,15 +856,6 @@ extension WatchSyncManager: WCSessionDelegate {
         let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
         let operationID = requestID.flatMap(UUID.init(uuidString:))
         let silent = (file.metadata?["silent"] as? Bool) ?? false
-
-        guard isWatchConnectivitySyncEnabled() else {
-            failSyncOperation(
-                operationID: operationID,
-                fallbackSilent: silent,
-                message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
-            )
-            return
-        }
 
         let stagedFileURL: URL
         do {
@@ -876,6 +877,14 @@ extension WatchSyncManager: WCSessionDelegate {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
+            guard isWatchConnectivitySyncEnabled() else {
+                self.failSyncOperation(
+                    operationID: operationID,
+                    fallbackSilent: silent,
+                    message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
+                )
+                return
+            }
             let effectiveSilent = self.isSyncSilent(operationID: operationID, fallback: silent)
             await self.applyExchange(
                 from: stagedFileURL,
@@ -905,27 +914,35 @@ extension WatchSyncManager: WCSessionDelegate {
         didReceiveMessage message: [String : Any],
         replyHandler: @escaping ([String : Any]) -> Void
     ) {
-        if handleIncomingCloudSyncSignal(message) {
-            replyHandler(["accepted": true])
-            return
+        Task { @MainActor [weak self] in
+            guard let self else {
+                replyHandler([:])
+                return
+            }
+            if self.handleIncomingCloudSyncSignal(message) {
+                replyHandler(["accepted": true])
+                return
+            }
+            if self.handleIncomingInlineExchangeMessage(message, replyHandler: replyHandler) {
+                return
+            }
+            if self.handleIncomingQuickAppConfigMessage(message, replyHandler: replyHandler) {
+                return
+            }
+            #if canImport(WatchConnectivity)
+            if ShortcutExecutionRelay.shared.handleIncomingMessage(message, replyHandler: replyHandler) {
+                return
+            }
+            #endif
+            // 保留消息处理以兼容旧版本
+            replyHandler([:])
         }
-        if handleIncomingInlineExchangeMessage(message, replyHandler: replyHandler) {
-            return
-        }
-        if handleIncomingQuickAppConfigMessage(message, replyHandler: replyHandler) {
-            return
-        }
-        #if canImport(WatchConnectivity)
-        if ShortcutExecutionRelay.shared.handleIncomingMessage(message, replyHandler: replyHandler) {
-            return
-        }
-        #endif
-        // 保留消息处理以兼容旧版本
-        replyHandler([:])
     }
 
     public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        _ = handleIncomingCloudSyncSignal(userInfo)
+        Task { @MainActor [weak self] in
+            _ = self?.handleIncomingCloudSyncSignal(userInfo)
+        }
     }
 }
 #endif
