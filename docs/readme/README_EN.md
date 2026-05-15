@@ -79,7 +79,7 @@ Since I mostly use a Mac and an Apple Watch in daily life, the iPhone side still
 #### Sync, Debugging, and Operations
 
 *   **Cross-Device Sync**: Built-in iOS ↔ watchOS sync engine for providers, sessions, worldbooks, tool settings, Daily Pulse data, and more, with Manifest/Delta differential sync in the main path.
-*   **Sync and Backup**: Supports ETOS package export/import, full import on watchOS, startup backup with corruption self-healing, and direct POST upload of export packages to custom endpoints.
+*   **Sync and Backup**: Supports ETOS package export/import, full import on watchOS, startup backup with corruption self-healing, and signed snapshot uploads to S3-compatible object storage such as AWS S3 or Cloudflare R2.
 *   **In-App Feedback Assistant**: Supports feedback categories, environment collection, PoW submission flow, and dual-platform sync.
 *   **Network Proxy Support**: Supports global and provider-level HTTP(S)/SOCKS proxy with authentication.
 *   **Feedback Center and Notifications**: Supports in-ticket comments, developer badge display, status auto-refresh, and high-priority local notifications with deep links.

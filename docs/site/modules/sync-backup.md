@@ -35,7 +35,7 @@ ETOS LLM Studio 不是把 iPhone 和 Apple Watch 做成两个彼此独立的 App
 - 换设备
 - 导入到手表
 - 手动保存关键配置
-- 导出后再用自定义地址 POST 上传
+- 导出后再用 S3 兼容对象存储上传到 AWS S3 或 Cloudflare R2
 
 ## 启动保护备份
 

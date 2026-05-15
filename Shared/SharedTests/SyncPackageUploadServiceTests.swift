@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import CryptoKit
 import Testing
 @testable import Shared
 
@@ -109,6 +110,95 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-FileName") == "encrypted.elsbackup")
         #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-Schema") == nil)
         #expect(capturedFileURL == fileURL)
+    }
+
+    @Test("S3 兼容快照上传会生成 SigV4 PUT 请求")
+    func testS3UploadSnapshotBuildsSignedPutRequest() async throws {
+        let endpoint = try #require(URL(string: "https://abc123.r2.cloudflarestorage.com"))
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("s3-snapshot-\(UUID().uuidString).elsbackup")
+        let payload = Data("encrypted-backup".utf8)
+        try payload.write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let configuration = S3CompatibleUploadConfiguration(
+            endpoint: endpoint,
+            region: "auto",
+            bucket: "etos-bucket",
+            keyPrefix: "mobile backups",
+            accessKeyID: "test-access",
+            secretAccessKey: "test-secret",
+            sessionToken: "test-session-token"
+        )
+        let now = try #require(ISO8601DateFormatter().date(from: "2024-05-15T12:34:56Z"))
+        var capturedRequest: URLRequest?
+        var capturedFileURL: URL?
+
+        let result = try await SyncPackageUploadService.uploadSnapshot(
+            fileURL: fileURL,
+            suggestedFileName: "encrypted.elsbackup",
+            s3: configuration,
+            now: now,
+            transport: { request, bodyFileURL in
+                capturedRequest = request
+                capturedFileURL = bodyFileURL
+                let response = try #require(
+                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (Data(), response)
+            }
+        )
+
+        let payloadHash = SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()
+        #expect(result.statusCode == 200)
+        #expect(capturedRequest?.url?.absoluteString == "https://abc123.r2.cloudflarestorage.com/etos-bucket/mobile%20backups/encrypted.elsbackup")
+        #expect(capturedRequest?.httpMethod == "PUT")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "x-amz-content-sha256") == payloadHash)
+        #expect(capturedRequest?.value(forHTTPHeaderField: "x-amz-date") == "20240515T123456Z")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "x-amz-security-token") == "test-session-token")
+        let authorization = try #require(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
+        #expect(authorization.contains("AWS4-HMAC-SHA256 Credential=test-access/20240515/auto/s3/aws4_request"))
+        #expect(authorization.contains("SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-security-token"))
+        #expect(authorization.contains("Signature="))
+        #expect(capturedFileURL == fileURL)
+    }
+
+    @Test("S3 兼容上传缺少凭据时会在发送前报错")
+    func testS3UploadSnapshotRequiresCredentials() async throws {
+        let endpoint = try #require(URL(string: "https://s3.us-east-1.amazonaws.com"))
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("s3-invalid-\(UUID().uuidString).elsbackup")
+        try Data("backup".utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        do {
+            _ = try await SyncPackageUploadService.uploadSnapshot(
+                fileURL: fileURL,
+                s3: S3CompatibleUploadConfiguration(
+                    endpoint: endpoint,
+                    region: "us-east-1",
+                    bucket: "etos-bucket",
+                    accessKeyID: "test-access",
+                    secretAccessKey: ""
+                ),
+                transport: { _, _ in
+                    Issue.record("缺少 Secret Access Key 时不应发送请求。")
+                    let response = try #require(
+                        HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                    )
+                    return (Data(), response)
+                }
+            )
+            Issue.record("预期应抛出 invalidS3Configuration。")
+        } catch let error as SyncPackageUploadError {
+            switch error {
+            case .invalidS3Configuration(let reason):
+                #expect(reason == NSLocalizedString("请填写 Secret Access Key。", comment: ""))
+            default:
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+            }
+        }
     }
 
     @Test("非 2xx 响应会抛出状态码错误")

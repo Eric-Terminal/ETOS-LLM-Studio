@@ -62,6 +62,12 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case cloudSyncEnabled = "cloudSync.enabled"
     case cloudSyncAutoSyncEnabled = "cloudSync.autoSyncEnabled"
     case syncBackupUploadEndpoint = "sync.backup.uploadEndpoint"
+    case syncBackupS3Region = "sync.backup.s3.region"
+    case syncBackupS3Bucket = "sync.backup.s3.bucket"
+    case syncBackupS3KeyPrefix = "sync.backup.s3.keyPrefix"
+    case syncBackupS3AccessKeyID = "sync.backup.s3.accessKeyID"
+    case syncBackupS3SecretAccessKey = "sync.backup.s3.secretAccessKey"
+    case syncBackupS3SessionToken = "sync.backup.s3.sessionToken"
     case syncBackupCreateOnLaunch = "sync.backup.createOnLaunch"
     case modelOrderRunnableModels = "modelOrder.runnableModels"
     case selectedRunnableModelID = "selectedRunnableModelID"
@@ -188,8 +194,15 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .appLockBiometricEnabled,
              .databaseEncryptionEnabled:
             return .bool(false)
-        case .syncBackupUploadEndpoint:
+        case .syncBackupUploadEndpoint,
+             .syncBackupS3Bucket,
+             .syncBackupS3KeyPrefix,
+             .syncBackupS3AccessKeyID,
+             .syncBackupS3SecretAccessKey,
+             .syncBackupS3SessionToken:
             return .text("")
+        case .syncBackupS3Region:
+            return .text("auto")
         case .modelOrderRunnableModels:
             return .text("[]")
         case .selectedRunnableModelID,

@@ -132,6 +132,12 @@ public final class AppConfigStore: ObservableObject {
     @Published public var cloudSyncEnabled: Bool { didSet { write(.cloudSyncEnabled, cloudSyncEnabled) } }
     @Published public var cloudSyncAutoSyncEnabled: Bool { didSet { write(.cloudSyncAutoSyncEnabled, cloudSyncAutoSyncEnabled) } }
     @Published public var syncBackupUploadEndpoint: String { didSet { write(.syncBackupUploadEndpoint, syncBackupUploadEndpoint) } }
+    @Published public var syncBackupS3Region: String { didSet { write(.syncBackupS3Region, syncBackupS3Region) } }
+    @Published public var syncBackupS3Bucket: String { didSet { write(.syncBackupS3Bucket, syncBackupS3Bucket) } }
+    @Published public var syncBackupS3KeyPrefix: String { didSet { write(.syncBackupS3KeyPrefix, syncBackupS3KeyPrefix) } }
+    @Published public var syncBackupS3AccessKeyID: String { didSet { write(.syncBackupS3AccessKeyID, syncBackupS3AccessKeyID) } }
+    @Published public var syncBackupS3SecretAccessKey: String { didSet { write(.syncBackupS3SecretAccessKey, syncBackupS3SecretAccessKey) } }
+    @Published public var syncBackupS3SessionToken: String { didSet { write(.syncBackupS3SessionToken, syncBackupS3SessionToken) } }
     @Published public var syncBackupCreateOnLaunch: Bool { didSet { write(.syncBackupCreateOnLaunch, syncBackupCreateOnLaunch) } }
     @Published public var appLockEnabled: Bool { didSet { write(.appLockEnabled, appLockEnabled) } }
     @Published public var appLockTimeoutSeconds: Int { didSet { write(.appLockTimeoutSeconds, appLockTimeoutSeconds) } }
@@ -241,6 +247,12 @@ public final class AppConfigStore: ObservableObject {
         cloudSyncEnabled = Self.boolValue(.cloudSyncEnabled, userDefaults: userDefaults)
         cloudSyncAutoSyncEnabled = Self.boolValue(.cloudSyncAutoSyncEnabled, userDefaults: userDefaults)
         syncBackupUploadEndpoint = Self.textValue(.syncBackupUploadEndpoint, userDefaults: userDefaults)
+        syncBackupS3Region = Self.textValue(.syncBackupS3Region, userDefaults: userDefaults)
+        syncBackupS3Bucket = Self.textValue(.syncBackupS3Bucket, userDefaults: userDefaults)
+        syncBackupS3KeyPrefix = Self.textValue(.syncBackupS3KeyPrefix, userDefaults: userDefaults)
+        syncBackupS3AccessKeyID = Self.textValue(.syncBackupS3AccessKeyID, userDefaults: userDefaults)
+        syncBackupS3SecretAccessKey = Self.textValue(.syncBackupS3SecretAccessKey, userDefaults: userDefaults)
+        syncBackupS3SessionToken = Self.textValue(.syncBackupS3SessionToken, userDefaults: userDefaults)
         syncBackupCreateOnLaunch = Self.boolValue(.syncBackupCreateOnLaunch, userDefaults: userDefaults)
         appLockEnabled = Self.boolValue(.appLockEnabled, userDefaults: userDefaults)
         appLockTimeoutSeconds = Self.integerValue(.appLockTimeoutSeconds, userDefaults: userDefaults)
@@ -603,6 +615,12 @@ public final class AppConfigStore: ObservableObject {
         case .cloudSyncEnabled: return .bool(cloudSyncEnabled)
         case .cloudSyncAutoSyncEnabled: return .bool(cloudSyncAutoSyncEnabled)
         case .syncBackupUploadEndpoint: return .text(syncBackupUploadEndpoint)
+        case .syncBackupS3Region: return .text(syncBackupS3Region)
+        case .syncBackupS3Bucket: return .text(syncBackupS3Bucket)
+        case .syncBackupS3KeyPrefix: return .text(syncBackupS3KeyPrefix)
+        case .syncBackupS3AccessKeyID: return .text(syncBackupS3AccessKeyID)
+        case .syncBackupS3SecretAccessKey: return .text(syncBackupS3SecretAccessKey)
+        case .syncBackupS3SessionToken: return .text(syncBackupS3SessionToken)
         case .syncBackupCreateOnLaunch: return .bool(syncBackupCreateOnLaunch)
         case .modelOrderRunnableModels,
              .selectedRunnableModelID,
@@ -819,6 +837,12 @@ public final class AppConfigStore: ObservableObject {
     private func setText(_ value: String, for key: AppConfigKey) {
         switch key {
         case .syncBackupUploadEndpoint: syncBackupUploadEndpoint = value
+        case .syncBackupS3Region: syncBackupS3Region = value
+        case .syncBackupS3Bucket: syncBackupS3Bucket = value
+        case .syncBackupS3KeyPrefix: syncBackupS3KeyPrefix = value
+        case .syncBackupS3AccessKeyID: syncBackupS3AccessKeyID = value
+        case .syncBackupS3SecretAccessKey: syncBackupS3SecretAccessKey = value
+        case .syncBackupS3SessionToken: syncBackupS3SessionToken = value
         case .modelOrderRunnableModels,
              .selectedRunnableModelID,
              .lastActiveSessionID,

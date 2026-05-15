@@ -81,10 +81,32 @@ struct BackupRestoreView: View {
             }
 
             Section {
-                TextField(NSLocalizedString("https://example.com/upload", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
+                TextField(NSLocalizedString("https://<account>.r2.cloudflarestorage.com", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+
+                TextField(NSLocalizedString("auto 或 us-east-1", comment: ""), text: $appConfig.syncBackupS3Region)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                TextField(NSLocalizedString("存储桶名称", comment: ""), text: $appConfig.syncBackupS3Bucket)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                TextField(NSLocalizedString("备份路径前缀（可选）", comment: ""), text: $appConfig.syncBackupS3KeyPrefix)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                TextField(NSLocalizedString("Access Key ID", comment: ""), text: $appConfig.syncBackupS3AccessKeyID)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                SecureField(NSLocalizedString("Secret Access Key", comment: ""), text: $appConfig.syncBackupS3SecretAccessKey)
+                    .textContentType(.password)
+
+                SecureField(NSLocalizedString("Session Token（可选）", comment: ""), text: $appConfig.syncBackupS3SessionToken)
+                    .textContentType(.password)
 
                 Button {
                     createAndUploadSnapshot()
@@ -95,16 +117,16 @@ struct BackupRestoreView: View {
                             ProgressView()
                                 .padding(.trailing, 8)
                         }
-                        Label(NSLocalizedString("上传到自定义地址", comment: ""), systemImage: "tray.and.arrow.up")
+                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
                             .etFont(.headline)
                         Spacer()
                     }
                 }
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
             } header: {
-                Text(NSLocalizedString("自定义地址上传", comment: ""))
+                Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
             } footer: {
-                Text(NSLocalizedString("会使用上方密码设置生成 .elsbackup，并以 HTTP POST 上传到自定义地址；这不是 iCloud 同步。请仅使用可信的 R2 或自有服务器。", comment: ""))
+                Text(NSLocalizedString("会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。", comment: ""))
             }
 
             Section {
@@ -220,39 +242,43 @@ struct BackupRestoreView: View {
         return true
     }
 
-    private func validatedUploadEndpoint() -> URL? {
+    private func s3UploadConfiguration() -> S3CompatibleUploadConfiguration? {
         let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            errorMessage = NSLocalizedString("请先输入自定义上传地址。", comment: "")
+            errorMessage = NSLocalizedString("请先输入对象存储 Endpoint。", comment: "")
             return nil
         }
         guard let endpoint = URL(string: trimmed),
               let scheme = endpoint.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            errorMessage = NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
+            errorMessage = NSLocalizedString("对象存储 Endpoint 必须是完整的 http/https URL。", comment: "")
             return nil
         }
-        return endpoint
+        return S3CompatibleUploadConfiguration(
+            endpoint: endpoint,
+            region: appConfig.syncBackupS3Region,
+            bucket: appConfig.syncBackupS3Bucket,
+            keyPrefix: appConfig.syncBackupS3KeyPrefix,
+            accessKeyID: appConfig.syncBackupS3AccessKeyID,
+            secretAccessKey: appConfig.syncBackupS3SecretAccessKey,
+            sessionToken: appConfig.syncBackupS3SessionToken
+        )
     }
 
     private func createAndUploadSnapshot() {
         guard validateExportPasswordIfNeeded(),
-              let endpoint = validatedUploadEndpoint() else { return }
+              let uploadConfiguration = s3UploadConfiguration() else { return }
 
         isUploadingSnapshot = true
         statusMessage = nil
         errorMessage = nil
         let password = encryptExport ? exportPassword : nil
         let useStrongPasswordDerivation = useStrongPasswordDerivation
-        let endpointString = endpoint.absoluteString
 
         Task.detached(priority: .userInitiated) {
             do {
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                guard let endpoint = URL(string: endpointString) else {
-                    throw SnapshotUploadError.invalidEndpoint
-                }
 
                 let snapshotURL = try SnapshotBuilder.buildSnapshot()
                 defer { try? FileManager.default.removeItem(at: snapshotURL) }
@@ -266,7 +292,7 @@ struct BackupRestoreView: View {
 
                 let result = try await SyncPackageUploadService.uploadSnapshot(
                     fileURL: snapshotURL,
-                    to: endpoint
+                    s3: uploadConfiguration
                 )
                 await MainActor.run {
                     if password != nil {
@@ -407,16 +433,5 @@ private enum BackupRestoreFileWriter {
             throw writeError
         }
         return destinationURL
-    }
-}
-
-private enum SnapshotUploadError: LocalizedError {
-    case invalidEndpoint
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidEndpoint:
-            return NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
-        }
     }
 }

@@ -3,11 +3,40 @@
 // ============================================================================
 // 同步数据包上传服务
 // - 将导出的 JSON 数据包通过 HTTP POST 上传到指定地址
-// - 将离线 .elsbackup 快照以二进制文件上传到指定地址
+// - 将离线 .elsbackup 快照上传到旧版 HTTP 端点或 S3 兼容对象存储
 // - 统一处理状态码与错误信息，供 iOS/watchOS 复用
 // ============================================================================
 
 import Foundation
+import CryptoKit
+
+public struct S3CompatibleUploadConfiguration: Equatable, Sendable {
+    public let endpoint: URL
+    public let region: String
+    public let bucket: String
+    public let keyPrefix: String
+    public let accessKeyID: String
+    public let secretAccessKey: String
+    public let sessionToken: String?
+
+    public init(
+        endpoint: URL,
+        region: String,
+        bucket: String,
+        keyPrefix: String = "",
+        accessKeyID: String,
+        secretAccessKey: String,
+        sessionToken: String? = nil
+    ) {
+        self.endpoint = endpoint
+        self.region = region
+        self.bucket = bucket
+        self.keyPrefix = keyPrefix
+        self.accessKeyID = accessKeyID
+        self.secretAccessKey = secretAccessKey
+        self.sessionToken = sessionToken
+    }
+}
 
 public struct SyncPackageUploadResult: Sendable {
     public let statusCode: Int
@@ -22,6 +51,8 @@ public struct SyncPackageUploadResult: Sendable {
 public enum SyncPackageUploadError: LocalizedError {
     case invalidHTTPResponse
     case unexpectedStatusCode(Int, String?)
+    case invalidS3Configuration(String)
+    case fileHashFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -36,6 +67,10 @@ public enum SyncPackageUploadError: LocalizedError {
                 )
             }
             return String(format: NSLocalizedString("上传失败：HTTP %d。", comment: ""), statusCode)
+        case .invalidS3Configuration(let reason):
+            return reason
+        case .fileHashFailed(let reason):
+            return String(format: NSLocalizedString("计算备份文件校验值失败：%@", comment: ""), reason)
         }
     }
 }
@@ -142,7 +177,7 @@ public enum SyncPackageUploadService {
         )
     }
 
-    /// 上传离线快照文件，供 R2 或自有对象存储端点接收。
+    /// 旧版 HTTP POST 快照上传，保留给测试与内部兼容路径。
     public static func uploadSnapshot(
         fileURL: URL,
         suggestedFileName: String? = nil,
@@ -178,9 +213,51 @@ public enum SyncPackageUploadService {
             responseBodyPreview: preview
         )
     }
+
+    /// 使用 S3 Signature V4 上传离线快照，兼容 AWS S3、Cloudflare R2 与常见 S3 API 对象存储。
+    public static func uploadSnapshot(
+        fileURL: URL,
+        suggestedFileName: String? = nil,
+        s3 configuration: S3CompatibleUploadConfiguration,
+        timeout: TimeInterval = 30,
+        now: Date = Date(),
+        transport: FileTransport? = nil
+    ) async throws -> SyncPackageUploadResult {
+        let fileName = suggestedFileName ?? fileURL.lastPathComponent
+        let request = try makeS3UploadRequest(
+            fileURL: fileURL,
+            suggestedFileName: fileName.isEmpty ? "ETOS-Snapshot.\(SnapshotBuilder.fileExtension)" : fileName,
+            configuration: configuration,
+            timeout: timeout,
+            now: now
+        )
+
+        let sender = transport ?? { request, fileURL in
+            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+        }
+        let (responseData, response) = try await sender(request, fileURL)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncPackageUploadError.invalidHTTPResponse
+        }
+
+        let preview = responsePreview(from: responseData)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
+        }
+
+        return SyncPackageUploadResult(
+            statusCode: httpResponse.statusCode,
+            responseBodyPreview: preview
+        )
+    }
 }
 
 private extension SyncPackageUploadService {
+    static let s3Algorithm = "AWS4-HMAC-SHA256"
+    static let s3Service = "s3"
+    static let s3RequestTerminator = "aws4_request"
+
     static func makeUploadRequest(
         suggestedFileName: String,
         endpoint: URL,
@@ -200,6 +277,283 @@ private extension SyncPackageUploadService {
         return request
     }
 
+    static func makeS3UploadRequest(
+        fileURL: URL,
+        suggestedFileName: String,
+        configuration: S3CompatibleUploadConfiguration,
+        timeout: TimeInterval,
+        now: Date
+    ) throws -> URLRequest {
+        let normalized = try normalizedS3Configuration(configuration)
+        let objectKey = makeObjectKey(prefix: normalized.keyPrefix, suggestedFileName: suggestedFileName)
+        let uploadURL = try makeS3PathStyleURL(
+            endpoint: normalized.endpoint,
+            bucket: normalized.bucket,
+            objectKey: objectKey
+        )
+        let payloadHash = try sha256Hex(forFileAt: fileURL)
+        let amzDate = s3Timestamp(from: now)
+        let dateStamp = s3DateStamp(from: now)
+        let contentType = "application/octet-stream"
+
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "PUT"
+        request.timeoutInterval = timeout
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue(payloadHash, forHTTPHeaderField: "x-amz-content-sha256")
+        request.setValue(amzDate, forHTTPHeaderField: "x-amz-date")
+        if let sessionToken = normalized.sessionToken {
+            request.setValue(sessionToken, forHTTPHeaderField: "x-amz-security-token")
+        }
+
+        let authorization = try s3AuthorizationHeader(
+            method: "PUT",
+            url: uploadURL,
+            contentType: contentType,
+            payloadHash: payloadHash,
+            amzDate: amzDate,
+            dateStamp: dateStamp,
+            configuration: normalized
+        )
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    static func normalizedS3Configuration(
+        _ configuration: S3CompatibleUploadConfiguration
+    ) throws -> S3CompatibleUploadConfiguration {
+        guard let scheme = configuration.endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              configuration.endpoint.host?.isEmpty == false else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("对象存储 Endpoint 必须是完整的 http/https URL。", comment: "")
+            )
+        }
+        guard configuration.endpoint.query == nil,
+              configuration.endpoint.fragment == nil else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("对象存储 Endpoint 不能包含查询参数或片段。", comment: "")
+            )
+        }
+
+        let region = configuration.region.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !region.isEmpty else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("请填写对象存储 Region；R2 通常填写 auto，AWS S3 填写实际区域。", comment: "")
+            )
+        }
+
+        let bucket = configuration.bucket.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !bucket.isEmpty else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("请填写存储桶名称。", comment: "")
+            )
+        }
+
+        let accessKeyID = configuration.accessKeyID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !accessKeyID.isEmpty else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("请填写 Access Key ID。", comment: "")
+            )
+        }
+
+        let secretAccessKey = configuration.secretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !secretAccessKey.isEmpty else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("请填写 Secret Access Key。", comment: "")
+            )
+        }
+
+        let sessionToken = configuration.sessionToken?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        return S3CompatibleUploadConfiguration(
+            endpoint: configuration.endpoint,
+            region: region,
+            bucket: bucket,
+            keyPrefix: configuration.keyPrefix.trimmingCharacters(in: .whitespacesAndNewlines),
+            accessKeyID: accessKeyID,
+            secretAccessKey: secretAccessKey,
+            sessionToken: sessionToken
+        )
+    }
+
+    static func makeObjectKey(prefix: String, suggestedFileName: String) -> String {
+        let cleanedPrefix = prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let cleanedFileName = suggestedFileName.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !cleanedPrefix.isEmpty else { return cleanedFileName }
+        return "\(cleanedPrefix)/\(cleanedFileName)"
+    }
+
+    static func makeS3PathStyleURL(endpoint: URL, bucket: String, objectKey: String) throws -> URL {
+        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("对象存储 Endpoint 必须是完整的 http/https URL。", comment: "")
+            )
+        }
+
+        let basePath = endpoint.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let rawPath = [basePath, bucket, objectKey]
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+        components.percentEncodedPath = "/" + rawPath
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .map { s3URIEncode(String($0)) }
+            .joined(separator: "/")
+        components.percentEncodedQuery = nil
+        components.fragment = nil
+
+        guard let url = components.url else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("无法生成对象存储上传地址。", comment: "")
+            )
+        }
+        return url
+    }
+
+    static func s3AuthorizationHeader(
+        method: String,
+        url: URL,
+        contentType: String,
+        payloadHash: String,
+        amzDate: String,
+        dateStamp: String,
+        configuration: S3CompatibleUploadConfiguration
+    ) throws -> String {
+        let credentialScope = "\(dateStamp)/\(configuration.region)/\(s3Service)/\(s3RequestTerminator)"
+        var headers = [
+            "content-type": contentType,
+            "host": try hostHeaderValue(for: url),
+            "x-amz-content-sha256": payloadHash,
+            "x-amz-date": amzDate
+        ]
+        if let sessionToken = configuration.sessionToken {
+            headers["x-amz-security-token"] = sessionToken
+        }
+
+        let sortedHeaderNames = headers.keys.sorted()
+        let canonicalHeaders = sortedHeaderNames
+            .map { "\($0):\(normalizedHeaderValue(headers[$0] ?? ""))" }
+            .joined(separator: "\n") + "\n"
+        let signedHeaders = sortedHeaderNames.joined(separator: ";")
+        let canonicalRequest = [
+            method,
+            url.percentEncodedPath.isEmpty ? "/" : url.percentEncodedPath,
+            url.percentEncodedQuery ?? "",
+            canonicalHeaders,
+            signedHeaders,
+            payloadHash
+        ].joined(separator: "\n")
+        let stringToSign = [
+            s3Algorithm,
+            amzDate,
+            credentialScope,
+            sha256Hex(Data(canonicalRequest.utf8))
+        ].joined(separator: "\n")
+        let signature = s3Signature(
+            stringToSign: stringToSign,
+            secretAccessKey: configuration.secretAccessKey,
+            dateStamp: dateStamp,
+            region: configuration.region
+        )
+
+        return "\(s3Algorithm) Credential=\(configuration.accessKeyID)/\(credentialScope), SignedHeaders=\(signedHeaders), Signature=\(signature)"
+    }
+
+    static func s3Signature(
+        stringToSign: String,
+        secretAccessKey: String,
+        dateStamp: String,
+        region: String
+    ) -> String {
+        let dateKey = hmacSHA256(Data(dateStamp.utf8), key: Data("AWS4\(secretAccessKey)".utf8))
+        let regionKey = hmacSHA256(Data(region.utf8), key: dateKey)
+        let serviceKey = hmacSHA256(Data(s3Service.utf8), key: regionKey)
+        let signingKey = hmacSHA256(Data(s3RequestTerminator.utf8), key: serviceKey)
+        return hexString(hmacSHA256(Data(stringToSign.utf8), key: signingKey))
+    }
+
+    static func hmacSHA256(_ data: Data, key: Data) -> Data {
+        let symmetricKey = SymmetricKey(data: key)
+        let digest = HMAC<SHA256>.authenticationCode(for: data, using: symmetricKey)
+        return Data(digest)
+    }
+
+    static func sha256Hex(_ data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return hexString(Data(digest))
+    }
+
+    static func sha256Hex(forFileAt fileURL: URL) throws -> String {
+        do {
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? handle.close() }
+            var hasher = SHA256()
+            while true {
+                let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
+                if chunk.isEmpty { break }
+                hasher.update(data: chunk)
+            }
+            return hexString(Data(hasher.finalize()))
+        } catch {
+            throw SyncPackageUploadError.fileHashFailed(error.localizedDescription)
+        }
+    }
+
+    static func hexString(_ data: Data) -> String {
+        data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func s3URIEncode(_ value: String) -> String {
+        let unreserved = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~".utf8)
+        var encoded = ""
+        for byte in value.utf8 {
+            if unreserved.contains(byte) {
+                encoded.append(Character(UnicodeScalar(byte)))
+            } else {
+                encoded += String(format: "%%%02X", byte)
+            }
+        }
+        return encoded
+    }
+
+    static func hostHeaderValue(for url: URL) throws -> String {
+        guard var host = url.host?.lowercased(), !host.isEmpty else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("对象存储 Endpoint 必须包含主机名。", comment: "")
+            )
+        }
+        if let port = url.port,
+           !((url.scheme == "https" && port == 443) || (url.scheme == "http" && port == 80)) {
+            host += ":\(port)"
+        }
+        return host
+    }
+
+    static func normalizedHeaderValue(_ value: String) -> String {
+        value
+            .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" })
+            .joined(separator: " ")
+    }
+
+    static func s3Timestamp(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        return formatter.string(from: date)
+    }
+
+    static func s3DateStamp(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter.string(from: date)
+    }
+
     static func responsePreview(from data: Data, maxBytes: Int = 256) -> String? {
         guard !data.isEmpty else { return nil }
         let clipped = data.prefix(maxBytes)
@@ -209,5 +563,11 @@ private extension SyncPackageUploadService {
             return nil
         }
         return text
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

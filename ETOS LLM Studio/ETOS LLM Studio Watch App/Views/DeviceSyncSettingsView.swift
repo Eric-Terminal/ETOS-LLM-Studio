@@ -77,6 +77,53 @@ struct DeviceSyncSettingsView: View {
                     }
                 }
 
+                TextField(
+                    NSLocalizedString("https://<account>.r2.cloudflarestorage.com", comment: ""),
+                    text: $appConfig.syncBackupUploadEndpoint.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("auto 或 us-east-1", comment: ""),
+                    text: $appConfig.syncBackupS3Region.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("存储桶名称", comment: ""),
+                    text: $appConfig.syncBackupS3Bucket.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("备份路径前缀（可选）", comment: ""),
+                    text: $appConfig.syncBackupS3KeyPrefix.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("Access Key ID", comment: ""),
+                    text: $appConfig.syncBackupS3AccessKeyID.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                SecureField(
+                    NSLocalizedString("Secret Access Key", comment: ""),
+                    text: $appConfig.syncBackupS3SecretAccessKey.watchKeyboardNewlineBinding()
+                )
+                .textContentType(.password)
+
+                SecureField(
+                    NSLocalizedString("Session Token（可选）", comment: ""),
+                    text: $appConfig.syncBackupS3SessionToken.watchKeyboardNewlineBinding()
+                )
+                .textContentType(.password)
+
                 Button {
                     uploadSnapshotFile()
                 } label: {
@@ -86,13 +133,13 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label(NSLocalizedString("上传到自定义地址", comment: ""), systemImage: "tray.and.arrow.up")
+                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
                         Spacer()
                     }
                 }
                 .disabled(isSnapshotBusy)
 
-                Text(NSLocalizedString("会先生成 .elsbackup，再以 HTTP POST 上传到已配置的自定义地址；这不是 iCloud 同步。", comment: ""))
+                Text(NSLocalizedString("会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -428,36 +475,18 @@ struct DeviceSyncSettingsView: View {
 
     private func uploadSnapshotFile() {
         guard validateSnapshotPasswordIfNeeded() else { return }
-        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            snapshotErrorMessage = NSLocalizedString("请先输入自定义上传地址。", comment: "")
-            return
-        }
-        guard let endpoint = URL(string: trimmed),
-              let scheme = endpoint.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            snapshotErrorMessage = NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
-            return
-        }
+        guard let uploadConfiguration = s3UploadConfiguration() else { return }
 
         isUploadingSnapshot = true
         snapshotErrorMessage = nil
         snapshotStatusMessage = nil
         let password = encryptSnapshot ? snapshotPassword : nil
         let useStrongDerivation = useStrongSnapshotPasswordDerivation
-        let endpointString = endpoint.absoluteString
 
         Task.detached(priority: .userInitiated) {
             do {
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                guard let endpoint = URL(string: endpointString) else {
-                    await MainActor.run {
-                        isUploadingSnapshot = false
-                        snapshotErrorMessage = NSLocalizedString("自定义上传地址格式无效，请输入完整的 http/https URL。", comment: "")
-                    }
-                    return
-                }
 
                 let fileURL = try SnapshotBuilder.buildSnapshot()
                 defer { try? FileManager.default.removeItem(at: fileURL) }
@@ -469,7 +498,7 @@ struct DeviceSyncSettingsView: View {
                     )
                 }
 
-                let result = try await SyncPackageUploadService.uploadSnapshot(fileURL: fileURL, to: endpoint)
+                let result = try await SyncPackageUploadService.uploadSnapshot(fileURL: fileURL, s3: uploadConfiguration)
                 await MainActor.run {
                     if password != nil {
                         snapshotPassword = ""
@@ -492,6 +521,29 @@ struct DeviceSyncSettingsView: View {
                 }
             }
         }
+    }
+
+    private func s3UploadConfiguration() -> S3CompatibleUploadConfiguration? {
+        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            snapshotErrorMessage = NSLocalizedString("请先输入对象存储 Endpoint。", comment: "")
+            return nil
+        }
+        guard let endpoint = URL(string: trimmed),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            snapshotErrorMessage = NSLocalizedString("对象存储 Endpoint 必须是完整的 http/https URL。", comment: "")
+            return nil
+        }
+        return S3CompatibleUploadConfiguration(
+            endpoint: endpoint,
+            region: appConfig.syncBackupS3Region,
+            bucket: appConfig.syncBackupS3Bucket,
+            keyPrefix: appConfig.syncBackupS3KeyPrefix,
+            accessKeyID: appConfig.syncBackupS3AccessKeyID,
+            secretAccessKey: appConfig.syncBackupS3SecretAccessKey,
+            sessionToken: appConfig.syncBackupS3SessionToken
+        )
     }
 
     private func downloadSnapshotForRestore() {
