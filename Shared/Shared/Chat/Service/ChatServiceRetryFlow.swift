@@ -114,7 +114,8 @@ extension ChatService {
                 requestedAt: retryRequestedAt,
                 responseGroupID: responseAttempt.groupID,
                 responseAttemptID: responseAttempt.attemptID,
-                responseAttemptIndex: responseAttempt.attemptIndex
+                responseAttemptIndex: responseAttempt.attemptIndex,
+                selectedResponseAttemptID: responseAttempt.attemptID
             )
             insertionIndex = responseRoundEndIndex(in: updatedMessages, anchorUserIndex: anchorUserIndex)
         }

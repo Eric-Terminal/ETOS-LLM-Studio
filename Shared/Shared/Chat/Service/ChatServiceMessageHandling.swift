@@ -124,7 +124,8 @@ extension ChatService {
                         fullErrorContent: fullContent.map { "重试失败\n\n\($0)" },
                         responseGroupID: loadingMessage.responseGroupID,
                         responseAttemptID: loadingMessage.responseAttemptID,
-                        responseAttemptIndex: loadingMessage.responseAttemptIndex
+                        responseAttemptIndex: loadingMessage.responseAttemptIndex,
+                        selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID ?? loadingMessage.responseAttemptID
                     )
                 }
 
@@ -144,7 +145,8 @@ extension ChatService {
                     fullErrorContent: fullContent,
                     responseGroupID: loadingMessage.responseGroupID,
                     responseAttemptID: loadingMessage.responseAttemptID,
-                    responseAttemptIndex: loadingMessage.responseAttemptIndex
+                    responseAttemptIndex: loadingMessage.responseAttemptIndex,
+                    selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID ?? loadingMessage.responseAttemptID
                 )
                 logger.error("错误消息已添加: \(content)")
             }

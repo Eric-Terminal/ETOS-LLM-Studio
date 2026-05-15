@@ -437,6 +437,70 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("删除用户锚点后回复版本仍保持折叠展示")
+    func testDeleteAnchorUserKeepsResponseAttemptsGrouped() async throws {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证用户锚点删除行为。")
+            await cleanup()
+            return
+        }
+
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let userMessage = ChatMessage(
+            role: .user,
+            content: "请重新生成",
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let firstAssistant = ChatMessage(
+            role: .assistant,
+            content: "第一版回复",
+            responseGroupID: userMessage.id,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0,
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let secondAssistant = ChatMessage(
+            role: .assistant,
+            content: "第二版回复",
+            responseGroupID: userMessage.id,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1,
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let nextUser = ChatMessage(role: .user, content: "下一轮")
+        chatService.updateMessages(
+            [userMessage, firstAssistant, secondAssistant, nextUser],
+            for: sessionID
+        )
+
+        chatService.deleteMessage(userMessage)
+
+        let storedMessages = chatService.messagesForSessionSubject.value
+        #expect(storedMessages.map(\.id) == [firstAssistant.id, secondAssistant.id, nextUser.id])
+        #expect(ChatResponseAttemptSupport.visibleMessages(from: storedMessages).map(\.id) == [
+            secondAssistant.id,
+            nextUser.id
+        ])
+
+        let switchedMessages = try #require(
+            ChatResponseAttemptSupport.selectPreviousAttempt(for: secondAssistant, in: storedMessages)
+        )
+        #expect(ChatResponseAttemptSupport.visibleMessages(from: switchedMessages).map(\.id) == [
+            firstAssistant.id,
+            nextUser.id
+        ])
+        #expect(
+            switchedMessages
+                .filter { $0.responseGroupID == userMessage.id }
+                .allSatisfy { $0.selectedResponseAttemptID == firstAttemptID }
+        )
+
+        await cleanup()
+    }
+
     @Test("删除所有回复版本会清理同组全部尝试")
     func testDeleteAllResponseAttemptVersionsRemovesWholeGroup() async {
         await cleanup()

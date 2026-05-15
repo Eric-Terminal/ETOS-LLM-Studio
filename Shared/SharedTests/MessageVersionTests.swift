@@ -315,6 +315,69 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(firstInfo.currentAttemptID, firstAttemptID)
         XCTAssertEqual(firstInfo.currentIndex, 0)
         XCTAssertEqual(firstInfo.totalCount, 2)
+        XCTAssertTrue(
+            switchedMessages
+                .filter { $0.responseGroupID == userID }
+                .allSatisfy { $0.selectedResponseAttemptID == firstAttemptID }
+        )
+    }
+
+    /// 测试用户锚点被删除后，回复尝试仍然只展示一个当前版本
+    func testResponseAttemptVisibleMessagesWithoutAnchorKeepsLatestAttempt() throws {
+        let groupID = UUID()
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let firstToolCall = ChatMessage(
+            role: .assistant,
+            content: "",
+            responseGroupID: groupID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let firstToolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            responseGroupID: groupID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let firstFinal = ChatMessage(
+            role: .assistant,
+            content: "第一次回复",
+            responseGroupID: groupID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondFinal = ChatMessage(
+            role: .assistant,
+            content: "第二次回复",
+            responseGroupID: groupID,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1
+        )
+        let nextUser = ChatMessage(role: .user, content: "下一轮对话")
+        let messages = [firstToolCall, firstToolResult, firstFinal, secondFinal, nextUser]
+
+        XCTAssertEqual(ChatResponseAttemptSupport.visibleMessages(from: messages).map(\.id), [secondFinal.id, nextUser.id])
+        XCTAssertNil(ChatResponseAttemptSupport.versionInfo(for: firstFinal, in: messages))
+
+        let secondInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: secondFinal, in: messages))
+        XCTAssertEqual(secondInfo.currentAttemptID, secondAttemptID)
+        XCTAssertEqual(secondInfo.currentIndex, 1)
+        XCTAssertEqual(secondInfo.totalCount, 2)
+
+        let switchedMessages = try XCTUnwrap(ChatResponseAttemptSupport.selectPreviousAttempt(for: secondFinal, in: messages))
+        XCTAssertEqual(ChatResponseAttemptSupport.visibleMessages(from: switchedMessages).map(\.id), [
+            firstToolCall.id,
+            firstToolResult.id,
+            firstFinal.id,
+            nextUser.id
+        ])
+        XCTAssertTrue(
+            switchedMessages
+                .filter { $0.responseGroupID == groupID }
+                .allSatisfy { $0.selectedResponseAttemptID == firstAttemptID }
+        )
     }
 
     /// 测试回复轮次只在同一个 attempt 内合并连续助手气泡

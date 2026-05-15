@@ -148,6 +148,7 @@ extension ChatService {
         message.responseGroupID = metadata.groupID
         message.responseAttemptID = metadata.attemptID
         message.responseAttemptIndex = metadata.attemptIndex
+        message.selectedResponseAttemptID = metadata.attemptID
     }
 
     func insertingResponseAttemptMessages(

@@ -149,7 +149,9 @@ public enum ChatResponseAttemptSupport {
 
     public static func selectAttempt(attemptID: UUID, groupID: UUID, in messages: [ChatMessage]) -> [ChatMessage] {
         messages.map { message in
-            guard message.id == groupID, message.role == .user else { return message }
+            let shouldStoreSelection = (message.id == groupID && message.role == .user)
+                || message.responseGroupID == groupID
+            guard shouldStoreSelection else { return message }
             var updated = message
             updated.selectedResponseAttemptID = attemptID
             return updated
@@ -161,7 +163,7 @@ public enum ChatResponseAttemptSupport {
         guard attempts.indices.contains(index) else { return nil }
 
         let targetAttemptID = attempts[index]
-        let selectedAttemptID = messages.first { $0.id == groupID && $0.role == .user }?.selectedResponseAttemptID
+        let selectedAttemptID = selectedAttemptID(for: groupID, in: messages)
         let remainingAttempts = attempts.filter { $0 != targetAttemptID }
         var updatedMessages = messages.filter {
             !($0.responseGroupID == groupID && $0.responseAttemptID == targetAttemptID)
@@ -187,34 +189,52 @@ public enum ChatResponseAttemptSupport {
     }
 
     public static func orderedAttemptIDs(for groupID: UUID, in messages: [ChatMessage]) -> [UUID] {
-        struct AttemptOrder {
-            let id: UUID
-            let explicitIndex: Int
-            let firstPosition: Int
-        }
-
         var orderByID: [UUID: AttemptOrder] = [:]
         for (position, message) in messages.enumerated() {
             guard message.responseGroupID == groupID,
                   let attemptID = message.responseAttemptID else {
                 continue
             }
-            let explicitIndex = message.responseAttemptIndex ?? Int.max
-            if let existing = orderByID[attemptID] {
-                orderByID[attemptID] = AttemptOrder(
-                    id: attemptID,
-                    explicitIndex: min(existing.explicitIndex, explicitIndex),
-                    firstPosition: min(existing.firstPosition, position)
-                )
-            } else {
-                orderByID[attemptID] = AttemptOrder(
-                    id: attemptID,
-                    explicitIndex: explicitIndex,
-                    firstPosition: position
-                )
-            }
+            recordAttemptOrder(
+                attemptID: attemptID,
+                explicitIndex: message.responseAttemptIndex,
+                position: position,
+                in: &orderByID
+            )
         }
 
+        return orderedAttemptIDs(from: orderByID)
+    }
+
+    private struct AttemptOrder {
+        let id: UUID
+        let explicitIndex: Int
+        let firstPosition: Int
+    }
+
+    private static func recordAttemptOrder(
+        attemptID: UUID,
+        explicitIndex: Int?,
+        position: Int,
+        in orderByID: inout [UUID: AttemptOrder]
+    ) {
+        let normalizedIndex = explicitIndex ?? Int.max
+        if let existing = orderByID[attemptID] {
+            orderByID[attemptID] = AttemptOrder(
+                id: attemptID,
+                explicitIndex: min(existing.explicitIndex, normalizedIndex),
+                firstPosition: min(existing.firstPosition, position)
+            )
+        } else {
+            orderByID[attemptID] = AttemptOrder(
+                id: attemptID,
+                explicitIndex: normalizedIndex,
+                firstPosition: position
+            )
+        }
+    }
+
+    private static func orderedAttemptIDs(from orderByID: [UUID: AttemptOrder]) -> [UUID] {
         return orderByID.values
             .sorted {
                 if $0.explicitIndex != $1.explicitIndex {
@@ -230,11 +250,46 @@ public enum ChatResponseAttemptSupport {
     }
 
     private static func selectedAttemptIDsByGroup(in messages: [ChatMessage]) -> [UUID: UUID] {
-        var selectedByGroup: [UUID: UUID] = [:]
-        for message in messages where message.role == .user {
-            if let selectedAttemptID = message.selectedResponseAttemptID {
-                selectedByGroup[message.id] = selectedAttemptID
+        var anchorSelectionByGroup: [UUID: UUID] = [:]
+        var storedSelectionByGroup: [UUID: UUID] = [:]
+        var orderByGroup: [UUID: [UUID: AttemptOrder]] = [:]
+
+        for (position, message) in messages.enumerated() {
+            if message.role == .user,
+               let selectedAttemptID = message.selectedResponseAttemptID {
+                anchorSelectionByGroup[message.id] = selectedAttemptID
             }
+
+            guard let groupID = message.responseGroupID else { continue }
+            if (message.role == .assistant || message.role == .error),
+               let selectedAttemptID = message.selectedResponseAttemptID {
+                storedSelectionByGroup[groupID] = selectedAttemptID
+            }
+
+            guard let attemptID = message.responseAttemptID else { continue }
+            var orderByID = orderByGroup[groupID, default: [:]]
+            recordAttemptOrder(
+                attemptID: attemptID,
+                explicitIndex: message.responseAttemptIndex,
+                position: position,
+                in: &orderByID
+            )
+            orderByGroup[groupID] = orderByID
+        }
+
+        var selectedByGroup = anchorSelectionByGroup
+        for (groupID, selectedAttemptID) in storedSelectionByGroup {
+            selectedByGroup[groupID] = selectedAttemptID
+        }
+
+        for (groupID, orderByID) in orderByGroup {
+            let attempts = orderedAttemptIDs(from: orderByID)
+            guard let fallbackAttemptID = attempts.last else { continue }
+            if let selectedAttemptID = selectedByGroup[groupID],
+               attempts.contains(selectedAttemptID) {
+                continue
+            }
+            selectedByGroup[groupID] = fallbackAttemptID
         }
         return selectedByGroup
     }

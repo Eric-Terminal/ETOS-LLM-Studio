@@ -189,7 +189,8 @@ extension ChatService {
             requestedAt: requestTimestamp,
             responseGroupID: responseAttempt.groupID,
             responseAttemptID: responseAttempt.attemptID,
-            responseAttemptIndex: responseAttempt.attemptIndex
+            responseAttemptIndex: responseAttempt.attemptIndex,
+            selectedResponseAttemptID: responseAttempt.attemptID
         ) // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
 
