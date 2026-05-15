@@ -417,8 +417,6 @@ class ChatViewModel: ObservableObject {
         // 监听应用返回前台事件，以重置可能卡住的状态
         NotificationCenter.default.addObserver(self, selector: #selector(handleDidBecomeActive), name: WKApplication.didBecomeActiveNotification, object: nil)
 
-        // 自动轮换背景逻辑
-        rotateBackgroundImageIfNeeded()
         refreshBlurredBackgroundImage()
 #if canImport(UserNotifications)
         enforceBackgroundReplyNotificationEnabled()

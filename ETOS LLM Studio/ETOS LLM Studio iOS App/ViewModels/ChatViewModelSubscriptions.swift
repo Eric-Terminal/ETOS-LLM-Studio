@@ -80,6 +80,7 @@ extension ChatViewModel {
         syncConversationSummaryModelSelection()
         syncReasoningSummaryModelSelection()
         syncOCRModelSelection()
+        rotateBackgroundImageIfNeeded()
         reloadGlobalSystemPromptEntries()
         reloadConversationMemoryState()
     }
@@ -93,7 +94,6 @@ extension ChatViewModel {
         DailyPulseDeliveryCoordinator.shared.reloadFromStorage()
         reloadGlobalSystemPromptEntries()
         reloadConversationMemoryState()
-        refreshBackgroundImages()
     }
 
     func reloadGlobalSystemPromptEntries() {
@@ -463,6 +463,7 @@ extension ChatViewModel {
 
     func rotateBackgroundImageIfNeeded() {
         refreshBackgroundImages()
+        guard AppConfigStore.shared.didLoadPersistentStore else { return }
         guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let available = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = available.randomElement() ?? backgroundImages.randomElement() ?? ""
@@ -471,6 +472,10 @@ extension ChatViewModel {
     func refreshBackgroundImages() {
         let images = ConfigLoader.loadBackgroundImages()
         backgroundImages = images
+        guard AppConfigStore.shared.didLoadPersistentStore else {
+            refreshBlurredBackgroundImage()
+            return
+        }
         if !images.contains(currentBackgroundImage) {
             currentBackgroundImage = images.first ?? ""
         }

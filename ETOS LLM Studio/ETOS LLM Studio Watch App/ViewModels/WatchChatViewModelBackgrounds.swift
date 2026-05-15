@@ -22,6 +22,10 @@ extension ChatViewModel {
     func refreshBackgroundImages() {
         let images = ConfigLoader.loadBackgroundImages()
         backgroundImages = images
+        guard AppConfigStore.shared.didLoadPersistentStore else {
+            refreshBlurredBackgroundImage()
+            return
+        }
         if !images.contains(currentBackgroundImage) {
             currentBackgroundImage = images.first ?? ""
         }
@@ -30,6 +34,7 @@ extension ChatViewModel {
 
     func rotateBackgroundImageIfNeeded() {
         refreshBackgroundImages()
+        guard AppConfigStore.shared.didLoadPersistentStore else { return }
         guard enableAutoRotateBackground, !backgroundImages.isEmpty else { return }
         let availableBackgrounds = backgroundImages.filter { $0 != currentBackgroundImage }
         currentBackgroundImage = availableBackgrounds.randomElement() ?? backgroundImages.randomElement() ?? ""

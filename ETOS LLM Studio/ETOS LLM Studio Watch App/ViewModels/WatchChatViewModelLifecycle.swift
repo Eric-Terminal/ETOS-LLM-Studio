@@ -76,6 +76,7 @@ extension ChatViewModel {
         syncConversationSummaryModelSelection()
         syncReasoningSummaryModelSelection()
         syncOCRModelSelection()
+        rotateBackgroundImageIfNeeded()
         reloadGlobalSystemPromptEntries()
         reloadConversationMemoryState()
     }
@@ -89,7 +90,6 @@ extension ChatViewModel {
         DailyPulseDeliveryCoordinator.shared.reloadFromStorage()
         reloadGlobalSystemPromptEntries()
         reloadConversationMemoryState()
-        refreshBackgroundImages()
     }
 
     func reloadGlobalSystemPromptEntries() {

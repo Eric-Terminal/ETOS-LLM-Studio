@@ -366,7 +366,6 @@ final class ChatViewModel: ObservableObject {
         reloadGlobalSystemPromptEntries()
         
         setupSubscriptions()
-        rotateBackgroundImageIfNeeded()
         registerLifecycleObservers()
         refreshBlurredBackgroundImage()
 #if canImport(UserNotifications)
