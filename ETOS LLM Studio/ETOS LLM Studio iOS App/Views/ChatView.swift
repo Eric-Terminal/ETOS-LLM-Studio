@@ -64,6 +64,8 @@ struct ChatView: View {
     @State var scrollDistanceToBottom: CGFloat = 0
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
+    @State var chatScrollTarget: ChatScrollTargetID?
+    @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var needsImmediateBottomSnap: Bool = true
     @State var pendingJumpRequest: MessageJumpRequest?
     @FocusState var composerFocused: Bool
@@ -81,7 +83,6 @@ struct ChatView: View {
         nonmutating set { appConfig.chatPickerPresentationStyle = newValue }
     }
 
-    let scrollBottomAnchorID = "chat-scroll-bottom"
     let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
     let navBarSubtitleFont = UIFont.systemFont(ofSize: 12)
     let navBarVerticalPadding: CGFloat = 8
@@ -94,7 +95,6 @@ struct ChatView: View {
     let modelPickerCornerRadius: CGFloat = 24
     let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
-    let longDistanceScrollAnimationThresholdScreens: CGFloat = 25
     let modelPickerMorphID = "modelPickerMorph"
     let sessionPickerMorphID = "sessionPickerMorph"
     let sessionPickerHeightRatio: CGFloat = 0.6
@@ -308,175 +308,172 @@ struct ChatView: View {
                     .ignoresSafeArea()
                 
                 // Z-Index 1: 消息列表
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ScrollDistanceToBottomObserver { distanceToBottom in
-                                updateScrollToBottomVisibility(distanceToBottom: distanceToBottom)
-                            }
-                            .frame(width: 0, height: 0)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ScrollDistanceToBottomObserver { distanceToBottom in
+                            updateScrollToBottomVisibility(distanceToBottom: distanceToBottom)
+                        }
+                        .frame(width: 0, height: 0)
 
-                            LazyVStack(spacing: 0, pinnedViews: []) {
-                                // 顶部留白（为导航栏留出空间）
-                                Color.clear.frame(height: 8)
+                        LazyVStack(spacing: 0, pinnedViews: []) {
+                            // 顶部留白（为导航栏留出空间）
+                            Color.clear.frame(height: 8)
 
-                                // 历史加载提示
-                                historyBanner
+                            // 历史加载提示
+                            historyBanner
 
-                                // 消息列表
-                                ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
-                                    let message = state.message
-                                    let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
-                                    let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
-                                    let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
-                                    let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
-                                    let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
-                                    let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
-                                    let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
-                                    ChatBubble(
-                                        messageState: state,
-                                        preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
-                                        preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
-                                        isReasoningExpanded: Binding(
-                                            get: { viewModel.reasoningExpandedState[message.id, default: false] },
-                                            set: { viewModel.setReasoningExpanded($0, for: message.id) }
-                                        ),
-                                        isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
-                                        isToolCallsExpanded: Binding(
-                                            get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-                                            set: { viewModel.toolCallsExpandedState[message.id] = $0 }
-                                        ),
-                                        enableMarkdown: viewModel.enableMarkdown,
-                                        enableBackground: viewModel.enableBackground,
-                                        enableLiquidGlass: isLiquidGlassEnabled,
-                                        enableNoBubbleUI: viewModel.enableNoBubbleUI,
-                                        enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
-                                        enableExperimentalToolResultDisplay: true,
-                                        enableMathRendering: viewModel.enableAdvancedRenderer,
-                                        showsStreamingIndicators: showsStreamingIndicators,
-                                        mergeWithPrevious: mergeWithPrevious,
-                                        mergeWithNext: mergeWithNext,
-                                        connectsTimelineFromPrevious: connectsTimelineFromPrevious,
-                                        connectsTimelineToNext: connectsTimelineToNext,
-                                        responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
-                                        hasAutoOpenedPendingToolCall: { toolCallID in
-                                            viewModel.hasAutoOpenedPendingToolCall(toolCallID)
-                                        },
-                                        markPendingToolCallAutoOpened: { toolCallID in
-                                            viewModel.markPendingToolCallAutoOpened(toolCallID)
-                                        },
-                                        onSwitchToPreviousVersion: {
-                                            viewModel.switchToPreviousVersion(of: message)
-                                        },
-                                        onSwitchToNextVersion: {
-                                            viewModel.switchToNextVersion(of: message)
-                                        },
-                                        onOpenMore: {
-                                            messageActionSheetPayload = MessageActionSheetPayload(message: message)
-                                        }
-                                    )
-                                    .id(state.id)
-                                }
+                            // 消息列表
+                            ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
+                                let message = state.message
+                                let previousMessage = index > 0 ? displayedMessages[index - 1].message : nil
+                                let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
+                                let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
+                                let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                                let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
+                                let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
+                                let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
+                                ChatBubble(
+                                    messageState: state,
+                                    preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
+                                    preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
+                                    isReasoningExpanded: Binding(
+                                        get: { viewModel.reasoningExpandedState[message.id, default: false] },
+                                        set: { viewModel.setReasoningExpanded($0, for: message.id) }
+                                    ),
+                                    isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
+                                    isToolCallsExpanded: Binding(
+                                        get: { viewModel.toolCallsExpandedState[message.id, default: false] },
+                                        set: { viewModel.toolCallsExpandedState[message.id] = $0 }
+                                    ),
+                                    enableMarkdown: viewModel.enableMarkdown,
+                                    enableBackground: viewModel.enableBackground,
+                                    enableLiquidGlass: isLiquidGlassEnabled,
+                                    enableNoBubbleUI: viewModel.enableNoBubbleUI,
+                                    enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+                                    enableExperimentalToolResultDisplay: true,
+                                    enableMathRendering: viewModel.enableAdvancedRenderer,
+                                    showsStreamingIndicators: showsStreamingIndicators,
+                                    mergeWithPrevious: mergeWithPrevious,
+                                    mergeWithNext: mergeWithNext,
+                                    connectsTimelineFromPrevious: connectsTimelineFromPrevious,
+                                    connectsTimelineToNext: connectsTimelineToNext,
+                                    responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
+                                    hasAutoOpenedPendingToolCall: { toolCallID in
+                                        viewModel.hasAutoOpenedPendingToolCall(toolCallID)
+                                    },
+                                    markPendingToolCallAutoOpened: { toolCallID in
+                                        viewModel.markPendingToolCallAutoOpened(toolCallID)
+                                    },
+                                    onSwitchToPreviousVersion: {
+                                        viewModel.switchToPreviousVersion(of: message)
+                                    },
+                                    onSwitchToNextVersion: {
+                                        viewModel.switchToNextVersion(of: message)
+                                    },
+                                    onOpenMore: {
+                                        messageActionSheetPayload = MessageActionSheetPayload(message: message)
+                                    }
+                                )
+                                .id(ChatScrollTargetID.message(state.id))
                             }
 
-                            // 底部锚点单独放在懒栈之外，避免被虚拟化后丢失回底按钮的可见性判断。
                             Color.clear
                                 .frame(height: 8)
-                                .id(scrollBottomAnchorID)
+                                .id(ChatScrollTargetID.bottom)
                         }
-                        .padding(.horizontal, 8)
+                        .scrollTargetLayout()
                     }
-                    .scrollDismissesKeyboard(.interactively)
-                    .scrollIndicators(.hidden)
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            composerFocused = false
-                        }
-                    )
-                    .onChange(of: viewModel.messages.count) { _, _ in
-                        guard !viewModel.messages.isEmpty else {
-                            showScrollToBottom = false
-                            return
-                        }
-                        if needsImmediateBottomSnap {
-                            scheduleImmediateBottomSnap(proxy: proxy)
-                            return
-                        }
-                        if suppressAutoScrollOnce {
-                            suppressAutoScrollOnce = false
-                            return
-                        }
-                        scrollToBottom(proxy: proxy)
-                    }
-                    .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
-                        guard newValue != nil, !showScrollToBottom else { return }
-                        scrollToBottom(proxy: proxy)
-                    }
-                    .onChange(of: pendingJumpRequest) { _, request in
-                        guard let request else { return }
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            proxy.scrollTo(request.messageID, anchor: .center)
-                        }
-                    }
-                    .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
-                        resolvePendingSearchJumpIfNeeded()
-                    }
-                    .onChange(of: viewModel.currentSession?.id) { _, _ in
-                        pendingHistoryResetWorkItem?.cancel()
-                        pendingHistoryResetWorkItem = nil
-                        showScrollToBottom = false
-                        needsImmediateBottomSnap = true
-                        scheduleImmediateBottomSnap(proxy: proxy)
-                        resolvePendingSearchJumpIfNeeded()
-                    }
-                    .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
-                        if needsImmediateBottomSnap, !viewModel.displayMessages.isEmpty {
-                            scheduleImmediateBottomSnap(proxy: proxy)
-                        }
-                        resolvePendingSearchJumpIfNeeded()
-                    }
-                    .onAppear {
-                        needsImmediateBottomSnap = true
-                        scheduleImmediateBottomSnap(proxy: proxy)
-                        resolvePendingSearchJumpIfNeeded()
-                    }
-                    .overlay(alignment: .top) {
-                        if viewModel.enableChatTopBlurFade {
-                            navBarFadeBlurOverlay
-                        }
-                    }
-                    // Telegram 风格：顶部导航栏
-                    .safeAreaInset(edge: .top) {
-                        telegramNavBar
-                    }
-                    // Telegram 风格：底部输入栏
-                    .safeAreaInset(edge: .bottom) {
-                        telegramInputBar
-                            .background(
-                                GeometryReader { proxy in
-                                    Color.clear.preference(
-                                        key: ChatInputBarHeightPreferenceKey.self,
-                                        value: proxy.size.height
-                                    )
-                                }
-                            )
-                    }
-                    .onPreferenceChange(ChatInputBarHeightPreferenceKey.self) { newHeight in
-                        chatInputBarHeight = newHeight
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        // Telegram 风格的滚动到底部按钮
-                        if showScrollToBottom {
-                            telegramScrollToBottomButton {
-                                handleScrollToBottomButtonTap(proxy: proxy)
-                            }
-                            .padding(.trailing, 16)
-                            .padding(.bottom, scrollToBottomButtonBottomPadding)
-                            .transition(.scale.combined(with: .opacity))
-                        }
-                    }
-                    .allowsHitTesting(!isOverlayPanelPresented)
+                    .padding(.horizontal, 8)
                 }
+                .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
+                .scrollDismissesKeyboard(.interactively)
+                .scrollIndicators(.hidden)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        composerFocused = false
+                    }
+                )
+                .onChange(of: viewModel.messages.count) { _, _ in
+                    guard !viewModel.messages.isEmpty else {
+                        showScrollToBottom = false
+                        return
+                    }
+                    if needsImmediateBottomSnap {
+                        scheduleImmediateBottomSnap()
+                        return
+                    }
+                    if suppressAutoScrollOnce {
+                        suppressAutoScrollOnce = false
+                        return
+                    }
+                    scrollToBottom()
+                }
+                .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
+                    guard newValue != nil, !showScrollToBottom else { return }
+                    scrollToBottom()
+                }
+                .onChange(of: pendingJumpRequest) { _, request in
+                    guard let request else { return }
+                    scrollToMessage(request.messageID)
+                }
+                .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
+                    resolvePendingSearchJumpIfNeeded()
+                }
+                .onChange(of: viewModel.currentSession?.id) { _, _ in
+                    pendingHistoryResetWorkItem?.cancel()
+                    pendingHistoryResetWorkItem = nil
+                    showScrollToBottom = false
+                    needsImmediateBottomSnap = true
+                    scheduleImmediateBottomSnap()
+                    resolvePendingSearchJumpIfNeeded()
+                }
+                .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
+                    if needsImmediateBottomSnap, !viewModel.displayMessages.isEmpty {
+                        scheduleImmediateBottomSnap()
+                    }
+                    resolvePendingSearchJumpIfNeeded()
+                }
+                .onAppear {
+                    needsImmediateBottomSnap = true
+                    scheduleImmediateBottomSnap()
+                    resolvePendingSearchJumpIfNeeded()
+                }
+                .overlay(alignment: .top) {
+                    if viewModel.enableChatTopBlurFade {
+                        navBarFadeBlurOverlay
+                    }
+                }
+                // Telegram 风格：顶部导航栏
+                .safeAreaInset(edge: .top) {
+                    telegramNavBar
+                }
+                // Telegram 风格：底部输入栏
+                .safeAreaInset(edge: .bottom) {
+                    telegramInputBar
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: ChatInputBarHeightPreferenceKey.self,
+                                    value: proxy.size.height
+                                )
+                            }
+                        )
+                }
+                .onPreferenceChange(ChatInputBarHeightPreferenceKey.self) { newHeight in
+                    chatInputBarHeight = newHeight
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    // Telegram 风格的滚动到底部按钮
+                    if showScrollToBottom {
+                        telegramScrollToBottomButton {
+                            handleScrollToBottomButtonTap()
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, scrollToBottomButtonBottomPadding)
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .allowsHitTesting(!isOverlayPanelPresented)
 
                 VStack {
                     Spacer()

@@ -70,33 +70,18 @@ extension ChatView {
     }
 
     func scrollToBottom(
-        proxy: ScrollViewProxy,
         animated: Bool = true,
         animation: Animation = .easeOut(duration: 0.25)
     ) {
-        let action = {
-            proxy.scrollTo(scrollBottomAnchorID, anchor: .bottom)
-        }
-        if animated {
-            withAnimation(animation) {
-                action()
-            }
-        } else {
-            action()
-        }
+        setScrollTarget(.bottom, anchor: .bottom, animated: animated, animation: animation)
     }
 
-    func handleScrollToBottomButtonTap(proxy: ScrollViewProxy) {
+    func handleScrollToBottomButtonTap() {
         pendingHistoryResetWorkItem?.cancel()
 
-        let shouldAnimate = shouldAnimateScrollToBottomButton
         let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
         showScrollToBottom = false
-        scrollToBottom(
-            proxy: proxy,
-            animated: shouldAnimate,
-            animation: scrollToBottomButtonAnimation
-        )
+        scrollToBottom(animated: true, animation: scrollToBottomButtonAnimation)
 
         guard shouldResetHistoryWindow else {
             pendingHistoryResetWorkItem = nil
@@ -109,27 +94,34 @@ extension ChatView {
             withTransaction(transaction) {
                 viewModel.resetLazyLoadState()
             }
-            scrollToBottom(proxy: proxy, animated: false)
+            scrollToBottom(animated: false)
             pendingHistoryResetWorkItem = nil
         }
         pendingHistoryResetWorkItem = workItem
 
-        let delay = shouldAnimate ? 0.56 : 0.08
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.56, execute: workItem)
     }
 
-    func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {
+    func scheduleImmediateBottomSnap() {
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = Task { @MainActor in
             for _ in 0..<3 {
                 guard !Task.isCancelled else { return }
-                scrollToBottom(proxy: proxy, animated: false)
+                scrollToBottom(animated: false)
                 await Task.yield()
             }
             guard !Task.isCancelled else { return }
             needsImmediateBottomSnap = false
             pendingBottomSnapTask = nil
         }
+    }
+
+    func scrollToMessage(
+        _ messageID: UUID,
+        animated: Bool = true,
+        animation: Animation = .easeInOut(duration: 0.25)
+    ) {
+        setScrollTarget(.message(messageID), anchor: .center, animated: animated, animation: animation)
     }
 
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
@@ -152,9 +144,33 @@ extension ChatView {
             }
         }
     }
+    private func setScrollTarget(
+        _ target: ChatScrollTargetID,
+        anchor: UnitPoint,
+        animated: Bool,
+        animation: Animation
+    ) {
+        let updateTarget = {
+            chatScrollTargetAnchor = anchor
+            chatScrollTarget = target
+        }
 
-    var shouldAnimateScrollToBottomButton: Bool {
-        let screenHeight = max(UIScreen.main.bounds.height, 1)
-        return scrollDistanceToBottom <= screenHeight * longDistanceScrollAnimationThresholdScreens
+        guard chatScrollTarget == target else {
+            if animated {
+                withAnimation(animation, updateTarget)
+            } else {
+                updateTarget()
+            }
+            return
+        }
+
+        chatScrollTarget = nil
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(animation, updateTarget)
+            } else {
+                updateTarget()
+            }
+        }
     }
 }

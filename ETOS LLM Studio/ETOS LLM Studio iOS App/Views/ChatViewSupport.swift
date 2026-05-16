@@ -97,6 +97,11 @@ struct MessageJumpRequest: Equatable {
     let messageID: UUID
 }
 
+enum ChatScrollTargetID: Hashable {
+    case message(UUID)
+    case bottom
+}
+
 struct SafeAreaBottomKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 
