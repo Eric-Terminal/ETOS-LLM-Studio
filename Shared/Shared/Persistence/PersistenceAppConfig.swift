@@ -12,7 +12,7 @@ import GRDB
 extension Persistence {
     public static func readAppConfigText(key: String) -> String? {
         AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        withConfigDatabaseRead { db in
+        return withConfigDatabaseRead { db in
             try String.fetchOne(
                 db,
                 sql: "SELECT value_text FROM app_config WHERE key = ?",
@@ -23,7 +23,7 @@ extension Persistence {
 
     public static func readAppConfigReal(key: String) -> Double? {
         AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        withConfigDatabaseRead { db in
+        return withConfigDatabaseRead { db in
             try Double.fetchOne(
                 db,
                 sql: "SELECT value_real FROM app_config WHERE key = ?",
@@ -34,7 +34,7 @@ extension Persistence {
 
     public static func readAppConfigInteger(key: String) -> Int? {
         AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-        withConfigDatabaseRead { db in
+        return withConfigDatabaseRead { db in
             try Int.fetchOne(
                 db,
                 sql: "SELECT value_integer FROM app_config WHERE key = ?",
