@@ -12,7 +12,11 @@ import Shared
 
 struct MessageRegexRulesView: View {
     @ObservedObject private var store = MessageRegexRuleStore.shared
-    @State private var editingRule: MessageRegexRule?
+    @Binding private var editingRule: MessageRegexRule?
+
+    init(editingRule: Binding<MessageRegexRule?>) {
+        _editingRule = editingRule
+    }
 
     var body: some View {
         List {
@@ -55,19 +59,6 @@ struct MessageRegexRulesView: View {
                 Text(NSLocalizedString("规则会按列表顺序应用。保存替换会写入消息；仅发送只影响模型请求；仅显示只影响聊天气泡展示。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle(NSLocalizedString("消息规则", comment: ""))
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                EditButton()
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    editingRule = MessageRegexRule()
-                } label: {
-                    Label(NSLocalizedString("新增规则", comment: ""), systemImage: "plus")
-                }
             }
         }
         .sheet(item: $editingRule) { rule in

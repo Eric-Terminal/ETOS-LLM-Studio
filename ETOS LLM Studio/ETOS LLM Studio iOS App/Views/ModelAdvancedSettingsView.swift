@@ -9,8 +9,17 @@
 import SwiftUI
 import Shared
 
+private enum ModelAdvancedSettingsTab: Hashable {
+    case promptInjection
+    case messageRules
+    case sessionContext
+    case generationOutput
+}
+
 struct ModelAdvancedSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var selectedTab: ModelAdvancedSettingsTab = .promptInjection
+    @State private var editingMessageRegexRule: MessageRegexRule?
 
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
@@ -61,7 +70,7 @@ struct ModelAdvancedSettingsView: View {
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             // MARK: - Tab 1：提示与注入
             Form {
                 Section {
@@ -164,12 +173,14 @@ struct ModelAdvancedSettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("提示与注入", comment: ""), systemImage: "text.quote")
             }
+            .tag(ModelAdvancedSettingsTab.promptInjection)
 
             // MARK: - Tab 2：消息规则
-            MessageRegexRulesView()
+            MessageRegexRulesView(editingRule: $editingMessageRegexRule)
                 .tabItem {
                     Label(NSLocalizedString("消息规则", comment: ""), systemImage: "textformat")
                 }
+                .tag(ModelAdvancedSettingsTab.messageRules)
 
             // MARK: - Tab 3：会话与上下文
             Form {
@@ -199,6 +210,7 @@ struct ModelAdvancedSettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("会话与上下文", comment: ""), systemImage: "bubble.left.and.bubble.right")
             }
+            .tag(ModelAdvancedSettingsTab.sessionContext)
 
             // MARK: - Tab 4：生成与输出
             Form {
@@ -260,8 +272,20 @@ struct ModelAdvancedSettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("生成与输出", comment: ""), systemImage: "waveform")
             }
+            .tag(ModelAdvancedSettingsTab.generationOutput)
         }
         .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if selectedTab == .messageRules {
+                    Button {
+                        editingMessageRegexRule = MessageRegexRule()
+                    } label: {
+                        Label(NSLocalizedString("新增规则", comment: ""), systemImage: "plus")
+                    }
+                }
+            }
+        }
         .onAppear {
             normalizeSamplingParametersIfNeeded()
         }
