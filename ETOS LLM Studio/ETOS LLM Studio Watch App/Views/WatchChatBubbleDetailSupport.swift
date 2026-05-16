@@ -273,27 +273,24 @@ extension ChatBubble {
                         )
                     }
 
-                    Section(NSLocalizedString("自动批准", comment: "")) {
-                        Toggle(
-                            NSLocalizedString("允许该工具自动批准", comment: ""),
-                            isOn: toolAutoApproveBinding(for: permissionRequest)
-                        )
-                        .disabled(!toolPermissionCenter.autoApproveEnabled)
+                    if toolPermissionCenter.autoApproveEnabled {
+                        Section(NSLocalizedString("自动批准", comment: "")) {
+                            Toggle(
+                                NSLocalizedString("允许该工具自动批准", comment: ""),
+                                isOn: toolAutoApproveBinding(for: permissionRequest)
+                            )
 
-                        if let countdownText = toolPermissionCountdownText(for: permissionRequest) {
-                            Label(countdownText, systemImage: "timer")
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+                            if let countdownText = toolPermissionCountdownText(for: permissionRequest) {
+                                Label(countdownText, systemImage: "timer")
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
 
-                        if !toolPermissionCenter.autoApproveEnabled {
-                            Text(NSLocalizedString("全局自动批准当前未开启。", comment: ""))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        } else if toolPermissionCenter.isAutoApproveDisabled(for: permissionRequest.toolName) {
-                            Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
+                            if toolPermissionCenter.isAutoApproveDisabled(for: permissionRequest.toolName) {
+                                Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

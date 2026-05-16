@@ -75,17 +75,14 @@ struct ToolPermissionInlineView: View {
                 decision: .allowAll
             )
 
-            Toggle(NSLocalizedString("允许该工具自动批准", comment: ""), isOn: autoApproveBinding)
-                .disabled(!permissionCenter.autoApproveEnabled)
+            if permissionCenter.autoApproveEnabled {
+                Toggle(NSLocalizedString("允许该工具自动批准", comment: ""), isOn: autoApproveBinding)
 
-            if !permissionCenter.autoApproveEnabled {
-                Text(NSLocalizedString("全局自动批准当前未开启。", comment: ""))
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
-            } else if permissionCenter.isAutoApproveDisabled(for: request.toolName) {
-                Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
+                if permissionCenter.isAutoApproveDisabled(for: request.toolName) {
+                    Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.top, 4)
