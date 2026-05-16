@@ -638,6 +638,7 @@ public final class AppConfigStore: ObservableObject {
              .appToolsToolApprovalPolicies,
              .mcpChatToolsEnabled,
              .shortcutChatToolsEnabled,
+             .messageRegexRules,
              .shortcutOfficialImportShortcutName,
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,
@@ -856,6 +857,7 @@ public final class AppConfigStore: ObservableObject {
              .appToolsEnabledToolIDs,
              .appToolsKnownDefaultToolIDs,
              .appToolsToolApprovalPolicies,
+             .messageRegexRules,
              .shortcutOfficialImportShortcutName:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)
         case .systemPrompt: systemPrompt = value

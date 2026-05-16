@@ -80,6 +80,7 @@ final class ChatViewModel: ObservableObject {
     @Published var runningSessionIDs: Set<UUID> = []
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
+    var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
     var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     

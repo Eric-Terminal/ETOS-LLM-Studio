@@ -151,7 +151,21 @@ struct ModelAdvancedSettingsView: View {
                 Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
             }
 
-            // MARK: Section 2：会话与上下文
+            // MARK: Section 2：消息规则
+            Section(
+                header: Text(NSLocalizedString("消息规则", comment: "")),
+                footer: Text(NSLocalizedString("规则会按列表顺序应用。保存替换会写入消息；仅发送只影响模型请求；仅显示只影响聊天气泡展示。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                NavigationLink {
+                    MessageRegexRulesView()
+                } label: {
+                    Label(NSLocalizedString("正则替换", comment: ""), systemImage: "textformat")
+                }
+            }
+
+            // MARK: Section 3：会话与上下文
             Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
                 Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
@@ -173,7 +187,7 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
 
-            // MARK: Section 3：生成与输出
+            // MARK: Section 4：生成与输出
             Section(header: Text(NSLocalizedString("生成与输出", comment: ""))) {
                 Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $enableStreaming)
                 Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)

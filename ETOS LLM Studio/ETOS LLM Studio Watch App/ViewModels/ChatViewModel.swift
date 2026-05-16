@@ -369,6 +369,7 @@ class ChatViewModel: ObservableObject {
     var recordingTimer: Timer?
     let waveformSampleCount: Int = 24
     var messageStateByID: [UUID: ChatMessageRenderState] = [:]
+    var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
     var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     var autoReasoningPreviewMessageIDs: Set<UUID> = []

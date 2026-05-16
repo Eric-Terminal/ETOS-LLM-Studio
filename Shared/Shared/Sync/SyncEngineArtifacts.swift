@@ -241,6 +241,9 @@ extension SyncEngine {
             || changedKeys.contains(AppConfigKey.selectedRunnableModelID.rawValue) {
             ChatService.shared.reloadAppConfigBackedModelState()
         }
+        if changedKeys.contains(AppConfigKey.messageRegexRules.rawValue) {
+            MessageRegexRuleStore.shared.reload(notify: true)
+        }
     }
 
     static func encodeAppStorageSnapshot(_ snapshot: [String: Any]) -> Data? {

@@ -165,100 +165,106 @@ struct ModelAdvancedSettingsView: View {
                 Label(NSLocalizedString("提示与注入", comment: ""), systemImage: "text.quote")
             }
 
-        // MARK: - Tab 2：会话与上下文
-        Form {
-            Section(NSLocalizedString("基础行为", comment: "")) {
-                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
-                Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
-            }
-
-            Section(NSLocalizedString("上下文窗口管理", comment: "")) {
-                LabeledContent(NSLocalizedString("最大上下文消息数", comment: "")) {
-                    TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
+            // MARK: - Tab 2：消息规则
+            MessageRegexRulesView()
+                .tabItem {
+                    Label(NSLocalizedString("消息规则", comment: ""), systemImage: "textformat")
                 }
 
-                LabeledContent(NSLocalizedString("懒加载轮次", comment: "")) {
-                    TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
+            // MARK: - Tab 3：会话与上下文
+            Form {
+                Section(NSLocalizedString("基础行为", comment: "")) {
+                    Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
+                    Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
                 }
 
-                Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .tabItem {
-            Label(NSLocalizedString("会话与上下文", comment: ""), systemImage: "bubble.left.and.bubble.right")
-        }
-
-        // MARK: - Tab 3：生成与输出
-        Form {
-            Section(NSLocalizedString("采样参数", comment: "")) {
-                Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
-                if aiTemperatureEnabled {
-                    Stepper(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep) {
-                        Text(
-                            String(
-                                format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
-                                temperatureBinding.wrappedValue
-                            )
-                        )
+                Section(NSLocalizedString("上下文窗口管理", comment: "")) {
+                    LabeledContent(NSLocalizedString("最大上下文消息数", comment: "")) {
+                        TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
                     }
 
-                    Slider(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep)
-                }
-
-                Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
-                if aiTopPEnabled {
-                    Stepper(value: topPBinding, in: topPRange, step: samplingParameterStep) {
-                        Text(
-                            String(
-                                format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
-                                topPBinding.wrappedValue
-                            )
-                        )
+                    LabeledContent(NSLocalizedString("懒加载轮次", comment: "")) {
+                        TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
                     }
 
-                    Slider(value: topPBinding, in: topPRange, step: samplingParameterStep)
+                    Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
-
-            Section {
-                Toggle(NSLocalizedString("启用流式输出", comment: ""), isOn: $enableStreaming)
-                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
-            } header: {
-                Text(NSLocalizedString("输出与思考", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+            .tabItem {
+                Label(NSLocalizedString("会话与上下文", comment: ""), systemImage: "bubble.left.and.bubble.right")
             }
 
-            Section {
-                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
-                Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
-            } header: {
-                Text(NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title"))
-            } footer: {
-                Text(
-                    "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
-                )
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            // MARK: - Tab 4：生成与输出
+            Form {
+                Section(NSLocalizedString("采样参数", comment: "")) {
+                    Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
+                    if aiTemperatureEnabled {
+                        Stepper(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep) {
+                            Text(
+                                String(
+                                    format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
+                                    temperatureBinding.wrappedValue
+                                )
+                            )
+                        }
 
+                        Slider(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep)
+                    }
+
+                    Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
+                    if aiTopPEnabled {
+                        Stepper(value: topPBinding, in: topPRange, step: samplingParameterStep) {
+                            Text(
+                                String(
+                                    format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
+                                    topPBinding.wrappedValue
+                                )
+                            )
+                        }
+
+                        Slider(value: topPBinding, in: topPRange, step: samplingParameterStep)
+                    }
+                }
+
+                Section {
+                    Toggle(NSLocalizedString("启用流式输出", comment: ""), isOn: $enableStreaming)
+                    Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
+                } header: {
+                    Text(NSLocalizedString("输出与思考", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
+                    Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
+                } header: {
+                    Text(NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title"))
+                } footer: {
+                    Text(
+                        "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
+                    )
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+            }
+            .tabItem {
+                Label(NSLocalizedString("生成与输出", comment: ""), systemImage: "waveform")
+            }
         }
-        .tabItem {
-            Label(NSLocalizedString("生成与输出", comment: ""), systemImage: "waveform")
+        .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
+        .onAppear {
+            normalizeSamplingParametersIfNeeded()
         }
-    }
-    .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
-    .onAppear {
-        normalizeSamplingParametersIfNeeded()
-    }
     }
 
     private var temperatureBinding: Binding<Double> {

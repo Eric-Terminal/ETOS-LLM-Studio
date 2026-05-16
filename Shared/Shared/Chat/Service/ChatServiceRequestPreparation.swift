@@ -106,8 +106,9 @@ extension ChatService {
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
         let baseMessages = visibleMessages.filter { $0.role != .error && $0.id != loadingMessageID }
         let normalizedMessages = normalizedMessagesForToolCallChain(baseMessages)
+        let messageRegexRules = MessageRegexRuleStore.currentRules()
         guard session?.isWorldbookContextIsolationActive == true else {
-            return normalizedMessages
+            return normalizedMessages.map { applyMessageRegexRules(to: $0, rules: messageRegexRules, mode: .sendOnly) }
         }
 
         return normalizedMessages.compactMap { message in
@@ -120,7 +121,7 @@ extension ChatService {
                sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return nil
             }
-            return sanitized
+            return applyMessageRegexRules(to: sanitized, rules: messageRegexRules, mode: .sendOnly)
         }
     }
 

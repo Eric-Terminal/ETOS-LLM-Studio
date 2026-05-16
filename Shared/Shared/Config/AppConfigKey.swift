@@ -98,6 +98,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
+    case messageRegexRules = "chat.messageRegexRules"
 
     case enableMemory = "enableMemory"
     case enableMemoryWrite = "enableMemoryWrite"
@@ -244,6 +245,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(true)
         case .systemPrompt:
             return .text("")
+        case .messageRegexRules:
+            return .text("[]")
         case .maxChatHistory:
             return .integer(0)
         case .enableStreaming:

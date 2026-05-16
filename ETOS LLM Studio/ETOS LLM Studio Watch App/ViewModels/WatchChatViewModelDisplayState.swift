@@ -147,7 +147,7 @@ extension ChatViewModel {
                 state = created
             }
             state.update(with: message)
-            scheduleMarkdownPreparationIfNeeded(for: message)
+            scheduleVisualMessagePreparationIfNeeded(for: state, source: message)
             scheduleReasoningMarkdownPreparationIfNeeded(for: message)
             newStates.append(state)
         }
@@ -177,9 +177,38 @@ extension ChatViewModel {
         markdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText] in
             let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: sourceText)
             guard !Task.isCancelled, let self else { return }
-            guard self.messageStateByID[messageID]?.message.content == sourceText else { return }
+            guard self.messageStateByID[messageID]?.visualMessage.content == sourceText else { return }
             self.preparedMarkdownByMessageID[messageID] = prepared
             self.markdownPrepareTasks[messageID] = nil
+        }
+    }
+
+    private func scheduleVisualMessagePreparationIfNeeded(for state: ChatMessageRenderState, source message: ChatMessage) {
+        let rules = MessageRegexRuleStore.shared.rules
+        guard Self.hasVisualRegexRule(in: rules, for: message) else {
+            visualMessagePrepareTasks[message.id]?.cancel()
+            visualMessagePrepareTasks.removeValue(forKey: message.id)
+            state.updateVisualMessage(message)
+            scheduleMarkdownPreparationIfNeeded(for: message)
+            return
+        }
+
+        let messageID = message.id
+        state.updateVisualMessage(message)
+        visualMessagePrepareTasks[messageID]?.cancel()
+        visualMessagePrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceMessage = message, rules] in
+            let visualMessage = await Task.detached(priority: .utility) {
+                ChatService.visualMessage(from: sourceMessage, rules: rules)
+            }.value
+
+            guard !Task.isCancelled, let self else { return }
+            guard let state = self.messageStateByID[messageID],
+                  state.message == sourceMessage else {
+                return
+            }
+            state.updateVisualMessage(visualMessage)
+            self.scheduleMarkdownPreparationIfNeeded(for: visualMessage)
+            self.visualMessagePrepareTasks[messageID] = nil
         }
     }
 
@@ -214,6 +243,12 @@ extension ChatViewModel {
         if !preparedReasoningMarkdownByMessageID.isEmpty {
             preparedReasoningMarkdownByMessageID = preparedReasoningMarkdownByMessageID.filter { validIDs.contains($0.key) }
         }
+        if !visualMessagePrepareTasks.isEmpty {
+            for (messageID, task) in visualMessagePrepareTasks where !validIDs.contains(messageID) {
+                task.cancel()
+            }
+            visualMessagePrepareTasks = visualMessagePrepareTasks.filter { validIDs.contains($0.key) }
+        }
         if !markdownPrepareTasks.isEmpty {
             for (messageID, task) in markdownPrepareTasks where !validIDs.contains(messageID) {
                 task.cancel()
@@ -235,6 +270,28 @@ extension ChatViewModel {
 
     private func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
         ChatResponseAttemptSupport.visibleMessages(from: source)
+    }
+
+    func refreshVisualMessagesAfterRegexRulesChange() {
+        for state in messages {
+            scheduleVisualMessagePreparationIfNeeded(for: state, source: state.message)
+        }
+    }
+
+    nonisolated static func hasVisualRegexRule(in rules: [MessageRegexRule], for message: ChatMessage) -> Bool {
+        let scope: MessageRegexRoleScope
+        switch message.role {
+        case .user:
+            scope = .user
+        case .assistant:
+            scope = .assistant
+        case .system, .tool, .error:
+            return false
+        }
+
+        return rules.contains { rule in
+            rule.isEnabled && rule.mode == .visualOnly && rule.scopes.contains(scope)
+        }
     }
 
     nonisolated static func lazyLoadWeight(for message: ChatMessage) -> Int {
@@ -346,7 +403,9 @@ extension ChatViewModel {
 
             if visibleIDs.contains(newMessage.id) {
                 messageStateByID[newMessage.id]?.update(with: newMessage)
-                scheduleMarkdownPreparationIfNeeded(for: newMessage)
+                if let state = messageStateByID[newMessage.id] {
+                    scheduleVisualMessagePreparationIfNeeded(for: state, source: newMessage)
+                }
                 scheduleReasoningMarkdownPreparationIfNeeded(for: newMessage)
                 if oldMessage.content != newMessage.content
                     || oldMessage.reasoningContent != newMessage.reasoningContent

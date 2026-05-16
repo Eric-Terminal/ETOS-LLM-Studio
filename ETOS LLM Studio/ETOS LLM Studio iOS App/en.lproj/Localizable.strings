@@ -2717,3 +2717,30 @@
 "请填写 Secret Access Key。" = "Enter the Secret Access Key.";
 "无法生成对象存储上传地址。" = "Unable to create the object storage upload URL.";
 "对象存储 Endpoint 必须包含主机名。" = "The object storage endpoint must include a host name.";
+
+/* Message regex rules */
+"消息规则" = "Message Rules";
+"正则替换" = "Regex Replace";
+"新增规则" = "New Rule";
+"暂无正则规则" = "No regex rules yet";
+"规则会按列表顺序应用。保存替换会写入消息；仅发送只影响模型请求；仅显示只影响聊天气泡展示。" = "Rules are applied in list order. Save Replace writes to messages; Send Only affects model requests; Display Only affects chat bubbles.";
+"未命名规则" = "Untitled Rule";
+"规则" = "Rule";
+"规则名称" = "Rule Name";
+"正则表达式" = "Regular Expression";
+"替换字符串" = "Replacement";
+"启用规则" = "Enable Rule";
+"替换字符串支持 $0、$1、$2 这类捕获组引用。" = "Replacement supports capture references such as $0, $1, and $2.";
+"作用范围" = "Scope";
+"应用方式" = "Mode";
+"保存替换" = "Save Replace";
+"仅发送" = "Send Only";
+"仅显示" = "Display Only";
+"会保存到消息内容" = "Saves into message content";
+"只影响发送给模型的内容" = "Only affects content sent to the model";
+"只影响聊天气泡显示" = "Only affects chat bubble display";
+"正则规则无法保存" = "Regex rule cannot be saved";
+"规则名称不能为空。" = "Rule name cannot be empty.";
+"正则表达式不能为空。" = "Regular expression cannot be empty.";
+"请至少选择一个作用范围。" = "Select at least one scope.";
+"正则表达式无效。" = "Regular expression is invalid.";

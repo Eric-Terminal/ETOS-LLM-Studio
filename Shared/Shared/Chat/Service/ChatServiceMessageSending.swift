@@ -71,7 +71,11 @@ extension ChatService {
         // 准备用户消息和UI占位消息
         let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
         let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
-        var messageContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        var messageContent = applyMessageRegexRules(
+            to: content.trimmingCharacters(in: .whitespacesAndNewlines),
+            scope: .user,
+            mode: .persist
+        )
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
         var savedFileNames: [String] = []

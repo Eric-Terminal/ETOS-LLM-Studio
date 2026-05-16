@@ -103,7 +103,7 @@ struct ChatBubble: View {
     }
 
     var message: ChatMessage {
-        messageState.message
+        messageState.visualMessage
     }
 
     var activeAppearanceProfile: ChatAppearanceProfile {

@@ -72,6 +72,8 @@ extension ChatViewModel {
 
     func refreshAfterAppConfigPersistentStoreLoad() {
         applyAppConfigSnapshotToLocalState()
+        MessageRegexRuleStore.shared.reload()
+        refreshVisualMessagesAfterRegexRulesChange()
         syncSpeechModelSelection()
         syncTTSModelSelection()
         syncEmbeddingModelSelection()
@@ -231,6 +233,13 @@ extension ChatViewModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.reloadAfterSnapshotRestore()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: MessageRegexRuleStore.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshVisualMessagesAfterRegexRulesChange()
             }
             .store(in: &cancellables)
 
