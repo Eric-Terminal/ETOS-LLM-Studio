@@ -62,6 +62,7 @@ struct ChatView: View {
     @State var keyboardHeight: CGFloat = 0
     @State var chatInputBarHeight: CGFloat = 0
     @State var scrollDistanceToBottom: CGFloat = 0
+    @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
     @State var needsImmediateBottomSnap: Bool = true
     @State var pendingJumpRequest: MessageJumpRequest?
@@ -93,6 +94,7 @@ struct ChatView: View {
     let modelPickerCornerRadius: CGFloat = 24
     let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
+    let longDistanceScrollAnimationThresholdScreens: CGFloat = 25
     let modelPickerMorphID = "modelPickerMorph"
     let sessionPickerMorphID = "sessionPickerMorph"
     let sessionPickerHeightRatio: CGFloat = 0.6
@@ -420,6 +422,8 @@ struct ChatView: View {
                         resolvePendingSearchJumpIfNeeded()
                     }
                     .onChange(of: viewModel.currentSession?.id) { _, _ in
+                        pendingHistoryResetWorkItem?.cancel()
+                        pendingHistoryResetWorkItem = nil
                         showScrollToBottom = false
                         needsImmediateBottomSnap = true
                         scheduleImmediateBottomSnap(proxy: proxy)
@@ -516,6 +520,8 @@ struct ChatView: View {
                 keyboardHeight = 0
             }
             .onDisappear {
+                pendingHistoryResetWorkItem?.cancel()
+                pendingHistoryResetWorkItem = nil
                 pendingBottomSnapTask?.cancel()
                 pendingBottomSnapTask = nil
             }
