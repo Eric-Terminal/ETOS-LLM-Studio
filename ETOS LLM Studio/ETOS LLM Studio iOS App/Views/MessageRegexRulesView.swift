@@ -170,7 +170,6 @@ private struct MessageRegexRuleEditorView: View {
                         Text(MessageRegexRuleLabels.title(for: mode)).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
 
                 Text(MessageRegexRuleLabels.detail(for: rule.mode))
                     .etFont(.footnote)
