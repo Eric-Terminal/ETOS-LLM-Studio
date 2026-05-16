@@ -34,7 +34,7 @@ public struct MessageRegexRule: Codable, Identifiable, Hashable, Sendable {
 
     public init(
         id: UUID = UUID(),
-        name: String,
+        name: String = "",
         pattern: String = "",
         replacement: String = "",
         scopes: [MessageRegexRoleScope] = [.user],

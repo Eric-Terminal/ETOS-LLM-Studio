@@ -262,7 +262,7 @@ private struct MessageRegexRuleEditorView: View {
 }
 
 private enum MessageRegexRuleLabels {
-    static func title(for mode: MessageRegexMode) -> String {
+    nonisolated static func title(for mode: MessageRegexMode) -> String {
         switch mode {
         case .persist:
             return NSLocalizedString("保存替换", comment: "")
@@ -273,7 +273,7 @@ private enum MessageRegexRuleLabels {
         }
     }
 
-    static func detail(for mode: MessageRegexMode) -> String {
+    nonisolated static func detail(for mode: MessageRegexMode) -> String {
         switch mode {
         case .persist:
             return NSLocalizedString("会保存到消息内容", comment: "")
@@ -284,12 +284,14 @@ private enum MessageRegexRuleLabels {
         }
     }
 
-    static func scopeSummary(for scopes: [MessageRegexRoleScope]) -> String {
+    nonisolated static func scopeSummary(for scopes: [MessageRegexRoleScope]) -> String {
         let ordered = MessageRegexRoleScope.allCases.filter { scopes.contains($0) }
-        return ordered.map(title(for:)).joined(separator: NSLocalizedString("、", comment: ""))
+        return ordered.map { scope in
+            title(for: scope)
+        }.joined(separator: NSLocalizedString("、", comment: ""))
     }
 
-    static func title(for scope: MessageRegexRoleScope) -> String {
+    nonisolated static func title(for scope: MessageRegexRoleScope) -> String {
         switch scope {
         case .user:
             return NSLocalizedString("用户消息", comment: "")
