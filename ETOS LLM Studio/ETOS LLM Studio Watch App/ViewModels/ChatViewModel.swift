@@ -420,7 +420,6 @@ class ChatViewModel: ObservableObject {
 
         refreshBlurredBackgroundImage()
 #if canImport(UserNotifications)
-        enforceBackgroundReplyNotificationEnabled()
         requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded()
 #endif
         

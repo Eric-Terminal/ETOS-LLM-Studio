@@ -218,10 +218,11 @@ extension ChatViewModel {
 
 #if canImport(UserNotifications)
     func requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded() {
-        enforceBackgroundReplyNotificationEnabled()
-        guard !hasRequestedBackgroundReplyNotificationPermission else { return }
-        hasRequestedBackgroundReplyNotificationPermission = true
         Task {
+            await Task.yield()
+            enforceBackgroundReplyNotificationEnabled()
+            guard !hasRequestedBackgroundReplyNotificationPermission else { return }
+            hasRequestedBackgroundReplyNotificationPermission = true
             _ = await requestBackgroundReplyNotificationAuthorizationIfNeeded()
         }
     }

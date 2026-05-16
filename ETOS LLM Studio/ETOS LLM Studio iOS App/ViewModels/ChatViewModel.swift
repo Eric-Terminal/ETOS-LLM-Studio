@@ -370,7 +370,6 @@ final class ChatViewModel: ObservableObject {
         registerLifecycleObservers()
         refreshBlurredBackgroundImage()
 #if canImport(UserNotifications)
-        enforceBackgroundReplyNotificationEnabled()
         requestBackgroundReplyNotificationPermissionOnFirstLaunchIfNeeded()
 #endif
     }
