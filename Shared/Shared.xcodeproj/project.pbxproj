@@ -10,6 +10,7 @@
 		0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 0704B98D2FA542E60059A02A /* ZIPFoundation */; };
 		072CF2442E92C1B400A8E9D0 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* Shared.framework */; };
 		078573792FB0579500B35DB4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 078573782FB0579500B35DB4 /* GRDB */; };
+		0793DFE72FB8C653001E6866 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = 0793DFE62FB8C653001E6866 /* MCP */; };
 		07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +59,7 @@
 				078573792FB0579500B35DB4 /* GRDB in Frameworks */,
 				07B5C2B22F6D3B3100A11AA1 /* AppIntents.framework in Frameworks */,
 				0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */,
+				0793DFE72FB8C653001E6866 /* MCP in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +141,7 @@
 			packageProductDependencies = (
 				0704B98D2FA542E60059A02A /* ZIPFoundation */,
 				078573782FB0579500B35DB4 /* GRDB */,
+				0793DFE62FB8C653001E6866 /* MCP */,
 			);
 			productName = Shared;
 			productReference = 073CA6A52E8CFCF3004516A0 /* Shared.framework */;
@@ -174,6 +177,7 @@
 			packageReferences = (
 				0704B98C2FA542E60059A02A /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				078573772FB0579500B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */,
+				0793DFE52FB8C653001E6866 /* XCRemoteSwiftPackageReference "swift-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 073CA6A62E8CFCF3004516A0 /* Products */;
@@ -545,6 +549,14 @@
 				kind = branch;
 			};
 		};
+		0793DFE52FB8C653001E6866 /* XCRemoteSwiftPackageReference "swift-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/modelcontextprotocol/swift-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -557,6 +569,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 078573772FB0579500B35DB4 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
+		};
+		0793DFE62FB8C653001E6866 /* MCP */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0793DFE52FB8C653001E6866 /* XCRemoteSwiftPackageReference "swift-sdk" */;
+			productName = MCP;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
