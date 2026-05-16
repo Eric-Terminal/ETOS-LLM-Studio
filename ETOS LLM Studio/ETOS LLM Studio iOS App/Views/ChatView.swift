@@ -203,6 +203,12 @@ struct ChatView: View {
     var scrollToBottomButtonBorderColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
     }
+    var scrollToBottomButtonGlassTintColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.12)
+    }
+    var scrollToBottomButtonGlassStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.24) : Color.white.opacity(0.36)
+    }
     var scrollToBottomButtonShadowColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.3) : TelegramColors.scrollButtonShadow
     }
