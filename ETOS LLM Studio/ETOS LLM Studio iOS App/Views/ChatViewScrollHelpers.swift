@@ -73,7 +73,7 @@ extension ChatView {
         animated: Bool = true,
         animation: Animation = .easeOut(duration: 0.25)
     ) {
-        setScrollTarget(.bottom, anchor: .bottom, animated: animated, animation: animation)
+        setScrollTarget(bottomScrollTarget, anchor: .bottom, animated: animated, animation: animation)
     }
 
     func handleScrollToBottomButtonTap() {
@@ -122,6 +122,13 @@ extension ChatView {
         animation: Animation = .easeInOut(duration: 0.25)
     ) {
         setScrollTarget(.message(messageID), anchor: .center, animated: animated, animation: animation)
+    }
+
+    var bottomScrollTarget: ChatScrollTargetID {
+        if let lastMessageID = viewModel.displayMessages.last?.id {
+            return .message(lastMessageID)
+        }
+        return .bottom
     }
 
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
