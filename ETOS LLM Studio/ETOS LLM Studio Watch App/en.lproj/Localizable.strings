@@ -2623,3 +2623,28 @@
 "正则表达式不能为空。" = "Regular expression cannot be empty.";
 "请至少选择一个作用范围。" = "Select at least one scope.";
 "正则表达式无效。" = "Regular expression is invalid.";
+
+/* 手写补齐：显示设置缺失 Key */
+"个性化色彩" = "Personalized Colors";
+"会话/模型弹出方式" = "Session/Model Picker Style";
+"全局外观" = "Global Appearance";
+"字体排印" = "Typography";
+"对话框与内容" = "Bubbles & Content";
+"对话框视觉" = "Chat Visuals";
+"底部抽屉" = "Bottom Sheet";
+"思考过程展现" = "Reasoning Display";
+"悬浮面板" = "Floating Panel";
+"手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标。" = "Choose the app interface language manually. When colorful icons are enabled, settings entries use colored circular icons.";
+"手机比例" = "Phone Ratio";
+"手表比例" = "Watch Ratio";
+"拖动和缩放以调整取景范围" = "Drag and zoom to adjust the crop area";
+"气泡与排版" = "Bubbles & Layout";
+"沉浸背景" = "Immersive Background";
+"界面与交互" = "Interface & Interaction";
+"背景与特效" = "Background & Effects";
+"背景图层" = "Background Layer";
+"裁切比例" = "Crop Ratio";
+"裁切背景" = "Crop Background";
+"设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。" = "Set how the picker menu appears. Floating Panel offers a centered, visually focused experience; Bottom Sheet follows natural thumb gestures so each switch feels smooth.";
+"质感与特效" = "Texture & Effects";
+"顶部毛玻璃渐隐" = "Top Glass Fade";
