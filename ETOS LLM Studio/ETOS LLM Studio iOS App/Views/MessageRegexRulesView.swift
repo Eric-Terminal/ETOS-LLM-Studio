@@ -17,6 +17,12 @@ struct MessageRegexRulesView: View {
     var body: some View {
         List {
             Section {
+                Button {
+                    editingRule = MessageRegexRule()
+                } label: {
+                    Label(NSLocalizedString("新增规则", comment: ""), systemImage: "plus.circle.fill")
+                }
+
                 if store.rules.isEmpty {
                     Text(NSLocalizedString("暂无正则规则", comment: ""))
                         .foregroundStyle(.secondary)
