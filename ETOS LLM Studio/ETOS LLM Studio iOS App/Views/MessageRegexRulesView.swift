@@ -17,12 +17,6 @@ struct MessageRegexRulesView: View {
     var body: some View {
         List {
             Section {
-                Button {
-                    editingRule = MessageRegexRule()
-                } label: {
-                    Label(NSLocalizedString("新增规则", comment: ""), systemImage: "plus.circle.fill")
-                }
-
                 if store.rules.isEmpty {
                     Text(NSLocalizedString("暂无正则规则", comment: ""))
                         .foregroundStyle(.secondary)
@@ -65,16 +59,15 @@ struct MessageRegexRulesView: View {
         }
         .navigationTitle(NSLocalizedString("消息规则", comment: ""))
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .navigationBarLeading) {
                 EditButton()
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     editingRule = MessageRegexRule()
                 } label: {
-                    Image(systemName: "plus")
+                    Label(NSLocalizedString("新增规则", comment: ""), systemImage: "plus")
                 }
-                .accessibilityLabel(NSLocalizedString("新增规则", comment: ""))
             }
         }
         .sheet(item: $editingRule) { rule in
