@@ -12,6 +12,8 @@
 "会话位置" = "Session location";
 "会话信息" = "Session info";
 "会话列表" = "Session list";
+"显示会话列表" = "Show session list";
+"隐藏会话列表" = "Hide session list";
 "会话名称" = "Session name";
 "会话概览" = "Session overview";
 "会话管理" = "Session management";

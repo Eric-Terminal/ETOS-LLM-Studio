@@ -48,7 +48,7 @@ extension ChatView {
     }
 
     var navBarSessionLabel: some View {
-        Image(systemName: "list.bullet")
+        Image(systemName: navBarSessionIconName)
             .etFont(.system(size: 17, weight: .semibold))
             .foregroundColor(TelegramColors.navBarText)
             .frame(width: navBarIconSize, height: navBarIconSize)
@@ -60,7 +60,7 @@ extension ChatView {
                     .stroke(isSessionPickerPresented ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
             )
             .contentShape(Circle())
-            .accessibilityLabel(NSLocalizedString("会话列表", comment: ""))
+            .accessibilityLabel(navBarSessionAccessibilityLabel)
     }
 
     func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
@@ -148,7 +148,7 @@ extension ChatView {
     }
 
     var sessionPickerButtonBackground: some View {
-        sessionPickerMorphBackground(isExpanded: false, isSource: !showSessionPickerPanel)
+        sessionPickerMorphBackground(isExpanded: false, isSource: usesLandscapeSessionSidebar ? true : !showSessionPickerPanel)
     }
 
     @ViewBuilder
@@ -163,7 +163,25 @@ extension ChatView {
         return NSLocalizedString("选择模型", comment: "")
     }
 
+    var navBarSessionIconName: String {
+        guard usesLandscapeSessionSidebar else { return "list.bullet" }
+        return isSessionPickerPresented ? "sidebar.right" : "sidebar.left"
+    }
+
+    var navBarSessionAccessibilityLabel: String {
+        guard usesLandscapeSessionSidebar else {
+            return NSLocalizedString("会话列表", comment: "")
+        }
+        return isSessionPickerPresented
+            ? NSLocalizedString("隐藏会话列表", comment: "")
+            : NSLocalizedString("显示会话列表", comment: "")
+    }
+
     func toggleModelPickerPanel() {
+        if usesLandscapeSessionSidebar, isSessionPickerPresented {
+            sessionSplitVisibility = .detailOnly
+            resetSessionPickerSearchState()
+        }
         guard !usesBottomSheetPickerStyle else {
             showSessionPickerPanel = false
             showModelPickerPanel = false
@@ -191,6 +209,19 @@ extension ChatView {
     }
 
     func toggleSessionPickerPanel() {
+        guard !usesLandscapeSessionSidebar else {
+            showModelPickerPanel = false
+            activeChatPickerSheet = nil
+            withAnimation(modelPickerAnimation) {
+                if isSessionPickerPresented {
+                    sessionSplitVisibility = .detailOnly
+                    resetSessionPickerSearchState()
+                } else {
+                    sessionSplitVisibility = .all
+                }
+            }
+            return
+        }
         guard !usesBottomSheetPickerStyle else {
             showModelPickerPanel = false
             showSessionPickerPanel = false
@@ -209,6 +240,13 @@ extension ChatView {
     }
 
     func dismissSessionPickerPanel() {
+        if usesLandscapeSessionSidebar {
+            withAnimation(modelPickerAnimation) {
+                sessionSplitVisibility = .detailOnly
+                resetSessionPickerSearchState()
+            }
+            return
+        }
         if usesBottomSheetPickerStyle {
             activeChatPickerSheet = nil
             resetSessionPickerSearchState()
@@ -232,6 +270,20 @@ extension ChatView {
     }
 
     func handleChatPickerSheetDismissed() {
+        resetSessionPickerSearchState()
+    }
+
+    func handleChatLayoutChange(isLandscape: Bool) {
+        guard isChatLayoutLandscape != isLandscape else { return }
+        isChatLayoutLandscape = isLandscape
+        if isLandscape {
+            if activeChatPickerSheet == .session {
+                activeChatPickerSheet = nil
+            }
+            showSessionPickerPanel = false
+            return
+        }
+        sessionSplitVisibility = .detailOnly
         resetSessionPickerSearchState()
     }
 

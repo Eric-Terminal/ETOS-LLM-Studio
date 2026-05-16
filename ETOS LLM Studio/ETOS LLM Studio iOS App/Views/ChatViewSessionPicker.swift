@@ -12,43 +12,40 @@ import Shared
 
 extension ChatView {
     var nativeSessionPickerSheet: some View {
+        applySessionPickerLifecycle(
+            to: NavigationStack {
+                nativeSessionPickerContent(showsCloseButton: true)
+            }
+        )
+    }
+
+    var landscapeSessionSidebar: some View {
+        applySessionPickerLifecycle(
+            to: nativeSessionPickerContent(showsCloseButton: false)
+                .navigationSplitViewColumnWidth(min: 288, ideal: 320, max: 380)
+        )
+    }
+
+    func nativeSessionPickerContent(showsCloseButton: Bool) -> some View {
         let queryActive = nativeSessionPickerQueryActive
         let displayedCount = nativeSessionPickerDisplayedCount
         let showsPagination = shouldShowSessionPickerPaginationBar(queryActive: queryActive)
 
-        return NavigationStack {
-            VStack(spacing: 0) {
-                nativeSessionPickerTopBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 10)
+        return VStack(spacing: 0) {
+            nativeSessionPickerTopBar
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
 
-                Divider()
+            Divider()
 
-                if showsPagination {
-                    ZStack(alignment: .bottom) {
-                        sessionPickerList(
-                            queryActive: queryActive,
-                            isSearching: isSessionPickerSearching,
-                            includesSearchInput: false,
-                            bottomContentPadding: 74
-                        )
-
-                        sessionPickerFooter(
-                            queryActive: queryActive,
-                            displayedCount: displayedCount,
-                            isSearching: isSessionPickerSearching
-                        )
-                        .padding(.top, 10)
-                    }
-                    .frame(maxHeight: .infinity)
-                } else {
+            if showsPagination {
+                ZStack(alignment: .bottom) {
                     sessionPickerList(
                         queryActive: queryActive,
                         isSearching: isSessionPickerSearching,
-                        includesSearchInput: false
+                        includesSearchInput: false,
+                        bottomContentPadding: 74
                     )
-
-                    Divider()
 
                     sessionPickerFooter(
                         queryActive: queryActive,
@@ -57,28 +54,50 @@ extension ChatView {
                     )
                     .padding(.top, 10)
                 }
+                .frame(maxHeight: .infinity)
+            } else {
+                sessionPickerList(
+                    queryActive: queryActive,
+                    isSearching: isSessionPickerSearching,
+                    includesSearchInput: false
+                )
+
+                Divider()
+
+                sessionPickerFooter(
+                    queryActive: queryActive,
+                    displayedCount: displayedCount,
+                    isSearching: isSessionPickerSearching
+                )
+                .padding(.top, 10)
             }
-            .navigationTitle(NSLocalizedString("会话", comment: ""))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+        }
+        .navigationTitle(NSLocalizedString("会话", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showsCloseButton {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("完成", comment: "")) {
                         dismissSessionPickerPanel()
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        viewModel.createNewSession()
-                        editingSessionID = nil
-                        sessionDraftName = ""
-                        dismissSessionPickerPanel()
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    viewModel.createNewSession()
+                    editingSessionID = nil
+                    sessionDraftName = ""
+                    dismissSessionPickerPanel()
+                } label: {
+                    Image(systemName: "plus")
                 }
+                .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
             }
         }
+    }
+
+    func applySessionPickerLifecycle<Content: View>(to content: Content) -> some View {
+        content
         .onAppear {
             showSessionPickerSearchInput = false
             normalizeSessionPickerPageIndex()

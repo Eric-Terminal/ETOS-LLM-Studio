@@ -56,6 +56,8 @@ struct ChatView: View {
     @State var exportSharePayload: ChatExportSharePayload?
     @State var exportErrorMessage: String?
     @State var activeChatPickerSheet: ChatPickerSheet?
+    @State var isChatLayoutLandscape = false
+    @State var sessionSplitVisibility: NavigationSplitViewVisibility = .detailOnly
     @State var modelPickerRequestControl: ModelRequestBodyControl?
     @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
@@ -125,8 +127,11 @@ struct ChatView: View {
     var navBarIconSize: CGFloat {
         navBarPillHeight
     }
+    var usesLandscapeSessionSidebar: Bool {
+        isChatLayoutLandscape
+    }
     var isOverlayPanelPresented: Bool {
-        !usesBottomSheetPickerStyle && (showModelPickerPanel || showSessionPickerPanel)
+        !usesLandscapeSessionSidebar && !usesBottomSheetPickerStyle && (showModelPickerPanel || showSessionPickerPanel)
     }
     var chatPickerPresentationStyle: ChatPickerPresentationStyle {
         ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue)
@@ -138,6 +143,9 @@ struct ChatView: View {
         usesBottomSheetPickerStyle ? activeChatPickerSheet == .model : showModelPickerPanel
     }
     var isSessionPickerPresented: Bool {
+        if usesLandscapeSessionSidebar {
+            return sessionSplitVisibility != .detailOnly
+        }
         usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
     }
     var isLiquidGlassEnabled: Bool {
@@ -306,9 +314,39 @@ struct ChatView: View {
         return Array(sessionPickerSearchResults[start..<end])
     }
     var body: some View {
+        applyPresentationModifiers(to: adaptiveChatLayout)
+    }
+
+    @ViewBuilder
+    var adaptiveChatLayout: some View {
+        GeometryReader { proxy in
+            let isLandscape = proxy.size.width > proxy.size.height
+
+            Group {
+                if isLandscape {
+                    NavigationSplitView(columnVisibility: $sessionSplitVisibility) {
+                        landscapeSessionSidebar
+                    } detail: {
+                        chatConversationContent
+                    }
+                    .navigationSplitViewStyle(.balanced)
+                } else {
+                    chatConversationContent
+                }
+            }
+            .onAppear {
+                handleChatLayoutChange(isLandscape: isLandscape)
+            }
+            .onChange(of: isLandscape) { _, newValue in
+                handleChatLayoutChange(isLandscape: newValue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    var chatConversationContent: some View {
         let displayedMessages = viewModel.displayMessages
-        applyPresentationModifiers(to: Group {
-            ZStack {
+        ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
                 telegramBackgroundLayer
                     .ignoresSafeArea()
@@ -491,7 +529,7 @@ struct ChatView: View {
                     modelPickerOverlay
                 }
 
-                if !usesBottomSheetPickerStyle && showSessionPickerPanel {
+                if !usesLandscapeSessionSidebar && !usesBottomSheetPickerStyle && showSessionPickerPanel {
                     sessionPickerOverlay
                 }
 
@@ -537,6 +575,5 @@ struct ChatView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
             .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
-        })
+        }
     }
-}
