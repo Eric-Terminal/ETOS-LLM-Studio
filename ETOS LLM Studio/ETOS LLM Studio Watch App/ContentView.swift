@@ -30,6 +30,7 @@ struct ContentView: View {
     @State var shouldForceScrollToBottom = false
     @State var shouldKeepBottomPinned = true
     @State var suppressAutoScrollOnce = false
+    @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
     @State var needsImmediateBottomSnap = true
     @State var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
@@ -182,6 +183,8 @@ struct ContentView: View {
             refreshAttachmentSourceHistory()
         }
         .onDisappear {
+            pendingHistoryResetWorkItem?.cancel()
+            pendingHistoryResetWorkItem = nil
             pendingBottomSnapTask?.cancel()
             pendingBottomSnapTask = nil
             bottomAnchorVisibilityWorkItem?.cancel()
