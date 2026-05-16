@@ -6,7 +6,7 @@
 // 覆盖内容:
 // - 用户日志脱敏策略
 // - 循环缓冲区边界行为
-// - 持久化 7 天保留策略
+// - 持久化默认与自定义保留策略
 // ============================================================================
 
 import Testing
@@ -194,6 +194,49 @@ struct AppLogCenterTests {
         let dayFolders = await store.loadDayFolders(now: now)
         #expect(dayFolders.count == 7)
         #expect(dayFolders.allSatisfy { $0.runs.count == 1 })
+    }
+
+    @Test("应用日志默认仅保留最近 15 天")
+    func testFileStoreDefaultRetentionKeepsLatestFifteenDays() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-default-retention-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        defer {
+            try? fileManager.removeItem(at: tempDirectory)
+        }
+
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date(timeIntervalSince1970: 1_772_848_800) // 2026-03-07 12:00:00 UTC
+        let store = AppLogFileStore(baseDirectory: tempDirectory, calendar: calendar)
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = calendar.timeZone
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+
+        for offset in 0..<20 {
+            let day = calendar.date(byAdding: .day, value: -offset, to: now) ?? now
+            let dayFolder = tempDirectory.appendingPathComponent(dayFormatter.string(from: day), isDirectory: true)
+            try fileManager.createDirectory(at: dayFolder, withIntermediateDirectories: true)
+            try writeEvents([
+                AppLogEvent(
+                    timestamp: day,
+                    channel: .developer,
+                    level: .info,
+                    category: "测试",
+                    action: "默认保留",
+                    message: "#\(offset)",
+                    payload: nil
+                )
+            ], to: dayFolder.appendingPathComponent("run-\(offset).jsonl", isDirectory: false))
+        }
+
+        let recent = await store.loadRecentEvents(now: now)
+        #expect(recent.count == 15)
+
+        let dayFolders = await store.loadDayFolders(now: now)
+        #expect(dayFolders.count == 15)
     }
 
     @Test("同一次应用运行写入同一个日志文件")

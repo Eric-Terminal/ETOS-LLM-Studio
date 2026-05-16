@@ -30,7 +30,7 @@ actor AppLogFileStore {
     init(
         fileManager: FileManager = .default,
         baseDirectory: URL = StorageUtility.documentsDirectory.appendingPathComponent("AppLogs", isDirectory: true),
-        retentionDays: Int = 180,
+        retentionDays: Int = 15,
         calendar: Calendar = Calendar(identifier: .gregorian)
     ) {
         self.fileManager = fileManager
