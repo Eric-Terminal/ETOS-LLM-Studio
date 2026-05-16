@@ -315,7 +315,7 @@ struct ChatView: View {
                         }
                         .frame(width: 0, height: 0)
 
-                        LazyVStack(spacing: 0, pinnedViews: []) {
+                        VStack(spacing: 0) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear.frame(height: 8)
 
