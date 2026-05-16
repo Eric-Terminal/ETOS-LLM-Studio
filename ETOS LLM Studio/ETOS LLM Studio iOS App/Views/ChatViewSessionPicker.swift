@@ -12,7 +12,11 @@ import Shared
 
 extension ChatView {
     var nativeSessionPickerSheet: some View {
-        NavigationStack {
+        let queryActive = nativeSessionPickerQueryActive
+        let displayedCount = nativeSessionPickerDisplayedCount
+        let showsPagination = shouldShowSessionPickerPaginationBar(queryActive: queryActive)
+
+        return NavigationStack {
             VStack(spacing: 0) {
                 nativeSessionPickerTopBar
                     .padding(.horizontal, 16)
@@ -20,20 +24,39 @@ extension ChatView {
 
                 Divider()
 
-                sessionPickerList(
-                    queryActive: nativeSessionPickerQueryActive,
-                    isSearching: isSessionPickerSearching,
-                    includesSearchInput: false
-                )
+                if showsPagination {
+                    ZStack(alignment: .bottom) {
+                        sessionPickerList(
+                            queryActive: queryActive,
+                            isSearching: isSessionPickerSearching,
+                            includesSearchInput: false,
+                            bottomContentPadding: 74
+                        )
 
-                Divider()
+                        sessionPickerFooter(
+                            queryActive: queryActive,
+                            displayedCount: displayedCount,
+                            isSearching: isSessionPickerSearching
+                        )
+                        .padding(.top, 10)
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    sessionPickerList(
+                        queryActive: queryActive,
+                        isSearching: isSessionPickerSearching,
+                        includesSearchInput: false
+                    )
 
-                sessionPickerFooter(
-                    queryActive: nativeSessionPickerQueryActive,
-                    displayedCount: nativeSessionPickerDisplayedCount,
-                    isSearching: isSessionPickerSearching
-                )
-                .padding(.top, 10)
+                    Divider()
+
+                    sessionPickerFooter(
+                        queryActive: queryActive,
+                        displayedCount: displayedCount,
+                        isSearching: isSessionPickerSearching
+                    )
+                    .padding(.top, 10)
+                }
             }
             .navigationTitle(NSLocalizedString("会话", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
@@ -322,7 +345,8 @@ extension ChatView {
     func sessionPickerList(
         queryActive: Bool,
         isSearching: Bool,
-        includesSearchInput: Bool = true
+        includesSearchInput: Bool = true,
+        bottomContentPadding: CGFloat = 16
     ) -> some View {
         ScrollView {
             LazyVStack(spacing: 10) {
@@ -350,7 +374,7 @@ extension ChatView {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .padding(.bottom, bottomContentPadding)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
