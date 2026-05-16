@@ -11,6 +11,35 @@ import Foundation
 @testable import Shared
 
 extension ChatServiceTests {
+    @Test("世界书隔离策略会显式屏蔽内置工具")
+    func testWorldbookIsolationPolicySuppressesBuiltInAppTools() async throws {
+        await cleanup()
+
+        var isolatedSession = ChatSession(id: UUID(), name: "隔离策略会话")
+        isolatedSession.lorebookIDs = [UUID()]
+        isolatedSession.worldbookContextIsolationEnabled = true
+
+        let normalPolicy = chatService.auxiliaryContextPolicy(
+            for: nil,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true
+        )
+        let isolatedPolicy = chatService.auxiliaryContextPolicy(
+            for: isolatedSession,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true
+        )
+
+        #expect(normalPolicy.includeBuiltInAppTools)
+        #expect(normalPolicy.includeAppTools)
+        #expect(!isolatedPolicy.includeBuiltInAppTools)
+        #expect(!isolatedPolicy.includeAppTools)
+
+        await cleanup()
+    }
+
     @Test("Topic prompt is added correctly to system message")
     func testTopicPrompt_IsAddedCorrectly() async throws {
         await cleanup()
