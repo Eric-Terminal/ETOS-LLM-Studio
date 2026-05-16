@@ -89,14 +89,15 @@ extension ChatView {
     func handleScrollToBottomButtonTap(proxy: ScrollViewProxy) {
         pendingHistoryResetWorkItem?.cancel()
 
-        let shouldAnimate = shouldAnimateScrollToBottomButton
         let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
         showScrollToBottom = false
-        scrollToBottom(
-            proxy: proxy,
-            animated: shouldAnimate,
-            animation: scrollToBottomButtonAnimation
-        )
+        if !scrollToBottomWithResolvedScrollView(animated: true) {
+            scrollToBottom(
+                proxy: proxy,
+                animated: true,
+                animation: scrollToBottomButtonAnimation
+            )
+        }
 
         guard shouldResetHistoryWindow else {
             pendingHistoryResetWorkItem = nil
@@ -109,13 +110,14 @@ extension ChatView {
             withTransaction(transaction) {
                 viewModel.resetLazyLoadState()
             }
-            scrollToBottom(proxy: proxy, animated: false)
+            if !scrollToBottomWithResolvedScrollView(animated: false) {
+                scrollToBottom(proxy: proxy, animated: false)
+            }
             pendingHistoryResetWorkItem = nil
         }
         pendingHistoryResetWorkItem = workItem
 
-        let delay = shouldAnimate ? 0.56 : 0.08
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.56, execute: workItem)
     }
 
     func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {
@@ -153,8 +155,39 @@ extension ChatView {
         }
     }
 
-    var shouldAnimateScrollToBottomButton: Bool {
-        let screenHeight = max(UIScreen.main.bounds.height, 1)
-        return scrollDistanceToBottom <= screenHeight * longDistanceScrollAnimationThresholdScreens
+    func scrollToBottomWithResolvedScrollView(animated: Bool) -> Bool {
+        guard let scrollView = chatScrollView else { return false }
+        scrollView.layoutIfNeeded()
+        guard scrollView.bounds.height > 0, scrollView.contentSize.height > 0 else { return false }
+
+        scrollToBottomAnimator?.stopAnimation(true)
+        scrollToBottomAnimator = nil
+
+        let minimumY = -scrollView.adjustedContentInset.top
+        let maximumY = max(
+            minimumY,
+            scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+        )
+        let targetOffset = CGPoint(x: scrollView.contentOffset.x, y: maximumY)
+
+        guard animated else {
+            scrollView.setContentOffset(targetOffset, animated: false)
+            return true
+        }
+
+        let timing = UICubicTimingParameters(
+            controlPoint1: CGPoint(x: 0.22, y: 1.0),
+            controlPoint2: CGPoint(x: 0.36, y: 1.0)
+        )
+        let animator = UIViewPropertyAnimator(duration: scrollToBottomAnimationDuration, timingParameters: timing)
+        animator.addAnimations {
+            scrollView.setContentOffset(targetOffset, animated: false)
+        }
+        animator.addCompletion { _ in
+            scrollToBottomAnimator = nil
+        }
+        scrollToBottomAnimator = animator
+        animator.startAnimation()
+        return true
     }
 }

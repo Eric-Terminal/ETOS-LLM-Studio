@@ -115,9 +115,18 @@ struct ChatInputBarHeightPreferenceKey: PreferenceKey {
 
 struct ScrollDistanceToBottomObserver: UIViewRepresentable {
     let onDistanceChange: (CGFloat) -> Void
+    let onScrollViewResolve: (UIScrollView) -> Void
+
+    init(
+        onScrollViewResolve: @escaping (UIScrollView) -> Void = { _ in },
+        onDistanceChange: @escaping (CGFloat) -> Void
+    ) {
+        self.onScrollViewResolve = onScrollViewResolve
+        self.onDistanceChange = onDistanceChange
+    }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDistanceChange: onDistanceChange)
+        Coordinator(onScrollViewResolve: onScrollViewResolve, onDistanceChange: onDistanceChange)
     }
 
     func makeUIView(context: Context) -> ObserverView {
@@ -130,6 +139,7 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
 
     func updateUIView(_ uiView: ObserverView, context: Context) {
         context.coordinator.onDistanceChange = onDistanceChange
+        context.coordinator.onScrollViewResolve = onScrollViewResolve
         uiView.coordinator = context.coordinator
         DispatchQueue.main.async {
             uiView.attachToScrollViewIfNeeded()
@@ -138,16 +148,22 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
 
     final class Coordinator {
         var onDistanceChange: (CGFloat) -> Void
+        var onScrollViewResolve: (UIScrollView) -> Void
         weak var scrollView: UIScrollView?
         private var contentOffsetObservation: NSKeyValueObservation?
         private var contentSizeObservation: NSKeyValueObservation?
         private var boundsObservation: NSKeyValueObservation?
 
-        init(onDistanceChange: @escaping (CGFloat) -> Void) {
+        init(
+            onScrollViewResolve: @escaping (UIScrollView) -> Void,
+            onDistanceChange: @escaping (CGFloat) -> Void
+        ) {
+            self.onScrollViewResolve = onScrollViewResolve
             self.onDistanceChange = onDistanceChange
         }
 
         func attach(to scrollView: UIScrollView) {
+            onScrollViewResolve(scrollView)
             guard self.scrollView !== scrollView else {
                 notifyDistanceChange()
                 return
