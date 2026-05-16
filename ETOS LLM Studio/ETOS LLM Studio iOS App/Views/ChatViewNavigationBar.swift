@@ -179,7 +179,7 @@ extension ChatView {
 
     func toggleModelPickerPanel() {
         if usesLandscapeSessionSidebar, isSessionPickerPresented {
-            sessionSplitVisibility = .detailOnly
+            isLandscapeSessionSidebarPresented = false
             resetSessionPickerSearchState()
         }
         guard !usesBottomSheetPickerStyle else {
@@ -214,10 +214,10 @@ extension ChatView {
             activeChatPickerSheet = nil
             withAnimation(modelPickerAnimation) {
                 if isSessionPickerPresented {
-                    sessionSplitVisibility = .detailOnly
+                    isLandscapeSessionSidebarPresented = false
                     resetSessionPickerSearchState()
                 } else {
-                    sessionSplitVisibility = .all
+                    isLandscapeSessionSidebarPresented = true
                 }
             }
             return
@@ -242,7 +242,7 @@ extension ChatView {
     func dismissSessionPickerPanel() {
         if usesLandscapeSessionSidebar {
             withAnimation(modelPickerAnimation) {
-                sessionSplitVisibility = .detailOnly
+                isLandscapeSessionSidebarPresented = false
                 resetSessionPickerSearchState()
             }
             return
@@ -283,7 +283,7 @@ extension ChatView {
             showSessionPickerPanel = false
             return
         }
-        sessionSplitVisibility = .detailOnly
+        isLandscapeSessionSidebarPresented = false
         resetSessionPickerSearchState()
     }
 

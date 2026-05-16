@@ -298,8 +298,7 @@ struct SettingsView: View {
     // MARK: - 辅助方法
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
-            && appConfig.settingsColorfulIconsEnabled
+        appConfig.settingsColorfulIconsEnabled
     }
 
     @ViewBuilder

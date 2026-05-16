@@ -57,7 +57,7 @@ struct ChatView: View {
     @State var exportErrorMessage: String?
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var isChatLayoutLandscape = false
-    @State var sessionSplitVisibility: NavigationSplitViewVisibility = .detailOnly
+    @State var isLandscapeSessionSidebarPresented = false
     @State var modelPickerRequestControl: ModelRequestBodyControl?
     @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
@@ -101,6 +101,7 @@ struct ChatView: View {
     let sessionPickerMorphID = "sessionPickerMorph"
     let sessionPickerHeightRatio: CGFloat = 0.6
     let sessionPickerCornerRadius: CGFloat = 26
+    let landscapeSessionSidebarWidth: CGFloat = 320
     let sessionPickerMaxSessionsPerPage = 100
     let transcriptExportService = ChatTranscriptExportService()
     var scrollToBottomButtonBottomPadding: CGFloat {
@@ -144,7 +145,7 @@ struct ChatView: View {
     }
     var isSessionPickerPresented: Bool {
         if usesLandscapeSessionSidebar {
-            return sessionSplitVisibility != .detailOnly
+            return isLandscapeSessionSidebarPresented
         }
         return usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
     }
@@ -324,12 +325,7 @@ struct ChatView: View {
 
             Group {
                 if isLandscape {
-                    NavigationSplitView(columnVisibility: $sessionSplitVisibility) {
-                        landscapeSessionSidebar
-                    } detail: {
-                        chatConversationContent
-                    }
-                    .navigationSplitViewStyle(.balanced)
+                    landscapeChatLayout
                 } else {
                     chatConversationContent
                 }
@@ -339,6 +335,32 @@ struct ChatView: View {
             }
             .onChange(of: isLandscape) { _, newValue in
                 handleChatLayoutChange(isLandscape: newValue)
+            }
+        }
+    }
+
+    var landscapeChatLayout: some View {
+        ZStack(alignment: .leading) {
+            chatConversationContent
+
+            if isSessionPickerPresented {
+                Color.black.opacity(colorScheme == .dark ? 0.2 : 0.1)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissSessionPickerPanel()
+                    }
+                    .transition(.opacity)
+                    .zIndex(40)
+
+                landscapeSessionSidebar
+                    .frame(width: landscapeSessionSidebarWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(.regularMaterial)
+                    .overlay(alignment: .trailing) {
+                        Divider()
+                    }
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+                    .zIndex(41)
             }
         }
     }

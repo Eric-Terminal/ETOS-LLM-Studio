@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件负责 watchOS 主聊天界面使用的导入、模型切换与问答 Sheet。
+// 本文件负责 watchOS 主聊天界面使用的导入与请求控制 Sheet。
 // ============================================================================
 
 import SwiftUI
@@ -69,74 +69,6 @@ struct WatchImportSourceView: View {
                 Button(confirmTitle, action: onImport)
                     .disabled(!canImport)
             }
-        }
-    }
-}
-
-struct WatchQuickModelSelectorView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let models: [RunnableModel]
-    @Binding var selectedModel: RunnableModel?
-
-    var body: some View {
-        List {
-            if models.isEmpty {
-                Text(NSLocalizedString("暂无可用模型，请先在设置中启用模型。", comment: ""))
-                    .foregroundStyle(.secondary)
-            } else {
-                Section(header: Text(NSLocalizedString("模型", comment: ""))) {
-                    ForEach(models, id: \.id) { model in
-                        Button {
-                            selectedModel = model
-                        } label: {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.model.displayName)
-                                        .etFont(.subheadline.weight(.semibold))
-                                    Text("\(model.provider.name) · \(model.model.modelName)")
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if selectedModel?.id == model.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.blue)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Section(header: Text(NSLocalizedString("请求控制", comment: ""))) {
-                    requestControlRows
-                }
-            }
-        }
-        .navigationTitle(NSLocalizedString("切换模型", comment: ""))
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    @ViewBuilder
-    private var requestControlRows: some View {
-        if let selectedModel {
-            let controls = selectedModel.model.requestBodyControls.filter(\.isEnabled)
-            if controls.isEmpty {
-                Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(controls) { control in
-                    NavigationLink {
-                        WatchRequestBodyControlDetailView(runnableModel: selectedModel, control: control)
-                    } label: {
-                        Text(control.title)
-                    }
-                }
-            }
-        } else {
-            Text(NSLocalizedString("请先选择模型。", comment: ""))
-                .foregroundStyle(.secondary)
         }
     }
 }

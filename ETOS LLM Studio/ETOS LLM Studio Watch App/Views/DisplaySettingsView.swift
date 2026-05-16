@@ -96,20 +96,15 @@ struct DisplaySettingsView: View {
             // MARK: Section 3：全局外观
             Section(
                 header: Text(NSLocalizedString("全局外观", comment: "")),
-                footer: Text(NSLocalizedString("「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。", comment: ""))
+                footer: Text(NSLocalizedString("手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标。", comment: ""))
             ) {
-                Picker(NSLocalizedString("界面架构", comment: ""), selection: chatNavigationModeBinding) {
-                    Text(NSLocalizedString("沉浸视窗", comment: "")).tag(ChatNavigationMode.legacyOverlay)
-                    Text(NSLocalizedString("独立页面", comment: "")).tag(ChatNavigationMode.nativeNavigation)
-                }
                 Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
                     ForEach(AppLanguagePreference.allCases) { language in
                         appLanguageLabel(language)
                             .tag(language.rawValue)
                     }
                 }
-                Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: colorfulSettingsIconsBinding)
-                    .disabled(!canUseColorfulSettingsIcons)
+                Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $appConfig.settingsColorfulIconsEnabled)
             }
         }
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
@@ -120,10 +115,6 @@ struct DisplaySettingsView: View {
         }
         .onAppear {
             normalizeBackgroundOpacityIfNeeded()
-            disableColorfulSettingsIconsIfNeeded()
-        }
-        .onChange(of: appConfig.chatNavigationMode) { _, _ in
-            disableColorfulSettingsIconsIfNeeded()
         }
     }
     private var normalizedBackgroundOpacity: Double {
@@ -135,30 +126,6 @@ struct DisplaySettingsView: View {
             get: { normalizedBackgroundOpacity },
             set: { backgroundOpacity = WatchBackgroundOpacitySetting.normalized($0) }
         )
-    }
-
-    private var chatNavigationModeBinding: Binding<ChatNavigationMode> {
-        Binding(
-            get: { ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) },
-            set: { appConfig.chatNavigationMode = $0.rawValue }
-        )
-    }
-
-    private var canUseColorfulSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
-    }
-
-    private var colorfulSettingsIconsBinding: Binding<Bool> {
-        Binding(
-            get: { canUseColorfulSettingsIcons && appConfig.settingsColorfulIconsEnabled },
-            set: { appConfig.settingsColorfulIconsEnabled = canUseColorfulSettingsIcons && $0 }
-        )
-    }
-
-    private func disableColorfulSettingsIconsIfNeeded() {
-        if !canUseColorfulSettingsIcons {
-            appConfig.settingsColorfulIconsEnabled = false
-        }
     }
 
     private func normalizeBackgroundOpacityIfNeeded() {

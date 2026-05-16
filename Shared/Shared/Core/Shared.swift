@@ -13,20 +13,6 @@ import Combine
 import ObjectiveC
 #endif
 
-public enum ChatNavigationMode: String, CaseIterable, Identifiable {
-    case legacyOverlay = "legacyOverlay"
-    case nativeNavigation = "nativeNavigation"
-
-    public static let storageKey = "ui.chatNavigationMode"
-    public static let defaultMode: ChatNavigationMode = .legacyOverlay
-
-    public var id: String { rawValue }
-
-    public static func resolvedMode(rawValue: String) -> ChatNavigationMode {
-        ChatNavigationMode(rawValue: rawValue) ?? defaultMode
-    }
-}
-
 public enum ChatPickerPresentationStyle: String, CaseIterable, Identifiable {
     case legacyOverlay = "legacyOverlay"
     case bottomSheet = "bottomSheet"

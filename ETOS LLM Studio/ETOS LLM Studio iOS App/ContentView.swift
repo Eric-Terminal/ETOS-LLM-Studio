@@ -2,7 +2,7 @@
 // ContentView.swift (iOS)
 // ============================================================================
 // 应用根视图:
-// - 构建原生导航根视图，统一承接通知与页面跳转
+// - 构建聊天根视图，统一承接通知与页面跳转
 // - 通过环境注入的 ChatViewModel 在各子视图间共享状态
 // ============================================================================
 
@@ -30,7 +30,6 @@ struct ContentView: View {
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
-    @State private var isNativeChatPresented: Bool = true
     @State private var isNativeSettingsPresented: Bool = false
     
     var body: some View {
@@ -58,11 +57,10 @@ struct ContentView: View {
     }
 
     private var baseContent: some View {
-        nativeNavigationContent
+        appNavigationContent
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
         .onAppear {
-            normalizeChatNavigationModeIfNeeded()
             AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
             refreshRootBodyFont()
         }
@@ -83,11 +81,6 @@ struct ContentView: View {
                 appConfig.fontCustomScale = normalizedValue
             }
             refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.chatNavigationMode) { _, _ in
-            normalizeChatNavigationModeIfNeeded()
-            isNativeSettingsPresented = false
-            isNativeChatPresented = true
         }
         .onChange(of: appConfig.appLanguage) { _, newValue in
             AppLanguageRuntime.apply(rawValue: newValue)
@@ -132,28 +125,9 @@ struct ContentView: View {
         }
     }
 
-    private var nativeNavigationContent: some View {
+    private var appNavigationContent: some View {
         NavigationStack {
-            SessionListView(
-                createConversationAction: {
-                    viewModel.createNewSession()
-                    pushNativeChatIfNeeded()
-                }
-            )
-                .navigationTitle(NSLocalizedString("历史会话", comment: ""))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            pushNativeSettings(destination: nil)
-                        } label: {
-                            Image(systemName: "gearshape.fill")
-                        }
-                    }
-                }
-                .navigationDestination(isPresented: $isNativeChatPresented) {
-                    ChatView()
-                }
+            ChatView()
                 .navigationDestination(isPresented: $isNativeSettingsPresented) {
                     SettingsView(requestedDestination: $settingsDestination)
                 }
@@ -306,7 +280,6 @@ struct ContentView: View {
 
     private func pushNativeSettings(destination: SettingsNavigationDestination?) {
         settingsDestination = nil
-        isNativeChatPresented = false
         isNativeSettingsPresented = true
         if let destination {
             DispatchQueue.main.async {
@@ -316,16 +289,7 @@ struct ContentView: View {
     }
 
     private func pushNativeChatIfNeeded() {
-        if isNativeChatPresented && !isNativeSettingsPresented {
-            return
-        }
         isNativeSettingsPresented = false
-        isNativeChatPresented = true
-    }
-
-    private func normalizeChatNavigationModeIfNeeded() {
-        guard appConfig.chatNavigationMode != ChatNavigationMode.legacyOverlay.rawValue else { return }
-        appConfig.chatNavigationMode = ChatNavigationMode.legacyOverlay.rawValue
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {

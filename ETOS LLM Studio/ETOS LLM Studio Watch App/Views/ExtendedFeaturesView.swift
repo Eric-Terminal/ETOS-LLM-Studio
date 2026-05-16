@@ -282,8 +282,7 @@ public struct ExtendedFeaturesView: View {
     }
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
-            && appConfig.settingsColorfulIconsEnabled
+        appConfig.settingsColorfulIconsEnabled
     }
 
     @ViewBuilder
@@ -414,8 +413,7 @@ struct LongTermMemoryFeatureView: View {
     }
 
     private var usesNativeSettingsIcons: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
-            && appConfig.settingsColorfulIconsEnabled
+        appConfig.settingsColorfulIconsEnabled
     }
 
     @ViewBuilder

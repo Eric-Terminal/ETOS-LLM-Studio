@@ -38,8 +38,6 @@ struct ContentView: View {
     @State var launchRecoveryNoticeMessage: String?
     @State var rootBodyFont: Font = .body
     @State var legacyMigrationErrorMessage: String?
-    @State var nativeDestination: WatchNativeNavigationDestination? = .chat
-    @State var isQuickModelSelectorPresented = false
     @State var isRequestControlsPresented = false
     @State var isAttachmentImportPresented = false
     @State var attachmentSourceText: String = ""
@@ -65,38 +63,16 @@ struct ContentView: View {
         }
     }
 
-    var isNativeNavigationEnabled: Bool {
-        ChatNavigationMode.resolvedMode(rawValue: appConfig.chatNavigationMode) == .nativeNavigation
-    }
-
     var body: some View {
         ZStack {
-            if !isNativeNavigationEnabled {
-                chatBackgroundLayer
-                    .ignoresSafeArea()
-            }
+            chatBackgroundLayer
+                .ignoresSafeArea()
 
             NavigationStack {
-                if isNativeNavigationEnabled {
-                    nativeSessionRootView
-                        .navigationDestination(item: $nativeDestination) { destination in
-                            switch destination {
-                            case .chat:
-                                legacyChatRootView
-                            case .settings:
-                                SettingsView(
-                                    viewModel: viewModel,
-                                    requestedDestination: $settingsDestination,
-                                    embedsInNavigationStack: false
-                                )
-                            }
-                        }
-                } else {
-                    legacyChatRootView
-                        .navigationDestination(isPresented: $isSessionListPresented) {
-                            sessionListView
-                        }
-                }
+                legacyChatRootView
+                    .navigationDestination(isPresented: $isSessionListPresented) {
+                        sessionListView
+                    }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
@@ -163,15 +139,6 @@ struct ContentView: View {
                 appConfig.fontCustomScale = normalizedValue
             }
             refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.chatNavigationMode) { _, _ in
-            if !isNativeNavigationEnabled {
-                nativeDestination = nil
-            } else {
-                nativeDestination = .chat
-                isSessionListPresented = false
-                isSettingsPresented = false
-            }
         }
         .onChange(of: appConfig.appLanguage) { _, newValue in
             AppLanguageRuntime.apply(rawValue: newValue)

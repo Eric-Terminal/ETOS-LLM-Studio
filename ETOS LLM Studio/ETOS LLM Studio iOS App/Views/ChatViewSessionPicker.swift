@@ -22,7 +22,6 @@ extension ChatView {
     var landscapeSessionSidebar: some View {
         applySessionPickerLifecycle(
             to: nativeSessionPickerContent(showsCloseButton: false)
-                .navigationSplitViewColumnWidth(min: 288, ideal: 320, max: 380)
         )
     }
 

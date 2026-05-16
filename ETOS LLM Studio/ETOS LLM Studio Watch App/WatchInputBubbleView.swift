@@ -13,7 +13,6 @@ struct WatchInputBubbleView: View {
     @ObservedObject var viewModel: ChatViewModel
 
     let isLiquidGlassEnabled: Bool
-    let isNativeNavigationEnabled: Bool
     let inputControlHeight: CGFloat
     let inputFillColor: Color
     let inputStrokeColor: Color
@@ -24,7 +23,6 @@ struct WatchInputBubbleView: View {
     let onRememberAttachmentSource: (String) -> Void
     let importSourceHistory: [String]
     let lastAttachmentSource: String
-    @Binding var isQuickModelSelectorPresented: Bool
     @Binding var isRequestControlsPresented: Bool
     @Binding var isAttachmentImportPresented: Bool
     @Binding var attachmentSourceText: String
@@ -288,43 +286,16 @@ struct WatchInputBubbleView: View {
                     .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
                     .tint(.purple)
                 }
-                if isNativeNavigationEnabled {
-                    Button {
-                        isQuickModelSelectorPresented = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("切换模型", comment: ""))
-                    .tint(.blue)
-                } else {
-                    Button {
-                        onOpenSessionHistory()
-                    } label: {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
-                    .tint(.blue)
+                Button {
+                    onOpenSessionHistory()
+                } label: {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: inputControlHeight, height: inputControlHeight)
                 }
-            }
-            .sheet(isPresented: $isQuickModelSelectorPresented) {
-                NavigationStack {
-                    WatchQuickModelSelectorView(
-                        models: viewModel.activatedModels,
-                        selectedModel: Binding(
-                            get: { viewModel.selectedModel },
-                            set: { newValue in
-                                viewModel.selectedModel = newValue
-                                ChatService.shared.setSelectedModel(newValue)
-                            }
-                        )
-                    )
-                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
+                .tint(.blue)
             }
             .sheet(isPresented: $isRequestControlsPresented) {
                 if let selectedModel = viewModel.selectedModel {

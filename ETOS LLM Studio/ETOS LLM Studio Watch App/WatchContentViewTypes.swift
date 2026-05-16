@@ -50,13 +50,6 @@ enum WatchChatInputActionState: Equatable {
     }
 }
 
-enum WatchNativeNavigationDestination: String, Identifiable {
-    case chat
-    case settings
-
-    var id: String { rawValue }
-}
-
 struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
     let id: UUID
 }

@@ -11,19 +11,6 @@ import Foundation
 import SwiftUI
 @testable import Shared
 
-@Suite("聊天界面架构默认值测试")
-struct ChatNavigationModeTests {
-    @Test("默认使用沉浸浮层界面")
-    func defaultModeUsesLegacyOverlay() {
-        #expect(ChatNavigationMode.defaultMode == .legacyOverlay)
-    }
-
-    @Test("沉浸浮层配置会保持沉浸浮层")
-    func legacyOverlayResolvesToLegacyOverlay() {
-        #expect(ChatNavigationMode.resolvedMode(rawValue: ChatNavigationMode.legacyOverlay.rawValue) == .legacyOverlay)
-    }
-}
-
 @Suite("聊天选择器呈现样式测试")
 struct ChatPickerPresentationStyleTests {
     @Test("默认使用底部抽屉")

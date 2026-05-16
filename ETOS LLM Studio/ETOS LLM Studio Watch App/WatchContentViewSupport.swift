@@ -11,38 +11,9 @@ import Foundation
 import Shared
 
 extension ContentView {
-    @ViewBuilder
-    var nativeSessionRootView: some View {
-        Group {
-            if nativeDestination == nil {
-                sessionListView
-            } else {
-                Color.clear
-            }
-        }
-            .navigationTitle(NSLocalizedString("历史会话", comment: ""))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if nativeDestination == nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            nativeDestination = .settings
-                        } label: {
-                            Image(systemName: "gearshape.fill")
-                        }
-                    }
-                }
-            }
-    }
-
     var legacyChatRootView: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
-                if isNativeNavigationEnabled {
-                    chatBackgroundLayer
-                        .ignoresSafeArea()
-                }
-
                 chatList(proxy: proxy)
 
                 if showScrollToBottomButton {
@@ -233,11 +204,7 @@ extension ContentView {
                     viewModel.clearPendingMessageJumpTarget()
                 }
                 ChatService.shared.setCurrentSession(selectedSession)
-                if isNativeNavigationEnabled {
-                    nativeDestination = .chat
-                } else {
-                    isSessionListPresented = false
-                }
+                isSessionListPresented = false
             },
             updateSessionAction: { session in
                 viewModel.updateSession(session)
@@ -257,10 +224,10 @@ extension ContentView {
             moveFolderToFolderAction: { folder, parentID in
                 viewModel.moveSessionFolder(folder, toParentID: parentID)
             },
-            createConversationAction: isNativeNavigationEnabled ? {
+            createConversationAction: {
                 viewModel.createNewSession()
-                nativeDestination = .chat
-            } : nil
+                isSessionListPresented = false
+            }
         )
     }
 

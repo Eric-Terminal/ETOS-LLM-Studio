@@ -139,7 +139,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case fontUseCustomFonts = "font.useCustomFonts"
     case fontFallbackScope = "font.fallbackScope"
     case fontCustomScale = "font.customScale"
-    case chatNavigationMode = "ui.chatNavigationMode"
     case appLanguage = "ui.appLanguage"
     case watchAttachmentLastSource = "watch.attachment.lastSource"
     case watchAttachmentSourceHistory = "watch.attachment.sourceHistory"
@@ -329,8 +328,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("segment")
         case .fontCustomScale:
             return .real(1.0)
-        case .chatNavigationMode:
-            return .text("legacyOverlay")
         case .appLanguage:
             return .text("system")
         case .watchAttachmentLastSource,

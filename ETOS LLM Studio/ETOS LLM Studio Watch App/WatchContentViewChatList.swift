@@ -64,7 +64,6 @@ extension ContentView {
                 WatchInputBubbleView(
                     viewModel: viewModel,
                     isLiquidGlassEnabled: isLiquidGlassEnabled,
-                    isNativeNavigationEnabled: isNativeNavigationEnabled,
                     inputControlHeight: inputControlHeight,
                     inputFillColor: inputFillColor,
                     inputStrokeColor: inputStrokeColor,
@@ -74,11 +73,7 @@ extension ContentView {
                         viewModel.activeSheet = nil
                         isSettingsPresented = false
                         settingsDestination = nil
-                        if isNativeNavigationEnabled {
-                            nativeDestination = nil
-                        } else {
-                            isSessionListPresented = true
-                        }
+                        isSessionListPresented = true
                     },
                     onHandleInputAction: { state in
                         switch state {
@@ -109,7 +104,6 @@ extension ContentView {
                     },
                     importSourceHistory: importSourceHistory,
                     lastAttachmentSource: appConfig.watchAttachmentLastSource,
-                    isQuickModelSelectorPresented: $isQuickModelSelectorPresented,
                     isRequestControlsPresented: $isRequestControlsPresented,
                     isAttachmentImportPresented: $isAttachmentImportPresented,
                     attachmentSourceText: $attachmentSourceText
@@ -147,14 +141,12 @@ extension ContentView {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .toolbar {
-            if !isNativeNavigationEnabled {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        viewModel.activeSheet = nil
-                        isSettingsPresented = true
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                    }
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    viewModel.activeSheet = nil
+                    isSettingsPresented = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
                 }
             }
         }

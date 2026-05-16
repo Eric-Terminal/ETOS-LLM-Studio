@@ -26,14 +26,6 @@ extension ContentView {
     }
 
     func openDailyPulse() {
-        if isNativeNavigationEnabled {
-            settingsDestination = nil
-            nativeDestination = .settings
-            DispatchQueue.main.async {
-                settingsDestination = .dailyPulse
-            }
-            return
-        }
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
@@ -59,28 +51,11 @@ extension ContentView {
 
     func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
-        if isNativeNavigationEnabled {
-            nativeDestination = .chat
-            return
-        }
         isSettingsPresented = false
         settingsDestination = nil
     }
 
     func openFeedback(issueNumber: Int?) {
-        if isNativeNavigationEnabled {
-            settingsDestination = nil
-            nativeDestination = .settings
-            DispatchQueue.main.async {
-                if let issueNumber,
-                   FeedbackService.shared.tickets.contains(where: { $0.issueNumber == issueNumber }) {
-                    settingsDestination = .feedbackIssue(issueNumber: issueNumber)
-                } else {
-                    settingsDestination = .feedbackCenter
-                }
-            }
-            return
-        }
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
@@ -94,14 +69,6 @@ extension ContentView {
     }
 
     func openAchievementJournal() {
-        if isNativeNavigationEnabled {
-            settingsDestination = nil
-            nativeDestination = .settings
-            DispatchQueue.main.async {
-                settingsDestination = .achievementJournal
-            }
-            return
-        }
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
@@ -118,10 +85,6 @@ extension ContentView {
             sessionID: continuation.sessionID,
             prompt: continuation.prompt
         )
-        if isNativeNavigationEnabled {
-            nativeDestination = .chat
-            return true
-        }
         isSettingsPresented = false
         settingsDestination = nil
         return true

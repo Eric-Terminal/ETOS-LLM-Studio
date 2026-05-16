@@ -196,7 +196,6 @@ public final class AppConfigStore: ObservableObject {
     @Published public var fontUseCustomFonts: Bool { didSet { write(.fontUseCustomFonts, fontUseCustomFonts) } }
     @Published public var fontFallbackScope: String { didSet { write(.fontFallbackScope, fontFallbackScope) } }
     @Published public var fontCustomScale: Double { didSet { write(.fontCustomScale, fontCustomScale) } }
-    @Published public var chatNavigationMode: String { didSet { write(.chatNavigationMode, chatNavigationMode) } }
     @Published public var appLanguage: String { didSet { write(.appLanguage, appLanguage) } }
     @Published public var watchAttachmentLastSource: String { didSet { write(.watchAttachmentLastSource, watchAttachmentLastSource) } }
     @Published public var watchAttachmentSourceHistory: String { didSet { write(.watchAttachmentSourceHistory, watchAttachmentSourceHistory) } }
@@ -315,7 +314,6 @@ public final class AppConfigStore: ObservableObject {
         fontUseCustomFonts = Self.boolValue(.fontUseCustomFonts, userDefaults: userDefaults)
         fontFallbackScope = Self.textValue(.fontFallbackScope, userDefaults: userDefaults)
         fontCustomScale = Self.realValue(.fontCustomScale, userDefaults: userDefaults)
-        chatNavigationMode = Self.textValue(.chatNavigationMode, userDefaults: userDefaults)
         appLanguage = Self.textValue(.appLanguage, userDefaults: userDefaults)
         watchAttachmentLastSource = Self.textValue(.watchAttachmentLastSource, userDefaults: userDefaults)
         watchAttachmentSourceHistory = Self.textValue(.watchAttachmentSourceHistory, userDefaults: userDefaults)
@@ -704,7 +702,6 @@ public final class AppConfigStore: ObservableObject {
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
         case .fontFallbackScope: return .text(fontFallbackScope)
         case .fontCustomScale: return .real(fontCustomScale)
-        case .chatNavigationMode: return .text(chatNavigationMode)
         case .appLanguage: return .text(appLanguage)
         case .watchAttachmentLastSource: return .text(watchAttachmentLastSource)
         case .watchAttachmentSourceHistory: return .text(watchAttachmentSourceHistory)
@@ -878,7 +875,6 @@ public final class AppConfigStore: ObservableObject {
         case .backgroundContentMode: backgroundContentMode = value
         case .currentBackgroundImage: currentBackgroundImage = value
         case .fontFallbackScope: fontFallbackScope = value
-        case .chatNavigationMode: chatNavigationMode = value
         case .appLanguage: appLanguage = value
         case .watchAttachmentLastSource: watchAttachmentLastSource = value
         case .watchAttachmentSourceHistory: watchAttachmentSourceHistory = value
