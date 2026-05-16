@@ -58,15 +58,7 @@ extension ChatBubble {
                 }
 
                 if let permissionRequest {
-                    toolDetailSection(title: "审批操作") {
-                        ToolPermissionInlineView(
-                            request: permissionRequest,
-                            onDecision: { decision in
-                                toolPermissionCenter.resolveActiveRequest(with: decision)
-                                selectedToolCallDetailSheetItem = nil
-                            }
-                        )
-                    }
+                    toolApprovalSection(for: permissionRequest)
                 }
             }
             .padding(14)
@@ -132,6 +124,23 @@ extension ChatBubble {
             }
             .padding(.top, 2)
         }
+    }
+
+    private func toolApprovalSection(for permissionRequest: ToolPermissionRequest) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("审批操作", comment: ""))
+                .etFont(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ToolPermissionInlineView(
+                request: permissionRequest,
+                onDecision: { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                    selectedToolCallDetailSheetItem = nil
+                }
+            )
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
