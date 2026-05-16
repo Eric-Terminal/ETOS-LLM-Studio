@@ -110,6 +110,7 @@ public final class MCPManager: ObservableObject {
     var autoConnectRetryTasks: [UUID: Task<Void, Never>] = [:]
     var autoConnectRetryAttempts: [UUID: Int] = [:]
     var autoConnectFailureNotifiedAt: [UUID: Date] = [:]
+    var autoConnectSuppressedServerIDs: Set<UUID> = []
     // 启动阶段连接失败后最多自动重试 3 次。
     let autoConnectMaxRetries = MCPRuntimeDefaults.maxRetryAttempts
     let autoConnectBaseDelay: TimeInterval = 1.0
@@ -162,6 +163,7 @@ public final class MCPManager: ObservableObject {
         servers = MCPServerStore.loadServers()
         configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
         let serverIDs = Set(servers.map { $0.id })
+        autoConnectSuppressedServerIDs = autoConnectSuppressedServerIDs.intersection(serverIDs)
         let removedIDs = Set(autoConnectRetryTasks.keys).subtracting(serverIDs)
         for serverID in removedIDs {
             cancelAutoConnectRetry(for: serverID, resetAttempts: true)
@@ -245,6 +247,7 @@ public final class MCPManager: ObservableObject {
         persistResumptionToken(for: server.id)
         cancelTrackedToolCalls(for: server.id, reason: "服务器被删除")
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
+        autoConnectSuppressedServerIDs.remove(server.id)
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
         MCPServerStore.delete(server)
@@ -258,7 +261,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func connectSelectedServersIfNeeded() {
-        for server in servers where server.isSelectedForChat {
+        for server in servers where isSelectedForAutoConnect(server.id) {
             let status = status(for: server)
             switch status.connectionState {
             case .ready:
@@ -293,6 +296,7 @@ public final class MCPManager: ObservableObject {
         retryOnFailure: Bool = false,
         keepReadyStateDuringHandshake: Bool = false
     ) {
+        autoConnectSuppressedServerIDs.remove(server.id)
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -311,6 +315,7 @@ public final class MCPManager: ObservableObject {
 
     public func disconnect(server: MCPServerConfiguration) {
         mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
+        autoConnectSuppressedServerIDs.insert(server.id)
         persistResumptionToken(for: server.id)
         cancelTrackedToolCalls(for: server.id, reason: "服务器已断开")
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
@@ -331,7 +336,7 @@ public final class MCPManager: ObservableObject {
             $0.metadataCachedAt = nil
             $0.isBusy = false
         }
-        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "已断开服务器连接。")
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "已断开服务器连接，并暂停本次会话内的自动重连。")
     }
 
     func ensureClientReady(
@@ -496,16 +501,26 @@ public final class MCPManager: ObservableObject {
             return client
         } catch {
             mcpManagerLogger.error("MCP 初始化失败：\(server.displayName, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
+            let failedClient = removeConnectionArtifacts(for: server.id)
+            await failedClient?.disconnect()
+            if Task.isCancelled || isAutoConnectSuppressed(server.id) {
+                if servers.contains(where: { $0.id == server.id }) {
+                    updateStatus(for: server.id) {
+                        $0.connectionState = .idle
+                        $0.isBusy = false
+                    }
+                }
+                appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "连接流程已取消，未安排自动重连。")
+                throw error
+            }
             updateStatus(for: server.id) {
                 $0.connectionState = .failed(reason: error.localizedDescription)
                 $0.isBusy = false
             }
             lastOperationError = error.localizedDescription
             lastOperationOutput = nil
-            let failedClient = removeConnectionArtifacts(for: server.id)
-            await failedClient?.disconnect()
             var didScheduleRetry = false
-            if retryOnFailure, server.isSelectedForChat {
+            if retryOnFailure, !Task.isCancelled, isSelectedForAutoConnect(server.id) {
                 didScheduleRetry = scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
             }
             if Self.shouldNotifyAutoConnectFailure(
@@ -552,6 +567,10 @@ public final class MCPManager: ObservableObject {
 
     @discardableResult
     func scheduleAutoConnectRetry(for serverID: UUID, preserveSelection: Bool) -> Bool {
+        guard isSelectedForAutoConnect(serverID) else {
+            cancelAutoConnectRetry(for: serverID, resetAttempts: true)
+            return false
+        }
         let attempt = (autoConnectRetryAttempts[serverID] ?? 0) + 1
         if attempt > autoConnectMaxRetries {
             autoConnectRetryAttempts[serverID] = nil
@@ -589,7 +608,7 @@ public final class MCPManager: ObservableObject {
             cancelAutoConnectRetry(for: serverID, resetAttempts: true)
             return
         }
-        guard server.isSelectedForChat else {
+        guard isSelectedForAutoConnect(serverID) else {
             cancelAutoConnectRetry(for: serverID, resetAttempts: true)
             return
         }
@@ -610,6 +629,20 @@ public final class MCPManager: ObservableObject {
         if resetAttempts {
             autoConnectRetryAttempts[serverID] = nil
         }
+    }
+
+    func isAutoConnectSuppressed(_ serverID: UUID) -> Bool {
+        autoConnectSuppressedServerIDs.contains(serverID)
+    }
+
+    func isSelectedForAutoConnect(_ serverID: UUID) -> Bool {
+        guard !isAutoConnectSuppressed(serverID) else {
+            return false
+        }
+        guard servers.first(where: { $0.id == serverID })?.isSelectedForChat == true else {
+            return false
+        }
+        return status(for: serverID).isSelectedForChat
     }
 
     private func autoConnectBackoffDelaySeconds(attempt: Int) -> TimeInterval {

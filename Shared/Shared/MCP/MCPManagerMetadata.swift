@@ -76,14 +76,20 @@ extension MCPManager {
             } else {
                 mcpManagerLogger.error("MCP 元数据刷新失败：server=\(serverID.uuidString, privacy: .public)，错误=\(error.localizedDescription, privacy: .public)")
             }
+            if Task.isCancelled || isAutoConnectSuppressed(serverID) {
+                updateStatus(for: serverID) {
+                    $0.isBusy = false
+                }
+                appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: "元数据刷新已取消，未安排自动重连。")
+                return
+            }
             updateStatus(for: serverID) {
                 $0.isBusy = false
                 $0.connectionState = .failed(reason: error.localizedDescription)
             }
             lastOperationError = error.localizedDescription
             lastOperationOutput = nil
-            if let server = servers.first(where: { $0.id == serverID }),
-               server.isSelectedForChat {
+            if isSelectedForAutoConnect(serverID) {
                 scheduleAutoConnectRetry(for: serverID, preserveSelection: true)
             }
             appendGovernanceLog(level: .error, category: .cache, serverID: serverID, message: "元数据刷新失败：\(error.localizedDescription)")

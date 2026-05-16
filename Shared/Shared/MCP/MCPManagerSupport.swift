@@ -47,6 +47,7 @@ extension MCPManager {
         var newPromptRouting: [String: RoutedPrompt] = [:]
 
         for server in servers {
+            guard !isAutoConnectSuppressed(server.id) else { continue }
             guard let status = serverStatuses[server.id], status.isSelectedForChat else { continue }
             let hasMetadataCache = !status.tools.isEmpty || !status.resources.isEmpty || !status.resourceTemplates.isEmpty || !status.prompts.isEmpty || !status.roots.isEmpty
             switch status.connectionState {
