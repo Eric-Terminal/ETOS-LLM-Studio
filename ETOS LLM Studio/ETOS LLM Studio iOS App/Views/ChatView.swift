@@ -146,7 +146,7 @@ struct ChatView: View {
         if usesLandscapeSessionSidebar {
             return sessionSplitVisibility != .detailOnly
         }
-        usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
+        return usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
     }
     var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
