@@ -149,7 +149,7 @@ private struct MessageRegexRuleEditorView: View {
 
     var body: some View {
         Form {
-            Section(NSLocalizedString("规则", comment: "")) {
+            Section {
                 TextField(NSLocalizedString("规则名称", comment: ""), text: $rule.name)
                 TextField(NSLocalizedString("正则表达式", comment: ""), text: $rule.pattern)
                     .textInputAutocapitalization(.never)
@@ -159,15 +159,19 @@ private struct MessageRegexRuleEditorView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 Toggle(NSLocalizedString("启用规则", comment: ""), isOn: $rule.isEnabled)
+            } header: {
+                Text(NSLocalizedString("规则", comment: ""))
             } footer: {
                 Text(NSLocalizedString("替换字符串支持 $0、$1、$2 这类捕获组引用。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            Section(NSLocalizedString("作用范围", comment: "")) {
+            Section {
                 Toggle(NSLocalizedString("用户消息", comment: ""), isOn: scopeBinding(for: .user))
                 Toggle(NSLocalizedString("助手消息", comment: ""), isOn: scopeBinding(for: .assistant))
+            } header: {
+                Text(NSLocalizedString("作用范围", comment: ""))
             }
 
             Section {

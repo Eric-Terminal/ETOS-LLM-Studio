@@ -108,17 +108,21 @@ private struct MessageRegexRuleEditorView: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("规则", comment: "")) {
+            Section {
                 TextField(NSLocalizedString("规则名称", comment: ""), text: $rule.name.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("正则表达式", comment: ""), text: $rule.pattern.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("替换字符串", comment: ""), text: $rule.replacement.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(2...5)
                 Toggle(NSLocalizedString("启用规则", comment: ""), isOn: $rule.isEnabled)
+            } header: {
+                Text(NSLocalizedString("规则", comment: ""))
             }
 
-            Section(NSLocalizedString("作用范围", comment: "")) {
+            Section {
                 Toggle(NSLocalizedString("用户消息", comment: ""), isOn: scopeBinding(for: .user))
                 Toggle(NSLocalizedString("助手消息", comment: ""), isOn: scopeBinding(for: .assistant))
+            } header: {
+                Text(NSLocalizedString("作用范围", comment: ""))
             }
 
             Section(
