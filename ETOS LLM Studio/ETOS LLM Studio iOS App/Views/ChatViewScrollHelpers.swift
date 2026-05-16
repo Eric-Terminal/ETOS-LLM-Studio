@@ -87,35 +87,12 @@ extension ChatView {
     }
 
     func handleScrollToBottomButtonTap(proxy: ScrollViewProxy) {
-        pendingHistoryResetWorkItem?.cancel()
-
-        let shouldAnimate = shouldAnimateScrollToBottomButton
-        let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
         showScrollToBottom = false
         scrollToBottom(
             proxy: proxy,
-            animated: shouldAnimate,
+            animated: true,
             animation: scrollToBottomButtonAnimation
         )
-
-        guard shouldResetHistoryWindow else {
-            pendingHistoryResetWorkItem = nil
-            return
-        }
-
-        let workItem = DispatchWorkItem {
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                viewModel.resetLazyLoadState()
-            }
-            scrollToBottom(proxy: proxy, animated: false)
-            pendingHistoryResetWorkItem = nil
-        }
-        pendingHistoryResetWorkItem = workItem
-
-        let delay = shouldAnimate ? 0.56 : 0.08
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {
@@ -153,8 +130,4 @@ extension ChatView {
         }
     }
 
-    var shouldAnimateScrollToBottomButton: Bool {
-        let screenHeight = max(UIScreen.main.bounds.height, 1)
-        return scrollDistanceToBottom <= screenHeight * longDistanceScrollAnimationThresholdScreens
-    }
 }

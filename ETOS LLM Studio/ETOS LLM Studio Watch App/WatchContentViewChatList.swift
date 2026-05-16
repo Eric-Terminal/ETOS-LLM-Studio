@@ -190,8 +190,6 @@ extension ContentView {
             resolvePendingSearchJumpIfNeeded()
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
-            pendingHistoryResetWorkItem?.cancel()
-            pendingHistoryResetWorkItem = nil
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
             showScrollToBottomButton = false
@@ -214,27 +212,9 @@ extension ContentView {
 
     func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         let scrollAction = {
-            pendingHistoryResetWorkItem?.cancel()
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
             scrollToBottom(proxy: proxy, animated: true)
-
-            guard viewModel.lazyLoadMessageCount > 0 else {
-                pendingHistoryResetWorkItem = nil
-                return
-            }
-
-            let workItem = DispatchWorkItem {
-                var transaction = Transaction()
-                transaction.animation = nil
-                withTransaction(transaction) {
-                    viewModel.resetLazyLoadState()
-                }
-                scrollToBottom(proxy: proxy, animated: false)
-                pendingHistoryResetWorkItem = nil
-            }
-            pendingHistoryResetWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.56, execute: workItem)
         }
 
         return Button(action: scrollAction) {
