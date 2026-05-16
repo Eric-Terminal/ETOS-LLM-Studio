@@ -38,7 +38,6 @@ struct BackgroundPickerView: View {
     
     private let gridSpacing: CGFloat = 10
     private let gridPadding: CGFloat = 10
-    private let importButtonSize: CGFloat = 38
     private var previewAspectRatio: CGFloat {
         let size = WKInterfaceDevice.current().screenBounds.size
         guard size.height > 0 else { return 1 }
@@ -57,54 +56,27 @@ struct BackgroundPickerView: View {
                 GridItem(.fixed(itemWidth), spacing: gridSpacing)
             ]
             
-            ZStack(alignment: .bottomLeading) {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: gridSpacing) {
-                        ForEach(backgrounds, id: \.self) { bgName in
-                            Button(action: {
-                                selectedBackground = bgName
-                            }) {
-                                FileImage(filename: bgName)
-                                    .aspectRatio(previewAspectRatio, contentMode: .fill)
-                                    .frame(width: itemWidth, height: itemHeight)
-                                    .clipped()
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(selectedBackground == bgName ? Color.accentColor : .clear, lineWidth: 3)
-                                    }
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .buttonStyle(.plain)
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: gridSpacing) {
+                    ForEach(backgrounds, id: \.self) { bgName in
+                        Button(action: {
+                            selectedBackground = bgName
+                        }) {
+                            FileImage(filename: bgName)
+                                .aspectRatio(previewAspectRatio, contentMode: .fill)
+                                .frame(width: itemWidth, height: itemHeight)
+                                .clipped()
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(selectedBackground == bgName ? Color.accentColor : .clear, lineWidth: 3)
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, gridPadding)
-                    .padding(.top, gridPadding)
-                    .padding(.bottom, gridPadding + importButtonSize + 8)
                 }
-
-                Button {
-                    importSourceText = backgroundSourceHistory.first ?? appConfig.watchBackgroundLastSource
-                    isShowingImportSheet = true
-                } label: {
-                    Group {
-                        if isImportingBackground {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "plus")
-                                .font(.system(size: 17, weight: .semibold))
-                        }
-                    }
-                        .foregroundStyle(.white)
-                        .frame(width: importButtonSize, height: importButtonSize)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .background(Circle().fill(Color.blue))
-                .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 0.8))
-                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
-                .accessibilityLabel(NSLocalizedString("添加背景", comment: ""))
-                .disabled(isImportingBackground)
-                .padding(.leading, gridPadding)
+                .padding(.horizontal, gridPadding)
+                .padding(.top, gridPadding)
                 .padding(.bottom, gridPadding)
             }
         }
@@ -118,6 +90,24 @@ struct BackgroundPickerView: View {
                     Image(systemName: "trash")
                 }
                 .disabled(selectedBackground.isEmpty)
+            }
+
+            ToolbarItem(placement: .bottomBar) {
+                HStack {
+                    Button {
+                        showImportSheet()
+                    } label: {
+                        if isImportingBackground {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "plus")
+                        }
+                    }
+                    .disabled(isImportingBackground)
+                    .accessibilityLabel(NSLocalizedString("添加背景", comment: ""))
+
+                    Spacer()
+                }
             }
         }
         .alert(NSLocalizedString("删除背景", comment: ""), isPresented: $isShowingDeleteConfirmation, presenting: deleteCandidate) { name in
@@ -177,10 +167,10 @@ struct BackgroundPickerView: View {
         } message: {
             Text(importErrorMessage ?? "")
         }
-        .onChange(of: appConfig.watchBackgroundSourceHistory) { _, _ in
+        .onChange(of: appConfig.watchAttachmentSourceHistory) { _, _ in
             refreshBackgroundSourceHistory()
         }
-        .onChange(of: appConfig.watchBackgroundLastSource) { _, _ in
+        .onChange(of: appConfig.watchAttachmentLastSource) { _, _ in
             refreshBackgroundSourceHistory()
         }
         .task {
@@ -194,25 +184,48 @@ struct BackgroundPickerView: View {
     
     // MARK: - 私有方法
 
+    private func showImportSheet() {
+        importSourceText = backgroundSourceHistory.first ?? appConfig.watchAttachmentLastSource
+        if importSourceText.isEmpty {
+            importSourceText = appConfig.watchBackgroundLastSource
+        }
+        isShowingImportSheet = true
+    }
+
     private func rememberBackgroundSource(_ source: String) {
         let updatedHistory = WatchImportSourceHistory.appending(
             source,
             to: backgroundSourceHistory
         )
-        appConfig.watchBackgroundSourceHistory = WatchImportSourceHistory.rawValue(for: updatedHistory)
-        appConfig.watchBackgroundLastSource = updatedHistory.first ?? ""
+        appConfig.watchAttachmentSourceHistory = WatchImportSourceHistory.rawValue(for: updatedHistory)
+        appConfig.watchAttachmentLastSource = updatedHistory.first ?? ""
         backgroundSourceHistory = updatedHistory
     }
 
     private func refreshBackgroundSourceHistory() {
-        let rawValue = appConfig.watchBackgroundSourceHistory
-        let fallback = appConfig.watchBackgroundLastSource
+        let attachmentRawValue = appConfig.watchAttachmentSourceHistory
+        let attachmentFallback = appConfig.watchAttachmentLastSource
+        let backgroundRawValue = appConfig.watchBackgroundSourceHistory
+        let backgroundFallback = appConfig.watchBackgroundLastSource
         Task {
             let history = await Task.detached(priority: .utility) {
-                WatchImportSourceHistory.values(from: rawValue, fallback: fallback)
+                let attachmentHistory = WatchImportSourceHistory.values(
+                    from: attachmentRawValue,
+                    fallback: attachmentFallback
+                )
+                let backgroundHistory = WatchImportSourceHistory.values(
+                    from: backgroundRawValue,
+                    fallback: backgroundFallback
+                )
+                return WatchImportSourceHistory.normalized(attachmentHistory + backgroundHistory)
             }.value
             await MainActor.run {
                 backgroundSourceHistory = history
+                let rawHistory = WatchImportSourceHistory.rawValue(for: history)
+                if rawHistory != appConfig.watchAttachmentSourceHistory {
+                    appConfig.watchAttachmentSourceHistory = rawHistory
+                    appConfig.watchAttachmentLastSource = history.first ?? ""
+                }
             }
         }
     }
