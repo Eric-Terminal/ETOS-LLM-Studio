@@ -317,7 +317,14 @@ public enum ModelRequestBodyControlRuntimeStore {
            let data = stored.data(using: .utf8) {
             return data
         }
-        return nil
+        guard let legacy = userDefaults.data(forKey: key),
+              let encoded = String(data: legacy, encoding: .utf8) else {
+            return nil
+        }
+        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
+            userDefaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func saveData(_ data: Data, forKey key: String, userDefaults: UserDefaults) {

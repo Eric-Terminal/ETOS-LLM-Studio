@@ -56,46 +56,20 @@ private final class AppConfigSnapshotCache: @unchecked Sendable {
     }
 }
 
-private struct LegacyExtraAppConfigMigrationValue: Sendable {
-    var key: String
-    var value: AppConfigValue
-}
-
-private struct LegacyExtraAppConfigMigrationPayload: Sendable {
-    var values: [LegacyExtraAppConfigMigrationValue]
-    var legacyKeysToRemove: [String]
-    var shouldMarkCompleted: Bool
-
-    static let empty = LegacyExtraAppConfigMigrationPayload(
-        values: [],
-        legacyKeysToRemove: [],
-        shouldMarkCompleted: false
-    )
-}
-
 private actor AppConfigPersistenceWorker {
     static let shared = AppConfigPersistenceWorker()
 
     func bootstrap(
         migrationFlagKey: String,
-        extraMigrationFlagKey: String,
-        initialValues: [AppConfigKey: AppConfigValue],
-        legacyExtraMigration: LegacyExtraAppConfigMigrationPayload
+        initialValues: [AppConfigKey: AppConfigValue]
     ) -> [String: Any] {
         let existingKeys = Set(Persistence.loadAllAppConfigs().map { $0.key })
         for key in AppConfigKey.allCases {
             guard !existingKeys.contains(key.rawValue) else { continue }
             AppConfigStore.persist(initialValues[key] ?? key.defaultValue, for: key)
         }
-        for migratedValue in legacyExtraMigration.values {
-            guard !existingKeys.contains(migratedValue.key) else { continue }
-            AppConfigStore.persist(migratedValue.value, forRawKey: migratedValue.key)
-        }
         if Persistence.readAppConfigInteger(key: migrationFlagKey) != 1 {
             Persistence.writeAppConfig(key: migrationFlagKey, integer: 1, typeHint: "integer")
-        }
-        if legacyExtraMigration.shouldMarkCompleted {
-            Persistence.writeAppConfig(key: extraMigrationFlagKey, integer: 1, typeHint: "integer")
         }
         return AppConfigStore.loadPersistentSnapshotFromDatabase(includeLocalOnly: true)
     }
@@ -124,7 +98,6 @@ public final class AppConfigStore: ObservableObject {
     public nonisolated static let persistentStoreDidLoadNotification = Notification.Name("com.ETOS.appConfig.persistentStoreDidLoad")
 
     private nonisolated static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
-    private nonisolated static let extraMigrationFlagKey = "appConfig.extraUserDefaultsKeysMigrated.v1"
     private nonisolated static let snapshotCache = AppConfigSnapshotCache(
         values: Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.map { key in
             (key.rawValue, key.defaultValue.anyValue)
@@ -404,14 +377,12 @@ public final class AppConfigStore: ObservableObject {
             return stored
         }
 
-        if userDefaults !== UserDefaults.standard {
-            let rawKey = legacyUserDefaultsKey ?? key.rawValue
-            if let legacy = userDefaults.string(forKey: rawKey) {
-                if persistSynchronously(.text(legacy), for: key) {
-                    userDefaults.removeObject(forKey: rawKey)
-                }
-                return legacy
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let legacy = userDefaults.string(forKey: rawKey) {
+            if persistSynchronously(.text(legacy), for: key) {
+                userDefaults.removeObject(forKey: rawKey)
             }
+            return legacy
         }
 
         if let defaultValue {
@@ -435,15 +406,13 @@ public final class AppConfigStore: ObservableObject {
             return value
         }
 
-        if userDefaults !== UserDefaults.standard {
-            let rawKey = legacyUserDefaultsKey ?? key.rawValue
-            if userDefaults.object(forKey: rawKey) != nil {
-                let legacy = userDefaults.bool(forKey: rawKey)
-                if persistSynchronously(.bool(legacy), for: key) {
-                    userDefaults.removeObject(forKey: rawKey)
-                }
-                return legacy
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if userDefaults.object(forKey: rawKey) != nil {
+            let legacy = userDefaults.bool(forKey: rawKey)
+            if persistSynchronously(.bool(legacy), for: key) {
+                userDefaults.removeObject(forKey: rawKey)
             }
+            return legacy
         }
 
         if let defaultValue {
@@ -467,14 +436,12 @@ public final class AppConfigStore: ObservableObject {
             return decoded
         }
 
-        if userDefaults !== UserDefaults.standard {
-            let rawKey = legacyUserDefaultsKey ?? key.rawValue
-            if let legacy = userDefaults.stringArray(forKey: rawKey) {
-                if persistStringArray(legacy, for: key) {
-                    userDefaults.removeObject(forKey: rawKey)
-                }
-                return legacy
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let legacy = userDefaults.stringArray(forKey: rawKey) {
+            if persistStringArray(legacy, for: key) {
+                userDefaults.removeObject(forKey: rawKey)
             }
+            return legacy
         }
 
         if let defaultValue {
@@ -506,14 +473,12 @@ public final class AppConfigStore: ObservableObject {
             return decoded
         }
 
-        if userDefaults !== UserDefaults.standard {
-            let rawKey = legacyUserDefaultsKey ?? key.rawValue
-            if let legacy = userDefaults.dictionary(forKey: rawKey) as? [String: String] {
-                if persistStringDictionary(legacy, for: key) {
-                    userDefaults.removeObject(forKey: rawKey)
-                }
-                return legacy
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let legacy = userDefaults.dictionary(forKey: rawKey) as? [String: String] {
+            if persistStringDictionary(legacy, for: key) {
+                userDefaults.removeObject(forKey: rawKey)
             }
+            return legacy
         }
 
         if case .text(let rawDefault) = key.defaultValue {
@@ -577,17 +542,13 @@ public final class AppConfigStore: ObservableObject {
         userDefaults: UserDefaults
     ) {
         let shouldRemoveStandardLegacyValues = userDefaults === UserDefaults.standard
-        let legacyExtraMigration = Self.legacyExtraMigrationPayload(from: userDefaults)
         Task(priority: .utility) { [weak self] in
             let snapshot = await AppConfigPersistenceWorker.shared.bootstrap(
                 migrationFlagKey: Self.migrationFlagKey,
-                extraMigrationFlagKey: Self.extraMigrationFlagKey,
-                initialValues: initialValues,
-                legacyExtraMigration: legacyExtraMigration
+                initialValues: initialValues
             )
             if shouldRemoveStandardLegacyValues {
                 Self.removeMigratedLegacyValues(from: .standard)
-                Self.removeLegacyValues(for: legacyExtraMigration.legacyKeysToRemove, from: .standard)
             }
             self?.applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: true)
         }
@@ -970,175 +931,20 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private static func initialValues(userDefaults: UserDefaults) -> [AppConfigKey: AppConfigValue] {
-        let shouldReadLegacyValues = shouldReadLegacyValues(from: userDefaults)
         var values = Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.map { key in
-            (
-                key,
-                userDefaultsValue(
-                    for: key,
-                    userDefaults: userDefaults,
-                    shouldReadLegacyValues: shouldReadLegacyValues
-                ) ?? key.defaultValue
-            )
+            (key, userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue)
         })
-        if shouldReadLegacyValues,
-           userDefaults.object(forKey: AppConfigKey.syncAppStorage.rawValue) == nil,
-           let legacyValue = userDefaultsValue(
-            for: .syncGlobalPrompt,
-            userDefaults: userDefaults,
-            shouldReadLegacyValues: true
-           ) {
+        if userDefaults.object(forKey: AppConfigKey.syncAppStorage.rawValue) == nil,
+           let legacyValue = userDefaultsValue(for: .syncGlobalPrompt, userDefaults: userDefaults) {
             values[.syncAppStorage] = legacyValue
         }
         return values
-    }
-
-    private static func shouldReadLegacyValues(from userDefaults: UserDefaults) -> Bool {
-        userDefaults !== UserDefaults.standard
-            || Persistence.readAppConfigInteger(key: migrationFlagKey) != 1
     }
 
     private static func removeMigratedLegacyValues(from userDefaults: UserDefaults) {
         guard userDefaults === UserDefaults.standard else { return }
         for key in AppConfigKey.allCases where userDefaults.object(forKey: key.rawValue) != nil {
             userDefaults.removeObject(forKey: key.rawValue)
-        }
-    }
-
-    private static func removeLegacyValues(for keys: [String], from userDefaults: UserDefaults) {
-        for key in Set(keys) where userDefaults.object(forKey: key) != nil {
-            userDefaults.removeObject(forKey: key)
-        }
-    }
-
-    private enum LegacyExtraAppConfigValueKind {
-        case bool
-        case integer
-        case real
-        case text
-        case stringArray
-        case utf8DataText
-        case base64Data
-    }
-
-    private static func legacyExtraMigrationPayload(from userDefaults: UserDefaults) -> LegacyExtraAppConfigMigrationPayload {
-        guard userDefaults === UserDefaults.standard,
-              Persistence.readAppConfigInteger(key: extraMigrationFlagKey) != 1 else {
-            return .empty
-        }
-
-        let staticKeys: [(String, LegacyExtraAppConfigValueKind)] = [
-            ("skills.enabledNames", .stringArray),
-            ("skills.chatToolsEnabled", .bool),
-            ("dailyPulse.autoGenerate", .bool),
-            ("dailyPulse.focusText", .text),
-            ("dailyPulse.includeMCPContext", .bool),
-            ("dailyPulse.includeShortcutContext", .bool),
-            ("dailyPulse.includeRecentExternalResults", .bool),
-            ("dailyPulse.includeTrendContext", .bool),
-            ("dailyPulse.lastViewedDayKey", .text),
-            ("dailyPulse.lastDeliveryAttemptDayKey", .text),
-            ("dailyPulse.delivery.reminderEnabled", .bool),
-            ("dailyPulse.delivery.reminderHour", .integer),
-            ("dailyPulse.delivery.reminderMinute", .integer),
-            ("dailyPulse.delivery.lastReadyDayKey", .text),
-            ("tts.playbackMode", .text),
-            ("tts.providerKind", .text),
-            ("tts.autoPlayAfterAssistantResponse", .bool),
-            ("tts.onlyReadQuotedContent", .bool),
-            ("tts.watchUseLightweightPreprocess", .bool),
-            ("tts.watchSpeechMaxCharacters", .integer),
-            ("tts.speechRate", .real),
-            ("tts.pitch", .real),
-            ("tts.playbackSpeed", .real),
-            ("tts.voice", .text),
-            ("tts.responseFormat", .text),
-            ("tts.languageType", .text),
-            ("tts.miniMaxEmotion", .text),
-            ("networkProxy.global.isEnabled", .bool),
-            ("networkProxy.global.type", .text),
-            ("networkProxy.global.host", .text),
-            ("networkProxy.global.port", .integer),
-            ("networkProxy.global.username", .text),
-            ("networkProxy.global.password", .text),
-            ("tool.permission.autoApproveEnabled", .bool),
-            ("tool.permission.autoApproveCountdownSeconds", .integer),
-            ("tool.permission.disabledAutoApproveTools", .stringArray),
-            ("requestBodyControls.state.inherited", .utf8DataText),
-            ("cloudSync.deviceIdentifier", .text),
-            ("cloudSync.appliedSnapshotChecksums", .base64Data),
-            ("cloudSync.snapshotChangeToken", .base64Data)
-        ]
-
-        var values: [LegacyExtraAppConfigMigrationValue] = []
-        var legacyKeysToRemove = Set<String>()
-
-        for (key, kind) in staticKeys {
-            guard let object = userDefaults.object(forKey: key),
-                  let value = legacyExtraValue(from: object, kind: kind) else {
-                continue
-            }
-            values.append(LegacyExtraAppConfigMigrationValue(key: key, value: value))
-            legacyKeysToRemove.insert(key)
-        }
-
-        for (key, object) in userDefaults.dictionaryRepresentation() {
-            guard !legacyKeysToRemove.contains(key),
-                  let kind = dynamicLegacyExtraValueKind(for: key),
-                  let value = legacyExtraValue(from: object, kind: kind) else {
-                continue
-            }
-            values.append(LegacyExtraAppConfigMigrationValue(key: key, value: value))
-            legacyKeysToRemove.insert(key)
-        }
-
-        return LegacyExtraAppConfigMigrationPayload(
-            values: values,
-            legacyKeysToRemove: Array(legacyKeysToRemove),
-            shouldMarkCompleted: true
-        )
-    }
-
-    private static func dynamicLegacyExtraValueKind(for key: String) -> LegacyExtraAppConfigValueKind? {
-        if key.hasPrefix("requestBodyControls.state.model.")
-            || key.hasPrefix("requestBodyControls.state.signature.") {
-            return .utf8DataText
-        }
-        if key.hasPrefix("achievementJournal.unlock.") {
-            return .utf8DataText
-        }
-        if key.hasPrefix("sync.delta.version-tracker.")
-            || key.hasPrefix("sync.delta.checkpoint.") {
-            return .base64Data
-        }
-        return nil
-    }
-
-    private static func legacyExtraValue(
-        from object: Any,
-        kind: LegacyExtraAppConfigValueKind
-    ) -> AppConfigValue? {
-        switch kind {
-        case .bool:
-            return coerceBool(object).map(AppConfigValue.bool)
-        case .integer:
-            return coerceInt(object).map(AppConfigValue.integer)
-        case .real:
-            return coerceDouble(object).map(AppConfigValue.real)
-        case .text:
-            return coerceString(object).map(AppConfigValue.text)
-        case .stringArray:
-            guard let values = object as? [String] else { return nil }
-            return .text(encodeStringArray(values))
-        case .utf8DataText:
-            guard let data = object as? Data,
-                  let text = String(data: data, encoding: .utf8) else {
-                return nil
-            }
-            return .text(text)
-        case .base64Data:
-            guard let data = object as? Data else { return nil }
-            return .text(data.base64EncodedString())
         }
     }
 
@@ -1189,25 +995,12 @@ public final class AppConfigStore: ObservableObject {
         return ""
     }
 
-    private static func userDefaultsValue(
-        for key: AppConfigKey,
-        userDefaults: UserDefaults,
-        shouldReadLegacyValues: Bool
-    ) -> AppConfigValue? {
-        guard shouldReadLegacyValues else { return nil }
+    private static func userDefaultsValue(for key: AppConfigKey, userDefaults: UserDefaults) -> AppConfigValue? {
         guard let object = userDefaults.object(forKey: key.rawValue) else {
             return nil
         }
 
         return appConfigValue(from: object, for: key)
-    }
-
-    private static func userDefaultsValue(for key: AppConfigKey, userDefaults: UserDefaults) -> AppConfigValue? {
-        userDefaultsValue(
-            for: key,
-            userDefaults: userDefaults,
-            shouldReadLegacyValues: shouldReadLegacyValues(from: userDefaults)
-        )
     }
 
     private static func appConfigValue(from object: Any, for key: AppConfigKey) -> AppConfigValue? {
@@ -1231,20 +1024,15 @@ public final class AppConfigStore: ObservableObject {
 
     @discardableResult
     fileprivate nonisolated static func persist(_ value: AppConfigValue, for key: AppConfigKey) -> Bool {
-        persist(value, forRawKey: key.rawValue)
-    }
-
-    @discardableResult
-    fileprivate nonisolated static func persist(_ value: AppConfigValue, forRawKey rawKey: String) -> Bool {
         switch value {
         case .bool(let value):
-            return Persistence.writeAppConfig(key: rawKey, integer: value ? 1 : 0, typeHint: "bool")
+            return Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: "bool")
         case .integer(let value):
-            return Persistence.writeAppConfig(key: rawKey, integer: value, typeHint: "integer")
+            return Persistence.writeAppConfig(key: key.rawValue, integer: value, typeHint: "integer")
         case .real(let value):
-            return Persistence.writeAppConfig(key: rawKey, real: value, typeHint: "real")
+            return Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: "real")
         case .text(let value):
-            return Persistence.writeAppConfig(key: rawKey, text: value, typeHint: "text")
+            return Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
         }
     }
 

@@ -260,7 +260,12 @@ public final class TTSSettingsStore: ObservableObject {
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored != 0
         }
-        return defaultValue
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
@@ -270,7 +275,11 @@ public final class TTSSettingsStore: ObservableObject {
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored
         }
-        return defaultValue
+        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func floatValue(forKey key: String, defaults: UserDefaults, defaultValue: Float) -> Float {
@@ -286,7 +295,19 @@ public final class TTSSettingsStore: ObservableObject {
         if let stored = Persistence.readAppConfigReal(key: key) {
             return Float(stored)
         }
-        return defaultValue
+        guard let object = defaults.object(forKey: key) else { return defaultValue }
+        let legacy: Float
+        if let value = object as? Float {
+            legacy = value
+        } else if let value = object as? NSNumber {
+            legacy = value.floatValue
+        } else {
+            return defaultValue
+        }
+        if Persistence.writeAppConfig(key: key, real: Double(legacy), typeHint: "real") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
@@ -296,7 +317,11 @@ public final class TTSSettingsStore: ObservableObject {
         if let stored = Persistence.readAppConfigText(key: key) {
             return stored
         }
-        return defaultValue
+        guard let legacy = defaults.string(forKey: key) else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {

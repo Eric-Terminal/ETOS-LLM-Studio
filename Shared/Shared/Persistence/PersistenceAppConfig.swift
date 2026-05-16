@@ -21,7 +21,16 @@ extension Persistence {
     }
 
     public static func readAppConfigText(key: String, legacyUserDefaultsKey: String) -> String? {
-        readAppConfigText(key: key)
+        if let value = readAppConfigText(key: key) {
+            return value
+        }
+        guard let legacy = UserDefaults.standard.string(forKey: legacyUserDefaultsKey) else {
+            return nil
+        }
+        if writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            UserDefaults.standard.removeObject(forKey: legacyUserDefaultsKey)
+        }
+        return legacy
     }
 
     public static func readAppConfigReal(key: String) -> Double? {
@@ -50,7 +59,16 @@ extension Persistence {
     }
 
     public static func readAppConfigData(key: String, legacyUserDefaultsKey: String) -> Data? {
-        readAppConfigData(key: key)
+        if let data = readAppConfigData(key: key) {
+            return data
+        }
+        guard let legacy = UserDefaults.standard.data(forKey: legacyUserDefaultsKey) else {
+            return nil
+        }
+        if writeAppConfig(key: key, data: legacy) {
+            UserDefaults.standard.removeObject(forKey: legacyUserDefaultsKey)
+        }
+        return legacy
     }
 
     @discardableResult

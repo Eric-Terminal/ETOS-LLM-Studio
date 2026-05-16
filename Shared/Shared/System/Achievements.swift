@@ -602,14 +602,16 @@ public final class AchievementCenter: ObservableObject {
                 records.append(record)
             }
         }
-        guard defaults !== UserDefaults.standard else {
-            return records
-        }
         for (key, value) in defaults.dictionaryRepresentation() {
             guard isAchievementStorageKey(key),
                   let data = value as? Data,
                   let record = try? decoder.decode(AchievementUnlockRecord.self, from: data) else {
                 continue
+            }
+            if defaults === UserDefaults.standard,
+               let raw = String(data: data, encoding: .utf8),
+               Persistence.writeAppConfig(key: key, text: raw, typeHint: "text") {
+                defaults.removeObject(forKey: key)
             }
             records.append(record)
         }

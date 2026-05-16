@@ -57,9 +57,9 @@ public enum GlobalSystemPromptStore {
     ///
     /// 规范化规则：
     /// - 优先读取配置数据库中的多版本提示词。
-    /// - 标准运行环境只读取配置数据库；测试专用 UserDefaults 仍使用旧存储格式。
+    /// - 当数据库为空且旧版 UserDefaults 数据存在时，自动迁移为数据库记录。
     /// - 当选中项丢失时，自动回退到第一条。
-    /// - 标准运行环境会清理旧版 UserDefaults 镜像字段。
+    /// - 始终将当前选中内容镜像回旧版 systemPrompt。
     @discardableResult
     public static func load(userDefaults: UserDefaults = .standard) -> GlobalSystemPromptSnapshot {
         let useDatabase = shouldUseDatabase(userDefaults: userDefaults)
@@ -67,7 +67,7 @@ public enum GlobalSystemPromptStore {
             let snapshot = normalizedSnapshot(
                 entries: databaseSnapshot.entries,
                 selectedEntryID: databaseSnapshot.selectedEntryID,
-                legacyPrompt: databaseSnapshot.activeSystemPrompt
+                legacyPrompt: nil
             )
             if snapshot != databaseSnapshot {
                 _ = saveToDatabase(snapshot)
@@ -76,19 +76,12 @@ public enum GlobalSystemPromptStore {
             return snapshot
         }
 
-        if useDatabase {
-            let legacySnapshot = loadFromUserDefaults(userDefaults)
-            let databasePrompt = Persistence.readAppConfigText(key: AppConfigKey.systemPrompt.rawValue)
-            let snapshot = legacySnapshot.entries.isEmpty
-                ? normalizedSnapshot(entries: [], selectedEntryID: nil, legacyPrompt: databasePrompt)
-                : legacySnapshot
-            _ = saveToDatabase(snapshot)
-            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: false)
-            return snapshot
-        }
-
         let snapshot = loadFromUserDefaults(userDefaults)
-        mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: true)
+        if useDatabase, saveToDatabase(snapshot) {
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: false)
+        } else {
+            mirrorCompatibilityFields(snapshot, userDefaults: userDefaults, includeListInUserDefaults: true)
+        }
         return snapshot
     }
 
@@ -120,7 +113,7 @@ public enum GlobalSystemPromptStore {
         return snapshot
     }
 
-    /// 仅更新当前生效提示词到数据库与 AppConfig 镜像，不回写旧版 UserDefaults 字段。
+    /// 仅更新当前生效提示词到数据库与 AppConfig 镜像，不回写旧版 UserDefaults 列表字段。
     @discardableResult
     public static func saveActiveSystemPrompt(_ prompt: String) -> GlobalSystemPromptSnapshot {
         let before = loadFromDatabase()
@@ -266,14 +259,6 @@ public enum GlobalSystemPromptStore {
     ) -> Bool {
         var didChange = false
 
-        if userDefaults === UserDefaults.standard {
-            didChange = removeObjectIfNeeded(forKey: entriesStorageKey, in: userDefaults) || didChange
-            didChange = removeObjectIfNeeded(forKey: selectedEntryIDStorageKey, in: userDefaults) || didChange
-            didChange = removeObjectIfNeeded(forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
-            AppConfigStore.persistSynchronously(.text(snapshot.activeSystemPrompt), for: .systemPrompt)
-            return didChange
-        }
-
         if includeListInUserDefaults {
             if snapshot.entries.isEmpty {
                 didChange = removeObjectIfNeeded(forKey: entriesStorageKey, in: userDefaults) || didChange
@@ -294,6 +279,9 @@ public enum GlobalSystemPromptStore {
         }
 
         didChange = setStringIfNeeded(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
+        if userDefaults === UserDefaults.standard {
+            AppConfigStore.persistSynchronously(.text(snapshot.activeSystemPrompt), for: .systemPrompt)
+        }
         return didChange
     }
 

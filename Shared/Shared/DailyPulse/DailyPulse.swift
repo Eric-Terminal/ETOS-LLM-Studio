@@ -162,7 +162,12 @@ public final class DailyPulseManager: ObservableObject {
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored != 0
         }
-        return defaultValue
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        let legacy = defaults.bool(forKey: key)
+        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
@@ -172,7 +177,11 @@ public final class DailyPulseManager: ObservableObject {
         if let stored = Persistence.readAppConfigText(key: key) {
             return stored
         }
-        return defaultValue
+        guard let legacy = defaults.string(forKey: key) else { return defaultValue }
+        if Persistence.writeAppConfig(key: key, text: legacy, typeHint: "text") {
+            defaults.removeObject(forKey: key)
+        }
+        return legacy
     }
 
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
