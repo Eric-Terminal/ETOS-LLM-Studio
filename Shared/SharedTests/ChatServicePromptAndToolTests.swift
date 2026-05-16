@@ -561,7 +561,7 @@ extension ChatServiceTests {
             ShortcutToolManager.shared.setChatToolsEnabled(true)
             AppToolManager.shared.restoreStateForTests(
                 chatToolsEnabled: true,
-                enabledKinds: [.echoText]
+                enabledKinds: [.echoText, .getSystemTime]
             )
         }
 

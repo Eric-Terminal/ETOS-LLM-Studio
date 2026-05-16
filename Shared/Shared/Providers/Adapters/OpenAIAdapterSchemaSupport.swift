@@ -338,6 +338,14 @@ extension OpenAIAdapter {
         overrides.filter { !Self.openAIControlOverrideKeys.contains($0.key) }
     }
 
+    func removeOpenAIToolFields(from payload: inout [String: Any]) {
+        payload.removeValue(forKey: "tools")
+        payload.removeValue(forKey: "tool_choice")
+        payload.removeValue(forKey: "functions")
+        payload.removeValue(forKey: "function_call")
+        payload.removeValue(forKey: "parallel_tool_calls")
+    }
+
     func normalizedOpenAIConversationAPIValue(_ rawValue: String) -> OpenAIConversationAPI? {
         let normalized = rawValue
             .trimmingCharacters(in: .whitespacesAndNewlines)

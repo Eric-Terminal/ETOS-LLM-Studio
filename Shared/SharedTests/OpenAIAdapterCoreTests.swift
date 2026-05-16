@@ -171,6 +171,52 @@ struct OpenAIAdapterCoreTests {
         #expect(filtersSchema["type"] as? String == "object")
     }
 
+    @Test("OpenAI 无工具请求会移除覆盖参数里的工具字段")
+    func testOpenAIRequestWithoutToolsRemovesOverrideToolFields() throws {
+        let model = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "test-model",
+                overrideParameters: [
+                    "tools": .array([
+                        .dictionary([
+                            "type": .string("function"),
+                            "function": .dictionary(["name": .string("stale_tool")])
+                        ])
+                    ]),
+                    "tool_choice": .string("auto"),
+                    "functions": .array([
+                        .dictionary(["name": .string("legacy_tool")])
+                    ]),
+                    "function_call": .string("auto"),
+                    "parallel_tool_calls": .bool(true)
+                ]
+            )
+        )
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        guard let request = adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any] else {
+            Issue.record("无法解析 OpenAI 请求体。")
+            return
+        }
+
+        #expect(jsonPayload["tools"] == nil)
+        #expect(jsonPayload["tool_choice"] == nil)
+        #expect(jsonPayload["functions"] == nil)
+        #expect(jsonPayload["function_call"] == nil)
+        #expect(jsonPayload["parallel_tool_calls"] == nil)
+    }
+
     @Test("OpenAI 工具 schema 组合类型和叶子节点兜底补全")
     func testOpenAISchemaTypeInferenceForCombinatorAndLeafFallback() throws {
         let tools = [

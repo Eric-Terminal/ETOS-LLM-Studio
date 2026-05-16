@@ -77,9 +77,9 @@ extension ChatService {
         if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
             resolvedTools.append(searchMemoryTool)
         }
-        let builtInAppTools = await MainActor.run { AppToolManager.shared.builtInToolsForLLM() }
-        resolvedTools.append(contentsOf: builtInAppTools)
         if policy.includeAppTools {
+            let builtInAppTools = await MainActor.run { AppToolManager.shared.builtInToolsForLLM() }
+            resolvedTools.append(contentsOf: builtInAppTools)
             let appTools = await MainActor.run { AppToolManager.shared.chatToolsForLLM() }
             resolvedTools.append(contentsOf: appTools)
         }

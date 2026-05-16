@@ -269,6 +269,46 @@ struct OpenAIAdapterAdvancedTests {
         #expect(request == nil)
     }
 
+    @Test("OpenAI Responses 无工具请求会移除覆盖参数里的工具字段")
+    func testOpenAIResponsesRequestWithoutToolsRemovesOverrideToolFields() throws {
+        let model = RunnableModel(
+            provider: responsesDummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "tools": .array([
+                        .dictionary([
+                            "type": .string("function"),
+                            "name": .string("stale_tool")
+                        ])
+                    ]),
+                    "tool_choice": .string("auto"),
+                    "parallel_tool_calls": .bool(true)
+                ]
+            )
+        )
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        guard let request = responsesAdapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any] else {
+            Issue.record("无法解析 OpenAI Responses 请求体。")
+            return
+        }
+
+        #expect(jsonPayload["tools"] == nil)
+        #expect(jsonPayload["tool_choice"] == nil)
+        #expect(jsonPayload["parallel_tool_calls"] == nil)
+    }
+
     @Test("OpenAI Responses 响应可解析正文、推理与工具调用")
     func testParseResponsesAPIResponse() throws {
         let json = """

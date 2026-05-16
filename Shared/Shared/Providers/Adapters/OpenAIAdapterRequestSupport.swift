@@ -197,6 +197,8 @@ extension OpenAIAdapter {
             }
             finalPayload["tools"] = apiTools
             finalPayload["tool_choice"] = "auto"
+        } else {
+            removeOpenAIToolFields(from: &finalPayload)
         }
 
         do {
@@ -283,8 +285,8 @@ extension OpenAIAdapter {
             } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
                 finalPayload["tool_choice"] = normalizedChoice
             }
-        } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
-            finalPayload["tool_choice"] = normalizedChoice
+        } else {
+            removeOpenAIToolFields(from: &finalPayload)
         }
 
         do {
