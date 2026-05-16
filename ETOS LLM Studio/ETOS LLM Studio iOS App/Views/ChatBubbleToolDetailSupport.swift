@@ -33,95 +33,32 @@ extension ChatBubble {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .center, spacing: 8) {
-                    Image(systemName: "wrench.and.screwdriver.fill")
-                        .foregroundStyle(status.accentColor)
-                        .etFont(.system(size: 15, weight: .semibold))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(displayName)
-                            .etFont(.headline)
-                        Text(status.title)
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                    Button(NSLocalizedString("关闭", comment: "")) {
-                        selectedToolCallDetailSheetItem = nil
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
+                toolDetailTopBar(
+                    displayName: displayName,
+                    status: status,
+                    permissionRequest: permissionRequest
+                )
 
                 toolDetailSection(title: "工具参数") {
-                    CappedScrollableText(
-                        text: argumentText,
-                        maxHeight: 240,
-                        font: .system(.caption, design: .monospaced),
-                        foreground: .secondary,
-                        enableSelection: true
-                    )
+                    Text(argumentText)
+                        .etFont(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if permissionRequest == nil {
                     toolDetailSection(title: "工具结果") {
-                        if resultText.isEmpty {
-                            Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
-                                .etFont(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else if enableExperimentalToolResultDisplay {
-                            let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let hasPrimaryContent = !(primaryContent ?? "").isEmpty
-                            let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
-                            let showRaw = canToggleRaw && showRawToolResultInDetailSheet
-
-                            if showRaw || !hasPrimaryContent {
-                                CappedScrollableText(
-                                    text: displayModel.rawDisplayText,
-                                    maxHeight: 240,
-                                    font: .system(.caption, design: .monospaced),
-                                    foreground: .secondary,
-                                    enableSelection: true
-                                )
-                            } else if let primaryContent {
-                                CappedScrollableText(
-                                    text: primaryContent,
-                                    maxHeight: 240,
-                                    font: .footnote,
-                                    foreground: .secondary,
-                                    enableSelection: true
-                                )
-                            }
-
-                            if canToggleRaw {
-                                Divider()
-                                HStack {
-                                    Button(showRawToolResultInDetailSheet ? NSLocalizedString("显示整理结果", comment: "") : NSLocalizedString("显示原文", comment: "")) {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            showRawToolResultInDetailSheet.toggle()
-                                        }
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                    Spacer(minLength: 0)
-                                }
-                            }
-                        } else {
-                            CappedScrollableText(
-                                text: resultText,
-                                maxHeight: 240,
-                                font: .system(.caption, design: .monospaced),
-                                foreground: .secondary,
-                                enableSelection: true
-                            )
-                        }
+                        toolResultSheetContent(
+                            status: status,
+                            resultText: resultText,
+                            displayModel: displayModel
+                        )
                     }
                 }
 
                 if let permissionRequest {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(NSLocalizedString("审批操作", comment: ""))
-                            .etFont(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                    toolDetailSection(title: "审批操作") {
                         ToolPermissionInlineView(
                             request: permissionRequest,
                             onDecision: { decision in
@@ -149,6 +86,54 @@ extension ChatBubble {
         .background(Color.clear)
     }
 
+    private func toolDetailTopBar(
+        displayName: String,
+        status: ToolCallBubbleStatus,
+        permissionRequest: ToolPermissionRequest?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Spacer(minLength: 6)
+                Button(NSLocalizedString("关闭", comment: "")) {
+                    selectedToolCallDetailSheetItem = nil
+                }
+                .etFont(.footnote)
+                .buttonStyle(.bordered)
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "wrench.and.screwdriver.fill")
+                    .foregroundStyle(status.accentColor)
+                    .etFont(.system(size: 15, weight: .semibold))
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("调用工具", comment: ""))
+                        .etFont(.headline)
+                    Text(displayName)
+                        .etFont(.subheadline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(status.title)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                    if permissionRequest != nil {
+                        Text(NSLocalizedString("等待你的审批后继续执行。", comment: ""))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let permissionRequest,
+                       let countdownText = toolPermissionCountdownText(for: permissionRequest) {
+                        Label(countdownText, systemImage: "timer")
+                            .etFont(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
     @ViewBuilder
     func toolDetailSection<Content: View>(
         title: String,
@@ -166,6 +151,62 @@ extension ChatBubble {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.primary.opacity(0.06))
         )
+    }
+
+    @ViewBuilder
+    private func toolResultSheetContent(
+        status: ToolCallBubbleStatus,
+        resultText: String,
+        displayModel: MCPToolResultDisplayModel
+    ) -> some View {
+        if resultText.isEmpty {
+            Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        } else if enableExperimentalToolResultDisplay {
+            let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasPrimaryContent = !(primaryContent ?? "").isEmpty
+            let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
+            let showRaw = canToggleRaw && showRawToolResultInDetailSheet
+
+            VStack(alignment: .leading, spacing: 8) {
+                if showRaw || !hasPrimaryContent {
+                    Text(displayModel.rawDisplayText)
+                        .etFont(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let primaryContent {
+                    Text(primaryContent)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if canToggleRaw {
+                    Button(showRawToolResultInDetailSheet ? NSLocalizedString("显示整理结果", comment: "") : NSLocalizedString("显示原文", comment: "")) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showRawToolResultInDetailSheet.toggle()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        } else {
+            Text(resultText)
+                .etFont(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func toolPermissionCountdownText(for request: ToolPermissionRequest) -> String? {
+        guard let remaining = toolPermissionCenter.autoApproveRemainingSeconds(for: request) else {
+            return nil
+        }
+        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
     func prettyPrintedJSONOrRaw(_ raw: String) -> String {

@@ -198,115 +198,115 @@ extension ChatBubble {
         let displayModel = MCPToolResultFormatter.displayModel(from: resultText)
         let permissionRequest = activeToolPermissionRequest(for: call)
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center, spacing: 8) {
-                    Image(systemName: "wrench.and.screwdriver.fill")
-                        .foregroundStyle(status.accentColor)
-                        .etFont(.system(size: 13, weight: .semibold))
-                    VStack(alignment: .leading, spacing: 1) {
-                        MarqueeText(
-                            content: displayName,
-                            uiFont: .preferredFont(forTextStyle: .footnote),
-                            font: .footnote.weight(.semibold)
-                        )
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(status.title)
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                toolDetailSection(title: "工具参数") {
-                    CappedScrollableText(
-                        text: argumentText,
-                        maxHeight: 120,
-                        font: .system(.caption2, design: .monospaced),
-                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
-                    )
-                }
-
-                if permissionRequest == nil {
-                    toolDetailSection(title: "工具结果") {
-                        if resultText.isEmpty {
-                            Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
+        NavigationStack {
+            List {
+                Section {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "wrench.and.screwdriver.fill")
+                            .foregroundStyle(status.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(displayName)
+                                .etFont(.headline)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(status.title)
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
-                        } else if enableExperimentalToolResultDisplay {
-                            let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let hasPrimaryContent = !(primaryContent ?? "").isEmpty
-                            let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
-                            let showRaw = canToggleRaw && showRawToolResultInDetailSheet
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                if showRaw || !hasPrimaryContent {
-                                    CappedScrollableText(
-                                        text: displayModel.rawDisplayText,
-                                        maxHeight: 120,
-                                        font: .system(.caption2, design: .monospaced),
-                                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82)
-                                    )
-                                } else if let primaryContent {
-                                    CappedScrollableText(
-                                        text: primaryContent,
-                                        maxHeight: 120,
-                                        font: .caption2,
-                                        foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
-                                    )
-                                }
-
-                                if canToggleRaw {
-                                    Divider()
-                                    HStack {
-                                        Button(showRawToolResultInDetailSheet ? NSLocalizedString("显示整理结果", comment: "") : NSLocalizedString("显示原文", comment: "")) {
-                                            withAnimation(.easeInOut(duration: 0.2)) {
-                                                showRawToolResultInDetailSheet.toggle()
-                                            }
-                                        }
-                                        .buttonStyle(.bordered)
-                                        Spacer(minLength: 0)
-                                    }
-                                }
+                            if permissionRequest != nil {
+                                Text(NSLocalizedString("等待你的审批后继续执行。", comment: ""))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                        } else {
-                            CappedScrollableText(
-                                text: resultText,
-                                maxHeight: 120,
-                                font: .system(.caption2, design: .monospaced),
-                                foreground: resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85)
-                            )
                         }
                     }
                 }
 
-                if let permissionRequest {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(NSLocalizedString("审批操作", comment: ""))
-                            .etFont(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        toolPermissionInlineView(
-                            request: permissionRequest,
-                            onDecision: { decision in
-                                toolPermissionCenter.resolveActiveRequest(with: decision)
-                                selectedToolCallDetailSheetItem = nil
-                            }
+                Section(NSLocalizedString("工具参数", comment: "工具详情小节标题")) {
+                    Text(argumentText)
+                        .etFont(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if permissionRequest == nil {
+                    Section(NSLocalizedString("工具结果", comment: "工具详情小节标题")) {
+                        toolResultSheetContent(
+                            status: status,
+                            resultText: resultText,
+                            displayModel: displayModel
                         )
                     }
                 }
+
+                if let permissionRequest {
+                    Section(NSLocalizedString("审批操作", comment: "")) {
+                        toolPermissionDecisionButton(
+                            title: NSLocalizedString("允许一次", comment: ""),
+                            systemImage: "checkmark.circle.fill",
+                            tint: .green,
+                            decision: .allowOnce
+                        )
+                        toolPermissionDecisionButton(
+                            title: NSLocalizedString("拒绝", comment: ""),
+                            systemImage: "xmark.circle.fill",
+                            tint: .red,
+                            role: .destructive,
+                            decision: .deny
+                        )
+                        toolPermissionDecisionButton(
+                            title: NSLocalizedString("补充提示", comment: ""),
+                            systemImage: "text.badge.plus",
+                            tint: .blue,
+                            decision: .supplement
+                        )
+                        toolPermissionDecisionButton(
+                            title: NSLocalizedString("保持允许", comment: ""),
+                            systemImage: "checkmark.shield.fill",
+                            tint: .teal,
+                            decision: .allowForTool
+                        )
+                        toolPermissionDecisionButton(
+                            title: NSLocalizedString("完全权限", comment: ""),
+                            systemImage: "shield.fill",
+                            tint: .purple,
+                            decision: .allowAll
+                        )
+                    }
+
+                    Section(NSLocalizedString("自动批准", comment: "")) {
+                        Toggle(
+                            NSLocalizedString("允许该工具自动批准", comment: ""),
+                            isOn: toolAutoApproveBinding(for: permissionRequest)
+                        )
+                        .disabled(!toolPermissionCenter.autoApproveEnabled)
+
+                        if let countdownText = toolPermissionCountdownText(for: permissionRequest) {
+                            Label(countdownText, systemImage: "timer")
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if !toolPermissionCenter.autoApproveEnabled {
+                            Text(NSLocalizedString("全局自动批准当前未开启。", comment: ""))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else if toolPermissionCenter.isAutoApproveDisabled(for: permissionRequest.toolName) {
+                            Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
-            )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .navigationTitle(NSLocalizedString("调用工具", comment: ""))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("关闭", comment: "")) {
+                        selectedToolCallDetailSheetItem = nil
+                    }
+                }
+            }
         }
     }
 
@@ -327,6 +327,92 @@ extension ChatBubble {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.primary.opacity(0.06))
         )
+    }
+
+    @ViewBuilder
+    private func toolResultSheetContent(
+        status: ToolCallBubbleStatus,
+        resultText: String,
+        displayModel: MCPToolResultDisplayModel
+    ) -> some View {
+        if resultText.isEmpty {
+            Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        } else if enableExperimentalToolResultDisplay {
+            let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasPrimaryContent = !(primaryContent ?? "").isEmpty
+            let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
+            let showRaw = canToggleRaw && showRawToolResultInDetailSheet
+
+            VStack(alignment: .leading, spacing: 6) {
+                if showRaw || !hasPrimaryContent {
+                    Text(displayModel.rawDisplayText)
+                        .etFont(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let primaryContent {
+                    Text(primaryContent)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if canToggleRaw {
+                    Button(showRawToolResultInDetailSheet ? NSLocalizedString("显示整理结果", comment: "") : NSLocalizedString("显示原文", comment: "")) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showRawToolResultInDetailSheet.toggle()
+                        }
+                    }
+                }
+            }
+        } else {
+            Text(resultText)
+                .etFont(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func toolPermissionDecisionButton(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        role: ButtonRole? = nil,
+        decision: ToolPermissionDecision
+    ) -> some View {
+        Button(role: role) {
+            resolveToolPermission(decision)
+        } label: {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: systemImage)
+                    .foregroundStyle(tint)
+            }
+        }
+    }
+
+    private func resolveToolPermission(_ decision: ToolPermissionDecision) {
+        toolPermissionCenter.resolveActiveRequest(with: decision)
+        selectedToolCallDetailSheetItem = nil
+    }
+
+    private func toolAutoApproveBinding(for request: ToolPermissionRequest) -> Binding<Bool> {
+        Binding(
+            get: { !toolPermissionCenter.isAutoApproveDisabled(for: request.toolName) },
+            set: { isEnabled in
+                toolPermissionCenter.setAutoApproveDisabled(!isEnabled, for: request.toolName)
+            }
+        )
+    }
+
+    private func toolPermissionCountdownText(for request: ToolPermissionRequest) -> String? {
+        guard let remaining = toolPermissionCenter.autoApproveRemainingSeconds(for: request) else {
+            return nil
+        }
+        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
     func prettyPrintedJSONOrRaw(_ raw: String) -> String {

@@ -22,61 +22,89 @@ struct ToolPermissionInlineView: View {
         return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
-    private var autoApproveToggleLabel: String {
-        permissionCenter.isAutoApproveDisabled(for: request.toolName)
-            ? NSLocalizedString("恢复该工具自动批准", comment: "")
-            : NSLocalizedString("关闭该工具自动批准", comment: "")
+    private var autoApproveBinding: Binding<Bool> {
+        Binding(
+            get: { !permissionCenter.isAutoApproveDisabled(for: request.toolName) },
+            set: { isEnabled in
+                permissionCenter.setAutoApproveDisabled(!isEnabled, for: request.toolName)
+            }
+        )
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Button(NSLocalizedString("允许", comment: "")) {
-                    onDecision(.allowOnce)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
-                    onDecision(.deny)
-                }
-                .buttonStyle(.bordered)
-            }
-
-            HStack(spacing: 8) {
-                Button(NSLocalizedString("补充提示", comment: "")) {
-                    onDecision(.supplement)
-                }
-                .buttonStyle(.bordered)
-
-                Button(NSLocalizedString("保持允许", comment: "")) {
-                    onDecision(.allowForTool)
-                }
-                .buttonStyle(.bordered)
-            }
-
-            HStack(spacing: 8) {
-                Button(NSLocalizedString("完全权限", comment: "")) {
-                    onDecision(.allowAll)
-                }
-                .buttonStyle(.bordered)
-
-                if permissionCenter.autoApproveEnabled {
-                    Button(autoApproveToggleLabel) {
-                        let shouldDisable = !permissionCenter.isAutoApproveDisabled(for: request.toolName)
-                        permissionCenter.setAutoApproveDisabled(shouldDisable, for: request.toolName)
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-
+        VStack(alignment: .leading, spacing: 8) {
             if let countdownText {
-                Text(countdownText)
-                    .etFont(.caption2)
+                Label(countdownText, systemImage: "timer")
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                onDecision(.allowOnce)
+            } label: {
+                Label(NSLocalizedString("允许一次", comment: ""), systemImage: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+
+            Button(role: .destructive) {
+                onDecision(.deny)
+            } label: {
+                Label(NSLocalizedString("拒绝", comment: ""), systemImage: "xmark.circle.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+
+            toolDecisionButton(
+                title: NSLocalizedString("补充提示", comment: ""),
+                systemImage: "text.badge.plus",
+                tint: .blue,
+                decision: .supplement
+            )
+            toolDecisionButton(
+                title: NSLocalizedString("保持允许", comment: ""),
+                systemImage: "checkmark.shield.fill",
+                tint: .teal,
+                decision: .allowForTool
+            )
+            toolDecisionButton(
+                title: NSLocalizedString("完全权限", comment: ""),
+                systemImage: "shield.fill",
+                tint: .purple,
+                decision: .allowAll
+            )
+
+            Toggle(NSLocalizedString("允许该工具自动批准", comment: ""), isOn: autoApproveBinding)
+                .disabled(!permissionCenter.autoApproveEnabled)
+
+            if !permissionCenter.autoApproveEnabled {
+                Text(NSLocalizedString("全局自动批准当前未开启。", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            } else if permissionCenter.isAutoApproveDisabled(for: request.toolName) {
+                Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .controlSize(.small)
         .padding(.top, 4)
+    }
+
+    private func toolDecisionButton(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        decision: ToolPermissionDecision
+    ) -> some View {
+        Button {
+            onDecision(decision)
+        } label: {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .tint(tint)
     }
 }
 
