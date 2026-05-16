@@ -346,7 +346,15 @@ extension MCPManager {
             return
         }
         await transport.terminateSession()
-        persistResumptionToken(for: serverID)
+        let client = removeConnectionArtifacts(for: serverID)
+        await client?.disconnect()
+        persistResumptionToken(nil, for: serverID)
+        updateStatus(for: serverID) {
+            $0.connectionState = .idle
+            $0.info = nil
+            $0.isBusy = false
+        }
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: "远端会话已终止，连接状态已重置。")
     }
 
     public func connectedServers() -> [MCPServerConfiguration] {

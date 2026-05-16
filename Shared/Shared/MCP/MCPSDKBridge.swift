@@ -281,21 +281,17 @@ enum MCPSDKBridge {
     }
 
     private static func samplingContent(from content: Sampling.Message.Content) -> MCPSamplingContent {
-        let block = content.asArray.first
+        let blocks = content.asArray
+        guard blocks.count == 1, let block = blocks.first else {
+            return .text(jsonValue(fromEncodable: blocks).prettyPrintedCompact())
+        }
         switch block {
         case .text(let text):
             return .text(text)
         case .image(let data, let mimeType):
             return .image(data: data, mimeType: mimeType)
-        case .audio(let data, let mimeType):
-            return .image(data: data, mimeType: mimeType)
-        case .toolUse(let toolUse):
-            return .text(toolUse.name)
-        case .toolResult(let toolResult):
-            let value = jsonValue(fromEncodable: toolResult.content)
-            return .text(value.prettyPrintedCompact())
-        case nil:
-            return .text("")
+        case .audio(_, _), .toolUse(_), .toolResult(_):
+            return .text(jsonValue(fromEncodable: block).prettyPrintedCompact())
         }
     }
 

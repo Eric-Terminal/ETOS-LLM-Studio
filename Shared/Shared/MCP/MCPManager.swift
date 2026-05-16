@@ -146,6 +146,16 @@ public final class MCPManager: ObservableObject {
         }
     }
 
+    func removeConnectionArtifacts(for serverID: UUID) -> MCPClient? {
+        let client = clients.removeValue(forKey: serverID)
+        let transport = streamingTransports.removeValue(forKey: serverID)
+        notificationRelays[serverID] = nil
+        if client == nil {
+            transport?.disconnect()
+        }
+        return client
+    }
+
     // MARK: - Server Management
 
     public func reloadServers() {
@@ -166,6 +176,13 @@ public final class MCPManager: ObservableObject {
             .map(\.key)
         for callID in removedToolCallIDs {
             cancelToolCall(callID: callID, reason: "服务器已移除")
+        }
+        let removedArtifactIDs = Set(clients.keys).union(streamingTransports.keys).subtracting(serverIDs)
+        for serverID in removedArtifactIDs {
+            let client = removeConnectionArtifacts(for: serverID)
+            Task {
+                await client?.disconnect()
+            }
         }
 
         var newStatuses: [UUID: MCPServerStatus] = serverStatuses.filter { serverIDs.contains($0.key) }
@@ -212,9 +229,6 @@ public final class MCPManager: ObservableObject {
             newStatuses[server.id] = status
         }
         serverStatuses = newStatuses
-        clients = clients.filter { serverIDs.contains($0.key) }
-        streamingTransports = streamingTransports.filter { serverIDs.contains($0.key) }
-        notificationRelays = notificationRelays.filter { serverIDs.contains($0.key) }
 
         rebuildAggregates()
         updateBusyFlag()
@@ -234,10 +248,10 @@ public final class MCPManager: ObservableObject {
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
         MCPServerStore.delete(server)
-        clients[server.id] = nil
-        streamingTransports[server.id]?.disconnect()
-        streamingTransports[server.id] = nil
-        notificationRelays[server.id] = nil
+        let client = removeConnectionArtifacts(for: server.id)
+        Task {
+            await client?.disconnect()
+        }
         serverStatuses[server.id] = nil
         appendGovernanceLog(level: .warning, category: .lifecycle, serverID: server.id, message: "删除服务器配置：\(server.displayName)")
         reloadServers()
@@ -302,10 +316,10 @@ public final class MCPManager: ObservableObject {
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
-        clients[server.id] = nil
-        streamingTransports[server.id]?.disconnect()
-        streamingTransports[server.id] = nil
-        notificationRelays[server.id] = nil
+        let client = removeConnectionArtifacts(for: server.id)
+        Task {
+            await client?.disconnect()
+        }
         updateStatus(for: server.id) {
             $0.connectionState = .idle
             $0.info = nil
@@ -488,10 +502,8 @@ public final class MCPManager: ObservableObject {
             }
             lastOperationError = error.localizedDescription
             lastOperationOutput = nil
-            clients[server.id] = nil
-            streamingTransports[server.id]?.disconnect()
-            streamingTransports[server.id] = nil
-            notificationRelays[server.id] = nil
+            let failedClient = removeConnectionArtifacts(for: server.id)
+            await failedClient?.disconnect()
             var didScheduleRetry = false
             if retryOnFailure, server.isSelectedForChat {
                 didScheduleRetry = scheduleAutoConnectRetry(for: server.id, preserveSelection: preserveSelection)
