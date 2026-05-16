@@ -225,7 +225,11 @@ public final class AppConfigStore: ObservableObject {
     @Published public var hiddenAnnouncementKeys: String { didSet { write(.hiddenAnnouncementKeys, hiddenAnnouncementKeys) } }
 
     public init(userDefaults: UserDefaults = .standard) {
-        let initialValues = Self.initialValues(userDefaults: userDefaults)
+        let userDefaultsInitialValues = Self.initialValues(userDefaults: userDefaults)
+        let persistentInitialValues = Self.persistentBootstrapValues(userDefaults: userDefaults)
+        let initialValues = userDefaultsInitialValues.merging(persistentInitialValues) { _, persistent in
+            persistent
+        }
         Self.snapshotCache.replace(with: Self.snapshot(from: initialValues, includeLocalOnly: true))
 
         syncProviders = Self.boolValue(.syncProviders, userDefaults: userDefaults)
@@ -950,6 +954,18 @@ public final class AppConfigStore: ObservableObject {
         return values
     }
 
+    private static func persistentBootstrapValues(userDefaults: UserDefaults) -> [AppConfigKey: AppConfigValue] {
+        guard userDefaults === UserDefaults.standard else { return [:] }
+
+        return Persistence.loadAllAppConfigs().reduce(into: [AppConfigKey: AppConfigValue]()) { result, item in
+            guard let key = AppConfigKey(rawValue: item.key),
+                  let value = appConfigValue(from: item.value, for: key) else {
+                return
+            }
+            result[key] = value
+        }
+    }
+
     private static func snapshot(
         from values: [AppConfigKey: AppConfigValue],
         includeLocalOnly: Bool
@@ -963,7 +979,7 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private static func boolValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Bool {
-        if case .bool(let value) = userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
+        if case .bool(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
             return value
         }
         return false
@@ -977,21 +993,21 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private static func integerValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Int {
-        if case .integer(let value) = userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
+        if case .integer(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
             return value
         }
         return 0
     }
 
     private static func realValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Double {
-        if case .real(let value) = userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
+        if case .real(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
             return value
         }
         return 0
     }
 
     private static func textValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> String {
-        if case .text(let value) = userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
+        if case .text(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
             return value
         }
         return ""
