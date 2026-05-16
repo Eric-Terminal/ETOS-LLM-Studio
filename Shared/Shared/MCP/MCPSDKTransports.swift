@@ -239,14 +239,12 @@ public actor MCPLegacySSESDKTransport: Transport, MCPSDKTransportControl {
         guard connected else {
             throw MCPClientError.notConnected
         }
-        Task {
-            do {
-                let response = try await legacyTransport.sendMessage(data)
-                continuation.yield(response)
-            } catch {
-                continuation.finish(throwing: error)
-            }
+        if isJSONRPCMessageWithoutExpectedResponse(data) {
+            try await legacyTransport.sendNotification(data)
+            return
         }
+        let response = try await legacyTransport.sendMessage(data)
+        continuation.yield(response)
     }
 
     public func receive() -> AsyncThrowingStream<Data, Error> {

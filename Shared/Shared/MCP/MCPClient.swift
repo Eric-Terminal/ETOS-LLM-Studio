@@ -68,6 +68,9 @@ public final class MCPClient {
                 throw MCPClientError.unsupportedProtocolVersion(resolvedProtocolVersion)
             }
             negotiatedProtocolVersion = resolvedProtocolVersion
+            if let configurableTransport = transport as? MCPProtocolVersionConfigurableTransport {
+                await configurableTransport.updateProtocolVersion(resolvedProtocolVersion)
+            }
             return MCPSDKBridge.serverInfo(from: result)
         } catch let error as MCPClientError {
             throw error
@@ -145,6 +148,8 @@ public final class MCPClient {
         } catch {
             throw mapSDKError(error)
         }
+        let cancellationClient = sdkClient
+        let requestID = context.requestID
 
         return try await withTaskCancellationHandler {
             do {
@@ -154,13 +159,23 @@ public final class MCPClient {
                     timeout: options.timeout
                 )
                 return try MCPSDKBridge.jsonValue(fromToolResult: result)
+            } catch let error as MCPClientError {
+                if case .requestTimedOut = error {
+                    Task {
+                        try? await cancellationClient.cancelRequest(
+                            requestID,
+                            reason: options.cancellationReason ?? "请求已超时"
+                        )
+                    }
+                }
+                throw error
             } catch {
                 throw mapSDKError(error)
             }
         } onCancel: {
             Task {
-                try? await sdkClient.cancelRequest(
-                    context.requestID,
+                try? await cancellationClient.cancelRequest(
+                    requestID,
                     reason: options.cancellationReason ?? "客户端已取消请求"
                 )
             }
@@ -265,7 +280,7 @@ private enum CompleteWithMetadata: MCP.Method {
     typealias Result = Complete.Result
 }
 
-private actor MCPTransportAdapter: Transport {
+private actor MCPTransportAdapter: Transport, MCPProtocolVersionConfigurableTransport {
     private let wrapped: MCPTransport
     private let stream: AsyncThrowingStream<Data, Error>
     private let continuation: AsyncThrowingStream<Data, Error>.Continuation
@@ -286,29 +301,21 @@ private actor MCPTransportAdapter: Transport {
     }
 
     func send(_ data: Data) async throws {
-        if isNotification(data) {
+        if isJSONRPCMessageWithoutExpectedResponse(data) {
             try await wrapped.sendNotification(data)
             return
         }
-        Task {
-            do {
-                let response = try await wrapped.sendMessage(data)
-                continuation.yield(response)
-            } catch {
-                continuation.finish(throwing: error)
-            }
-        }
+        let response = try await wrapped.sendMessage(data)
+        continuation.yield(response)
     }
 
     func receive() -> AsyncThrowingStream<Data, Error> {
         stream
     }
 
-    private func isNotification(_ data: Data) -> Bool {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return false
-        }
-        return object["method"] != nil && object["id"] == nil
+    func updateProtocolVersion(_ protocolVersion: String?) async {
+        guard let wrapped = wrapped as? MCPProtocolVersionConfigurableTransport else { return }
+        await wrapped.updateProtocolVersion(protocolVersion)
     }
 }
 
@@ -360,6 +367,12 @@ private extension MCPClient {
                 .elicitationComplete,
                 params: .dictionary(["elicitationId": .string(message.params.elicitationId)])
             )
+        }
+
+        if capabilities.roots != nil {
+            await sdkClient.withRootsHandler {
+                []
+            }
         }
 
         if capabilities.sampling != nil {

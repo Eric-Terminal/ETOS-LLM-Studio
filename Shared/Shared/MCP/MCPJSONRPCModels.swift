@@ -106,6 +106,21 @@ public struct AnyEncodable: Encodable {
     }
 }
 
+func isJSONRPCMessageWithoutExpectedResponse(_ data: Data) -> Bool {
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return false
+    }
+    if object["method"] != nil && object["id"] == nil {
+        return true
+    }
+    if object["method"] == nil,
+       object["id"] != nil,
+       object["result"] != nil || object["error"] != nil {
+        return true
+    }
+    return false
+}
+
 public extension MCPClientInfo {
     static var appDefault: MCPClientInfo {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -115,14 +130,10 @@ public extension MCPClientInfo {
 
 public extension MCPClientCapabilities {
     static var standard: MCPClientCapabilities {
-        MCPClientCapabilities(
-            roots: MCPClientRootsCapabilities(listChanged: true)
-        )
+        MCPClientCapabilities()
     }
 
     static var httpOnly: MCPClientCapabilities {
-        MCPClientCapabilities(
-            roots: MCPClientRootsCapabilities(listChanged: true)
-        )
+        MCPClientCapabilities()
     }
 }

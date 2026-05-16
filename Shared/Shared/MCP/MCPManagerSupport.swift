@@ -340,7 +340,7 @@ extension MCPManager {
     }
 
     func clientCapabilitiesForCurrentHandlers() -> MCPClientCapabilities {
-        var capabilities = MCPClientCapabilities(roots: MCPClientRootsCapabilities(listChanged: true))
+        var capabilities = MCPClientCapabilities()
         if samplingHandler != nil {
             capabilities.sampling = MCPClientSamplingCapabilities()
         }

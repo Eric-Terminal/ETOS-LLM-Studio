@@ -20,6 +20,16 @@ import Foundation
 
 @Suite("MCP Client Tests")
 struct MCPClientTests {
+    private func initializedClient(transport: MockTransport) async throws -> MCPClient {
+        transport.enqueueSuccess(result: InitializeResultPayload(
+            protocolVersion: MCPProtocolVersion.current,
+            capabilities: [:],
+            serverInfo: ServerInfoPayload(name: "Test MCP Server", version: "1.0.0")
+        ))
+        let client = MCPClient(transport: transport)
+        _ = try await client.initialize(clientInfo: .init(name: "Harness", version: "0.1"))
+        return client
+    }
 
     @Test("Initialize sends metadata and decodes server info")
     func testInitializeRequest() async throws {
@@ -94,18 +104,24 @@ struct MCPClientTests {
         #expect(info == expectedInfo)
         #expect(client.negotiatedProtocolVersion == negotiatedVersion)
         #expect(transport.updatedProtocolVersions.last ?? nil == negotiatedVersion)
+        guard let recorded = transport.request(named: "initialize"),
+              let capabilities = recorded.params?["capabilities"] as? [String: Any] else {
+            Issue.record("未捕获到初始化能力声明。")
+            return
+        }
+        #expect(capabilities["roots"] == nil)
     }
 
     @Test("List tools decodes JSON payload")
     func testListToolsDecoding() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         let tools = [
             MCPToolDescription(toolId: "tool.one", description: "第一个工具", inputSchema: .dictionary(["type": .string("object")]), examples: nil),
             MCPToolDescription(toolId: "tool.two", description: nil, inputSchema: .dictionary(["type": .string("object")]), examples: nil)
         ]
         transport.enqueueSuccess(result: ToolsPagePayload(tools: tools, nextCursor: nil))
 
-        let client = MCPClient(transport: transport)
         let fetched = try await client.listTools()
 
         #expect(fetched.count == 2)
@@ -120,6 +136,7 @@ struct MCPClientTests {
     @Test("List tools follows cursor pagination")
     func testListToolsPagination() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.enqueueSuccess(result: ToolsPagePayload(
             tools: [MCPToolDescription(toolId: "tool.page.1", description: "第一页", inputSchema: .dictionary(["type": .string("object")]), examples: nil)],
             nextCursor: "cursor-2"
@@ -129,7 +146,6 @@ struct MCPClientTests {
             nextCursor: nil
         ))
 
-        let client = MCPClient(transport: transport)
         let fetched = try await client.listTools()
 
         #expect(fetched.map(\.toolId) == ["tool.page.1", "tool.page.2"])
@@ -142,6 +158,7 @@ struct MCPClientTests {
     @Test("资源模板列表支持 cursor 分页拉取")
     func testListResourceTemplatesPagination() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.enqueueSuccess(result: ResourceTemplatesPagePayload(
             resourceTemplates: [
                 MCPResourceTemplate(
@@ -169,7 +186,6 @@ struct MCPClientTests {
             nextCursor: nil
         ))
 
-        let client = MCPClient(transport: transport)
         let fetched = try await client.listResourceTemplates()
 
         #expect(fetched.map(\.uriTemplate) == ["file://docs/{name}", "file://images/{id}"])
@@ -182,6 +198,7 @@ struct MCPClientTests {
     @Test("Execute tool encodes inputs and returns JSONValue")
     func testExecuteTool() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         let responseValue = JSONValue.dictionary([
             "content": .array([
                 .dictionary([
@@ -207,7 +224,6 @@ struct MCPClientTests {
             ])
         ))
 
-        let client = MCPClient(transport: transport)
         let result = try await client.executeTool(
             toolId: "calculator",
             inputs: ["question": .string("What is 6 * 7?")]
@@ -228,11 +244,11 @@ struct MCPClientTests {
     @Test("Execute tool encodes MCP meta fields")
     func testExecuteToolMetaEncoding() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.enqueueSuccess(result: ToolCallResultPayload(
             content: [["type": .string("text"), "text": .string("ok")]]
         ))
 
-        let client = MCPClient(transport: transport)
         _ = try await client.executeTool(
             toolId: "meta-tool",
             inputs: ["query": .string("hello")],
@@ -252,11 +268,11 @@ struct MCPClientTests {
     @Test("Execute tool encodes integer progress token")
     func testExecuteToolIntegerProgressTokenEncoding() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.enqueueSuccess(result: ToolCallResultPayload(
             content: [["type": .string("text"), "text": .string("ok")]]
         ))
 
-        let client = MCPClient(transport: transport)
         _ = try await client.executeTool(
             toolId: "meta-tool-int",
             inputs: ["query": .string("hello")],
@@ -276,12 +292,12 @@ struct MCPClientTests {
     @Test("Execute tool timeout sends cancelled notification")
     func testExecuteToolTimeoutSendsCancelledNotification() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.messageDelayNanoseconds = 400_000_000
         transport.enqueueSuccess(result: ToolCallResultPayload(
             content: [["type": .string("text"), "text": .string("slow")]]
         ))
 
-        let client = MCPClient(transport: transport)
         do {
             _ = try await client.executeTool(
                 toolId: "slow-tool",
@@ -312,9 +328,9 @@ struct MCPClientTests {
     @Test("Read resource surfaces RPC errors")
     func testReadResourceErrorPropagation() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.enqueueError(code: 404, message: "Resource not found", data: .dictionary(["resourceId": .string("doc.unknown")]))
 
-        let client = MCPClient(transport: transport)
         do {
             _ = try await client.readResource(resourceId: "doc.unknown", query: nil)
             Issue.record("readResource 应当抛出错误，但却成功返回。")
@@ -343,11 +359,11 @@ struct MCPClientTests {
     @Test("completion 请求可编码引用并解析返回候选")
     func testCompletionEncodingAndDecoding() async throws {
         let transport = MockTransport()
+        let client = try await initializedClient(transport: transport)
         transport.enqueueSuccess(result: CompletionResultPayload(
             completion: MCPCompletion(values: ["苹果", "安卓"], total: 2, hasMore: false)
         ))
 
-        let client = MCPClient(transport: transport)
         let completion = try await client.complete(
             reference: .prompt(name: "suggest-platform"),
             argument: MCPCompletionArgument(name: "keyword", value: "移动"),
