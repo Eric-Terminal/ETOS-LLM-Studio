@@ -429,8 +429,16 @@ struct TelegramMessageComposer: View {
         if isLiquidGlassEnabled {
             if #available(iOS 26.0, *) {
                 Circle()
-                    .fill(fill)
+                    .fill(Color.clear)
                     .glassEffect(.clear, in: Circle())
+                    .overlay(
+                        Circle()
+                            .fill(fill.opacity(0.82))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(glassStrokeColor, lineWidth: 0.5)
+                    )
                     .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
             } else {
                 Circle()

@@ -110,22 +110,55 @@ extension ChatView {
     @ViewBuilder
     func telegramScrollToBottomButton(action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            ZStack {
+            Image(systemName: "chevron.down")
+                .etFont(.system(size: 16, weight: .semibold))
+                .foregroundColor(scrollToBottomButtonIconColor)
+                .frame(width: 40, height: 40)
+                .background(scrollToBottomButtonBackground)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(NSLocalizedString("滚动到底部", comment: ""))
+    }
+
+    @ViewBuilder
+    var scrollToBottomButtonBackground: some View {
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
                 Circle()
-                    .fill(scrollToBottomButtonFillColor)
-                    .frame(width: 40, height: 40)
+                    .fill(Color.clear)
+                    .glassEffect(.clear, in: Circle())
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
                     .overlay(
                         Circle()
                             .stroke(scrollToBottomButtonBorderColor, lineWidth: 0.8)
                     )
                     .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
-
-                Image(systemName: "chevron.down")
-                    .etFont(.system(size: 16, weight: .semibold))
-                    .foregroundColor(scrollToBottomButtonIconColor)
+            } else {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(navBarGlassOverlayColor)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(scrollToBottomButtonBorderColor, lineWidth: 0.8)
+                    )
+                    .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
             }
+        } else {
+            Circle()
+                .fill(scrollToBottomButtonFillColor)
+                .overlay(
+                    Circle()
+                        .stroke(scrollToBottomButtonBorderColor, lineWidth: 0.8)
+                )
+                .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
         }
-        .accessibilityLabel(NSLocalizedString("滚动到底部", comment: ""))
     }
 
     /// Telegram 风格历史加载提示
