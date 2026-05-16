@@ -27,10 +27,17 @@ struct MCPClientTests {
         let expectedInfo = MCPServerInfo(
             name: "Local Toolchain",
             version: "1.2.3",
-            capabilities: ["echo": .bool(true)],
+            capabilities: [
+                "tools": .dictionary(["listChanged": .bool(true)])
+            ],
             metadata: ["region": .string("cn")]
         )
-        transport.enqueueSuccess(result: expectedInfo)
+        transport.enqueueSuccess(result: InitializeResultPayload(
+            protocolVersion: MCPProtocolVersion.current,
+            capabilities: expectedInfo.capabilities ?? [:],
+            serverInfo: ServerInfoPayload(name: expectedInfo.name, version: expectedInfo.version ?? "1.2.3"),
+            metadata: expectedInfo.metadata
+        ))
 
         let client = MCPClient(transport: transport)
         let info = try await client.initialize(
@@ -65,12 +72,15 @@ struct MCPClientTests {
         let expectedInfo = MCPServerInfo(
             name: "Negotiated MCP Server",
             version: "2.0.0",
-            capabilities: ["search": .bool(true)],
-            metadata: ["region": .string("us")]
+            capabilities: [
+                "tools": .dictionary(["listChanged": .bool(true)])
+            ],
+            metadata: nil
         )
         transport.enqueueSuccess(
-            result: InitializeNegotiatedPayload(
+            result: InitializeResultPayload(
                 protocolVersion: negotiatedVersion,
+                capabilities: expectedInfo.capabilities ?? [:],
                 serverInfo: expectedInfo
             )
         )
@@ -90,10 +100,10 @@ struct MCPClientTests {
     func testListToolsDecoding() async throws {
         let transport = MockTransport()
         let tools = [
-            MCPToolDescription(toolId: "tool.one", description: "第一个工具", inputSchema: nil, examples: nil),
+            MCPToolDescription(toolId: "tool.one", description: "第一个工具", inputSchema: .dictionary(["type": .string("object")]), examples: nil),
             MCPToolDescription(toolId: "tool.two", description: nil, inputSchema: .dictionary(["type": .string("object")]), examples: nil)
         ]
-        transport.enqueueSuccess(result: tools)
+        transport.enqueueSuccess(result: ToolsPagePayload(tools: tools, nextCursor: nil))
 
         let client = MCPClient(transport: transport)
         let fetched = try await client.listTools()
@@ -111,11 +121,11 @@ struct MCPClientTests {
     func testListToolsPagination() async throws {
         let transport = MockTransport()
         transport.enqueueSuccess(result: ToolsPagePayload(
-            tools: [MCPToolDescription(toolId: "tool.page.1", description: "第一页", inputSchema: nil, examples: nil)],
+            tools: [MCPToolDescription(toolId: "tool.page.1", description: "第一页", inputSchema: .dictionary(["type": .string("object")]), examples: nil)],
             nextCursor: "cursor-2"
         ))
         transport.enqueueSuccess(result: ToolsPagePayload(
-            tools: [MCPToolDescription(toolId: "tool.page.2", description: "第二页", inputSchema: nil, examples: nil)],
+            tools: [MCPToolDescription(toolId: "tool.page.2", description: "第二页", inputSchema: .dictionary(["type": .string("object")]), examples: nil)],
             nextCursor: nil
         ))
 
@@ -173,10 +183,29 @@ struct MCPClientTests {
     func testExecuteTool() async throws {
         let transport = MockTransport()
         let responseValue = JSONValue.dictionary([
-            "status": .string("ok"),
-            "answer": .string("42")
+            "content": .array([
+                .dictionary([
+                    "type": .string("text"),
+                    "text": .string("42")
+                ])
+            ]),
+            "structuredContent": .dictionary([
+                "status": .string("ok"),
+                "answer": .string("42")
+            ])
         ])
-        transport.enqueueSuccess(result: responseValue)
+        transport.enqueueSuccess(result: ToolCallResultPayload(
+            content: [
+                [
+                    "type": .string("text"),
+                    "text": .string("42")
+                ]
+            ],
+            structuredContent: .dictionary([
+                "status": .string("ok"),
+                "answer": .string("42")
+            ])
+        ))
 
         let client = MCPClient(transport: transport)
         let result = try await client.executeTool(
@@ -199,8 +228,9 @@ struct MCPClientTests {
     @Test("Execute tool encodes MCP meta fields")
     func testExecuteToolMetaEncoding() async throws {
         let transport = MockTransport()
-        let responseValue = JSONValue.dictionary(["status": .string("ok")])
-        transport.enqueueSuccess(result: responseValue)
+        transport.enqueueSuccess(result: ToolCallResultPayload(
+            content: [["type": .string("text"), "text": .string("ok")]]
+        ))
 
         let client = MCPClient(transport: transport)
         _ = try await client.executeTool(
@@ -222,8 +252,9 @@ struct MCPClientTests {
     @Test("Execute tool encodes integer progress token")
     func testExecuteToolIntegerProgressTokenEncoding() async throws {
         let transport = MockTransport()
-        let responseValue = JSONValue.dictionary(["status": .string("ok")])
-        transport.enqueueSuccess(result: responseValue)
+        transport.enqueueSuccess(result: ToolCallResultPayload(
+            content: [["type": .string("text"), "text": .string("ok")]]
+        ))
 
         let client = MCPClient(transport: transport)
         _ = try await client.executeTool(
@@ -246,7 +277,9 @@ struct MCPClientTests {
     func testExecuteToolTimeoutSendsCancelledNotification() async throws {
         let transport = MockTransport()
         transport.messageDelayNanoseconds = 400_000_000
-        transport.enqueueSuccess(result: JSONValue.dictionary(["status": .string("slow")]))
+        transport.enqueueSuccess(result: ToolCallResultPayload(
+            content: [["type": .string("text"), "text": .string("slow")]]
+        ))
 
         let client = MCPClient(transport: transport)
         do {
@@ -344,6 +377,25 @@ struct MCPClientTests {
         #expect(contextArguments["language"] as? String == "zh-CN")
         #expect(meta["progressToken"] as? Int == 7)
     }
+
+    @Test("官方 HTTP 请求修饰器只为 GET 注入恢复令牌")
+    func testSDKHTTPRequestStateInjectsResumptionTokenForGETOnly() throws {
+        let state = MCPSDKHTTPRequestState(headers: ["X-Test": "ok"])
+        state.updateResumptionToken(" event-1 ")
+        let modifier = state.requestModifier()
+
+        var getRequest = URLRequest(url: try #require(URL(string: "https://example.com/mcp")))
+        getRequest.httpMethod = "GET"
+        let modifiedGet = modifier(getRequest)
+        #expect(modifiedGet.value(forHTTPHeaderField: "X-Test") == "ok")
+        #expect(modifiedGet.value(forHTTPHeaderField: mcpResumptionHeader) == "event-1")
+
+        var postRequest = URLRequest(url: try #require(URL(string: "https://example.com/mcp")))
+        postRequest.httpMethod = "POST"
+        let modifiedPost = modifier(postRequest)
+        #expect(modifiedPost.value(forHTTPHeaderField: "X-Test") == "ok")
+        #expect(modifiedPost.value(forHTTPHeaderField: mcpResumptionHeader) == nil)
+    }
 }
 
 // MARK: - Test Helpers
@@ -405,7 +457,7 @@ private final class MockTransport: MCPTransport, MCPProtocolVersionConfigurableT
         let next = responses.removeFirst()
         switch next {
         case .success(let data):
-            return data
+            return try responseData(data, matchingRequest: dictionary)
         case .failure(let error):
             throw error
         }
@@ -432,6 +484,14 @@ private final class MockTransport: MCPTransport, MCPProtocolVersionConfigurableT
         }
         return request(named: method)
     }
+
+    private func responseData(_ data: Data, matchingRequest request: [String: Any]) throws -> Data {
+        guard var response = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return data
+        }
+        response["id"] = request["id"]
+        return try JSONSerialization.data(withJSONObject: response)
+    }
 }
 
 private struct RPCSuccessPayload<Result: Encodable>: Encodable {
@@ -440,9 +500,56 @@ private struct RPCSuccessPayload<Result: Encodable>: Encodable {
     let result: Result
 }
 
-private struct InitializeNegotiatedPayload: Encodable {
+private struct InitializeResultPayload: Encodable {
     let protocolVersion: String
-    let serverInfo: MCPServerInfo
+    let capabilities: [String: JSONValue]
+    let serverInfo: ServerInfoPayload
+    let metadata: [String: JSONValue]?
+
+    init(
+        protocolVersion: String,
+        capabilities: [String: JSONValue],
+        serverInfo: ServerInfoPayload,
+        metadata: [String: JSONValue]? = nil
+    ) {
+        self.protocolVersion = protocolVersion
+        self.capabilities = capabilities
+        self.serverInfo = serverInfo
+        self.metadata = metadata
+    }
+
+    init(protocolVersion: String, capabilities: [String: JSONValue], serverInfo: MCPServerInfo) {
+        self.init(
+            protocolVersion: protocolVersion,
+            capabilities: capabilities,
+            serverInfo: ServerInfoPayload(name: serverInfo.name, version: serverInfo.version ?? "0.0.0"),
+            metadata: serverInfo.metadata
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case protocolVersion
+        case capabilities
+        case serverInfo
+        case metadata = "_meta"
+    }
+}
+
+private struct ServerInfoPayload: Encodable {
+    let name: String
+    let version: String
+}
+
+private struct ToolCallResultPayload: Encodable {
+    let content: [[String: JSONValue]]
+    let structuredContent: JSONValue?
+    let isError: Bool?
+
+    init(content: [[String: JSONValue]], structuredContent: JSONValue? = nil, isError: Bool? = nil) {
+        self.content = content
+        self.structuredContent = structuredContent
+        self.isError = isError
+    }
 }
 
 private struct RPCErrorPayload: Encodable {

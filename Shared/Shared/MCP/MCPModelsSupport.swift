@@ -539,6 +539,12 @@ public struct MCPProgressParams: Codable, Hashable {
     public let progressToken: MCPProgressToken
     public let progress: Double
     public let total: Double?
+
+    public init(progressToken: MCPProgressToken, progress: Double, total: Double?) {
+        self.progressToken = progressToken
+        self.progress = progress
+        self.total = total
+    }
 }
 
 public struct MCPCancelledParams: Codable, Hashable {

@@ -397,8 +397,8 @@ public final class MCPManager: ObservableObject {
             $0.isBusy = true
         }
 
-        let transport = server.makeTransport()
-        if let resumptionTransport = transport as? MCPResumptionControllableTransport,
+        let transportBundle = server.makeSDKTransport()
+        if let resumptionTransport = transportBundle.streamControl as? MCPResumptionControllableTransport,
            let token = server.streamResumptionToken,
            !token.isEmpty {
             await resumptionTransport.updateResumptionToken(token)
@@ -409,19 +409,24 @@ public final class MCPManager: ObservableObject {
                 message: "已恢复流式重连令牌。"
             )
         }
-        let client = MCPClient(transport: transport)
-        clients[server.id] = client
-
-        if let streamingTransport = transport as? MCPStreamingTransportProtocol {
-            let relay = MCPServerNotificationRelay(serverID: server.id, manager: self)
-            notificationRelays[server.id] = relay
-            streamingTransport.notificationDelegate = relay
-            streamingTransport.samplingHandler = samplingHandler
-            streamingTransport.elicitationHandler = elicitationHandler
-            streamingTransports[server.id] = streamingTransport
+        let relay = MCPServerNotificationRelay(serverID: server.id, manager: self)
+        notificationRelays[server.id] = relay
+        transportBundle.streamControl?.notificationDelegate = relay
+        transportBundle.streamControl?.samplingHandler = samplingHandler
+        transportBundle.streamControl?.elicitationHandler = elicitationHandler
+        if let streamControl = transportBundle.streamControl {
+            streamingTransports[server.id] = streamControl
         } else {
-            notificationRelays[server.id] = nil
+            streamingTransports[server.id] = nil
         }
+        let client = MCPClient(
+            transport: transportBundle.transport,
+            notificationDelegate: relay,
+            samplingHandler: samplingHandler,
+            elicitationHandler: elicitationHandler,
+            capabilities: clientCapabilitiesForCurrentHandlers()
+        )
+        clients[server.id] = client
 
         do {
             let handshakeTimeout = (retryOnFailure || keepReadyStateDuringHandshake)
@@ -432,6 +437,9 @@ public final class MCPManager: ObservableObject {
                 timeout: handshakeTimeout,
                 capabilities: clientCapabilitiesForCurrentHandlers()
             )
+            if let configurableTransport = transportBundle.streamControl as? MCPProtocolVersionConfigurableTransport {
+                await configurableTransport.updateProtocolVersion(client.negotiatedProtocolVersion)
+            }
             mcpManagerLogger.info("MCP 初始化成功：\(server.displayName, privacy: .public)，server=\(info.name, privacy: .public) \(info.version ?? "unknown", privacy: .public)")
 
             let shouldSelectForChat = !preserveSelection && !status(for: server).isSelectedForChat

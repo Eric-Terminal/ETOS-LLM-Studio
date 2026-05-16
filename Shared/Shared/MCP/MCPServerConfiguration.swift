@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Foundation
+import MCP
 
 private let mcpTokenPlaceholder = "{token}"
 
@@ -205,6 +206,93 @@ public extension MCPServerConfiguration {
                 session: urlSession
             )
         }
+    }
+
+    func makeSDKTransport(urlSession: URLSession = NetworkSessionConfiguration.shared) -> MCPSDKTransportBundle {
+        switch transport {
+        case .http(let endpoint, let apiKey, let additionalHeaders):
+            let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
+            let configuration = NetworkSessionConfiguration.makeConfiguration()
+            let requestState = MCPSDKHTTPRequestState(headers: headers)
+            let modifier = requestState.requestModifier()
+            let sdkTransport = HTTPClientTransport(
+                endpoint: endpoint,
+                configuration: configuration,
+                streaming: true,
+                protocolVersion: MCPProtocolVersion.current,
+                requestModifier: modifier
+            )
+            let controller = MCPSDKHTTPTransportController(
+                transport: sdkTransport,
+                requestState: requestState,
+                session: urlSession,
+                endpoint: endpoint,
+                requestModifier: modifier
+            )
+            return MCPSDKTransportBundle(
+                transport: sdkTransport,
+                streamControl: MCPTransportControlBox(control: controller)
+            )
+        case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
+            let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
+            let legacyTransport = MCPStreamingTransport(
+                messageEndpoint: messageEndpoint,
+                sseEndpoint: sseEndpoint,
+                session: urlSession,
+                headers: headers
+            )
+            let sdkTransport = MCPLegacySSESDKTransport(legacyTransport: legacyTransport)
+            return MCPSDKTransportBundle(
+                transport: sdkTransport,
+                streamControl: MCPLegacySSETransportControlBox(
+                    sdkTransport: sdkTransport,
+                    legacyTransport: legacyTransport
+                )
+            )
+        case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
+            let configuration = NetworkSessionConfiguration.makeConfiguration()
+            let authorizer = MCPOAuthEndpointAuthorizer(
+                tokenEndpoint: tokenEndpoint,
+                clientID: clientID,
+                clientSecret: clientSecret,
+                scope: scope,
+                grantType: grantType,
+                authorizationCode: authorizationCode,
+                redirectURI: redirectURI,
+                codeVerifier: codeVerifier
+            )
+            let requestState = MCPSDKHTTPRequestState(headers: [:])
+            let modifier = requestState.requestModifier()
+            let sdkTransport = HTTPClientTransport(
+                endpoint: endpoint,
+                configuration: configuration,
+                streaming: true,
+                protocolVersion: MCPProtocolVersion.current,
+                authorizer: authorizer,
+                requestModifier: modifier
+            )
+            let controller = MCPSDKHTTPTransportController(
+                transport: sdkTransport,
+                requestState: requestState,
+                session: urlSession,
+                endpoint: endpoint,
+                requestModifier: modifier
+            )
+            return MCPSDKTransportBundle(
+                transport: sdkTransport,
+                streamControl: MCPTransportControlBox(control: controller)
+            )
+        }
+    }
+}
+
+public struct MCPSDKTransportBundle {
+    public let transport: any Transport
+    public let streamControl: MCPStreamingTransportProtocol?
+
+    public init(transport: any Transport, streamControl: MCPStreamingTransportProtocol?) {
+        self.transport = transport
+        self.streamControl = streamControl
     }
 }
 
