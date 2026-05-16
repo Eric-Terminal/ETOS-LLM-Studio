@@ -414,45 +414,34 @@ public final class ToolPermissionCenter: ObservableObject {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Bool ?? defaultValue
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored != 0
         }
-        guard defaults.object(forKey: key) != nil else { return defaultValue }
-        let legacy = defaults.bool(forKey: key)
-        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return defaultValue
     }
 
     private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Int ?? defaultValue
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored
         }
-        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
-        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return defaultValue
     }
 
     private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
         guard usesDatabase(defaults: defaults) else {
             return defaults.stringArray(forKey: key) ?? []
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigText(key: key),
            let decoded = decodeStringArray(stored) {
             return decoded
         }
-        guard let legacy = defaults.stringArray(forKey: key) else { return [] }
-        if let encoded = encodeStringArray(legacy),
-           Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return []
     }
 
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
@@ -460,9 +449,7 @@ public final class ToolPermissionCenter: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
-            defaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool")
     }
 
     private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
@@ -470,9 +457,7 @@ public final class ToolPermissionCenter: ObservableObject {
             defaults.set(value, forKey: key)
             return
         }
-        if Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer") {
-            defaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer")
     }
 
     private static func save(_ value: [String], forKey key: String, defaults: UserDefaults) {
@@ -481,9 +466,7 @@ public final class ToolPermissionCenter: ObservableObject {
             return
         }
         guard let encoded = encodeStringArray(value) else { return }
-        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
-            defaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text")
     }
 
     private static func encodeStringArray(_ value: [String]) -> String? {

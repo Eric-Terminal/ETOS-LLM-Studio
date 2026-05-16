@@ -3,7 +3,7 @@
 // ============================================================================
 // 管理全局系统提示词列表与当前选中项
 // - 支持从旧版单一 systemPrompt 自动迁移
-// - 统一维护列表存储与当前发送用 systemPrompt 的镜像关系
+// - 统一维护列表存储与当前发送用 app_config systemPrompt 的镜像关系
 // ============================================================================
 
 import Foundation
@@ -59,10 +59,13 @@ public enum GlobalSystemPromptStore {
     /// - 优先读取配置数据库中的多版本提示词。
     /// - 当数据库为空且旧版 UserDefaults 数据存在时，自动迁移为数据库记录。
     /// - 当选中项丢失时，自动回退到第一条。
-    /// - 始终将当前选中内容镜像回旧版 systemPrompt。
+    /// - 始终将当前选中内容镜像到 app_config 的 systemPrompt。
     @discardableResult
     public static func load(userDefaults: UserDefaults = .standard) -> GlobalSystemPromptSnapshot {
         let useDatabase = shouldUseDatabase(userDefaults: userDefaults)
+        if useDatabase {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+        }
         if useDatabase, let databaseSnapshot = loadFromDatabase() {
             let snapshot = normalizedSnapshot(
                 entries: databaseSnapshot.entries,
@@ -113,7 +116,7 @@ public enum GlobalSystemPromptStore {
         return snapshot
     }
 
-    /// 仅更新当前生效提示词到数据库与 AppConfig 镜像，不回写旧版 UserDefaults 列表字段。
+    /// 仅更新当前生效提示词到数据库与 AppConfig 镜像。
     @discardableResult
     public static func saveActiveSystemPrompt(_ prompt: String) -> GlobalSystemPromptSnapshot {
         let before = loadFromDatabase()
@@ -157,6 +160,42 @@ public enum GlobalSystemPromptStore {
 
     private static func shouldUseDatabase(userDefaults: UserDefaults) -> Bool {
         userDefaults === UserDefaults.standard
+    }
+
+    static func migrateLegacyUserDefaultsToDatabase() {
+        let userDefaults = UserDefaults.standard
+        let legacyKeys = [
+            entriesStorageKey,
+            selectedEntryIDStorageKey,
+            legacySystemPromptStorageKey
+        ]
+        guard legacyKeys.contains(where: { userDefaults.object(forKey: $0) != nil }) else {
+            return
+        }
+
+        var canRemoveLegacyKeys = false
+        if let existingSnapshot = loadFromDatabase() {
+            Persistence.writeAppConfig(
+                key: AppConfigKey.systemPrompt.rawValue,
+                text: existingSnapshot.activeSystemPrompt,
+                typeHint: "text"
+            )
+            canRemoveLegacyKeys = true
+        } else {
+            let snapshot = loadFromUserDefaults(userDefaults)
+            if saveToDatabase(snapshot) {
+                Persistence.writeAppConfig(
+                    key: AppConfigKey.systemPrompt.rawValue,
+                    text: snapshot.activeSystemPrompt,
+                    typeHint: "text"
+                )
+                canRemoveLegacyKeys = true
+            }
+        }
+
+        if canRemoveLegacyKeys {
+            legacyKeys.forEach { userDefaults.removeObject(forKey: $0) }
+        }
     }
 
     private static func loadFromDatabase() -> GlobalSystemPromptSnapshot? {
@@ -259,6 +298,14 @@ public enum GlobalSystemPromptStore {
     ) -> Bool {
         var didChange = false
 
+        if userDefaults === UserDefaults.standard {
+            didChange = removeObjectIfNeeded(forKey: entriesStorageKey, in: userDefaults) || didChange
+            didChange = removeObjectIfNeeded(forKey: selectedEntryIDStorageKey, in: userDefaults) || didChange
+            didChange = removeObjectIfNeeded(forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
+            AppConfigStore.persistSynchronously(.text(snapshot.activeSystemPrompt), for: .systemPrompt)
+            return didChange
+        }
+
         if includeListInUserDefaults {
             if snapshot.entries.isEmpty {
                 didChange = removeObjectIfNeeded(forKey: entriesStorageKey, in: userDefaults) || didChange
@@ -279,9 +326,6 @@ public enum GlobalSystemPromptStore {
         }
 
         didChange = setStringIfNeeded(snapshot.activeSystemPrompt, forKey: legacySystemPromptStorageKey, in: userDefaults) || didChange
-        if userDefaults === UserDefaults.standard {
-            AppConfigStore.persistSynchronously(.text(snapshot.activeSystemPrompt), for: .systemPrompt)
-        }
         return didChange
     }
 

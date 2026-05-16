@@ -407,21 +407,47 @@ public enum ChatAppearanceProfileStore {
         userDefaults === UserDefaults.standard
     }
 
+    static func migrateLegacyUserDefaultsToAppConfig() {
+        let userDefaults = UserDefaults.standard
+        let hasStoredConfiguration = userDefaults.object(forKey: configurationStorageKey) != nil
+        let hasLegacyColors = legacyColorKeys.contains { userDefaults.object(forKey: $0) != nil }
+        guard hasStoredConfiguration || hasLegacyColors else { return }
+
+        var canRemoveLegacyKeys = Persistence.readAppConfigText(key: configurationStorageKey) != nil
+        if Persistence.readAppConfigText(key: configurationStorageKey) == nil {
+            if let data = userDefaults.data(forKey: configurationStorageKey),
+               let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) {
+                _ = try? saveConfiguration(decoded.normalized(), userDefaults: userDefaults)
+                canRemoveLegacyKeys = Persistence.readAppConfigText(key: configurationStorageKey) != nil
+            } else if hasLegacyColors {
+                _ = try? saveConfiguration(
+                    migratedLegacyConfiguration(userDefaults: userDefaults),
+                    userDefaults: userDefaults
+                )
+                canRemoveLegacyKeys = Persistence.readAppConfigText(key: configurationStorageKey) != nil
+            }
+        }
+
+        if canRemoveLegacyKeys {
+            userDefaults.removeObject(forKey: configurationStorageKey)
+            clearLegacyColorKeys(in: userDefaults)
+        }
+    }
+
     private static func loadStoredConfiguration(userDefaults: UserDefaults) -> ChatAppearanceProfileConfiguration? {
-        if usesDatabase(userDefaults: userDefaults),
-           let raw = Persistence.readAppConfigText(key: configurationStorageKey),
-           let data = raw.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) {
+        if usesDatabase(userDefaults: userDefaults) {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            guard let raw = Persistence.readAppConfigText(key: configurationStorageKey),
+                  let data = raw.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) else {
+                return nil
+            }
             return decoded
         }
 
         guard let data = userDefaults.data(forKey: configurationStorageKey),
               let decoded = try? JSONDecoder().decode(ChatAppearanceProfileConfiguration.self, from: data) else {
             return nil
-        }
-        if usesDatabase(userDefaults: userDefaults),
-           Persistence.readAppConfigText(key: configurationStorageKey) == nil {
-            _ = try? saveConfiguration(decoded.normalized(), userDefaults: userDefaults)
         }
         return decoded
     }
@@ -438,6 +464,10 @@ public enum ChatAppearanceProfileStore {
     }
 
     private static func clearLegacyColorKeys(in userDefaults: UserDefaults) {
+        legacyColorKeys.forEach { userDefaults.removeObject(forKey: $0) }
+    }
+
+    private static var legacyColorKeys: [String] {
         [
             legacyEnableUserBubbleKey,
             legacyUserBubbleHexKey,
@@ -447,7 +477,7 @@ public enum ChatAppearanceProfileStore {
             legacyLightTextHexKey,
             legacyEnableDarkTextKey,
             legacyDarkTextHexKey
-        ].forEach { userDefaults.removeObject(forKey: $0) }
+        ]
     }
 }
 

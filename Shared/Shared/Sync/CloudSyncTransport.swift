@@ -207,10 +207,8 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
 
     private func loadZoneChangeTokenData() -> Data? {
         if userDefaults === UserDefaults.standard {
-            return Persistence.readAppConfigData(
-                key: Self.zoneChangeTokenKey,
-                legacyUserDefaultsKey: Self.zoneChangeTokenKey
-            )
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            return Persistence.readAppConfigData(key: Self.zoneChangeTokenKey)
         }
         return userDefaults.data(forKey: Self.zoneChangeTokenKey)
     }

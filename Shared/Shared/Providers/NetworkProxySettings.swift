@@ -120,43 +120,33 @@ public enum NetworkProxySettings {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Bool ?? defaultValue
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored != 0
         }
-        guard defaults.object(forKey: key) != nil else { return defaultValue }
-        let legacy = defaults.bool(forKey: key)
-        if Persistence.writeAppConfig(key: key, integer: legacy ? 1 : 0, typeHint: "bool") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return defaultValue
     }
 
     private static func integerValue(forKey key: String, defaults: UserDefaults, defaultValue: Int) -> Int {
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Int ?? defaultValue
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigInteger(key: key) {
             return stored
         }
-        guard let legacy = defaults.object(forKey: key) as? Int else { return defaultValue }
-        if Persistence.writeAppConfig(key: key, integer: legacy, typeHint: "integer") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return defaultValue
     }
 
     private static func textValue(forKey key: String, defaults: UserDefaults, defaultValue: String) -> String {
         guard usesDatabase(defaults: defaults) else {
             return defaults.string(forKey: key) ?? defaultValue
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigText(key: key) {
             return stored
         }
-        guard let legacy = defaults.string(forKey: key) else { return defaultValue }
-        if Persistence.writeAppConfig(key: key, text: legacy, typeHint: "text") {
-            defaults.removeObject(forKey: key)
-        }
-        return legacy
+        return defaultValue
     }
 
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
@@ -164,9 +154,7 @@ public enum NetworkProxySettings {
             defaults.set(value, forKey: key)
             return
         }
-        if Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool") {
-            defaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, integer: value ? 1 : 0, typeHint: "bool")
     }
 
     private static func save(_ value: Int, forKey key: String, defaults: UserDefaults) {
@@ -174,9 +162,7 @@ public enum NetworkProxySettings {
             defaults.set(value, forKey: key)
             return
         }
-        if Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer") {
-            defaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, integer: value, typeHint: "integer")
     }
 
     private static func save(_ value: String, forKey key: String, defaults: UserDefaults) {
@@ -184,9 +170,7 @@ public enum NetworkProxySettings {
             defaults.set(value, forKey: key)
             return
         }
-        if Persistence.writeAppConfig(key: key, text: value, typeHint: "text") {
-            defaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, text: value, typeHint: "text")
     }
 }
 

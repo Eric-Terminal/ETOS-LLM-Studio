@@ -11,6 +11,7 @@ import GRDB
 
 extension Persistence {
     public static func readAppConfigText(key: String) -> String? {
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         withConfigDatabaseRead { db in
             try String.fetchOne(
                 db,
@@ -20,20 +21,8 @@ extension Persistence {
         } ?? nil
     }
 
-    public static func readAppConfigText(key: String, legacyUserDefaultsKey: String) -> String? {
-        if let value = readAppConfigText(key: key) {
-            return value
-        }
-        guard let legacy = UserDefaults.standard.string(forKey: legacyUserDefaultsKey) else {
-            return nil
-        }
-        if writeAppConfig(key: key, text: legacy, typeHint: "text") {
-            UserDefaults.standard.removeObject(forKey: legacyUserDefaultsKey)
-        }
-        return legacy
-    }
-
     public static func readAppConfigReal(key: String) -> Double? {
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         withConfigDatabaseRead { db in
             try Double.fetchOne(
                 db,
@@ -44,6 +33,7 @@ extension Persistence {
     }
 
     public static func readAppConfigInteger(key: String) -> Int? {
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         withConfigDatabaseRead { db in
             try Int.fetchOne(
                 db,
@@ -56,19 +46,6 @@ extension Persistence {
     public static func readAppConfigData(key: String) -> Data? {
         guard let encoded = readAppConfigText(key: key) else { return nil }
         return Data(base64Encoded: encoded)
-    }
-
-    public static func readAppConfigData(key: String, legacyUserDefaultsKey: String) -> Data? {
-        if let data = readAppConfigData(key: key) {
-            return data
-        }
-        guard let legacy = UserDefaults.standard.data(forKey: legacyUserDefaultsKey) else {
-            return nil
-        }
-        if writeAppConfig(key: key, data: legacy) {
-            UserDefaults.standard.removeObject(forKey: legacyUserDefaultsKey)
-        }
-        return legacy
     }
 
     @discardableResult

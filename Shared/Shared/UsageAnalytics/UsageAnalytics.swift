@@ -204,10 +204,8 @@ public enum UsageAnalyticsRuntimeContext {
     public static func currentDeviceIdentifier(userDefaults: UserDefaults = .standard) -> String {
         let existing: String?
         if userDefaults === UserDefaults.standard {
-            existing = Persistence.readAppConfigText(
-                key: deviceIdentifierKey,
-                legacyUserDefaultsKey: deviceIdentifierKey
-            )
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            existing = Persistence.readAppConfigText(key: deviceIdentifierKey)
         } else {
             existing = userDefaults.string(forKey: deviceIdentifierKey)
         }

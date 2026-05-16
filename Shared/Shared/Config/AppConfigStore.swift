@@ -63,6 +63,7 @@ private actor AppConfigPersistenceWorker {
         migrationFlagKey: String,
         initialValues: [AppConfigKey: AppConfigValue]
     ) -> [String: Any] {
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         let existingKeys = Set(Persistence.loadAllAppConfigs().map { $0.key })
         for key in AppConfigKey.allCases {
             guard !existingKeys.contains(key.rawValue) else { continue }
@@ -372,9 +373,16 @@ public final class AppConfigStore: ObservableObject {
         userDefaults: UserDefaults = .standard,
         defaultValue: String? = nil
     ) -> String {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+        }
         if let stored = Persistence.readAppConfigText(key: key.rawValue) {
             snapshotCache.set(stored, for: key)
             return stored
+        }
+
+        guard userDefaults !== UserDefaults.standard else {
+            return defaultValue ?? defaultText(for: key)
         }
 
         let rawKey = legacyUserDefaultsKey ?? key.rawValue
@@ -385,13 +393,7 @@ public final class AppConfigStore: ObservableObject {
             return legacy
         }
 
-        if let defaultValue {
-            return defaultValue
-        }
-        if case .text(let value) = key.defaultValue {
-            return value
-        }
-        return ""
+        return defaultValue ?? defaultText(for: key)
     }
 
     public nonisolated static func boolValue(
@@ -400,10 +402,17 @@ public final class AppConfigStore: ObservableObject {
         userDefaults: UserDefaults = .standard,
         defaultValue: Bool? = nil
     ) -> Bool {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+        }
         if let stored = Persistence.readAppConfigInteger(key: key.rawValue) {
             let value = stored != 0
             snapshotCache.set(value, for: key)
             return value
+        }
+
+        guard userDefaults !== UserDefaults.standard else {
+            return defaultValue ?? defaultBool(for: key)
         }
 
         let rawKey = legacyUserDefaultsKey ?? key.rawValue
@@ -415,13 +424,7 @@ public final class AppConfigStore: ObservableObject {
             return legacy
         }
 
-        if let defaultValue {
-            return defaultValue
-        }
-        if case .bool(let value) = key.defaultValue {
-            return value
-        }
-        return false
+        return defaultValue ?? defaultBool(for: key)
     }
 
     public nonisolated static func stringArrayValue(
@@ -430,10 +433,17 @@ public final class AppConfigStore: ObservableObject {
         userDefaults: UserDefaults = .standard,
         defaultValue: [String]? = nil
     ) -> [String]? {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+        }
         if let stored = Persistence.readAppConfigText(key: key.rawValue),
            let decoded = decodeStringArray(from: stored) {
             snapshotCache.set(stored, for: key)
             return decoded
+        }
+
+        guard userDefaults !== UserDefaults.standard else {
+            return defaultValue ?? defaultStringArray(for: key)
         }
 
         let rawKey = legacyUserDefaultsKey ?? key.rawValue
@@ -444,13 +454,7 @@ public final class AppConfigStore: ObservableObject {
             return legacy
         }
 
-        if let defaultValue {
-            return defaultValue
-        }
-        if case .text(let rawDefault) = key.defaultValue {
-            return decodeStringArray(from: rawDefault)
-        }
-        return nil
+        return defaultValue ?? defaultStringArray(for: key)
     }
 
     @discardableResult
@@ -467,10 +471,17 @@ public final class AppConfigStore: ObservableObject {
         legacyUserDefaultsKey: String? = nil,
         userDefaults: UserDefaults = .standard
     ) -> [String: String] {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+        }
         if let stored = Persistence.readAppConfigText(key: key.rawValue),
            let decoded = decodeStringDictionary(from: stored) {
             snapshotCache.set(stored, for: key)
             return decoded
+        }
+
+        guard userDefaults !== UserDefaults.standard else {
+            return defaultStringDictionary(for: key)
         }
 
         let rawKey = legacyUserDefaultsKey ?? key.rawValue
@@ -541,15 +552,11 @@ public final class AppConfigStore: ObservableObject {
         initialValues: [AppConfigKey: AppConfigValue],
         userDefaults: UserDefaults
     ) {
-        let shouldRemoveStandardLegacyValues = userDefaults === UserDefaults.standard
         Task(priority: .utility) { [weak self] in
             let snapshot = await AppConfigPersistenceWorker.shared.bootstrap(
                 migrationFlagKey: Self.migrationFlagKey,
                 initialValues: initialValues
             )
-            if shouldRemoveStandardLegacyValues {
-                Self.removeMigratedLegacyValues(from: .standard)
-            }
             self?.applyPersistentStoreSnapshot(snapshot, preservingLocalBootstrapChanges: true)
         }
     }
@@ -941,13 +948,6 @@ public final class AppConfigStore: ObservableObject {
         return values
     }
 
-    private static func removeMigratedLegacyValues(from userDefaults: UserDefaults) {
-        guard userDefaults === UserDefaults.standard else { return }
-        for key in AppConfigKey.allCases where userDefaults.object(forKey: key.rawValue) != nil {
-            userDefaults.removeObject(forKey: key.rawValue)
-        }
-    }
-
     private static func snapshot(
         from values: [AppConfigKey: AppConfigValue],
         includeLocalOnly: Bool
@@ -1056,6 +1056,34 @@ public final class AppConfigStore: ObservableObject {
             return "[]"
         }
         return encoded
+    }
+
+    private nonisolated static func defaultText(for key: AppConfigKey) -> String {
+        if case .text(let value) = key.defaultValue {
+            return value
+        }
+        return ""
+    }
+
+    private nonisolated static func defaultBool(for key: AppConfigKey) -> Bool {
+        if case .bool(let value) = key.defaultValue {
+            return value
+        }
+        return false
+    }
+
+    private nonisolated static func defaultStringArray(for key: AppConfigKey) -> [String]? {
+        guard case .text(let rawDefault) = key.defaultValue else {
+            return nil
+        }
+        return decodeStringArray(from: rawDefault)
+    }
+
+    private nonisolated static func defaultStringDictionary(for key: AppConfigKey) -> [String: String] {
+        guard case .text(let rawDefault) = key.defaultValue else {
+            return [:]
+        }
+        return decodeStringDictionary(from: rawDefault) ?? [:]
     }
 
     private nonisolated static func decodeStringArray(from raw: String) -> [String]? {

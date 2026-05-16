@@ -32,7 +32,8 @@ enum SyncVersionTrackerStore {
         let key = keyPrefix + normalized(channel)
         let data: Data?
         if userDefaults === UserDefaults.standard {
-            data = Persistence.readAppConfigData(key: key, legacyUserDefaultsKey: key)
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            data = Persistence.readAppConfigData(key: key)
         } else {
             data = userDefaults.data(forKey: key)
         }
@@ -70,7 +71,8 @@ enum SyncCheckpointStore {
         let key = keyPrefix + normalized(channel)
         let data: Data?
         if userDefaults === UserDefaults.standard {
-            data = Persistence.readAppConfigData(key: key, legacyUserDefaultsKey: key)
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            data = Persistence.readAppConfigData(key: key)
         } else {
             data = userDefaults.data(forKey: key)
         }

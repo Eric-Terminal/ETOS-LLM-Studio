@@ -397,7 +397,8 @@ public final class CloudSyncManager: ObservableObject {
 
     private func loadTextState(forKey key: String) -> String? {
         if userDefaults === UserDefaults.standard {
-            return Persistence.readAppConfigText(key: key, legacyUserDefaultsKey: key)
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            return Persistence.readAppConfigText(key: key)
         }
         return userDefaults.string(forKey: key)
     }
@@ -412,7 +413,8 @@ public final class CloudSyncManager: ObservableObject {
 
     private func loadDataState(forKey key: String) -> Data? {
         if userDefaults === UserDefaults.standard {
-            return Persistence.readAppConfigData(key: key, legacyUserDefaultsKey: key)
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            return Persistence.readAppConfigData(key: key)
         }
         return userDefaults.data(forKey: key)
     }

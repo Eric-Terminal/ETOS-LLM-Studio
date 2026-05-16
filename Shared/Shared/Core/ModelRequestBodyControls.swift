@@ -313,18 +313,12 @@ public enum ModelRequestBodyControlRuntimeStore {
         guard usesDatabase(userDefaults: userDefaults) else {
             return userDefaults.data(forKey: key)
         }
+        AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         if let stored = Persistence.readAppConfigText(key: key),
            let data = stored.data(using: .utf8) {
             return data
         }
-        guard let legacy = userDefaults.data(forKey: key),
-              let encoded = String(data: legacy, encoding: .utf8) else {
-            return nil
-        }
-        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
-            userDefaults.removeObject(forKey: key)
-        }
-        return legacy
+        return nil
     }
 
     private static func saveData(_ data: Data, forKey key: String, userDefaults: UserDefaults) {
@@ -333,9 +327,7 @@ public enum ModelRequestBodyControlRuntimeStore {
             return
         }
         guard let encoded = String(data: data, encoding: .utf8) else { return }
-        if Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text") {
-            userDefaults.removeObject(forKey: key)
-        }
+        Persistence.writeAppConfig(key: key, text: encoded, typeHint: "text")
     }
 
     private static func signature(for controls: [ModelRequestBodyControl]) -> String {

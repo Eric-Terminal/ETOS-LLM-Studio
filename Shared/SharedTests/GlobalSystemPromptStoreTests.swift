@@ -168,7 +168,8 @@ struct GlobalSystemPromptStoreTests {
         #expect(snapshot.selectedEntryID == entry.id)
         #expect(defaults.data(forKey: GlobalSystemPromptStore.entriesStorageKey) == nil)
         #expect(defaults.string(forKey: GlobalSystemPromptStore.selectedEntryIDStorageKey) == nil)
-        #expect(defaults.string(forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey) == entry.content)
+        #expect(defaults.string(forKey: GlobalSystemPromptStore.legacySystemPromptStorageKey) == nil)
+        #expect(Persistence.readAppConfigText(key: AppConfigKey.systemPrompt.rawValue) == entry.content)
 
         let storedCount = Persistence.withConfigDatabaseRead { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM global_system_prompt_entries")
