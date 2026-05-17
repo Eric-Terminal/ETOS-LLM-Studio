@@ -173,7 +173,7 @@ extension ChatView {
             onBranch: { copyHistory in
                 let newSession = viewModel.branchSession(from: session, copyMessages: copyHistory)
                 viewModel.setCurrentSession(newSession)
-                dismissSessionPickerPanel()
+                dismissSessionPickerAfterSelection()
             },
             onDeleteLastMessage: {
                 viewModel.deleteLastMessage(for: session)
@@ -269,7 +269,7 @@ extension ChatView {
                 viewModel.clearPendingMessageJumpTarget()
             }
             viewModel.setCurrentSession(session)
-            dismissSessionPickerPanel()
+            dismissSessionPickerAfterSelection()
             return
         }
 
@@ -285,7 +285,15 @@ extension ChatView {
                 viewModel.clearPendingMessageJumpTarget()
             }
             viewModel.setCurrentSession(session)
-            dismissSessionPickerPanel()
+            dismissSessionPickerAfterSelection()
         }
+    }
+
+    func dismissSessionPickerAfterSelection() {
+        if usesLandscapeSessionSidebar {
+            enforceLandscapeSessionColumnVisibility()
+            return
+        }
+        dismissSessionPickerPanel()
     }
 }

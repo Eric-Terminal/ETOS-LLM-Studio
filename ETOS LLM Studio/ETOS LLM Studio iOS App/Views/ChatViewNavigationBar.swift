@@ -165,22 +165,19 @@ extension ChatView {
 
     var navBarSessionIconName: String {
         guard usesLandscapeSessionSidebar else { return "list.bullet" }
-        return isSessionPickerPresented ? "sidebar.right" : "sidebar.left"
+        return "sidebar.left"
     }
 
     var navBarSessionAccessibilityLabel: String {
         guard usesLandscapeSessionSidebar else {
             return NSLocalizedString("会话列表", comment: "")
         }
-        return isSessionPickerPresented
-            ? NSLocalizedString("隐藏会话列表", comment: "")
-            : NSLocalizedString("显示会话列表", comment: "")
+        return NSLocalizedString("显示会话列表", comment: "")
     }
 
     func toggleModelPickerPanel() {
-        if usesLandscapeSessionSidebar, isSessionPickerPresented {
-            isLandscapeSessionSidebarPresented = false
-            resetSessionPickerSearchState()
+        if usesLandscapeSessionSidebar {
+            enforceLandscapeSessionColumnVisibility()
         }
         guard !usesBottomSheetPickerStyle else {
             showSessionPickerPanel = false
@@ -212,14 +209,7 @@ extension ChatView {
         guard !usesLandscapeSessionSidebar else {
             showModelPickerPanel = false
             activeChatPickerSheet = nil
-            withAnimation(modelPickerAnimation) {
-                if isSessionPickerPresented {
-                    isLandscapeSessionSidebarPresented = false
-                    resetSessionPickerSearchState()
-                } else {
-                    isLandscapeSessionSidebarPresented = true
-                }
-            }
+            enforceLandscapeSessionColumnVisibility()
             return
         }
         guard !usesBottomSheetPickerStyle else {
@@ -241,10 +231,7 @@ extension ChatView {
 
     func dismissSessionPickerPanel() {
         if usesLandscapeSessionSidebar {
-            withAnimation(modelPickerAnimation) {
-                isLandscapeSessionSidebarPresented = false
-                resetSessionPickerSearchState()
-            }
+            enforceLandscapeSessionColumnVisibility()
             return
         }
         if usesBottomSheetPickerStyle {
@@ -256,6 +243,32 @@ extension ChatView {
             showSessionPickerPanel = false
             resetSessionPickerSearchState()
         }
+    }
+
+    var landscapeSessionColumnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { landscapeSessionColumnVisibility },
+            set: { newValue in
+                landscapeSessionColumnVisibility = fixedLandscapeSessionColumnVisibility(from: newValue)
+            }
+        )
+    }
+
+    func fixedLandscapeSessionColumnVisibility(
+        from proposedValue: NavigationSplitViewVisibility = .all
+    ) -> NavigationSplitViewVisibility {
+        switch proposedValue {
+        case .doubleColumn:
+            return .doubleColumn
+        default:
+            return .all
+        }
+    }
+
+    func enforceLandscapeSessionColumnVisibility() {
+        let fixedValue = fixedLandscapeSessionColumnVisibility(from: landscapeSessionColumnVisibility)
+        guard landscapeSessionColumnVisibility != fixedValue else { return }
+        landscapeSessionColumnVisibility = fixedValue
     }
 
     func resetSessionPickerSearchState() {
@@ -282,10 +295,10 @@ extension ChatView {
             if activeChatPickerSheet == .session {
                 activeChatPickerSheet = nil
             }
+            enforceLandscapeSessionColumnVisibility()
             showSessionPickerPanel = false
             return
         }
-        isLandscapeSessionSidebarPresented = false
         resetSessionPickerSearchState()
     }
 

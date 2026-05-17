@@ -59,7 +59,7 @@ struct ChatView: View {
     @State var exportErrorMessage: String?
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var isChatLayoutLandscape = false
-    @State var isLandscapeSessionSidebarPresented = false
+    @State var landscapeSessionColumnVisibility: NavigationSplitViewVisibility = .all
     @State var modelPickerRequestControl: ModelRequestBodyControl?
     @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
@@ -148,7 +148,7 @@ struct ChatView: View {
     }
     var isSessionPickerPresented: Bool {
         if usesLandscapeSessionSidebar {
-            return isLandscapeSessionSidebarPresented
+            return true
         }
         return usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
     }
@@ -266,7 +266,7 @@ struct ChatView: View {
 
             Group {
                 if isLandscape {
-                    landscapeChatLayout(chatViewportWidth: chatViewportWidth)
+                    landscapeChatLayout()
                 } else {
                     chatConversationContent(chatViewportWidth: chatViewportWidth)
                 }
@@ -280,31 +280,33 @@ struct ChatView: View {
         }
     }
 
-    func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
-        ZStack(alignment: .leading) {
-            chatConversationContent(chatViewportWidth: chatViewportWidth)
-
-            if isSessionPickerPresented {
-                Color.black.opacity(colorScheme == .dark ? 0.2 : 0.1)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        dismissSessionPickerPanel()
-                    }
-                    .transition(.opacity)
-                    .zIndex(40)
-
-                landscapeSessionSidebar
-                    .frame(width: landscapeSessionSidebarWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(.regularMaterial)
-                    .overlay(alignment: .trailing) {
-                        Color(uiColor: .separator)
-                            .frame(width: 0.5)
-                            .frame(maxHeight: .infinity)
-                    }
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-                    .zIndex(41)
+    func landscapeChatLayout() -> some View {
+        NavigationSplitView(columnVisibility: landscapeSessionColumnVisibilityBinding) {
+            landscapeSessionSidebar
+                .frame(maxHeight: .infinity)
+                .background(.regularMaterial)
+                .overlay(alignment: .trailing) {
+                    Color(uiColor: .separator)
+                        .frame(width: 0.5)
+                        .frame(maxHeight: .infinity)
+                }
+                .navigationSplitViewColumnWidth(
+                    min: landscapeSessionSidebarWidth,
+                    ideal: landscapeSessionSidebarWidth,
+                    max: landscapeSessionSidebarWidth
+                )
+                .toolbar(.hidden, for: .navigationBar)
+        } detail: {
+            GeometryReader { proxy in
+                chatConversationContent(chatViewportWidth: max(1, proxy.size.width))
             }
+        }
+        .navigationSplitViewStyle(.balanced)
+        .onAppear {
+            enforceLandscapeSessionColumnVisibility()
+        }
+        .onChange(of: landscapeSessionColumnVisibility) { _, _ in
+            enforceLandscapeSessionColumnVisibility()
         }
     }
 
