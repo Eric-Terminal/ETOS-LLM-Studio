@@ -92,7 +92,9 @@ struct WatchMessageRowView: View {
                 viewModel.retryMessage(message)
             },
             onCopy: {
-                ETCodeClipboard.copy(message.content)
+                viewModel.applyToolInputDraftRequest(
+                    AppToolInputDraftRequest(text: message.content, mode: .replace)
+                )
             },
             onSwitchToPreviousVersion: {
                 viewModel.switchToPreviousVersion(of: message)

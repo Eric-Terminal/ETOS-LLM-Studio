@@ -144,7 +144,7 @@ extension ChatBubble {
         case .quickRetry:
             return canRetry
         case .copyMessage:
-            return ETCodeClipboard.supportsCopy && !message.content.isEmpty
+            return !message.content.isEmpty
         case .requestTime:
             return messageRequestDate != nil
         case .inputTokens:

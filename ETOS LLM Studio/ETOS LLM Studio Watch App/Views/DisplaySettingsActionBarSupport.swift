@@ -163,9 +163,7 @@ extension MessageActionBarAlignment {
 extension MessageActionBarItem {
     var isSupportedOnCurrentPlatform: Bool {
         switch self {
-        case .copyMessage:
-            return ETCodeClipboard.supportsCopy
-        case .quickRetry, .requestTime, .inputTokens, .outputTokens, .versionSwitcher:
+        case .quickRetry, .copyMessage, .requestTime, .inputTokens, .outputTokens, .versionSwitcher:
             return true
         }
     }
