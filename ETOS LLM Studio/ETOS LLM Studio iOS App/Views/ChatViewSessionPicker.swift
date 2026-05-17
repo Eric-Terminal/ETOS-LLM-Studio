@@ -86,7 +86,7 @@ extension ChatView {
                         viewModel.createNewSession()
                         editingSessionID = nil
                         sessionDraftName = ""
-                        dismissSessionPickerPanel()
+                        dismissSessionPickerAfterSelection()
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -147,7 +147,7 @@ extension ChatView {
                         viewModel.createNewSession()
                         editingSessionID = nil
                         sessionDraftName = ""
-                        dismissSessionPickerPanel()
+                        dismissSessionPickerAfterSelection()
                     } label: {
                         Image(systemName: "plus")
                             .etFont(.system(size: 14, weight: .semibold))
@@ -304,7 +304,7 @@ extension ChatView {
                     viewModel.createNewSession()
                     editingSessionID = nil
                     sessionDraftName = ""
-                    dismissSessionPickerPanel()
+                    dismissSessionPickerAfterSelection()
                 }
 
                 pickerHeaderActionButton(

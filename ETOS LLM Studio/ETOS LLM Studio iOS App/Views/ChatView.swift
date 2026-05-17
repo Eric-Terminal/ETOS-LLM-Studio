@@ -59,6 +59,7 @@ struct ChatView: View {
     @State var exportErrorMessage: String?
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var isChatLayoutLandscape = false
+    @State var isLandscapeSessionSidebarPresented = true
     @State var modelPickerRequestControl: ModelRequestBodyControl?
     @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
@@ -147,7 +148,7 @@ struct ChatView: View {
     }
     var isSessionPickerPresented: Bool {
         if usesLandscapeSessionSidebar {
-            return true
+            return isLandscapeSessionSidebarPresented
         }
         return usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
     }
@@ -280,22 +281,26 @@ struct ChatView: View {
     }
 
     func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
-        let detailWidth = max(1, chatViewportWidth - landscapeSessionSidebarWidth)
+        let sidebarWidth = isLandscapeSessionSidebarPresented ? landscapeSessionSidebarWidth : 0
+        let detailWidth = max(1, chatViewportWidth - sidebarWidth)
 
         return ZStack {
             telegramBackgroundLayer
                 .ignoresSafeArea()
 
             HStack(spacing: 0) {
-                landscapeSessionSidebar
-                    .frame(width: landscapeSessionSidebarWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(.regularMaterial)
-                    .overlay(alignment: .trailing) {
-                        Color(uiColor: .separator)
-                            .frame(width: 0.5)
-                            .frame(maxHeight: .infinity)
-                    }
+                if isLandscapeSessionSidebarPresented {
+                    landscapeSessionSidebar
+                        .frame(width: landscapeSessionSidebarWidth)
+                        .frame(maxHeight: .infinity)
+                        .background(.regularMaterial)
+                        .overlay(alignment: .trailing) {
+                            Color(uiColor: .separator)
+                                .frame(width: 0.5)
+                                .frame(maxHeight: .infinity)
+                        }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
 
                 chatConversationContent(
                     chatViewportWidth: detailWidth,
