@@ -345,11 +345,7 @@ extension SessionFolderBrowserView {
                 .etFont(.system(size: 17, weight: .semibold))
                 .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
                 .frame(width: 44, height: 44)
-                .background {
-                    paginationButtonBackground
-                        .frame(width: 44, height: 44)
-                }
-                .contentShape(Circle())
+                .background(paginationButtonBackground)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
