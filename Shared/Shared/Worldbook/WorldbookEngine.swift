@@ -68,6 +68,11 @@ public struct WorldbookDepthInsertion: Hashable, Sendable {
     }
 }
 
+private struct WorldbookEntryRuntimeKey: Hashable {
+    let worldbookID: UUID
+    let entryID: UUID
+}
+
 public struct WorldbookEvaluationResult: Hashable, Sendable {
     public var before: [WorldbookInjection]
     public var after: [WorldbookInjection]
@@ -153,6 +158,18 @@ public final class WorldbookRuntimeStateStore {
         }
     }
 
+    public func state(for sessionID: UUID, worldbookID: UUID, entryID: UUID) -> WorldbookTimedEffectState {
+        queue.sync {
+            let envelope = loadEnvelopeUnlocked()
+            let sessionKey = sessionID.uuidString
+            let entryKey = stateKey(worldbookID: worldbookID, entryID: entryID)
+            let legacyEntryKey = entryID.uuidString
+            return envelope.sessions[sessionKey]?.states[entryKey]
+                ?? envelope.sessions[sessionKey]?.states[legacyEntryKey]
+                ?? WorldbookTimedEffectState()
+        }
+    }
+
     public func updateState(_ state: WorldbookTimedEffectState, for sessionID: UUID, entryID: UUID) {
         queue.sync {
             var envelope = loadEnvelopeUnlocked()
@@ -163,6 +180,22 @@ public final class WorldbookRuntimeStateStore {
             envelope.sessions[sessionKey] = session
             saveEnvelopeUnlocked(envelope)
         }
+    }
+
+    public func updateState(_ state: WorldbookTimedEffectState, for sessionID: UUID, worldbookID: UUID, entryID: UUID) {
+        queue.sync {
+            var envelope = loadEnvelopeUnlocked()
+            let sessionKey = sessionID.uuidString
+            let entryKey = stateKey(worldbookID: worldbookID, entryID: entryID)
+            var session = envelope.sessions[sessionKey] ?? SessionRuntimeState(turn: 0, states: [:])
+            session.states[entryKey] = state
+            envelope.sessions[sessionKey] = session
+            saveEnvelopeUnlocked(envelope)
+        }
+    }
+
+    private func stateKey(worldbookID: UUID, entryID: UUID) -> String {
+        "\(worldbookID.uuidString)::\(entryID.uuidString)"
     }
 
     private func loadEnvelopeUnlocked() -> StoredEnvelope {
@@ -243,13 +276,9 @@ public struct WorldbookEngine {
 
         let turn = runtimeStore.nextTurn(for: context.sessionID)
         let maxRecursionDepth = activeBooks.map { $0.settings.maxRecursionDepth }.max() ?? 0
-        let maxInjectedEntries = activeBooks.map { $0.settings.maxInjectedEntries }.max() ?? 64
-        let maxInjectedChars = activeBooks.contains(where: { $0.settings.maxInjectedCharacters < 0 })
-            ? -1
-            : activeBooks.map { $0.settings.maxInjectedCharacters }.max() ?? -1
 
         var triggered: [WorldbookInjection] = []
-        var triggeredIDs = Set<UUID>()
+        var triggeredIDs = Set<WorldbookEntryRuntimeKey>()
         var recursionBuffer: [String] = []
 
         for recursionLevel in 0...maxRecursionDepth {
@@ -259,12 +288,13 @@ public struct WorldbookEngine {
             for item in entries {
                 let entry = item.entry
 
-                if triggeredIDs.contains(entry.id) { continue }
+                let entryKey = WorldbookEntryRuntimeKey(worldbookID: item.book.id, entryID: entry.id)
+                if triggeredIDs.contains(entryKey) { continue }
                 if !entry.isEnabled { continue }
                 if recursionLevel > 0 && entry.preventRecursion { continue }
                 if recursionLevel == 0 && entry.delayUntilRecursion { continue }
 
-                var state = runtimeStore.state(for: context.sessionID, entryID: entry.id)
+                var state = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
 
                 let stickyActive = isStickyActive(entry: entry, state: state, currentTurn: turn)
                 let inCooldown = isCooldownActive(entry: entry, state: state, currentTurn: turn)
@@ -290,12 +320,12 @@ public struct WorldbookEngine {
                 if let delay = entry.delay, delay > 0, !stickyActive {
                     if let due = state.delayUntilTurn {
                         if turn < due {
-                            runtimeStore.updateState(state, for: context.sessionID, entryID: entry.id)
+                            runtimeStore.updateState(state, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
                             continue
                         }
                     } else {
                         state.delayUntilTurn = turn + delay
-                        runtimeStore.updateState(state, for: context.sessionID, entryID: entry.id)
+                        runtimeStore.updateState(state, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
                         continue
                     }
                 }
@@ -316,7 +346,7 @@ public struct WorldbookEngine {
                 if let cooldown = entry.cooldown, cooldown > 0 {
                     updatedState.cooldownUntilTurn = turn + cooldown
                 }
-                runtimeStore.updateState(updatedState, for: context.sessionID, entryID: entry.id)
+                runtimeStore.updateState(updatedState, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
 
                 let injection = WorldbookInjection(
                     worldbookID: item.book.id,
@@ -335,7 +365,7 @@ public struct WorldbookEngine {
                     )
                 )
                 triggered.append(injection)
-                triggeredIDs.insert(entry.id)
+                triggeredIDs.insert(entryKey)
                 newlyTriggeredContents.append(entry.content)
             }
 
@@ -346,7 +376,7 @@ public struct WorldbookEngine {
         }
 
         let grouped = applyGroupRules(triggered, booksByID: Dictionary(uniqueKeysWithValues: activeBooks.map { ($0.id, $0) }))
-        let budgeted = applyBudget(grouped, maxEntries: maxInjectedEntries, maxCharacters: maxInjectedChars)
+        let budgeted = applyBudgetsByWorldbook(grouped, activeBooks: activeBooks)
 
         if !budgeted.isEmpty {
             logger.info("世界书激活完成: turn=\(turn), entries=\(budgeted.count)")
@@ -502,7 +532,7 @@ public struct WorldbookEngine {
                 direct.append(item)
                 continue
             }
-            grouped[group, default: []].append(item)
+            grouped["\(item.worldbookID.uuidString)::\(group)", default: []].append(item)
         }
 
         var selected = direct
@@ -561,19 +591,27 @@ public struct WorldbookEngine {
         }
     }
 
+    private func applyBudgetsByWorldbook(_ items: [WorldbookInjection], activeBooks: [Worldbook]) -> [WorldbookInjection] {
+        let itemsByWorldbookID = Dictionary(grouping: items, by: \.worldbookID)
+        var result: [WorldbookInjection] = []
+
+        for book in activeBooks {
+            let bookItems = itemsByWorldbookID[book.id] ?? []
+            result.append(contentsOf: applyBudget(
+                bookItems,
+                maxEntries: book.settings.maxInjectedEntries,
+                maxCharacters: book.settings.maxInjectedCharacters
+            ))
+        }
+
+        return sortedInjections(result)
+    }
+
     private func applyBudget(_ items: [WorldbookInjection], maxEntries: Int, maxCharacters: Int) -> [WorldbookInjection] {
         var result: [WorldbookInjection] = []
         var totalChars = 0
 
-        let sortedItems = items.sorted {
-            if $0.order != $1.order {
-                return $0.order > $1.order
-            }
-            if $0.triggerScore != $1.triggerScore {
-                return $0.triggerScore > $1.triggerScore
-            }
-            return $0.entryID.uuidString < $1.entryID.uuidString
-        }
+        let sortedItems = sortedInjections(items)
 
         for item in sortedItems {
             if result.count >= maxEntries { break }
@@ -587,6 +625,21 @@ public struct WorldbookEngine {
         }
 
         return result
+    }
+
+    private func sortedInjections(_ items: [WorldbookInjection]) -> [WorldbookInjection] {
+        items.sorted {
+            if $0.order != $1.order {
+                return $0.order > $1.order
+            }
+            if $0.triggerScore != $1.triggerScore {
+                return $0.triggerScore > $1.triggerScore
+            }
+            if $0.worldbookID != $1.worldbookID {
+                return $0.worldbookID.uuidString < $1.worldbookID.uuidString
+            }
+            return $0.entryID.uuidString < $1.entryID.uuidString
+        }
     }
 
     private func buildResult(from items: [WorldbookInjection]) -> WorldbookEvaluationResult {

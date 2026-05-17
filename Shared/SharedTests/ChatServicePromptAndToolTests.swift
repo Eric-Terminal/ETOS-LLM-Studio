@@ -607,6 +607,49 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("绑定多本世界书时会一起注入请求")
+    func testMultipleBoundWorldbooksAreInjectedTogether() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        defer { store.saveWorldbooks(originalBooks) }
+
+        let firstBook = Worldbook(
+            name: "多本绑定一",
+            entries: [WorldbookEntry(content: "multi-bound-first-hit", keys: ["hero"], position: .after)]
+        )
+        let secondBook = Worldbook(
+            name: "多本绑定二",
+            entries: [WorldbookEntry(content: "multi-bound-second-hit", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([firstBook, secondBook])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "多本绑定会话")
+        session.lorebookIDs = [firstBook.id, secondBook.id]
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "sys",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let systemPrompt = mockAdapter.receivedMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(systemPrompt.contains("multi-bound-first-hit"))
+        #expect(systemPrompt.contains("multi-bound-second-hit"))
+
+        await cleanup()
+    }
+
     @Test("Worldbook isolation suppresses memory and tool context")
     func testWorldbookIsolationSuppressesMemoryAndToolContext() async throws {
         await cleanup()

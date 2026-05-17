@@ -134,6 +134,110 @@ struct WorldbookEngineTests {
         #expect(result.after.contains(where: { $0.content == longContent }))
     }
 
+    @Test("engine applies injected entry budget per worldbook")
+    func testInjectedEntryBudgetIsPerWorldbook() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-per-book-budget-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+
+        let firstBook = Worldbook(
+            name: "第一本",
+            entries: [WorldbookEntry(content: "first-book-hit", keys: ["hero"], position: .after, order: 100)],
+            settings: WorldbookSettings(maxInjectedEntries: 1, maxInjectedCharacters: -1)
+        )
+        let secondBook = Worldbook(
+            name: "第二本",
+            entries: [WorldbookEntry(content: "second-book-hit", keys: ["hero"], position: .after, order: 90)],
+            settings: WorldbookSettings(maxInjectedEntries: 1, maxInjectedCharacters: -1)
+        )
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [firstBook, secondBook],
+                messages: [ChatMessage(role: .user, content: "hero")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.contains(where: { $0.content == "first-book-hit" }))
+        #expect(result.after.contains(where: { $0.content == "second-book-hit" }))
+    }
+
+    @Test("engine keeps matching entries when different worldbooks reuse entry IDs")
+    func testEntryIDCollisionAcrossWorldbooksDoesNotSuppressMatches() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-entry-id-collision-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+
+        let sharedEntryID = UUID()
+        let firstBook = Worldbook(
+            name: "复用 ID 一本",
+            entries: [WorldbookEntry(id: sharedEntryID, content: "same-entry-id-first", keys: ["hero"], position: .after)]
+        )
+        let secondBook = Worldbook(
+            name: "复用 ID 二本",
+            entries: [WorldbookEntry(id: sharedEntryID, content: "same-entry-id-second", keys: ["hero"], position: .after)]
+        )
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [firstBook, secondBook],
+                messages: [ChatMessage(role: .user, content: "hero")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.contains(where: { $0.content == "same-entry-id-first" }))
+        #expect(result.after.contains(where: { $0.content == "same-entry-id-second" }))
+    }
+
+    @Test("engine applies group competition inside each worldbook")
+    func testGroupCompetitionIsScopedPerWorldbook() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-group-scope-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+
+        let firstBook = Worldbook(
+            name: "同组一本",
+            entries: [
+                WorldbookEntry(content: "group-first-winner", keys: ["hero"], order: 100, group: "shared"),
+                WorldbookEntry(content: "group-first-loser", keys: ["hero"], order: 10, group: "shared")
+            ]
+        )
+        let secondBook = Worldbook(
+            name: "同组二本",
+            entries: [
+                WorldbookEntry(content: "group-second-winner", keys: ["hero"], order: 90, group: "shared"),
+                WorldbookEntry(content: "group-second-loser", keys: ["hero"], order: 20, group: "shared")
+            ]
+        )
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [firstBook, secondBook],
+                messages: [ChatMessage(role: .user, content: "hero")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.contains(where: { $0.content == "group-first-winner" }))
+        #expect(result.after.contains(where: { $0.content == "group-second-winner" }))
+        #expect(!result.after.contains(where: { $0.content == "group-first-loser" }))
+        #expect(!result.after.contains(where: { $0.content == "group-second-loser" }))
+    }
+
     @Test("engine supports atDepth / emTop / emBottom positions")
     func testEnginePositions() {
         let tempURL = FileManager.default.temporaryDirectory
