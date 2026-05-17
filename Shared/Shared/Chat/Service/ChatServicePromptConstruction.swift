@@ -23,12 +23,6 @@ extension ChatService {
         worldbookOutlet: [WorldbookInjection] = []
     ) -> String {
         var parts: [String] = []
-        parts.append("""
-<app_language>
-\(ModelPromptLanguage.current.outputInstruction)
-\(ModelPromptLanguage.current.toolArgumentInstruction)
-</app_language>
-""")
 
         if let global, !global.isEmpty {
             parts.append("<system_prompt>\n\(global)\n</system_prompt>")

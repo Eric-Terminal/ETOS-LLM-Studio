@@ -106,8 +106,8 @@ extension ChatServiceTests {
         #expect(lastMessage?.role == .system)
         #expect(systemContent.contains("<enhanced_prompt>"))
         #expect(systemContent.contains(enhancedPrompt))
-        #expect(systemMessages.contains(where: { $0.content.contains("<app_language>") }))
-        #expect(systemMessages.count == 2)
+        #expect(!systemMessages.contains(where: { $0.content.contains("<app_language>") }))
+        #expect(systemMessages.count == 1)
         #expect(userContent == userText)
         #expect(!userContent.contains("<user_input>"))
 
@@ -164,8 +164,9 @@ extension ChatServiceTests {
         let firstSystemContent = systemMessages.first?.content ?? ""
         let lastMessage = sentMessages.last
 
-        #expect(systemMessages.count == 3)
-        #expect(firstSystemContent.contains("<app_language>"))
+        #expect(systemMessages.count == 2)
+        #expect(!sentMessages.contains(where: { $0.content.contains("<app_language>") }))
+        #expect(firstSystemContent.contains("<enhanced_prompt>"))
         #expect(!firstSystemContent.contains("<time>"))
         #expect(lastMessage?.role == .system)
         #expect(lastMessage?.content.contains("<time>") == true)
