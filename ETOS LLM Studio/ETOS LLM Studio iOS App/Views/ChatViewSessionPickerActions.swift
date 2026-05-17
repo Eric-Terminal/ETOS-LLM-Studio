@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// ChatView 会话选择器的分页、搜索调度、行事件与跳转行为。
+// ChatView 会话选择器的无限滚动、搜索调度、行事件与跳转行为。
 // ============================================================================
 
 import Foundation
@@ -11,58 +11,83 @@ import SwiftUI
 import Shared
 
 extension ChatView {
-    func normalizeSessionPickerPageIndex() {
-        let maxIndex = max(totalSessionPickerPages - 1, 0)
-        if sessionPickerPageIndex > maxIndex {
-            sessionPickerPageIndex = maxIndex
-        } else if sessionPickerPageIndex < 0 {
-            sessionPickerPageIndex = 0
-        }
+    func resetSessionPickerLoadedSessions() {
+        isLoadingMoreSessionPickerSessions = false
+        loadedSessionPickerSessions = []
+        appendNextSessionPickerSessionsPage()
     }
 
-    func normalizeSessionPickerSearchResultPageIndex() {
-        let maxIndex = max(totalSessionPickerSearchResultPages - 1, 0)
-        if sessionPickerSearchResultPageIndex > maxIndex {
-            sessionPickerSearchResultPageIndex = maxIndex
-        } else if sessionPickerSearchResultPageIndex < 0 {
-            sessionPickerSearchResultPageIndex = 0
-        }
+    func resetSessionPickerLoadedSearchResults() {
+        isLoadingMoreSessionPickerSearchResults = false
+        loadedSessionPickerSearchResults = []
+        appendNextSessionPickerSearchResultsPage()
     }
 
-    func shouldShowSessionPickerPaginationBar(queryActive: Bool) -> Bool {
-        queryActive ? shouldShowSessionPickerSearchPagination : shouldShowSessionPickerPagination
-    }
+    func appendNextSessionPickerSessionsPage() {
+        guard !isLoadingMoreSessionPickerSessions, hasMoreSessionPickerSessions else { return }
+        isLoadingMoreSessionPickerSessions = true
 
-    func canGoToPreviousActiveSessionPickerPage(queryActive: Bool) -> Bool {
-        queryActive ? canGoToPreviousSessionPickerSearchResultPage : canGoToPreviousSessionPickerPage
-    }
-
-    func canGoToNextActiveSessionPickerPage(queryActive: Bool) -> Bool {
-        queryActive ? canGoToNextSessionPickerSearchResultPage : canGoToNextSessionPickerPage
-    }
-
-    func activeSessionPickerPaginationSummaryText(queryActive: Bool) -> String {
-        queryActive ? sessionPickerSearchPaginationSummaryText : sessionPickerPaginationSummaryText
-    }
-
-    func goToPreviousActiveSessionPickerPage(queryActive: Bool) {
-        if queryActive {
-            guard canGoToPreviousSessionPickerSearchResultPage else { return }
-            sessionPickerSearchResultPageIndex -= 1
+        let start = loadedSessionPickerSessions.count
+        let end = min(start + sessionPickerMaxSessionsPerPage, viewModel.chatSessions.count)
+        guard start < end else {
+            isLoadingMoreSessionPickerSessions = false
             return
         }
-        guard canGoToPreviousSessionPickerPage else { return }
-        sessionPickerPageIndex -= 1
+        loadedSessionPickerSessions.append(contentsOf: viewModel.chatSessions[start..<end])
+        DispatchQueue.main.async {
+            isLoadingMoreSessionPickerSessions = false
+        }
     }
 
-    func goToNextActiveSessionPickerPage(queryActive: Bool) {
-        if queryActive {
-            guard canGoToNextSessionPickerSearchResultPage else { return }
-            sessionPickerSearchResultPageIndex += 1
+    func appendNextSessionPickerSearchResultsPage() {
+        guard !isLoadingMoreSessionPickerSearchResults, hasMoreSessionPickerSearchResults else { return }
+        isLoadingMoreSessionPickerSearchResults = true
+
+        let results = sessionPickerSearchResults
+        let start = loadedSessionPickerSearchResults.count
+        let end = min(start + sessionPickerMaxSessionsPerPage, results.count)
+        guard start < end else {
+            isLoadingMoreSessionPickerSearchResults = false
             return
         }
-        guard canGoToNextSessionPickerPage else { return }
-        sessionPickerPageIndex += 1
+        loadedSessionPickerSearchResults.append(contentsOf: results[start..<end])
+        DispatchQueue.main.async {
+            isLoadingMoreSessionPickerSearchResults = false
+        }
+    }
+
+    func syncLoadedSessionPickerSessionsWithSource() {
+        let loadedCount = min(max(loadedSessionPickerSessions.count, sessionPickerMaxSessionsPerPage), viewModel.chatSessions.count)
+        loadedSessionPickerSessions = Array(viewModel.chatSessions.prefix(loadedCount))
+    }
+
+    func syncLoadedSessionPickerSearchResultsWithSource() {
+        let results = sessionPickerSearchResults
+        let loadedCount = min(max(loadedSessionPickerSearchResults.count, sessionPickerMaxSessionsPerPage), results.count)
+        loadedSessionPickerSearchResults = Array(results.prefix(loadedCount))
+    }
+
+    func loadMoreSessionPickerItemsIfNeeded(currentID: String, queryActive: Bool) {
+        if queryActive {
+            guard loadedSessionPickerSearchResults.suffix(sessionPickerInfiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
+            appendNextSessionPickerSearchResultsPage()
+            return
+        }
+
+        guard let sessionID = UUID(uuidString: currentID) else { return }
+        guard loadedSessionPickerSessions.suffix(sessionPickerInfiniteScrollTriggerRemainingCount).contains(where: { $0.id == sessionID }) else { return }
+        appendNextSessionPickerSessionsPage()
+    }
+
+    func sessionPickerLoadingMoreFooter(queryActive: Bool) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+            Text(NSLocalizedString("正在加载", comment: ""))
+                .etFont(.system(size: 12, weight: .medium))
+                .foregroundColor(TelegramColors.navBarSubtitle)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 
     func scheduleSessionPickerSearch(for query: String) {
@@ -73,7 +98,8 @@ extension ChatView {
         guard !normalized.isEmpty else {
             sessionPickerSearchHits = [:]
             isSessionPickerSearching = false
-            sessionPickerSearchResultPageIndex = 0
+            isLoadingMoreSessionPickerSearchResults = false
+            loadedSessionPickerSearchResults = []
             return
         }
 
@@ -98,7 +124,7 @@ extension ChatView {
             DispatchQueue.main.async {
                 guard searchToken == sessionPickerLatestSearchToken else { return }
                 sessionPickerSearchHits = hits
-                normalizeSessionPickerSearchResultPageIndex()
+                resetSessionPickerLoadedSearchResults()
                 isSessionPickerSearching = false
                 sessionPickerPendingSearchWorkItem = nil
             }

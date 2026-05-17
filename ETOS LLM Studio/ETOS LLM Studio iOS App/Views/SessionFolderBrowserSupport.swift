@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 提供 iOS 会话文件夹浏览器的分页、搜索、路径与选择辅助逻辑。
+// 提供 iOS 会话文件夹浏览器的无限滚动、搜索、路径与选择辅助逻辑。
 // ============================================================================
 
 import Foundation
@@ -11,60 +11,82 @@ import Shared
 import SwiftUI
 
 extension SessionFolderBrowserView {
-    func normalizeSessionPageIndex() {
-        let maxIndex = max(totalSessionPages - 1, 0)
-        if sessionPageIndex > maxIndex {
-            sessionPageIndex = maxIndex
+    func resetLoadedDirectSessions() {
+        isLoadingMoreSessions = false
+        loadedDirectSessions = []
+        appendNextDirectSessionsPage()
+    }
+
+    func resetLoadedSearchResultItems() {
+        isLoadingMoreSearchResults = false
+        loadedSearchResultItems = []
+        appendNextSearchResultItemsPage()
+    }
+
+    func appendNextDirectSessionsPage() {
+        guard !isLoadingMoreSessions, hasMoreDirectSessions else { return }
+        isLoadingMoreSessions = true
+
+        let source = directSessions
+        let start = loadedDirectSessions.count
+        let end = min(start + maxSessionsPerPage, source.count)
+        guard start < end else {
+            isLoadingMoreSessions = false
+            return
         }
-        if sessionPageIndex < 0 {
-            sessionPageIndex = 0
+        loadedDirectSessions.append(contentsOf: source[start..<end])
+        unlockConversationArchaeologistIfNeeded()
+        DispatchQueue.main.async {
+            isLoadingMoreSessions = false
         }
     }
 
-    func goToPreviousPage() {
-        guard canGoToPreviousPage else { return }
-        sessionPageIndex -= 1
+    func appendNextSearchResultItemsPage() {
+        guard !isLoadingMoreSearchResults, hasMoreSearchResults else { return }
+        isLoadingMoreSearchResults = true
+
+        let source = searchResultItems
+        let start = loadedSearchResultItems.count
+        let end = min(start + maxSessionsPerPage, source.count)
+        guard start < end else {
+            isLoadingMoreSearchResults = false
+            return
+        }
+        loadedSearchResultItems.append(contentsOf: source[start..<end])
+        DispatchQueue.main.async {
+            isLoadingMoreSearchResults = false
+        }
     }
 
-    func goToNextPage() {
-        guard canGoToNextPage else { return }
-        sessionPageIndex += 1
+    func syncLoadedDirectSessionsWithSource() {
+        let loadedCount = min(max(loadedDirectSessions.count, maxSessionsPerPage), directSessions.count)
+        loadedDirectSessions = Array(directSessions.prefix(loadedCount))
         unlockConversationArchaeologistIfNeeded()
     }
 
-    func normalizeSearchResultPageIndex() {
-        let maxIndex = max(totalSearchResultPages - 1, 0)
-        if searchResultPageIndex > maxIndex {
-            searchResultPageIndex = maxIndex
-        }
-        if searchResultPageIndex < 0 {
-            searchResultPageIndex = 0
-        }
+    func syncLoadedSearchResultItemsWithSource() {
+        let source = searchResultItems
+        let loadedCount = min(max(loadedSearchResultItems.count, maxSessionsPerPage), source.count)
+        loadedSearchResultItems = Array(source.prefix(loadedCount))
     }
 
-    func goToPreviousActivePage() {
-        if isSearchActive {
-            guard canGoToPreviousSearchResultPage else { return }
-            searchResultPageIndex -= 1
-            return
-        }
-        goToPreviousPage()
+    func loadMoreDirectSessionsIfNeeded(currentID: UUID) {
+        guard loadedDirectSessions.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
+        appendNextDirectSessionsPage()
     }
 
-    func goToNextActivePage() {
-        if isSearchActive {
-            guard canGoToNextSearchResultPage else { return }
-            searchResultPageIndex += 1
-            return
-        }
-        goToNextPage()
+    func loadMoreSearchResultItemsIfNeeded(currentID: String) {
+        guard loadedSearchResultItems.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
+        appendNextSearchResultItemsPage()
     }
 
     func unlockConversationArchaeologistIfNeeded() {
+        let totalPages = max(((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1, 1)
+        let loadedPageIndex = max((loadedDirectSessions.count - 1) / maxSessionsPerPage, 0)
         guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
             totalSessions: totalDirectSessionCount,
-            pageIndex: sessionPageIndex,
-            totalPages: totalSessionPages
+            pageIndex: loadedPageIndex,
+            totalPages: totalPages
         ) else { return }
 
         Task {
@@ -192,7 +214,8 @@ extension SessionFolderBrowserView {
         guard !normalized.isEmpty else {
             searchHits = [:]
             isSearching = false
-            searchResultPageIndex = 0
+            isLoadingMoreSearchResults = false
+            loadedSearchResultItems = []
             return
         }
 
@@ -217,6 +240,7 @@ extension SessionFolderBrowserView {
             DispatchQueue.main.async {
                 guard searchToken == latestSearchToken else { return }
                 searchHits = hits
+                resetLoadedSearchResultItems()
                 isSearching = false
                 pendingSearchWorkItem = nil
             }
@@ -272,5 +296,15 @@ extension SessionFolderBrowserView {
             editingSessionID = viewModel.currentSession?.id
             draftSessionName = viewModel.currentSession?.name ?? ""
         }
+    }
+
+    var loadingMoreFooter: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+            Text(NSLocalizedString("正在加载", comment: ""))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 8)
     }
 }

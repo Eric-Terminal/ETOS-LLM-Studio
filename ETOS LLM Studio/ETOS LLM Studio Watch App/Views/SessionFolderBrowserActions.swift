@@ -9,23 +9,17 @@ import Shared
 import SwiftUI
 
 extension SessionFolderBrowserView {
-    var paginationBottomBar: some View {
-        WatchPaginationBar(
-            summaryText: paginationSummaryText,
-            canGoToPrevious: canGoToPreviousPage,
-            canGoToNext: canGoToNextPage,
-            onPrevious: goToPreviousPage,
-            onNext: goToNextPage,
-            strokeColor: paginationCapsuleStrokeColor
-        )
-    }
-
     func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
         switch entry {
         case .folder(let folder):
             return AnyView(folderRow(folder))
         case .session(let session):
-            return AnyView(sessionRow(session))
+            return AnyView(
+                sessionRow(session)
+                    .onAppear {
+                        loadMoreDirectSessionsIfNeeded(currentID: session.id)
+                    }
+            )
         }
     }
 
@@ -192,32 +186,58 @@ extension SessionFolderBrowserView {
         return String(format: NSLocalizedString("将删除 %@。文件夹内的会话会移回未分类，操作不可恢复。", comment: ""), targetSummary)
     }
 
-    func normalizeSessionPageIndex() {
-        let maxIndex = max(totalSessionPages - 1, 0)
-        if sessionPageIndex > maxIndex {
-            sessionPageIndex = maxIndex
+    func resetLoadedDirectSessions() {
+        isLoadingMoreSessions = false
+        loadedDirectSessions = []
+        appendNextDirectSessionsPage()
+    }
+
+    func appendNextDirectSessionsPage() {
+        guard !isLoadingMoreSessions, hasMoreDirectSessions else { return }
+        isLoadingMoreSessions = true
+
+        let source = directSessions
+        let start = loadedDirectSessions.count
+        let end = min(start + maxSessionsPerPage, source.count)
+        guard start < end else {
+            isLoadingMoreSessions = false
+            return
         }
-        if sessionPageIndex < 0 {
-            sessionPageIndex = 0
+        loadedDirectSessions.append(contentsOf: source[start..<end])
+        unlockConversationArchaeologistIfNeeded()
+        DispatchQueue.main.async {
+            isLoadingMoreSessions = false
         }
     }
 
-    func goToPreviousPage() {
-        guard canGoToPreviousPage else { return }
-        sessionPageIndex -= 1
-    }
-
-    func goToNextPage() {
-        guard canGoToNextPage else { return }
-        sessionPageIndex += 1
+    func syncLoadedDirectSessionsWithSource() {
+        let loadedCount = min(max(loadedDirectSessions.count, maxSessionsPerPage), directSessions.count)
+        loadedDirectSessions = Array(directSessions.prefix(loadedCount))
         unlockConversationArchaeologistIfNeeded()
     }
 
+    func loadMoreDirectSessionsIfNeeded(currentID: UUID) {
+        guard loadedDirectSessions.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
+        appendNextDirectSessionsPage()
+    }
+
+    var loadingMoreFooter: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(NSLocalizedString("正在加载", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     func unlockConversationArchaeologistIfNeeded() {
+        let totalPages = max(((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1, 1)
+        let loadedPageIndex = max((loadedDirectSessions.count - 1) / maxSessionsPerPage, 0)
         guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
             totalSessions: totalDirectSessionCount,
-            pageIndex: sessionPageIndex,
-            totalPages: totalSessionPages
+            pageIndex: loadedPageIndex,
+            totalPages: totalPages
         ) else { return }
 
         Task {

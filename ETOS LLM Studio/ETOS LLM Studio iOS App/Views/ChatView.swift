@@ -50,8 +50,10 @@ struct ChatView: View {
     @State var sessionPickerLatestSearchToken: Int = 0
     @State var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
     @State var showSessionPickerSearchInput: Bool = false
-    @State var sessionPickerPageIndex: Int = 0
-    @State var sessionPickerSearchResultPageIndex: Int = 0
+    @State var loadedSessionPickerSessions: [ChatSession] = []
+    @State var loadedSessionPickerSearchResults: [SessionHistorySearchResult] = []
+    @State var isLoadingMoreSessionPickerSessions: Bool = false
+    @State var isLoadingMoreSessionPickerSearchResults: Bool = false
     @State var imageDownloadAlertMessage: String?
     @State var exportSharePayload: ChatExportSharePayload?
     @State var exportErrorMessage: String?
@@ -103,6 +105,7 @@ struct ChatView: View {
     let sessionPickerCornerRadius: CGFloat = 26
     let landscapeSessionSidebarWidth: CGFloat = 320
     let sessionPickerMaxSessionsPerPage = 100
+    let sessionPickerInfiniteScrollTriggerRemainingCount = 5
     let transcriptExportService = ChatTranscriptExportService()
     var scrollToBottomButtonBottomPadding: CGFloat {
         max(chatInputBarHeight + 16, 92)
@@ -224,13 +227,6 @@ struct ChatView: View {
     var totalSessionPickerCount: Int {
         viewModel.chatSessions.count
     }
-    var totalSessionPickerPages: Int {
-        guard totalSessionPickerCount > 0 else { return 1 }
-        return ((totalSessionPickerCount - 1) / sessionPickerMaxSessionsPerPage) + 1
-    }
-    var shouldShowSessionPickerPagination: Bool {
-        totalSessionPickerCount > sessionPickerMaxSessionsPerPage
-    }
     var sessionPickerSearchResults: [SessionHistorySearchResult] {
         SessionHistorySearchSupport.flattenedResults(
             sessions: viewModel.chatSessions,
@@ -240,79 +236,23 @@ struct ChatView: View {
     var totalSessionPickerSearchResultCount: Int {
         sessionPickerSearchResults.count
     }
-    var totalSessionPickerSearchResultPages: Int {
-        guard totalSessionPickerSearchResultCount > 0 else { return 1 }
-        return ((totalSessionPickerSearchResultCount - 1) / sessionPickerMaxSessionsPerPage) + 1
+    var hasMoreSessionPickerSessions: Bool {
+        loadedSessionPickerSessions.count < totalSessionPickerCount
     }
-    var shouldShowSessionPickerSearchPagination: Bool {
-        totalSessionPickerSearchResultCount > sessionPickerMaxSessionsPerPage
+    var hasMoreSessionPickerSearchResults: Bool {
+        loadedSessionPickerSearchResults.count < totalSessionPickerSearchResultCount
     }
-    var canGoToPreviousSessionPickerPage: Bool {
-        sessionPickerPageIndex > 0
+    func isLoadingMoreSessionPickerItems(queryActive: Bool) -> Bool {
+        queryActive ? isLoadingMoreSessionPickerSearchResults : isLoadingMoreSessionPickerSessions
     }
-    var canGoToNextSessionPickerPage: Bool {
-        sessionPickerPageIndex + 1 < totalSessionPickerPages
-    }
-    var canGoToPreviousSessionPickerSearchResultPage: Bool {
-        sessionPickerSearchResultPageIndex > 0
-    }
-    var canGoToNextSessionPickerSearchResultPage: Bool {
-        sessionPickerSearchResultPageIndex + 1 < totalSessionPickerSearchResultPages
-    }
-    var currentSessionPickerPageStartOrdinal: Int {
-        guard totalSessionPickerCount > 0 else { return 0 }
-        return sessionPickerPageIndex * sessionPickerMaxSessionsPerPage + 1
-    }
-    var currentSessionPickerPageEndOrdinal: Int {
-        guard totalSessionPickerCount > 0 else { return 0 }
-        return min((sessionPickerPageIndex + 1) * sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
-    }
-    var currentSessionPickerSearchResultPageStartOrdinal: Int {
-        guard totalSessionPickerSearchResultCount > 0 else { return 0 }
-        return sessionPickerSearchResultPageIndex * sessionPickerMaxSessionsPerPage + 1
-    }
-    var currentSessionPickerSearchResultPageEndOrdinal: Int {
-        guard totalSessionPickerSearchResultCount > 0 else { return 0 }
-        return min(
-            (sessionPickerSearchResultPageIndex + 1) * sessionPickerMaxSessionsPerPage,
-            totalSessionPickerSearchResultCount
-        )
-    }
-    var sessionPickerPaginationSummaryText: String {
-        String(
-            format: NSLocalizedString(
-                "当前显示 %1$d-%2$d 个对话（总共 %3$d）",
-                comment: "Session picker pagination summary"
-            ),
-            currentSessionPickerPageStartOrdinal,
-            currentSessionPickerPageEndOrdinal,
-            totalSessionPickerCount
-        )
-    }
-    var sessionPickerSearchPaginationSummaryText: String {
-        String(
-            format: NSLocalizedString("当前显示 %1$d-%2$d 条结果（总共 %3$d）", comment: "Session picker search pagination summary"),
-            currentSessionPickerSearchResultPageStartOrdinal,
-            currentSessionPickerSearchResultPageEndOrdinal,
-            totalSessionPickerSearchResultCount
-        )
+    func hasMoreSessionPickerItems(queryActive: Bool) -> Bool {
+        queryActive ? hasMoreSessionPickerSearchResults : hasMoreSessionPickerSessions
     }
     var pagedSessionPickerSessions: [ChatSession] {
-        guard totalSessionPickerCount > 0 else { return [] }
-        let start = min(sessionPickerPageIndex * sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
-        let end = min(start + sessionPickerMaxSessionsPerPage, totalSessionPickerCount)
-        guard start < end else { return [] }
-        return Array(viewModel.chatSessions[start..<end])
+        loadedSessionPickerSessions
     }
     var pagedSessionPickerSearchResults: [SessionHistorySearchResult] {
-        guard totalSessionPickerSearchResultCount > 0 else { return [] }
-        let start = min(
-            sessionPickerSearchResultPageIndex * sessionPickerMaxSessionsPerPage,
-            totalSessionPickerSearchResultCount
-        )
-        let end = min(start + sessionPickerMaxSessionsPerPage, totalSessionPickerSearchResultCount)
-        guard start < end else { return [] }
-        return Array(sessionPickerSearchResults[start..<end])
+        loadedSessionPickerSearchResults
     }
     var body: some View {
         applyPresentationModifiers(to: adaptiveChatLayout)

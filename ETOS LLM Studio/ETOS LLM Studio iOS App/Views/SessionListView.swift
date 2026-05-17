@@ -62,10 +62,13 @@ struct SessionFolderBrowserView: View {
     @State var isSearching: Bool = false
     @State var latestSearchToken: Int = 0
     @State var pendingSearchWorkItem: DispatchWorkItem?
-    @State var sessionPageIndex: Int = 0
-    @State var searchResultPageIndex: Int = 0
+    @State var loadedDirectSessions: [ChatSession] = []
+    @State var loadedSearchResultItems: [SessionHistorySearchResult] = []
+    @State var isLoadingMoreSessions: Bool = false
+    @State var isLoadingMoreSearchResults: Bool = false
 
     let maxSessionsPerPage = 100
+    let infiniteScrollTriggerRemainingCount = 5
 
     var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })
@@ -88,21 +91,8 @@ struct SessionFolderBrowserView: View {
         directSessions.count
     }
 
-    var totalSessionPages: Int {
-        guard totalDirectSessionCount > 0 else { return 1 }
-        return ((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1
-    }
-
-    var shouldShowPaginationBar: Bool {
-        totalDirectSessionCount > maxSessionsPerPage
-    }
-
     var pagedDirectSessions: [ChatSession] {
-        guard totalDirectSessionCount > 0 else { return [] }
-        let start = min(sessionPageIndex * maxSessionsPerPage, totalDirectSessionCount)
-        let end = min(start + maxSessionsPerPage, totalDirectSessionCount)
-        guard start < end else { return [] }
-        return Array(directSessions[start..<end])
+        loadedDirectSessions
     }
 
     var sessionOrderByID: [UUID: Int] {
@@ -199,85 +189,24 @@ struct SessionFolderBrowserView: View {
         searchResultItems.count
     }
 
-    var totalSearchResultPages: Int {
-        guard totalSearchResultCount > 0 else { return 1 }
-        return ((totalSearchResultCount - 1) / maxSessionsPerPage) + 1
-    }
-
-    var shouldShowSearchPaginationBar: Bool {
-        totalSearchResultCount > maxSessionsPerPage
-    }
-
     var pagedSearchResultItems: [SessionHistorySearchResult] {
-        guard totalSearchResultCount > 0 else { return [] }
-        let start = min(searchResultPageIndex * maxSessionsPerPage, totalSearchResultCount)
-        let end = min(start + maxSessionsPerPage, totalSearchResultCount)
-        guard start < end else { return [] }
-        return Array(searchResultItems[start..<end])
+        loadedSearchResultItems
     }
 
     var emptyStateText: String {
         folderID == nil ? NSLocalizedString("暂无文件夹或会话。", comment: "") : NSLocalizedString("当前文件夹暂无内容。", comment: "")
     }
 
-    var canGoToPreviousPage: Bool {
-        sessionPageIndex > 0
+    var hasMoreDirectSessions: Bool {
+        loadedDirectSessions.count < totalDirectSessionCount
     }
 
-    var canGoToNextPage: Bool {
-        sessionPageIndex + 1 < totalSessionPages
+    var hasMoreSearchResults: Bool {
+        loadedSearchResultItems.count < totalSearchResultCount
     }
 
-    var canGoToPreviousSearchResultPage: Bool {
-        searchResultPageIndex > 0
-    }
-
-    var canGoToNextSearchResultPage: Bool {
-        searchResultPageIndex + 1 < totalSearchResultPages
-    }
-
-    var currentPageStartOrdinal: Int {
-        guard totalDirectSessionCount > 0 else { return 0 }
-        return sessionPageIndex * maxSessionsPerPage + 1
-    }
-
-    var currentPageEndOrdinal: Int {
-        guard totalDirectSessionCount > 0 else { return 0 }
-        return min((sessionPageIndex + 1) * maxSessionsPerPage, totalDirectSessionCount)
-    }
-
-    var currentSearchResultPageStartOrdinal: Int {
-        guard totalSearchResultCount > 0 else { return 0 }
-        return searchResultPageIndex * maxSessionsPerPage + 1
-    }
-
-    var currentSearchResultPageEndOrdinal: Int {
-        guard totalSearchResultCount > 0 else { return 0 }
-        return min((searchResultPageIndex + 1) * maxSessionsPerPage, totalSearchResultCount)
-    }
-
-    var paginationSummaryText: String {
-        String(format: NSLocalizedString("当前显示%d-%d个对话(总共%d)", comment: ""), currentPageStartOrdinal, currentPageEndOrdinal, totalDirectSessionCount)
-    }
-
-    var searchPaginationSummaryText: String {
-        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentSearchResultPageStartOrdinal, currentSearchResultPageEndOrdinal, totalSearchResultCount)
-    }
-
-    var shouldShowActivePaginationBar: Bool {
-        isSearchActive ? shouldShowSearchPaginationBar : shouldShowPaginationBar
-    }
-
-    var activePaginationSummaryText: String {
-        isSearchActive ? searchPaginationSummaryText : paginationSummaryText
-    }
-
-    var canGoToPreviousActivePage: Bool {
-        isSearchActive ? canGoToPreviousSearchResultPage : canGoToPreviousPage
-    }
-
-    var canGoToNextActivePage: Bool {
-        isSearchActive ? canGoToNextSearchResultPage : canGoToNextPage
+    var shouldShowLoadingMoreFooter: Bool {
+        isSearchActive ? (isLoadingMoreSearchResults || hasMoreSearchResults) : (isLoadingMoreSessions || hasMoreDirectSessions)
     }
 
     var body: some View {
@@ -308,6 +237,11 @@ struct SessionFolderBrowserView: View {
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.visible)
                 }
+
+                if shouldShowLoadingMoreFooter {
+                    loadingMoreFooter
+                        .listRowSeparator(.hidden)
+                }
             }
         }
         .listStyle(.plain)
@@ -320,8 +254,6 @@ struct SessionFolderBrowserView: View {
         .safeAreaInset(edge: .bottom) {
             if isBatchSelecting && !isSearchActive {
                 batchActionBar
-            } else if shouldShowActivePaginationBar {
-                paginationBar
             }
         }
         return applySearchModifier(to: baseList)

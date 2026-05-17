@@ -266,7 +266,9 @@ extension ChatView {
         isSessionPickerSearching = false
         showSessionPickerSearchInput = false
         sessionPickerSearchFocused = false
-        sessionPickerSearchResultPageIndex = 0
+        loadedSessionPickerSearchResults = []
+        isLoadingMoreSessionPickerSessions = false
+        isLoadingMoreSessionPickerSearchResults = false
     }
 
     func handleChatPickerSheetDismissed() {

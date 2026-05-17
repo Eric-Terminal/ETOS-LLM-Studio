@@ -10,7 +10,6 @@ import SwiftUI
 
 struct SessionFolderBrowserView: View {
     let folderID: UUID?
-    @Environment(\.colorScheme) private var colorScheme
 
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
@@ -51,9 +50,11 @@ struct SessionFolderBrowserView: View {
     @State var selectedFolderIDs: Set<UUID> = []
     @State var showBatchDeleteConfirm = false
     @State var showSessionSearch = false
-    @State var sessionPageIndex: Int = 0
+    @State var loadedDirectSessions: [ChatSession] = []
+    @State var isLoadingMoreSessions = false
 
     let maxSessionsPerPage = 50
+    let infiniteScrollTriggerRemainingCount = 5
 
     var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
@@ -76,21 +77,8 @@ struct SessionFolderBrowserView: View {
         directSessions.count
     }
 
-    var totalSessionPages: Int {
-        guard totalDirectSessionCount > 0 else { return 1 }
-        return ((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1
-    }
-
-    var shouldShowPaginationBar: Bool {
-        totalDirectSessionCount > maxSessionsPerPage
-    }
-
     var pagedDirectSessions: [ChatSession] {
-        guard totalDirectSessionCount > 0 else { return [] }
-        let start = min(sessionPageIndex * maxSessionsPerPage, totalDirectSessionCount)
-        let end = min(start + maxSessionsPerPage, totalDirectSessionCount)
-        guard start < end else { return [] }
-        return Array(directSessions[start..<end])
+        loadedDirectSessions
     }
 
     var sessionOrderByID: [UUID: Int] {
@@ -168,30 +156,12 @@ struct SessionFolderBrowserView: View {
         folderID == nil ? NSLocalizedString("暂无文件夹或会话。", comment: "") : NSLocalizedString("当前文件夹暂无内容。", comment: "")
     }
 
-    var canGoToPreviousPage: Bool {
-        sessionPageIndex > 0
+    var hasMoreDirectSessions: Bool {
+        loadedDirectSessions.count < totalDirectSessionCount
     }
 
-    var canGoToNextPage: Bool {
-        sessionPageIndex + 1 < totalSessionPages
-    }
-
-    var currentPageStartOrdinal: Int {
-        guard totalDirectSessionCount > 0 else { return 0 }
-        return sessionPageIndex * maxSessionsPerPage + 1
-    }
-
-    var currentPageEndOrdinal: Int {
-        guard totalDirectSessionCount > 0 else { return 0 }
-        return min((sessionPageIndex + 1) * maxSessionsPerPage, totalDirectSessionCount)
-    }
-
-    var paginationSummaryText: String {
-        String(format: NSLocalizedString("当前显示%d-%d个对话(总共%d)", comment: ""), currentPageStartOrdinal, currentPageEndOrdinal, totalDirectSessionCount)
-    }
-
-    var paginationCapsuleStrokeColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
+    var shouldShowLoadingMoreFooter: Bool {
+        isLoadingMoreSessions || hasMoreDirectSessions
     }
 
     var body: some View {
@@ -209,6 +179,10 @@ struct SessionFolderBrowserView: View {
             ForEach(mergedEntries) { entry in
                 mergedEntryRow(entry)
             }
+
+            if shouldShowLoadingMoreFooter {
+                loadingMoreFooter
+            }
         }
         .navigationTitle(isRoot ? NSLocalizedString("历史会话", comment: "") : (currentFolder?.name ?? NSLocalizedString("文件夹", comment: "")))
         .toolbar {
@@ -217,12 +191,6 @@ struct SessionFolderBrowserView: View {
                     showMoreActions = true
                 } label: {
                     Image(systemName: "ellipsis")
-                }
-            }
-
-            if !isBatchSelecting && shouldShowPaginationBar {
-                ToolbarItem(placement: .bottomBar) {
-                    paginationBottomBar
                 }
             }
         }
@@ -249,10 +217,14 @@ struct SessionFolderBrowserView: View {
     func applyStateHandlers<Content: View>(to content: Content) -> some View {
         content
             .onChange(of: folders) { _, _ in
+                syncLoadedDirectSessionsWithSource()
                 guard folderID != nil else { return }
                 if currentFolder == nil {
                     dismiss()
                 }
+            }
+            .onChange(of: sessions) { _, _ in
+                syncLoadedDirectSessionsWithSource()
             }
             .onChange(of: pagedSessionIDs) { _, visibleIDs in
                 selectedSessionIDs.formIntersection(Set(visibleIDs))
@@ -261,10 +233,10 @@ struct SessionFolderBrowserView: View {
                 selectedFolderIDs.formIntersection(Set(visibleIDs))
             }
             .onChange(of: totalDirectSessionCount) { _, _ in
-                normalizeSessionPageIndex()
+                syncLoadedDirectSessionsWithSource()
             }
             .onAppear {
-                normalizeSessionPageIndex()
+                resetLoadedDirectSessions()
             }
     }
 

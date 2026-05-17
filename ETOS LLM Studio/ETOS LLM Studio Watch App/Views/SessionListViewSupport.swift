@@ -114,74 +114,6 @@ struct BatchMoveDestinationPickerView: View {
     }
 }
 
-struct WatchPaginationBar: View {
-    let summaryText: String
-    let canGoToPrevious: Bool
-    let canGoToNext: Bool
-    let onPrevious: () -> Void
-    let onNext: () -> Void
-    let strokeColor: Color
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Button(action: onPrevious) {
-                Image(systemName: "chevron.left")
-            }
-            .frame(minWidth: 30, minHeight: 30)
-            .disabled(!canGoToPrevious)
-            .accessibilityLabel(NSLocalizedString("上一页", comment: ""))
-
-            Spacer(minLength: 1)
-
-            summaryCapsule
-
-            Spacer(minLength: 1)
-
-            Button(action: onNext) {
-                Image(systemName: "chevron.right")
-            }
-            .frame(minWidth: 30, minHeight: 30)
-            .disabled(!canGoToNext)
-            .accessibilityLabel(NSLocalizedString("下一页", comment: ""))
-        }
-        .frame(minHeight: 36)
-    }
-
-    @ViewBuilder
-    private var summaryCapsule: some View {
-        let summaryContent = MarqueeText(
-            content: summaryText,
-            uiFont: .preferredFont(forTextStyle: .footnote),
-            speed: 28,
-            delay: 0.8,
-            spacing: 24
-        )
-        .multilineTextAlignment(.center)
-        .allowsHitTesting(false)
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
-
-        if #available(watchOS 26.0, *) {
-            summaryContent
-                .glassEffect(.clear, in: Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(strokeColor, lineWidth: 0.6)
-                )
-        } else {
-            summaryContent
-                .background(
-                    Capsule()
-                        .fill(Color.clear)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(strokeColor, lineWidth: 0.6)
-                )
-        }
-    }
-}
-
 struct WatchSessionSearchView: View {
     let sessions: [ChatSession]
     let folders: [SessionFolder]
@@ -189,16 +121,17 @@ struct WatchSessionSearchView: View {
     let onSelect: (ChatSession, Int?) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @State private var searchText: String = ""
     @State private var committedSearchText: String = ""
     @State private var searchHits: [UUID: SessionHistorySearchHit] = [:]
     @State private var isSearching: Bool = false
     @State private var latestSearchToken: Int = 0
     @State private var pendingSearchWorkItem: DispatchWorkItem?
-    @State private var resultPageIndex: Int = 0
+    @State private var loadedSearchResults: [SessionHistorySearchResult] = []
+    @State private var isLoadingMoreResults = false
 
     private let maxResultsPerPage = 50
+    private let infiniteScrollTriggerRemainingCount = 5
 
     private var normalizedQuery: String {
         SessionHistorySearchSupport.normalizedQuery(committedSearchText)
@@ -212,47 +145,16 @@ struct WatchSessionSearchView: View {
         )
     }
 
-    private var totalResultPages: Int {
-        guard !searchResults.isEmpty else { return 1 }
-        return ((searchResults.count - 1) / maxResultsPerPage) + 1
-    }
-
-    private var shouldShowResultPagination: Bool {
-        searchResults.count > maxResultsPerPage
-    }
-
-    private var canGoToPreviousResultPage: Bool {
-        resultPageIndex > 0
-    }
-
-    private var canGoToNextResultPage: Bool {
-        resultPageIndex + 1 < totalResultPages
-    }
-
-    private var currentResultPageStartOrdinal: Int {
-        guard !searchResults.isEmpty else { return 0 }
-        return resultPageIndex * maxResultsPerPage + 1
-    }
-
-    private var currentResultPageEndOrdinal: Int {
-        guard !searchResults.isEmpty else { return 0 }
-        return min((resultPageIndex + 1) * maxResultsPerPage, searchResults.count)
-    }
-
-    private var paginationSummaryText: String {
-        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentResultPageStartOrdinal, currentResultPageEndOrdinal, searchResults.count)
-    }
-
-    private var paginationStrokeColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
-    }
-
     private var pagedSearchResults: [SessionHistorySearchResult] {
-        guard !searchResults.isEmpty else { return [] }
-        let start = min(resultPageIndex * maxResultsPerPage, searchResults.count)
-        let end = min(start + maxResultsPerPage, searchResults.count)
-        guard start < end else { return [] }
-        return Array(searchResults[start..<end])
+        loadedSearchResults
+    }
+
+    private var hasMoreSearchResults: Bool {
+        loadedSearchResults.count < searchResults.count
+    }
+
+    private var shouldShowLoadingMoreFooter: Bool {
+        isLoadingMoreResults || hasMoreSearchResults
     }
 
     var body: some View {
@@ -305,25 +207,18 @@ struct WatchSessionSearchView: View {
                 } else {
                     ForEach(pagedSearchResults) { result in
                         resultRow(result)
+                            .onAppear {
+                                loadMoreResultsIfNeeded(currentID: result.id)
+                            }
+                    }
+
+                    if shouldShowLoadingMoreFooter {
+                        loadingMoreFooter
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("搜索会话", comment: ""))
-        .safeAreaInset(edge: .bottom) {
-            if !isSearching && shouldShowResultPagination {
-                WatchPaginationBar(
-                    summaryText: paginationSummaryText,
-                    canGoToPrevious: canGoToPreviousResultPage,
-                    canGoToNext: canGoToNextResultPage,
-                    onPrevious: goToPreviousResultPage,
-                    onNext: goToNextResultPage,
-                    strokeColor: paginationStrokeColor
-                )
-                .padding(.horizontal, 4)
-                .padding(.bottom, 2)
-            }
-        }
         .onChange(of: sessions) { _, _ in
             guard !normalizedQuery.isEmpty else { return }
             scheduleSearch(for: committedSearchText)
@@ -382,37 +277,19 @@ struct WatchSessionSearchView: View {
         }
     }
 
-    private func normalizeResultPageIndex() {
-        let maxIndex = max(totalResultPages - 1, 0)
-        if resultPageIndex > maxIndex {
-            resultPageIndex = maxIndex
-        }
-        if resultPageIndex < 0 {
-            resultPageIndex = 0
-        }
-    }
-
-    private func goToPreviousResultPage() {
-        guard canGoToPreviousResultPage else { return }
-        resultPageIndex -= 1
-    }
-
-    private func goToNextResultPage() {
-        guard canGoToNextResultPage else { return }
-        resultPageIndex += 1
-    }
-
     private func submitSearch() {
         let committed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         committedSearchText = committed
-        resultPageIndex = 0
+        isLoadingMoreResults = false
+        loadedSearchResults = []
         scheduleSearch(for: committed)
     }
 
     private func clearSearch() {
         searchText = ""
         committedSearchText = ""
-        resultPageIndex = 0
+        isLoadingMoreResults = false
+        loadedSearchResults = []
         pendingSearchWorkItem?.cancel()
         pendingSearchWorkItem = nil
         searchHits = [:]
@@ -427,7 +304,8 @@ struct WatchSessionSearchView: View {
         guard !normalized.isEmpty else {
             searchHits = [:]
             isSearching = false
-            resultPageIndex = 0
+            isLoadingMoreResults = false
+            loadedSearchResults = []
             return
         }
 
@@ -448,7 +326,7 @@ struct WatchSessionSearchView: View {
             DispatchQueue.main.async {
                 guard searchToken == latestSearchToken else { return }
                 searchHits = hits
-                normalizeResultPageIndex()
+                resetLoadedSearchResults()
                 isSearching = false
                 pendingSearchWorkItem = nil
             }
@@ -456,6 +334,44 @@ struct WatchSessionSearchView: View {
 
         pendingSearchWorkItem = workItem
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
+    }
+
+    private func resetLoadedSearchResults() {
+        isLoadingMoreResults = false
+        loadedSearchResults = []
+        appendNextSearchResultsPage()
+    }
+
+    private func appendNextSearchResultsPage() {
+        guard !isLoadingMoreResults, hasMoreSearchResults else { return }
+        isLoadingMoreResults = true
+
+        let source = searchResults
+        let start = loadedSearchResults.count
+        let end = min(start + maxResultsPerPage, source.count)
+        guard start < end else {
+            isLoadingMoreResults = false
+            return
+        }
+        loadedSearchResults.append(contentsOf: source[start..<end])
+        DispatchQueue.main.async {
+            isLoadingMoreResults = false
+        }
+    }
+
+    private func loadMoreResultsIfNeeded(currentID: String) {
+        guard loadedSearchResults.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
+        appendNextSearchResultsPage()
+    }
+
+    private var loadingMoreFooter: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(NSLocalizedString("正在加载", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

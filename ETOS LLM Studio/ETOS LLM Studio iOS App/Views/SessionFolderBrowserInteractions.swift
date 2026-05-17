@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 提供 iOS 会话文件夹浏览器的弹窗、搜索结果、分页、行构造与批量操作。
+// 提供 iOS 会话文件夹浏览器的弹窗、搜索结果、无限滚动、行构造与批量操作。
 // ============================================================================
 
 import Foundation
@@ -14,6 +14,7 @@ extension SessionFolderBrowserView {
     func applyStateHandlers<Content: View>(to content: Content) -> some View {
         let pagingContent = content
             .onChange(of: viewModel.sessionFolderListVersion) { _, _ in
+                syncLoadedDirectSessionsWithSource()
                 guard folderID != nil else { return }
                 if currentFolder == nil {
                     dismiss()
@@ -26,16 +27,19 @@ extension SessionFolderBrowserView {
                 selectedFolderIDs.formIntersection(Set(visibleIDs))
             }
             .onChange(of: totalDirectSessionCount) { _, _ in
-                normalizeSessionPageIndex()
+                syncLoadedDirectSessionsWithSource()
             }
             .onChange(of: totalSearchResultCount) { _, _ in
-                normalizeSearchResultPageIndex()
+                syncLoadedSearchResultItemsWithSource()
+            }
+            .onChange(of: viewModel.chatSessionListVersion) { _, _ in
+                syncLoadedDirectSessionsWithSource()
             }
 
         let searchContent = pagingContent
             .onAppear {
-                normalizeSessionPageIndex()
-                normalizeSearchResultPageIndex()
+                resetLoadedDirectSessions()
+                resetLoadedSearchResultItems()
                 guard isRoot else { return }
                 scheduleSearch(for: searchText)
             }
@@ -46,7 +50,8 @@ extension SessionFolderBrowserView {
                     selectedSessionIDs.removeAll()
                     selectedFolderIDs.removeAll()
                 }
-                searchResultPageIndex = 0
+                isLoadingMoreSearchResults = false
+                loadedSearchResultItems = []
                 scheduleSearch(for: newValue)
             }
             .onChange(of: viewModel.chatSessionListVersion) { _, _ in
@@ -229,6 +234,13 @@ extension SessionFolderBrowserView {
                     searchResultRow(result)
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.visible)
+                        .onAppear {
+                            loadMoreSearchResultItemsIfNeeded(currentID: result.id)
+                        }
+                }
+
+                if shouldShowLoadingMoreFooter {
+                    loadingMoreFooter
                 }
             }
         } header: {
@@ -276,106 +288,6 @@ extension SessionFolderBrowserView {
         .padding(.vertical, 6)
     }
 
-    var paginationBar: some View {
-        HStack(spacing: 10) {
-            paginationButton(
-                systemName: "chevron.left",
-                accessibilityLabel: NSLocalizedString("上一页", comment: ""),
-                isEnabled: canGoToPreviousActivePage,
-                action: goToPreviousActivePage
-            )
-
-            paginationSummaryField
-
-            paginationButton(
-                systemName: "chevron.right",
-                accessibilityLabel: NSLocalizedString("下一页", comment: ""),
-                isEnabled: canGoToNextActivePage,
-                action: goToNextActivePage
-            )
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity)
-    }
-
-    @ViewBuilder
-    var paginationSummaryField: some View {
-        let field = Text(activePaginationSummaryText)
-            .etFont(.callout)
-            .multilineTextAlignment(.center)
-            .lineLimit(1)
-            .minimumScaleFactor(0.82)
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 44)
-
-        if #available(iOS 26.0, *) {
-            field
-                .glassEffect(.clear, in: Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(0.28), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
-        } else {
-            field
-                .background(
-                    Capsule()
-                        .fill(.ultraThinMaterial)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(Color(uiColor: .separator).opacity(0.32), lineWidth: 0.5)
-                )
-        }
-    }
-
-    func paginationButton(
-        systemName: String,
-        accessibilityLabel: String,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            guard isEnabled else { return }
-            action()
-        } label: {
-            Image(systemName: systemName)
-                .etFont(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
-                .frame(width: 44, height: 44)
-                .background(paginationButtonBackground)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    @ViewBuilder
-    var paginationButtonBackground: some View {
-        if #available(iOS 26.0, *) {
-            Circle()
-                .fill(Color.clear)
-                .glassEffect(.clear, in: Circle())
-                .overlay(
-                    Circle()
-                        .fill(Color(uiColor: .systemBackground).opacity(0.22))
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.24), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
-        } else {
-            Circle()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    Circle()
-                        .stroke(Color(uiColor: .separator).opacity(0.32), lineWidth: 0.5)
-                )
-        }
-    }
-
     func mergedEntryRow(_ entry: SessionMergedEntry) -> AnyView {
         switch entry {
         case .folder(let folder):
@@ -383,6 +295,9 @@ extension SessionFolderBrowserView {
         case .session(let session):
             return AnyView(
                 sessionRow(session)
+                    .onAppear {
+                        loadMoreDirectSessionsIfNeeded(currentID: session.id)
+                    }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if !isBatchSelecting {
                             Button(role: .destructive) {

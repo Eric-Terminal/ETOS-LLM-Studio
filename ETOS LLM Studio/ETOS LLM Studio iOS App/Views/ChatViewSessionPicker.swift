@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件承载 ChatView 的会话选择器、会话搜索、分页和跳转逻辑。
+// 本文件承载 ChatView 的会话选择器、会话搜索、无限滚动和跳转逻辑。
 // ============================================================================
 
 import Foundation
@@ -38,7 +38,6 @@ extension ChatView {
     ) -> some View {
         let queryActive = nativeSessionPickerQueryActive
         let displayedCount = nativeSessionPickerDisplayedCount
-        let showsPagination = shouldShowSessionPickerPaginationBar(queryActive: queryActive)
 
         return VStack(spacing: 0) {
             nativeSessionPickerTopBar(showsCreateButton: showsInlineCreateButton)
@@ -49,41 +48,22 @@ extension ChatView {
                 Divider()
             }
 
-            if showsPagination {
-                ZStack(alignment: .bottom) {
-                    sessionPickerList(
-                        queryActive: queryActive,
-                        isSearching: isSessionPickerSearching,
-                        includesSearchInput: false,
-                        bottomContentPadding: 74
-                    )
+            sessionPickerList(
+                queryActive: queryActive,
+                isSearching: isSessionPickerSearching,
+                includesSearchInput: false
+            )
 
-                    sessionPickerFooter(
-                        queryActive: queryActive,
-                        displayedCount: displayedCount,
-                        isSearching: isSessionPickerSearching
-                    )
-                    .padding(.top, 10)
-                }
-                .frame(maxHeight: .infinity)
-            } else {
-                sessionPickerList(
-                    queryActive: queryActive,
-                    isSearching: isSessionPickerSearching,
-                    includesSearchInput: false
-                )
-
-                if showsFooterDivider {
-                    Divider()
-                }
-
-                sessionPickerFooter(
-                    queryActive: queryActive,
-                    displayedCount: displayedCount,
-                    isSearching: isSessionPickerSearching
-                )
-                .padding(.top, 10)
+            if showsFooterDivider {
+                Divider()
             }
+
+            sessionPickerFooter(
+                queryActive: queryActive,
+                displayedCount: displayedCount,
+                isSearching: isSessionPickerSearching
+            )
+            .padding(.top, 10)
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .navigationTitle(NSLocalizedString("会话", comment: ""))
@@ -116,17 +96,18 @@ extension ChatView {
         content
         .onAppear {
             showSessionPickerSearchInput = false
-            normalizeSessionPickerPageIndex()
-            normalizeSessionPickerSearchResultPageIndex()
+            resetSessionPickerLoadedSessions()
+            resetSessionPickerLoadedSearchResults()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: sessionPickerSearchText) { _, newValue in
-            sessionPickerSearchResultPageIndex = 0
+            isLoadingMoreSessionPickerSearchResults = false
+            loadedSessionPickerSearchResults = []
             scheduleSessionPickerSearch(for: newValue)
         }
         .onChange(of: viewModel.chatSessionListVersion) { _, _ in
-            normalizeSessionPickerPageIndex()
-            normalizeSessionPickerSearchResultPageIndex()
+            syncLoadedSessionPickerSessionsWithSource()
+            syncLoadedSessionPickerSearchResultsWithSource()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
@@ -252,17 +233,18 @@ extension ChatView {
             }
         }
         .onAppear {
-            normalizeSessionPickerPageIndex()
-            normalizeSessionPickerSearchResultPageIndex()
+            resetSessionPickerLoadedSessions()
+            resetSessionPickerLoadedSearchResults()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: sessionPickerSearchText) { _, newValue in
-            sessionPickerSearchResultPageIndex = 0
+            isLoadingMoreSessionPickerSearchResults = false
+            loadedSessionPickerSearchResults = []
             scheduleSessionPickerSearch(for: newValue)
         }
         .onChange(of: viewModel.chatSessionListVersion) { _, _ in
-            normalizeSessionPickerPageIndex()
-            normalizeSessionPickerSearchResultPageIndex()
+            syncLoadedSessionPickerSessionsWithSource()
+            syncLoadedSessionPickerSearchResultsWithSource()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
@@ -422,17 +404,27 @@ extension ChatView {
                     sessionPickerSearchingState
                 } else if queryActive && totalSessionPickerSearchResultCount == 0 {
                     sessionPickerEmptyState(queryActive: true)
-                } else if !queryActive && pagedSessionPickerSessions.isEmpty {
+                } else if !queryActive && totalSessionPickerCount == 0 {
                     sessionPickerEmptyState(queryActive: false)
                 } else {
                     if queryActive {
                         ForEach(pagedSessionPickerSearchResults) { result in
                             sessionPickerSearchResultRow(result)
+                                .onAppear {
+                                    loadMoreSessionPickerItemsIfNeeded(currentID: result.id, queryActive: true)
+                                }
                         }
                     } else {
                         ForEach(pagedSessionPickerSessions) { session in
                             sessionPickerRow(session)
+                                .onAppear {
+                                    loadMoreSessionPickerItemsIfNeeded(currentID: session.id.uuidString, queryActive: false)
+                                }
                         }
+                    }
+
+                    if isLoadingMoreSessionPickerItems(queryActive: queryActive) || hasMoreSessionPickerItems(queryActive: queryActive) {
+                        sessionPickerLoadingMoreFooter(queryActive: queryActive)
                     }
                 }
             }
@@ -443,68 +435,15 @@ extension ChatView {
     }
 
     func sessionPickerFooter(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
-        Group {
-            if shouldShowSessionPickerPaginationBar(queryActive: queryActive) {
-                HStack(spacing: 12) {
-                    sessionPickerFooterButton(
-                        systemName: "chevron.left",
-                        accessibilityLabel: NSLocalizedString("上一页", comment: "Session picker previous page"),
-                        isEnabled: canGoToPreviousActiveSessionPickerPage(queryActive: queryActive)
-                    ) {
-                        goToPreviousActiveSessionPickerPage(queryActive: queryActive)
-                    }
-
-                    Text(activeSessionPickerPaginationSummaryText(queryActive: queryActive))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .multilineTextAlignment(.center)
-                        .etFont(.system(size: 12, weight: .medium))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(sessionPickerFooterSummaryBackground)
-
-                    sessionPickerFooterButton(
-                        systemName: "chevron.right",
-                        accessibilityLabel: NSLocalizedString("下一页", comment: "Session picker next page"),
-                        isEnabled: canGoToNextActiveSessionPickerPage(queryActive: queryActive)
-                    ) {
-                        goToNextActiveSessionPickerPage(queryActive: queryActive)
-                    }
-                }
-            } else {
-                Text(
-                    queryActive
-                    ? (isSearching ? NSLocalizedString("正在搜索…", comment: "") : String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), displayedCount, sessionPickerSearchHits.count))
-                    : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
-                )
-                .etFont(.system(size: 12, weight: .medium))
-                .foregroundColor(TelegramColors.navBarSubtitle)
-            }
-        }
+        Text(
+            queryActive
+            ? (isSearching ? NSLocalizedString("正在搜索…", comment: "") : String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), displayedCount, sessionPickerSearchHits.count))
+            : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
+        )
+        .etFont(.system(size: 12, weight: .medium))
+        .foregroundColor(TelegramColors.navBarSubtitle)
         .padding(.horizontal, 16)
         .padding(.bottom, 14)
-    }
-
-    func sessionPickerFooterButton(
-        systemName: String,
-        accessibilityLabel: String,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            guard isEnabled else { return }
-            action()
-        } label: {
-            Image(systemName: systemName)
-                .etFont(.system(size: 14, weight: .semibold))
-                .foregroundColor(isEnabled ? TelegramColors.sendButtonColor : TelegramColors.navBarSubtitle.opacity(0.45))
-                .frame(width: 32, height: 32)
-                .background(sessionPickerFooterButtonBackground)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: "会话选择器按钮无障碍标签"))
     }
 
     @ViewBuilder
@@ -529,31 +468,6 @@ extension ChatView {
         } else {
             Circle()
                 .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
-        }
-    }
-
-    @ViewBuilder
-    var sessionPickerFooterSummaryBackground: some View {
-        if isLiquidGlassEnabled {
-            if #available(iOS 26.0, *) {
-                Capsule()
-                    .fill(Color.clear)
-                    .glassEffect(.clear, in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .fill(navBarGlassOverlayColor)
-                    )
-            } else {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule()
-                            .fill(navBarGlassOverlayColor)
-                    )
-            }
-        } else {
-            Capsule()
-                .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
         }
     }
 
