@@ -79,6 +79,19 @@ extension ChatView {
         appendNextSessionPickerSessionsPage()
     }
 
+    func unlockConversationArchaeologistIfNeeded(for session: ChatSession) {
+        guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
+            selectedSession: session,
+            sessions: viewModel.chatSessions
+        ) else { return }
+
+        Task {
+            let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .conversationArchaeologist)
+            guard !hasUnlocked else { return }
+            await AchievementCenter.shared.unlock(id: .conversationArchaeologist)
+        }
+    }
+
     func sessionPickerLoadingMoreFooter(queryActive: Bool) -> some View {
         HStack(spacing: 8) {
             ProgressView()
@@ -264,6 +277,7 @@ extension ChatView {
             ghostSession = session
             showGhostSessionAlert = true
         } else {
+            unlockConversationArchaeologistIfNeeded(for: session)
             editingSessionID = nil
             if let messageOrdinal {
                 viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)

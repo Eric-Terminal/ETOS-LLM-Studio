@@ -83,7 +83,10 @@ extension SessionFolderBrowserView {
                 showBranchOptions: $showBranchOptions,
                 sessionToDelete: $sessionToDelete,
                 showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                onSessionSelected: onSessionSelected,
+                onSessionSelected: { selectedSession, messageOrdinal in
+                    unlockConversationArchaeologistIfNeeded(for: selectedSession)
+                    onSessionSelected(selectedSession, messageOrdinal)
+                },
                 deleteLastMessageAction: deleteLastMessageAction,
                 sendSessionToCompanionAction: sendSessionToCompanionAction,
                 moveSessionToFolderAction: moveSessionToFolderAction
@@ -204,7 +207,6 @@ extension SessionFolderBrowserView {
             return
         }
         loadedDirectSessions.append(contentsOf: source[start..<end])
-        unlockConversationArchaeologistIfNeeded()
         DispatchQueue.main.async {
             isLoadingMoreSessions = false
         }
@@ -213,7 +215,6 @@ extension SessionFolderBrowserView {
     func syncLoadedDirectSessionsWithSource() {
         let loadedCount = min(max(loadedDirectSessions.count, maxSessionsPerPage), directSessions.count)
         loadedDirectSessions = Array(directSessions.prefix(loadedCount))
-        unlockConversationArchaeologistIfNeeded()
     }
 
     func loadMoreDirectSessionsIfNeeded(currentID: UUID) {
@@ -231,13 +232,10 @@ extension SessionFolderBrowserView {
         }
     }
 
-    func unlockConversationArchaeologistIfNeeded() {
-        let totalPages = max(((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1, 1)
-        let loadedPageIndex = max((loadedDirectSessions.count - 1) / maxSessionsPerPage, 0)
+    func unlockConversationArchaeologistIfNeeded(for session: ChatSession) {
         guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
-            totalSessions: totalDirectSessionCount,
-            pageIndex: loadedPageIndex,
-            totalPages: totalPages
+            selectedSession: session,
+            sessions: sessions
         ) else { return }
 
         Task {

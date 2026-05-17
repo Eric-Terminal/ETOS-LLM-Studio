@@ -35,7 +35,6 @@ extension SessionFolderBrowserView {
             return
         }
         loadedDirectSessions.append(contentsOf: source[start..<end])
-        unlockConversationArchaeologistIfNeeded()
         DispatchQueue.main.async {
             isLoadingMoreSessions = false
         }
@@ -61,7 +60,6 @@ extension SessionFolderBrowserView {
     func syncLoadedDirectSessionsWithSource() {
         let loadedCount = min(max(loadedDirectSessions.count, maxSessionsPerPage), directSessions.count)
         loadedDirectSessions = Array(directSessions.prefix(loadedCount))
-        unlockConversationArchaeologistIfNeeded()
     }
 
     func syncLoadedSearchResultItemsWithSource() {
@@ -80,13 +78,10 @@ extension SessionFolderBrowserView {
         appendNextSearchResultItemsPage()
     }
 
-    func unlockConversationArchaeologistIfNeeded() {
-        let totalPages = max(((totalDirectSessionCount - 1) / maxSessionsPerPage) + 1, 1)
-        let loadedPageIndex = max((loadedDirectSessions.count - 1) / maxSessionsPerPage, 0)
+    func unlockConversationArchaeologistIfNeeded(for session: ChatSession) {
         guard AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(
-            totalSessions: totalDirectSessionCount,
-            pageIndex: loadedPageIndex,
-            totalPages: totalPages
+            selectedSession: session,
+            sessions: viewModel.chatSessions
         ) else { return }
 
         Task {
@@ -280,6 +275,7 @@ extension SessionFolderBrowserView {
             ghostSession = session
             showGhostSessionAlert = true
         } else {
+            unlockConversationArchaeologistIfNeeded(for: session)
             if let messageOrdinal {
                 viewModel.requestMessageJump(sessionID: session.id, messageOrdinal: messageOrdinal)
             } else {

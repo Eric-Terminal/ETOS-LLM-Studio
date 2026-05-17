@@ -200,6 +200,7 @@ struct SessionFolderBrowserView: View {
                 folders: folders,
                 currentSessionID: currentSession?.id,
                 onSelect: { session, messageOrdinal in
+                    unlockConversationArchaeologistIfNeeded(for: session)
                     onSessionSelected(session, messageOrdinal)
                 }
             )

@@ -1383,8 +1383,8 @@
 "在设置里找到了什么，或者什么都没找到。" = "Found something in Settings, or found nothing at all.";
 "触发条件：在设置页面停留超过 5 分钟" = "Trigger condition: stay on Settings for over 5 minutes";
 "考古学家" = "Archaeologist";
-"翻到了最早的对话记录。" = "Reached the earliest conversation records.";
-"触发条件：超过 300 个会话后翻到最后一页" = "Trigger condition: with over 300 sessions, turn to the last page";
+"打开了最原始的那个对话。" = "Opened the very first conversation.";
+"触发条件：超过 300 个会话后打开最早的对话" = "Trigger condition: with over 300 sessions, open the earliest conversation";
 "让AI评价鱼缸" = "Let the AI Review the Fish Tank";
 "AI使用了评价这款App的工具。套娃已完成。" = "The AI used the tool for reviewing this app. The nesting is complete.";
 "触发条件：AI 调用 app_submit_feedback_ticket 工具" = "Trigger condition: AI calls the app_submit_feedback_ticket tool";

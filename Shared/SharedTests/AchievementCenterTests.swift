@@ -287,6 +287,8 @@ struct AchievementCenterTests {
         #expect(definitions[.schrodingerQuestion]?.titleKey == "薛定谔的问题")
         #expect(definitions[.settingsResearcher]?.titleKey == "研究者")
         #expect(definitions[.conversationArchaeologist]?.titleKey == "考古学家")
+        #expect(definitions[.conversationArchaeologist]?.sentenceKey == "打开了最原始的那个对话。")
+        #expect(definitions[.conversationArchaeologist]?.triggerNoteKey == "触发条件：超过 300 个会话后打开最早的对话")
         #expect(definitions[.fishTankReview]?.titleKey == "让AI评价鱼缸")
     }
 
@@ -368,9 +370,14 @@ struct AchievementCenterTests {
         #expect(AchievementTriggerEvaluator.shouldUnlockSchrodingerQuestion(consecutiveRetryCount: 2) == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockSettingsResearcher(elapsedTime: 300))
         #expect(AchievementTriggerEvaluator.shouldUnlockSettingsResearcher(elapsedTime: 299) == false)
-        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 3, totalPages: 4))
-        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 300, pageIndex: 2, totalPages: 3) == false)
-        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(totalSessions: 301, pageIndex: 2, totalPages: 4) == false)
+        let sessions = Self.sessions(count: 301)
+        let shortSessions = Self.sessions(count: 300)
+        let temporarySession = ChatSession(id: UUID(), name: "临时会话", isTemporary: true)
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(selectedSession: sessions.last!, sessions: sessions))
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(selectedSession: shortSessions.last!, sessions: shortSessions) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(selectedSession: sessions[sessions.count - 2], sessions: sessions) == false)
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(selectedSession: sessions.last!, sessions: sessions + [temporarySession]))
+        #expect(AchievementTriggerEvaluator.shouldUnlockConversationArchaeologist(selectedSession: temporarySession, sessions: sessions + [temporarySession]) == false)
         #expect(AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: "app_submit_feedback_ticket"))
         #expect(AchievementTriggerEvaluator.shouldUnlockFishTankReview(appToolName: "app_echo_text") == false)
     }
@@ -462,6 +469,12 @@ struct AchievementCenterTests {
         components.hour = hour
         components.minute = minute
         return components.date ?? Date(timeIntervalSince1970: 0)
+    }
+
+    private static func sessions(count: Int) -> [ChatSession] {
+        (0..<count).map { index in
+            ChatSession(id: UUID(), name: "会话 \(index)")
+        }
     }
 
     private func store(_ record: AchievementUnlockRecord, in defaults: UserDefaults) {

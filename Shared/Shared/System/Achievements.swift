@@ -220,8 +220,8 @@ public enum AchievementCatalog {
         AchievementDefinition(
             id: .conversationArchaeologist,
             titleKey: "考古学家",
-            sentenceKey: "翻到了最早的对话记录。",
-            triggerNoteKey: "触发条件：超过 300 个会话后翻到最后一页",
+            sentenceKey: "打开了最原始的那个对话。",
+            triggerNoteKey: "触发条件：超过 300 个会话后打开最早的对话",
             systemImageName: "archivebox"
         ),
         AchievementDefinition(
@@ -393,13 +393,20 @@ public enum AchievementTriggerEvaluator {
     }
 
     public static func shouldUnlockConversationArchaeologist(
-        totalSessions: Int,
-        pageIndex: Int,
-        totalPages: Int
+        selectedSession: ChatSession,
+        sessions: [ChatSession]
     ) -> Bool {
-        totalSessions > archaeologySessionThreshold
-            && totalPages > 1
-            && pageIndex == totalPages - 1
+        guard !selectedSession.isTemporary else { return false }
+
+        var persistentSessionCount = 0
+        var earliestSessionID: UUID?
+        for session in sessions where !session.isTemporary {
+            persistentSessionCount += 1
+            earliestSessionID = session.id
+        }
+
+        return persistentSessionCount > archaeologySessionThreshold
+            && earliestSessionID == selectedSession.id
     }
 
     static func shouldUnlockFishTankReview(appToolName: String) -> Bool {
