@@ -522,9 +522,17 @@ enum AppLogRedactor {
         "messages",
         "content",
         "contents",
+        "input",
         "prompt",
         "system",
         "system_instruction"
+    ]
+    private static let requestBodyPlainMessageKeys: Set<String> = [
+        "message",
+        "messages",
+        "content",
+        "contents",
+        "input"
     ]
     private static let sensitiveQueryFragments = [
         "key", "api_key", "token", "secret", "signature", "sig", "auth"
@@ -562,8 +570,13 @@ enum AppLogRedactor {
         return result
     }
 
-    static func sanitizeRequestBodyForLog(_ payload: [String: Any], maxLength: Int = 4_000) -> String? {
-        let sanitized = sanitizeJSONValue(payload)
+    static func sanitizeRequestBodyForLog(
+        _ payload: [String: Any],
+        maxLength: Int = 4_000,
+        exposesMessageFields: Bool? = nil
+    ) -> String? {
+        let shouldExposeMessages = exposesMessageFields ?? AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+        let sanitized = sanitizeJSONValue(payload, exposesMessageFields: shouldExposeMessages)
         guard JSONSerialization.isValidJSONObject(sanitized),
               let data = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]),
               var text = String(data: data, encoding: .utf8) else {
@@ -613,28 +626,48 @@ enum AppLogRedactor {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
-    private static func sanitizeJSONValue(_ value: Any) -> Any {
+    private static func sanitizeJSONValue(_ value: Any, exposesMessageFields: Bool) -> Any {
         if let dictionary = value as? [String: Any] {
             var result: [String: Any] = [:]
             for (key, rawValue) in dictionary {
-                if shouldHideRequestBodyField(key) {
+                if let text = rawValue as? String, shouldHideBinaryPayload(key: key, text: text) {
+                    result[key] = binaryPayloadPlaceholder(for: text)
+                } else if shouldHideRequestBodyField(key, exposesMessageFields: exposesMessageFields) {
                     result[key] = redactionPlaceholder(for: rawValue)
                 } else {
-                    result[key] = sanitizeJSONValue(rawValue)
+                    result[key] = sanitizeJSONValue(rawValue, exposesMessageFields: exposesMessageFields)
                 }
             }
             return result
         }
 
         if let array = value as? [Any] {
-            return array.map { sanitizeJSONValue($0) }
+            return array.map { sanitizeJSONValue($0, exposesMessageFields: exposesMessageFields) }
         }
 
         return value
     }
 
-    private static func shouldHideRequestBodyField(_ key: String) -> Bool {
-        requestBodySensitiveKeys.contains(key.lowercased())
+    private static func shouldHideRequestBodyField(_ key: String, exposesMessageFields: Bool) -> Bool {
+        let normalized = key.lowercased()
+        if exposesMessageFields, requestBodyPlainMessageKeys.contains(normalized) {
+            return false
+        }
+        return requestBodySensitiveKeys.contains(normalized)
+    }
+
+    private static func shouldHideBinaryPayload(key: String, text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let normalizedKey = key.lowercased()
+        if (normalizedKey == "url" || normalizedKey == "image_url"), trimmed.hasPrefix("data:") {
+            return true
+        }
+        return normalizedKey == "data" || normalizedKey == "file_data" || normalizedKey == "b64_json"
+    }
+
+    private static func binaryPayloadPlaceholder(for text: String) -> String {
+        "[二进制内容已隐藏，长度: \(text.count)]"
     }
 
     private static func redactionPlaceholder(for value: Any) -> String {

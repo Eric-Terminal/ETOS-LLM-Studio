@@ -81,8 +81,12 @@ func logChatRequestSnapshot(
     if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
         detailPayload["请求头"] = headers
     }
-    if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload) {
-        detailPayload["请求体(不含消息字段)"] = body
+    let exposesMessageFields = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+    if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload, exposesMessageFields: exposesMessageFields) {
+        let bodyKey = exposesMessageFields
+            ? "请求体(含明文消息)"
+            : "请求体(不含消息字段)"
+        detailPayload[bodyKey] = body
     } else {
         detailPayload["请求体(不含消息字段)"] = "[无法序列化]"
     }

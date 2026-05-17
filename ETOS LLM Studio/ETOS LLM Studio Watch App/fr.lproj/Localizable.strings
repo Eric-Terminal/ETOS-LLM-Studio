@@ -2487,3 +2487,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "颜色" = "Couleur";
 "颜色配置" = "Profils de couleur";
 "默认配置" = "Profil par défaut";
+"记录请求明文消息" = "Log plaintext request messages";
+"图片、音频和文件的 Base64 仍会隐藏。" = "Base64 for images, audio, and files remains hidden.";

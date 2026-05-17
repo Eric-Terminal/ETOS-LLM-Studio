@@ -95,6 +95,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case maxChatHistory = "maxChatHistory"
     case enableStreaming = "enableStreaming"
     case enableResponseSpeedMetrics = "enableResponseSpeedMetrics"
+    case requestLogPlainMessageEnabled = "logs.request.plainMessageEnabled"
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
@@ -260,6 +261,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #else
             return .bool(true)
             #endif
+        case .requestLogPlainMessageEnabled:
+            return .bool(false)
         case .lazyLoadMessageCount:
             #if os(watchOS)
             return .integer(3)
@@ -399,6 +402,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .lastAnnouncementId,
              .hideAnnouncementSection,
              .hiddenAnnouncementKeys,
+             .requestLogPlainMessageEnabled,
              .appLockEnabled,
              .appLockTimeoutSeconds,
              .appLockBiometricEnabled,

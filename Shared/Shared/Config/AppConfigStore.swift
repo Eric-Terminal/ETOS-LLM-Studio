@@ -153,6 +153,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var maxChatHistory: Int { didSet { write(.maxChatHistory, maxChatHistory) } }
     @Published public var enableStreaming: Bool { didSet { write(.enableStreaming, enableStreaming) } }
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
+    @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
@@ -271,6 +272,7 @@ public final class AppConfigStore: ObservableObject {
         maxChatHistory = Self.integerValue(.maxChatHistory, userDefaults: userDefaults)
         enableStreaming = Self.boolValue(.enableStreaming, userDefaults: userDefaults)
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
+        requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
@@ -659,6 +661,7 @@ public final class AppConfigStore: ObservableObject {
         case .maxChatHistory: return .integer(maxChatHistory)
         case .enableStreaming: return .bool(enableStreaming)
         case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
+        case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
         case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
         case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
@@ -784,6 +787,7 @@ public final class AppConfigStore: ObservableObject {
         case .aiTopPEnabled: aiTopPEnabled = value
         case .enableStreaming: enableStreaming = value
         case .enableResponseSpeedMetrics: enableResponseSpeedMetrics = value
+        case .requestLogPlainMessageEnabled: requestLogPlainMessageEnabled = value
         case .enableOpenAIStreamIncludeUsage: enableOpenAIStreamIncludeUsage = value
         case .enableAutoSessionNaming: enableAutoSessionNaming = value
         case .enableMemory: enableMemory = value

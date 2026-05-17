@@ -2611,3 +2611,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "颜色配置" = "ملفات الألوان";
 "风来疏竹，风过而竹不留声。" = "تمر الريح بين خيزران متباعد؛ وحين تمضي لا يحتفظ الخيزران بصوتها.";
 "默认配置" = "ملف التعريف الافتراضي";
+"记录请求明文消息" = "Log plaintext request messages";
+"关闭时请求体日志会隐藏 message、content 等消息字段；开启后会记录明文消息文本，但图片、音频和文件的 Base64 仍会隐藏。" = "When off, request body logs hide message and content fields. When on, message text is logged in plaintext, while Base64 for images, audio, and files remains hidden.";

@@ -2487,3 +2487,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "颜色" = "اللون";
 "颜色配置" = "ملفات الألوان";
 "默认配置" = "ملف التعريف الافتراضي";
+"记录请求明文消息" = "Log plaintext request messages";
+"图片、音频和文件的 Base64 仍会隐藏。" = "Base64 for images, audio, and files remains hidden.";

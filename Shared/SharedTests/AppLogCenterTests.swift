@@ -55,11 +55,46 @@ struct AppLogCenterTests {
             "tools": [["type": "function"]]
         ]
 
-        let output = AppLogRedactor.sanitizeRequestBodyForLog(source, maxLength: 2_000)
+        let output = AppLogRedactor.sanitizeRequestBodyForLog(
+            source,
+            maxLength: 2_000,
+            exposesMessageFields: false
+        )
         #expect(output != nil)
         #expect(output?.contains("\"model\" : \"gpt-5\"") == true)
         #expect(output?.contains("\"messages\" : \"[已隐藏数组") == true)
         #expect(output?.contains("你好") == false)
+    }
+
+    @Test("开启明文消息后请求体日志保留文本并隐藏二进制内容")
+    func testRequestBodyPlainMessagesKeepTextAndHideBinaryPayloads() {
+        let source: [String: Any] = [
+            "model": "gpt-5",
+            "messages": [
+                [
+                    "role": "user",
+                    "content": [
+                        ["type": "text", "text": "你好"],
+                        [
+                            "type": "image_url",
+                            "image_url": [
+                                "url": "data:image/png;base64,abcdef"
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let output = AppLogRedactor.sanitizeRequestBodyForLog(
+            source,
+            maxLength: 2_000,
+            exposesMessageFields: true
+        )
+        #expect(output != nil)
+        #expect(output?.contains("你好") == true)
+        #expect(output?.contains("data:image/png;base64,abcdef") == false)
+        #expect(output?.contains("[二进制内容已隐藏") == true)
     }
 
     @Test("请求 URL 日志会隐藏敏感查询参数")
@@ -376,4 +411,5 @@ struct AppLogCenterTests {
         }
         try content.write(to: fileURL, options: .atomic)
     }
+
 }

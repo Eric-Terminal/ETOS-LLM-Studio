@@ -2648,3 +2648,5 @@
 "设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。" = "Set how the picker menu appears. Floating Panel offers a centered, visually focused experience; Bottom Sheet follows natural thumb gestures so each switch feels smooth.";
 "质感与特效" = "Texture & Effects";
 "顶部毛玻璃渐隐" = "Top Glass Fade";
+"记录请求明文消息" = "Log plaintext request messages";
+"图片、音频和文件的 Base64 仍会隐藏。" = "Base64 for images, audio, and files remains hidden.";

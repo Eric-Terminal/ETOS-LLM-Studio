@@ -2389,3 +2389,5 @@
 "颜色" = "カラー";
 "颜色配置" = "カラープロファイル";
 "默认配置" = "デフォルトプロファイル";
+"记录请求明文消息" = "Log plaintext request messages";
+"图片、音频和文件的 Base64 仍会隐藏。" = "Base64 for images, audio, and files remains hidden.";

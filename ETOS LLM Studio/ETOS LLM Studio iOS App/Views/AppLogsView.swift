@@ -17,10 +17,17 @@ import UIKit
 
 struct AppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var showClearAllConfirm = false
 
     var body: some View {
         List {
+            Section {
+                Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $appConfig.requestLogPlainMessageEnabled)
+            } footer: {
+                Text(NSLocalizedString("关闭时请求体日志会隐藏 message、content 等消息字段；开启后会记录明文消息文本，但图片、音频和文件的 Base64 仍会隐藏。", comment: ""))
+            }
+
             if logCenter.logDayFolders.isEmpty {
                 ContentUnavailableView(NSLocalizedString("暂无日志目录", comment: ""),
                     systemImage: "folder",

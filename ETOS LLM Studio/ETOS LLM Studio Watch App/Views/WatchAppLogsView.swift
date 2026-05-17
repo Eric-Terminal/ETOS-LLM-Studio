@@ -14,10 +14,19 @@ import Shared
 
 struct WatchAppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var showClearAllConfirm = false
 
     var body: some View {
         List {
+            Section {
+                Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $appConfig.requestLogPlainMessageEnabled)
+                    .buttonStyle(.plain)
+                Text(NSLocalizedString("图片、音频和文件的 Base64 仍会隐藏。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             if logCenter.logDayFolders.isEmpty {
                 Text(NSLocalizedString("暂无日志目录", comment: ""))
                     .etFont(.caption)
