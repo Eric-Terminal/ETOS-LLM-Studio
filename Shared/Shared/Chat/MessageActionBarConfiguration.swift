@@ -31,6 +31,17 @@ public enum MessageActionBarItem: String, CaseIterable, Identifiable, Codable, S
     case versionSwitcher
 
     public var id: String { rawValue }
+
+    public static func supportedItems(for role: MessageActionBarRole) -> [MessageActionBarItem] {
+        switch role {
+        case .assistant:
+            return allCases
+        case .user:
+            return allCases.filter { item in
+                item != .quickRetry && item != .versionSwitcher
+            }
+        }
+    }
 }
 
 public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
@@ -45,15 +56,15 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
         assistantAlignment: MessageActionBarAlignment,
         userAlignment: MessageActionBarAlignment
     ) {
-        self.assistantItems = Self.uniqueItems(assistantItems)
-        self.userItems = Self.uniqueItems(userItems)
+        self.assistantItems = Self.normalizedItems(assistantItems, for: .assistant)
+        self.userItems = Self.normalizedItems(userItems, for: .user)
         self.assistantAlignment = assistantAlignment
         self.userAlignment = userAlignment
     }
 
     public static let defaultConfiguration = MessageActionBarConfiguration(
         assistantItems: [.versionSwitcher],
-        userItems: [.versionSwitcher],
+        userItems: [],
         assistantAlignment: .trailing,
         userAlignment: .trailing
     )
@@ -73,7 +84,7 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public func encodedString() -> String {
         guard let data = try? JSONEncoder().encode(normalized()),
               let string = String(data: data, encoding: .utf8) else {
-            return #"{"assistantItems":["versionSwitcher"],"userItems":["versionSwitcher"],"assistantAlignment":"trailing","userAlignment":"trailing"}"#
+            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing"}"#
         }
         return string
     }
@@ -99,9 +110,9 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public mutating func setItems(_ items: [MessageActionBarItem], for role: MessageActionBarRole) {
         switch role {
         case .assistant:
-            assistantItems = Self.uniqueItems(items)
+            assistantItems = Self.normalizedItems(items, for: role)
         case .user:
-            userItems = Self.uniqueItems(items)
+            userItems = Self.normalizedItems(items, for: role)
         }
     }
 
@@ -121,6 +132,11 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
             assistantAlignment: assistantAlignment,
             userAlignment: userAlignment
         )
+    }
+
+    private static func normalizedItems(_ items: [MessageActionBarItem], for role: MessageActionBarRole) -> [MessageActionBarItem] {
+        let supportedItems = MessageActionBarItem.supportedItems(for: role)
+        return uniqueItems(items.filter { supportedItems.contains($0) })
     }
 
     private static func uniqueItems(_ items: [MessageActionBarItem]) -> [MessageActionBarItem] {

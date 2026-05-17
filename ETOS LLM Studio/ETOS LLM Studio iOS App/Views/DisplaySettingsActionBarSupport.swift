@@ -25,7 +25,7 @@ struct MessageActionBarSettingsView: View {
 
     private var availableItems: [MessageActionBarItem] {
         let selected = Set(selectedItems)
-        return MessageActionBarItem.allCases.filter { !selected.contains($0) }
+        return MessageActionBarItem.supportedItems(for: selectedRole).filter { !selected.contains($0) }
     }
 
     var body: some View {
@@ -48,7 +48,6 @@ struct MessageActionBarSettingsView: View {
                     Text(role.title).tag(role)
                 }
             }
-            .pickerStyle(.segmented)
         } footer: {
             Text(NSLocalizedString("助手气泡和用户气泡可以分别配置。列表从上到下对应气泡下方从左到右或从右到左的显示顺序。", comment: ""))
                 .etFont(.footnote)
@@ -81,7 +80,7 @@ struct MessageActionBarSettingsView: View {
         } header: {
             Text(NSLocalizedString("已启用项目", comment: ""))
         } footer: {
-            Text(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。多版本切换移除后，仍可在长按菜单里管理版本。", comment: ""))
+            Text(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }

@@ -25,7 +25,7 @@ struct WatchMessageActionBarSettingsView: View {
 
     private var availableItems: [MessageActionBarItem] {
         let selected = Set(selectedItems)
-        return MessageActionBarItem.allCases.filter { item in
+        return MessageActionBarItem.supportedItems(for: role).filter { item in
             !selected.contains(item) && item.isSupportedOnCurrentPlatform
         }
     }
@@ -33,7 +33,7 @@ struct WatchMessageActionBarSettingsView: View {
     var body: some View {
         List {
             Section(
-                footer: Text(NSLocalizedString("从上到下对应气泡下方的显示顺序。多版本切换移除后，仍可在长按菜单里管理版本。", comment: ""))
+                footer: Text(NSLocalizedString("从上到下对应气泡下方的显示顺序。", comment: ""))
             ) {
                 Picker(NSLocalizedString("延伸方向", comment: ""), selection: alignmentBinding) {
                     ForEach(MessageActionBarAlignment.allCases) { alignment in

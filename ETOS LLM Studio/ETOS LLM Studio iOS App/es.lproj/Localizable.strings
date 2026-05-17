@@ -2624,6 +2624,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "已启用项目" = "Enabled Items";
 "当前没有启用项目，可从下方添加。" = "No items are enabled. Add one below.";
 "点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。多版本切换移除后，仍可在长按菜单里管理版本。" = "Tap Edit in the top-right corner to drag the reorder handle. Swipe right to remove. If version switching is removed, versions remain available from the long-press menu.";
+"点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。" = "Tap Edit in the top-right corner to drag the reorder handle. Swipe right to remove.";
 "可添加项目" = "Available Items";
 "所有项目都已加入。" = "All items have been added.";
 "助手气泡" = "Assistant Bubble";

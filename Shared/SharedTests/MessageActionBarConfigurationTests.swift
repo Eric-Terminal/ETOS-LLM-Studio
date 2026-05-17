@@ -11,12 +11,12 @@ import Testing
 @Suite("气泡功能栏配置测试")
 struct MessageActionBarConfigurationTests {
 
-    @Test("默认配置只启用多版本切换")
+    @Test("默认配置只在助手气泡启用多版本切换")
     func defaultConfigurationOnlyKeepsVersionSwitcher() {
         let configuration = MessageActionBarConfiguration.defaultConfiguration
 
         #expect(configuration.assistantItems == [.versionSwitcher])
-        #expect(configuration.userItems == [.versionSwitcher])
+        #expect(configuration.userItems.isEmpty)
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
     }
@@ -36,6 +36,19 @@ struct MessageActionBarConfigurationTests {
         #expect(decoded.userItems == [.requestTime, .inputTokens, .outputTokens])
         #expect(decoded.assistantAlignment == .leading)
         #expect(decoded.userAlignment == .trailing)
+    }
+
+    @Test("用户气泡配置会过滤重试和多版本切换")
+    func userConfigurationFiltersAssistantOnlyItems() {
+        let configuration = MessageActionBarConfiguration(
+            assistantItems: [.quickRetry, .versionSwitcher],
+            userItems: [.quickRetry, .copyMessage, .versionSwitcher, .requestTime],
+            assistantAlignment: .trailing,
+            userAlignment: .leading
+        )
+
+        #expect(configuration.assistantItems == [.quickRetry, .versionSwitcher])
+        #expect(configuration.userItems == [.copyMessage, .requestTime])
     }
 
     @Test("重试可用性会一次性预计算可操作消息")
