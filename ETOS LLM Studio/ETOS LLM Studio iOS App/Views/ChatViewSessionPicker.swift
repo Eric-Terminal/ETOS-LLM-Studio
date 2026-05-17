@@ -21,23 +21,33 @@ extension ChatView {
 
     var landscapeSessionSidebar: some View {
         applySessionPickerLifecycle(
-            to: NavigationStack {
-                nativeSessionPickerContent(showsCloseButton: false, showsFooterDivider: false)
-            }
+            to: nativeSessionPickerContent(
+                showsCloseButton: false,
+                showsTopDivider: false,
+                showsFooterDivider: false,
+                showsInlineCreateButton: true
+            )
         )
     }
 
-    func nativeSessionPickerContent(showsCloseButton: Bool, showsFooterDivider: Bool = true) -> some View {
+    func nativeSessionPickerContent(
+        showsCloseButton: Bool,
+        showsTopDivider: Bool = true,
+        showsFooterDivider: Bool = true,
+        showsInlineCreateButton: Bool = false
+    ) -> some View {
         let queryActive = nativeSessionPickerQueryActive
         let displayedCount = nativeSessionPickerDisplayedCount
         let showsPagination = shouldShowSessionPickerPaginationBar(queryActive: queryActive)
 
         return VStack(spacing: 0) {
-            nativeSessionPickerTopBar
+            nativeSessionPickerTopBar(showsCreateButton: showsInlineCreateButton)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
 
-            Divider()
+            if showsTopDivider {
+                Divider()
+            }
 
             if showsPagination {
                 ZStack(alignment: .bottom) {
@@ -86,16 +96,18 @@ extension ChatView {
                     }
                 }
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    viewModel.createNewSession()
-                    editingSessionID = nil
-                    sessionDraftName = ""
-                    dismissSessionPickerPanel()
-                } label: {
-                    Image(systemName: "plus")
+            if !showsInlineCreateButton {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        viewModel.createNewSession()
+                        editingSessionID = nil
+                        sessionDraftName = ""
+                        dismissSessionPickerPanel()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
                 }
-                .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
             }
         }
     }
@@ -129,11 +141,39 @@ extension ChatView {
         }
     }
 
-    var nativeSessionPickerTopBar: some View {
+    func nativeSessionPickerTopBar(showsCreateButton: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(nativeSessionPickerSubtitle)
-                .etFont(.footnote)
-                .foregroundStyle(.secondary)
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if showsCreateButton {
+                        Text(NSLocalizedString("会话", comment: ""))
+                            .etFont(.system(size: 18, weight: .semibold))
+                            .foregroundColor(TelegramColors.navBarText)
+                    }
+                    Text(nativeSessionPickerSubtitle)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if showsCreateButton {
+                    Button {
+                        viewModel.createNewSession()
+                        editingSessionID = nil
+                        sessionDraftName = ""
+                        dismissSessionPickerPanel()
+                    } label: {
+                        Image(systemName: "plus")
+                            .etFont(.system(size: 14, weight: .semibold))
+                            .foregroundColor(TelegramColors.navBarText)
+                            .frame(width: 32, height: 32)
+                            .background(sessionPickerFooterButtonBackground)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
+                }
+            }
 
             sessionPickerSearchInput
         }
