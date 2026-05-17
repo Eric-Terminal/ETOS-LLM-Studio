@@ -25,7 +25,8 @@ extension ChatView {
                 showsCloseButton: false,
                 showsTopDivider: false,
                 showsFooterDivider: false,
-                showsInlineCreateButton: true
+                showsInlineCreateButton: true,
+                showsFooter: false
             )
         )
     }
@@ -34,7 +35,8 @@ extension ChatView {
         showsCloseButton: Bool,
         showsTopDivider: Bool = true,
         showsFooterDivider: Bool = true,
-        showsInlineCreateButton: Bool = false
+        showsInlineCreateButton: Bool = false,
+        showsFooter: Bool = true
     ) -> some View {
         let queryActive = nativeSessionPickerQueryActive
         let displayedCount = nativeSessionPickerDisplayedCount
@@ -54,16 +56,18 @@ extension ChatView {
                 includesSearchInput: false
             )
 
-            if showsFooterDivider {
+            if showsFooter && showsFooterDivider {
                 Divider()
             }
 
-            sessionPickerFooter(
-                queryActive: queryActive,
-                displayedCount: displayedCount,
-                isSearching: isSessionPickerSearching
-            )
-            .padding(.top, 10)
+            if showsFooter {
+                sessionPickerFooter(
+                    queryActive: queryActive,
+                    displayedCount: displayedCount,
+                    isSearching: isSessionPickerSearching
+                )
+                .padding(.top, 10)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .navigationTitle(NSLocalizedString("会话", comment: ""))
