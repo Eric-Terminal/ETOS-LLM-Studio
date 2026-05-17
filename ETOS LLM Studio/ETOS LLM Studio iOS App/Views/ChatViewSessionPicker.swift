@@ -129,6 +129,19 @@ extension ChatView {
     func nativeSessionPickerTopBar(showsCreateButton: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if showsCreateButton {
+                        Text(NSLocalizedString("会话", comment: ""))
+                            .etFont(.system(size: 18, weight: .semibold))
+                            .foregroundColor(TelegramColors.navBarText)
+                    }
+                    Text(nativeSessionPickerSubtitle)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
                 if showsCreateButton {
                     Button {
                         viewModel.createNewSession()
@@ -145,19 +158,6 @@ extension ChatView {
                     .buttonStyle(.plain)
                     .accessibilityLabel(NSLocalizedString("开启新对话", comment: ""))
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    if showsCreateButton {
-                        Text(NSLocalizedString("会话", comment: ""))
-                            .etFont(.system(size: 18, weight: .semibold))
-                            .foregroundColor(TelegramColors.navBarText)
-                    }
-                    Text(nativeSessionPickerSubtitle)
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
             }
 
             sessionPickerSearchInput
