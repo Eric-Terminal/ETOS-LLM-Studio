@@ -63,7 +63,7 @@ struct ChatView: View {
     @State var modelPickerRequestControl: ModelRequestBodyControl?
     @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
-    @State var keyboardHeight: CGFloat = 0
+    @State var isKeyboardVisible = false
     @State var chatInputBarHeight: CGFloat = 0
     @State var scrollDistanceToBottom: CGFloat = 0
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
@@ -113,7 +113,7 @@ struct ChatView: View {
         max(chatInputBarHeight + 16, 92)
     }
     var tabBarCompensation: CGFloat {
-        guard keyboardHeight == 0 else { return 0 }
+        guard !isKeyboardVisible else { return 0 }
         let measuredTabBarHeight = UITabBarController().tabBar.frame.height
         let tabBarHeight = measuredTabBarHeight > 0 ? measuredTabBarHeight : 49
         guard bottomSafeAreaInset > tabBarHeight + 8, bottomSafeAreaInset < 160 else {
@@ -263,7 +263,9 @@ struct ChatView: View {
     @ViewBuilder
     var adaptiveChatLayout: some View {
         GeometryReader { proxy in
-            let isLandscape = proxy.size.width > proxy.size.height
+            let measuredIsLandscape = proxy.size.width > proxy.size.height
+            let shouldFreezeLayout = isKeyboardVisible || composerFocused || sessionPickerSearchFocused
+            let isLandscape = shouldFreezeLayout ? isChatLayoutLandscape : measuredIsLandscape
             let chatViewportWidth = max(1, proxy.size.width)
 
             Group {
@@ -545,12 +547,15 @@ struct ChatView: View {
             .onPreferenceChange(SafeAreaBottomKey.self) { newValue in
                 bottomSafeAreaInset = newValue
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-                guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-                keyboardHeight = frame.height
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                if !isKeyboardVisible {
+                    isKeyboardVisible = true
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                keyboardHeight = 0
+                if isKeyboardVisible {
+                    isKeyboardVisible = false
+                }
             }
             .onDisappear {
                 pendingHistoryResetWorkItem?.cancel()
