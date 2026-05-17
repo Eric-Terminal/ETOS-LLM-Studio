@@ -341,15 +341,15 @@ extension SessionFolderBrowserView {
             guard isEnabled else { return }
             action()
         } label: {
-            ZStack {
-                paginationButtonBackground
-
-                Image(systemName: systemName)
-                    .etFont(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
-            }
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
+            Image(systemName: systemName)
+                .etFont(.system(size: 17, weight: .semibold))
+                .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
+                .frame(width: 44, height: 44)
+                .background {
+                    paginationButtonBackground
+                        .frame(width: 44, height: 44)
+                }
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
