@@ -357,7 +357,9 @@ struct ChatView: View {
                     .frame(maxHeight: .infinity)
                     .background(.regularMaterial)
                     .overlay(alignment: .trailing) {
-                        Divider()
+                        Color(uiColor: .separator)
+                            .frame(width: 0.5)
+                            .frame(maxHeight: .infinity)
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
                     .zIndex(41)
