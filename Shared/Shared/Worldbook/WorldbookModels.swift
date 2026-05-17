@@ -118,6 +118,9 @@ public struct WorldbookTimedEffectState: Codable, Hashable, Sendable {
 }
 
 public struct WorldbookSettings: Codable, Hashable, Sendable {
+    public static let unlimitedInjectedEntries = -1
+    public static let unlimitedInjectedCharacters = -1
+
     public var scanDepth: Int
     public var maxRecursionDepth: Int
     public var maxInjectedEntries: Int
@@ -127,14 +130,14 @@ public struct WorldbookSettings: Codable, Hashable, Sendable {
     public init(
         scanDepth: Int = 4,
         maxRecursionDepth: Int = 2,
-        maxInjectedEntries: Int = 64,
-        maxInjectedCharacters: Int = -1,
+        maxInjectedEntries: Int = WorldbookSettings.unlimitedInjectedEntries,
+        maxInjectedCharacters: Int = WorldbookSettings.unlimitedInjectedCharacters,
         fallbackPosition: WorldbookPosition = .after
     ) {
         self.scanDepth = max(1, scanDepth)
         self.maxRecursionDepth = max(0, maxRecursionDepth)
-        self.maxInjectedEntries = max(1, maxInjectedEntries)
-        self.maxInjectedCharacters = maxInjectedCharacters < 0 ? -1 : max(1, maxInjectedCharacters)
+        self.maxInjectedEntries = maxInjectedEntries < 0 ? Self.unlimitedInjectedEntries : max(1, maxInjectedEntries)
+        self.maxInjectedCharacters = maxInjectedCharacters < 0 ? Self.unlimitedInjectedCharacters : max(1, maxInjectedCharacters)
         self.fallbackPosition = fallbackPosition
     }
 
@@ -151,8 +154,8 @@ public struct WorldbookSettings: Codable, Hashable, Sendable {
         self.init(
             scanDepth: try container.decodeIfPresent(Int.self, forKey: .scanDepth) ?? 4,
             maxRecursionDepth: try container.decodeIfPresent(Int.self, forKey: .maxRecursionDepth) ?? 2,
-            maxInjectedEntries: try container.decodeIfPresent(Int.self, forKey: .maxInjectedEntries) ?? 64,
-            maxInjectedCharacters: try container.decodeIfPresent(Int.self, forKey: .maxInjectedCharacters) ?? -1,
+            maxInjectedEntries: try container.decodeIfPresent(Int.self, forKey: .maxInjectedEntries) ?? Self.unlimitedInjectedEntries,
+            maxInjectedCharacters: try container.decodeIfPresent(Int.self, forKey: .maxInjectedCharacters) ?? Self.unlimitedInjectedCharacters,
             fallbackPosition: try container.decodeIfPresent(WorldbookPosition.self, forKey: .fallbackPosition) ?? .after
         )
     }

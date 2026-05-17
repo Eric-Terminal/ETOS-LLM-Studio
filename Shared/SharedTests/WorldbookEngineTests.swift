@@ -13,11 +13,42 @@ import Foundation
 @Suite("Worldbook Engine Tests")
 struct WorldbookEngineTests {
 
-    @Test("默认世界书注入字符数不限制")
-    func testDefaultWorldbookInjectionCharactersUnlimited() {
+    @Test("默认世界书注入预算不限制")
+    func testDefaultWorldbookInjectionBudgetsUnlimited() {
         let settings = WorldbookSettings()
 
+        #expect(settings.maxInjectedEntries == -1)
         #expect(settings.maxInjectedCharacters == -1)
+    }
+
+    @Test("默认世界书注入不会限制 64 条")
+    func testDefaultWorldbookInjectionDoesNotCapAtSixtyFourEntries() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-default-unlimited-entries-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+        let entries = (0..<80).map { index in
+            WorldbookEntry(
+                content: "默认无限条目 \(index)",
+                keys: ["常驻"],
+                position: .after,
+                order: 100 - index
+            )
+        }
+        let book = Worldbook(name: "默认无限注入测试", entries: entries)
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "常驻")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.count == 80)
     }
 
     @Test("engine handles secondary logic, probability and sticky")

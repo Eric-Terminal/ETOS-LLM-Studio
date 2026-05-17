@@ -30,7 +30,7 @@ extension WorldbookStore {
         if canUseGRDB,
            let storedWorldbooks = loadWorldbooksFromSQLite(),
            !storedWorldbooks.isEmpty {
-            let sortedStoredWorldbooks = deduplicatedAndSortedWorldbooks(storedWorldbooks)
+            let sortedStoredWorldbooks = deduplicatedAndSortedWorldbooks(storedWorldbooks, normalizeLegacyBudgets: true)
             updateCaches(with: sortedStoredWorldbooks)
             cleanupLegacyFilesAfterGRDBSave(removeLegacyAggregate: true)
             return sortedStoredWorldbooks
@@ -40,7 +40,7 @@ extension WorldbookStore {
         let standaloneResult = loadStandaloneWorldbooksUnlocked()
         let legacyResult = loadLegacyWorldbooksUnlocked()
 
-        let sorted = deduplicatedAndSortedWorldbooks(standaloneResult.worldbooks + legacyResult.worldbooks)
+        let sorted = deduplicatedAndSortedWorldbooks(standaloneResult.worldbooks + legacyResult.worldbooks, normalizeLegacyBudgets: true)
 
         if canUseGRDB {
             saveWorldbooksUnlocked(sorted, removeLegacyAggregate: true)
@@ -342,13 +342,17 @@ extension WorldbookStore {
         }
     }
 
-    func deduplicatedAndSortedWorldbooks(_ worldbooks: [Worldbook]) -> [Worldbook] {
+    func deduplicatedAndSortedWorldbooks(
+        _ worldbooks: [Worldbook],
+        normalizeLegacyBudgets: Bool = false
+    ) -> [Worldbook] {
         var merged: [Worldbook] = []
         var knownIDs = Set<UUID>()
 
         for worldbook in worldbooks {
-            if knownIDs.insert(worldbook.id).inserted {
-                merged.append(worldbook)
+            let normalized = normalizeLegacyBudgets ? normalizedInjectionBudgetDefaults(for: worldbook) : worldbook
+            if knownIDs.insert(normalized.id).inserted {
+                merged.append(normalized)
             }
         }
 
@@ -358,6 +362,25 @@ extension WorldbookStore {
             }
             return lhs.updatedAt > rhs.updatedAt
         }
+    }
+
+    func normalizedInjectionBudgetDefaults(for worldbook: Worldbook) -> Worldbook {
+        guard worldbook.settings.maxInjectedEntries == 64,
+              !hasExplicitImportedEntryBudget(worldbook.metadata) else {
+            return worldbook
+        }
+
+        var normalized = worldbook
+        normalized.settings.maxInjectedEntries = WorldbookSettings.unlimitedInjectedEntries
+        return normalized
+    }
+
+    private func hasExplicitImportedEntryBudget(_ metadata: [String: JSONValue]) -> Bool {
+        metadata["maxEntries"] != nil ||
+            metadata["max_entries"] != nil ||
+            metadata["maxInjectedEntries"] != nil ||
+            metadata["max_injected_entries"] != nil ||
+            metadata["etosExplicitMaxInjectedEntries"] != nil
     }
 
     func updateCaches(with worldbooks: [Worldbook]) {

@@ -61,10 +61,10 @@ struct WorldbookDetailView: View {
                             .frame(width: 88)
                     }
                     LabeledContent(NSLocalizedString("最大注入条目", comment: "Max injected entries label")) {
-                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsMaxInjectedEntriesBinding, formatter: numberFormatter)
-                            .keyboardType(.numberPad)
+                        TextField(NSLocalizedString("-1 表示不限制", comment: "Unlimited placeholder"), value: settingsMaxInjectedEntriesBinding, formatter: numberFormatter)
+                            .keyboardType(.numbersAndPunctuation)
                             .multilineTextAlignment(.trailing)
-                            .frame(width: 88)
+                            .frame(width: 120)
                     }
                     LabeledContent(NSLocalizedString("最大注入字符", comment: "Max injected characters label")) {
                         TextField(NSLocalizedString("-1 表示不限制", comment: "Unlimited placeholder"), value: settingsMaxInjectedCharsBinding, formatter: numberFormatter)
@@ -245,18 +245,21 @@ struct WorldbookDetailView: View {
 
     private var settingsMaxInjectedEntriesBinding: Binding<Int> {
         Binding(
-            get: { worldbook?.settings.maxInjectedEntries ?? 64 },
+            get: { worldbook?.settings.maxInjectedEntries ?? WorldbookSettings.unlimitedInjectedEntries },
             set: { value in
-                updateWorldbook { $0.settings.maxInjectedEntries = max(1, value) }
+                updateWorldbook { book in
+                    book.settings.maxInjectedEntries = value < 0 ? WorldbookSettings.unlimitedInjectedEntries : max(1, value)
+                    book.metadata["etosExplicitMaxInjectedEntries"] = value < 0 ? nil : .bool(true)
+                }
             }
         )
     }
 
     private var settingsMaxInjectedCharsBinding: Binding<Int> {
         Binding(
-            get: { worldbook?.settings.maxInjectedCharacters ?? -1 },
+            get: { worldbook?.settings.maxInjectedCharacters ?? WorldbookSettings.unlimitedInjectedCharacters },
             set: { value in
-                updateWorldbook { $0.settings.maxInjectedCharacters = value < 0 ? -1 : max(1, value) }
+                updateWorldbook { $0.settings.maxInjectedCharacters = value < 0 ? WorldbookSettings.unlimitedInjectedCharacters : max(1, value) }
             }
         )
     }

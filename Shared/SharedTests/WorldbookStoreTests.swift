@@ -125,6 +125,47 @@ struct WorldbookStoreTests {
         #expect(persisted.entries.first?.content == "这里的路灯会在雾里发蓝光。")
     }
 
+    @Test("历史默认 64 注入条目会迁移为不限制")
+    func testLegacyDefaultInjectedEntryBudgetMigratesToUnlimited() throws {
+        let directory = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = WorldbookStore(storageDirectoryURL: directory)
+        let legacyDefaultBook = Worldbook(
+            id: UUID(),
+            name: "历史默认限制",
+            entries: [WorldbookEntry(content: "旧默认不应继续限制。", keys: ["旧默认"])],
+            settings: WorldbookSettings(maxInjectedEntries: 64, maxInjectedCharacters: -1)
+        )
+
+        store.saveWorldbooks([legacyDefaultBook])
+        store.invalidateCache()
+        let loaded = store.loadWorldbooks()
+
+        #expect(loaded.first?.settings.maxInjectedEntries == WorldbookSettings.unlimitedInjectedEntries)
+    }
+
+    @Test("显式导入的 64 注入条目限制会保留")
+    func testExplicitImportedInjectedEntryBudgetIsPreserved() throws {
+        let directory = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = WorldbookStore(storageDirectoryURL: directory)
+        let explicitBook = Worldbook(
+            id: UUID(),
+            name: "显式限制",
+            entries: [WorldbookEntry(content: "显式限制应该保留。", keys: ["显式"])],
+            settings: WorldbookSettings(maxInjectedEntries: 64, maxInjectedCharacters: -1),
+            metadata: ["maxEntries": .int(64)]
+        )
+
+        store.saveWorldbooks([explicitBook])
+        store.invalidateCache()
+        let loaded = store.loadWorldbooks()
+
+        #expect(loaded.first?.settings.maxInjectedEntries == 64)
+    }
+
     private func makeTemporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("worldbook-store-tests-\(UUID().uuidString)", isDirectory: true)

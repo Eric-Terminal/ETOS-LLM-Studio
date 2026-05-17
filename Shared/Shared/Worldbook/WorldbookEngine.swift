@@ -614,7 +614,7 @@ public struct WorldbookEngine {
         let sortedItems = sortedInjections(items)
 
         for item in sortedItems {
-            if result.count >= maxEntries { break }
+            if maxEntries >= 0, result.count >= maxEntries { break }
             let rendered = item.renderedContent
             let nextChars = totalChars + rendered.count
             if maxCharacters >= 0, nextChars > maxCharacters {

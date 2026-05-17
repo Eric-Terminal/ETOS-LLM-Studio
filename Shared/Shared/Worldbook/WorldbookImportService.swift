@@ -355,8 +355,8 @@ public struct WorldbookImportService {
         let settings = WorldbookSettings(
             scanDepth: intValue(root["scanDepth"]) ?? intValue(root["scan_depth"]) ?? 4,
             maxRecursionDepth: intValue(root["maxRecursionDepth"]) ?? intValue(root["max_recursion_depth"]) ?? 2,
-            maxInjectedEntries: intValue(root["maxEntries"]) ?? intValue(root["max_entries"]) ?? 64,
-            maxInjectedCharacters: intValue(root["maxChars"]) ?? intValue(root["max_chars"]) ?? -1,
+            maxInjectedEntries: intValue(root["maxEntries"]) ?? intValue(root["max_entries"]) ?? WorldbookSettings.unlimitedInjectedEntries,
+            maxInjectedCharacters: intValue(root["maxChars"]) ?? intValue(root["max_chars"]) ?? WorldbookSettings.unlimitedInjectedCharacters,
             fallbackPosition: WorldbookPosition(stRawValue: stringValue(root["position"]) ?? "after")
         )
 

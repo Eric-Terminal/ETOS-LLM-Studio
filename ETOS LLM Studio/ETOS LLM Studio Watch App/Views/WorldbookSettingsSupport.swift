@@ -58,10 +58,11 @@ struct WatchWorldbookDetailView: View {
 
     private var settingsMaxInjectedEntriesBinding: Binding<Int> {
         Binding(
-            get: { worldbook?.settings.maxInjectedEntries ?? 64 },
+            get: { worldbook?.settings.maxInjectedEntries ?? WorldbookSettings.unlimitedInjectedEntries },
             set: { value in
                 updateWorldbook { book in
-                    book.settings.maxInjectedEntries = max(1, value)
+                    book.settings.maxInjectedEntries = value < 0 ? WorldbookSettings.unlimitedInjectedEntries : max(1, value)
+                    book.metadata["etosExplicitMaxInjectedEntries"] = value < 0 ? nil : .bool(true)
                 }
             }
         )
@@ -69,10 +70,10 @@ struct WatchWorldbookDetailView: View {
 
     private var settingsMaxInjectedCharsBinding: Binding<Int> {
         Binding(
-            get: { worldbook?.settings.maxInjectedCharacters ?? -1 },
+            get: { worldbook?.settings.maxInjectedCharacters ?? WorldbookSettings.unlimitedInjectedCharacters },
             set: { value in
                 updateWorldbook { book in
-                    book.settings.maxInjectedCharacters = value < 0 ? -1 : max(1, value)
+                    book.settings.maxInjectedCharacters = value < 0 ? WorldbookSettings.unlimitedInjectedCharacters : max(1, value)
                 }
             }
         )
@@ -127,9 +128,9 @@ struct WatchWorldbookDetailView: View {
                     HStack {
                         Text(NSLocalizedString("最大注入条目", comment: "Max injected entries label"))
                         Spacer()
-                        TextField(NSLocalizedString("数量", comment: "Number placeholder"), value: settingsMaxInjectedEntriesBinding, formatter: numberFormatter)
+                        TextField(NSLocalizedString("-1 表示不限制", comment: "Unlimited placeholder"), value: settingsMaxInjectedEntriesBinding, formatter: numberFormatter)
                             .multilineTextAlignment(.trailing)
-                            .frame(width: 60)
+                            .frame(width: 76)
                     }
                     HStack {
                         Text(NSLocalizedString("最大注入字符", comment: "Max injected characters label"))
