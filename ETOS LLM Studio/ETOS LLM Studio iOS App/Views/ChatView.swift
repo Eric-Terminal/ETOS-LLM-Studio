@@ -103,7 +103,7 @@ struct ChatView: View {
     let sessionPickerMorphID = "sessionPickerMorph"
     let sessionPickerHeightRatio: CGFloat = 0.6
     let sessionPickerCornerRadius: CGFloat = 26
-    let landscapeSessionSidebarMinWidth: CGFloat = 260
+    let landscapeSessionSidebarMinWidth: CGFloat = 220
     let landscapeSessionSidebarMaxWidth: CGFloat = 300
     let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
     let sessionPickerMaxSessionsPerPage = 100
