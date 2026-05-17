@@ -2613,3 +2613,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "默认配置" = "Profil par défaut";
 "记录请求明文消息" = "Log plaintext request messages";
 "关闭时请求体日志会隐藏 message、content 等消息字段；开启后会记录明文消息文本，但图片、音频和文件的 Base64 仍会隐藏。" = "When off, request body logs hide message and content fields. When on, message text is logged in plaintext, while Base64 for images, audio, and files remains hidden.";
+"已显示前 %d 个字符，共 %d 个字符。" = "Showing the first %d of %d characters.";
+"显示完整内容" = "Show full content";

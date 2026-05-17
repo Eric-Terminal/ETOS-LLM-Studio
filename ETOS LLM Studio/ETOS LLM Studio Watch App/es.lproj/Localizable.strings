@@ -2489,3 +2489,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "默认配置" = "Perfil predeterminado";
 "记录请求明文消息" = "Log plaintext request messages";
 "图片、音频和文件的 Base64 仍会隐藏。" = "Base64 for images, audio, and files remains hidden.";
+"已显示前 %d 个字符，共 %d 个字符。" = "Showing the first %d of %d characters.";
+"显示完整内容" = "Show full content";

@@ -572,20 +572,14 @@ enum AppLogRedactor {
 
     static func sanitizeRequestBodyForLog(
         _ payload: [String: Any],
-        maxLength: Int = 4_000,
         exposesMessageFields: Bool? = nil
     ) -> String? {
         let shouldExposeMessages = exposesMessageFields ?? AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
         let sanitized = sanitizeJSONValue(payload, exposesMessageFields: shouldExposeMessages)
         guard JSONSerialization.isValidJSONObject(sanitized),
               let data = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]),
-              var text = String(data: data, encoding: .utf8) else {
+              let text = String(data: data, encoding: .utf8) else {
             return nil
-        }
-
-        let safeMaxLength = max(200, maxLength)
-        if text.count > safeMaxLength {
-            text = String(text.prefix(safeMaxLength)) + "\n...(已截断，原始长度 \(text.count) 字符)"
         }
         return text
     }

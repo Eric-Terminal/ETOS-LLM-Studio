@@ -57,7 +57,6 @@ struct AppLogCenterTests {
 
         let output = AppLogRedactor.sanitizeRequestBodyForLog(
             source,
-            maxLength: 2_000,
             exposesMessageFields: false
         )
         #expect(output != nil)
@@ -88,13 +87,27 @@ struct AppLogCenterTests {
 
         let output = AppLogRedactor.sanitizeRequestBodyForLog(
             source,
-            maxLength: 2_000,
             exposesMessageFields: true
         )
         #expect(output != nil)
         #expect(output?.contains("你好") == true)
         #expect(output?.contains("data:image/png;base64,abcdef") == false)
         #expect(output?.contains("[二进制内容已隐藏") == true)
+    }
+
+    @Test("请求体日志写入完整内容不提前截断")
+    func testRequestBodySanitizationKeepsFullText() {
+        let longText = String(repeating: "长文本", count: 3_000)
+        let source: [String: Any] = [
+            "messages": [
+                ["role": "user", "content": longText]
+            ]
+        ]
+
+        let output = AppLogRedactor.sanitizeRequestBodyForLog(source, exposesMessageFields: true)
+
+        #expect(output?.contains(longText) == true)
+        #expect(output?.contains("已截断") == false)
     }
 
     @Test("请求 URL 日志会隐藏敏感查询参数")

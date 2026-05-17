@@ -397,6 +397,7 @@ private struct AppLogDetailRow: View {
 
 private struct AppLogEventDetailView: View {
     let entry: AppLogEvent
+    @State private var showsFullPayloadDetail = false
 
     var body: some View {
         List {
@@ -435,9 +436,10 @@ private struct AppLogEventDetailView: View {
                 }
 
                 Section(NSLocalizedString("详情", comment: "")) {
-                    Text(formatLogPayload(payload))
-                        .etFont(.footnote.monospaced())
-                        .textSelection(.enabled)
+                    ExpandableLogTextView(
+                        text: formatLogPayload(payload),
+                        isExpanded: $showsFullPayloadDetail
+                    )
                 }
             }
         }
@@ -469,13 +471,15 @@ private struct AppLogEventDetailView: View {
 private struct AppLogPayloadValueDetailView: View {
     let key: String
     let value: String
+    @State private var showsFullValue = false
 
     var body: some View {
         List {
             Section(key) {
-                Text(prettyPayloadValue(value))
-                    .etFont(.footnote.monospaced())
-                    .textSelection(.enabled)
+                ExpandableLogTextView(
+                    text: prettyPayloadValue(value),
+                    isExpanded: $showsFullValue
+                )
             }
         }
         .navigationTitle(key)
@@ -484,6 +488,40 @@ private struct AppLogPayloadValueDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(NSLocalizedString("复制", comment: "")) {
                     UIPasteboard.general.string = prettyPayloadValue(value)
+                }
+            }
+        }
+    }
+}
+
+private struct ExpandableLogTextView: View {
+    let text: String
+    @Binding var isExpanded: Bool
+
+    private let previewLimit = 4_000
+
+    private var needsExpansion: Bool {
+        text.count > previewLimit
+    }
+
+    private var displayedText: String {
+        guard needsExpansion, !isExpanded else { return text }
+        return String(text.prefix(previewLimit))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(displayedText)
+                .etFont(.footnote.monospaced())
+                .textSelection(.enabled)
+
+            if needsExpansion && !isExpanded {
+                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), previewLimit, text.count))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button(NSLocalizedString("显示完整内容", comment: "")) {
+                    isExpanded = true
                 }
             }
         }

@@ -272,15 +272,52 @@ private struct WatchAppLogEventDetailView: View {
 private struct WatchAppLogPayloadValueDetailView: View {
     let key: String
     let value: String
+    @State private var showsFullValue = false
 
     var body: some View {
         List {
             Section(key) {
-                Text(prettyPayloadValue(value))
-                    .etFont(.system(size: 9, design: .monospaced))
+                WatchExpandableLogTextView(
+                    text: prettyPayloadValue(value),
+                    isExpanded: $showsFullValue
+                )
             }
         }
         .navigationTitle(key)
+    }
+}
+
+private struct WatchExpandableLogTextView: View {
+    let text: String
+    @Binding var isExpanded: Bool
+
+    private let previewLimit = 2_000
+
+    private var needsExpansion: Bool {
+        text.count > previewLimit
+    }
+
+    private var displayedText: String {
+        guard needsExpansion, !isExpanded else { return text }
+        return String(text.prefix(previewLimit))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(displayedText)
+                .etFont(.system(size: 9, design: .monospaced))
+
+            if needsExpansion && !isExpanded {
+                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), previewLimit, text.count))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Button(NSLocalizedString("显示完整内容", comment: "")) {
+                    isExpanded = true
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 
