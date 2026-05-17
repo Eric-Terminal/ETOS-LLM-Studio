@@ -13,6 +13,10 @@ import Shared
 extension ContentView {
     func chatList(proxy: ScrollViewProxy) -> some View {
         let displayedMessages = viewModel.displayMessages
+        let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
+            in: viewModel.allMessagesForSession,
+            isSending: viewModel.isSendingMessage
+        )
         return List {
             if viewModel.messages.isEmpty {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
@@ -54,6 +58,7 @@ extension ContentView {
                     connectsTimelineFromPrevious: connectsTimelineFromPrevious,
                     connectsTimelineToNext: connectsTimelineToNext,
                     isLiquidGlassEnabled: isLiquidGlassEnabled,
+                    canRetry: retryableMessageIDs.contains(message.id),
                     onOpenMore: {
                         messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
                     }

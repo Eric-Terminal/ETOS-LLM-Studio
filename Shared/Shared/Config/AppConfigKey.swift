@@ -136,6 +136,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableLiquidGlass = "enableLiquidGlass"
     case enableChatTopBlurFade = "enableChatTopBlurFade"
     case enableNoBubbleUI = "enableNoBubbleUI"
+    case messageActionBarConfiguration = "chat.messageActionBar.configuration"
 
     case fontUseCustomFonts = "font.useCustomFonts"
     case fontFallbackScope = "font.fallbackScope"
@@ -324,6 +325,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("fill")
         case .currentBackgroundImage:
             return .text("")
+        case .messageActionBarConfiguration:
+            return .text(MessageActionBarConfiguration.defaultConfigurationJSON)
 
         case .fontUseCustomFonts:
             return .bool(true)

@@ -1,0 +1,226 @@
+// ============================================================================
+// DisplaySettingsActionBarSupport.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// iOS 端气泡下方功能栏设置视图。
+// ============================================================================
+
+import SwiftUI
+import Foundation
+import Shared
+
+struct MessageActionBarSettingsView: View {
+    @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var selectedRole: MessageActionBarRole = .assistant
+
+    private var configuration: MessageActionBarConfiguration {
+        get { appConfig.messageActionBarSettings }
+        nonmutating set { appConfig.messageActionBarSettings = newValue }
+    }
+
+    private var selectedItems: [MessageActionBarItem] {
+        configuration.items(for: selectedRole)
+    }
+
+    private var availableItems: [MessageActionBarItem] {
+        let selected = Set(selectedItems)
+        return MessageActionBarItem.allCases.filter { !selected.contains($0) }
+    }
+
+    var body: some View {
+        Form {
+            roleSection
+            alignmentSection
+            enabledItemsSection
+            availableItemsSection
+        }
+        .navigationTitle(NSLocalizedString("功能栏自定义", comment: ""))
+        .toolbar {
+            EditButton()
+        }
+    }
+
+    private var roleSection: some View {
+        Section {
+            Picker(NSLocalizedString("消息类型", comment: ""), selection: $selectedRole) {
+                ForEach(MessageActionBarRole.allCases) { role in
+                    Text(role.title).tag(role)
+                }
+            }
+            .pickerStyle(.segmented)
+        } footer: {
+            Text(NSLocalizedString("助手气泡和用户气泡可以分别配置。列表从上到下对应气泡下方从左到右或从右到左的显示顺序。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var alignmentSection: some View {
+        Section(NSLocalizedString("延伸方向", comment: "")) {
+            Picker(NSLocalizedString("功能栏位置", comment: ""), selection: alignmentBinding) {
+                ForEach(MessageActionBarAlignment.allCases) { alignment in
+                    Text(alignment.title).tag(alignment)
+                }
+            }
+        }
+    }
+
+    private var enabledItemsSection: some View {
+        Section {
+            if selectedItems.isEmpty {
+                Text(NSLocalizedString("当前没有启用项目，可从下方添加。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(selectedItems) { item in
+                    itemRow(item)
+                }
+                .onMove(perform: moveSelectedItems)
+                .onDelete(perform: removeSelectedItems)
+            }
+        } header: {
+            Text(NSLocalizedString("已启用项目", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。多版本切换移除后，仍可在长按菜单里管理版本。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var availableItemsSection: some View {
+        Section(NSLocalizedString("可添加项目", comment: "")) {
+            if availableItems.isEmpty {
+                Text(NSLocalizedString("所有项目都已加入。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(availableItems) { item in
+                    Button {
+                        addItem(item)
+                    } label: {
+                        Label(item.title, systemImage: item.systemImage)
+                    }
+                }
+            }
+        }
+    }
+
+    private var alignmentBinding: Binding<MessageActionBarAlignment> {
+        Binding(
+            get: { configuration.alignment(for: selectedRole) },
+            set: { newValue in
+                var updated = configuration
+                updated.setAlignment(newValue, for: selectedRole)
+                configuration = updated
+            }
+        )
+    }
+
+    private func itemRow(_ item: MessageActionBarItem) -> some View {
+        Label {
+            Text(item.title)
+        } icon: {
+            Image(systemName: item.systemImage)
+                .foregroundStyle(item.tint)
+        }
+    }
+
+    private func addItem(_ item: MessageActionBarItem) {
+        var updated = configuration
+        var items = updated.items(for: selectedRole)
+        guard !items.contains(item) else { return }
+        items.append(item)
+        updated.setItems(items, for: selectedRole)
+        configuration = updated
+    }
+
+    private func moveSelectedItems(from source: IndexSet, to destination: Int) {
+        var updated = configuration
+        var items = updated.items(for: selectedRole)
+        items.move(fromOffsets: source, toOffset: destination)
+        updated.setItems(items, for: selectedRole)
+        configuration = updated
+    }
+
+    private func removeSelectedItems(at offsets: IndexSet) {
+        var updated = configuration
+        var items = updated.items(for: selectedRole)
+        items.remove(atOffsets: offsets)
+        updated.setItems(items, for: selectedRole)
+        configuration = updated
+    }
+}
+
+extension MessageActionBarRole {
+    var title: String {
+        switch self {
+        case .assistant:
+            return NSLocalizedString("助手气泡", comment: "")
+        case .user:
+            return NSLocalizedString("用户气泡", comment: "")
+        }
+    }
+}
+
+extension MessageActionBarAlignment {
+    var title: String {
+        switch self {
+        case .leading:
+            return NSLocalizedString("靠左延伸", comment: "")
+        case .trailing:
+            return NSLocalizedString("靠右延伸", comment: "")
+        }
+    }
+}
+
+extension MessageActionBarItem {
+    var title: String {
+        switch self {
+        case .quickRetry:
+            return NSLocalizedString("快捷重试", comment: "")
+        case .copyMessage:
+            return NSLocalizedString("复制消息", comment: "")
+        case .requestTime:
+            return NSLocalizedString("请求时间", comment: "")
+        case .inputTokens:
+            return NSLocalizedString("输入 Token", comment: "")
+        case .outputTokens:
+            return NSLocalizedString("输出 Token", comment: "")
+        case .versionSwitcher:
+            return NSLocalizedString("多版本切换", comment: "")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .quickRetry:
+            return "arrow.clockwise"
+        case .copyMessage:
+            return "doc.on.doc"
+        case .requestTime:
+            return "clock"
+        case .inputTokens:
+            return "arrow.up"
+        case .outputTokens:
+            return "arrow.down"
+        case .versionSwitcher:
+            return "arrow.left.arrow.right"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .quickRetry:
+            return .orange
+        case .copyMessage:
+            return .blue
+        case .requestTime:
+            return .secondary
+        case .inputTokens:
+            return .green
+        case .outputTokens:
+            return .purple
+        case .versionSwitcher:
+            return .indigo
+        }
+    }
+}

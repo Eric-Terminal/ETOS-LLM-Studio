@@ -193,6 +193,23 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableLiquidGlass: Bool { didSet { write(.enableLiquidGlass, enableLiquidGlass) } }
     @Published public var enableChatTopBlurFade: Bool { didSet { write(.enableChatTopBlurFade, enableChatTopBlurFade) } }
     @Published public var enableNoBubbleUI: Bool { didSet { write(.enableNoBubbleUI, enableNoBubbleUI) } }
+    @Published public var messageActionBarConfiguration: String {
+        didSet {
+            write(.messageActionBarConfiguration, messageActionBarConfiguration)
+            let decoded = MessageActionBarConfiguration.decoded(from: messageActionBarConfiguration)
+            if messageActionBarSettings != decoded {
+                messageActionBarSettings = decoded
+            }
+        }
+    }
+    @Published public var messageActionBarSettings: MessageActionBarConfiguration {
+        didSet {
+            let encoded = messageActionBarSettings.encodedString()
+            if messageActionBarConfiguration != encoded {
+                messageActionBarConfiguration = encoded
+            }
+        }
+    }
 
     @Published public var fontUseCustomFonts: Bool { didSet { write(.fontUseCustomFonts, fontUseCustomFonts) } }
     @Published public var fontFallbackScope: String { didSet { write(.fontFallbackScope, fontFallbackScope) } }
@@ -312,6 +329,9 @@ public final class AppConfigStore: ObservableObject {
         enableLiquidGlass = Self.boolValue(.enableLiquidGlass, userDefaults: userDefaults)
         enableChatTopBlurFade = Self.boolValue(.enableChatTopBlurFade, userDefaults: userDefaults)
         enableNoBubbleUI = Self.boolValue(.enableNoBubbleUI, userDefaults: userDefaults)
+        let initialMessageActionBarConfiguration = Self.textValue(.messageActionBarConfiguration, userDefaults: userDefaults)
+        messageActionBarConfiguration = initialMessageActionBarConfiguration
+        messageActionBarSettings = MessageActionBarConfiguration.decoded(from: initialMessageActionBarConfiguration)
 
         fontUseCustomFonts = Self.boolValue(.fontUseCustomFonts, userDefaults: userDefaults)
         fontFallbackScope = Self.textValue(.fontFallbackScope, userDefaults: userDefaults)
@@ -701,6 +721,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableLiquidGlass: return .bool(enableLiquidGlass)
         case .enableChatTopBlurFade: return .bool(enableChatTopBlurFade)
         case .enableNoBubbleUI: return .bool(enableNoBubbleUI)
+        case .messageActionBarConfiguration: return .text(messageActionBarConfiguration)
 
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
         case .fontFallbackScope: return .text(fontFallbackScope)
@@ -878,6 +899,7 @@ public final class AppConfigStore: ObservableObject {
         case .imageGenerationParameterExpressionsByModel: imageGenerationParameterExpressionsByModel = value
         case .backgroundContentMode: backgroundContentMode = value
         case .currentBackgroundImage: currentBackgroundImage = value
+        case .messageActionBarConfiguration: messageActionBarConfiguration = value
         case .fontFallbackScope: fontFallbackScope = value
         case .appLanguage: appLanguage = value
         case .watchAttachmentLastSource: watchAttachmentLastSource = value

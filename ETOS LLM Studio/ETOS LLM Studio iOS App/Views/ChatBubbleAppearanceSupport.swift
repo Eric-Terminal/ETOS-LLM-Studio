@@ -44,6 +44,37 @@ extension ChatBubble {
         )
     }
 
+    var messageActionBarConfiguration: MessageActionBarConfiguration {
+        appConfig.messageActionBarSettings
+    }
+
+    var messageActionBarRole: MessageActionBarRole {
+        isOutgoing ? .user : .assistant
+    }
+
+    var configuredMessageActionBarItems: [MessageActionBarItem] {
+        let configuredItems = messageActionBarConfiguration.items(for: messageActionBarRole)
+        return configuredItems.filter { isMessageActionBarItemAvailable($0) }
+    }
+
+    var displayedMessageActionBarItems: [MessageActionBarItem] {
+        switch messageActionBarConfiguration.alignment(for: messageActionBarRole) {
+        case .leading:
+            return configuredMessageActionBarItems
+        case .trailing:
+            return Array(configuredMessageActionBarItems.reversed())
+        }
+    }
+
+    var messageActionBarAlignment: Alignment {
+        switch messageActionBarConfiguration.alignment(for: messageActionBarRole) {
+        case .leading:
+            return .leading
+        case .trailing:
+            return .trailing
+        }
+    }
+
     var versionSwitcherBackgroundColor: Color {
         if isOutgoing, responseAttemptVersionInfo == nil {
             return resolvedUserBubbleEndColor.opacity(colorScheme == .dark ? 0.28 : 0.18)
@@ -57,19 +88,59 @@ extension ChatBubble {
     }
 
     @ViewBuilder
-    var versionSwitcherRow: some View {
-        let row = HStack(spacing: 0) {
-            compactVersionIndicator
+    var messageActionBarRow: some View {
+        let row = HStack(spacing: 6) {
+            ForEach(displayedMessageActionBarItems) { item in
+                messageActionBarItemView(item)
+            }
         }
 
         if shouldForceMergedWidth {
             row
-                .frame(width: bubbleMaxWidth, alignment: .trailing)
+                .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
                 .padding(.top, 2)
         } else {
             row
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: messageActionBarAlignment)
                 .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
+        switch item {
+        case .quickRetry:
+            Button(action: onRetry) {
+                Image(systemName: item.systemImage)
+                    .etFont(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(item.title))
+            .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+        case .copyMessage:
+            Button(action: onCopy) {
+                Image(systemName: item.systemImage)
+                    .etFont(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(item.title))
+            .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+        case .requestTime:
+            Label(messageRequestTimeText, systemImage: item.systemImage)
+                .etFont(.system(size: 12, weight: .semibold))
+                .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+        case .inputTokens:
+            Label("\(inputTokenCount)", systemImage: item.systemImage)
+                .etFont(.system(size: 12, weight: .semibold))
+                .monospacedDigit()
+                .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+        case .outputTokens:
+            Label("\(outputTokenCount)", systemImage: item.systemImage)
+                .etFont(.system(size: 12, weight: .semibold))
+                .monospacedDigit()
+                .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+        case .versionSwitcher:
+            compactVersionIndicator
         }
     }
 
@@ -120,6 +191,44 @@ extension ChatBubble {
 
     var shouldShowVersionIndicator: Bool {
         responseAttemptVersionInfo != nil || message.hasMultipleVersions
+    }
+
+    var shouldShowMessageActionBar: Bool {
+        !configuredMessageActionBarItems.isEmpty
+    }
+
+    func isMessageActionBarItemAvailable(_ item: MessageActionBarItem) -> Bool {
+        switch item {
+        case .quickRetry:
+            return canRetry
+        case .copyMessage:
+            return !message.content.isEmpty
+        case .requestTime:
+            return messageRequestDate != nil
+        case .inputTokens:
+            return message.tokenUsage?.promptTokens != nil
+        case .outputTokens:
+            return message.tokenUsage?.completionTokens != nil
+        case .versionSwitcher:
+            return shouldShowVersionIndicator
+        }
+    }
+
+    var messageRequestDate: Date? {
+        message.responseMetrics?.requestStartedAt ?? message.requestedAt
+    }
+
+    var messageRequestTimeText: String {
+        guard let messageRequestDate else { return "" }
+        return messageRequestDate.formatted(date: .omitted, time: .shortened)
+    }
+
+    var inputTokenCount: Int {
+        message.tokenUsage?.promptTokens ?? 0
+    }
+
+    var outputTokenCount: Int {
+        message.tokenUsage?.completionTokens ?? 0
     }
 
     var customTextColorOverride: Color? {
@@ -557,5 +666,33 @@ extension ChatBubble {
 
     var shouldPlaceImagesAfterText: Bool {
         !isOutgoing && shouldShowTextBubble
+    }
+}
+
+private struct MessageActionBarCapsuleStyle: ViewModifier {
+    let background: Color
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(.secondary)
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(background)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
+            )
+            .contentShape(Capsule())
+    }
+}
+
+private extension View {
+    func messageActionBarCapsuleStyle(background: Color) -> some View {
+        modifier(MessageActionBarCapsuleStyle(background: background))
     }
 }

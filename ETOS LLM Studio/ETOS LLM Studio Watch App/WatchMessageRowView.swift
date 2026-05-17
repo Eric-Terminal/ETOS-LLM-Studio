@@ -19,6 +19,7 @@ struct WatchMessageRowView: View {
     let connectsTimelineFromPrevious: Bool
     let connectsTimelineToNext: Bool
     let isLiquidGlassEnabled: Bool
+    let canRetry: Bool
     let onOpenMore: () -> Void
 
     private var message: ChatMessage {
@@ -84,6 +85,20 @@ struct WatchMessageRowView: View {
             },
             onCodeBlockHeaderTap: { content in
                 viewModel.appendCodeBlockContentToInput(content)
+            },
+            responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),
+            canRetry: canRetry,
+            onRetry: {
+                viewModel.retryMessage(message)
+            },
+            onCopy: {
+                ETCodeClipboard.copy(message.content)
+            },
+            onSwitchToPreviousVersion: {
+                viewModel.switchToPreviousVersion(of: message)
+            },
+            onSwitchToNextVersion: {
+                viewModel.switchToNextVersion(of: message)
             },
             onOpenMore: hasActivePermission ? nil : onOpenMore
         )

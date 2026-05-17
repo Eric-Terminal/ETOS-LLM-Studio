@@ -42,6 +42,12 @@ struct ChatBubble: View {
     let hasAutoOpenedPendingToolCall: (String) -> Bool
     let markPendingToolCallAutoOpened: (String) -> Void
     let onCodeBlockHeaderTap: ((String) -> Void)?
+    let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
+    let canRetry: Bool
+    let onRetry: () -> Void
+    let onCopy: () -> Void
+    let onSwitchToPreviousVersion: () -> Void
+    let onSwitchToNextVersion: () -> Void
     let onOpenMore: (() -> Void)?
 
     @StateObject var audioPlayer = WatchAudioPlayerManager()
@@ -51,6 +57,7 @@ struct ChatBubble: View {
     @State var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
+    @ObservedObject var appConfig = AppConfigStore.shared
     @Environment(\.displayScale) var displayScale
     @Environment(\.colorScheme) var colorScheme
 
@@ -76,6 +83,12 @@ struct ChatBubble: View {
         hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
         markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
         onCodeBlockHeaderTap: ((String) -> Void)? = nil,
+        responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? = nil,
+        canRetry: Bool = false,
+        onRetry: @escaping () -> Void = {},
+        onCopy: @escaping () -> Void = {},
+        onSwitchToPreviousVersion: @escaping () -> Void = {},
+        onSwitchToNextVersion: @escaping () -> Void = {},
         onOpenMore: (() -> Void)? = nil
     ) {
         self.messageState = messageState
@@ -99,6 +112,12 @@ struct ChatBubble: View {
         self.hasAutoOpenedPendingToolCall = hasAutoOpenedPendingToolCall
         self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
+        self.responseAttemptVersionInfo = responseAttemptVersionInfo
+        self.canRetry = canRetry
+        self.onRetry = onRetry
+        self.onCopy = onCopy
+        self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
+        self.onSwitchToNextVersion = onSwitchToNextVersion
         self.onOpenMore = onOpenMore
     }
 
@@ -215,6 +234,10 @@ struct ChatBubble: View {
             if shouldShowUserBubble {
                 userTextBubble
             }
+
+            if shouldShowMessageActionBar {
+                messageActionBarRow
+            }
         }
     }
 
@@ -261,6 +284,10 @@ struct ChatBubble: View {
                let imageFileNames = message.imageFileNames,
                !imageFileNames.isEmpty {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
+            }
+
+            if shouldShowMessageActionBar {
+                messageActionBarRow
             }
         }
         .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)

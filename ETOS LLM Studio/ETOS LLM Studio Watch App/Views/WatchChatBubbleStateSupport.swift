@@ -10,6 +10,169 @@ import SwiftUI
 import Shared
 
 extension ChatBubble {
+    var messageActionBarConfiguration: MessageActionBarConfiguration {
+        appConfig.messageActionBarSettings
+    }
+
+    var messageActionBarRole: MessageActionBarRole {
+        message.role == .user ? .user : .assistant
+    }
+
+    var configuredMessageActionBarItems: [MessageActionBarItem] {
+        messageActionBarConfiguration.items(for: messageActionBarRole).filter { isMessageActionBarItemAvailable($0) }
+    }
+
+    var displayedMessageActionBarItems: [MessageActionBarItem] {
+        switch messageActionBarConfiguration.alignment(for: messageActionBarRole) {
+        case .leading:
+            return configuredMessageActionBarItems
+        case .trailing:
+            return Array(configuredMessageActionBarItems.reversed())
+        }
+    }
+
+    var messageActionBarAlignment: Alignment {
+        switch messageActionBarConfiguration.alignment(for: messageActionBarRole) {
+        case .leading:
+            return .leading
+        case .trailing:
+            return .trailing
+        }
+    }
+
+    @ViewBuilder
+    var messageActionBarRow: some View {
+        HStack(spacing: 5) {
+            ForEach(displayedMessageActionBarItems) { item in
+                messageActionBarItemView(item)
+            }
+        }
+        .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
+        switch item {
+        case .quickRetry:
+            Button(action: onRetry) {
+                Image(systemName: item.systemImage)
+                    .etFont(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(item.title))
+            .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+        case .copyMessage:
+            Button(action: onCopy) {
+                Image(systemName: item.systemImage)
+                    .etFont(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(item.title))
+            .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+        case .requestTime:
+            Label(messageRequestTimeText, systemImage: item.systemImage)
+                .etFont(.system(size: 10, weight: .semibold))
+                .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+        case .inputTokens:
+            Label("\(inputTokenCount)", systemImage: item.systemImage)
+                .etFont(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+                .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+        case .outputTokens:
+            Label("\(outputTokenCount)", systemImage: item.systemImage)
+                .etFont(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+                .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+        case .versionSwitcher:
+            compactVersionIndicator
+        }
+    }
+
+    @ViewBuilder
+    var compactVersionIndicator: some View {
+        let currentIndex = responseAttemptVersionInfo?.currentIndex ?? message.getCurrentVersionIndex()
+        let totalCount = responseAttemptVersionInfo?.totalCount ?? message.getAllVersions().count
+        HStack(spacing: 4) {
+            Button {
+                onSwitchToPreviousVersion()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .etFont(.system(size: 11, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .disabled(currentIndex == 0)
+            .opacity(currentIndex > 0 ? 1 : 0.4)
+
+            Text("\(currentIndex + 1)/\(totalCount)")
+                .etFont(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+
+            Button {
+                onSwitchToNextVersion()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .etFont(.system(size: 11, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .disabled(currentIndex >= totalCount - 1)
+            .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
+        }
+        .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+    }
+
+    var messageActionBarBackgroundColor: Color {
+        if message.role == .user {
+            return (resolvedUserBubbleColorOverride ?? .blue).opacity(colorScheme == .dark ? 0.28 : 0.18)
+        }
+        if let resolvedAssistantBubbleColorOverride {
+            return resolvedAssistantBubbleColorOverride.opacity(enableBackground ? 0.75 : 1)
+        }
+        return Color(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: enableBackground ? 0.75 : 1)
+    }
+
+    var shouldShowVersionIndicator: Bool {
+        responseAttemptVersionInfo != nil || message.hasMultipleVersions
+    }
+
+    var shouldShowMessageActionBar: Bool {
+        !configuredMessageActionBarItems.isEmpty
+    }
+
+    func isMessageActionBarItemAvailable(_ item: MessageActionBarItem) -> Bool {
+        switch item {
+        case .quickRetry:
+            return canRetry
+        case .copyMessage:
+            return ETCodeClipboard.supportsCopy && !message.content.isEmpty
+        case .requestTime:
+            return messageRequestDate != nil
+        case .inputTokens:
+            return message.tokenUsage?.promptTokens != nil
+        case .outputTokens:
+            return message.tokenUsage?.completionTokens != nil
+        case .versionSwitcher:
+            return shouldShowVersionIndicator
+        }
+    }
+
+    var messageRequestDate: Date? {
+        message.responseMetrics?.requestStartedAt ?? message.requestedAt
+    }
+
+    var messageRequestTimeText: String {
+        guard let messageRequestDate else { return "" }
+        return messageRequestDate.formatted(date: .omitted, time: .shortened)
+    }
+
+    var inputTokenCount: Int {
+        message.tokenUsage?.promptTokens ?? 0
+    }
+
+    var outputTokenCount: Int {
+        message.tokenUsage?.completionTokens ?? 0
+    }
+
     var hasNonPlaceholderText: Bool {
         let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return false }
@@ -252,5 +415,33 @@ extension ChatBubble {
     var currentThinkingText: String {
         guard shouldShowThinkingIndicator else { return "" }
         return NSLocalizedString("正在思考...", comment: "")
+    }
+}
+
+private struct WatchMessageActionBarCapsuleStyle: ViewModifier {
+    let background: Color
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(.secondary)
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(background)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
+            )
+            .contentShape(Capsule())
+    }
+}
+
+private extension View {
+    func watchMessageActionBarCapsuleStyle(background: Color) -> some View {
+        modifier(WatchMessageActionBarCapsuleStyle(background: background))
     }
 }

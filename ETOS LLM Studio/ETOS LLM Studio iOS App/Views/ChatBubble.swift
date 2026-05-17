@@ -39,6 +39,9 @@ struct ChatBubble: View {
     let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
     let hasAutoOpenedPendingToolCall: (String) -> Bool
     let markPendingToolCallAutoOpened: (String) -> Void
+    let canRetry: Bool
+    let onRetry: () -> Void
+    let onCopy: () -> Void
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
     let onOpenMore: (() -> Void)?
@@ -49,6 +52,7 @@ struct ChatBubble: View {
     @State var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject var appearanceProfileManager = ChatAppearanceProfileManager.shared
+    @ObservedObject var appConfig = AppConfigStore.shared
     @Environment(\.colorScheme) var colorScheme
 
     init(
@@ -74,6 +78,9 @@ struct ChatBubble: View {
         responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? = nil,
         hasAutoOpenedPendingToolCall: @escaping (String) -> Bool = { _ in false },
         markPendingToolCallAutoOpened: @escaping (String) -> Void = { _ in },
+        canRetry: Bool = false,
+        onRetry: @escaping () -> Void = {},
+        onCopy: @escaping () -> Void = {},
         onSwitchToPreviousVersion: @escaping () -> Void,
         onSwitchToNextVersion: @escaping () -> Void,
         onOpenMore: (() -> Void)? = nil
@@ -100,6 +107,9 @@ struct ChatBubble: View {
         self.responseAttemptVersionInfo = responseAttemptVersionInfo
         self.hasAutoOpenedPendingToolCall = hasAutoOpenedPendingToolCall
         self.markPendingToolCallAutoOpened = markPendingToolCallAutoOpened
+        self.canRetry = canRetry
+        self.onRetry = onRetry
+        self.onCopy = onCopy
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
         self.onSwitchToNextVersion = onSwitchToNextVersion
         self.onOpenMore = onOpenMore
@@ -146,8 +156,8 @@ struct ChatBubble: View {
                     imageAttachmentsView(fileNames: imageFileNames)
                 }
 
-                if shouldShowVersionIndicator {
-                    versionSwitcherRow
+                if shouldShowMessageActionBar {
+                    messageActionBarRow
                 }
             }
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)

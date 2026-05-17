@@ -332,6 +332,10 @@ struct ChatView: View {
         showsBackground: Bool = true
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
+        let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
+            in: viewModel.allMessagesForSession,
+            isSending: viewModel.isSendingMessage
+        )
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
         ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
@@ -397,6 +401,13 @@ struct ChatView: View {
                                     },
                                     markPendingToolCallAutoOpened: { toolCallID in
                                         viewModel.markPendingToolCallAutoOpened(toolCallID)
+                                    },
+                                    canRetry: retryableMessageIDs.contains(message.id),
+                                    onRetry: {
+                                        performDeferredRetry(message)
+                                    },
+                                    onCopy: {
+                                        UIPasteboard.general.string = message.content
                                     },
                                     onSwitchToPreviousVersion: {
                                         viewModel.switchToPreviousVersion(of: message)

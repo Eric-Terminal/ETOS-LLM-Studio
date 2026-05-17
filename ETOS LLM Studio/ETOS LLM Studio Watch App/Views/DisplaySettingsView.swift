@@ -93,7 +93,24 @@ struct DisplaySettingsView: View {
                 }
             }
 
-            // MARK: Section 3：全局外观
+            // MARK: Section 3：气泡功能栏
+            Section(
+                header: Text(NSLocalizedString("气泡功能栏", comment: "")),
+                footer: Text(NSLocalizedString("助手气泡和用户气泡可以分别配置。", comment: ""))
+            ) {
+                NavigationLink {
+                    WatchMessageActionBarSettingsView(role: .assistant)
+                } label: {
+                    Text(NSLocalizedString("助手气泡", comment: ""))
+                }
+                NavigationLink {
+                    WatchMessageActionBarSettingsView(role: .user)
+                } label: {
+                    Text(NSLocalizedString("用户气泡", comment: ""))
+                }
+            }
+
+            // MARK: Section 4：全局外观
             Section(
                 header: Text(NSLocalizedString("全局外观", comment: "")),
                 footer: Text(NSLocalizedString("手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标。", comment: ""))

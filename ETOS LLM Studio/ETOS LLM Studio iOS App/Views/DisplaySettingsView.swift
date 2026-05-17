@@ -128,7 +128,13 @@ struct DisplaySettingsView: View {
                 }
             }
 
-            // MARK: - Tab 3：界面与交互
+            // MARK: - Tab 3：气泡功能栏
+            MessageActionBarSettingsView()
+            .tabItem {
+                Label(NSLocalizedString("功能栏", comment: ""), systemImage: "ellipsis.rectangle")
+            }
+
+            // MARK: - Tab 4：界面与交互
             Form {
                 Section(footer: Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))) {
                     Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
