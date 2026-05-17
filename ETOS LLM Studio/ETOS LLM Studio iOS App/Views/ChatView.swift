@@ -59,7 +59,6 @@ struct ChatView: View {
     @State var exportErrorMessage: String?
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var isChatLayoutLandscape = false
-    @State var landscapeSessionColumnVisibility: NavigationSplitViewVisibility = .all
     @State var modelPickerRequestControl: ModelRequestBodyControl?
     @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
@@ -266,7 +265,7 @@ struct ChatView: View {
 
             Group {
                 if isLandscape {
-                    landscapeChatLayout()
+                    landscapeChatLayout(chatViewportWidth: chatViewportWidth)
                 } else {
                     chatConversationContent(chatViewportWidth: chatViewportWidth)
                 }
@@ -280,45 +279,50 @@ struct ChatView: View {
         }
     }
 
-    func landscapeChatLayout() -> some View {
-        NavigationSplitView(columnVisibility: landscapeSessionColumnVisibilityBinding) {
-            landscapeSessionSidebar
-                .frame(maxHeight: .infinity)
-                .background(.regularMaterial)
-                .overlay(alignment: .trailing) {
-                    Color(uiColor: .separator)
-                        .frame(width: 0.5)
-                        .frame(maxHeight: .infinity)
-                }
-                .navigationSplitViewColumnWidth(
-                    min: landscapeSessionSidebarWidth,
-                    ideal: landscapeSessionSidebarWidth,
-                    max: landscapeSessionSidebarWidth
+    func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
+        let detailWidth = max(1, chatViewportWidth - landscapeSessionSidebarWidth)
+
+        return ZStack {
+            telegramBackgroundLayer
+                .ignoresSafeArea()
+
+            HStack(spacing: 0) {
+                landscapeSessionSidebar
+                    .frame(width: landscapeSessionSidebarWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(.regularMaterial)
+                    .overlay(alignment: .trailing) {
+                        Color(uiColor: .separator)
+                            .frame(width: 0.5)
+                            .frame(maxHeight: .infinity)
+                    }
+
+                chatConversationContent(
+                    chatViewportWidth: detailWidth,
+                    showsBackground: false
                 )
-                .toolbar(.hidden, for: .navigationBar)
-        } detail: {
-            GeometryReader { proxy in
-                chatConversationContent(chatViewportWidth: max(1, proxy.size.width))
+                .frame(width: detailWidth)
+                .frame(maxHeight: .infinity)
             }
-        }
-        .navigationSplitViewStyle(.balanced)
-        .onAppear {
-            enforceLandscapeSessionColumnVisibility()
-        }
-        .onChange(of: landscapeSessionColumnVisibility) { _, _ in
-            enforceLandscapeSessionColumnVisibility()
+            .frame(width: chatViewportWidth, alignment: .leading)
+            .frame(maxHeight: .infinity)
         }
     }
 
     @ViewBuilder
-    func chatConversationContent(chatViewportWidth: CGFloat) -> some View {
+    func chatConversationContent(
+        chatViewportWidth: CGFloat,
+        showsBackground: Bool = true
+    ) -> some View {
         let displayedMessages = viewModel.displayMessages
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
         ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
-                telegramBackgroundLayer
-                    .ignoresSafeArea()
-                
+                if showsBackground {
+                    telegramBackgroundLayer
+                        .ignoresSafeArea()
+                }
+
                 // Z-Index 1: 消息列表
                 ScrollView {
                     VStack(spacing: 0) {

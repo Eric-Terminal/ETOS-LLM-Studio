@@ -176,9 +176,6 @@ extension ChatView {
     }
 
     func toggleModelPickerPanel() {
-        if usesLandscapeSessionSidebar {
-            enforceLandscapeSessionColumnVisibility()
-        }
         guard !usesBottomSheetPickerStyle else {
             showSessionPickerPanel = false
             showModelPickerPanel = false
@@ -209,7 +206,6 @@ extension ChatView {
         guard !usesLandscapeSessionSidebar else {
             showModelPickerPanel = false
             activeChatPickerSheet = nil
-            enforceLandscapeSessionColumnVisibility()
             return
         }
         guard !usesBottomSheetPickerStyle else {
@@ -231,7 +227,6 @@ extension ChatView {
 
     func dismissSessionPickerPanel() {
         if usesLandscapeSessionSidebar {
-            enforceLandscapeSessionColumnVisibility()
             return
         }
         if usesBottomSheetPickerStyle {
@@ -243,32 +238,6 @@ extension ChatView {
             showSessionPickerPanel = false
             resetSessionPickerSearchState()
         }
-    }
-
-    var landscapeSessionColumnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
-        Binding(
-            get: { landscapeSessionColumnVisibility },
-            set: { newValue in
-                landscapeSessionColumnVisibility = fixedLandscapeSessionColumnVisibility(from: newValue)
-            }
-        )
-    }
-
-    func fixedLandscapeSessionColumnVisibility(
-        from proposedValue: NavigationSplitViewVisibility = .all
-    ) -> NavigationSplitViewVisibility {
-        switch proposedValue {
-        case .doubleColumn:
-            return .doubleColumn
-        default:
-            return .all
-        }
-    }
-
-    func enforceLandscapeSessionColumnVisibility() {
-        let fixedValue = fixedLandscapeSessionColumnVisibility(from: landscapeSessionColumnVisibility)
-        guard landscapeSessionColumnVisibility != fixedValue else { return }
-        landscapeSessionColumnVisibility = fixedValue
     }
 
     func resetSessionPickerSearchState() {
@@ -295,7 +264,6 @@ extension ChatView {
             if activeChatPickerSheet == .session {
                 activeChatPickerSheet = nil
             }
-            enforceLandscapeSessionColumnVisibility()
             showSessionPickerPanel = false
             return
         }

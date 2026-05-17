@@ -291,7 +291,6 @@ extension ChatView {
 
     func dismissSessionPickerAfterSelection() {
         if usesLandscapeSessionSidebar {
-            enforceLandscapeSessionColumnVisibility()
             return
         }
         dismissSessionPickerPanel()
