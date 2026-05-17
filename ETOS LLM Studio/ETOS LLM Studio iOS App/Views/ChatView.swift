@@ -103,7 +103,9 @@ struct ChatView: View {
     let sessionPickerMorphID = "sessionPickerMorph"
     let sessionPickerHeightRatio: CGFloat = 0.6
     let sessionPickerCornerRadius: CGFloat = 26
-    let landscapeSessionSidebarWidth: CGFloat = 320
+    let landscapeSessionSidebarMinWidth: CGFloat = 260
+    let landscapeSessionSidebarMaxWidth: CGFloat = 300
+    let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
     let sessionPickerMaxSessionsPerPage = 100
     let sessionPickerInfiniteScrollTriggerRemainingCount = 5
     let transcriptExportService = ChatTranscriptExportService()
@@ -281,7 +283,8 @@ struct ChatView: View {
     }
 
     func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
-        let sidebarWidth = isLandscapeSessionSidebarPresented ? landscapeSessionSidebarWidth : 0
+        let expandedSidebarWidth = landscapeSessionSidebarWidth(for: chatViewportWidth)
+        let sidebarWidth = isLandscapeSessionSidebarPresented ? expandedSidebarWidth : 0
         let detailWidth = max(1, chatViewportWidth - sidebarWidth)
 
         return ZStack {
@@ -291,7 +294,7 @@ struct ChatView: View {
             HStack(spacing: 0) {
                 if isLandscapeSessionSidebarPresented {
                     landscapeSessionSidebar
-                        .frame(width: landscapeSessionSidebarWidth)
+                        .frame(width: expandedSidebarWidth)
                         .frame(maxHeight: .infinity)
                         .background(.regularMaterial)
                         .overlay(alignment: .trailing) {
@@ -312,6 +315,13 @@ struct ChatView: View {
             .frame(width: chatViewportWidth, alignment: .leading)
             .frame(maxHeight: .infinity)
         }
+    }
+
+    func landscapeSessionSidebarWidth(for viewportWidth: CGFloat) -> CGFloat {
+        min(
+            landscapeSessionSidebarMaxWidth,
+            max(landscapeSessionSidebarMinWidth, viewportWidth * landscapeSessionSidebarWidthRatio)
+        )
     }
 
     @ViewBuilder
