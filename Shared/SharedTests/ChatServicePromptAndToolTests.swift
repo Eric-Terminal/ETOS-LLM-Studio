@@ -345,6 +345,48 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("记忆总开关关闭时不注入跨对话摘要和用户画像")
+    func testMemoryMasterSwitchSuppressesConversationMemoryPrompt() async throws {
+        await cleanup()
+        Persistence.writeAppConfig(key: AppConfigKey.enableMemory.rawValue, integer: 0, typeHint: AppConfigKey.enableMemory.typeHint)
+        Persistence.writeAppConfig(key: AppConfigKey.enableConversationMemoryAsync.rawValue, integer: 1, typeHint: AppConfigKey.enableConversationMemoryAsync.typeHint)
+        Persistence.writeAppConfig(key: AppConfigKey.conversationMemoryRecentLimit.rawValue, integer: 5, typeHint: AppConfigKey.conversationMemoryRecentLimit.typeHint)
+
+        let historicalSession = chatService.createSavedSession(name: "历史摘要会话")
+        ConversationMemoryManager.saveSessionSummary(
+            sessionID: historicalSession.id,
+            summary: "cross-session-summary-should-hide",
+            updatedAt: Date()
+        )
+        try ConversationMemoryManager.saveUserProfile(
+            content: "user-profile-should-hide",
+            updatedAt: Date(),
+            sourceSessionID: historicalSession.id
+        )
+        chatService.createNewSession()
+
+        await chatService.sendAndProcessMessage(
+            content: "hello",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let systemPrompt = mockAdapter.receivedMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(!systemPrompt.contains("<recent_conversation_memory>"))
+        #expect(!systemPrompt.contains("<user_profile_memory>"))
+        #expect(!systemPrompt.contains("cross-session-summary-should-hide"))
+        #expect(!systemPrompt.contains("user-profile-should-hide"))
+
+        await cleanup()
+    }
+
     @Test("save_memory tool call correctly saves memory")
     func testSaveMemoryTool_Execution() async throws {
         await cleanup()

@@ -87,12 +87,17 @@ struct ChatServiceTests {
         Persistence.deleteAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.imageGenerationModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.imageGenerationParameterExpressionsByModel.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.enableMemory.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.enableMemoryWrite.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.enableMemoryActiveRetrieval.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.memoryTopK.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.enableConversationMemoryAsync.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.conversationMemoryRecentLimit.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.conversationMemoryRoundThreshold.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.conversationMemorySummaryMinIntervalMinutes.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.enableConversationProfileDailyUpdate.rawValue)
+        _ = ConversationMemoryManager.clearAllSessionSummaries()
+        try? ConversationMemoryManager.clearUserProfile()
         MockURLProtocol.mockResponses = [:]
         mockAdapter.receivedMessages = nil
         mockAdapter.receivedTitleMessages = nil

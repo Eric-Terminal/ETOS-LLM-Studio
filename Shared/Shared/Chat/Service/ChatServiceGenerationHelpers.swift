@@ -35,7 +35,8 @@ extension ChatService {
         }
     }
 
-    func scheduleConversationMemoryUpdateIfNeeded(for sessionID: UUID) {
+    func scheduleConversationMemoryUpdateIfNeeded(for sessionID: UUID, enableMemory: Bool) {
+        guard enableMemory else { return }
         guard isConversationMemoryEnabled() else { return }
         guard let session = chatSessionsSubject.value.first(where: { $0.id == sessionID }), !session.isTemporary else {
             return

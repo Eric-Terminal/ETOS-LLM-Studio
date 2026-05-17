@@ -466,7 +466,7 @@ extension ChatService {
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
             updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
             scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
-            scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID)
+            scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
         }
@@ -611,7 +611,7 @@ extension ChatService {
                 currentFileAttachments: []
             )
         } else {
-            scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID)
+            scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
         }
     }

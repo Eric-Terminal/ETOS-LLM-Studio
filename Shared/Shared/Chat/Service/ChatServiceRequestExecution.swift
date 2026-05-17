@@ -65,7 +65,7 @@ extension ChatService {
         }
 
         let isWorldbookIsolationActive = sessionForRequest?.isWorldbookContextIsolationActive ?? false
-        let conversationMemoryEnabled = isConversationMemoryEnabled() && !isWorldbookIsolationActive
+        let conversationMemoryEnabled = enableMemory && isConversationMemoryEnabled() && !isWorldbookIsolationActive
         let recentConversationSummaries: [ConversationSessionSummary]
         let conversationUserProfile: ConversationUserProfile?
         if conversationMemoryEnabled {
