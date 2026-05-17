@@ -21,11 +21,13 @@ extension ChatView {
 
     var landscapeSessionSidebar: some View {
         applySessionPickerLifecycle(
-            to: nativeSessionPickerContent(showsCloseButton: false)
+            to: NavigationStack {
+                nativeSessionPickerContent(showsCloseButton: false, showsFooterDivider: false)
+            }
         )
     }
 
-    func nativeSessionPickerContent(showsCloseButton: Bool) -> some View {
+    func nativeSessionPickerContent(showsCloseButton: Bool, showsFooterDivider: Bool = true) -> some View {
         let queryActive = nativeSessionPickerQueryActive
         let displayedCount = nativeSessionPickerDisplayedCount
         let showsPagination = shouldShowSessionPickerPaginationBar(queryActive: queryActive)
@@ -61,7 +63,9 @@ extension ChatView {
                     includesSearchInput: false
                 )
 
-                Divider()
+                if showsFooterDivider {
+                    Divider()
+                }
 
                 sessionPickerFooter(
                     queryActive: queryActive,
@@ -71,6 +75,7 @@ extension ChatView {
                 .padding(.top, 10)
             }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .navigationTitle(NSLocalizedString("会话", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
