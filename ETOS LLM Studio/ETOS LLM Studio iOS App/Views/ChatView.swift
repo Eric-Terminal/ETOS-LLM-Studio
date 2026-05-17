@@ -262,12 +262,13 @@ struct ChatView: View {
     var adaptiveChatLayout: some View {
         GeometryReader { proxy in
             let isLandscape = proxy.size.width > proxy.size.height
+            let chatViewportWidth = max(1, proxy.size.width)
 
             Group {
                 if isLandscape {
-                    landscapeChatLayout
+                    landscapeChatLayout(chatViewportWidth: chatViewportWidth)
                 } else {
-                    chatConversationContent
+                    chatConversationContent(chatViewportWidth: chatViewportWidth)
                 }
             }
             .onAppear {
@@ -279,9 +280,9 @@ struct ChatView: View {
         }
     }
 
-    var landscapeChatLayout: some View {
+    func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
         ZStack(alignment: .leading) {
-            chatConversationContent
+            chatConversationContent(chatViewportWidth: chatViewportWidth)
 
             if isSessionPickerPresented {
                 Color.black.opacity(colorScheme == .dark ? 0.2 : 0.1)
@@ -308,8 +309,9 @@ struct ChatView: View {
     }
 
     @ViewBuilder
-    var chatConversationContent: some View {
+    func chatConversationContent(chatViewportWidth: CGFloat) -> some View {
         let displayedMessages = viewModel.displayMessages
+        let messageLayoutWidth = max(1, chatViewportWidth - 16)
         ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
                 telegramBackgroundLayer
@@ -342,6 +344,7 @@ struct ChatView: View {
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                 ChatBubble(
                                     messageState: state,
+                                    layoutWidth: messageLayoutWidth,
                                     preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
                                     preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
                                     isReasoningExpanded: Binding(
@@ -392,7 +395,9 @@ struct ChatView: View {
                         .scrollTargetLayout()
                     }
                     .padding(.horizontal, 8)
+                    .frame(width: chatViewportWidth, alignment: .top)
                 }
+                .frame(width: chatViewportWidth)
                 .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
@@ -454,10 +459,12 @@ struct ChatView: View {
                 // Telegram 风格：顶部导航栏
                 .safeAreaInset(edge: .top) {
                     telegramNavBar
+                        .frame(width: chatViewportWidth)
                 }
                 // Telegram 风格：底部输入栏
                 .safeAreaInset(edge: .bottom) {
                     telegramInputBar
+                        .frame(width: chatViewportWidth)
                         .background(
                             GeometryReader { proxy in
                                 Color.clear.preference(

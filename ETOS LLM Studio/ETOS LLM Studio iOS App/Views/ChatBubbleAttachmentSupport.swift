@@ -37,7 +37,7 @@ extension ChatBubble {
                     }
                 }
             }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.65, alignment: isOutgoing ? .trailing : .leading)
+            .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
 
             if !isOutgoing {
                 Spacer(minLength: 0)

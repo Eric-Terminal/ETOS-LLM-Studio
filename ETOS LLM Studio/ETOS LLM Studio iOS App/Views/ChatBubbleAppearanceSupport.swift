@@ -230,8 +230,12 @@ extension ChatBubble {
         }
     }
 
+    var bubbleLayoutBaseWidth: CGFloat {
+        max(layoutWidth ?? UIScreen.main.bounds.width, 1)
+    }
+
     var bubbleMaxWidth: CGFloat {
-        let baseWidth = max(UIScreen.main.bounds.width, 1)
+        let baseWidth = bubbleLayoutBaseWidth
         let rowChromeWidth = rowHorizontalPadding * 2 + (usesNoBubbleStyle ? 0 : rowSideSpacerMinLength)
         let availableBubbleWidth = max(1, baseWidth - rowChromeWidth)
         let widthRatio: CGFloat
@@ -243,6 +247,10 @@ extension ChatBubble {
             widthRatio = 0.94
         }
         return min(baseWidth * widthRatio, availableBubbleWidth)
+    }
+
+    var attachmentMaxWidth: CGFloat {
+        max(1, bubbleLayoutBaseWidth * 0.65)
     }
 
     var shouldForceMergedWidth: Bool {
