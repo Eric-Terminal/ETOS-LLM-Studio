@@ -20,8 +20,8 @@ extension WorldbookImportService {
             switch number {
             case 0: return .before
             case 1: return .after
-            case 2: return .anTop
-            case 3: return .anTop
+            case 2: return .emTop
+            case 3: return .emTop
             case 4: return .atDepth
             case 5: return .emTop
             case 6: return .emBottom
@@ -30,13 +30,19 @@ extension WorldbookImportService {
             }
         }
         if let text = stringValue(raw) {
-            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if normalized == "before_char" {
+            let normalized = text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+            if normalized == "before_char" || normalized == "before_system_prompt" {
                 return .before
             }
-            if normalized == "after_char" {
+            if normalized == "after_char" || normalized == "after_system_prompt" {
                 return .after
             }
+            if normalized == "top_of_chat" { return .emTop }
+            if normalized == "bottom_of_chat" { return .emBottom }
+            if normalized == "at_depth" { return .atDepth }
             return WorldbookPosition(stRawValue: text)
         }
         return .after
@@ -121,7 +127,14 @@ extension WorldbookImportService {
             return values.compactMap { stringValue($0) }
         case let text as String:
             return text
-                .split(separator: ",")
+                .replacingOccurrences(of: "“", with: "\"")
+                .replacingOccurrences(of: "”", with: "\"")
+                .replacingOccurrences(of: "‘", with: "'")
+                .replacingOccurrences(of: "’", with: "'")
+                .replacingOccurrences(of: "，", with: ",")
+                .split { character in
+                    character == "," || character == "\n" || character == "\r"
+                }
                 .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         default:
             return []

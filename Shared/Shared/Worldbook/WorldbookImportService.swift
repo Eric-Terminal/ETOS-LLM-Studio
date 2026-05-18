@@ -351,13 +351,38 @@ public struct WorldbookImportService {
         let defaultName = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
         let name = stringValue(root["name"]) ?? stringValue(root["title"]) ?? (defaultName.isEmpty ? "导入世界书" : defaultName)
         let description = stringValue(root["description"]) ?? stringValue(root["desc"]) ?? ""
+        let nestedSettings = root["settings"] as? [String: Any]
 
         let settings = WorldbookSettings(
-            scanDepth: intValue(root["scanDepth"]) ?? intValue(root["scan_depth"]) ?? 4,
-            maxRecursionDepth: intValue(root["maxRecursionDepth"]) ?? intValue(root["max_recursion_depth"]) ?? 2,
-            maxInjectedEntries: intValue(root["maxEntries"]) ?? intValue(root["max_entries"]) ?? WorldbookSettings.unlimitedInjectedEntries,
-            maxInjectedCharacters: intValue(root["maxChars"]) ?? intValue(root["max_chars"]) ?? WorldbookSettings.unlimitedInjectedCharacters,
-            fallbackPosition: WorldbookPosition(stRawValue: stringValue(root["position"]) ?? "after")
+            scanDepth: intValue(root["scanDepth"]) ??
+                intValue(root["scan_depth"]) ??
+                intValue(nestedSettings?["scanDepth"]) ??
+                intValue(nestedSettings?["scan_depth"]) ??
+                4,
+            maxRecursionDepth: intValue(root["maxRecursionDepth"]) ??
+                intValue(root["max_recursion_depth"]) ??
+                intValue(nestedSettings?["maxRecursionDepth"]) ??
+                intValue(nestedSettings?["max_recursion_depth"]) ??
+                2,
+            maxInjectedEntries: intValue(root["maxEntries"]) ??
+                intValue(root["max_entries"]) ??
+                intValue(root["maxInjectedEntries"]) ??
+                intValue(root["max_injected_entries"]) ??
+                intValue(nestedSettings?["maxEntries"]) ??
+                intValue(nestedSettings?["max_entries"]) ??
+                intValue(nestedSettings?["maxInjectedEntries"]) ??
+                intValue(nestedSettings?["max_injected_entries"]) ??
+                WorldbookSettings.unlimitedInjectedEntries,
+            maxInjectedCharacters: intValue(root["maxChars"]) ??
+                intValue(root["max_chars"]) ??
+                intValue(root["maxInjectedCharacters"]) ??
+                intValue(root["max_injected_characters"]) ??
+                intValue(nestedSettings?["maxChars"]) ??
+                intValue(nestedSettings?["max_chars"]) ??
+                intValue(nestedSettings?["maxInjectedCharacters"]) ??
+                intValue(nestedSettings?["max_injected_characters"]) ??
+                WorldbookSettings.unlimitedInjectedCharacters,
+            fallbackPosition: positionFromRaw(root["position"] ?? nestedSettings?["fallbackPosition"])
         )
 
         let metadata = jsonDictionary(from: root)

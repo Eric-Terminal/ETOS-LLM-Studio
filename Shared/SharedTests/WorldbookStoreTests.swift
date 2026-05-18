@@ -166,6 +166,78 @@ struct WorldbookStoreTests {
         #expect(loaded.first?.settings.maxInjectedEntries == 64)
     }
 
+    @Test("嵌套 settings 中显式 64 注入条目限制会保留")
+    func testNestedExplicitInjectedEntryBudgetIsPreserved() throws {
+        let directory = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = WorldbookStore(storageDirectoryURL: directory)
+        let explicitBook = Worldbook(
+            id: UUID(),
+            name: "嵌套显式限制",
+            entries: [WorldbookEntry(content: "嵌套显式限制应该保留。", keys: ["嵌套"])],
+            settings: WorldbookSettings(maxInjectedEntries: 64, maxInjectedCharacters: -1),
+            metadata: [
+                "settings": .dictionary([
+                    "maxInjectedEntries": .int(64)
+                ])
+            ]
+        )
+
+        store.saveWorldbooks([explicitBook])
+        store.invalidateCache()
+        let loaded = store.loadWorldbooks()
+
+        #expect(loaded.first?.settings.maxInjectedEntries == 64)
+    }
+
+    @Test("导入合并默认保留重复内容条目")
+    func testImportedWorldbookKeepsDuplicateContentEntriesByDefault() throws {
+        let directory = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = WorldbookStore(storageDirectoryURL: directory)
+        let duplicateBook = Worldbook(
+            id: UUID(),
+            name: "重复内容",
+            entries: [
+                WorldbookEntry(content: "同一段设定。", keys: ["alpha"], order: 2),
+                WorldbookEntry(content: "同一段设定。", keys: ["beta"], order: 1)
+            ]
+        )
+
+        let report = store.mergeImportedWorldbook(duplicateBook, dedupeByContent: false)
+        let loaded = store.loadWorldbooks()
+
+        #expect(report.importedEntries == 2)
+        #expect(report.skippedEntries == 0)
+        #expect(loaded.first?.entries.count == 2)
+        #expect(loaded.first?.entries.map(\.keys) == [["alpha"], ["beta"]])
+    }
+
+    @Test("导入合并仍可按内容去重")
+    func testImportedWorldbookCanStillDedupeByContentWhenRequested() throws {
+        let directory = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = WorldbookStore(storageDirectoryURL: directory)
+        let duplicateBook = Worldbook(
+            id: UUID(),
+            name: "重复内容去重",
+            entries: [
+                WorldbookEntry(content: "同一段设定。", keys: ["alpha"], order: 2),
+                WorldbookEntry(content: "同一段设定。", keys: ["beta"], order: 1)
+            ]
+        )
+
+        let report = store.mergeImportedWorldbook(duplicateBook, dedupeByContent: true)
+        let loaded = store.loadWorldbooks()
+
+        #expect(report.importedEntries == 1)
+        #expect(report.skippedEntries == 1)
+        #expect(loaded.first?.entries.count == 1)
+    }
+
     private func makeTemporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("worldbook-store-tests-\(UUID().uuidString)", isDirectory: true)

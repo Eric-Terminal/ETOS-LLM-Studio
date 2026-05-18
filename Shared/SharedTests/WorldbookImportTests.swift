@@ -314,6 +314,58 @@ struct WorldbookImportTests {
         #expect(worldbook.entries.first?.role == .assistant)
     }
 
+    @Test("import Kelivo/RikkaHub native position and newline keywords")
+    func testImportKelivoRikkaHubNativeFields() throws {
+        let json = """
+        {
+          "version": 1,
+          "type": "lorebook",
+          "data": {
+            "name": "Kelivo 兼容书",
+            "entries": [
+              {
+                "name": "底部注入",
+                "keywords": "alpha\\nbeta，gamma",
+                "content": "bottom content",
+                "position": "BOTTOM_OF_CHAT",
+                "priority": 77,
+                "scanDepth": 3
+              },
+              {
+                "name": "深度注入",
+                "keywords": ["depth"],
+                "content": "depth content",
+                "position": "at_depth",
+                "injectDepth": 2
+              }
+            ],
+            "settings": {
+              "scanDepth": 9,
+              "maxRecursionDepth": 4,
+              "maxInjectedEntries": 1,
+              "maxInjectedCharacters": 5,
+              "fallbackPosition": "TOP_OF_CHAT"
+            }
+          }
+        }
+        """
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "kelivo-rikka.json")
+
+        #expect(worldbook.entries.count == 2)
+        #expect(worldbook.entries[0].keys == ["alpha", "beta", "gamma"])
+        #expect(worldbook.entries[0].position == .emBottom)
+        #expect(worldbook.entries[0].order == 77)
+        #expect(worldbook.entries[1].position == .atDepth)
+        #expect(worldbook.entries[1].depth == 2)
+        #expect(worldbook.settings.scanDepth == 9)
+        #expect(worldbook.settings.maxRecursionDepth == 4)
+        #expect(worldbook.settings.maxInjectedEntries == 1)
+        #expect(worldbook.settings.maxInjectedCharacters == 5)
+        #expect(worldbook.settings.fallbackPosition == .emTop)
+    }
+
     @Test("import top-level entries array JSON")
     func testImportTopLevelArrayJSON() throws {
         let json = """

@@ -375,8 +375,7 @@ public struct WorldbookEngine {
             recursionBuffer.append(contentsOf: newlyTriggeredContents)
         }
 
-        let grouped = applyGroupRules(triggered, booksByID: Dictionary(uniqueKeysWithValues: activeBooks.map { ($0.id, $0) }))
-        let budgeted = applyBudgetsByWorldbook(grouped, activeBooks: activeBooks)
+        let budgeted = sortedInjections(triggered)
 
         if !budgeted.isEmpty {
             logger.info("世界书激活完成: turn=\(turn), entries=\(budgeted.count)")
@@ -423,8 +422,7 @@ public struct WorldbookEngine {
         enhancedPrompt: String?
     ) -> String {
         let filtered = messages.filter { $0.role == .user || $0.role == .assistant || $0.role == .tool }
-        let maxMessages = max(1, scanDepth * 2)
-        let limited = Array(filtered.suffix(maxMessages))
+        let limited = Array(filtered.suffix(max(1, scanDepth)))
 
         var lines: [String] = []
         if let topicPrompt, !topicPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -518,113 +516,6 @@ public struct WorldbookEngine {
             return buffer.contains(key)
         }
         return buffer.localizedCaseInsensitiveContains(key)
-    }
-
-    private func applyGroupRules(_ items: [WorldbookInjection], booksByID: [UUID: Worldbook]) -> [WorldbookInjection] {
-        var direct: [WorldbookInjection] = []
-        var grouped: [String: [WorldbookInjection]] = [:]
-
-        for item in items {
-            guard let book = booksByID[item.worldbookID],
-                  let entry = book.entries.first(where: { $0.id == item.entryID }),
-                  let group = entry.group?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !group.isEmpty else {
-                direct.append(item)
-                continue
-            }
-            grouped["\(item.worldbookID.uuidString)::\(group)", default: []].append(item)
-        }
-
-        var selected = direct
-        for (_, candidates) in grouped {
-            let sorted = candidates.sorted {
-                if $0.order == $1.order {
-                    return $0.entryID.uuidString < $1.entryID.uuidString
-                }
-                return $0.order > $1.order
-            }
-
-            let overrideItems = sorted.filter { candidate in
-                guard let book = booksByID[candidate.worldbookID],
-                      let entry = book.entries.first(where: { $0.id == candidate.entryID }) else {
-                    return false
-                }
-                return entry.groupOverride
-            }
-            if !overrideItems.isEmpty {
-                selected.append(contentsOf: overrideItems)
-            }
-
-            let scored = sorted
-                .filter { candidate in
-                    guard let book = booksByID[candidate.worldbookID],
-                          let entry = book.entries.first(where: { $0.id == candidate.entryID }) else {
-                        return false
-                    }
-                    return !entry.groupOverride
-                }
-                .map { candidate -> (WorldbookInjection, Double) in
-                guard let book = booksByID[candidate.worldbookID],
-                      let entry = book.entries.first(where: { $0.id == candidate.entryID }) else {
-                    return (candidate, 0)
-                }
-                let weight = entry.groupWeight
-                let triggerScore = entry.useGroupScoring ? candidate.triggerScore : 0
-                let score = triggerScore * 100 + weight * 10 + Double(candidate.order) * 0.01
-                return (candidate, score)
-            }
-            if let winner = scored.max(by: { lhs, rhs in
-                if lhs.1 == rhs.1 {
-                    return lhs.0.entryID.uuidString > rhs.0.entryID.uuidString
-                }
-                return lhs.1 < rhs.1
-            }) {
-                selected.append(winner.0)
-            }
-        }
-
-        return selected.sorted {
-            if $0.order == $1.order {
-                return $0.entryID.uuidString < $1.entryID.uuidString
-            }
-            return $0.order > $1.order
-        }
-    }
-
-    private func applyBudgetsByWorldbook(_ items: [WorldbookInjection], activeBooks: [Worldbook]) -> [WorldbookInjection] {
-        let itemsByWorldbookID = Dictionary(grouping: items, by: \.worldbookID)
-        var result: [WorldbookInjection] = []
-
-        for book in activeBooks {
-            let bookItems = itemsByWorldbookID[book.id] ?? []
-            result.append(contentsOf: applyBudget(
-                bookItems,
-                maxEntries: book.settings.maxInjectedEntries,
-                maxCharacters: book.settings.maxInjectedCharacters
-            ))
-        }
-
-        return sortedInjections(result)
-    }
-
-    private func applyBudget(_ items: [WorldbookInjection], maxEntries: Int, maxCharacters: Int) -> [WorldbookInjection] {
-        var result: [WorldbookInjection] = []
-        var totalChars = 0
-
-        let sortedItems = sortedInjections(items)
-
-        for item in sortedItems {
-            if maxEntries >= 0, result.count >= maxEntries { break }
-            let rendered = item.renderedContent
-            let nextChars = totalChars + rendered.count
-            if maxCharacters >= 0, nextChars > maxCharacters {
-                continue
-            }
-            result.append(item)
-            totalChars = nextChars
-        }
-
-        return result
     }
 
     private func sortedInjections(_ items: [WorldbookInjection]) -> [WorldbookInjection] {

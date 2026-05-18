@@ -376,11 +376,22 @@ extension WorldbookStore {
     }
 
     private func hasExplicitImportedEntryBudget(_ metadata: [String: JSONValue]) -> Bool {
+        let nestedSettings: [String: JSONValue]
+        if case .dictionary(let value) = metadata["settings"] {
+            nestedSettings = value
+        } else {
+            nestedSettings = [:]
+        }
+
         metadata["maxEntries"] != nil ||
             metadata["max_entries"] != nil ||
             metadata["maxInjectedEntries"] != nil ||
             metadata["max_injected_entries"] != nil ||
-            metadata["etosExplicitMaxInjectedEntries"] != nil
+            metadata["etosExplicitMaxInjectedEntries"] != nil ||
+            nestedSettings["maxEntries"] != nil ||
+            nestedSettings["max_entries"] != nil ||
+            nestedSettings["maxInjectedEntries"] != nil ||
+            nestedSettings["max_injected_entries"] != nil
     }
 
     func updateCaches(with worldbooks: [Worldbook]) {

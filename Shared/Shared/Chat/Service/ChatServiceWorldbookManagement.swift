@@ -45,7 +45,7 @@ extension ChatService {
         let imported = try worldbookImportService.importWorldbookWithReport(from: data, fileName: fileName)
         return worldbookStore.mergeImportedWorldbook(
             imported.worldbook,
-            dedupeByContent: true,
+            dedupeByContent: false,
             diagnostics: imported.diagnostics
         )
     }
