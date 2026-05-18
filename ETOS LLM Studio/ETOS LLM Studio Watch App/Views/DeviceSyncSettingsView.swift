@@ -11,7 +11,6 @@ import Foundation
 import Shared
 
 struct DeviceSyncSettingsView: View {
-    @EnvironmentObject private var syncManager: WatchSyncManager
     @EnvironmentObject private var cloudSyncManager: CloudSyncManager
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var snapshotFileURL: URL?
@@ -205,29 +204,6 @@ struct DeviceSyncSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(NSLocalizedString("Apple Watch 同步", comment: "")) {
-                Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
-
-                Button {
-                    syncManager.performSync(options: .fullSync)
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isSyncing {
-                            ProgressView()
-                                .padding(.trailing, 4)
-                        }
-                        Label(NSLocalizedString("同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
-                        Spacer()
-                    }
-                }
-                .disabled(!appConfig.syncAutoSyncEnabled || isSyncing)
-            }
-            
-            Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
-                syncStatusView
-            }
-
             Section(NSLocalizedString("iCloud 同步", comment: "")) {
                 Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
 
@@ -283,13 +259,6 @@ struct DeviceSyncSettingsView: View {
         }
     }
     
-    private var isSyncing: Bool {
-        if case .syncing = syncManager.state {
-            return true
-        }
-        return false
-    }
-
     private var isCloudSyncing: Bool {
         if case .syncing = cloudSyncManager.state {
             return true
@@ -301,39 +270,6 @@ struct DeviceSyncSettingsView: View {
         isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot
     }
     
-    @ViewBuilder
-    private var syncStatusView: some View {
-        switch syncManager.state {
-        case .idle:
-            Text(NSLocalizedString("未同步", comment: "")).etFont(.caption).foregroundStyle(.secondary)
-        case .syncing(let message):
-            HStack {
-                ProgressView()
-                Text(message).etFont(.caption)
-            }
-        case .success(let summary):
-            VStack(alignment: .leading, spacing: 2) {
-                Label(NSLocalizedString("成功", comment: ""), systemImage: "checkmark.circle")
-                    .foregroundStyle(.green)
-                Text(summaryDescription(summary))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        case .failed(let reason):
-            VStack(alignment: .leading, spacing: 2) {
-                Label(NSLocalizedString("失败", comment: ""), systemImage: "xmark.circle")
-                    .foregroundStyle(.red)
-                Text(reason)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        @unknown default:
-            Text(NSLocalizedString("未知状态", comment: ""))
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     @ViewBuilder
     private var cloudSyncStatusView: some View {
         if !appConfig.cloudSyncEnabled {
