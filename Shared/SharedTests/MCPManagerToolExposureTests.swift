@@ -75,13 +75,16 @@ struct MCPManagerToolExposureTests {
                     MCPServerStore.saveMetadata(metadata, for: server.id)
                 }
             }
-            manager.setChatToolsEnabled(originalGlobalSwitch)
+            manager.chatToolsEnabled = originalGlobalSwitch
+            AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
             manager.reloadServers()
         }
 
         for server in MCPServerStore.loadServers() {
             MCPServerStore.delete(server)
         }
+        manager.reloadServers()
+        manager.setChatToolsEnabled(true)
 
         let server = MCPServerConfiguration(
             displayName: "Test MCP Server",
@@ -113,12 +116,80 @@ struct MCPManagerToolExposureTests {
         )
 
         manager.reloadServers()
-        manager.setChatToolsEnabled(true)
         let exposedTools = manager.chatToolsForLLM()
         #expect(exposedTools.count == 1)
 
         manager.setChatToolsEnabled(false)
         #expect(manager.chatToolsForLLM().isEmpty)
         #expect(manager.approvalPolicy(for: exposedTools[0].name) == .alwaysDeny)
+    }
+
+    @MainActor
+    @Test("MCP 聊天总开关关闭时不会按缓存乐观恢复并自动连接")
+    func testDisabledGlobalSwitchSkipsLaunchAutoConnect() {
+        let manager = MCPManager.shared
+        let originalServers = MCPServerStore.loadServers()
+        let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
+            (server.id, MCPServerStore.loadMetadata(for: server.id))
+        })
+        let originalGlobalSwitch = manager.chatToolsEnabled
+
+        defer {
+            for server in MCPServerStore.loadServers() {
+                MCPServerStore.delete(server)
+            }
+            for server in originalServers {
+                MCPServerStore.save(server)
+                if let metadata = originalMetadata[server.id] {
+                    MCPServerStore.saveMetadata(metadata, for: server.id)
+                }
+            }
+            manager.chatToolsEnabled = originalGlobalSwitch
+            AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
+            manager.reloadServers()
+        }
+
+        for server in MCPServerStore.loadServers() {
+            MCPServerStore.delete(server)
+        }
+        manager.reloadServers()
+        manager.setChatToolsEnabled(false)
+
+        let server = MCPServerConfiguration(
+            displayName: "Disabled Auto Connect Server",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/mcp")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            isSelectedForChat: true
+        )
+        MCPServerStore.save(server)
+        MCPServerStore.saveMetadata(
+            MCPServerMetadataCache(
+                info: nil,
+                tools: [
+                    MCPToolDescription(
+                        toolId: "tool.cached",
+                        description: "用于验证关闭总开关时不自动连接",
+                        inputSchema: .dictionary(["type": .string("object")]),
+                        examples: nil
+                    )
+                ],
+                resources: [],
+                resourceTemplates: [],
+                prompts: [],
+                roots: []
+            ),
+            for: server.id
+        )
+
+        manager.reloadServers()
+        #expect(manager.status(for: server).connectionState == .idle)
+
+        manager.connectSelectedServersIfNeeded()
+        #expect(manager.inFlightConnections[server.id] == nil)
+        #expect(manager.clients[server.id] == nil)
+        #expect(manager.status(for: server).connectionState == .idle)
     }
 }

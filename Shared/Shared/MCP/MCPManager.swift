@@ -221,9 +221,8 @@ public final class MCPManager: ObservableObject {
                     !status.roots.isEmpty
                 if hasMetadataCache {
                     status.metadataCachedAt = MCPServerStore.loadMetadataCachedAt(for: server.id) ?? status.metadataCachedAt ?? Date()
-                    // 首次加载时，若服务器已加入聊天路由且有可用缓存，先乐观恢复为 ready。
-                    // 后台会继续发起 initialize 握手校验，失败后再回落到 failed。
-                    if existingStatus == nil, server.isSelectedForChat {
+                    // 首次加载时，只有聊天暴露总开关开启，才乐观恢复 ready 并等待后台握手校验。
+                    if existingStatus == nil, chatToolsEnabled, server.isSelectedForChat {
                         status.connectionState = .ready
                     }
                 }
@@ -261,6 +260,10 @@ public final class MCPManager: ObservableObject {
     }
 
     public func connectSelectedServersIfNeeded() {
+        guard chatToolsEnabled else {
+            cancelAllAutoConnectRetries(resetAttempts: true)
+            return
+        }
         for server in servers where isSelectedForAutoConnect(server.id) {
             let status = status(for: server)
             switch status.connectionState {
@@ -631,11 +634,20 @@ public final class MCPManager: ObservableObject {
         }
     }
 
+    func cancelAllAutoConnectRetries(resetAttempts: Bool) {
+        for serverID in Array(autoConnectRetryTasks.keys) {
+            cancelAutoConnectRetry(for: serverID, resetAttempts: resetAttempts)
+        }
+    }
+
     func isAutoConnectSuppressed(_ serverID: UUID) -> Bool {
         autoConnectSuppressedServerIDs.contains(serverID)
     }
 
     func isSelectedForAutoConnect(_ serverID: UUID) -> Bool {
+        guard chatToolsEnabled else {
+            return false
+        }
         guard !isAutoConnectSuppressed(serverID) else {
             return false
         }

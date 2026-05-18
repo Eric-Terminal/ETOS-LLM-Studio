@@ -210,14 +210,29 @@ extension MCPManager {
         chatToolsEnabled = isEnabled
         AppConfigStore.persistSynchronously(.bool(isEnabled), for: .mcpChatToolsEnabled)
         appendGovernanceLog(level: .info, category: .routing, message: "MCP 聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
+        if isEnabled {
+            connectSelectedServersIfNeeded()
+        } else {
+            cancelAllAutoConnectRetries(resetAttempts: true)
+            rebuildAggregates()
+        }
     }
 
     public func reloadAppConfigBackedState() {
+        let previousValue = chatToolsEnabled
         chatToolsEnabled = AppConfigStore.boolValue(
             for: .mcpChatToolsEnabled,
             legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
             defaultValue: true
         )
+        if chatToolsEnabled {
+            if !previousValue {
+                connectSelectedServersIfNeeded()
+            }
+        } else {
+            cancelAllAutoConnectRetries(resetAttempts: true)
+            rebuildAggregates()
+        }
         objectWillChange.send()
     }
 
