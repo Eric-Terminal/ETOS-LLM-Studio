@@ -2510,3 +2510,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "输入 Token" = "Input Tokens";
 "输出 Token" = "Output Tokens";
 "多版本切换" = "Version Switcher";
+"上传进度" = "تقدم الرفع";
+"已上传 %@ / %@" = "تم رفع %@ / %@";

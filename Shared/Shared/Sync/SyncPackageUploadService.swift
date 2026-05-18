@@ -48,6 +48,25 @@ public struct SyncPackageUploadResult: Sendable {
     }
 }
 
+public struct SyncPackageUploadProgress: Equatable, Sendable {
+    public let bytesSent: Int64
+    public let totalBytes: Int64
+
+    public init(bytesSent: Int64, totalBytes: Int64) {
+        let normalizedTotalBytes = max(0, totalBytes)
+        let normalizedBytesSent = max(0, bytesSent)
+        self.totalBytes = normalizedTotalBytes
+        self.bytesSent = normalizedTotalBytes > 0
+            ? min(normalizedBytesSent, normalizedTotalBytes)
+            : normalizedBytesSent
+    }
+
+    public var fractionCompleted: Double {
+        guard totalBytes > 0 else { return 0 }
+        return min(max(Double(bytesSent) / Double(totalBytes), 0), 1)
+    }
+}
+
 public enum SyncPackageUploadError: LocalizedError {
     case invalidHTTPResponse
     case unexpectedStatusCode(Int, String?)
@@ -78,6 +97,7 @@ public enum SyncPackageUploadError: LocalizedError {
 public enum SyncPackageUploadService {
     public typealias Transport = (_ request: URLRequest, _ body: Data) async throws -> (Data, URLResponse)
     public typealias FileTransport = (_ request: URLRequest, _ fileURL: URL) async throws -> (Data, URLResponse)
+    public typealias ProgressHandler = @Sendable (SyncPackageUploadProgress) -> Void
 
     /// 直接上传导出数据。
     public static func upload(
@@ -121,7 +141,8 @@ public enum SyncPackageUploadService {
         suggestedFileName: String,
         to endpoint: URL,
         timeout: TimeInterval = 30,
-        transport: FileTransport? = nil
+        transport: FileTransport? = nil,
+        progress: ProgressHandler? = nil
     ) async throws -> SyncPackageUploadResult {
         let request = makeUploadRequest(
             suggestedFileName: suggestedFileName,
@@ -129,10 +150,12 @@ public enum SyncPackageUploadService {
             timeout: timeout
         )
 
+        reportInitialProgress(for: exportFileURL, progress: progress)
         let sender = transport ?? { request, fileURL in
-            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+            try await uploadFile(request: request, fileURL: fileURL, progress: progress)
         }
         let (responseData, response) = try await sender(request, exportFileURL)
+        reportCompletedProgress(for: exportFileURL, progress: progress)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncPackageUploadError.invalidHTTPResponse
@@ -183,7 +206,8 @@ public enum SyncPackageUploadService {
         suggestedFileName: String? = nil,
         to endpoint: URL,
         timeout: TimeInterval = 30,
-        transport: FileTransport? = nil
+        transport: FileTransport? = nil,
+        progress: ProgressHandler? = nil
     ) async throws -> SyncPackageUploadResult {
         let fileName = suggestedFileName ?? fileURL.lastPathComponent
         let request = makeUploadRequest(
@@ -194,10 +218,12 @@ public enum SyncPackageUploadService {
             schemaVersion: nil
         )
 
+        reportInitialProgress(for: fileURL, progress: progress)
         let sender = transport ?? { request, fileURL in
-            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+            try await uploadFile(request: request, fileURL: fileURL, progress: progress)
         }
         let (responseData, response) = try await sender(request, fileURL)
+        reportCompletedProgress(for: fileURL, progress: progress)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncPackageUploadError.invalidHTTPResponse
@@ -221,9 +247,11 @@ public enum SyncPackageUploadService {
         s3 configuration: S3CompatibleUploadConfiguration,
         timeout: TimeInterval = 30,
         now: Date = Date(),
-        transport: FileTransport? = nil
+        transport: FileTransport? = nil,
+        progress: ProgressHandler? = nil
     ) async throws -> SyncPackageUploadResult {
         let fileName = suggestedFileName ?? fileURL.lastPathComponent
+        reportInitialProgress(for: fileURL, progress: progress)
         let request = try makeS3UploadRequest(
             fileURL: fileURL,
             suggestedFileName: fileName.isEmpty ? "ETOS-Snapshot.\(SnapshotBuilder.fileExtension)" : fileName,
@@ -233,9 +261,10 @@ public enum SyncPackageUploadService {
         )
 
         let sender = transport ?? { request, fileURL in
-            try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+            try await uploadFile(request: request, fileURL: fileURL, progress: progress)
         }
         let (responseData, response) = try await sender(request, fileURL)
+        reportCompletedProgress(for: fileURL, progress: progress)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncPackageUploadError.invalidHTTPResponse
@@ -257,6 +286,36 @@ private extension SyncPackageUploadService {
     static let s3Algorithm = "AWS4-HMAC-SHA256"
     static let s3Service = "s3"
     static let s3RequestTerminator = "aws4_request"
+
+    static func uploadFile(
+        request: URLRequest,
+        fileURL: URL,
+        progress: ProgressHandler?
+    ) async throws -> (Data, URLResponse) {
+        let totalBytes = fileSizeInBytes(at: fileURL)
+        let delegate = UploadProgressDelegate(totalBytes: totalBytes, progress: progress)
+        return try await NetworkSessionConfiguration.shared.upload(
+            for: request,
+            fromFile: fileURL,
+            delegate: delegate
+        )
+    }
+
+    static func reportInitialProgress(for fileURL: URL, progress: ProgressHandler?) {
+        guard let progress else { return }
+        progress(SyncPackageUploadProgress(bytesSent: 0, totalBytes: fileSizeInBytes(at: fileURL)))
+    }
+
+    static func reportCompletedProgress(for fileURL: URL, progress: ProgressHandler?) {
+        guard let progress else { return }
+        let totalBytes = fileSizeInBytes(at: fileURL)
+        progress(SyncPackageUploadProgress(bytesSent: totalBytes, totalBytes: totalBytes))
+    }
+
+    static func fileSizeInBytes(at fileURL: URL) -> Int64 {
+        let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values?.fileSize ?? 0)
+    }
 
     static func makeUploadRequest(
         suggestedFileName: String,
@@ -575,6 +634,27 @@ private extension SyncPackageUploadService {
             return nil
         }
         return text
+    }
+}
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let totalBytes: Int64
+    private let progress: SyncPackageUploadService.ProgressHandler?
+
+    init(totalBytes: Int64, progress: SyncPackageUploadService.ProgressHandler?) {
+        self.totalBytes = totalBytes
+        self.progress = progress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        let expectedBytes = totalBytesExpectedToSend > 0 ? totalBytesExpectedToSend : totalBytes
+        progress?(SyncPackageUploadProgress(bytesSent: totalBytesSent, totalBytes: expectedBytes))
     }
 }
 

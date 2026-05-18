@@ -19,6 +19,7 @@ struct BackupRestoreView: View {
     @State private var isUploadingSnapshot = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var uploadProgress: SyncPackageUploadProgress?
     @State private var encryptExport = false
     @State private var useStrongPasswordDerivation = false
     @State private var exportPassword = ""
@@ -123,6 +124,10 @@ struct BackupRestoreView: View {
                     }
                 }
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+
+                if let uploadProgress {
+                    SnapshotUploadProgressView(progress: uploadProgress)
+                }
             } header: {
                 Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
             } footer: {
@@ -272,6 +277,7 @@ struct BackupRestoreView: View {
         isUploadingSnapshot = true
         statusMessage = nil
         errorMessage = nil
+        uploadProgress = nil
         let password = encryptExport ? exportPassword : nil
         let useStrongPasswordDerivation = useStrongPasswordDerivation
 
@@ -292,7 +298,12 @@ struct BackupRestoreView: View {
 
                 let result = try await SyncPackageUploadService.uploadSnapshot(
                     fileURL: snapshotURL,
-                    s3: uploadConfiguration
+                    s3: uploadConfiguration,
+                    progress: { progress in
+                        Task { @MainActor in
+                            uploadProgress = progress
+                        }
+                    }
                 )
                 await MainActor.run {
                     if password != nil {
@@ -315,6 +326,7 @@ struct BackupRestoreView: View {
             } catch {
                 await MainActor.run {
                     isUploadingSnapshot = false
+                    uploadProgress = nil
                     errorMessage = error.localizedDescription
                 }
             }
@@ -380,6 +392,41 @@ struct BackupRestoreView: View {
         }
     }
 
+}
+
+private struct SnapshotUploadProgressView: View {
+    let progress: SyncPackageUploadProgress
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(NSLocalizedString("上传进度", comment: ""))
+                Spacer()
+                Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    .monospacedDigit()
+            }
+            .etFont(.footnote)
+
+            ProgressView(value: progress.fractionCompleted)
+
+            Text(progressText)
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var progressText: String {
+        String(
+            format: NSLocalizedString("已上传 %@ / %@", comment: ""),
+            formatBytes(progress.bytesSent),
+            formatBytes(progress.totalBytes)
+        )
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        StorageUtility.formatSize(bytes)
+    }
 }
 
 private enum BackupRestoreFileWriter {

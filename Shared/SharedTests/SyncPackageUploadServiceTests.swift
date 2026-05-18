@@ -76,6 +76,37 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedFileURL == fileURL)
     }
 
+    @Test("文件上传会向调用方报告初始与完成进度")
+    func testUploadFileReportsProgress() async throws {
+        let endpoint = try #require(URL(string: "https://example.com/backup"))
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sync-progress-\(UUID().uuidString).json")
+        try Data(repeating: 1, count: 4096).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let progressEvents = UploadProgressRecorder()
+
+        _ = try await SyncPackageUploadService.upload(
+            exportFileURL: fileURL,
+            suggestedFileName: "ETOS-数据导出.json",
+            to: endpoint,
+            transport: { _, _ in
+                let response = try #require(
+                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (Data(), response)
+            },
+            progress: { progress in
+                progressEvents.append(progress)
+            }
+        )
+
+        let events = progressEvents.events
+        #expect(events.first == SyncPackageUploadProgress(bytesSent: 0, totalBytes: 4096))
+        #expect(events.last == SyncPackageUploadProgress(bytesSent: 4096, totalBytes: 4096))
+        #expect(events.last?.fractionCompleted == 1)
+    }
+
     @Test("离线快照上传会使用二进制请求头")
     func testUploadSnapshotUsesBinaryRequestHeaders() async throws {
         let endpoint = try #require(URL(string: "https://example.com/backup"))
@@ -110,6 +141,15 @@ struct SyncPackageUploadServiceTests {
         #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-FileName") == "encrypted.elsbackup")
         #expect(capturedRequest?.value(forHTTPHeaderField: "X-ETOS-Backup-Schema") == nil)
         #expect(capturedFileURL == fileURL)
+    }
+
+    @Test("上传进度会限制在总大小范围内")
+    func testUploadProgressClampsValues() {
+        let progress = SyncPackageUploadProgress(bytesSent: 2048, totalBytes: 1024)
+
+        #expect(progress.bytesSent == 1024)
+        #expect(progress.totalBytes == 1024)
+        #expect(progress.fractionCompleted == 1)
     }
 
     @Test("S3 兼容快照上传会生成 SigV4 PUT 请求")
@@ -257,5 +297,22 @@ struct SyncPackageUploadServiceTests {
                 Issue.record("错误类型不符合预期：\(error.localizedDescription)")
             }
         }
+    }
+}
+
+private final class UploadProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedEvents: [SyncPackageUploadProgress] = []
+
+    var events: [SyncPackageUploadProgress] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedEvents
+    }
+
+    func append(_ progress: SyncPackageUploadProgress) {
+        lock.lock()
+        recordedEvents.append(progress)
+        lock.unlock()
     }
 }

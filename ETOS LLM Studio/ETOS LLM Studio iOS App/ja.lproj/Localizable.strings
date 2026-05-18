@@ -2539,3 +2539,5 @@
 "输入 Token" = "Input Tokens";
 "输出 Token" = "Output Tokens";
 "多版本切换" = "Version Switcher";
+"上传进度" = "アップロード進捗";
+"已上传 %@ / %@" = "アップロード済み %@ / %@";

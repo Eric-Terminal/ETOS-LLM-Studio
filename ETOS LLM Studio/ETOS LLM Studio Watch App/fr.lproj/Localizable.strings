@@ -2510,3 +2510,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "输入 Token" = "Input Tokens";
 "输出 Token" = "Output Tokens";
 "多版本切换" = "Version Switcher";
+"上传进度" = "Progression de l’envoi";
+"已上传 %@ / %@" = "%@ / %@ envoyés";

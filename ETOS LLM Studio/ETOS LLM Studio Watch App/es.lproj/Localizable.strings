@@ -2510,3 +2510,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "输入 Token" = "Input Tokens";
 "输出 Token" = "Output Tokens";
 "多版本切换" = "Version Switcher";
+"上传进度" = "Progreso de subida";
+"已上传 %@ / %@" = "Subido %@ / %@";

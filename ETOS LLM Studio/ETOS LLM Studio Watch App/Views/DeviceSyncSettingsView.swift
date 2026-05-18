@@ -18,6 +18,7 @@ struct DeviceSyncSettingsView: View {
     @State private var snapshotErrorMessage: String?
     @State private var isCreatingSnapshot: Bool = false
     @State private var isUploadingSnapshot: Bool = false
+    @State private var uploadProgress: SyncPackageUploadProgress?
     @State private var encryptSnapshot: Bool = false
     @State private var useStrongSnapshotPasswordDerivation: Bool = false
     @State private var snapshotPassword: String = ""
@@ -137,6 +138,10 @@ struct DeviceSyncSettingsView: View {
                     }
                 }
                 .disabled(isSnapshotBusy)
+
+                if let uploadProgress {
+                    WatchSnapshotUploadProgressView(progress: uploadProgress)
+                }
 
                 Text(NSLocalizedString("会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。", comment: ""))
                     .etFont(.caption2)
@@ -416,6 +421,7 @@ struct DeviceSyncSettingsView: View {
         isUploadingSnapshot = true
         snapshotErrorMessage = nil
         snapshotStatusMessage = nil
+        uploadProgress = nil
         let password = encryptSnapshot ? snapshotPassword : nil
         let useStrongDerivation = useStrongSnapshotPasswordDerivation
 
@@ -434,7 +440,15 @@ struct DeviceSyncSettingsView: View {
                     )
                 }
 
-                let result = try await SyncPackageUploadService.uploadSnapshot(fileURL: fileURL, s3: uploadConfiguration)
+                let result = try await SyncPackageUploadService.uploadSnapshot(
+                    fileURL: fileURL,
+                    s3: uploadConfiguration,
+                    progress: { progress in
+                        Task { @MainActor in
+                            uploadProgress = progress
+                        }
+                    }
+                )
                 await MainActor.run {
                     if password != nil {
                         snapshotPassword = ""
@@ -453,6 +467,7 @@ struct DeviceSyncSettingsView: View {
             } catch {
                 await MainActor.run {
                     isUploadingSnapshot = false
+                    uploadProgress = nil
                     snapshotErrorMessage = error.localizedDescription
                 }
             }
@@ -640,6 +655,36 @@ struct DeviceSyncSettingsView: View {
         pendingEncryptedSnapshotURL = nil
         pendingSnapshotInspection = nil
         restorePassword = ""
+    }
+}
+
+private struct WatchSnapshotUploadProgressView: View {
+    let progress: SyncPackageUploadProgress
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(NSLocalizedString("上传进度", comment: ""))
+                Spacer()
+                Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    .monospacedDigit()
+            }
+            .etFont(.caption2)
+
+            ProgressView(value: progress.fractionCompleted)
+
+            Text(progressText)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var progressText: String {
+        String(
+            format: NSLocalizedString("已上传 %@ / %@", comment: ""),
+            StorageUtility.formatSize(progress.bytesSent),
+            StorageUtility.formatSize(progress.totalBytes)
+        )
     }
 }
 
