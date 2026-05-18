@@ -459,7 +459,7 @@ public struct WorldbookEngine {
         let secondary = entry.secondaryKeys
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        guard !secondary.isEmpty else { return (true, score) }
+        guard entry.secondaryKeysEnabled, !secondary.isEmpty else { return (true, score) }
 
         let secondaryMatches = secondary.map { keyword($0, matchesIn: buffer, entry: entry) }
         let hitCount = secondaryMatches.filter { $0 }.count

@@ -20,8 +20,8 @@ extension WorldbookImportService {
             switch number {
             case 0: return .before
             case 1: return .after
-            case 2: return .emTop
-            case 3: return .emTop
+            case 2: return .anTop
+            case 3: return .anBottom
             case 4: return .atDepth
             case 5: return .emTop
             case 6: return .emBottom

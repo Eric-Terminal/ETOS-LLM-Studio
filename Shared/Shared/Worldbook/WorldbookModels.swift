@@ -88,10 +88,12 @@ public enum WorldbookEntryRole: String, Codable, CaseIterable, Hashable, Sendabl
 
     public init(rawOrLegacyValue: String?) {
         switch rawOrLegacyValue?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
-        case "SYSTEM":
+        case "SYSTEM", "0":
             self = .system
-        case "ASSISTANT":
+        case "ASSISTANT", "2":
             self = .assistant
+        case "USER", "1":
+            self = .user
         default:
             self = .user
         }
@@ -115,6 +117,13 @@ public struct WorldbookTimedEffectState: Codable, Hashable, Sendable {
         self.delayUntilTurn = delayUntilTurn
         self.lastTriggeredTurn = lastTriggeredTurn
     }
+}
+
+public enum WorldbookMetadataKey {
+    public static let selective = "selective"
+    public static let etosSecondaryKeysEnabled = "etosSecondaryKeysEnabled"
+    public static let sillyTavernSecondaryKeys = "keysecondary"
+    public static let characterBookSecondaryKeys = "secondary_keys"
 }
 
 public struct WorldbookSettings: Codable, Hashable, Sendable {
@@ -194,6 +203,20 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
     public var delayUntilRecursion: Bool
     public var metadata: [String: JSONValue]
 
+    public var secondaryKeysEnabled: Bool {
+        if let explicit = metadata.boolValue(for: WorldbookMetadataKey.etosSecondaryKeysEnabled) {
+            return explicit
+        }
+        if let selective = metadata.boolValue(for: WorldbookMetadataKey.selective) {
+            return selective
+        }
+        if metadata[WorldbookMetadataKey.sillyTavernSecondaryKeys] != nil ||
+            metadata[WorldbookMetadataKey.characterBookSecondaryKeys] != nil {
+            return false
+        }
+        return !secondaryKeys.isEmpty
+    }
+
     public init(
         id: UUID = UUID(),
         uid: Int? = nil,
@@ -269,6 +292,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         case key
         case secondaryKeys
         case keysecondary
+        case selective
         case selectiveLogic
         case isEnabled
         case disable
@@ -315,6 +339,17 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         self.secondaryKeys = container.decodeStringArrayLossy(forKey: .secondaryKeys, fallbackKey: .keysecondary)
         let logicRaw = try container.decodeIfPresent(String.self, forKey: .selectiveLogic)
         self.selectiveLogic = WorldbookSelectiveLogic(rawOrLegacyValue: logicRaw)
+        var decodedMetadata = try container.decodeIfPresent([String: JSONValue].self, forKey: .metadata) ?? [:]
+        if let selective = container.decodeBoolIfPresentLossy(forKey: .selective) {
+            decodedMetadata[WorldbookMetadataKey.selective] = .bool(selective)
+            decodedMetadata[WorldbookMetadataKey.etosSecondaryKeysEnabled] = .bool(selective)
+        } else if !secondaryKeys.isEmpty,
+                  decodedMetadata[WorldbookMetadataKey.selective] == nil,
+                  decodedMetadata[WorldbookMetadataKey.etosSecondaryKeysEnabled] == nil,
+                  container.contains(.keysecondary),
+                  !container.contains(.secondaryKeys) {
+            decodedMetadata[WorldbookMetadataKey.etosSecondaryKeysEnabled] = .bool(false)
+        }
         let disabled = try container.decodeIfPresent(Bool.self, forKey: .disable) ?? false
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? !disabled
         self.constant = try container.decodeIfPresent(Bool.self, forKey: .constant) ?? false
@@ -345,7 +380,7 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         self.excludeRecursion = try container.decodeIfPresent(Bool.self, forKey: .excludeRecursion) ?? false
         self.preventRecursion = try container.decodeIfPresent(Bool.self, forKey: .preventRecursion) ?? false
         self.delayUntilRecursion = try container.decodeIfPresent(Bool.self, forKey: .delayUntilRecursion) ?? false
-        self.metadata = try container.decodeIfPresent([String: JSONValue].self, forKey: .metadata) ?? [:]
+        self.metadata = decodedMetadata
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -514,6 +549,26 @@ private func normalizeWorldbookContent(_ text: String) -> String {
         .lowercased()
 }
 
+private extension Dictionary where Key == String, Value == JSONValue {
+    func boolValue(for key: String) -> Bool? {
+        switch self[key] {
+        case .bool(let value):
+            return value
+        case .int(let value):
+            return value != 0
+        case .double(let value):
+            return value != 0
+        case .string(let value):
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if ["true", "1", "yes", "y"].contains(normalized) { return true }
+            if ["false", "0", "no", "n"].contains(normalized) { return false }
+            return nil
+        default:
+            return nil
+        }
+    }
+}
+
 private extension KeyedDecodingContainer where K == WorldbookEntry.CodingKeys {
     func decodeStringIfPresentLossy(forKey key: K) -> String? {
         if let value = try? decodeIfPresent(String.self, forKey: key) {
@@ -528,6 +583,24 @@ private extension KeyedDecodingContainer where K == WorldbookEntry.CodingKeys {
         }
         if let boolValue = try? decodeIfPresent(Bool.self, forKey: key) {
             return boolValue ? "true" : "false"
+        }
+        return nil
+    }
+
+    func decodeBoolIfPresentLossy(forKey key: K) -> Bool? {
+        if let value = try? decodeIfPresent(Bool.self, forKey: key) {
+            return value
+        }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) {
+            return value != 0
+        }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) {
+            return value != 0
+        }
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if ["true", "1", "yes", "y"].contains(normalized) { return true }
+            if ["false", "0", "no", "n"].contains(normalized) { return false }
         }
         return nil
     }

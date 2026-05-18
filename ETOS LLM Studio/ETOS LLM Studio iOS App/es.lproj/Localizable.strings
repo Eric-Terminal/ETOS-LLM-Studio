@@ -1082,6 +1082,7 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "内容" = "Contenido";
 "主关键词（逗号/换行分隔）" = "Primary keywords (comma/newline separated)";
 "次级关键词（逗号/换行分隔）" = "Secundario keywords (comma/newline separated)";
+"启用次级关键词" = "Activar palabras clave secundarias";
 "次级逻辑" = "Secundario logic";
 "匹配与触发" = "Coincidencia y Activar";
 "常驻激活" = "Always Activo";

@@ -18,6 +18,7 @@ struct WorldbookEntryDraft: Identifiable {
     var keysText: String
     var secondaryKeysText: String
 
+    var secondaryKeysEnabled: Bool
     var selectiveLogic: WorldbookSelectiveLogic
     var isEnabled: Bool
     var constant: Bool
@@ -56,6 +57,8 @@ struct WorldbookEntryDraft: Identifiable {
     var preventRecursion: Bool
     var delayUntilRecursion: Bool
 
+    private var metadata: [String: JSONValue]
+
     var primaryKeys: [String] {
         parseKeywordList(keysText)
     }
@@ -71,6 +74,7 @@ struct WorldbookEntryDraft: Identifiable {
         self.content = entry.content
         self.keysText = entry.keys.joined(separator: ", ")
         self.secondaryKeysText = entry.secondaryKeys.joined(separator: ", ")
+        self.secondaryKeysEnabled = entry.secondaryKeysEnabled
         self.selectiveLogic = entry.selectiveLogic
         self.isEnabled = entry.isEnabled
         self.constant = entry.constant
@@ -99,6 +103,7 @@ struct WorldbookEntryDraft: Identifiable {
         self.excludeRecursion = entry.excludeRecursion
         self.preventRecursion = entry.preventRecursion
         self.delayUntilRecursion = entry.delayUntilRecursion
+        self.metadata = entry.metadata
     }
 
     static func new() -> WorldbookEntryDraft {
@@ -109,6 +114,7 @@ struct WorldbookEntryDraft: Identifiable {
             content: "",
             keysText: "",
             secondaryKeysText: "",
+            secondaryKeysEnabled: true,
             selectiveLogic: .andAny,
             isEnabled: true,
             constant: false,
@@ -136,7 +142,8 @@ struct WorldbookEntryDraft: Identifiable {
             delay: 1,
             excludeRecursion: false,
             preventRecursion: false,
-            delayUntilRecursion: false
+            delayUntilRecursion: false,
+            metadata: [:]
         )
     }
 
@@ -145,6 +152,9 @@ struct WorldbookEntryDraft: Identifiable {
         let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedOutletName = outletName.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let normalizedGroupName = groupName.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+        var updatedMetadata = metadata
+        updatedMetadata[WorldbookMetadataKey.etosSecondaryKeysEnabled] = secondaryKeys.isEmpty ? nil : .bool(secondaryKeysEnabled)
+
         return WorldbookEntry(
             id: entryID,
             comment: normalizedComment,
@@ -174,7 +184,8 @@ struct WorldbookEntryDraft: Identifiable {
             delay: enableDelay ? delay : nil,
             excludeRecursion: excludeRecursion,
             preventRecursion: preventRecursion,
-            delayUntilRecursion: delayUntilRecursion
+            delayUntilRecursion: delayUntilRecursion,
+            metadata: updatedMetadata
         )
     }
 
@@ -185,6 +196,7 @@ struct WorldbookEntryDraft: Identifiable {
         content: String,
         keysText: String,
         secondaryKeysText: String,
+        secondaryKeysEnabled: Bool,
         selectiveLogic: WorldbookSelectiveLogic,
         isEnabled: Bool,
         constant: Bool,
@@ -212,7 +224,8 @@ struct WorldbookEntryDraft: Identifiable {
         delay: Int,
         excludeRecursion: Bool,
         preventRecursion: Bool,
-        delayUntilRecursion: Bool
+        delayUntilRecursion: Bool,
+        metadata: [String: JSONValue]
     ) {
         self.id = id
         self.entryID = entryID
@@ -220,6 +233,7 @@ struct WorldbookEntryDraft: Identifiable {
         self.content = content
         self.keysText = keysText
         self.secondaryKeysText = secondaryKeysText
+        self.secondaryKeysEnabled = secondaryKeysEnabled
         self.selectiveLogic = selectiveLogic
         self.isEnabled = isEnabled
         self.constant = constant
@@ -248,6 +262,7 @@ struct WorldbookEntryDraft: Identifiable {
         self.excludeRecursion = excludeRecursion
         self.preventRecursion = preventRecursion
         self.delayUntilRecursion = delayUntilRecursion
+        self.metadata = metadata
     }
 }
 

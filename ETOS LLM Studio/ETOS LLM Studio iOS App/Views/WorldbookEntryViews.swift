@@ -202,9 +202,12 @@ struct WorldbookEntryEditView: View {
                     .lineLimit(2...6)
                 TextField(NSLocalizedString("次级关键词（逗号/换行分隔）", comment: "Secondary keywords field"), text: $draft.secondaryKeysText, axis: .vertical)
                     .lineLimit(2...6)
-                Picker(NSLocalizedString("次级逻辑", comment: "Secondary selective logic"), selection: $draft.selectiveLogic) {
-                    ForEach(WorldbookSelectiveLogic.allCases, id: \.self) { logic in
-                        Text(worldbookSelectiveLogicLabel(logic)).tag(logic)
+                Toggle(NSLocalizedString("启用次级关键词", comment: "Enable secondary keywords"), isOn: $draft.secondaryKeysEnabled)
+                if draft.secondaryKeysEnabled {
+                    Picker(NSLocalizedString("次级逻辑", comment: "Secondary selective logic"), selection: $draft.selectiveLogic) {
+                        ForEach(WorldbookSelectiveLogic.allCases, id: \.self) { logic in
+                            Text(worldbookSelectiveLogicLabel(logic)).tag(logic)
+                        }
                     }
                 }
             }

@@ -55,6 +55,69 @@ struct WorldbookImportTests {
         #expect(entry.order == 42)
         #expect(entry.scanDepth == 6)
         #expect(entry.matchWholeWords == true)
+        #expect(entry.secondaryKeysEnabled == false)
+    }
+
+    @Test("导入 SillyTavern selective 开关控制次级关键词")
+    func testImportSillyTavernSelectiveSwitch() throws {
+        let json = """
+        {
+          "name": "Selective 测试",
+          "entries": {
+            "1": {
+              "uid": 1,
+              "key": ["hero"],
+              "keysecondary": ["ruby"],
+              "selective": false,
+              "content": "primary only"
+            },
+            "2": {
+              "uid": 2,
+              "key": ["villain"],
+              "keysecondary": ["shadow"],
+              "selective": true,
+              "content": "secondary required"
+            }
+          }
+        }
+        """
+
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "selective.json")
+
+        let primaryOnly = try #require(worldbook.entries.first(where: { $0.uid == 1 }))
+        let secondaryRequired = try #require(worldbook.entries.first(where: { $0.uid == 2 }))
+
+        #expect(primaryOnly.secondaryKeysEnabled == false)
+        #expect(secondaryRequired.secondaryKeysEnabled == true)
+    }
+
+    @Test("导入 SillyTavern 数字位置区分 AN 和 EM")
+    func testImportSillyTavernNumericPositions() throws {
+        let json = """
+        {
+          "name": "位置映射测试",
+          "entries": {
+            "2": { "uid": 2, "key": ["a"], "content": "an top", "position": 2 },
+            "3": { "uid": 3, "key": ["b"], "content": "an bottom", "position": 3 },
+            "5": { "uid": 5, "key": ["c"], "content": "em top", "position": 5 },
+            "6": { "uid": 6, "key": ["d"], "content": "em bottom", "position": 6 }
+          }
+        }
+        """
+
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "positions.json")
+        let positionsByUID = Dictionary(uniqueKeysWithValues: worldbook.entries.compactMap { entry in
+            entry.uid.map { ($0, entry.position) }
+        })
+
+        #expect(positionsByUID[2] == .anTop)
+        #expect(positionsByUID[3] == .anBottom)
+        #expect(positionsByUID[5] == .emTop)
+        #expect(positionsByUID[6] == .emBottom)
     }
 
     @Test("import worldbook from PNG naidata text chunk")
@@ -409,6 +472,55 @@ struct WorldbookImportTests {
         let worldbook = try service.importWorldbook(from: data, fileName: "system-role.json")
         #expect(worldbook.entries.count == 1)
         #expect(worldbook.entries.first?.role == .system)
+    }
+
+    @Test("导入 SillyTavern atDepth 默认使用 system 角色")
+    func testImportSillyTavernAtDepthDefaultRole() throws {
+        let json = """
+        {
+          "name": "默认深度角色测试",
+          "entries": {
+            "1": {
+              "uid": 1,
+              "key": ["system-depth"],
+              "content": "default system role",
+              "position": 4
+            }
+          }
+        }
+        """
+
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "default-depth-role.json")
+
+        #expect(worldbook.entries.first?.position == .atDepth)
+        #expect(worldbook.entries.first?.role == .system)
+    }
+
+    @Test("导入 SillyTavern 数字深度角色")
+    func testImportSillyTavernNumericDepthRoles() throws {
+        let json = """
+        {
+          "name": "深度角色测试",
+          "entries": {
+            "1": { "uid": 1, "key": ["system"], "content": "system role", "position": 4, "role": 0 },
+            "2": { "uid": 2, "key": ["user"], "content": "user role", "position": 4, "role": 1 },
+            "3": { "uid": 3, "key": ["assistant"], "content": "assistant role", "position": 4, "role": 2 }
+          }
+        }
+        """
+
+        let service = WorldbookImportService()
+        let data = try #require(json.data(using: .utf8))
+        let worldbook = try service.importWorldbook(from: data, fileName: "depth-roles.json")
+        let rolesByUID = Dictionary(uniqueKeysWithValues: worldbook.entries.compactMap { entry in
+            entry.uid.map { ($0, entry.role) }
+        })
+
+        #expect(rolesByUID[1] == .system)
+        #expect(rolesByUID[2] == .user)
+        #expect(rolesByUID[3] == .assistant)
     }
 
     @Test("import character card book JSON with character_book entries")

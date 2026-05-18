@@ -414,6 +414,7 @@ public struct WorldbookImportService {
             extensionDict?["position"] ??
             dict["insertPosition"] ??
             "after"
+        let position = positionFromRaw(rawPositionValue)
 
         let order = intValue(dict["priority"]) ?? intValue(dict["order"]) ?? 100
         let probabilityRaw = doubleValue(dict["probability"]) ?? 100
@@ -450,6 +451,33 @@ public struct WorldbookImportService {
             enabled = true
         }
 
+        var metadata = jsonDictionary(from: dict)
+        if !dedupSecondary.isEmpty,
+           metadata[WorldbookMetadataKey.etosSecondaryKeysEnabled] == nil {
+            let usesSillyTavernSecondaryKeys = dict[WorldbookMetadataKey.sillyTavernSecondaryKeys] != nil ||
+                dict[WorldbookMetadataKey.characterBookSecondaryKeys] != nil
+            let secondaryKeysEnabled = boolValue(dict[WorldbookMetadataKey.selective]) ?? !usesSillyTavernSecondaryKeys
+            metadata[WorldbookMetadataKey.etosSecondaryKeysEnabled] = .bool(secondaryKeysEnabled)
+        }
+        let rawRole =
+            stringValue(dict["role"]) ??
+            stringValue(extensionDict?["role"]) ??
+            intValue(dict["role"]).map { String($0) } ??
+            intValue(extensionDict?["role"]).map { String($0) }
+        let usesSillyTavernRoleDefault =
+            dict["key"] != nil ||
+            dict[WorldbookMetadataKey.sillyTavernSecondaryKeys] != nil ||
+            dict[WorldbookMetadataKey.characterBookSecondaryKeys] != nil ||
+            dict[WorldbookMetadataKey.selective] != nil ||
+            dict["disable"] != nil ||
+            extensionDict != nil
+        let role: WorldbookEntryRole = {
+            if rawRole == nil, position == .atDepth, usesSillyTavernRoleDefault {
+                return .system
+            }
+            return WorldbookEntryRole(rawOrLegacyValue: rawRole)
+        }()
+
         return WorldbookEntry(
             id: UUID(),
             uid: uidHint ?? intValue(dict["uid"]) ?? intValue(dict["id"]),
@@ -460,7 +488,7 @@ public struct WorldbookImportService {
             selectiveLogic: logic,
             isEnabled: enabled,
             constant: boolValue(dict["constant"]) ?? boolValue(dict["constantActive"]) ?? false,
-            position: positionFromRaw(rawPositionValue),
+            position: position,
             outletName: outletName,
             order: order,
             depth: intValue(dict["injectDepth"]) ?? intValue(dict["depth"]) ?? intValue(extensionDict?["depth"]),
@@ -474,18 +502,14 @@ public struct WorldbookImportService {
             groupOverride: boolValue(dict["groupOverride"]) ?? boolValue(extensionDict?["group_override"]) ?? false,
             groupWeight: doubleValue(dict["groupWeight"]) ?? doubleValue(extensionDict?["group_weight"]) ?? 1,
             useGroupScoring: boolValue(dict["useGroupScoring"]) ?? boolValue(extensionDict?["use_group_scoring"]) ?? false,
-            role: WorldbookEntryRole(
-                rawOrLegacyValue:
-                    stringValue(dict["role"]) ??
-                    stringValue(extensionDict?["role"])
-            ),
+            role: role,
             sticky: intValue(dict["sticky"]) ?? intValue(extensionDict?["sticky"]),
             cooldown: intValue(dict["cooldown"]) ?? intValue(extensionDict?["cooldown"]),
             delay: intValue(dict["delay"]) ?? intValue(extensionDict?["delay"]),
             excludeRecursion: boolValue(dict["excludeRecursion"]) ?? boolValue(extensionDict?["exclude_recursion"]) ?? false,
             preventRecursion: boolValue(dict["preventRecursion"]) ?? boolValue(extensionDict?["prevent_recursion"]) ?? false,
             delayUntilRecursion: boolValue(dict["delayUntilRecursion"]) ?? boolValue(extensionDict?["delay_until_recursion"]) ?? false,
-            metadata: jsonDictionary(from: dict)
+            metadata: metadata
         )
     }
 }

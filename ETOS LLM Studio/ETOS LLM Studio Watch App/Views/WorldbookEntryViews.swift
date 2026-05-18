@@ -225,14 +225,32 @@ struct WatchWorldbookEntryDraft: Identifiable {
     var comment: String
     var content: String
     var keysText: String
+    var secondaryKeys: [String]
+    var selectiveLogic: WorldbookSelectiveLogic
     var isEnabled: Bool
     var constant: Bool
     var useRegex: Bool
     var caseSensitive: Bool
+    var matchWholeWords: Bool
     var position: WorldbookPosition
     var role: WorldbookEntryRole
+    var outletName: String?
     var depth: Int
     var order: Int
+    var scanDepth: Int?
+    var useProbability: Bool
+    var probability: Double
+    var group: String?
+    var groupOverride: Bool
+    var groupWeight: Double
+    var useGroupScoring: Bool
+    var sticky: Int?
+    var cooldown: Int?
+    var delay: Int?
+    var excludeRecursion: Bool
+    var preventRecursion: Bool
+    var delayUntilRecursion: Bool
+    private var metadata: [String: JSONValue]
 
     init(entry: WorldbookEntry) {
         self.id = UUID()
@@ -240,14 +258,32 @@ struct WatchWorldbookEntryDraft: Identifiable {
         self.comment = entry.comment
         self.content = entry.content
         self.keysText = entry.keys.joined(separator: ", ")
+        self.secondaryKeys = entry.secondaryKeys
+        self.selectiveLogic = entry.selectiveLogic
         self.isEnabled = entry.isEnabled
         self.constant = entry.constant
         self.useRegex = entry.useRegex
         self.caseSensitive = entry.caseSensitive
+        self.matchWholeWords = entry.matchWholeWords
         self.position = entry.position
         self.role = entry.role
+        self.outletName = entry.outletName
         self.depth = max(0, entry.depth ?? 0)
         self.order = entry.order
+        self.scanDepth = entry.scanDepth
+        self.useProbability = entry.useProbability
+        self.probability = entry.probability
+        self.group = entry.group
+        self.groupOverride = entry.groupOverride
+        self.groupWeight = entry.groupWeight
+        self.useGroupScoring = entry.useGroupScoring
+        self.sticky = entry.sticky
+        self.cooldown = entry.cooldown
+        self.delay = entry.delay
+        self.excludeRecursion = entry.excludeRecursion
+        self.preventRecursion = entry.preventRecursion
+        self.delayUntilRecursion = entry.delayUntilRecursion
+        self.metadata = entry.metadata
     }
 
     static func new() -> WatchWorldbookEntryDraft {
@@ -257,14 +293,32 @@ struct WatchWorldbookEntryDraft: Identifiable {
             comment: "",
             content: "",
             keysText: "",
+            secondaryKeys: [],
+            selectiveLogic: .andAny,
             isEnabled: true,
             constant: false,
             useRegex: false,
             caseSensitive: false,
+            matchWholeWords: false,
             position: .after,
             role: .user,
+            outletName: nil,
             depth: 0,
-            order: 100
+            order: 100,
+            scanDepth: nil,
+            useProbability: false,
+            probability: 100,
+            group: nil,
+            groupOverride: false,
+            groupWeight: 1,
+            useGroupScoring: false,
+            sticky: nil,
+            cooldown: nil,
+            delay: nil,
+            excludeRecursion: false,
+            preventRecursion: false,
+            delayUntilRecursion: false,
+            metadata: [:]
         )
     }
 
@@ -274,28 +328,64 @@ struct WatchWorldbookEntryDraft: Identifiable {
         comment: String,
         content: String,
         keysText: String,
+        secondaryKeys: [String],
+        selectiveLogic: WorldbookSelectiveLogic,
         isEnabled: Bool,
         constant: Bool,
         useRegex: Bool,
         caseSensitive: Bool,
+        matchWholeWords: Bool,
         position: WorldbookPosition,
         role: WorldbookEntryRole,
+        outletName: String?,
         depth: Int,
-        order: Int
+        order: Int,
+        scanDepth: Int?,
+        useProbability: Bool,
+        probability: Double,
+        group: String?,
+        groupOverride: Bool,
+        groupWeight: Double,
+        useGroupScoring: Bool,
+        sticky: Int?,
+        cooldown: Int?,
+        delay: Int?,
+        excludeRecursion: Bool,
+        preventRecursion: Bool,
+        delayUntilRecursion: Bool,
+        metadata: [String: JSONValue]
     ) {
         self.id = id
         self.entryID = entryID
         self.comment = comment
         self.content = content
         self.keysText = keysText
+        self.secondaryKeys = secondaryKeys
+        self.selectiveLogic = selectiveLogic
         self.isEnabled = isEnabled
         self.constant = constant
         self.useRegex = useRegex
         self.caseSensitive = caseSensitive
+        self.matchWholeWords = matchWholeWords
         self.position = position
         self.role = role
+        self.outletName = outletName
         self.depth = depth
         self.order = order
+        self.scanDepth = scanDepth
+        self.useProbability = useProbability
+        self.probability = probability
+        self.group = group
+        self.groupOverride = groupOverride
+        self.groupWeight = groupWeight
+        self.useGroupScoring = useGroupScoring
+        self.sticky = sticky
+        self.cooldown = cooldown
+        self.delay = delay
+        self.excludeRecursion = excludeRecursion
+        self.preventRecursion = preventRecursion
+        self.delayUntilRecursion = delayUntilRecursion
+        self.metadata = metadata
     }
 
     func toEntry() -> WorldbookEntry {
@@ -307,14 +397,32 @@ struct WatchWorldbookEntryDraft: Identifiable {
             comment: normalizedComment,
             content: normalizedContent,
             keys: normalizedKeys,
+            secondaryKeys: secondaryKeys,
+            selectiveLogic: selectiveLogic,
             isEnabled: isEnabled,
             constant: constant,
             position: position,
+            outletName: outletName,
             order: order,
             depth: position == .atDepth ? depth : nil,
+            scanDepth: scanDepth,
             caseSensitive: caseSensitive,
+            matchWholeWords: matchWholeWords,
             useRegex: useRegex,
-            role: role
+            useProbability: useProbability,
+            probability: probability,
+            group: group,
+            groupOverride: groupOverride,
+            groupWeight: groupWeight,
+            useGroupScoring: useGroupScoring,
+            role: role,
+            sticky: sticky,
+            cooldown: cooldown,
+            delay: delay,
+            excludeRecursion: excludeRecursion,
+            preventRecursion: preventRecursion,
+            delayUntilRecursion: delayUntilRecursion,
+            metadata: metadata
         )
     }
 }

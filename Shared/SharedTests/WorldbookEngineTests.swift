@@ -377,6 +377,51 @@ struct WorldbookEngineTests {
         #expect(result.after.contains(where: { $0.content == "NOT_ALL 命中" }))
     }
 
+    @Test("导入的 selective 开关关闭时引擎忽略次级关键词")
+    func testEngineIgnoresSecondaryKeysWhenSelectiveIsOff() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-secondary-selective-off-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
+
+        let importedEntry = WorldbookEntry(
+            content: "selective-off primary hit",
+            keys: ["hero"],
+            secondaryKeys: ["missing-secondary"],
+            selectiveLogic: .andAny,
+            metadata: [WorldbookMetadataKey.etosSecondaryKeysEnabled: .bool(false)]
+        )
+        let nativeEntry = WorldbookEntry(
+            content: "native secondary still checked",
+            keys: ["hero"],
+            secondaryKeys: ["missing-secondary"],
+            selectiveLogic: .andAny
+        )
+        let legacyImportedEntry = WorldbookEntry(
+            content: "legacy metadata primary hit",
+            keys: ["hero"],
+            secondaryKeys: ["missing-secondary"],
+            selectiveLogic: .andAny,
+            metadata: [WorldbookMetadataKey.sillyTavernSecondaryKeys: .array([.string("missing-secondary")])]
+        )
+        let book = Worldbook(name: "selective", entries: [importedEntry, legacyImportedEntry, nativeEntry])
+
+        let result = engine.evaluate(
+            .init(
+                sessionID: UUID(),
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "hero")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(result.after.contains(where: { $0.content == "selective-off primary hit" }))
+        #expect(result.after.contains(where: { $0.content == "legacy metadata primary hit" }))
+        #expect(!result.after.contains(where: { $0.content == "native secondary still checked" }))
+    }
+
     @Test("engine ignores group scoring and keeps every matching group entry")
     func testEngineGroupFieldsDoNotSuppressEntries() {
         let tempURL = FileManager.default.temporaryDirectory
