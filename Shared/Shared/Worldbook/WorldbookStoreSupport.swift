@@ -383,15 +383,16 @@ extension WorldbookStore {
             nestedSettings = [:]
         }
 
-        metadata["maxEntries"] != nil ||
+        let hasRootBudget = metadata["maxEntries"] != nil ||
             metadata["max_entries"] != nil ||
             metadata["maxInjectedEntries"] != nil ||
             metadata["max_injected_entries"] != nil ||
-            metadata["etosExplicitMaxInjectedEntries"] != nil ||
-            nestedSettings["maxEntries"] != nil ||
+            metadata["etosExplicitMaxInjectedEntries"] != nil
+        let hasNestedBudget = nestedSettings["maxEntries"] != nil ||
             nestedSettings["max_entries"] != nil ||
             nestedSettings["maxInjectedEntries"] != nil ||
             nestedSettings["max_injected_entries"] != nil
+        return hasRootBudget || hasNestedBudget
     }
 
     func updateCaches(with worldbooks: [Worldbook]) {
