@@ -25,17 +25,17 @@ public enum SystemSpeechRecognizerService {
         public var errorDescription: String? {
             switch self {
             case .unavailable:
-                return "当前系统不支持语音识别。"
+                return NSLocalizedString("当前系统不支持语音识别。", comment: "System speech recognition unavailable error")
             case .authorizationDenied:
-                return "语音识别权限未开启，请到系统设置中允许“语音识别”。"
+                return NSLocalizedString("语音识别权限未开启，请到系统设置中允许“语音识别”。", comment: "System speech recognition authorization denied error")
             case .noSpeechRecognizer:
-                return "无法初始化系统语音识别器。"
+                return NSLocalizedString("无法初始化系统语音识别器。", comment: "System speech recognizer init failed error")
             case .recognitionFailed(let message):
-                return "系统语音识别失败：\(message)"
+                return String(format: NSLocalizedString("系统语音识别失败：%@", comment: "System speech recognition failed error"), message)
             case .emptyResult:
-                return "未识别到有效语音内容。"
+                return NSLocalizedString("未识别到有效语音内容。", comment: "System speech recognition empty result error")
             case .unsupportedPlatform:
-                return "当前平台不支持系统语音识别。"
+                return NSLocalizedString("当前平台不支持系统语音识别。", comment: "System speech recognition unsupported platform error")
             }
         }
     }

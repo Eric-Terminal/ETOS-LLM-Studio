@@ -19,13 +19,13 @@ public enum FontSemanticRole: String, Codable, CaseIterable, Identifiable {
     public var title: String {
         switch self {
         case .body:
-            return "正文"
+            return NSLocalizedString("正文", comment: "Font semantic role title")
         case .emphasis:
-            return "斜体"
+            return NSLocalizedString("斜体", comment: "Font semantic role title")
         case .strong:
-            return "粗体"
+            return NSLocalizedString("粗体", comment: "Font semantic role title")
         case .code:
-            return "代码"
+            return NSLocalizedString("代码", comment: "Font semantic role title")
         }
     }
 }
@@ -39,18 +39,18 @@ public enum FontFallbackScope: String, Codable, CaseIterable, Identifiable {
     public var title: String {
         switch self {
         case .segment:
-            return "整段"
+            return NSLocalizedString("整段", comment: "Font fallback scope title")
         case .character:
-            return "单字"
+            return NSLocalizedString("单字", comment: "Font fallback scope title")
         }
     }
 
     public var summary: String {
         switch self {
         case .segment:
-            return "当前行为：一条文本里只要有字形缺失，就整段降级到下一优先级字体。"
+            return NSLocalizedString("当前行为：一条文本里只要有字形缺失，就整段降级到下一优先级字体。", comment: "Font fallback segment summary")
         case .character:
-            return "按单字回退：优先保留高优先级字体，缺失字形再由系统进行逐字回退。"
+            return NSLocalizedString("按单字回退：优先保留高优先级字体，缺失字形再由系统进行逐字回退。", comment: "Font fallback character summary")
         }
     }
 }
@@ -159,13 +159,13 @@ public enum FontLibraryError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidFontData:
-            return "无法识别该字体文件。"
+            return NSLocalizedString("无法识别该字体文件。", comment: "Font import invalid data error")
         case .unsupportedFontFileExtension:
-            return "仅支持导入 TTF / OTF / TTC / WOFF / WOFF2 字体文件。"
+            return NSLocalizedString("仅支持导入 TTF / OTF / TTC / WOFF / WOFF2 字体文件。", comment: "Font import unsupported extension error")
         case .saveFailed:
-            return "保存字体文件失败。"
+            return NSLocalizedString("保存字体文件失败。", comment: "Font save failed error")
         case .deleteFailed:
-            return "删除字体文件失败。"
+            return NSLocalizedString("删除字体文件失败。", comment: "Font delete failed error")
         }
     }
 }

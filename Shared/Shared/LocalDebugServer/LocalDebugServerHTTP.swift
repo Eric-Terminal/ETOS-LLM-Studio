@@ -25,13 +25,13 @@ extension LocalDebugServer {
             Task { @MainActor in
                 if success {
                     self.isRunning = true
-                    self.connectionStatus = "已连接 (HTTP)"
+                    self.connectionStatus = NSLocalizedString("已连接 (HTTP)", comment: "")
                     self.errorMessage = nil
                     self.logger.info("HTTP 连接测试成功")
                     self.startHTTPPolling(host: host, port: port)
                 } else {
                     self.isRunning = false
-                    self.connectionStatus = "连接失败"
+                    self.connectionStatus = NSLocalizedString("连接失败", comment: "")
                     self.errorMessage = self.describeHTTPConnectionFailure(error)
                     self.logger.error("HTTP 连接测试失败")
                 }
@@ -69,27 +69,27 @@ extension LocalDebugServer {
     /// 生成更易定位问题的 HTTP 连接失败提示
     func describeHTTPConnectionFailure(_ error: Error?) -> String {
         guard let error else {
-            return "无法连接到服务器，请检查地址和端口"
+            return NSLocalizedString("无法连接到服务器，请检查地址和端口", comment: "")
         }
 
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain,
            nsError.code == NSURLErrorAppTransportSecurityRequiresSecureConnection {
-            return "HTTP 被系统安全策略拦截，请允许本地网络明文访问后重试"
+            return NSLocalizedString("HTTP 被系统安全策略拦截，请允许本地网络明文访问后重试", comment: "")
         }
 
         let description = error.localizedDescription.lowercased()
         if description.contains("connection refused") || description.contains("拒绝") {
-            return "连接被拒绝，请检查服务器是否已启动"
+            return NSLocalizedString("连接被拒绝，请检查服务器是否已启动", comment: "")
         }
         if description.contains("timed out") || description.contains("超时") {
-            return "连接超时，请检查 IP 地址和网络"
+            return NSLocalizedString("连接超时，请检查 IP 地址和网络", comment: "")
         }
         if description.contains("unreachable") || description.contains("不可达") {
-            return "网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络"
+            return NSLocalizedString("网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络", comment: "")
         }
 
-        return "连接失败: \(error.localizedDescription)"
+        return String(format: NSLocalizedString("连接失败: %@", comment: ""), error.localizedDescription)
     }
 
     /// 启动 HTTP 轮询

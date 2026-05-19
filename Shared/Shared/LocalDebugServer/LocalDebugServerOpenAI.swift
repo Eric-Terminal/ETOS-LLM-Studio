@@ -179,8 +179,9 @@ extension LocalDebugServer {
 
     func formatSessionTitle(for date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年MM月dd日 HH点mm分ss秒"
+        formatter.locale = .autoupdatingCurrent
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
         return formatter.string(from: date)
     }
 

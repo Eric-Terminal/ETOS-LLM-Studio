@@ -508,7 +508,7 @@ struct ThirdPartyImportView: View {
     private func progressRow(text: String) -> some View {
         HStack(spacing: 8) {
             ProgressView()
-            Text(text)
+            Text(NSLocalizedString(text, comment: "导入进度文本"))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -516,7 +516,7 @@ struct ThirdPartyImportView: View {
 
     private func row(title: String, value: String) -> some View {
         HStack {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "导入信息行标题"))
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)

@@ -56,13 +56,13 @@ public enum SyncPackageTransferError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidEnvelope:
-            return "导出包格式无效。"
+            return NSLocalizedString("导出包格式无效。", comment: "Sync package invalid envelope error")
         case .unsupportedSchemaVersion(let version):
-            return "导出包版本过新（schemaVersion=\(version)），当前版本暂不支持。"
+            return String(format: NSLocalizedString("导出包版本过新（schemaVersion=%d），当前版本暂不支持。", comment: "Sync package unsupported schema version error"), version)
         case .unableToCreateOutputFile:
-            return "无法创建导出文件。"
+            return NSLocalizedString("无法创建导出文件。", comment: "Sync package unable to create output file error")
         case .fileWriteFailed(let reason):
-            return "写入导出文件失败：\(reason)"
+            return String(format: NSLocalizedString("写入导出文件失败：%@", comment: "Sync package file write failed error"), reason)
         }
     }
 }
@@ -225,12 +225,13 @@ public enum SyncPackageTransferService {
     /// 默认导出文件名。
     public static func suggestedFileName(exportedAt: Date = Date()) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .current
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let stamp = formatter.string(from: exportedAt)
-        return "ETOS-数据导出-\(stamp).json"
+        let baseName = NSLocalizedString("ETOS-数据导出", comment: "Sync package export file base name")
+        return "\(baseName)-\(stamp).json"
     }
 
     private static func makeManifest(from package: SyncPackage, generatedAt: Date) -> SyncManifest {

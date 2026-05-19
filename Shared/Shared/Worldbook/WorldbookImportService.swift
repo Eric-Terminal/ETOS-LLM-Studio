@@ -15,13 +15,13 @@ public enum WorldbookImportError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidPayload:
-            return "导入失败：文件内容不是有效的世界书数据。"
+            return NSLocalizedString("导入失败：文件内容不是有效的世界书数据。", comment: "Worldbook import invalid payload error")
         case .unsupportedFormat:
-            return "导入失败：暂不支持该文件格式。"
+            return NSLocalizedString("导入失败：暂不支持该文件格式。", comment: "Worldbook import unsupported format error")
         case .missingEntries:
-            return "导入失败：未找到可用条目。"
+            return NSLocalizedString("导入失败：未找到可用条目。", comment: "Worldbook import missing entries error")
         case .missingPNGPayload:
-            return "导入失败：PNG 内未找到 naidata 世界书数据。"
+            return NSLocalizedString("导入失败：PNG 内未找到 naidata 世界书数据。", comment: "Worldbook import missing PNG payload error")
         }
     }
 }
@@ -159,7 +159,10 @@ public struct WorldbookImportService {
         for (index, item) in entries.enumerated() {
             guard var dict = item as? [String: Any] else {
                 failedEntries += 1
-                appendFailureReason("角色卡条目 #\(index) 结构无效，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("角色卡条目 #%d 结构无效，已跳过。", comment: "Worldbook character card entry invalid structure"), index),
+                    to: &failureReasons
+                )
                 continue
             }
 
@@ -182,7 +185,10 @@ public struct WorldbookImportService {
                 parsed.append(entry)
             } else {
                 failedEntries += 1
-                appendFailureReason("角色卡条目 \(uid) 缺少有效 content，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("角色卡条目 %@ 缺少有效 content，已跳过。", comment: "Worldbook character card entry missing content"), String(uid)),
+                    to: &failureReasons
+                )
             }
         }
 
@@ -210,7 +216,10 @@ public struct WorldbookImportService {
         for (key, value) in entriesContainer {
             guard let dict = value as? [String: Any] else {
                 failedEntries += 1
-                appendFailureReason("条目 \(key) 结构无效，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("条目 %@ 结构无效，已跳过。", comment: "Worldbook entry invalid structure"), key),
+                    to: &failureReasons
+                )
                 continue
             }
             let uidHint = Int(key)
@@ -218,7 +227,10 @@ public struct WorldbookImportService {
                 entries.append(entry)
             } else {
                 failedEntries += 1
-                appendFailureReason("条目 \(uidHint.map(String.init) ?? key) 缺少有效 content，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("条目 %@ 缺少有效 content，已跳过。", comment: "Worldbook entry missing content"), uidHint.map(String.init) ?? key),
+                    to: &failureReasons
+                )
             }
         }
         return buildParsedBook(entries: entries, root: root, fileName: fileName, failedEntries: failedEntries, failureReasons: failureReasons)
@@ -231,7 +243,10 @@ public struct WorldbookImportService {
         for (index, item) in entries.enumerated() {
             guard let dict = item as? [String: Any] else {
                 failedEntries += 1
-                appendFailureReason("条目 #\(index) 结构无效，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("条目 #%d 结构无效，已跳过。", comment: "Worldbook indexed entry invalid structure"), index),
+                    to: &failureReasons
+                )
                 continue
             }
             let uid = intValue(dict["uid"])
@@ -239,7 +254,10 @@ public struct WorldbookImportService {
                 parsed.append(entry)
             } else {
                 failedEntries += 1
-                appendFailureReason("条目 \(uid.map(String.init) ?? "#\(index)") 缺少有效 content，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("条目 %@ 缺少有效 content，已跳过。", comment: "Worldbook entry missing content"), uid.map(String.init) ?? "#\(index)"),
+                    to: &failureReasons
+                )
             }
         }
         return buildParsedBook(entries: parsed, root: root, fileName: fileName, failedEntries: failedEntries, failureReasons: failureReasons)
@@ -252,7 +270,10 @@ public struct WorldbookImportService {
         for (index, item) in entries.enumerated() {
             guard let dict = item as? [String: Any] else {
                 failedEntries += 1
-                appendFailureReason("Novel 条目 #\(index) 结构无效，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("Novel 条目 #%d 结构无效，已跳过。", comment: "Worldbook Novel entry invalid structure"), index),
+                    to: &failureReasons
+                )
                 continue
             }
             var converted = dict
@@ -273,7 +294,10 @@ public struct WorldbookImportService {
                 parsed.append(entry)
             } else {
                 failedEntries += 1
-                appendFailureReason("Novel 条目 \(uid.map(String.init) ?? "#\(index)") 缺少有效 content，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("Novel 条目 %@ 缺少有效 content，已跳过。", comment: "Worldbook Novel entry missing content"), uid.map(String.init) ?? "#\(index)"),
+                    to: &failureReasons
+                )
             }
         }
         return buildParsedBook(entries: parsed, root: root, fileName: fileName, failedEntries: failedEntries, failureReasons: failureReasons)
@@ -286,7 +310,10 @@ public struct WorldbookImportService {
         for (index, item) in entries.enumerated() {
             guard let dict = item as? [String: Any] else {
                 failedEntries += 1
-                appendFailureReason("Agnai 条目 #\(index) 结构无效，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("Agnai 条目 #%d 结构无效，已跳过。", comment: "Worldbook Agnai entry invalid structure"), index),
+                    to: &failureReasons
+                )
                 continue
             }
             var converted = dict
@@ -304,7 +331,10 @@ public struct WorldbookImportService {
                 parsed.append(entry)
             } else {
                 failedEntries += 1
-                appendFailureReason("Agnai 条目 \(uid.map(String.init) ?? "#\(index)") 缺少有效 content，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("Agnai 条目 %@ 缺少有效 content，已跳过。", comment: "Worldbook Agnai entry missing content"), uid.map(String.init) ?? "#\(index)"),
+                    to: &failureReasons
+                )
             }
         }
         return buildParsedBook(entries: parsed, root: root, fileName: fileName, failedEntries: failedEntries, failureReasons: failureReasons)
@@ -317,7 +347,10 @@ public struct WorldbookImportService {
         for (index, item) in entries.enumerated() {
             guard let dict = item as? [String: Any] else {
                 failedEntries += 1
-                appendFailureReason("Risu 条目 #\(index) 结构无效，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("Risu 条目 #%d 结构无效，已跳过。", comment: "Worldbook Risu entry invalid structure"), index),
+                    to: &failureReasons
+                )
                 continue
             }
             var converted = dict
@@ -335,7 +368,10 @@ public struct WorldbookImportService {
                 parsed.append(entry)
             } else {
                 failedEntries += 1
-                appendFailureReason("Risu 条目 \(uid.map(String.init) ?? "#\(index)") 缺少有效 content，已跳过。", to: &failureReasons)
+                appendFailureReason(
+                    String(format: NSLocalizedString("Risu 条目 %@ 缺少有效 content，已跳过。", comment: "Worldbook Risu entry missing content"), uid.map(String.init) ?? "#\(index)"),
+                    to: &failureReasons
+                )
             }
         }
         return buildParsedBook(entries: parsed, root: root, fileName: fileName, failedEntries: failedEntries, failureReasons: failureReasons)
@@ -349,7 +385,7 @@ public struct WorldbookImportService {
         failureReasons: [String]
     ) -> ParsedBook {
         let defaultName = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
-        let name = stringValue(root["name"]) ?? stringValue(root["title"]) ?? (defaultName.isEmpty ? "导入世界书" : defaultName)
+        let name = stringValue(root["name"]) ?? stringValue(root["title"]) ?? (defaultName.isEmpty ? NSLocalizedString("导入世界书", comment: "Imported worldbook fallback name") : defaultName)
         let description = stringValue(root["description"]) ?? stringValue(root["desc"]) ?? ""
         let nestedSettings = root["settings"] as? [String: Any]
 

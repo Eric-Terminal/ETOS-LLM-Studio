@@ -73,23 +73,27 @@ public enum MCPClientError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .transportUnavailable:
-            return "未配置可用的 MCP 传输通道。"
+            return NSLocalizedString("未配置可用的 MCP 传输通道。", comment: "MCP client transport unavailable error")
         case .invalidResponse:
-            return "服务器返回了无法解析的响应。"
+            return NSLocalizedString("服务器返回了无法解析的响应。", comment: "MCP client invalid response error")
         case .rpcError(let error):
-            return "MCP 服务器错误 \(error.code): \(error.message)"
+            return String(format: NSLocalizedString("MCP 服务器错误 %d: %@", comment: "MCP client RPC error"), error.code, error.message)
         case .encodingError(let error):
-            return "请求编码失败：\(error.localizedDescription)"
+            return String(format: NSLocalizedString("请求编码失败：%@", comment: "MCP client encoding error"), error.localizedDescription)
         case .decodingError(let error):
-            return "响应解析失败：\(error.localizedDescription)"
+            return String(format: NSLocalizedString("响应解析失败：%@", comment: "MCP client decoding error"), error.localizedDescription)
         case .missingResult:
-            return "响应中缺少 result 字段。"
+            return NSLocalizedString("响应中缺少 result 字段。", comment: "MCP client missing result error")
         case .notConnected:
-            return "尚未连接到 MCP 服务器。"
+            return NSLocalizedString("尚未连接到 MCP 服务器。", comment: "MCP client not connected error")
         case .unsupportedProtocolVersion(let version):
-            return "服务器协商的 MCP 协议版本不受支持：\(version)"
+            return String(format: NSLocalizedString("服务器协商的 MCP 协议版本不受支持：%@", comment: "MCP client unsupported protocol version error"), version)
         case .requestTimedOut(let method, let timeout):
-            return "请求 \(method) 超时（\(String(format: "%.1f", timeout)) 秒）。"
+            return String(
+                format: NSLocalizedString("请求 %@ 超时（%@ 秒）。", comment: "MCP client request timeout error"),
+                method,
+                String(format: "%.1f", timeout)
+            )
         }
     }
 }

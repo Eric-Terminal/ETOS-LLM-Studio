@@ -26,24 +26,24 @@ public enum MemoryEmbeddingError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .emptyInput:
-            return "未提供任何待编码文本。"
+            return NSLocalizedString("未提供任何待编码文本。", comment: "Memory embedding empty input error")
         case .noAvailableModel:
-            return "尚未配置可用的嵌入模型。"
+            return NSLocalizedString("尚未配置可用的嵌入模型。", comment: "Memory embedding no available model error")
         case .preferredModelUnavailable(let identifier):
-            return "已选嵌入模型不可用或不支持嵌入：\(identifier)"
+            return String(format: NSLocalizedString("已选嵌入模型不可用或不支持嵌入：%@", comment: "Memory embedding preferred model unavailable error"), identifier)
         case .adapterMissing(let format):
-            return "找不到 '\(format)' 对应的嵌入适配器。"
+            return String(format: NSLocalizedString("找不到 '%@' 对应的嵌入适配器。", comment: "Memory embedding adapter missing error"), format)
         case .requestBuildFailed:
-            return "无法构建嵌入请求，请检查提供商配置。"
+            return NSLocalizedString("无法构建嵌入请求，请检查提供商配置。", comment: "Memory embedding request build failed error")
         case .httpStatus(let code, let body):
             if let body {
-                return "嵌入 API 响应异常 (\(code)): \(body)"
+                return String(format: NSLocalizedString("嵌入 API 响应异常 (%d): %@", comment: "Memory embedding HTTP error with body"), code, body)
             }
-            return "嵌入 API 响应异常，状态码: \(code)"
+            return String(format: NSLocalizedString("嵌入 API 响应异常，状态码: %d", comment: "Memory embedding HTTP error"), code)
         case .invalidResponse:
-            return "嵌入 API 返回了无效的数据。"
+            return NSLocalizedString("嵌入 API 返回了无效的数据。", comment: "Memory embedding invalid response error")
         case .resultCountMismatch(let expected, let actual):
-            return "嵌入结果数量与输入不一致：预期 \(expected)，实际 \(actual)。"
+            return String(format: NSLocalizedString("嵌入结果数量与输入不一致：预期 %d，实际 %d。", comment: "Memory embedding result count mismatch error"), expected, actual)
         }
     }
     

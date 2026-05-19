@@ -38,15 +38,15 @@ extension ChatService {
                     bodyDescription
                 )
             case .adapterNotFound(let format):
-                return "找不到适用于 '\(format)' 格式的 API 适配器。"
+                return String(format: NSLocalizedString("找不到适用于 '%@' 格式的 API 适配器。", comment: "API adapter missing error"), format)
             case .requestBuildFailed(let provider):
-                return "无法为 '\(provider)' 构建请求。"
+                return String(format: NSLocalizedString("无法为 '%@' 构建请求。", comment: "API request build failed error"), provider)
             case .featureUnavailable(let provider):
-                return "当前提供商 \(provider) 暂未实现语音转文字能力。"
+                return String(format: NSLocalizedString("当前提供商 %@ 暂未实现语音转文字能力。", comment: "Speech to text unavailable for provider error"), provider)
             case .invalidProviderConfiguration(let message):
                 return message
             case .modelListUnavailable(let provider, let apiFormat):
-                return "\(provider) (\(apiFormat)) 当前适配器未实现在线获取模型列表，请手动配置模型。"
+                return String(format: NSLocalizedString("%@ (%@) 当前适配器未实现在线获取模型列表，请手动配置模型。", comment: "Online model list unavailable error"), provider, apiFormat)
             }
         }
     }

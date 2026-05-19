@@ -13,19 +13,19 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
     public var displayName: String {
         switch self {
         case .chat:
-            return "聊天"
+            return NSLocalizedString("聊天", comment: "Usage analytics request source")
         case .dailyPulse:
-            return "每日脉冲"
+            return NSLocalizedString("每日脉冲", comment: "Usage analytics request source")
         case .sessionTitle:
-            return "会话标题"
+            return NSLocalizedString("会话标题", comment: "Usage analytics request source")
         case .reasoningSummary:
-            return "思考摘要"
+            return NSLocalizedString("思考摘要", comment: "Usage analytics request source")
         case .conversationSummary:
-            return "会话摘要"
+            return NSLocalizedString("会话摘要", comment: "Usage analytics request source")
         case .conversationProfile:
-            return "用户画像"
+            return NSLocalizedString("用户画像", comment: "Usage analytics request source")
         case .shortcutDescription:
-            return "快捷指令描述"
+            return NSLocalizedString("快捷指令描述", comment: "Usage analytics request source")
         case .imageOCR:
             return NSLocalizedString("图片 OCR", comment: "Image OCR usage source")
         }

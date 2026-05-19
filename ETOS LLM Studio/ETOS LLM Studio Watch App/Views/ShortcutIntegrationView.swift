@@ -264,9 +264,9 @@ struct ShortcutIntegrationView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "快捷指令介绍卡片标题"))
                 .etFont(.footnote.weight(.semibold))
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "快捷指令介绍卡片摘要"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
             Button {
@@ -282,7 +282,7 @@ struct ShortcutIntegrationView: View {
         .padding(.vertical, 2)
         .sheet(isPresented: isExpanded) {
             ScrollView {
-                Text(details)
+                Text(NSLocalizedString(details, comment: "快捷指令介绍卡片详情"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

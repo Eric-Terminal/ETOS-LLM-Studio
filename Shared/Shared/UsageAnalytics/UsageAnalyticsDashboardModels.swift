@@ -16,11 +16,11 @@ public enum UsageAnalyticsDetailScope: String, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .day:
-            return "日"
+            return NSLocalizedString("日", comment: "Usage analytics detail scope")
         case .week:
-            return "周"
+            return NSLocalizedString("周", comment: "Usage analytics detail scope")
         case .month:
-            return "月"
+            return NSLocalizedString("月", comment: "Usage analytics detail scope")
         }
     }
 }

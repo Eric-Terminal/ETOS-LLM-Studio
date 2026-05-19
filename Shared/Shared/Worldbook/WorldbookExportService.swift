@@ -14,7 +14,7 @@ public enum WorldbookExportError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .encodeFailed:
-            return "导出失败：无法序列化世界书数据。"
+            return NSLocalizedString("导出失败：无法序列化世界书数据。", comment: "Worldbook export encode failed error")
         }
     }
 }

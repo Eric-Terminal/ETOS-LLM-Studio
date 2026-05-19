@@ -259,27 +259,27 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     private func registerNotificationCategories() {
         let openAction = UNNotificationAction(
             identifier: appLocalNotificationDailyPulseOpenActionIdentifier,
-            title: "查看",
+            title: NSLocalizedString("查看", comment: "Daily pulse notification open action"),
             options: [.foreground]
         )
         let likeAction = UNNotificationAction(
             identifier: appLocalNotificationDailyPulseLikeActionIdentifier,
-            title: "喜欢",
+            title: NSLocalizedString("喜欢", comment: "Daily pulse notification like action"),
             options: []
         )
         let saveAction = UNNotificationAction(
             identifier: appLocalNotificationDailyPulseSaveActionIdentifier,
-            title: "保存为会话",
+            title: NSLocalizedString("保存为会话", comment: "Daily pulse notification save action"),
             options: []
         )
         let continueAction = UNNotificationAction(
             identifier: appLocalNotificationDailyPulseContinueActionIdentifier,
-            title: "继续聊",
+            title: NSLocalizedString("继续聊", comment: "Daily pulse notification continue action"),
             options: [.foreground]
         )
         let taskAction = UNNotificationAction(
             identifier: appLocalNotificationDailyPulseTaskActionIdentifier,
-            title: "加入任务",
+            title: NSLocalizedString("加入任务", comment: "Daily pulse notification add task action"),
             options: []
         )
 

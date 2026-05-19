@@ -220,10 +220,10 @@ private extension AgentSkillsView {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "Agent Skills 介绍卡片标题"))
                 .etFont(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "Agent Skills 介绍卡片摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.primary)
             Button {
@@ -240,7 +240,7 @@ private extension AgentSkillsView {
         .sheet(isPresented: isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(details)
+                    Text(NSLocalizedString(details, comment: "Agent Skills 介绍卡片详情"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

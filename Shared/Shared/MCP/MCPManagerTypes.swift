@@ -237,15 +237,15 @@ public enum MCPChatBridgeError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unknownTool:
-            return "未找到匹配的 MCP 工具。"
+            return NSLocalizedString("未找到匹配的 MCP 工具。", comment: "MCP chat bridge unknown tool error")
         case .unknownPrompt:
-            return "未找到匹配的 MCP 提示词模板。"
+            return NSLocalizedString("未找到匹配的 MCP 提示词模板。", comment: "MCP chat bridge unknown prompt error")
         case .toolGroupDisabled(let displayName):
-            return "\(displayName)总开关已关闭。"
+            return String(format: NSLocalizedString("%@总开关已关闭。", comment: "MCP chat bridge tool group disabled error"), displayName)
         case .toolDeniedByPolicy(let displayName):
-            return "\(displayName) 已被策略禁止调用。"
+            return String(format: NSLocalizedString("%@ 已被策略禁止调用。", comment: "MCP chat bridge tool denied by policy error"), displayName)
         case .toolCancelled(let displayName):
-            return "\(displayName) 调用已取消。"
+            return String(format: NSLocalizedString("%@ 调用已取消。", comment: "MCP chat bridge tool cancelled error"), displayName)
         }
     }
 }

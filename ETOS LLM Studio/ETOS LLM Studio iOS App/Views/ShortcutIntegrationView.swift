@@ -315,7 +315,7 @@ struct ShortcutIntegrationView: View {
 
     private func row(title: String, value: String) -> some View {
         HStack {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "快捷指令导入摘要标题"))
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
@@ -329,10 +329,10 @@ struct ShortcutIntegrationView: View {
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(NSLocalizedString(title, comment: "快捷指令介绍卡片标题"))
                 .etFont(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text(summary)
+            Text(NSLocalizedString(summary, comment: "快捷指令介绍卡片摘要"))
                 .etFont(.subheadline)
                 .foregroundStyle(.primary)
             Button {
@@ -349,13 +349,13 @@ struct ShortcutIntegrationView: View {
         .sheet(isPresented: isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(details)
+                    Text(NSLocalizedString(details, comment: "快捷指令介绍卡片详情"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .navigationTitle(title)
+                .navigationTitle(NSLocalizedString(title, comment: "快捷指令介绍卡片详情标题"))
                 .navigationBarTitleDisplayMode(.inline)
             }
         }

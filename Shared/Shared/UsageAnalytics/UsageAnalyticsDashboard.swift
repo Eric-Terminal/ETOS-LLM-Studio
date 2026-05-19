@@ -193,9 +193,9 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         calendar: Calendar
     ) -> [UsageAnalyticsOverviewCard] {
         [
-            makeOverviewCard(scope: .day, title: "今日", interval: DateInterval(start: calendar.startOfDay(for: referenceDate), end: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: referenceDate)) ?? referenceDate), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar),
-            makeOverviewCard(scope: .week, title: "本周", interval: UsageAnalyticsRuntimeContext.weekInterval(containing: referenceDate, calendar: calendar), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar),
-            makeOverviewCard(scope: .month, title: "本月", interval: UsageAnalyticsRuntimeContext.monthInterval(containing: referenceDate, calendar: calendar), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar)
+            makeOverviewCard(scope: .day, title: NSLocalizedString("今日", comment: "Usage overview card title"), interval: DateInterval(start: calendar.startOfDay(for: referenceDate), end: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: referenceDate)) ?? referenceDate), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar),
+            makeOverviewCard(scope: .week, title: NSLocalizedString("本周", comment: "Usage overview card title"), interval: UsageAnalyticsRuntimeContext.weekInterval(containing: referenceDate, calendar: calendar), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar),
+            makeOverviewCard(scope: .month, title: NSLocalizedString("本月", comment: "Usage overview card title"), interval: UsageAnalyticsRuntimeContext.monthInterval(containing: referenceDate, calendar: calendar), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar)
         ]
     }
 
@@ -213,7 +213,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let requestCount = scopedTotals.reduce(0) { $0 + $1.requestCount }
         let totalTokens = scopedTotals.reduce(0) { $0 + $1.tokenTotals.totalTokens }
         let errorCount = scopedTotals.reduce(0) { $0 + $1.failedCount }
-        let topModelName = aggregateModels(scopedModels).first?.title ?? "暂无"
+        let topModelName = aggregateModels(scopedModels).first?.title ?? NSLocalizedString("暂无", comment: "Usage analytics no top model")
 
         return UsageAnalyticsOverviewCard(
             scope: scope,
@@ -331,15 +331,15 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             let start = calendar.startOfDay(for: anchorDate)
             let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
             interval = DateInterval(start: start, end: end)
-            title = "日详情"
+            title = NSLocalizedString("日详情", comment: "Usage analytics detail title")
             subtitle = dayTitle(for: anchorDate, calendar: calendar)
         case .week:
             interval = UsageAnalyticsRuntimeContext.weekInterval(containing: anchorDate, calendar: calendar)
-            title = "周详情"
+            title = NSLocalizedString("周详情", comment: "Usage analytics detail title")
             subtitle = "\(dayTitle(for: interval.start, calendar: calendar)) - \(dayTitle(for: interval.end.addingTimeInterval(-1), calendar: calendar))"
         case .month:
             interval = UsageAnalyticsRuntimeContext.monthInterval(containing: anchorDate, calendar: calendar)
-            title = "月详情"
+            title = NSLocalizedString("月详情", comment: "Usage analytics detail title")
             subtitle = compactMonthTitle(for: anchorDate, calendar: calendar)
         }
 
@@ -492,26 +492,26 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     private nonisolated static func compactMonthTitle(for date: Date, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.locale = .autoupdatingCurrent
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "M月"
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
         return formatter.string(from: date)
     }
 
     private nonisolated static func dayTitle(for date: Date, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.locale = .autoupdatingCurrent
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "yyyy年M月d日"
+        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
         return formatter.string(from: date)
     }
 
     private nonisolated static func weekdaySymbols(calendar: Calendar) -> [String] {
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_Hans_CN")
-        let symbols = formatter.veryShortStandaloneWeekdaySymbols ?? ["日", "一", "二", "三", "四", "五", "六"]
+        formatter.locale = .autoupdatingCurrent
+        let symbols = formatter.veryShortStandaloneWeekdaySymbols ?? formatter.veryShortWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
         let first = max(0, calendar.firstWeekday - 1)
         return Array(symbols[first...]) + Array(symbols[..<first])
     }

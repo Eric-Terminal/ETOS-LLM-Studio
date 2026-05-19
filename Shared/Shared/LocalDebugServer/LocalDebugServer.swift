@@ -57,7 +57,7 @@ public class LocalDebugServer: ObservableObject {
 
     @Published public var isRunning = false
     @Published public var serverURL: String = ""
-    @Published public var connectionStatus: String = "未连接"
+    @Published public var connectionStatus: String = NSLocalizedString("未连接", comment: "")
     @Published public var errorMessage: String?
     @Published public var pendingOpenAIRequest: OpenAIRequestSummary?
     @Published public var pendingOpenAIQueueCount: Int = 0

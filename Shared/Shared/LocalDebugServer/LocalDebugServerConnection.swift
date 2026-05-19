@@ -250,7 +250,7 @@ extension LocalDebugServer {
         if useHTTP {
             logger.info("使用 HTTP 轮询模式")
             serverURL = "\(parsed.host):\(parsed.httpPort)"
-            connectionStatus = "正在请求权限..."
+            connectionStatus = NSLocalizedString("正在请求权限...", comment: "")
             triggerLocalNetworkPermission(host: "\(parsed.host):\(parsed.httpPort)") { [weak self] in
                 guard let self else { return }
                 Task { @MainActor in
@@ -260,7 +260,7 @@ extension LocalDebugServer {
         } else {
             wsAutoFallbackEnabled = true
             serverURL = "\(parsed.host):\(parsed.wsPort)"
-            connectionStatus = "正在请求权限..."
+            connectionStatus = NSLocalizedString("正在请求权限...", comment: "")
             triggerLocalNetworkPermission(host: "\(parsed.host):\(parsed.wsPort)") { [weak self] in
                 guard let self else { return }
                 Task { @MainActor in
@@ -277,8 +277,8 @@ extension LocalDebugServer {
 
         let urlString = "ws://\(host):\(port)/"
         guard let wsURL = URL(string: urlString) else {
-            self.errorMessage = "无效的服务器地址"
-            self.connectionStatus = "连接失败"
+            self.errorMessage = NSLocalizedString("无效的服务器地址", comment: "")
+            self.connectionStatus = NSLocalizedString("连接失败", comment: "")
             return
         }
 
@@ -305,7 +305,7 @@ extension LocalDebugServer {
                 switch state {
                 case .ready:
                     self.isRunning = true
-                    self.connectionStatus = "已连接"
+                    self.connectionStatus = NSLocalizedString("已连接", comment: "")
                     self.errorMessage = nil
                     self.wsAutoFallbackEnabled = false
                     self.logger.info("已连接到 \(host):\(port)")
@@ -314,38 +314,38 @@ extension LocalDebugServer {
                         self.wsAutoFallbackEnabled = false
                         self.useHTTP = true
                         self.serverURL = "\(host):\(self.wsFallbackHTTPPort)"
-                        self.connectionStatus = "WebSocket 失败，回退到 HTTP 轮询..."
-                        self.errorMessage = "WebSocket 连接失败，已自动切换到 HTTP 轮询"
+                        self.connectionStatus = NSLocalizedString("WebSocket 失败，回退到 HTTP 轮询...", comment: "")
+                        self.errorMessage = NSLocalizedString("WebSocket 连接失败，已自动切换到 HTTP 轮询", comment: "")
                         self.logger.error("WebSocket 连接失败，准备回退 HTTP: \(error.localizedDescription)")
                         self.performHTTPConnection(host: host, port: self.wsFallbackHTTPPort)
                         return
                     }
 
                     self.isRunning = false
-                    self.connectionStatus = "连接失败"
+                    self.connectionStatus = NSLocalizedString("连接失败", comment: "")
                     let errorDescription = error.localizedDescription.lowercased()
                     if errorDescription.contains("connection refused") || errorDescription.contains("拒绝") {
-                        self.errorMessage = "连接被拒绝，请检查服务器是否已启动"
+                        self.errorMessage = NSLocalizedString("连接被拒绝，请检查服务器是否已启动", comment: "")
                     } else if errorDescription.contains("timed out") || errorDescription.contains("超时") {
-                        self.errorMessage = "连接超时，请检查 IP 地址和网络"
+                        self.errorMessage = NSLocalizedString("连接超时，请检查 IP 地址和网络", comment: "")
                     } else if errorDescription.contains("unreachable") || errorDescription.contains("不可达") {
-                        self.errorMessage = "网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络"
+                        self.errorMessage = NSLocalizedString("网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络", comment: "")
                     } else {
-                        self.errorMessage = "连接失败: \(error.localizedDescription)"
+                        self.errorMessage = String(format: NSLocalizedString("连接失败: %@", comment: ""), error.localizedDescription)
                     }
                     self.logger.error("连接失败: \(error.localizedDescription)")
                 case .cancelled:
                     self.isRunning = false
-                    self.connectionStatus = "未连接"
+                    self.connectionStatus = NSLocalizedString("未连接", comment: "")
                     self.errorMessage = nil
                     self.wsAutoFallbackEnabled = false
                 case .waiting(let error):
-                    self.connectionStatus = "等待连接..."
+                    self.connectionStatus = NSLocalizedString("等待连接...", comment: "")
                     self.logger.info("等待连接: \(error.localizedDescription)")
                 case .preparing:
-                    self.connectionStatus = "准备中..."
+                    self.connectionStatus = NSLocalizedString("准备中...", comment: "")
                 case .setup:
-                    self.connectionStatus = "设置中..."
+                    self.connectionStatus = NSLocalizedString("设置中...", comment: "")
                 @unknown default:
                     self.logger.warning("未知连接状态")
                 }
@@ -375,7 +375,7 @@ extension LocalDebugServer {
         httpSession = nil
 
         isRunning = false
-        connectionStatus = "未连接"
+        connectionStatus = NSLocalizedString("未连接", comment: "")
         wsAutoFallbackEnabled = false
         pendingOpenAIRequests.removeAll()
         updatePendingOpenAIState()

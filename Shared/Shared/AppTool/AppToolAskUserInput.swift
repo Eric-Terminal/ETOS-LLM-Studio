@@ -176,7 +176,7 @@ public enum AppToolAskUserInputSubmissionFormatter {
         submission: AppToolAskUserInputSubmission
     ) -> String {
         if submission.cancelled {
-            return "用户取消了本次问答。"
+            return NSLocalizedString("用户取消了本次问答。", comment: "Ask user input tool cancelled result")
         }
 
         let questionByID = Dictionary(uniqueKeysWithValues: request.questions.map { ($0.id, $0) })
@@ -187,7 +187,7 @@ public enum AppToolAskUserInputSubmissionFormatter {
         }
 
         if blocks.isEmpty {
-            return "用户未提供回答。"
+            return NSLocalizedString("用户未提供回答。", comment: "Ask user input tool empty result")
         }
         return blocks.joined(separator: "\n\n")
     }
@@ -221,7 +221,7 @@ public enum AppToolAskUserInputSubmissionFormatter {
         }
 
         if segments.isEmpty {
-            return "未填写"
+            return NSLocalizedString("未填写", comment: "Ask user input unanswered placeholder")
         }
         return segments.joined(separator: ",")
     }

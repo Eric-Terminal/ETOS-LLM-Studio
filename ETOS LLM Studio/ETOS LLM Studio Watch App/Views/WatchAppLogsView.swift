@@ -363,7 +363,7 @@ private enum WatchLevelFilter: String, CaseIterable, Identifiable {
 
 private func formatTime(_ date: Date) -> String {
     let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "zh_CN")
+    formatter.locale = .autoupdatingCurrent
     formatter.dateFormat = "HH:mm:ss"
     return formatter.string(from: date)
 }

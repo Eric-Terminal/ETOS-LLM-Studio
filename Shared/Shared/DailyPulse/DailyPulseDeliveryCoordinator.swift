@@ -109,26 +109,28 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         case .authorized, .provisional, .ephemeral:
 #if os(iOS)
             return reminderEnabled
-                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；iPhone 会尽量在后台提前准备今天这一期，如果到了提醒时间后才完成，还会补发一条就绪通知。"
-                : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
+                ? String(format: NSLocalizedString("将于每天 %@ 提醒你查看每日脉冲；iPhone 会尽量在后台提前准备今天这一期，如果到了提醒时间后才完成，还会补发一条就绪通知。", comment: "Daily pulse iOS reminder enabled status"), reminderTimeText)
+                : NSLocalizedString("提醒已关闭；你仍可在应用内手动查看今日卡片。", comment: "Daily pulse reminder disabled status")
 #else
             return reminderEnabled
-                ? "将于每天 \(reminderTimeText) 提醒你查看每日脉冲；手表端仍会在前台恢复时自动尝试准备今天这一期。"
-                : "提醒已关闭；你仍可在应用内手动查看今日卡片。"
+                ? String(format: NSLocalizedString("将于每天 %@ 提醒你查看每日脉冲；手表端仍会在前台恢复时自动尝试准备今天这一期。", comment: "Daily pulse watchOS reminder enabled status"), reminderTimeText)
+                : NSLocalizedString("提醒已关闭；你仍可在应用内手动查看今日卡片。", comment: "Daily pulse reminder disabled status")
 #endif
         case .denied:
 #if os(iOS)
-            return "系统通知权限当前未开启，提醒与就绪通知不会送达；但 iPhone 仍会尽量在后台提前准备今天这一期。"
+            return NSLocalizedString("系统通知权限当前未开启，提醒与就绪通知不会送达；但 iPhone 仍会尽量在后台提前准备今天这一期。", comment: "Daily pulse iOS notification denied status")
 #else
-            return "系统通知权限当前未开启，晨间提醒暂时不会送达。"
+            return NSLocalizedString("系统通知权限当前未开启，晨间提醒暂时不会送达。", comment: "Daily pulse watchOS notification denied status")
 #endif
         case .notDetermined:
-            return reminderEnabled ? "首次开启后会请求通知权限，用于晨间提醒与晨间送达尝试。" : "开启后会在设定时间提醒你查看今日脉冲。"
+            return reminderEnabled
+                ? NSLocalizedString("首次开启后会请求通知权限，用于晨间提醒与晨间送达尝试。", comment: "Daily pulse notification permission not determined enabled status")
+                : NSLocalizedString("开启后会在设定时间提醒你查看今日脉冲。", comment: "Daily pulse notification permission not determined disabled status")
         @unknown default:
-            return "通知权限状态暂时未知。"
+            return NSLocalizedString("通知权限状态暂时未知。", comment: "Daily pulse notification unknown status")
         }
 #else
-        return "当前平台暂不支持本地通知提醒。"
+        return NSLocalizedString("当前平台暂不支持本地通知提醒。", comment: "Daily pulse local notification unsupported status")
 #endif
     }
 
@@ -146,8 +148,8 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         guard granted else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "每日脉冲晨间提醒"
-        content.body = "到了每日脉冲提醒时间。若今天这一期仍在准备中，请稍候片刻，完成后会再收到“已准备好”通知。"
+        content.title = NSLocalizedString("每日脉冲晨间提醒", comment: "Daily pulse reminder notification title")
+        content.body = NSLocalizedString("到了每日脉冲提醒时间。若今天这一期仍在准备中，请稍候片刻，完成后会再收到“已准备好”通知。", comment: "Daily pulse reminder notification body")
         content.sound = .default
         content.threadIdentifier = "dailyPulse.delivery"
         content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder")
@@ -182,10 +184,16 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "每日脉冲已准备好"
+        content.title = NSLocalizedString("每日脉冲已准备好", comment: "Daily pulse ready notification title")
         let primaryCard = run.visibleCards.first ?? run.cards.first
-        let primaryCardSuffix = primaryCard.map { "主卡「\($0.title)」。" } ?? ""
-        content.body = "今天的每日脉冲已经整理完成，已为你准备 \(run.visibleCards.count) 张主动情报卡片。\(primaryCardSuffix)"
+        let primaryCardSuffix = primaryCard.map {
+            String(format: NSLocalizedString("主卡「%@」。", comment: "Daily pulse ready notification primary card suffix"), $0.title)
+        } ?? ""
+        content.body = String(
+            format: NSLocalizedString("今天的每日脉冲已经整理完成，已为你准备 %d 张主动情报卡片。%@", comment: "Daily pulse ready notification body"),
+            run.visibleCards.count,
+            primaryCardSuffix
+        )
         content.sound = .default
         content.threadIdentifier = "dailyPulse.delivery"
         content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "ready")

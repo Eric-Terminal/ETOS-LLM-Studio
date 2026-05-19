@@ -171,8 +171,8 @@ public struct LocalDebugView: View {
 
     private func formatPendingTime(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "MM-dd HH:mm"
+        formatter.locale = .autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("MdHm")
         return formatter.string(from: date)
     }
 }

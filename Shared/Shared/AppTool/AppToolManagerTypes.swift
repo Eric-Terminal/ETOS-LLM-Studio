@@ -23,11 +23,11 @@ public enum AppToolSQLiteDatabase: String, CaseIterable, Identifiable, Hashable,
     var displayName: String {
         switch self {
         case .chat:
-            return "聊天"
+            return NSLocalizedString("聊天", comment: "App tool SQLite database display name")
         case .config:
-            return "配置"
+            return NSLocalizedString("配置", comment: "App tool SQLite database display name")
         case .memory:
-            return "记忆"
+            return NSLocalizedString("记忆", comment: "App tool SQLite database display name")
         }
     }
 }

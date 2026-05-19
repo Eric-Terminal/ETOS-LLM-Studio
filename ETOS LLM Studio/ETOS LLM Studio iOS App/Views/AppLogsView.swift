@@ -570,7 +570,7 @@ private enum LevelFilter: String, CaseIterable, Identifiable {
 
 private func formatTime(_ date: Date) -> String {
     let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "zh_CN")
+    formatter.locale = .autoupdatingCurrent
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
     return formatter.string(from: date)
 }

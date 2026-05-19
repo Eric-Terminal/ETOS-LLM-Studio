@@ -624,7 +624,7 @@ extension DailyPulseManager {
     internal nonisolated static func userFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = .autoupdatingCurrent
         formatter.timeZone = calendar.timeZone
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -634,9 +634,9 @@ extension DailyPulseManager {
     internal nonisolated static func compactUserFacingDateString(from date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = .autoupdatingCurrent
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "M/d HH:mm"
+        formatter.setLocalizedDateFormatFromTemplate("MdHm")
         return formatter.string(from: date)
     }
 

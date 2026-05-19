@@ -30,13 +30,13 @@ public enum ParameterExpressionParser {
         public var errorDescription: String? {
             switch self {
             case .emptyExpression:
-                return "表达式不能为空"
+                return NSLocalizedString("表达式不能为空", comment: "Parameter expression empty error")
             case .missingAssignmentOperator:
-                return "需要使用“key = value”的格式"
+                return NSLocalizedString("需要使用“key = value”的格式", comment: "Parameter expression missing assignment operator error")
             case .invalidKey:
-                return "key 不能为空或包含非法字符"
+                return NSLocalizedString("key 不能为空或包含非法字符", comment: "Parameter expression invalid key error")
             case .invalidValue(let raw):
-                return "无法理解的值: \(raw)"
+                return String(format: NSLocalizedString("无法理解的值: %@", comment: "Parameter expression invalid value error"), raw)
             }
         }
     }
@@ -48,9 +48,9 @@ public enum ParameterExpressionParser {
         public var errorDescription: String? {
             switch self {
             case .rootMustBeObject:
-                return "顶层必须是 JSON 对象（例如 {\"a\": 1}）"
+                return NSLocalizedString("顶层必须是 JSON 对象（例如 {\"a\": 1}）", comment: "Raw JSON root must be object error")
             case .invalidJSON(let reason):
-                return "JSON 格式无效：\(reason)"
+                return String(format: NSLocalizedString("JSON 格式无效：%@", comment: "Raw JSON invalid format error"), reason)
             }
         }
     }
@@ -116,7 +116,7 @@ public enum ParameterExpressionParser {
         }
 
         guard let data = cleaned.data(using: .utf8) else {
-            throw RawJSONError.invalidJSON("无法按 UTF-8 读取文本")
+            throw RawJSONError.invalidJSON(NSLocalizedString("无法按 UTF-8 读取文本", comment: "Raw JSON UTF-8 decode error"))
         }
 
         do {

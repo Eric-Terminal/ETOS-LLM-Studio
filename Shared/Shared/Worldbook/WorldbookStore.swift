@@ -211,7 +211,7 @@ public final class WorldbookStore {
 
             guard !acceptedEntries.isEmpty else {
                 if failureReasons.isEmpty {
-                    failureReasons.append("导入内容为空，或条目均被去重跳过。")
+                    failureReasons.append(NSLocalizedString("导入内容为空，或条目均被去重跳过。", comment: "Worldbook import skipped all entries"))
                 }
                 return WorldbookImportReport(
                     importedBookID: nil,

@@ -58,11 +58,11 @@ public enum ChatTranscriptExportError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .emptyMessages:
-            return "导出失败：当前会话没有可导出的消息。"
+            return NSLocalizedString("导出失败：当前会话没有可导出的消息。", comment: "Chat transcript export empty messages error")
         case .messageNotFound:
-            return "导出失败：未找到指定的消息。"
+            return NSLocalizedString("导出失败：未找到指定的消息。", comment: "Chat transcript export missing target message error")
         case .pdfRenderFailed:
-            return "导出失败：无法生成 PDF 文件。"
+            return NSLocalizedString("导出失败：无法生成 PDF 文件。", comment: "Chat transcript export PDF render error")
         }
     }
 }
@@ -128,21 +128,27 @@ public struct ChatTranscriptExportService {
 
     private func suggestedFileName(_ context: ExportContext) -> String {
         let sessionName = context.session?.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = sanitizeFileName(sessionName?.isEmpty == false ? sessionName! : "会话导出")
+        let fallbackName = NSLocalizedString("会话导出", comment: "Chat transcript export fallback file name")
+        let baseName = sanitizeFileName(sessionName?.isEmpty == false ? sessionName! : fallbackName)
 
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let stamp = formatter.string(from: context.exportedAt)
 
         let scopeSuffix: String
         if context.upToMessageID != nil {
-            scopeSuffix = "-截至第\(context.messages.count)条"
+            scopeSuffix = String(
+                format: NSLocalizedString("-截至第%d条", comment: "Chat transcript export file suffix for partial scope"),
+                context.messages.count
+            )
         } else {
-            scopeSuffix = "-完整"
+            scopeSuffix = NSLocalizedString("-完整", comment: "Chat transcript export file suffix for full scope")
         }
 
-        let reasoningSuffix = context.includeReasoning ? "-含思考" : "-不含思考"
+        let reasoningSuffix = context.includeReasoning
+            ? NSLocalizedString("-含思考", comment: "Chat transcript export file suffix with reasoning")
+            : NSLocalizedString("-不含思考", comment: "Chat transcript export file suffix without reasoning")
         return "\(baseName)\(scopeSuffix)\(reasoningSuffix)-\(stamp).\(context.format.fileExtension)"
     }
 
@@ -152,20 +158,20 @@ public struct ChatTranscriptExportService {
             .components(separatedBy: invalid)
             .joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return sanitized.isEmpty ? "会话导出" : sanitized
+        return sanitized.isEmpty ? NSLocalizedString("会话导出", comment: "Chat transcript export fallback file name") : sanitized
     }
 
     private func buildMarkdown(_ context: ExportContext) -> String {
         var lines: [String] = []
         lines.reserveCapacity(context.messages.count * 8 + 16)
 
-        lines.append("# 会话导出")
+        lines.append("# \(localizedExportText("会话导出"))")
         lines.append("")
-        lines.append("- 会话名称：\(context.session?.name ?? "未命名会话")")
-        lines.append("- 导出时间：\(formattedDateTime(context.exportedAt))")
-        lines.append("- 导出范围：\(scopeDescription(context))")
-        lines.append("- 思考/推理：\(context.includeReasoning ? "包含" : "不包含")")
-        lines.append("- 消息数量：\(context.messages.count)")
+        lines.append("- \(localizedExportText("会话名称")): \(context.session?.name ?? localizedExportText("未命名会话"))")
+        lines.append("- \(localizedExportText("导出时间")): \(formattedDateTime(context.exportedAt))")
+        lines.append("- \(localizedExportText("导出范围")): \(scopeDescription(context))")
+        lines.append("- \(localizedExportText("思考/推理")): \(context.includeReasoning ? localizedExportText("包含") : localizedExportText("不包含"))")
+        lines.append("- \(localizedExportText("消息数量")): \(context.messages.count)")
 
         appendPromptLinesIfNeeded(for: context.session, markdownLines: &lines)
 
@@ -180,7 +186,7 @@ public struct ChatTranscriptExportService {
             lines.append("")
 
             if context.includeReasoning, let reasoning = trimmedOrNil(message.reasoningContent) {
-                lines.append("### 推理")
+                lines.append("### \(localizedExportText("推理"))")
                 lines.append("")
                 lines.append(reasoning)
                 lines.append("")
@@ -199,13 +205,13 @@ public struct ChatTranscriptExportService {
         var lines: [String] = []
         lines.reserveCapacity(context.messages.count * 8 + 16)
 
-        lines.append("会话导出")
+        lines.append(localizedExportText("会话导出"))
         lines.append(String(repeating: "=", count: 42))
-        lines.append("会话名称：\(context.session?.name ?? "未命名会话")")
-        lines.append("导出时间：\(formattedDateTime(context.exportedAt))")
-        lines.append("导出范围：\(scopeDescription(context))")
-        lines.append("思考/推理：\(context.includeReasoning ? "包含" : "不包含")")
-        lines.append("消息数量：\(context.messages.count)")
+        lines.append("\(localizedExportText("会话名称")): \(context.session?.name ?? localizedExportText("未命名会话"))")
+        lines.append("\(localizedExportText("导出时间")): \(formattedDateTime(context.exportedAt))")
+        lines.append("\(localizedExportText("导出范围")): \(scopeDescription(context))")
+        lines.append("\(localizedExportText("思考/推理")): \(context.includeReasoning ? localizedExportText("包含") : localizedExportText("不包含"))")
+        lines.append("\(localizedExportText("消息数量")): \(context.messages.count)")
 
         appendPromptLinesIfNeeded(for: context.session, plainLines: &lines)
         lines.append("")
@@ -217,7 +223,7 @@ public struct ChatTranscriptExportService {
 
             if context.includeReasoning, let reasoning = trimmedOrNil(message.reasoningContent) {
                 lines.append("")
-                lines.append("[推理]")
+                lines.append("[\(localizedExportText("推理"))]")
                 lines.append(reasoning)
             }
 
@@ -239,23 +245,23 @@ public struct ChatTranscriptExportService {
         guard trimmedOrNil(globalPrompt) != nil || topicPrompt != nil || enhancedPrompt != nil else { return }
 
         lines.append("")
-        lines.append("## 提示词")
+        lines.append("## \(localizedExportText("提示词"))")
         lines.append("")
 
         if let globalPrompt = trimmedOrNil(globalPrompt) {
-            lines.append("### 全局系统提示词")
+            lines.append("### \(localizedExportText("全局系统提示词"))")
             lines.append("")
             lines.append(globalPrompt)
             lines.append("")
         }
         if let topicPrompt {
-            lines.append("### 话题提示词")
+            lines.append("### \(localizedExportText("话题提示词"))")
             lines.append("")
             lines.append(topicPrompt)
             lines.append("")
         }
         if let enhancedPrompt {
-            lines.append("### 增强提示词")
+            lines.append("### \(localizedExportText("增强提示词"))")
             lines.append("")
             lines.append(enhancedPrompt)
             lines.append("")
@@ -272,21 +278,21 @@ public struct ChatTranscriptExportService {
         guard trimmedOrNil(globalPrompt) != nil || topicPrompt != nil || enhancedPrompt != nil else { return }
 
         lines.append("")
-        lines.append("提示词")
+        lines.append(localizedExportText("提示词"))
         lines.append(String(repeating: "-", count: 42))
 
         if let globalPrompt = trimmedOrNil(globalPrompt) {
-            lines.append("[全局系统提示词]")
+            lines.append("[\(localizedExportText("全局系统提示词"))]")
             lines.append(globalPrompt)
             lines.append("")
         }
         if let topicPrompt {
-            lines.append("[话题提示词]")
+            lines.append("[\(localizedExportText("话题提示词"))]")
             lines.append(topicPrompt)
             lines.append("")
         }
         if let enhancedPrompt {
-            lines.append("[增强提示词]")
+            lines.append("[\(localizedExportText("增强提示词"))]")
             lines.append(enhancedPrompt)
             lines.append("")
         }
@@ -294,13 +300,13 @@ public struct ChatTranscriptExportService {
 
     private func appendToolCallsMarkdownIfNeeded(_ toolCalls: [InternalToolCall]?, lines: inout [String]) {
         guard let toolCalls, !toolCalls.isEmpty else { return }
-        lines.append("### 工具调用")
+        lines.append("### \(localizedExportText("工具调用"))")
         lines.append("")
 
         for (idx, call) in toolCalls.enumerated() {
             lines.append("#### \(idx + 1). \(call.toolName)")
             lines.append("")
-            lines.append("**参数**")
+            lines.append("**\(localizedExportText("参数"))**")
             lines.append("")
             lines.append("```json")
             lines.append(messageBodyOrPlaceholder(call.arguments))
@@ -308,7 +314,7 @@ public struct ChatTranscriptExportService {
             lines.append("")
 
             if let result = trimmedOrNil(call.result) {
-                lines.append("**结果**")
+                lines.append("**\(localizedExportText("结果"))**")
                 lines.append("")
                 lines.append("```text")
                 lines.append(result)
@@ -321,14 +327,14 @@ public struct ChatTranscriptExportService {
     private func appendToolCallsPlainIfNeeded(_ toolCalls: [InternalToolCall]?, lines: inout [String]) {
         guard let toolCalls, !toolCalls.isEmpty else { return }
         lines.append("")
-        lines.append("[工具调用]")
+        lines.append("[\(localizedExportText("工具调用"))]")
 
         for (idx, call) in toolCalls.enumerated() {
             lines.append("- \(idx + 1). \(call.toolName)")
-            lines.append("  参数：")
+            lines.append("  \(localizedExportText("参数")):")
             lines.append(indent(call.arguments, spaces: 4))
             if let result = trimmedOrNil(call.result) {
-                lines.append("  结果：")
+                lines.append("  \(localizedExportText("结果")):")
                 lines.append(indent(result, spaces: 4))
             }
         }
@@ -341,17 +347,17 @@ public struct ChatTranscriptExportService {
 
         guard audio != nil || !images.isEmpty || !files.isEmpty else { return }
 
-        lines.append("### 附件")
+        lines.append("### \(localizedExportText("附件"))")
         lines.append("")
 
         if let audio {
-            lines.append("- 音频：\(audio)")
+            lines.append("- \(localizedExportText("音频")): \(audio)")
         }
         if !images.isEmpty {
-            lines.append("- 图片：\(images.joined(separator: ", "))")
+            lines.append("- \(localizedExportText("图片")): \(images.joined(separator: ", "))")
         }
         if !files.isEmpty {
-            lines.append("- 文件：\(files.joined(separator: ", "))")
+            lines.append("- \(localizedExportText("文件")): \(files.joined(separator: ", "))")
         }
         lines.append("")
     }
@@ -364,47 +370,54 @@ public struct ChatTranscriptExportService {
         guard audio != nil || !images.isEmpty || !files.isEmpty else { return }
 
         lines.append("")
-        lines.append("[附件]")
+        lines.append("[\(localizedExportText("附件"))]")
         if let audio {
-            lines.append("- 音频：\(audio)")
+            lines.append("- \(localizedExportText("音频")): \(audio)")
         }
         if !images.isEmpty {
-            lines.append("- 图片：\(images.joined(separator: ", "))")
+            lines.append("- \(localizedExportText("图片")): \(images.joined(separator: ", "))")
         }
         if !files.isEmpty {
-            lines.append("- 文件：\(files.joined(separator: ", "))")
+            lines.append("- \(localizedExportText("文件")): \(files.joined(separator: ", "))")
         }
     }
 
     private func roleTitle(_ role: MessageRole) -> String {
         switch role {
         case .system:
-            return "系统"
+            return localizedExportText("系统")
         case .user:
-            return "用户"
+            return localizedExportText("用户")
         case .assistant:
-            return "助手"
+            return localizedExportText("助手")
         case .tool:
-            return "工具"
+            return localizedExportText("工具")
         case .error:
-            return "错误"
+            return localizedExportText("错误")
         @unknown default:
-            return "未知"
+            return localizedExportText("未知")
         }
     }
 
     private func formattedDateTime(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale.autoupdatingCurrent
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return formatter.string(from: date)
     }
 
     private func scopeDescription(_ context: ExportContext) -> String {
         if context.upToMessageID != nil {
-            return "前 \(context.messages.count) / \(context.sourceCount) 条（包含目标消息与其上文）"
+            return String(
+                format: NSLocalizedString("前 %d / %d 条（包含目标消息与其上文）", comment: "Chat transcript export partial scope description"),
+                context.messages.count,
+                context.sourceCount
+            )
         }
-        return "完整会话（共 \(context.messages.count) 条）"
+        return String(
+            format: NSLocalizedString("完整会话（共 %d 条）", comment: "Chat transcript export full scope description"),
+            context.messages.count
+        )
     }
 
     private func trimmedOrNil(_ raw: String?) -> String? {
@@ -419,7 +432,7 @@ public struct ChatTranscriptExportService {
 
     private func messageBodyOrPlaceholder(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "（空内容）" : trimmed
+        return trimmed.isEmpty ? localizedExportText("（空内容）") : trimmed
     }
 
     private func indent(_ raw: String, spaces: Int) -> String {
@@ -431,7 +444,7 @@ public struct ChatTranscriptExportService {
     }
 
     private func makePDF(fromMarkdown markdownText: String) throws -> Data {
-        let content = markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "（空内容）" : markdownText
+        let content = markdownText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localizedExportText("（空内容）") : markdownText
         let outputData = NSMutableData()
 
         guard let consumer = CGDataConsumer(data: outputData as CFMutableData) else {
@@ -555,5 +568,9 @@ public struct ChatTranscriptExportService {
         let exportedAt: Date
         let upToMessageID: UUID?
         let sourceCount: Int
+    }
+
+    private func localizedExportText(_ key: String) -> String {
+        NSLocalizedString(key, comment: "Chat transcript export text")
     }
 }
