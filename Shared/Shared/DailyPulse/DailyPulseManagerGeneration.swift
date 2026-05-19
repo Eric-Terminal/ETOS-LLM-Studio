@@ -79,7 +79,7 @@ extension DailyPulseManager {
             let newRun = DailyPulseRun(
                 dayKey: todayKey,
                 generatedAt: now,
-                headline: Self.normalizedText(parsed.headline, fallback: "今天这几条值得你看"),
+                headline: Self.normalizedText(parsed.headline, fallback: NSLocalizedString("今天这几条值得你看", comment: "Daily Pulse fallback headline")),
                 cards: cards,
                 sourceDigest: input.sourceDigest
             )

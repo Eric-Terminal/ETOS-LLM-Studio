@@ -53,8 +53,8 @@ extension ChatService {
                 }
                 logger.info("复用了已有临时会话。")
                 AppLog.userOperation(
-                    category: "会话",
-                    action: "复用临时会话",
+                    category: NSLocalizedString("会话", comment: "App log category"),
+                    action: NSLocalizedString("复用临时会话", comment: "App log action"),
                     payload: ["sessionID": target.id.uuidString]
                 )
             }
@@ -68,8 +68,8 @@ extension ChatService {
         publishMessages([])
         logger.info("创建了新的临时会话。")
         AppLog.userOperation(
-            category: "会话",
-            action: "创建新会话",
+            category: NSLocalizedString("会话", comment: "App log category"),
+            action: NSLocalizedString("创建新会话", comment: "App log action"),
             payload: ["sessionID": newSession.id.uuidString]
         )
     }
@@ -107,8 +107,8 @@ extension ChatService {
         Persistence.saveChatSessions(updatedSessions)
         logger.info("创建了正式会话并写入初始消息: \(newSession.name)")
         AppLog.userOperation(
-            category: "会话",
-            action: "创建正式会话",
+            category: NSLocalizedString("会话", comment: "App log category"),
+            action: NSLocalizedString("创建正式会话", comment: "App log action"),
             payload: [
                 "sessionID": newSession.id.uuidString,
                 "messageCount": "\(initialMessages.count)"
@@ -151,8 +151,8 @@ extension ChatService {
         Persistence.saveChatSessions(currentSessions)
         logger.info("删除后已保存会话列表。")
         AppLog.userOperation(
-            category: "会话",
-            action: "删除会话",
+            category: NSLocalizedString("会话", comment: "App log category"),
+            action: NSLocalizedString("删除会话", comment: "App log action"),
             payload: ["count": "\(sessionsToDelete.count)"]
         )
         if isClearingAllConversationRecords {

@@ -259,7 +259,7 @@ extension Persistence {
 
         guard isSQLiteDatabaseHealthy(at: tempBackupURL) else {
             throw NSError(domain: "Persistence.LaunchBackup", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "备份文件完整性检查失败"
+                NSLocalizedDescriptionKey: NSLocalizedString("备份文件完整性检查失败", comment: "Launch backup integrity error")
             ])
         }
 

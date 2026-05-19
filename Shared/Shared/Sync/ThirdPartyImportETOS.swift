@@ -14,7 +14,7 @@ extension ThirdPartyImportService {
         if isDirectory(fileURL) {
             guard let foundURL = findETOSJSONFile(inDirectory: fileURL) else {
                 throw ThirdPartyImportError.unsupportedBackupFormat(
-                    reason: "未在目录中找到 ETOS 可识别的 JSON 导出包。"
+                    reason: NSLocalizedString("未在目录中找到 ETOS 可识别的 JSON 导出包。", comment: "ETOS import missing export package")
                 )
             }
             rootURL = foundURL
@@ -24,7 +24,7 @@ extension ThirdPartyImportService {
 
         if isLikelyCompressedBackup(rootURL) {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "ETOS 数据包请直接选择 .json 文件，不支持压缩包。"
+                reason: NSLocalizedString("ETOS 数据包请直接选择 .json 文件，不支持压缩包。", comment: "ETOS import compressed backup unsupported")
             )
         }
 
@@ -37,7 +37,7 @@ extension ThirdPartyImportService {
 
         guard let package = try? SyncPackageTransferService.decodePackage(from: data) else {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "文件不是可识别的 ETOS 导出数据包。"
+                reason: NSLocalizedString("文件不是可识别的 ETOS 导出数据包。", comment: "ETOS import unrecognized package")
             )
         }
         guard !package.options.isEmpty else {

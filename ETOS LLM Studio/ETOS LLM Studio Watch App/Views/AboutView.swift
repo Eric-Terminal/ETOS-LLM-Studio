@@ -209,7 +209,10 @@ struct AboutView: View {
         guard versionTapCount >= 7 else { return }
         versionTapCount = 0
         showAppLogs = true
-        AppLog.userOperation(category: "调试入口", action: "打开应用日志页")
+        AppLog.userOperation(
+            category: NSLocalizedString("调试入口", comment: "App log category"),
+            action: NSLocalizedString("打开应用日志页", comment: "App log action")
+        )
         Task {
             let hasUnlocked = AchievementCenter.shared.hasUnlocked(id: .forbiddenPlace)
             guard !hasUnlocked else { return }

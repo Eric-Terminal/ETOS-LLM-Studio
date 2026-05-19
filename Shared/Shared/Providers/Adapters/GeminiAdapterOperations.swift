@@ -323,13 +323,13 @@ extension GeminiAdapter {
         
         // 检查错误
         if let error = apiResponse.error {
-            throw NSError(domain: "GeminiAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+            throw NSError(domain: "GeminiAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? NSLocalizedString("未知错误", comment: "Generic unknown error")])
         }
         
         guard let candidate = apiResponse.candidates?.first,
               let content = candidate.content,
               let parts = content.parts else {
-            throw NSError(domain: "GeminiAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少有效的 content 对象"])
+            throw NSError(domain: "GeminiAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("响应中缺少有效的 content 对象", comment: "Gemini missing content error")])
         }
         
         var textContent = ""
@@ -525,7 +525,7 @@ extension GeminiAdapter {
             if let embeddings = response.embeddings {
                 return embeddings.map { $0.values.map { Float($0) } }
             }
-            throw NSError(domain: "GeminiAdapterError", code: 2, userInfo: [NSLocalizedDescriptionKey: "嵌入响应中缺少 embedding 数据"])
+            throw NSError(domain: "GeminiAdapterError", code: 2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("嵌入响应中缺少 embedding 数据", comment: "Gemini missing embedding error")])
         } catch {
             if let raw = String(data: data, encoding: .utf8) {
                 logger.error("Gemini 嵌入响应解析失败，原始数据: \(raw)")

@@ -25,10 +25,10 @@ extension ThirdPartyImportService {
         let indexedDB = dictionary(root["indexedDB"])
 
         if localStorage == nil {
-            warnings.append("Cherry 备份未找到 localStorage。")
+            warnings.append(NSLocalizedString("Cherry 备份未找到 localStorage。", comment: "Cherry import missing localStorage warning"))
         }
         if indexedDB == nil {
-            warnings.append("Cherry 备份未找到 indexedDB。")
+            warnings.append(NSLocalizedString("Cherry 备份未找到 indexedDB。", comment: "Cherry import missing indexedDB warning"))
         }
 
         let persistRaw = string(localStorage?["persist:cherry-studio"])
@@ -144,7 +144,7 @@ extension ThirdPartyImportService {
 
         if providers.isEmpty && sessions.isEmpty {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "Cherry 备份格式无法识别，或文件中没有可导入数据。"
+                reason: NSLocalizedString("Cherry 备份格式无法识别，或文件中没有可导入数据。", comment: "Cherry import unrecognized or empty backup")
             )
         }
 
@@ -162,7 +162,7 @@ extension ThirdPartyImportService {
 
         if isLikelyCompressedBackup(fileURL) {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "当前版本暂不支持直接读取压缩包，请先解压后选择包含 JSON 的文件或目录。"
+                reason: NSLocalizedString("当前版本暂不支持直接读取压缩包，请先解压后选择包含 JSON 的文件或目录。", comment: "Cherry import compressed backup unsupported")
             )
         }
 
@@ -172,7 +172,7 @@ extension ThirdPartyImportService {
         }
 
         throw ThirdPartyImportError.unsupportedBackupFormat(
-            reason: "无法识别 Cherry 备份结构（需包含 localStorage 与 indexedDB）。"
+            reason: NSLocalizedString("无法识别 Cherry 备份结构（需包含 localStorage 与 indexedDB）。", comment: "Cherry import unrecognized backup structure")
         )
     }
 

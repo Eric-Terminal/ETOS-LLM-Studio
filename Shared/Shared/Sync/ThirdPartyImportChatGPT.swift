@@ -17,7 +17,7 @@ extension ThirdPartyImportService {
                 preferredNames: ["conversations.json"]
             ) else {
                 throw ThirdPartyImportError.unsupportedBackupFormat(
-                    reason: "未在目录中找到 conversations.json。"
+                    reason: NSLocalizedString("未在目录中找到 conversations.json。", comment: "ChatGPT import missing conversations file")
                 )
             }
             rootURL = conversationsURL
@@ -27,7 +27,7 @@ extension ThirdPartyImportService {
 
         if isLikelyCompressedBackup(rootURL) {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "当前版本暂不支持直接读取压缩包，请先解压后导入 conversations.json。"
+                reason: NSLocalizedString("当前版本暂不支持直接读取压缩包，请先解压后导入 conversations.json。", comment: "ChatGPT import compressed backup unsupported")
             )
         }
 
@@ -58,12 +58,12 @@ extension ThirdPartyImportService {
                 conversations = [root]
             } else {
                 throw ThirdPartyImportError.unsupportedBackupFormat(
-                    reason: "未识别到 ChatGPT conversations.json 结构。"
+                    reason: NSLocalizedString("未识别到 ChatGPT conversations.json 结构。", comment: "ChatGPT import unrecognized conversations structure")
                 )
             }
         } else {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "未识别到 ChatGPT conversations.json 结构。"
+                reason: NSLocalizedString("未识别到 ChatGPT conversations.json 结构。", comment: "ChatGPT import unrecognized conversations structure")
             )
         }
 
@@ -71,7 +71,7 @@ extension ThirdPartyImportService {
         sessions.reserveCapacity(conversations.count)
 
         for (index, conversation) in conversations.enumerated() {
-            let title = nonEmpty(string(conversation["title"])) ?? "ChatGPT 对话 \(index + 1)"
+            let title = nonEmpty(string(conversation["title"])) ?? String(format: NSLocalizedString("ChatGPT 对话 %d", comment: "ChatGPT imported conversation fallback title"), index + 1)
 
             let messages: [ChatMessage]
             if let mapping = dictionary(conversation["mapping"]) {

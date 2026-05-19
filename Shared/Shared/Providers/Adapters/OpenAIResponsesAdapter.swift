@@ -49,7 +49,7 @@ public final class OpenAIResponsesAdapter: APIAdapter {
     public func parseResponse(data: Data) throws -> ChatMessage {
         guard let object = try? JSONSerialization.jsonObject(with: data, options: []),
               let payload = object as? [String: Any] else {
-            throw NSError(domain: "OpenAIResponsesAdapter", code: 1, userInfo: [NSLocalizedDescriptionKey: "Responses API 响应不是有效的 JSON 对象"])
+            throw NSError(domain: "OpenAIResponsesAdapter", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("Responses API 响应不是有效的 JSON 对象", comment: "OpenAI Responses invalid JSON object error")])
         }
         return try openAIAdapter.parseResponsesMessage(from: payload)
     }

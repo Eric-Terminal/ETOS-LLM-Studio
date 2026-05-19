@@ -21,10 +21,10 @@ extension MCPManager {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
-        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试调用工具：\(toolId)")
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试调用工具：%@", comment: "MCP governance debug tool call started"), toolId))
         let resolvedOptions = options ?? defaultManagedToolCallOptions(
             timeout: defaultToolCallTimeout,
-            reason: "调试工具调用超时"
+            reason: NSLocalizedString("调试工具调用超时", comment: "MCP debug tool call timeout reason")
         )
         let callID = UUID()
 
@@ -39,15 +39,15 @@ extension MCPManager {
                 )
                 self.lastOperationOutput = result.prettyPrinted()
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试工具调用成功：\(toolId)")
+                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试工具调用成功：%@", comment: "MCP governance debug tool call succeeded"), toolId))
             } catch is CancellationError {
-                self.lastOperationError = "工具调用已取消。"
+                self.lastOperationError = NSLocalizedString("工具调用已取消。", comment: "MCP tool call cancelled error")
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .warning, category: .toolCall, serverID: serverID, message: "调试工具调用已取消：\(toolId)")
+                self.appendGovernanceLog(level: .warning, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试工具调用已取消：%@", comment: "MCP governance debug tool call cancelled"), toolId))
             } catch {
                 self.lastOperationError = error.localizedDescription
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试工具调用失败：\(toolId)，错误=\(error.localizedDescription)")
+                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试工具调用失败：%@，错误=%@", comment: "MCP governance debug tool call failed"), toolId, error.localizedDescription))
             }
         }
         return callID
@@ -69,7 +69,7 @@ extension MCPManager {
         )
     }
 
-    public func cancelToolCall(callID: UUID, reason: String = "用户取消调用") {
+    public func cancelToolCall(callID: UUID, reason: String = NSLocalizedString("用户取消调用", comment: "MCP user cancelled tool call reason")) {
         guard let task = trackedToolCallTasks[callID] else { return }
         task.cancel()
         if var call = activeToolCalls[callID] {
@@ -79,7 +79,7 @@ extension MCPManager {
                 level: .warning,
                 category: .toolCall,
                 serverID: call.serverID,
-                message: "工具调用已请求取消：\(call.toolId)，原因=\(reason)"
+                message: String(format: NSLocalizedString("工具调用已请求取消：%@，原因=%@", comment: "MCP governance tool call cancel requested"), call.toolId, reason)
             )
         }
     }
@@ -88,7 +88,7 @@ extension MCPManager {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
-        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试读取资源：\(resourceId)")
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试读取资源：%@", comment: "MCP governance debug resource read started"), resourceId))
 
         Task {
             do {
@@ -96,11 +96,11 @@ extension MCPManager {
                 let result = try await client.readResource(resourceId: resourceId, query: query)
                 self.lastOperationOutput = result.prettyPrinted()
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试资源读取成功：\(resourceId)")
+                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试资源读取成功：%@", comment: "MCP governance debug resource read succeeded"), resourceId))
             } catch {
                 self.lastOperationError = error.localizedDescription
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试资源读取失败：\(resourceId)，错误=\(error.localizedDescription)")
+                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试资源读取失败：%@，错误=%@", comment: "MCP governance debug resource read failed"), resourceId, error.localizedDescription))
             }
         }
     }
@@ -109,7 +109,7 @@ extension MCPManager {
         lastOperationError = nil
         lastOperationOutput = nil
         setDebugBusy(true)
-        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试获取提示词：\(name)")
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试获取提示词：%@", comment: "MCP governance debug prompt get started"), name))
 
         Task {
             do {
@@ -117,11 +117,11 @@ extension MCPManager {
                 let result = try await client.getPrompt(name: name, arguments: arguments)
                 self.lastOperationOutput = self.formatPromptResult(result)
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: "调试提示词获取成功：\(name)")
+                self.appendGovernanceLog(level: .info, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试提示词获取成功：%@", comment: "MCP governance debug prompt get succeeded"), name))
             } catch {
                 self.lastOperationError = error.localizedDescription
                 self.setDebugBusy(false)
-                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: "调试提示词获取失败：\(name)，错误=\(error.localizedDescription)")
+                self.appendGovernanceLog(level: .error, category: .toolCall, serverID: serverID, message: String(format: NSLocalizedString("调试提示词获取失败：%@，错误=%@", comment: "MCP governance debug prompt get failed"), name, error.localizedDescription))
             }
         }
     }
@@ -137,18 +137,18 @@ extension MCPManager {
     func formatPromptResult(_ result: MCPGetPromptResult) -> String {
         var output = ""
         if let desc = result.description {
-            output += "描述：\(desc)\n\n"
+            output += String(format: NSLocalizedString("描述：%@", comment: "MCP prompt result description"), desc) + "\n\n"
         }
-        output += "消息：\n"
+        output += NSLocalizedString("消息：", comment: "MCP prompt result messages header") + "\n"
         for (index, message) in result.messages.enumerated() {
             output += "[\(index + 1)] \(message.role):\n"
             switch message.content {
             case .text(let text):
                 output += text
             case .image(let data, let mimeType):
-                output += "[图片: \(mimeType), \(data.count) bytes]"
+                output += String(format: NSLocalizedString("[图片: %@, %d bytes]", comment: "MCP prompt result image placeholder"), mimeType, data.count)
             case .resource(let uri, let mimeType, let text):
-                output += "[资源: \(uri)"
+                output += String(format: NSLocalizedString("[资源: %@", comment: "MCP prompt result resource placeholder prefix"), uri)
                 if let mimeType { output += ", \(mimeType)" }
                 if let text { output += "]\n\(text)" } else { output += "]" }
             }
@@ -165,10 +165,10 @@ extension MCPManager {
                 self.updateStatus(for: serverID) {
                     $0.logLevel = level
                 }
-                self.appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: "日志级别已更新为 \(level.rawValue)。")
+                self.appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: String(format: NSLocalizedString("日志级别已更新为 %@。", comment: "MCP governance log level updated"), level.rawValue))
             } catch {
                 self.lastOperationError = error.localizedDescription
-                self.appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: "更新日志级别失败：\(error.localizedDescription)")
+                self.appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: String(format: NSLocalizedString("更新日志级别失败：%@", comment: "MCP governance log level update failed"), error.localizedDescription))
             }
         }
     }
@@ -192,7 +192,7 @@ extension MCPManager {
             $0.roots = []
             $0.metadataCachedAt = nil
         }
-        appendGovernanceLog(level: .warning, category: .cache, serverID: serverID, message: "元数据缓存已失效：\(reason)")
+        appendGovernanceLog(level: .warning, category: .cache, serverID: serverID, message: String(format: NSLocalizedString("元数据缓存已失效：%@", comment: "MCP governance metadata cache invalidated"), reason))
         if refreshIfConnected, case .ready = status(for: server).connectionState {
             refreshMetadata(for: server)
         }
@@ -209,7 +209,10 @@ extension MCPManager {
         guard chatToolsEnabled != isEnabled else { return }
         chatToolsEnabled = isEnabled
         AppConfigStore.persistSynchronously(.bool(isEnabled), for: .mcpChatToolsEnabled)
-        appendGovernanceLog(level: .info, category: .routing, message: "MCP 聊天工具总开关已\(isEnabled ? "开启" : "关闭")。")
+        let stateText = isEnabled
+            ? NSLocalizedString("开启", comment: "MCP enabled state")
+            : NSLocalizedString("关闭", comment: "MCP disabled state")
+        appendGovernanceLog(level: .info, category: .routing, message: String(format: NSLocalizedString("MCP 聊天工具总开关已%@。", comment: "MCP governance chat tools switch changed"), stateText))
         if isEnabled {
             connectSelectedServersIfNeeded()
         } else {
@@ -272,7 +275,7 @@ extension MCPManager {
             throw MCPChatBridgeError.toolDeniedByPolicy(displayName(for: routed))
         }
         let startedAt = Date()
-        appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: "开始执行聊天工具：\(routed.tool.toolId)")
+        appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("开始执行聊天工具：%@", comment: "MCP governance chat tool started"), routed.tool.toolId))
         let inputs = try decodeJSONDictionary(from: argumentsJSON)
         let callID = UUID()
         do {
@@ -283,17 +286,17 @@ extension MCPManager {
                 inputs: inputs,
                 options: defaultManagedToolCallOptions(
                     timeout: defaultChatToolCallTimeout,
-                    reason: "聊天工具调用超时"
+                    reason: NSLocalizedString("聊天工具调用超时", comment: "MCP chat tool timeout reason")
                 )
             )
             let elapsed = Date().timeIntervalSince(startedAt)
-            appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行成功：\(routed.tool.toolId)，耗时 \(String(format: "%.2f", elapsed)) 秒。")
+            appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("聊天工具执行成功：%@，耗时 %.2f 秒。", comment: "MCP governance chat tool succeeded"), routed.tool.toolId, elapsed))
             return result.prettyPrinted()
         } catch is CancellationError {
-            appendGovernanceLog(level: .warning, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行已取消：\(routed.tool.toolId)")
+            appendGovernanceLog(level: .warning, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("聊天工具执行已取消：%@", comment: "MCP governance chat tool cancelled"), routed.tool.toolId))
             throw MCPChatBridgeError.toolCancelled(displayName(for: routed))
         } catch {
-            appendGovernanceLog(level: .error, category: .toolCall, serverID: routed.server.id, message: "聊天工具执行失败：\(routed.tool.toolId)，错误=\(error.localizedDescription)")
+            appendGovernanceLog(level: .error, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("聊天工具执行失败：%@，错误=%@", comment: "MCP governance chat tool failed"), routed.tool.toolId, error.localizedDescription))
             throw error
         }
     }
@@ -317,7 +320,10 @@ extension MCPManager {
     public func setToolEnabled(serverID: UUID, toolId: String, isEnabled: Bool) {
         guard var server = servers.first(where: { $0.id == serverID }) else { return }
         server.setToolEnabled(toolId, isEnabled: isEnabled)
-        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: "工具 \(toolId) 已\(isEnabled ? "启用" : "禁用")。")
+        let stateText = isEnabled
+            ? NSLocalizedString("启用", comment: "MCP enabled state")
+            : NSLocalizedString("禁用", comment: "MCP disabled state")
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: String(format: NSLocalizedString("工具 %@ 已%@。", comment: "MCP governance tool enabled changed"), toolId, stateText))
         save(server: server)
     }
 
@@ -337,7 +343,7 @@ extension MCPManager {
     public func setToolApprovalPolicy(serverID: UUID, toolId: String, policy: MCPToolApprovalPolicy) {
         guard var server = servers.first(where: { $0.id == serverID }) else { return }
         server.setApprovalPolicy(policy, for: toolId)
-        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: "工具 \(toolId) 审批策略已更新为 \(policy.rawValue)。")
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: String(format: NSLocalizedString("工具 %@ 审批策略已更新为 %@。", comment: "MCP governance tool approval policy changed"), toolId, policy.rawValue))
         save(server: server)
     }
 
@@ -369,7 +375,7 @@ extension MCPManager {
             $0.info = nil
             $0.isBusy = false
         }
-        appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: "远端会话已终止，连接状态已重置。")
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverID, message: NSLocalizedString("远端会话已终止，连接状态已重置。", comment: "MCP governance remote session terminated"))
     }
 
     public func connectedServers() -> [MCPServerConfiguration] {

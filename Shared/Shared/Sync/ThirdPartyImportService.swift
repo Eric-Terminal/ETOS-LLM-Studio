@@ -17,7 +17,7 @@ public enum ThirdPartyImportSource: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .etosBackup: return "ETOS 数据包"
+        case .etosBackup: return NSLocalizedString("ETOS 数据包", comment: "Third-party import source")
         case .cherryStudio: return "Cherry Studio"
         case .rikkahub: return "RikkaHub"
         case .kelivo: return "Kelivo"
@@ -125,7 +125,7 @@ public enum ThirdPartyImportService {
                 parsed = try parseChatGPT(fileURL: fileURL)
             case .etosBackup:
                 // 已在前置分支返回，这里仅为穷尽匹配。
-                throw ThirdPartyImportError.unsupportedBackupFormat(reason: "导入来源未实现。")
+                throw ThirdPartyImportError.unsupportedBackupFormat(reason: NSLocalizedString("导入来源未实现。", comment: "Third-party import unsupported source error"))
             }
 
             let package = try makePackage(from: parsed)

@@ -150,7 +150,10 @@ extension MCPManager {
         updatedServers[index] = updatedServer
         servers = updatedServers
         MCPServerStore.save(updatedServer)
-        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: "聊天路由已\(isSelected ? "加入" : "移除")服务器。")
+        let stateText = isSelected
+            ? NSLocalizedString("加入", comment: "MCP selected state")
+            : NSLocalizedString("移除", comment: "MCP deselected state")
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: String(format: NSLocalizedString("聊天路由已%@服务器。", comment: "MCP governance chat route selection changed"), stateText))
     }
 
     func internalToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {
@@ -244,7 +247,7 @@ extension MCPManager {
             level: .info,
             category: .toolCall,
             serverID: serverID,
-            message: "工具调用已注册：\(toolId)，token=\(tokenKey)"
+            message: String(format: NSLocalizedString("工具调用已注册：%@，token=%@", comment: "MCP governance tool call registered"), toolId, tokenKey)
         )
 
         do {
@@ -300,7 +303,7 @@ extension MCPManager {
                         await self?.markToolCallCancelling(
                             callID: callID,
                             serverID: serverID,
-                            message: "工具调用触发最大超时：\(toolId)"
+                            message: String(format: NSLocalizedString("工具调用触发最大超时：%@", comment: "MCP governance tool call max timeout"), toolId)
                         )
                         task.cancel()
                         throw MCPClientError.requestTimedOut(method: "tools/call", timeout: maxTotalTimeout)
@@ -317,7 +320,7 @@ extension MCPManager {
                             await self?.markToolCallCancelling(
                                 callID: callID,
                                 serverID: serverID,
-                                message: "工具调用触发空闲超时：\(toolId)"
+                                message: String(format: NSLocalizedString("工具调用触发空闲超时：%@", comment: "MCP governance tool call idle timeout"), toolId)
                             )
                             task.cancel()
                             throw MCPClientError.requestTimedOut(method: "tools/call", timeout: idleTimeout)
@@ -379,7 +382,7 @@ extension MCPManager {
                     self.appendGovernanceLog(
                         level: .warning,
                         category: .lifecycle,
-                        message: "MCP 配置监听失败，将保留当前状态：\(error.localizedDescription)"
+                        message: String(format: NSLocalizedString("MCP 配置监听失败，将保留当前状态：%@", comment: "MCP governance config observation failed"), error.localizedDescription)
                     )
                 }
             },
@@ -393,7 +396,7 @@ extension MCPManager {
             appendGovernanceLog(
                 level: .warning,
                 category: .lifecycle,
-                message: "MCP 配置监听未启用：将仅在应用内触发保存时刷新。"
+                message: NSLocalizedString("MCP 配置监听未启用：将仅在应用内触发保存时刷新。", comment: "MCP governance config observation unavailable")
             )
         }
     }
@@ -403,7 +406,7 @@ extension MCPManager {
         appendGovernanceLog(
             level: .info,
             category: .lifecycle,
-            message: "检测到 MCP 配置数据库变化，自动刷新。"
+            message: NSLocalizedString("检测到 MCP 配置数据库变化，自动刷新。", comment: "MCP governance config database changed")
         )
         reloadServers()
     }
@@ -482,7 +485,7 @@ extension MCPManager {
             level: .info,
             category: .lifecycle,
             serverID: serverID,
-            message: "流式重连令牌已更新。"
+            message: NSLocalizedString("流式重连令牌已更新。", comment: "MCP governance stream resumption token updated")
         )
     }
 }

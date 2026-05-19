@@ -21,7 +21,7 @@ extension MCPManager {
             return
         }
         mcpManagerLogger.info("刷新 MCP 元数据：\(server.displayName, privacy: .public)")
-        appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: "开始刷新元数据。")
+        appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: NSLocalizedString("开始刷新元数据。", comment: "MCP governance metadata refresh started"))
         updateStatus(for: server.id) { $0.isBusy = true }
         let currentInfo = status(for: server).info
         Task {
@@ -68,7 +68,17 @@ extension MCPManager {
                 $0.metadataCachedAt = cache.cachedAt
                 $0.isBusy = false
             }
-            appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: "元数据刷新成功：tools=\(tools.count), resources=\(resources.count), prompts=\(prompts.count)")
+            appendGovernanceLog(
+                level: .info,
+                category: .cache,
+                serverID: serverID,
+                message: String(
+                    format: NSLocalizedString("元数据刷新成功：tools=%d, resources=%d, prompts=%d", comment: "MCP governance metadata refresh succeeded"),
+                    tools.count,
+                    resources.count,
+                    prompts.count
+                )
+            )
             persistResumptionToken(for: serverID)
         } catch {
             if let server = servers.first(where: { $0.id == serverID }) {
@@ -80,7 +90,7 @@ extension MCPManager {
                 updateStatus(for: serverID) {
                     $0.isBusy = false
                 }
-                appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: "元数据刷新已取消，未安排自动重连。")
+                appendGovernanceLog(level: .info, category: .cache, serverID: serverID, message: NSLocalizedString("元数据刷新已取消，未安排自动重连。", comment: "MCP governance metadata refresh cancelled"))
                 return
             }
             updateStatus(for: serverID) {
@@ -92,7 +102,7 @@ extension MCPManager {
             if isSelectedForAutoConnect(serverID) {
                 scheduleAutoConnectRetry(for: serverID, preserveSelection: true)
             }
-            appendGovernanceLog(level: .error, category: .cache, serverID: serverID, message: "元数据刷新失败：\(error.localizedDescription)")
+            appendGovernanceLog(level: .error, category: .cache, serverID: serverID, message: String(format: NSLocalizedString("元数据刷新失败：%@", comment: "MCP governance metadata refresh failed"), error.localizedDescription))
         }
     }
 

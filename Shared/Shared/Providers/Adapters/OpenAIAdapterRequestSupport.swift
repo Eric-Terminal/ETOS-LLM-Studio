@@ -347,7 +347,7 @@ extension OpenAIAdapter {
         let apiResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
         
         guard let message = apiResponse.choices.first?.message else {
-            throw NSError(domain: "APIAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少有效的 message 对象"])
+            throw NSError(domain: "APIAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("响应中缺少有效的 message 对象", comment: "OpenAI missing message error")])
         }
         
         let internalToolCalls: [InternalToolCall]?
@@ -668,7 +668,7 @@ extension OpenAIAdapter {
         }
 
         if results.isEmpty {
-            throw NSError(domain: "OpenAIImageAdapter", code: 2, userInfo: [NSLocalizedDescriptionKey: "响应中未包含可用图片数据"])
+            throw NSError(domain: "OpenAIImageAdapter", code: 2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("响应中未包含可用图片数据", comment: "Image generation missing image data error")])
         }
         return results
     }

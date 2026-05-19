@@ -431,7 +431,7 @@ public class AnthropicAdapter: APIAdapter {
         }
         
         guard let contentBlocks = apiResponse.content else {
-            throw NSError(domain: "AnthropicAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少有效的 content 数组"])
+            throw NSError(domain: "AnthropicAdapterError", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("响应中缺少有效的 content 数组", comment: "Anthropic missing content error")])
         }
         
         var textContent = ""

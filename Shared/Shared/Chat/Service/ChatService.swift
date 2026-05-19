@@ -492,15 +492,15 @@ public class ChatService {
         AppLog.developer(
             category: "chat_service",
             action: "initialize",
-            message: "ChatService 初始化完成",
+            message: NSLocalizedString("ChatService 初始化完成", comment: "App log message"),
             payload: [
                 "providerCount": "\(self.providers.count)",
-                "selectedModel": initialModel?.model.displayName ?? "无"
+                "selectedModel": initialModel?.model.displayName ?? NSLocalizedString("无", comment: "App log empty value")
             ]
         )
         AppLog.userOperation(
-            category: "应用",
-            action: "初始化聊天服务",
+            category: NSLocalizedString("应用", comment: "App log category"),
+            action: NSLocalizedString("初始化聊天服务", comment: "App log action"),
             payload: ["providerCount": "\(self.providers.count)"]
         )
     }

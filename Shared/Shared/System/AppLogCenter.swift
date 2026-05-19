@@ -511,7 +511,9 @@ struct AppLogRingBuffer {
 }
 
 enum AppLogRedactor {
-    static let redactionToken = "[已隐藏]"
+    static var redactionToken: String {
+        NSLocalizedString("[已隐藏]", comment: "App log redaction placeholder")
+    }
 
     // 关键字段统一占位，避免持久化聊天敏感内容。
     private static let sensitiveFragments = [
@@ -585,7 +587,7 @@ enum AppLogRedactor {
     }
 
     static func sanitizeURLForLog(_ url: URL?) -> String {
-        guard let url else { return "无" }
+        guard let url else { return NSLocalizedString("无", comment: "App log empty value") }
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url.absoluteString
         }

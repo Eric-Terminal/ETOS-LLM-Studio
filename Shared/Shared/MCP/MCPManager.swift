@@ -53,7 +53,7 @@ public final class MCPManager: ObservableObject {
             DailyPulseManager.shared.appendExternalSignal(
                 DailyPulseExternalSignal(
                     source: .mcpOutput,
-                    title: "MCP 输出",
+                    title: NSLocalizedString("MCP 输出", comment: "Daily Pulse MCP output signal title"),
                     preview: lastOperationOutput,
                     capturedAt: Date(),
                     isFailure: false
@@ -68,7 +68,7 @@ public final class MCPManager: ObservableObject {
             DailyPulseManager.shared.appendExternalSignal(
                 DailyPulseExternalSignal(
                     source: .mcpError,
-                    title: "MCP 错误",
+                    title: NSLocalizedString("MCP 错误", comment: "Daily Pulse MCP error signal title"),
                     preview: lastOperationError,
                     capturedAt: Date(),
                     isFailure: true
@@ -177,7 +177,7 @@ public final class MCPManager: ObservableObject {
             .filter { !serverIDs.contains($0.value.serverID) }
             .map(\.key)
         for callID in removedToolCallIDs {
-            cancelToolCall(callID: callID, reason: "服务器已移除")
+            cancelToolCall(callID: callID, reason: NSLocalizedString("服务器已移除", comment: "MCP server removed cancellation reason"))
         }
         let removedArtifactIDs = Set(clients.keys).union(streamingTransports.keys).subtracting(serverIDs)
         for serverID in removedArtifactIDs {
@@ -233,18 +233,18 @@ public final class MCPManager: ObservableObject {
 
         rebuildAggregates()
         updateBusyFlag()
-        appendGovernanceLog(level: .info, category: .lifecycle, message: "重载 MCP 服务器配置，共 \(servers.count) 台。")
+        appendGovernanceLog(level: .info, category: .lifecycle, message: String(format: NSLocalizedString("重载 MCP 服务器配置，共 %d 台。", comment: "MCP governance servers reloaded"), servers.count))
     }
 
     public func save(server: MCPServerConfiguration) {
         MCPServerStore.save(server)
-        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "保存服务器配置：\(server.displayName)")
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: String(format: NSLocalizedString("保存服务器配置：%@", comment: "MCP governance server saved"), server.displayName))
         reloadServers()
     }
 
     public func delete(server: MCPServerConfiguration) {
         persistResumptionToken(for: server.id)
-        cancelTrackedToolCalls(for: server.id, reason: "服务器被删除")
+        cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器被删除", comment: "MCP server deleted cancellation reason"))
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         autoConnectSuppressedServerIDs.remove(server.id)
         inFlightConnections[server.id]?.cancel()
@@ -255,7 +255,7 @@ public final class MCPManager: ObservableObject {
             await client?.disconnect()
         }
         serverStatuses[server.id] = nil
-        appendGovernanceLog(level: .warning, category: .lifecycle, serverID: server.id, message: "删除服务器配置：\(server.displayName)")
+        appendGovernanceLog(level: .warning, category: .lifecycle, serverID: server.id, message: String(format: NSLocalizedString("删除服务器配置：%@", comment: "MCP governance server deleted"), server.displayName))
         reloadServers()
     }
 
@@ -279,7 +279,7 @@ public final class MCPManager: ObservableObject {
                     continue
                 }
                 if isMetadataStale(status.metadataCachedAt) {
-                    appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: "检测到元数据缓存过期，触发刷新。")
+                    appendGovernanceLog(level: .info, category: .cache, serverID: server.id, message: NSLocalizedString("检测到元数据缓存过期，触发刷新。", comment: "MCP governance stale metadata cache"))
                     refreshMetadata(for: server)
                 }
                 continue
@@ -320,7 +320,7 @@ public final class MCPManager: ObservableObject {
         mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
         autoConnectSuppressedServerIDs.insert(server.id)
         persistResumptionToken(for: server.id)
-        cancelTrackedToolCalls(for: server.id, reason: "服务器已断开")
+        cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器已断开", comment: "MCP server disconnected cancellation reason"))
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
@@ -339,7 +339,7 @@ public final class MCPManager: ObservableObject {
             $0.metadataCachedAt = nil
             $0.isBusy = false
         }
-        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "已断开服务器连接，并暂停本次会话内的自动重连。")
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: NSLocalizedString("已断开服务器连接，并暂停本次会话内的自动重连。", comment: "MCP governance server disconnected"))
     }
 
     func ensureClientReady(
@@ -410,7 +410,19 @@ public final class MCPManager: ObservableObject {
         let cachedMetadataCachedAt = cachedMetadata?.cachedAt ?? MCPServerStore.loadMetadataCachedAt(for: server.id)
         let hasCachedMetadata = cachedMetadata != nil || !cachedTools.isEmpty
         let shouldRefreshMetadata = refreshMetadataIfCacheMissing && (!hasCachedMetadata || isMetadataStale(cachedMetadataCachedAt))
-        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "开始连接服务器，传输=\(transportLabel(for: server))，将刷新元数据=\(shouldRefreshMetadata ? "是" : "否")")
+        let shouldRefreshText = shouldRefreshMetadata
+            ? NSLocalizedString("是", comment: "MCP governance yes")
+            : NSLocalizedString("否", comment: "MCP governance no")
+        appendGovernanceLog(
+            level: .info,
+            category: .lifecycle,
+            serverID: server.id,
+            message: String(
+                format: NSLocalizedString("开始连接服务器，传输=%@，将刷新元数据=%@", comment: "MCP governance connection started"),
+                transportLabel(for: server),
+                shouldRefreshText
+            )
+        )
         let shouldKeepReadyState = keepReadyStateDuringHandshake
             && clients[server.id] == nil
             && status(for: server).connectionState == .ready
@@ -428,7 +440,7 @@ public final class MCPManager: ObservableObject {
                 level: .info,
                 category: .lifecycle,
                 serverID: server.id,
-                message: "已恢复流式重连令牌。"
+                message: NSLocalizedString("已恢复流式重连令牌。", comment: "MCP governance stream resumption token restored")
             )
         }
         let relay = MCPServerNotificationRelay(serverID: server.id, manager: self)
@@ -493,7 +505,7 @@ public final class MCPManager: ObservableObject {
                 MCPServerStore.saveMetadata(updatedCache, for: server.id)
             }
             cancelAutoConnectRetry(for: server.id, resetAttempts: true)
-            appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "服务器连接成功：\(info.name)")
+            appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: String(format: NSLocalizedString("服务器连接成功：%@", comment: "MCP governance server connected"), info.name))
 
             if shouldRefreshMetadata {
                 await refreshMetadata(for: server.id, client: client, serverInfo: info)
@@ -513,7 +525,7 @@ public final class MCPManager: ObservableObject {
                         $0.isBusy = false
                     }
                 }
-                appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: "连接流程已取消，未安排自动重连。")
+                appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: NSLocalizedString("连接流程已取消，未安排自动重连。", comment: "MCP governance connection cancelled"))
                 throw error
             }
             updateStatus(for: server.id) {
@@ -533,7 +545,7 @@ public final class MCPManager: ObservableObject {
             ) {
                 notifyAutoConnectFailureIfNeeded(for: server, error: error)
             }
-            appendGovernanceLog(level: .error, category: .lifecycle, serverID: server.id, message: "服务器连接失败：\(error.localizedDescription)")
+            appendGovernanceLog(level: .error, category: .lifecycle, serverID: server.id, message: String(format: NSLocalizedString("服务器连接失败：%@", comment: "MCP governance server connection failed"), error.localizedDescription))
             throw error
         }
     }
@@ -577,7 +589,7 @@ public final class MCPManager: ObservableObject {
         let attempt = (autoConnectRetryAttempts[serverID] ?? 0) + 1
         if attempt > autoConnectMaxRetries {
             autoConnectRetryAttempts[serverID] = nil
-            appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: "自动重连已达到上限，停止继续重试。")
+            appendGovernanceLog(level: .error, category: .lifecycle, serverID: serverID, message: NSLocalizedString("自动重连已达到上限，停止继续重试。", comment: "MCP governance reconnect max reached"))
             return false
         }
         autoConnectRetryAttempts[serverID] = attempt
@@ -589,11 +601,11 @@ public final class MCPManager: ObservableObject {
             $0.connectionState = .reconnecting(
                 attempt: attempt,
                 scheduledAt: scheduledAt,
-                reason: "连接失败后自动重连"
+                reason: NSLocalizedString("连接失败后自动重连", comment: "MCP reconnect reason")
             )
         }
         mcpManagerLogger.info("MCP 自动重试连接：server=\(serverID.uuidString, privacy: .public)，attempt=\(attempt)，delay=\(delaySeconds, privacy: .public)s")
-        appendGovernanceLog(level: .warning, category: .lifecycle, serverID: serverID, message: "自动重连已排队，第 \(attempt) 次，延迟 \(String(format: "%.1f", delaySeconds)) 秒。")
+        appendGovernanceLog(level: .warning, category: .lifecycle, serverID: serverID, message: String(format: NSLocalizedString("自动重连已排队，第 %d 次，延迟 %.1f 秒。", comment: "MCP governance reconnect scheduled"), attempt, delaySeconds))
         autoConnectRetryTasks[serverID] = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: delayNanoseconds)

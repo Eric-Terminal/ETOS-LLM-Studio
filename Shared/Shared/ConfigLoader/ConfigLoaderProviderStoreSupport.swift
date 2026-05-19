@@ -319,7 +319,9 @@ extension ConfigLoader {
         }
 
         let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
-        let action = previousProvider == nil ? "新增提供商配置" : "更新提供商配置"
+        let action = previousProvider == nil
+            ? NSLocalizedString("新增提供商配置", comment: "App log action")
+            : NSLocalizedString("更新提供商配置", comment: "App log action")
         var payload: [String: String] = [
             "providerID": persistedProvider.id.uuidString,
             "providerName": persistedProvider.name,
@@ -328,7 +330,7 @@ extension ConfigLoader {
             "modelCount": "\(persistedProvider.models.count)",
             "headerCount": "\(persistedProvider.headerOverrides.count)",
             "apiKeyCount": "\(normalizedAPIKeys.count)",
-            "changedFields": changedFields.joined(separator: "、")
+            "changedFields": changedFields.joined(separator: NSLocalizedString("、", comment: "App log list separator"))
         ]
         if !persistedProvider.headerOverrides.isEmpty {
             let sortedHeaderKeys = persistedProvider.headerOverrides.keys.sorted().joined(separator: ", ")
@@ -336,14 +338,14 @@ extension ConfigLoader {
         }
 
         AppLog.userOperation(
-            category: "配置",
+            category: NSLocalizedString("配置", comment: "App log category"),
             action: action,
             payload: payload
         )
         AppLog.developer(
             category: "config",
             action: action,
-            message: "提供商配置已保存：\(persistedProvider.name)",
+            message: String(format: NSLocalizedString("提供商配置已保存：%@", comment: "App log message"), persistedProvider.name),
             payload: payload
         )
     }
@@ -370,45 +372,45 @@ extension ConfigLoader {
             "modelCount": "\(provider.models.count)"
         ]
         AppLog.userOperation(
-            category: "配置",
-            action: "删除提供商配置",
+            category: NSLocalizedString("配置", comment: "App log category"),
+            action: NSLocalizedString("删除提供商配置", comment: "App log action"),
             payload: payload
         )
         AppLog.developer(
             category: "config",
-            action: "删除提供商配置",
-            message: "提供商配置已删除：\(provider.name)",
+            action: NSLocalizedString("删除提供商配置", comment: "App log action"),
+            message: String(format: NSLocalizedString("提供商配置已删除：%@", comment: "App log message"), provider.name),
             payload: payload
         )
     }
 
     static func changedFieldsForProviderUpdate(old: Provider?, new: Provider) -> [String] {
-        guard let old else { return ["首次保存"] }
+        guard let old else { return [NSLocalizedString("首次保存", comment: "App log changed field")] }
 
         var fields: [String] = []
         if old.name != new.name {
-            fields.append("名称")
+            fields.append(NSLocalizedString("名称", comment: "App log changed field"))
         }
         if old.baseURL != new.baseURL {
             fields.append("Base URL")
         }
         if old.apiFormat != new.apiFormat {
-            fields.append("API 格式")
+            fields.append(NSLocalizedString("API 格式", comment: "App log changed field"))
         }
         if old.models != new.models {
-            fields.append("模型列表")
+            fields.append(NSLocalizedString("模型列表", comment: "App log changed field"))
         }
         if old.headerOverrides != new.headerOverrides {
-            fields.append("请求头覆写")
+            fields.append(NSLocalizedString("请求头覆写", comment: "App log changed field"))
         }
         if old.proxyConfiguration != new.proxyConfiguration {
-            fields.append("代理配置")
+            fields.append(NSLocalizedString("代理配置", comment: "App log changed field"))
         }
         if old.apiKeys != new.apiKeys {
-            fields.append("API Key 列表")
+            fields.append(NSLocalizedString("API Key 列表", comment: "App log changed field"))
         }
 
-        return fields.isEmpty ? ["无字段变化（覆盖保存）"] : fields
+        return fields.isEmpty ? [NSLocalizedString("无字段变化（覆盖保存）", comment: "App log changed field")] : fields
     }
 
     static func providersShareSamePersistentConfiguration(_ lhs: Provider, _ rhs: Provider) -> Bool {

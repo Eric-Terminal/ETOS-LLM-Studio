@@ -170,8 +170,8 @@ extension ChatService {
 
             logger.info("已更新当前会话元数据: \(session.name)")
             AppLog.userOperation(
-                category: "会话",
-                action: "更新当前会话",
+                category: NSLocalizedString("会话", comment: "App log category"),
+                action: NSLocalizedString("更新当前会话", comment: "App log action"),
                 payload: ["sessionID": session.id.uuidString]
             )
             return
@@ -182,9 +182,9 @@ extension ChatService {
         publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
         AppLog.userOperation(
-            category: "会话",
-            action: "切换会话",
-            payload: ["sessionID": session?.id.uuidString ?? "无"]
+            category: NSLocalizedString("会话", comment: "App log category"),
+            action: NSLocalizedString("切换会话", comment: "App log action"),
+            payload: ["sessionID": session?.id.uuidString ?? NSLocalizedString("无", comment: "App log empty value")]
         )
     }
 

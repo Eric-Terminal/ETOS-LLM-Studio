@@ -235,7 +235,7 @@ extension OpenAIAdapter {
         }
 
         guard let outputItems = payload["output"] as? [Any] else {
-            throw NSError(domain: "OpenAIResponsesError", code: 1, userInfo: [NSLocalizedDescriptionKey: "响应中缺少 output 数组"])
+            throw NSError(domain: "OpenAIResponsesError", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("响应中缺少 output 数组", comment: "OpenAI Responses missing output error")])
         }
 
         var textContent = ""

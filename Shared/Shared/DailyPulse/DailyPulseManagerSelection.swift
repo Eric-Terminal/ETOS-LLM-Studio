@@ -56,11 +56,14 @@ extension DailyPulseManager {
         var normalizedCandidates: [DailyPulseCard] = []
         normalizedCandidates.reserveCapacity(min(cards.count, max(1, limit * 3)))
         for card in cards.prefix(max(1, limit * 3)) {
-            let title = normalizedText(card.title, fallback: "今日提醒")
-            let summary = normalizedText(card.summary, fallback: "暂无摘要")
-            let why = normalizedText(card.why, fallback: fallbackFocus.isEmpty ? "这条内容与你最近的聊天和使用轨迹相关。" : "这条内容与你当前关注的“\(fallbackFocus)”有关。")
+            let title = normalizedText(card.title, fallback: NSLocalizedString("今日提醒", comment: "Daily Pulse fallback card title"))
+            let summary = normalizedText(card.summary, fallback: NSLocalizedString("暂无摘要", comment: "Daily Pulse fallback card summary"))
+            let whyFallback = fallbackFocus.isEmpty
+                ? NSLocalizedString("这条内容与你最近的聊天和使用轨迹相关。", comment: "Daily Pulse fallback recommendation reason")
+                : String(format: NSLocalizedString("这条内容与你当前关注的“%@”有关。", comment: "Daily Pulse fallback focused recommendation reason"), fallbackFocus)
+            let why = normalizedText(card.why, fallback: whyFallback)
             let details = normalizedMultilineText(card.detailsMarkdown, fallback: summary)
-            let suggestedPrompt = normalizedText(card.suggestedPrompt, fallback: "请结合这条每日脉冲继续展开，并给我更具体的下一步建议。")
+            let suggestedPrompt = normalizedText(card.suggestedPrompt, fallback: NSLocalizedString("请结合这条每日脉冲继续展开，并给我更具体的下一步建议。", comment: "Daily Pulse fallback suggested prompt"))
             guard !title.isEmpty, !summary.isEmpty else { continue }
             normalizedCandidates.append(DailyPulseCard(
                 title: truncated(title, limit: 40),

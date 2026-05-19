@@ -598,7 +598,7 @@ final class PersistenceGRDBStore {
         let existing = try columnNames(db, table: table)
         for column in columns where !existing.contains(column) {
             throw NSError(domain: "PersistenceGRDBStore.SchemaRepair", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "数据库表 \(table) 缺少关键字段 \(column)，需要自动重建。"
+                NSLocalizedDescriptionKey: String(format: NSLocalizedString("数据库表 %@ 缺少关键字段 %@，需要自动重建。", comment: "Database schema repair missing column error"), table, column)
             ])
         }
     }

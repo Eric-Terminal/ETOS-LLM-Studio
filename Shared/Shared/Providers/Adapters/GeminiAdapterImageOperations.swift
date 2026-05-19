@@ -132,7 +132,7 @@ extension GeminiAdapter {
         }
 
         if results.isEmpty {
-            throw NSError(domain: "GeminiImageAdapter", code: 3, userInfo: [NSLocalizedDescriptionKey: "响应中未包含可用图片数据"])
+            throw NSError(domain: "GeminiImageAdapter", code: 3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("响应中未包含可用图片数据", comment: "Image generation missing image data error")])
         }
         return results
     }

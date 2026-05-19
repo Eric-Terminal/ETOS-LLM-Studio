@@ -364,16 +364,16 @@ extension DailyPulseManager {
 
             switch tool.runModeHint {
             case .bridge:
-                parts.append("桥接执行")
+                parts.append(NSLocalizedString("桥接执行", comment: "Daily Pulse shortcut tool mode"))
             case .direct:
-                parts.append("直接执行")
+                parts.append(NSLocalizedString("直接执行", comment: "Daily Pulse shortcut tool mode"))
             }
 
             if let source = normalizedOptionalText(tool.source, fallback: nil) {
-                parts.append("来源：\(truncated(source, limit: 24))")
+                parts.append(String(format: NSLocalizedString("来源：%@", comment: "Daily Pulse shortcut tool source"), truncated(source, limit: 24)))
             }
 
-            entries.append("- \(tool.displayName)：\(parts.joined(separator: "；"))")
+            entries.append(String(format: NSLocalizedString("- %@：%@", comment: "Daily Pulse shortcut tool digest entry"), tool.displayName, parts.joined(separator: NSLocalizedString("；", comment: "Daily Pulse digest separator"))))
         }
         return entries
     }
@@ -391,22 +391,22 @@ extension DailyPulseManager {
             if shortcutResult.success {
                 let preview = resultPreviewText(
                     shortcutResult.result,
-                    fallback: "执行成功，但没有返回可展示的文本结果。"
+                    fallback: NSLocalizedString("执行成功，但没有返回可展示的文本结果。", comment: "Daily Pulse shortcut empty success result")
                 )
-                entries.append("- 最近快捷指令结果（\(shortcutResult.toolName)，\(timeText)）：\(preview)")
+                entries.append(String(format: NSLocalizedString("- 最近快捷指令结果（%@，%@）：%@", comment: "Daily Pulse recent shortcut result entry"), shortcutResult.toolName, timeText, preview))
             } else {
                 let preview = resultPreviewText(
                     shortcutResult.errorMessage,
-                    fallback: "执行失败，但没有返回详细错误。"
+                    fallback: NSLocalizedString("执行失败，但没有返回详细错误。", comment: "Daily Pulse shortcut empty failure result")
                 )
-                entries.append("- 最近快捷指令失败（\(shortcutResult.toolName)，\(timeText)）：\(preview)")
+                entries.append(String(format: NSLocalizedString("- 最近快捷指令失败（%@，%@）：%@", comment: "Daily Pulse recent shortcut failure entry"), shortcutResult.toolName, timeText, preview))
             }
         }
 
         if let output = normalizedOptionalText(mcpOperationOutput, fallback: nil) {
-            entries.append("- 最近 MCP 输出：\(resultPreviewText(output, fallback: "暂无输出"))")
+            entries.append(String(format: NSLocalizedString("- 最近 MCP 输出：%@", comment: "Daily Pulse recent MCP output entry"), resultPreviewText(output, fallback: NSLocalizedString("暂无输出", comment: "Daily Pulse empty MCP output"))))
         } else if let error = normalizedOptionalText(mcpOperationError, fallback: nil) {
-            entries.append("- 最近 MCP 错误：\(resultPreviewText(error, fallback: "暂无错误详情"))")
+            entries.append(String(format: NSLocalizedString("- 最近 MCP 错误：%@", comment: "Daily Pulse recent MCP error entry"), resultPreviewText(error, fallback: NSLocalizedString("暂无错误详情", comment: "Daily Pulse empty MCP error"))))
         }
 
         return Array(entries.prefix(max(1, limit)))
@@ -418,7 +418,7 @@ extension DailyPulseManager {
     ) -> [String] {
         announcements.prefix(max(1, limit)).map { announcement in
             let preview = resultPreviewText(announcement.body, fallback: announcement.title)
-            return "- \(announcement.title)：\(preview)"
+            return String(format: NSLocalizedString("- %@：%@", comment: "Daily Pulse announcement digest entry"), announcement.title, preview)
         }
     }
 
@@ -442,8 +442,14 @@ extension DailyPulseManager {
             .prefix(max(1, limit))
             .map { signal in
                 let timeText = compactUserFacingDateString(from: signal.capturedAt)
-                let suffix = signal.isFailure ? "（失败）" : ""
-                return "- \(signal.title)\(suffix) · \(timeText)：\(resultPreviewText(signal.preview, fallback: signal.title))"
+                let suffix = signal.isFailure ? NSLocalizedString("（失败）", comment: "Daily Pulse failure suffix") : ""
+                return String(
+                    format: NSLocalizedString("- %@%@ · %@：%@", comment: "Daily Pulse external signal digest entry"),
+                    signal.title,
+                    suffix,
+                    timeText,
+                    resultPreviewText(signal.preview, fallback: signal.title)
+                )
             }
     }
 

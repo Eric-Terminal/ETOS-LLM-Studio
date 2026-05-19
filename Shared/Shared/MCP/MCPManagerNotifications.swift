@@ -45,12 +45,12 @@ extension MCPManager {
                 level: .info,
                 category: .notification,
                 serverID: sourceServerID,
-                message: "收到能力变更通知：\(notification.method)"
+                message: String(format: NSLocalizedString("收到能力变更通知：%@", comment: "MCP governance capability change notification"), notification.method)
             )
             if let sourceServerID {
-                invalidateMetadataCache(for: sourceServerID, reason: "收到 \(notification.method) 通知")
+                invalidateMetadataCache(for: sourceServerID, reason: String(format: NSLocalizedString("收到 %@ 通知", comment: "MCP metadata invalidation notification reason"), notification.method))
             } else {
-                invalidateAllMetadataCaches(reason: "收到全局能力变更通知：\(notification.method)")
+                invalidateAllMetadataCaches(reason: String(format: NSLocalizedString("收到全局能力变更通知：%@", comment: "MCP metadata invalidation global notification reason"), notification.method))
             }
         case MCPNotificationType.cancelled.rawValue:
             if let params = notification.params,
@@ -60,7 +60,7 @@ extension MCPManager {
                     level: .warning,
                     category: .notification,
                     serverID: sourceServerID,
-                    message: "收到取消通知 requestId=\(cancelled.requestId.canonicalValue)"
+                    message: String(format: NSLocalizedString("收到取消通知 requestId=%@", comment: "MCP governance cancelled notification"), cancelled.requestId.canonicalValue)
                 )
                 if let reason = cancelled.reason, !reason.isEmpty {
                     lastOperationError = reason
@@ -71,7 +71,7 @@ extension MCPManager {
                 level: .debug,
                 category: .notification,
                 serverID: sourceServerID,
-                message: "收到通知：\(notification.method)"
+                message: String(format: NSLocalizedString("收到通知：%@", comment: "MCP governance generic notification"), notification.method)
             )
         }
     }
@@ -85,7 +85,7 @@ extension MCPManager {
             level: entry.level,
             category: .serverLog,
             serverID: sourceServerID,
-            message: entry.logger ?? "服务器日志",
+            message: entry.logger ?? NSLocalizedString("服务器日志", comment: "MCP server log fallback title"),
             payload: entry.data
         )
     }
@@ -118,7 +118,7 @@ extension MCPManager {
             level: .info,
             category: .progress,
             serverID: sourceServerID,
-            message: "进度更新 token=\(tokenKey), progress=\(progress.progress), total=\(progress.total ?? 0)"
+            message: String(format: NSLocalizedString("进度更新 token=%@, progress=%.2f, total=%.2f", comment: "MCP governance progress update"), tokenKey, progress.progress, progress.total ?? 0)
         )
     }
 }

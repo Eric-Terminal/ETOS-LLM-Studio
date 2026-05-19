@@ -29,7 +29,7 @@ extension ThirdPartyImportService {
             }
         } else if isLikelyCompressedBackup(fileURL) {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "当前版本暂不支持直接读取压缩包，请先解压后再导入 settings.json/chats.json。"
+                reason: NSLocalizedString("当前版本暂不支持直接读取压缩包，请先解压后再导入 settings.json/chats.json。", comment: "Kelivo import compressed backup unsupported")
             )
         }
 
@@ -37,15 +37,15 @@ extension ThirdPartyImportService {
         let sessions = parseKelivoSessions(chats)
 
         if providers.isEmpty {
-            warnings.append("Kelivo 备份中未识别到 provider_configs。")
+            warnings.append(NSLocalizedString("Kelivo 备份中未识别到 provider_configs。", comment: "Kelivo import missing provider configs warning"))
         }
         if sessions.isEmpty {
-            warnings.append("Kelivo 备份中未识别到 chats.json 会话。")
+            warnings.append(NSLocalizedString("Kelivo 备份中未识别到 chats.json 会话。", comment: "Kelivo import missing chats warning"))
         }
 
         if providers.isEmpty && sessions.isEmpty {
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "未识别到 Kelivo 备份中的可导入数据。"
+                reason: NSLocalizedString("未识别到 Kelivo 备份中的可导入数据。", comment: "Kelivo import no importable data")
             )
         }
 

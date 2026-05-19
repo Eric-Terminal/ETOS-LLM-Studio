@@ -512,6 +512,6 @@ extension ChatView {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: "会话与模型选择器按钮无障碍标签"))
     }
 }

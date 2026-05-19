@@ -72,30 +72,30 @@ func logChatRequestSnapshot(
     payload: [String: Any]
 ) {
     var detailPayload: [String: String] = [
-        "适配器": adapterName,
-        "方法": request.httpMethod ?? "POST",
-        "地址": AppLogRedactor.sanitizeURLForLog(request.url),
-        "请求体字节数": "\(request.httpBody?.count ?? 0)"
+        NSLocalizedString("适配器", comment: "App log payload key"): adapterName,
+        NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",
+        NSLocalizedString("地址", comment: "App log payload key"): AppLogRedactor.sanitizeURLForLog(request.url),
+        NSLocalizedString("请求体字节数", comment: "App log payload key"): "\(request.httpBody?.count ?? 0)"
     ]
 
     if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
-        detailPayload["请求头"] = headers
+        detailPayload[NSLocalizedString("请求头", comment: "App log payload key")] = headers
     }
     let exposesMessageFields = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
     if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload, exposesMessageFields: exposesMessageFields) {
         let bodyKey = exposesMessageFields
-            ? "请求体(含明文消息)"
-            : "请求体(不含消息字段)"
+            ? NSLocalizedString("请求体(含明文消息)", comment: "App log payload key")
+            : NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")
         detailPayload[bodyKey] = body
     } else {
-        detailPayload["请求体(不含消息字段)"] = "[无法序列化]"
+        detailPayload[NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")] = NSLocalizedString("[无法序列化]", comment: "App log payload value")
     }
 
     AppLog.developer(
         level: .debug,
-        category: "请求",
-        action: "构建\(adapterName)请求",
-        message: "\(adapterName) 请求体已生成",
+        category: NSLocalizedString("请求", comment: "App log category"),
+        action: String(format: NSLocalizedString("构建%@请求", comment: "App log action"), adapterName),
+        message: String(format: NSLocalizedString("%@ 请求体已生成", comment: "App log message"), adapterName),
         payload: detailPayload
     )
 }
@@ -156,7 +156,7 @@ public extension APIAdapter {
     }
 
     func parseTranscriptionResponse(data: Data) throws -> String {
-        throw NSError(domain: "APIAdapter", code: -10, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现语音转文字功能。"])
+        throw NSError(domain: "APIAdapter", code: -10, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现语音转文字功能。", comment: "Adapter unsupported transcription error")])
     }
 
     func buildEmbeddingRequest(for model: RunnableModel, texts: [String]) -> URLRequest? {
@@ -164,7 +164,7 @@ public extension APIAdapter {
     }
 
     func parseEmbeddingResponse(data: Data) throws -> [[Float]] {
-        throw NSError(domain: "APIAdapter", code: -11, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现嵌入 API。"])
+        throw NSError(domain: "APIAdapter", code: -11, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现嵌入 API。", comment: "Adapter unsupported embedding error")])
     }
 
     func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {
@@ -172,7 +172,7 @@ public extension APIAdapter {
     }
 
     func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult] {
-        throw NSError(domain: "APIAdapter", code: -12, userInfo: [NSLocalizedDescriptionKey: "当前适配器未实现生图 API。"])
+        throw NSError(domain: "APIAdapter", code: -12, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现生图 API。", comment: "Adapter unsupported image generation error")])
     }
 
     func parseModelListResponse(data: Data) throws -> [Model] {

@@ -39,8 +39,8 @@ public final class ShortcutToolManager: ObservableObject {
                     source: .shortcutResult,
                     title: lastExecutionResult.toolName,
                     preview: lastExecutionResult.success
-                        ? (lastExecutionResult.result ?? "执行成功，但没有返回可展示内容。")
-                        : (lastExecutionResult.errorMessage ?? "执行失败，但没有返回详细错误。"),
+                        ? (lastExecutionResult.result ?? NSLocalizedString("执行成功，但没有返回可展示内容。", comment: "Shortcut tool empty success signal preview"))
+                        : (lastExecutionResult.errorMessage ?? NSLocalizedString("执行失败，但没有返回详细错误。", comment: "Shortcut tool empty failure signal preview")),
                     capturedAt: lastExecutionResult.finishedAt,
                     isFailure: !lastExecutionResult.success
                 )

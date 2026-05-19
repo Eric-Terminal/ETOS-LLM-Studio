@@ -11,7 +11,7 @@ import Foundation
 extension ThirdPartyImportService {
     static func parseRikkaHub(fileURL: URL) throws -> ParsedPayload {
         var warnings: [String] = [
-            "RikkaHub 备份当前仅支持读取 settings.json 中的提供商配置，会话内容暂未解析。"
+            NSLocalizedString("RikkaHub 备份当前仅支持读取 settings.json 中的提供商配置，会话内容暂未解析。", comment: "RikkaHub import limitation warning")
         ]
 
         let settings: [String: Any]
@@ -23,11 +23,11 @@ extension ThirdPartyImportService {
         } else {
             if isLikelyCompressedBackup(fileURL) {
                 throw ThirdPartyImportError.unsupportedBackupFormat(
-                    reason: "当前版本暂不支持直接读取压缩包，请先解压后再导入 settings.json。"
+                    reason: NSLocalizedString("当前版本暂不支持直接读取压缩包，请先解压后再导入 settings.json。", comment: "RikkaHub import compressed backup unsupported")
                 )
             }
             throw ThirdPartyImportError.unsupportedBackupFormat(
-                reason: "未找到 RikkaHub 可识别的 settings.json。"
+                reason: NSLocalizedString("未找到 RikkaHub 可识别的 settings.json。", comment: "RikkaHub import missing settings")
             )
         }
 
@@ -35,7 +35,7 @@ extension ThirdPartyImportService {
         let providers = parseRikkaProviders(providerList)
 
         if providers.isEmpty {
-            warnings.append("未在 RikkaHub 备份中识别到可导入的提供商。")
+            warnings.append(NSLocalizedString("未在 RikkaHub 备份中识别到可导入的提供商。", comment: "RikkaHub import no providers warning"))
             throw ThirdPartyImportError.noImportableContent
         }
 
