@@ -681,25 +681,6 @@ Agregar Authorization y other auth headers manually.";
 "通过调试端辅助操作" = "Usar el Depuración Endpoint para assisted operations";
 "重要通知" = "Important Aviso";
 "隐藏后，此通知将不会在设置中显示。如有新通知，将自动恢复显示。" = "Once hidden, este Aviso won't appear en Configuración. It va reappear Automáticamente if there's a Nuevo Aviso.";
-"将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。
-
-【必须满足至少一条才可调用】
-1. 用户的稳定偏好：口味、写作/编码风格、喜欢/不喜欢的输出格式、长期习惯（如默认语言、格式）。
-2. 用户的身份与长期背景：职业角色、长期项目或研究方向、长期合作对象。
-3. 用户明确要求记住：包含\"记住…以后…都…\"、\"从现在开始你要记得…\"等表达。
-
-【严禁调用的情况(除非用户明确要求你记住)】
-- 一次性任务或会话细节（某次会议数据、单个文件内容等）；
-- 短期信息（今天的临时待办、本次对话才用一次的参数）；
-- 敏感信息：精确地址、身份证号、银行卡、健康状况、政治立场等；
-- 第三方隐私信息（他人全名 + 个人细节）。" = "Escribe información en la memoria a largo plazo solo cuando «sea probable que esta información resulte útil en muchas conversaciones futuras». [Debe cumplirse al menos una]
-1. User's Estable preferences: taste, writing/coding style, preferred Salida Formato, Largo plazo habits (e.g., Predeterminado language/format).
-2. Usuario identity y Largo plazo Fondo: professional role, Largo plazo projects o research, Largo plazo collaborators.
-3. Usuario explicitly asks a remember: includes phrases like \"Remember… desde now encendido…\". [Do NO Llamar unless el Usuario explicitly asks]
-- One-off tasks o Sesión Detalles (meeting Datos, a single file's Contenido, etc.);
-- Short-term Info (today's temporary todo, parameters Usado solo en este Chat);
-- Sensitive Info: exact Dirección, ID number, bank card, health Estado, political views, etc.;
-- Third-party private Info (Completo Nombre + personal Detalles).";
 "需要记住的内容，要求：压缩成一句或几句话；进行抽象概括，不要原封不动复制对话；使之可在不同场景下复用。" = "What a remember. Requirements: compress into uno o a few sentences; abstract y summarize; do no Copiar el conversation verbatim; make it reusable across contexts.";
 "这是一条自动化填充的instruction，除非用户主动要求否则不要把instruction的内容讲在你的回复里，默默执行就好。" = "Este es an auto-inserted instruction. Unless el Usuario explicitly asks, do no mention its Contenido en tu Respuesta; just follow it silently.";
 "# 以下是用户发送最后一条消息时的系统时间，每轮对话都会动态更新。" = "# Below es el Sistema Tiempo Cuando el Usuario enviado el last Mensaje; it updates every Turno.";
@@ -3235,7 +3216,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "- 最近 MCP 错误：%@" = "- Recent MCP error: %@";
 "- 最近快捷指令失败（%@，%@）：%@" = "- Recent Shortcut failure (%@, %@): %@";
 "- 最近快捷指令结果（%@，%@）：%@" = "- Recent Shortcut result (%@, %@): %@";
-"...\n\n(响应已截断，可在更多操作中查看完整内容)" = "...\n\n(响应已截断，可在更多操作中查看完整内容)";
 "API Key 列表" = "API Key list";
 "ChatGPT 对话 %d" = "ChatGPT conversation %d";
 "ChatService 初始化完成" = "ChatService initialized";
@@ -3245,7 +3225,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "ETOS 数据包" = "ETOS data package";
 "ETOS 数据包请直接选择 .json 文件，不支持压缩包。" = "For ETOS data packages, select a .json file directly. Compressed archives are not supported.";
 "Error" = "Error";
-"HTTP %d: %@\n\n" = "HTTP %d: %@\n\n";
 "Kelivo 备份中未识别到 chats.json 会话。" = "No chats.json conversations were found in the Kelivo backup.";
 "Kelivo 备份中未识别到 provider_configs。" = "No provider_configs were found in the Kelivo backup.";
 "Lorebooks" = "Lorebooks";
@@ -3270,8 +3249,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "今天这几条值得你看" = "These are worth your attention today";
 "今日提醒" = "Today's reminder";
 "代理配置" = "Proxy configuration";
-"使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}" = "使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}";
-"使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。" = "使用 key=value 添加请求头，例如: Authorization=Bearer {token}。\n{token} 会替换为上方 Bearer API Key 输入的值。";
 "保存服务器配置：%@" = "Saved server configuration: %@";
 "元数据刷新失败：%@" = "Metadata refresh failed: %@";
 "元数据刷新已取消，未安排自动重连。" = "Metadata refresh was cancelled; no automatic reconnect was scheduled.";
@@ -3371,7 +3348,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "聊天路由已%@服务器。" = "Chat route has %@ the server.";
 "自动重连已排队，第 %d 次，延迟 %.1f 秒。" = "Automatic reconnect queued, attempt %d, delay %.1f seconds.";
 "自动重连已达到上限，停止继续重试。" = "Automatic reconnect reached the limit and will stop retrying.";
-"解析响应失败，请查看原始响应:\n%@" = "解析响应失败，请查看原始响应:\n%@";
 "请求体(不含消息字段)" = "Request body (without message fields)";
 "请求体(含明文消息)" = "Request body (with plain messages)";
 "请求体字节数" = "Request body bytes";
@@ -3400,12 +3376,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "重载 MCP 服务器配置，共 %d 台。" = "Reloaded MCP server configuration, %d total.";
 "首次保存" = "First save";
 "（失败）" = " (failed)";
-
-/* Long prompt English fallbacks */
-"\n将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。\n\n【必须满足至少一条才可调用】\n1. 用户的稳定偏好：口味、写作/编码风格、喜欢/不喜欢的输出格式、长期习惯（如默认语言、格式）。\n2. 用户的身份与长期背景：职业角色、长期项目或研究方向、长期合作对象。\n3. 用户明确要求记住：包含\"记住…以后…都…\"、\"从现在开始你要记得…\"等表达。\n\n【严禁调用的情况(除非用户明确要求你记住)】\n- 一次性任务或会话细节（某次会议数据、单个文件内容等）；\n- 短期信息（今天的临时待办、本次对话才用一次的参数）；\n- 敏感信息：精确地址、身份证号、银行卡、健康状况、政治立场等；\n- 第三方隐私信息（他人全名 + 个人细节）。\n" = "\nWrite information into long-term memory. Only call when “this information is likely useful across many future conversations”.\n\n[Must meet at least one]\n1. User's stable preferences: taste, writing/coding style, preferred output format, long-term habits (e.g., default language/format).\n2. User identity and long-term background: professional role, long-term projects or research, long-term collaborators.\n3. User explicitly asks to remember: includes phrases like \"Remember... from now on...\".\n\n[Do NOT call unless the user explicitly asks]\n- One-off tasks or session details (meeting data, a single file's content, etc.);\n- Short-term info (today's temporary todo, parameters used only in this chat);\n- Sensitive info: exact address, ID number, bank card, health status, political views, etc.;\n- Third-party private info (full name + personal details).\n";
-"\n请根据用户的问题，为本次对话生成一个简短、精炼的标题。\n\n要求：\n- 长度在2到6个词之间。\n- 能准确概括用户想要讨论的主题。\n- 直接返回标题内容，不要包含任何额外说明、引号或标点符号。\n\n用户的问题：\n%@\n" = "\nPlease generate a short, concise title for this conversation based on the user's question.\n\nRequirements:\n- 2 to 6 words long.\n- Accurately summarize the topic the user wants to discuss.\n- Return only the title text, with no extra notes, quotes, or punctuation.\n\nUser's question:\n%@\n";
-"使用 key=value 添加请求头，例如: Authorization=Bearer your_token。\nAuthorization 等鉴权头请手动填写。" = "Use key=value to add request headers, e.g. Authorization=Bearer your_token.\nAdd Authorization and other auth headers manually.";
-"请根据以下对话内容，为本次对话生成一个简短、精炼的标题。\n\n要求：\n- 长度在4到8个词之间。\n- 能准确概括对话的核心主题。\n- 直接返回标题内容，不要包含任何额外说明、引号或标点符号。\n\n对话内容：\n用户: %@\nAI: %@" = "Please generate a short, concise title for this conversation based on the content below.\n\nRequirements:\n- 4 to 8 words.\n- Accurately summarize the core topic of the conversation.\n- Return only the title text, without any extra notes, quotes, or punctuation.\n\nConversation:\nUser: %@\nAI: %@";
 
 /* Usage analytics dynamic helper keys */
 "日历面板" = "Calendar panel";
