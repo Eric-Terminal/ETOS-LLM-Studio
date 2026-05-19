@@ -165,7 +165,8 @@ struct ChatBubble: View {
     }
 
     /// 图片占位符文本（各语言版本）
-    static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+    static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"]
+    static let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]"]
 
     // MARK: - 视图主体
 
@@ -231,6 +232,10 @@ struct ChatBubble: View {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: true)
             }
 
+            if let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty {
+                fileAttachmentsView(fileNames: fileFileNames, isOutgoing: true)
+            }
+
             if shouldShowUserBubble {
                 userTextBubble
             }
@@ -270,6 +275,10 @@ struct ChatBubble: View {
                let imageFileNames = message.imageFileNames,
                !imageFileNames.isEmpty {
                 imageAttachmentsView(fileNames: imageFileNames, isOutgoing: false)
+            }
+
+            if let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty {
+                fileAttachmentsView(fileNames: fileFileNames, isOutgoing: false)
             }
 
             if shouldShowAssistantBubble {

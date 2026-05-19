@@ -48,42 +48,54 @@ extension ChatBubble {
 
     @ViewBuilder
     func fileAttachmentsView(fileNames: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(fileNames, id: \.self) { fileName in
-                HStack(spacing: 8) {
-                    Image(systemName: "doc")
-                        .etFont(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(
-                            usesNoBubbleStyle
-                                ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
-                                : (isOutgoing
-                                    ? resolvedSecondaryTextColor(default: Color.white.opacity(0.85), customOpacity: 0.85)
-                                    : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
-                        )
-                    Text(fileName)
-                        .etFont(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                        .foregroundStyle(
-                            usesNoBubbleStyle
-                                ? resolvedTextColor(default: Color.primary)
-                                : resolvedTextColor(default: isOutgoing ? Color.white : Color.primary)
-                        )
+        HStack(spacing: 0) {
+            if isOutgoing {
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(fileNames, id: \.self) { fileName in
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc")
+                            .etFont(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                usesNoBubbleStyle
+                                    ? resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8)
+                                    : (isOutgoing
+                                        ? resolvedSecondaryTextColor(default: Color.white.opacity(0.85), customOpacity: 0.85)
+                                        : resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.8))
+                            )
+                        Text(fileName)
+                            .etFont(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                            .foregroundStyle(
+                                usesNoBubbleStyle
+                                    ? resolvedTextColor(default: Color.primary)
+                                    : resolvedTextColor(default: isOutgoing ? Color.white : Color.primary)
+                            )
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                usesNoBubbleStyle
+                                    ? Color.clear
+                                    : (isOutgoing
+                                        ? resolvedUserBubbleEndColor
+                                        : (resolvedAssistantBubbleColor ?? Color(uiColor: .secondarySystemBackground)))
+                            )
+                    )
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(
-                            usesNoBubbleStyle
-                                ? Color.clear
-                                : (isOutgoing
-                                    ? resolvedUserBubbleEndColor
-                                    : (resolvedAssistantBubbleColor ?? Color(uiColor: .secondarySystemBackground)))
-                        )
-                )
+            }
+            .frame(maxWidth: attachmentMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+
+            if !isOutgoing {
+                Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -127,13 +139,14 @@ extension ChatBubble {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
-                TelegramWaveformView(
-                    progress: audioPlayer.currentFileName == fileName ? audioPlayer.progress : 0,
-                    isPlaying: audioPlayer.isPlaying && audioPlayer.currentFileName == fileName,
-                    foregroundColor: foregroundColor,
-                    backgroundColor: secondaryColor.opacity(0.4)
+                Slider(
+                    value: Binding(
+                        get: { audioPlayer.currentFileName == fileName ? audioPlayer.progress : 0 },
+                        set: { audioPlayer.seek(toProgress: $0, fileName: fileName) }
+                    ),
+                    in: 0...1
                 )
-                .frame(height: 20)
+                .tint(foregroundColor)
 
                 if audioPlayer.currentFileName == fileName && audioPlayer.duration > 0 {
                     Text(audioPlayer.timeString)
@@ -147,7 +160,8 @@ extension ChatBubble {
                         .lineLimit(1)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minWidth: 180)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

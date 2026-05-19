@@ -130,6 +130,70 @@ extension ChatServiceTests {
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
+    @Test("混合发送时文本与附件会拆成独立用户消息")
+    func testMixedContentCreatesIndependentUserMessages() async throws {
+        await cleanup()
+        let session = createPermanentTestSession(name: "附件拆分测试")
+        defer { chatService.deleteSessions([session]) }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "已收到")
+
+        let audioAttachment = AudioAttachment(
+            data: Data([0x00, 0x01, 0x02]),
+            mimeType: "audio/m4a",
+            format: "m4a",
+            fileName: "voice.m4a"
+        )
+        let imageAttachment = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "snapshot.png"
+        )
+        let fileAttachment = FileAttachment(
+            data: Data("# 标题\n正文".utf8),
+            mimeType: "text/markdown",
+            fileName: "notes.md"
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请看这些附件",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            audioAttachment: audioAttachment,
+            imageAttachments: [imageAttachment],
+            fileAttachments: [fileAttachment],
+            includeSystemTime: false
+        )
+
+        let storedUserMessages = Persistence.loadMessages(for: session.id).filter { $0.role == .user }
+        #expect(storedUserMessages.count == 4)
+        #expect(storedUserMessages[0].content == "请看这些附件")
+        #expect(storedUserMessages[0].audioFileName == nil)
+        #expect(storedUserMessages[0].imageFileNames == nil)
+        #expect(storedUserMessages[0].fileFileNames == nil)
+        #expect(storedUserMessages[1].audioFileName != nil)
+        #expect(storedUserMessages[1].imageFileNames == nil)
+        #expect(storedUserMessages[1].fileFileNames == nil)
+        #expect(storedUserMessages[2].imageFileNames == ["snapshot.png"])
+        #expect(storedUserMessages[3].fileFileNames == ["notes.md"])
+
+        let sentMessages = try #require(mockAdapter.receivedMessages)
+        let sentUserMessages = sentMessages.filter { $0.role == .user }
+        #expect(sentUserMessages.map(\.id) == storedUserMessages.map(\.id))
+        #expect(mockAdapter.receivedAudioAttachments?.keys.contains(storedUserMessages[1].id) == true)
+        #expect(mockAdapter.receivedImageAttachments?[storedUserMessages[2].id]?.first?.fileName == "snapshot.png")
+        #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
+        #expect(sentUserMessages[3].content.contains("notes.md"))
+        #expect(sentUserMessages[3].content.contains("# 标题"))
+    }
+
     @Test("文件附件文本提取失败时会阻断请求")
     func testFileAttachmentTextExtractionFailureBlocksRequest() async {
         await cleanup()

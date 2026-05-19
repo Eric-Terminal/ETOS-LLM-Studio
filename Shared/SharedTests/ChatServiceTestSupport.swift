@@ -14,6 +14,8 @@ final class MockAPIAdapter: APIAdapter {
     var receivedTitleMessages: [ChatMessage]?
     var receivedReasoningSummaryMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
+    var receivedAudioAttachments: [UUID: AudioAttachment]?
+    var receivedImageAttachments: [UUID: [ImageAttachment]]?
     var receivedFileAttachments: [UUID: [FileAttachment]]?
     var responseToReturn: ChatMessage?
     var receivedChatModel: RunnableModel?
@@ -32,6 +34,8 @@ final class MockAPIAdapter: APIAdapter {
         } else {
             receivedMessages = messages
             receivedTools = tools
+            receivedAudioAttachments = audioAttachments
+            receivedImageAttachments = imageAttachments
             receivedFileAttachments = fileAttachments
             receivedChatModel = model
             return URLRequest(url: URL(string: "https://fake.url/chat")!)

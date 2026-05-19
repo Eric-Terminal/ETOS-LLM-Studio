@@ -36,7 +36,7 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
-        currentFileAttachments: [FileAttachment]
+        currentFileAttachments _: [FileAttachment]
     ) async {
         let currentSessionSnapshot = currentSessionSubject.value
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
@@ -193,7 +193,9 @@ extension ChatService {
 
         var audioAttachments: [UUID: AudioAttachment] = [:]
         for msg in messagesToSend {
-            if let currentAudio = currentAudioAttachment, msg.id == userMessage?.id {
+            if let currentAudio = currentAudioAttachment,
+               msg.id == userMessage?.id,
+               msg.audioFileName != nil {
                 audioAttachments[msg.id] = currentAudio
             } else if let audioFileName = msg.audioFileName,
                       let attachment = loadAudioAttachmentFromStorage(fileName: audioFileName) {
@@ -241,10 +243,6 @@ extension ChatService {
 
         var fileAttachments: [UUID: [FileAttachment]] = [:]
         for msg in messagesToSend {
-            if msg.id == userMessage?.id, !currentFileAttachments.isEmpty {
-                fileAttachments[msg.id] = currentFileAttachments
-                continue
-            }
             guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
             var attachments: [FileAttachment] = []
             for fileName in fileFileNames {

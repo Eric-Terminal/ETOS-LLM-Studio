@@ -54,6 +54,10 @@ extension ChatBubble {
             customOpacity: 0.75
         )
         let isCurrentFile = audioPlayer.currentFileName == fileName
+        let progressBinding = Binding<Double>(
+            get: { isCurrentFile ? audioPlayer.progress : 0 },
+            set: { audioPlayer.seek(toProgress: $0, fileName: fileName) }
+        )
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -76,6 +80,8 @@ extension ChatBubble {
                 ProgressView(value: audioPlayer.progress)
                     .progressViewStyle(.linear)
                     .tint(foregroundColor)
+                    .focusable(true)
+                    .digitalCrownRotation(progressBinding, from: 0, through: 1, by: 0.01, sensitivity: .medium, isContinuous: false, isHapticFeedbackEnabled: true)
 
                 HStack {
                     Text(formatTime(audioPlayer.currentTime))
@@ -131,6 +137,32 @@ extension ChatBubble {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
+    }
+
+    @ViewBuilder
+    func fileAttachmentsView(fileNames: [String], isOutgoing: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(fileNames, id: \.self) { fileName in
+                HStack(spacing: 6) {
+                    Image(systemName: "doc")
+                        .etFont(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+
+                    Text(fileName)
+                        .etFont(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(resolvedTextColor(default: .primary))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.secondary.opacity(0.15))
+                )
+            }
+        }
+        .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
     }
 
     @ViewBuilder

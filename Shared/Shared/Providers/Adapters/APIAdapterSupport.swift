@@ -23,9 +23,9 @@ func appendSegment(_ segment: String, to target: inout String?, separator: Strin
     target = existing + joiner + segment
 }
 
-let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
-let audioPlaceholders: Set<String> = ["[语音消息]", "[語音訊息]", "[音声メッセージ]", "[Voice message]"]
-let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]"]
+let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"]
+let audioPlaceholders: Set<String> = ["[语音消息]", "[語音訊息]", "[音声メッセージ]", "[Voice message]", "[Voz Mensaje]", "[Voix Message]", "[الصوت رسالة]", "[Голосовое сообщение]"]
+let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]"]
 
 func shouldSendText(_ text: String) -> Bool {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

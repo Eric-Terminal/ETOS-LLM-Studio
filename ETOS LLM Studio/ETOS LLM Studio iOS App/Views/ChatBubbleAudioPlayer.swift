@@ -18,14 +18,14 @@ final class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegat
     @Published var progress: Double = 0
     @Published var currentFileName: String?
     @Published var duration: TimeInterval = 0
+    @Published var currentTime: TimeInterval = 0
 
     private var audioPlayer: AVAudioPlayer?
     private var timer: Timer?
 
     var timeString: String {
-        guard let player = audioPlayer else { return "0:00" }
-        let current = Int(player.currentTime)
-        let total = Int(player.duration)
+        let current = Int(currentTime)
+        let total = Int(duration)
         return String(format: "%d:%02d / %d:%02d", current / 60, current % 60, total / 60, total % 60)
     }
 
@@ -56,6 +56,7 @@ final class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegat
 
             currentFileName = fileName
             duration = audioPlayer?.duration ?? 0
+            currentTime = 0
             isPlaying = true
 
             startTimer()
@@ -69,13 +70,28 @@ final class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegat
         audioPlayer = nil
         isPlaying = false
         progress = 0
+        currentTime = 0
+        currentFileName = nil
+        duration = 0
         stopTimer()
+    }
+
+    func seek(toProgress progress: Double, fileName: String) {
+        let clampedProgress = min(max(progress, 0), 1)
+        if currentFileName != fileName || audioPlayer == nil {
+            play(fileName: fileName)
+        }
+        guard let player = audioPlayer, player.duration > 0 else { return }
+        player.currentTime = player.duration * clampedProgress
+        currentTime = player.currentTime
+        self.progress = clampedProgress
     }
 
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self, let player = self.audioPlayer else { return }
-            self.progress = player.currentTime / player.duration
+            self.currentTime = player.currentTime
+            self.progress = player.duration > 0 ? player.currentTime / player.duration : 0
         }
     }
 
@@ -88,7 +104,9 @@ final class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegat
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         DispatchQueue.main.async {
             self.isPlaying = false
-            self.progress = 0
+            self.progress = 1
+            self.currentTime = self.duration
+            self.audioPlayer = nil
             self.stopTimer()
         }
     }

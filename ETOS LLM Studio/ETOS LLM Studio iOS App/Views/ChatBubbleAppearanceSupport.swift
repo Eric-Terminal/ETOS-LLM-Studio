@@ -366,6 +366,9 @@ extension ChatBubble {
         if usesNoBubbleStyle {
             return true
         }
+        if isOutgoing && message.audioFileName != nil {
+            return true
+        }
         return !isOutgoing && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
     }
 
@@ -506,7 +509,8 @@ extension ChatBubble {
         return defaultColor
     }
 
-    static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]"]
+    static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"]
+    static let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]"]
 
     var hasOnlyImages: Bool {
         guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else {
@@ -514,6 +518,15 @@ extension ChatBubble {
         }
         let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         let isPlaceholderOnly = trimmedContent.isEmpty || Self.imagePlaceholders.contains(trimmedContent)
+        return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
+    }
+
+    var hasOnlyFiles: Bool {
+        guard let fileFileNames = message.fileFileNames, !fileFileNames.isEmpty else {
+            return false
+        }
+        let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isPlaceholderOnly = trimmedContent.isEmpty || Self.filePlaceholders.contains(trimmedContent)
         return isPlaceholderOnly && message.reasoningContent == nil && message.toolCalls == nil && message.audioFileName == nil
     }
 
@@ -621,7 +634,7 @@ extension ChatBubble {
     }
 
     var hasMainContentWhenToolCallsSeparated: Bool {
-        if hasOnlyImages {
+        if hasOnlyImages || hasOnlyFiles {
             return false
         }
         let hasReasoning = !(message.reasoningContent ?? "").isEmpty
@@ -642,7 +655,7 @@ extension ChatBubble {
     }
 
     var shouldShowTextBubble: Bool {
-        if hasOnlyImages {
+        if hasOnlyImages || hasOnlyFiles {
             return false
         }
         let hasReasoning = !(message.reasoningContent ?? "").isEmpty

@@ -228,6 +228,7 @@
 "PIN 码随机生成,请勿泄露" = "Le code PIN est généré aléatoirement, ne le partagez pas.";
 "Scope (可选)" = "Scope (Optionnel)";
 "[图片]" = "[Image]";
+"[文件]" = "[Fichier]";
 "[语音消息]" = "[Voix Message]";
 "iCloud 同步" = "iCloud Synchroniser";
 "iPhone 与 Apple Watch 无缝协作" = "iPhone et Apple Watch synchronisés";

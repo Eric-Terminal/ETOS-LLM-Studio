@@ -79,6 +79,18 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
         audioPlayer = nil
         isPlaying = false
         currentTime = 0
+        currentFileName = nil
+        duration = 0
+    }
+
+    func seek(toProgress progress: Double, fileName: String) {
+        let clampedProgress = min(max(progress, 0), 1)
+        if currentFileName != fileName || audioPlayer == nil {
+            play(fileName: fileName)
+        }
+        guard let player = audioPlayer, player.duration > 0 else { return }
+        player.currentTime = player.duration * clampedProgress
+        currentTime = player.currentTime
     }
 
     private func startProgressTimer() {
@@ -100,6 +112,7 @@ class WatchAudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate
             self.stopProgressTimer()
             self.isPlaying = false
             self.currentTime = self.duration
+            self.audioPlayer = nil
         }
     }
 

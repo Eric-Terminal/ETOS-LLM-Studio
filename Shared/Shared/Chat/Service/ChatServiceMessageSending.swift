@@ -71,7 +71,8 @@ extension ChatService {
         // 准备用户消息和UI占位消息
         let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
         let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
-        var messageContent = applyMessageRegexRules(
+        let filePlaceholder = NSLocalizedString("[文件]", comment: "File message placeholder")
+        let messageContent = applyMessageRegexRules(
             to: content.trimmingCharacters(in: .whitespacesAndNewlines),
             scope: .user,
             mode: .persist
@@ -121,42 +122,41 @@ extension ChatService {
             }
         }
 
-        if messageContent.isEmpty && savedAudioFileName == nil {
-            if !savedFileNames.isEmpty {
-                messageContent = savedFileNames.joined(separator: "\n")
-            } else if !savedImageFileNames.isEmpty {
-                messageContent = imagePlaceholder
-            }
-        }
-
-        // 构建用户消息列表：
-        // - 若同时含语音和文字，拆分为两个独立气泡，方便单独删除
-        // - 若只有一种内容，保持原有单条消息行为
-        if let savedAudioFileName {
-            let audioMessage = ChatMessage(
-                role: .user,
-                content: audioPlaceholder,
-                requestedAt: requestTimestamp,
-                audioFileName: savedAudioFileName,
-                imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames,
-                fileFileNames: savedFileNames.isEmpty ? nil : savedFileNames
-            )
-            userMessages.append(audioMessage)
-        }
-
         if !messageContent.isEmpty {
-            // 当同时有语音与文字时，避免重复附带图片到文字消息（保持图片随首条消息）
-            let imageNamesForText = savedAudioFileName == nil ? (savedImageFileNames.isEmpty ? nil : savedImageFileNames) : nil
-            let fileNamesForText = savedAudioFileName == nil ? (savedFileNames.isEmpty ? nil : savedFileNames) : nil
             let textMessage = ChatMessage(
                 role: .user,
                 content: messageContent,
                 requestedAt: requestTimestamp,
-                audioFileName: nil,
-                imageFileNames: imageNamesForText,
-                fileFileNames: fileNamesForText
+                audioFileName: nil
             )
             userMessages.append(textMessage)
+        }
+
+        if let savedAudioFileName {
+            userMessages.append(ChatMessage(
+                role: .user,
+                content: audioPlaceholder,
+                requestedAt: requestTimestamp,
+                audioFileName: savedAudioFileName
+            ))
+        }
+
+        for imageFileName in savedImageFileNames {
+            userMessages.append(ChatMessage(
+                role: .user,
+                content: imagePlaceholder,
+                requestedAt: requestTimestamp,
+                imageFileNames: [imageFileName]
+            ))
+        }
+
+        for fileName in savedFileNames {
+            userMessages.append(ChatMessage(
+                role: .user,
+                content: filePlaceholder,
+                requestedAt: requestTimestamp,
+                fileFileNames: [fileName]
+            ))
         }
 
         // 兜底：如果没有生成任何用户消息，直接报错返回
@@ -169,8 +169,13 @@ extension ChatService {
             return
         }
 
-        // 用于命名会话/记忆检索的代表消息：优先文字，其次第一条消息
-        if let textMessage = userMessages.first(where: { $0.audioFileName == nil && !$0.content.isEmpty }) {
+        // 用于命名会话/记忆检索的代表消息：优先用户正文，其次第一条附件消息。
+        if let textMessage = userMessages.first(where: {
+            $0.audioFileName == nil
+                && ($0.imageFileNames?.isEmpty ?? true)
+                && ($0.fileFileNames?.isEmpty ?? true)
+                && !$0.content.isEmpty
+        }) {
             primaryUserMessage = textMessage
         } else {
             primaryUserMessage = userMessages.first
@@ -227,7 +232,7 @@ extension ChatService {
 
             // 用户发送第一条消息时，立即异步生成标题（无需等待AI响应）
             let trimmedTitleSource = sessionTitleSource.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            let isPlaceholderTitle = trimmedTitleSource == audioPlaceholder || trimmedTitleSource == imagePlaceholder
+            let isPlaceholderTitle = trimmedTitleSource == audioPlaceholder || trimmedTitleSource == imagePlaceholder || trimmedTitleSource == filePlaceholder
             if !trimmedTitleSource.isEmpty && !isPlaceholderTitle {
                 let sessionIDForTitle = currentSession.id
                 let userMessageForTitle = sessionTitleSource

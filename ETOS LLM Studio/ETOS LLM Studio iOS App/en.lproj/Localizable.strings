@@ -256,6 +256,7 @@
 "PIN 码随机生成,请勿泄露" = "PIN is randomly generated. Do not share.";
 "Scope (可选)" = "Scope (optional)";
 "[图片]" = "[Image]";
+"[文件]" = "[File]";
 "[语音消息]" = "[Voice message]";
 "iCloud 同步" = "iCloud Sync";
 "iPhone 与 Apple Watch 无缝协作" = "iPhone and Apple Watch in sync";

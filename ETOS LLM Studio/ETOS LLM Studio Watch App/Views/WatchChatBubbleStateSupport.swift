@@ -177,6 +177,7 @@ extension ChatBubble {
         let trimmedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return false }
         return !Self.imagePlaceholders.contains(trimmedContent)
+            && !Self.filePlaceholders.contains(trimmedContent)
     }
 
     var hasToolCalls: Bool {
