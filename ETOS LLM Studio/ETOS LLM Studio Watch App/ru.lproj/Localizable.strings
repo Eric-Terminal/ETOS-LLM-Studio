@@ -3315,3 +3315,22 @@
 "拼接画像：\n%@" = "Merged profile:\n%@";
 "文件预览" = "Предпросмотр файла";
 "%d 行" = "%d строк";
+
+/* Model connectivity test */
+"模型测试" = "Model Test";
+"测试结果" = "Test Results";
+"模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。" = "Model Test sends a lightweight request to each added chat model to verify that the API key, endpoint, and model ID work.";
+"模型测试会向每个已添加的聊天模型发送一条轻量请求。" = "Model Test sends a lightweight request to each added chat model.";
+"没有可测试的已添加聊天模型。" = "No added chat models are available to test.";
+"%d / %d 已完成" = "%d / %d complete";
+"%d 可用 / %d 不可用" = "%d available / %d unavailable";
+"耗时 %d ms" = "%d ms";
+"开始测试" = "Start Test";
+"重新测试" = "Retest";
+"等待测试" = "Waiting";
+"测试中" = "Testing";
+"可用" = "Available";
+"不可用" = "Unavailable";
+"测试模型连通性" = "test model connectivity";
+"请只回复 OK。" = "Reply with OK only.";
+"测试已取消。" = "Test cancelled.";
