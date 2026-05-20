@@ -213,16 +213,6 @@ struct StorageDirectoryBrowserView: View {
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 deleteAction(for: file)
             }
-        } else if StorageBrowserSupport.isJSONFile(file.url) {
-            Button {
-                previewingFile = file
-            } label: {
-                FileRowView(file: file, isEditing: false, isSelected: false)
-            }
-            .buttonStyle(.plain)
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                deleteAction(for: file)
-            }
         } else if StorageBrowserSupport.isImageFile(file.url) || StorageBrowserSupport.isSQLiteDatabaseFile(file.url) {
             Button {
                 previewingFile = file
@@ -234,10 +224,15 @@ struct StorageDirectoryBrowserView: View {
                 deleteAction(for: file)
             }
         } else {
-            FileRowView(file: file, isEditing: false, isSelected: false)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    deleteAction(for: file)
-                }
+            Button {
+                previewingFile = file
+            } label: {
+                FileRowView(file: file, isEditing: false, isSelected: false)
+            }
+            .buttonStyle(.plain)
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                deleteAction(for: file)
+            }
         }
     }
 
@@ -345,7 +340,7 @@ private struct FileRowView: View {
                 Image(systemName: "chevron.right")
                     .etFont(.caption)
                     .foregroundStyle(.tertiary)
-            } else if (StorageBrowserSupport.isJSONFile(file.url) || StorageBrowserSupport.isImageFile(file.url) || StorageBrowserSupport.isSQLiteDatabaseFile(file.url)) && !isEditing {
+            } else if !isEditing {
                 Image(systemName: "eye")
                     .etFont(.caption)
                     .foregroundStyle(.tertiary)
@@ -378,7 +373,7 @@ private struct FileRowView: View {
 
         let ext = file.url.pathExtension.lowercased()
         switch ext {
-        case "json":
+        case "json", "jsonl", "txt", "text", "md", "markdown", "csv", "tsv", "log", "xml", "html", "htm", "yaml", "yml":
             return ("doc.text", .orange)
         case "m4a", "mp3", "wav", "aac":
             return ("waveform", .purple)
@@ -403,7 +398,7 @@ struct OtherFilesView: View {
             currentDirectory: rootDirectory,
             emptyTitle: NSLocalizedString("暂无其他文件", comment: ""),
             emptyDescription: NSLocalizedString("Documents 根目录下没有其他文件。", comment: ""),
-            footerText: NSLocalizedString("点击文件夹继续浏览，点击 JSON 文件可预览内容。", comment: ""),
+            footerText: NSLocalizedString("点击文件夹继续浏览，点击文件可尝试预览内容。", comment: ""),
             itemFilter: { item in
                 if item.isDirectory {
                     return !knownDirectories.contains(item.name)

@@ -41,6 +41,21 @@ struct FileAttachmentTextExtractorTests {
         #expect(text == "没有常规后缀但仍是文本")
     }
 
+    @Test("本地文件预览会读取 jsonl 等纯文本文件")
+    func localFilePreviewReadsJSONLText() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("preview-\(UUID().uuidString)")
+            .appendingPathExtension("jsonl")
+        try Data("{\"a\":1}\n{\"b\":2}".utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let payload = FileAttachmentPreviewLoader.load(fileURL: fileURL)
+
+        #expect(payload.canPreview)
+        #expect(payload.text == "{\"a\":1}\n{\"b\":2}")
+        #expect(payload.lineCount == 2)
+    }
+
     @Test("DOCX 附件会抽取主文档文本")
     func docxAttachmentCanBeExtracted() throws {
         let extractor = FileAttachmentTextExtractor()

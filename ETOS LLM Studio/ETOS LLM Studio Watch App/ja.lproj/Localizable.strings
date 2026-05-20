@@ -1887,6 +1887,7 @@
 "清空用户画像？" = "Clear user profile?";
 "激活模型" = "Active Models";
 "点击文件夹继续浏览，点击 JSON 文件打开分页阅读。" = "Tap folders to continue browsing. Tap JSON files to open paged reading.";
+"点击文件夹继续浏览，点击文件可尝试预览内容。" = "フォルダをタップして参照を続けます。ファイルをタップすると内容のプレビューを試せます。";
 "点击进入二级菜单配置开关与审批策略" = "Tap to configure switches and approval policy in the secondary menu";
 "点按后可使用数码表冠缩放图片" = "After tapping, use the Digital Crown to zoom the image";
 "生图请求会使用这里单独选择的模型，不影响主聊天模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。" = "Image generation requests use the model selected here and do not affect the main chat model. You can also configure it globally in Provider & Model Management > Dedicated Models.";

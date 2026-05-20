@@ -1922,6 +1922,7 @@
 "点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。" = "Tap “Edit” in the top-right to drag the right handle and reorder priorities. Use “Add Font to Current Slot” to add fonts not yet included. Swipe right on fonts in a slot to remove them. Higher entries have higher priority.";
 "点击后将与 Apple Watch 双向同步数据：比较双方差异后，把对方有而本地没有的数据传过来。" = "Tap to sync with Apple Watch in both directions: compare differences, then bring over data the other side has and this side lacks.";
 "点击文件夹继续浏览，点击 JSON 文件打开分页阅读。" = "Tap folders to continue browsing. Tap JSON files to open paged reading.";
+"点击文件夹继续浏览，点击文件可尝试预览内容。" = "Tap folders to continue browsing. Tap files to try previewing their contents.";
 "点击进入二级菜单配置开关与审批策略" = "Tap to configure switches and approval policy in the secondary menu";
 "点按后可使用数码表冠缩放图片" = "After tapping, use the Digital Crown to zoom the image";
 "生图请求会使用这里单独选择的模型，不影响主聊天模型。也可以在“提供商与模型管理 > 专用模型”中统一设置。" = "Image generation requests use the model selected here and do not affect the main chat model. You can also configure it globally in Provider & Model Management > Dedicated Models.";

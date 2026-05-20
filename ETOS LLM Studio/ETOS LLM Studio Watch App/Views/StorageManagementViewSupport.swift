@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch App
 //
-// 存储管理视图的文件浏览、图片预览、SQLite 预览与文件行辅助。
+// 存储管理视图的文件浏览、文本预览、图片预览、SQLite 预览与文件行辅助。
 // ============================================================================
 
 import SwiftUI
@@ -122,7 +122,7 @@ public struct WatchFileListView: View {
             } header: {
                 Text(NSLocalizedString("内容", comment: ""))
             } footer: {
-                Text(NSLocalizedString("点击文件夹继续浏览，点击 JSON 文件打开分页阅读。", comment: ""))
+                Text(NSLocalizedString("点击文件夹继续浏览，点击文件可尝试预览内容。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -139,15 +139,6 @@ public struct WatchFileListView: View {
                     rootDirectory: rootDirectory,
                     title: titleOverride
                 )
-            } label: {
-                WatchFileRow(file: file)
-            }
-            .swipeActions(edge: .trailing) {
-                deleteAction(for: file)
-            }
-        } else if StorageBrowserSupport.isJSONFile(file.url) {
-            NavigationLink {
-                WatchJSONPreviewView(file: file)
             } label: {
                 WatchFileRow(file: file)
             }
@@ -173,10 +164,14 @@ public struct WatchFileListView: View {
                 deleteAction(for: file)
             }
         } else {
-            WatchFileRow(file: file)
-                .swipeActions(edge: .trailing) {
-                    deleteAction(for: file)
-                }
+            NavigationLink {
+                WatchFilePreviewView(file: file)
+            } label: {
+                WatchFileRow(file: file)
+            }
+            .swipeActions(edge: .trailing) {
+                deleteAction(for: file)
+            }
         }
     }
 
@@ -276,7 +271,7 @@ private struct WatchFileRow: View {
             return "cylinder.split.1x2"
         }
         switch file.url.pathExtension.lowercased() {
-        case "json":
+        case "json", "jsonl", "txt", "text", "md", "markdown", "csv", "tsv", "log", "xml", "html", "htm", "yaml", "yml":
             return "doc.text"
         case "m4a", "mp3", "wav", "aac":
             return "waveform"
@@ -296,7 +291,7 @@ private struct WatchFileRow: View {
             return .indigo
         }
         switch file.url.pathExtension.lowercased() {
-        case "json":
+        case "json", "jsonl", "txt", "text", "md", "markdown", "csv", "tsv", "log", "xml", "html", "htm", "yaml", "yml":
             return .orange
         case "m4a", "mp3", "wav", "aac":
             return .purple
@@ -306,12 +301,13 @@ private struct WatchFileRow: View {
     }
 }
 
-private struct WatchJSONPreviewView: View {
+private struct WatchFilePreviewView: View {
     let file: FileItem
 
     @State private var pages: [StorageTextPage] = []
     @State private var isLoading = true
     @State private var selectedPageIndex = 0
+    @State private var previewErrorMessage: String?
 
     private var currentPage: StorageTextPage? {
         guard pages.indices.contains(selectedPageIndex) else { return nil }
@@ -353,7 +349,7 @@ private struct WatchJSONPreviewView: View {
                         .foregroundStyle(.secondary)
                     Text(NSLocalizedString("无法预览", comment: ""))
                         .etFont(.footnote)
-                    Text(NSLocalizedString("无法读取此 JSON 文件。", comment: ""))
+                    Text(previewErrorMessage ?? NSLocalizedString("无法读取此文件的内容。", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -400,15 +396,20 @@ private struct WatchJSONPreviewView: View {
         isLoading = true
 
         let fileURL = file.url
-        let loadedPages = await Task.detached(priority: .userInitiated) {
-            guard let content = StorageUtility.readJSONFile(at: fileURL) else {
-                return [StorageTextPage]()
+        let result = await Task.detached(priority: .userInitiated) {
+            let payload = FileAttachmentPreviewLoader.load(fileURL: fileURL)
+            guard let content = payload.text else {
+                return (pages: [StorageTextPage](), errorMessage: payload.errorMessage)
             }
-            return StorageBrowserSupport.paginateText(content, linesPerPage: 100)
+            return (
+                pages: StorageBrowserSupport.paginateText(content, linesPerPage: 100),
+                errorMessage: payload.errorMessage
+            )
         }.value
 
         await MainActor.run {
-            pages = loadedPages
+            pages = result.pages
+            previewErrorMessage = result.errorMessage
             selectedPageIndex = 0
             isLoading = false
         }

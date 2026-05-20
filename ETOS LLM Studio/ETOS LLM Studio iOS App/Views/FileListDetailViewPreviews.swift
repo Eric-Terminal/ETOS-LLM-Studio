@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// iOS 文件列表详情页的文件预览、图片预览与 SQLite 预览子视图。
+// iOS 文件列表详情页的文本文件预览、图片预览与 SQLite 预览子视图。
 // ============================================================================
 
 import Foundation
@@ -15,13 +15,8 @@ struct FilePreviewSheet: View {
     let file: FileItem
 
     @Environment(\.dismiss) private var dismiss
-    @State private var content: String?
+    @State private var payload: FileAttachmentPreviewPayload?
     @State private var isLoading = true
-
-    private var lineCount: Int {
-        guard let content else { return 0 }
-        return StorageBrowserSupport.paginateText(content, linesPerPage: Int.max).first?.endLineNumber ?? 0
-    }
 
     var body: some View {
         NavigationStack {
@@ -29,7 +24,7 @@ struct FilePreviewSheet: View {
                 if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let content {
+                } else if let payload, let content = payload.text {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 6) {
@@ -39,10 +34,16 @@ struct FilePreviewSheet: View {
                                 Text(file.name)
                                     .etFont(.footnote.monospaced())
 
+                                Text(NSLocalizedString("文件大小", comment: ""))
+                                    .etFont(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(StorageUtility.formatSize(payload.fileSize))
+                                    .etFont(.footnote.monospaced())
+
                                 Text(NSLocalizedString("总行数", comment: ""))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
-                                Text("\(lineCount)")
+                                Text("\(payload.lineCount)")
                                     .etFont(.footnote.monospaced())
                             }
 
@@ -56,11 +57,11 @@ struct FilePreviewSheet: View {
                 } else {
                     ContentUnavailableView(NSLocalizedString("无法预览", comment: ""),
                         systemImage: "doc.questionmark",
-                        description: Text(NSLocalizedString("无法读取此文件的内容。", comment: ""))
+                        description: Text(payload?.errorMessage ?? NSLocalizedString("无法读取此文件的内容。", comment: ""))
                     )
                 }
             }
-            .navigationTitle(NSLocalizedString("JSON 预览", comment: ""))
+            .navigationTitle(NSLocalizedString("文件预览", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -71,7 +72,10 @@ struct FilePreviewSheet: View {
             }
         }
         .task {
-            content = StorageUtility.readJSONFile(at: file.url)
+            let fileURL = file.url
+            payload = await Task.detached(priority: .userInitiated) {
+                FileAttachmentPreviewLoader.load(fileURL: fileURL)
+            }.value
             isLoading = false
         }
     }

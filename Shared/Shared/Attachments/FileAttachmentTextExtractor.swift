@@ -312,14 +312,7 @@ public struct FileAttachmentPreviewPayload: Identifiable {
     public let fileSize: Int64
     public let text: String?
     public let errorMessage: String?
-
-    public var lineCount: Int {
-        guard let text else { return 0 }
-        let newlineCount = text.reduce(0) { count, character in
-            character.isNewline ? count + 1 : count
-        }
-        return text.isEmpty ? 0 : newlineCount + 1
-    }
+    public let lineCount: Int
 
     public var canPreview: Bool {
         text != nil
@@ -333,10 +326,34 @@ public enum FileAttachmentPreviewLoader {
                 fileName: fileName,
                 fileSize: 0,
                 text: nil,
-                errorMessage: NSLocalizedString("无法读取此文件的内容。", comment: "")
+                errorMessage: NSLocalizedString("无法读取此文件的内容。", comment: ""),
+                lineCount: 0
             )
         }
 
+        return makePayload(data: data, fileName: fileName, extractor: extractor)
+    }
+
+    public static func load(fileURL: URL, extractor: FileAttachmentTextExtractor = FileAttachmentTextExtractor()) -> FileAttachmentPreviewPayload {
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return makePayload(data: data, fileName: fileURL.lastPathComponent, extractor: extractor)
+        } catch {
+            return FileAttachmentPreviewPayload(
+                fileName: fileURL.lastPathComponent,
+                fileSize: 0,
+                text: nil,
+                errorMessage: NSLocalizedString("无法读取此文件的内容。", comment: ""),
+                lineCount: 0
+            )
+        }
+    }
+
+    private static func makePayload(
+        data: Data,
+        fileName: String,
+        extractor: FileAttachmentTextExtractor
+    ) -> FileAttachmentPreviewPayload {
         let attachment = FileAttachment(
             data: data,
             mimeType: resolvedMimeType(for: fileName),
@@ -349,16 +366,25 @@ public enum FileAttachmentPreviewLoader {
                 fileName: fileName,
                 fileSize: Int64(data.count),
                 text: text,
-                errorMessage: nil
+                errorMessage: nil,
+                lineCount: lineCount(in: text)
             )
         } catch {
             return FileAttachmentPreviewPayload(
                 fileName: fileName,
                 fileSize: Int64(data.count),
                 text: nil,
-                errorMessage: error.localizedDescription
+                errorMessage: error.localizedDescription,
+                lineCount: 0
             )
         }
+    }
+
+    private static func lineCount(in text: String) -> Int {
+        let newlineCount = text.reduce(0) { count, character in
+            character.isNewline ? count + 1 : count
+        }
+        return text.isEmpty ? 0 : newlineCount + 1
     }
 
     private static func resolvedMimeType(for fileName: String) -> String {
