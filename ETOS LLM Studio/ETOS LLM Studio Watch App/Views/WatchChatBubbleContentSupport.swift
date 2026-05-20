@@ -143,26 +143,49 @@ extension ChatBubble {
     func fileAttachmentsView(fileNames: [String], isOutgoing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(fileNames, id: \.self) { fileName in
-                HStack(spacing: 6) {
-                    Image(systemName: "doc")
-                        .etFont(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                Button {
+                    loadFilePreview(fileName)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc")
+                            .etFont(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
 
-                    Text(fileName)
-                        .etFont(.system(size: 11, weight: .medium))
-                        .lineLimit(1)
-                        .foregroundStyle(resolvedTextColor(default: .primary))
+                        Text(fileName)
+                            .etFont(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                            .foregroundStyle(resolvedTextColor(default: .primary))
+
+                        Spacer(minLength: 4)
+
+                        Image(systemName: "eye")
+                            .etFont(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.secondary.opacity(0.15))
+                    )
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.secondary.opacity(0.15))
-                )
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("预览", comment: ""))
             }
         }
         .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+    }
+
+    func loadFilePreview(_ fileName: String) {
+        Task {
+            let payload = await Task.detached(priority: .userInitiated) {
+                FileAttachmentPreviewLoader.load(fileName: fileName)
+            }.value
+            await MainActor.run {
+                filePreview = payload
+            }
+        }
     }
 
     @ViewBuilder
@@ -621,6 +644,54 @@ extension ChatBubble {
 
         static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
             value = max(value, nextValue())
+        }
+    }
+}
+
+struct WatchFileAttachmentPreviewSheet: View {
+    let payload: FileAttachmentPreviewPayload
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let text = payload.text {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(payload.fileName)
+                                    .etFont(.caption2.weight(.semibold))
+                                    .lineLimit(2)
+
+                                Text(StorageUtility.formatSize(payload.fileSize))
+                                    .etFont(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+
+                                Text(String(format: NSLocalizedString("%d 行", comment: "Watch file preview line count"), payload.lineCount))
+                                    .etFont(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(text)
+                                .etFont(.system(size: 10, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.questionmark")
+                            .etFont(.title3)
+                            .foregroundStyle(.secondary)
+                        Text(NSLocalizedString("无法预览", comment: ""))
+                            .etFont(.caption.weight(.semibold))
+                        Text(payload.errorMessage ?? NSLocalizedString("无法读取此文件的内容。", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("文件预览", comment: "Watch file attachment preview title"))
         }
     }
 }

@@ -27,6 +27,20 @@ struct FileAttachmentTextExtractorTests {
         #expect(text == "纯文本内容")
     }
 
+    @Test("未知后缀的纯文本附件也可以抽取")
+    func unknownExtensionPlainTextAttachmentCanBeExtracted() throws {
+        let extractor = FileAttachmentTextExtractor()
+        let attachment = FileAttachment(
+            data: Data("没有常规后缀但仍是文本".utf8),
+            mimeType: "application/octet-stream",
+            fileName: "notes.payload"
+        )
+
+        let text = try extractor.extractText(from: attachment)
+
+        #expect(text == "没有常规后缀但仍是文本")
+    }
+
     @Test("DOCX 附件会抽取主文档文本")
     func docxAttachmentCanBeExtracted() throws {
         let extractor = FileAttachmentTextExtractor()

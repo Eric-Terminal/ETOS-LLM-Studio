@@ -11,6 +11,9 @@ import ZIPFoundation
 #if canImport(PDFKit) && !os(watchOS)
 import PDFKit
 #endif
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
 
 public enum FileAttachmentTextExtractionError: LocalizedError {
     case unsupportedFileType(fileName: String)
@@ -110,8 +113,8 @@ public struct FileAttachmentTextExtractor {
         case "pdf":
             extractedText = try extractPDFText(from: attachment.data, fileName: fileName)
         default:
-            if shouldTreatAsPlainText(fileExtension: fileExtension, mimeType: attachment.mimeType),
-               let text = decodePlainText(from: attachment.data) {
+            if let text = decodePlainText(from: attachment.data),
+               shouldTreatAsPlainText(fileExtension: fileExtension, mimeType: attachment.mimeType, decodedText: text) {
                 extractedText = text
             } else {
                 throw FileAttachmentTextExtractionError.unsupportedFileType(fileName: fileName)
@@ -230,7 +233,7 @@ public struct FileAttachmentTextExtractor {
         return nil
     }
 
-    private func shouldTreatAsPlainText(fileExtension: String, mimeType: String) -> Bool {
+    private func shouldTreatAsPlainText(fileExtension: String, mimeType: String, decodedText: String) -> Bool {
         if textFileExtensions.contains(fileExtension) {
             return true
         }
@@ -239,7 +242,23 @@ public struct FileAttachmentTextExtractor {
         if normalizedMimeType.hasPrefix("text/") {
             return true
         }
-        return textMimeTypes.contains(normalizedMimeType)
+        if textMimeTypes.contains(normalizedMimeType) {
+            return true
+        }
+        return looksLikePlainText(decodedText)
+    }
+
+    private func looksLikePlainText(_ text: String) -> Bool {
+        let sample = text.prefix(4096)
+        guard !sample.isEmpty else { return false }
+
+        let scalars = sample.unicodeScalars
+        let invalidCount = scalars.filter { scalar in
+            scalar.value == 0
+                || (scalar.value < 0x20 && scalar.value != 0x0A && scalar.value != 0x0D && scalar.value != 0x09)
+                || scalar.value == 0xFFFD
+        }.count
+        return Double(invalidCount) / Double(scalars.count) < 0.02
     }
 
     private func extractXMLText(from data: Data, tags: Set<String>) -> String {
@@ -284,6 +303,75 @@ public struct FileAttachmentTextExtractor {
     private func normalizeWhitespace(in text: String) -> String {
         text
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+public struct FileAttachmentPreviewPayload: Identifiable {
+    public let id = UUID()
+    public let fileName: String
+    public let fileSize: Int64
+    public let text: String?
+    public let errorMessage: String?
+
+    public var lineCount: Int {
+        guard let text else { return 0 }
+        let newlineCount = text.reduce(0) { count, character in
+            character.isNewline ? count + 1 : count
+        }
+        return text.isEmpty ? 0 : newlineCount + 1
+    }
+
+    public var canPreview: Bool {
+        text != nil
+    }
+}
+
+public enum FileAttachmentPreviewLoader {
+    public static func load(fileName: String, extractor: FileAttachmentTextExtractor = FileAttachmentTextExtractor()) -> FileAttachmentPreviewPayload {
+        guard let data = Persistence.loadFile(fileName: fileName) else {
+            return FileAttachmentPreviewPayload(
+                fileName: fileName,
+                fileSize: 0,
+                text: nil,
+                errorMessage: NSLocalizedString("无法读取此文件的内容。", comment: "")
+            )
+        }
+
+        let attachment = FileAttachment(
+            data: data,
+            mimeType: resolvedMimeType(for: fileName),
+            fileName: fileName
+        )
+
+        do {
+            let text = try extractor.extractText(from: attachment)
+            return FileAttachmentPreviewPayload(
+                fileName: fileName,
+                fileSize: Int64(data.count),
+                text: text,
+                errorMessage: nil
+            )
+        } catch {
+            return FileAttachmentPreviewPayload(
+                fileName: fileName,
+                fileSize: Int64(data.count),
+                text: nil,
+                errorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    private static func resolvedMimeType(for fileName: String) -> String {
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        guard !ext.isEmpty else {
+            return "application/octet-stream"
+        }
+        #if canImport(UniformTypeIdentifiers)
+        if let type = UTType(filenameExtension: ext), let mime = type.preferredMIMEType {
+            return mime
+        }
+        #endif
+        return "application/octet-stream"
     }
 }
 

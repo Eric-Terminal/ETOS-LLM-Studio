@@ -3421,3 +3421,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "已有画像：\n%@\n\n最新会话摘要：\n%@" = "Existing profile:\n%@\n\nLatest conversation summary:\n%@";
 "你是用户画像去重助手。请把拼接后的多端用户画像压缩成一份一致画像。\n约束：\n- 保留稳定偏好、长期背景、常见工作方式；\n- 合并重复语义，删除互相矛盾或一次性噪音；\n- 中文输出 80~220 字，其他语言输出 70~180 个词；\n- 仅输出画像正文。" = "You are a user profile deduplication assistant. Compress the merged multi-device user profiles into one consistent profile.\nConstraints:\n- Preserve stable preferences, long-term background, and common working style;\n- Merge duplicate meanings and remove contradictions or one-off noise;\n- For Chinese, write 80-220 characters; for other languages, write 70-180 words;\n- Return only the profile text.";
 "拼接画像：\n%@" = "Merged profile:\n%@";
+"文件预览" = "Vista previa del archivo";
+"%d 行" = "%d líneas";

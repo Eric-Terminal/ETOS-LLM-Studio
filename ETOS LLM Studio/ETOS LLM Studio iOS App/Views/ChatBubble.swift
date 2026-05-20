@@ -48,6 +48,7 @@ struct ChatBubble: View {
     
     @StateObject var audioPlayer = AudioPlayerManager()
     @State var imagePreview: ImagePreviewPayload?
+    @State var filePreview: FileAttachmentPreviewPayload?
     @State var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
@@ -181,6 +182,11 @@ struct ChatBubble: View {
                     .scaledToFit()
                     .padding(24)
             }
+        }
+        .sheet(item: $filePreview) { payload in
+            ChatFileAttachmentPreviewSheet(payload: payload)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedToolCallDetailSheetItem) { item in
             toolCallDetailSheet(for: item)

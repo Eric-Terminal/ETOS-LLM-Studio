@@ -52,6 +52,7 @@ struct ChatBubble: View {
 
     @StateObject var audioPlayer = WatchAudioPlayerManager()
     @State var imagePreview: ImagePreviewPayload?
+    @State var filePreview: FileAttachmentPreviewPayload?
     @State var toolCallResultExpandedState: [String: Bool] = [:]
     @State var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
     @State var showRawToolResultInDetailSheet: Bool = false
@@ -208,6 +209,9 @@ struct ChatBubble: View {
                     .scaledToFit()
                     .padding(12)
             }
+        }
+        .sheet(item: $filePreview) { payload in
+            WatchFileAttachmentPreviewSheet(payload: payload)
         }
         .sheet(item: $selectedToolCallDetailSheetItem) { item in
             toolCallDetailSheet(for: item)
