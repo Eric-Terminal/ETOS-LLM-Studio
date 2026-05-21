@@ -186,6 +186,7 @@ private struct ProviderConfigurationTabsView: View {
     @State private var providerRevision = 0
     @State private var addModelRequest = 0
     @State private var fetchModelsRequest = 0
+    @State private var isShowingModelTest = false
 
     init(provider: Provider) {
         _provider = State(initialValue: provider)
@@ -228,6 +229,13 @@ private struct ProviderConfigurationTabsView: View {
         .toolbar {
             if selectedTab == .models {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        isShowingModelTest = true
+                    } label: {
+                        Image(systemName: "checkmark.seal")
+                    }
+                    .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
+
                     if allowsRemoteModelFetch {
                         Button {
                             fetchModelsRequest += 1
@@ -244,6 +252,11 @@ private struct ProviderConfigurationTabsView: View {
                     }
                     .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
                 }
+            }
+        }
+        .sheet(isPresented: $isShowingModelTest) {
+            NavigationStack {
+                ModelConnectivityTestView(provider: provider)
             }
         }
     }
