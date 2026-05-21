@@ -165,6 +165,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableBackgroundReplyNotification = "enableBackgroundReplyNotification"
     case hasRequestedBackgroundReplyNotificationPermission = "hasRequestedBackgroundReplyNotificationPermission"
     case hasRequestedBackgroundReplyNotificationPermissionWatch = "hasRequestedBackgroundReplyNotificationPermissionWatch"
+    case updateTimelineAutoCheckEnabled = "updateTimeline.autoCheckEnabled"
+    case updateTimelineAutoSummaryEnabled = "updateTimeline.autoSummaryEnabled"
     case lastAnnouncementId = "lastAnnouncementId"
     case hideAnnouncementSection = "hideAnnouncementSection"
     case hiddenAnnouncementKeys = "hiddenAnnouncementKeys"
@@ -378,8 +380,11 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .audioRecordingFormat:
             return .text("aac")
-        case .enableBackgroundReplyNotification:
+        case .enableBackgroundReplyNotification,
+             .updateTimelineAutoCheckEnabled:
             return .bool(true)
+        case .updateTimelineAutoSummaryEnabled:
+            return .bool(false)
         case .lastAnnouncementId:
             return .integer(0)
         case .hiddenAnnouncementKeys:
@@ -402,6 +407,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .chatPickerStyleMigratedToBottomSheet,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
+             .updateTimelineAutoCheckEnabled,
+             .updateTimelineAutoSummaryEnabled,
              .lastAnnouncementId,
              .hideAnnouncementSection,
              .hiddenAnnouncementKeys,

@@ -237,6 +237,8 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableBackgroundReplyNotification: Bool { didSet { write(.enableBackgroundReplyNotification, enableBackgroundReplyNotification) } }
     @Published public var hasRequestedBackgroundReplyNotificationPermission: Bool { didSet { write(.hasRequestedBackgroundReplyNotificationPermission, hasRequestedBackgroundReplyNotificationPermission) } }
     @Published public var hasRequestedBackgroundReplyNotificationPermissionWatch: Bool { didSet { write(.hasRequestedBackgroundReplyNotificationPermissionWatch, hasRequestedBackgroundReplyNotificationPermissionWatch) } }
+    @Published public var updateTimelineAutoCheckEnabled: Bool { didSet { write(.updateTimelineAutoCheckEnabled, updateTimelineAutoCheckEnabled) } }
+    @Published public var updateTimelineAutoSummaryEnabled: Bool { didSet { write(.updateTimelineAutoSummaryEnabled, updateTimelineAutoSummaryEnabled) } }
     @Published public var lastAnnouncementId: Int { didSet { write(.lastAnnouncementId, lastAnnouncementId) } }
     @Published public var hideAnnouncementSection: Bool { didSet { write(.hideAnnouncementSection, hideAnnouncementSection) } }
     @Published public var hiddenAnnouncementKeys: String { didSet { write(.hiddenAnnouncementKeys, hiddenAnnouncementKeys) } }
@@ -359,6 +361,8 @@ public final class AppConfigStore: ObservableObject {
         enableBackgroundReplyNotification = Self.boolValue(.enableBackgroundReplyNotification, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermission = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermission, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermissionWatch = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermissionWatch, userDefaults: userDefaults)
+        updateTimelineAutoCheckEnabled = Self.boolValue(.updateTimelineAutoCheckEnabled, userDefaults: userDefaults)
+        updateTimelineAutoSummaryEnabled = Self.boolValue(.updateTimelineAutoSummaryEnabled, userDefaults: userDefaults)
         lastAnnouncementId = Self.integerValue(.lastAnnouncementId, userDefaults: userDefaults)
         hideAnnouncementSection = Self.boolValue(.hideAnnouncementSection, userDefaults: userDefaults)
         hiddenAnnouncementKeys = Self.textValue(.hiddenAnnouncementKeys, userDefaults: userDefaults)
@@ -751,6 +755,8 @@ public final class AppConfigStore: ObservableObject {
         case .enableBackgroundReplyNotification: return .bool(enableBackgroundReplyNotification)
         case .hasRequestedBackgroundReplyNotificationPermission: return .bool(hasRequestedBackgroundReplyNotificationPermission)
         case .hasRequestedBackgroundReplyNotificationPermissionWatch: return .bool(hasRequestedBackgroundReplyNotificationPermissionWatch)
+        case .updateTimelineAutoCheckEnabled: return .bool(updateTimelineAutoCheckEnabled)
+        case .updateTimelineAutoSummaryEnabled: return .bool(updateTimelineAutoSummaryEnabled)
         case .lastAnnouncementId: return .integer(lastAnnouncementId)
         case .hideAnnouncementSection: return .bool(hideAnnouncementSection)
         case .hiddenAnnouncementKeys: return .text(hiddenAnnouncementKeys)
@@ -837,6 +843,8 @@ public final class AppConfigStore: ObservableObject {
         case .enableBackgroundReplyNotification: enableBackgroundReplyNotification = value
         case .hasRequestedBackgroundReplyNotificationPermission: hasRequestedBackgroundReplyNotificationPermission = value
         case .hasRequestedBackgroundReplyNotificationPermissionWatch: hasRequestedBackgroundReplyNotificationPermissionWatch = value
+        case .updateTimelineAutoCheckEnabled: updateTimelineAutoCheckEnabled = value
+        case .updateTimelineAutoSummaryEnabled: updateTimelineAutoSummaryEnabled = value
         case .hideAnnouncementSection: hideAnnouncementSection = value
         default: break
         }

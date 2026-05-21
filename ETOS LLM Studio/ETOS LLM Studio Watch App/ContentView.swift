@@ -86,6 +86,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
                 openAchievementJournalFromNotification()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
+                openUpdateTimelineFromNotification()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
                 Task { @MainActor in
                     applyDailyPulseContinuationIfNeeded()

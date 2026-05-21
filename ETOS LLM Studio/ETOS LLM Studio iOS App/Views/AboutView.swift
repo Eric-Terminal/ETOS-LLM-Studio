@@ -89,9 +89,13 @@ struct AboutView: View {
                 .onTapGesture {
                     handleVersionTap()
                 }
-                LabeledContent(NSLocalizedString("Git 提交", comment: "")) {
-                    Text(appCommitHashShort)
-                        .foregroundStyle(.secondary)
+                NavigationLink {
+                    UpdateTimelineView()
+                } label: {
+                    LabeledContent(NSLocalizedString("Git 提交", comment: "")) {
+                        Text(appCommitHashShort)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 LabeledContent(NSLocalizedString("开发者", comment: ""), value: "Eric-Terminal")
                 LabeledContent(NSLocalizedString("平台支持", comment: ""), value: "iOS / watchOS")

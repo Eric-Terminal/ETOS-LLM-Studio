@@ -15,6 +15,7 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
     case feedbackCenter
     case feedbackIssue(issueNumber: Int)
     case achievementJournal
+    case updateTimeline
 
     var id: String {
         switch self {
@@ -26,6 +27,8 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
             return "feedbackIssue-\(issueNumber)"
         case .achievementJournal:
             return "achievementJournal"
+        case .updateTimeline:
+            return "updateTimeline"
         }
     }
 }
@@ -260,6 +263,12 @@ struct SettingsView: View {
                 } label: {
                     SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
                 }
+
+                NavigationLink {
+                    UpdateTimelineView()
+                } label: {
+                    SettingsListIconLabel("更新时间线", icon: .about)
+                }
             }
 
             // MARK: - 公告通知 Section
@@ -309,6 +318,8 @@ struct SettingsView: View {
                 FeedbackDetailView(issueNumber: issueNumber)
             case .achievementJournal:
                 AchievementJournalView()
+            case .updateTimeline:
+                UpdateTimelineView()
             }
         }
     }

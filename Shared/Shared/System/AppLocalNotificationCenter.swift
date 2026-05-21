@@ -26,6 +26,8 @@ public extension Notification.Name {
     static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
     /// 请求当前设备直接打开隐藏日记页面。
     static let requestOpenAchievementJournal = Notification.Name("com.ETOS.achievementJournal.requestOpen")
+    /// 请求当前设备直接打开更新时间线页面。
+    static let requestOpenUpdateTimeline = Notification.Name("com.ETOS.updateTimeline.requestOpen")
 }
 
 public enum AppLocalNotificationRoute: String, Sendable {
@@ -33,6 +35,7 @@ public enum AppLocalNotificationRoute: String, Sendable {
     case feedback
     case chatSession
     case achievementJournal
+    case updateTimeline
 }
 
 public struct AppLocalNotificationDailyPulseContinuation: Sendable, Equatable {
@@ -216,6 +219,17 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         return route == AppLocalNotificationRoute.achievementJournal.rawValue
     }
 
+    public nonisolated static func notificationTargetsUpdateTimeline(userInfo: [AnyHashable: Any]) -> Bool {
+        guard let route = userInfo[appLocalNotificationRouteUserInfoKey] as? String else { return false }
+        return route == AppLocalNotificationRoute.updateTimeline.rawValue
+    }
+
+    public nonisolated static func updateTimelineUserInfo() -> [AnyHashable: Any] {
+        [
+            appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.updateTimeline.rawValue
+        ]
+    }
+
     public nonisolated static func achievementJournalUserInfo(achievementID: String? = nil) -> [AnyHashable: Any] {
         var info: [AnyHashable: Any] = [
             appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.achievementJournal.rawValue
@@ -329,6 +343,11 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         NotificationCenter.default.post(name: .requestOpenAchievementJournal, object: nil)
     }
 
+    private func openUpdateTimelineFromNotification() {
+        pendingRoute = .updateTimeline
+        NotificationCenter.default.post(name: .requestOpenUpdateTimeline, object: nil)
+    }
+
     private func continueDailyPulseFromNotification(payload: AppLocalNotificationPayload) {
         guard let target = dailyPulseTarget(from: payload),
               let session = DailyPulseManager.shared.saveCardAsSession(cardID: target.card.id, runID: target.runID) else {
@@ -367,6 +386,8 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
             openChatSessionFromNotification(payload: payload)
         } else if payload.route == .achievementJournal {
             openAchievementJournalFromNotification()
+        } else if payload.route == .updateTimeline {
+            openUpdateTimelineFromNotification()
         }
     }
 
@@ -444,6 +465,7 @@ public extension Notification.Name {
     static let requestOpenFeedback = Notification.Name("com.ETOS.feedback.requestOpen")
     static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
     static let requestOpenAchievementJournal = Notification.Name("com.ETOS.achievementJournal.requestOpen")
+    static let requestOpenUpdateTimeline = Notification.Name("com.ETOS.updateTimeline.requestOpen")
 }
 
 @MainActor

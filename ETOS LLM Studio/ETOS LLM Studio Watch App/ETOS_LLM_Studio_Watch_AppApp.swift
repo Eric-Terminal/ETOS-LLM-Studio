@@ -21,6 +21,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     @StateObject private var cloudSyncManager = CloudSyncManager.shared
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @StateObject private var updateTimelineManager = UpdateTimelineManager.shared
     @StateObject private var feedbackService = FeedbackService.shared
     @StateObject private var appConfig = AppConfigStore.shared
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
@@ -56,6 +57,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
                     dailyPulseDeliveryCoordinator.activate()
+                    updateTimelineManager.activateOnLaunchIfNeeded()
                     triggerFeedbackRefreshOnLaunchIfNeeded()
                 }
                 .task {

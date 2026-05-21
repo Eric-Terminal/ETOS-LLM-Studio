@@ -17,6 +17,7 @@ enum WatchSettingsNavigationDestination: Hashable, Identifiable {
     case feedbackCenter
     case feedbackIssue(issueNumber: Int)
     case achievementJournal
+    case updateTimeline
 
     var id: String {
         switch self {
@@ -28,6 +29,8 @@ enum WatchSettingsNavigationDestination: Hashable, Identifiable {
             return "feedbackIssue-\(issueNumber)"
         case .achievementJournal:
             return "achievementJournal"
+        case .updateTimeline:
+            return "updateTimeline"
         }
     }
 }
@@ -248,6 +251,10 @@ struct SettingsView: View {
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
                     }
+
+                    NavigationLink(destination: WatchUpdateTimelineView()) {
+                        settingsNavigationLabel("更新时间线", icon: .about)
+                    }
                 }
                 
                 // MARK: - 公告通知 Section
@@ -291,6 +298,8 @@ struct SettingsView: View {
                     WatchFeedbackDetailView(issueNumber: issueNumber)
                 case .achievementJournal:
                     AchievementJournalView()
+                case .updateTimeline:
+                    WatchUpdateTimelineView()
                 }
             }
     }

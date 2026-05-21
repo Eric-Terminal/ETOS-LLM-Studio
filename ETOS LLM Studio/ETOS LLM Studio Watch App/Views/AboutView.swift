@@ -89,7 +89,12 @@ struct AboutView: View {
                     .onTapGesture {
                         handleVersionTap()
                     }
-                    InfoRow(title: "Git 提交", value: appCommitHashShort)
+                    NavigationLink {
+                        WatchUpdateTimelineView()
+                    } label: {
+                        InfoRow(title: "Git 提交", value: appCommitHashShort)
+                    }
+                    .buttonStyle(.plain)
                     InfoRow(title: "开发者", value: "Eric-Terminal")
                     InfoRow(title: "平台支持", value: "iOS / watchOS")
                 }

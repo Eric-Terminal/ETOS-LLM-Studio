@@ -55,6 +55,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var mcpManager = MCPManager.shared
     @StateObject private var dailyPulseManager = DailyPulseManager.shared
     @StateObject private var dailyPulseDeliveryCoordinator = DailyPulseDeliveryCoordinator.shared
+    @StateObject private var updateTimelineManager = UpdateTimelineManager.shared
     @StateObject private var feedbackService = FeedbackService.shared
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var appConfig = AppConfigStore.shared
@@ -86,6 +87,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     mcpManager.connectSelectedServersIfNeeded()
                     dailyPulseDeliveryCoordinator.activate()
                     DailyPulseBackgroundDeliveryScheduler.shared.activate()
+                    updateTimelineManager.activateOnLaunchIfNeeded()
                     triggerFeedbackRefreshOnLaunchIfNeeded()
                 }
                 .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in

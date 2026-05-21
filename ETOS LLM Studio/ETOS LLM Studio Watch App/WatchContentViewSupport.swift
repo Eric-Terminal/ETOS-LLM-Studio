@@ -85,6 +85,8 @@ extension ContentView {
                     openChatSessionFromNotification()
                 case .achievementJournal:
                     openAchievementJournalFromNotification()
+                case .updateTimeline:
+                    openUpdateTimelineFromNotification()
                 }
             }
         }

@@ -49,6 +49,11 @@ extension ContentView {
         openAchievementJournal()
     }
 
+    func openUpdateTimelineFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        openUpdateTimeline()
+    }
+
     func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
         isSettingsPresented = false
@@ -73,6 +78,14 @@ extension ContentView {
         settingsDestination = nil
         DispatchQueue.main.async {
             settingsDestination = .achievementJournal
+        }
+    }
+
+    func openUpdateTimeline() {
+        isSettingsPresented = true
+        settingsDestination = nil
+        DispatchQueue.main.async {
+            settingsDestination = .updateTimeline
         }
     }
 

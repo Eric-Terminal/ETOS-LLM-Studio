@@ -97,6 +97,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
             openAchievementJournalFromNotification()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
+            openUpdateTimelineFromNotification()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
             Task { @MainActor in
                 openDailyPulseContinuationIfNeeded()
@@ -221,6 +224,11 @@ struct ContentView: View {
         openAchievementJournal()
     }
 
+    private func openUpdateTimelineFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        openUpdateTimeline()
+    }
+
     private func openChatSession(sessionID: UUID) {
         guard viewModel.setCurrentSessionIfExists(sessionID: sessionID) else { return }
         pushNativeChatIfNeeded()
@@ -239,6 +247,10 @@ struct ContentView: View {
 
     private func openAchievementJournal() {
         pushNativeSettings(destination: .achievementJournal)
+    }
+
+    private func openUpdateTimeline() {
+        pushNativeSettings(destination: .updateTimeline)
     }
 
     private func handleLaunchTasks() async {
@@ -261,6 +273,8 @@ struct ContentView: View {
                 }
             case .achievementJournal:
                 openAchievementJournal()
+            case .updateTimeline:
+                openUpdateTimeline()
             }
         }
     }
