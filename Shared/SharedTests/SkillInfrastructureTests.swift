@@ -110,6 +110,7 @@ when_to_use: 用户需要整理导入资料时使用。
         #expect(description.contains("<description>处理 &lt;xml&gt; &amp; 文本</description>"))
         #expect(description.contains("<compatibility>需要完整技能目录</compatibility>"))
         #expect(description.contains("<allowed_tools>read_file, search_web</allowed_tools>"))
+        #expect(description.contains("图片资源会尝试 OCR"))
         #expect(description.contains("allowed-tools 仅作为技能作者说明"))
     }
 
@@ -426,6 +427,7 @@ description: "demo"
         #expect(listResult.contains("assets/blank.png"))
         #expect(listResult.contains("assets/blob.png"))
         #expect(listResult.contains("不会执行"))
+        #expect(listResult.contains("图片资源会尝试 OCR"))
         let listedFiles = manager.listFiles(skillName: skillName)
         #expect(listedFiles.first(where: { $0.relativePath == "references/FORM" })?.isReadableText == true)
         #expect(listedFiles.first(where: { $0.relativePath == "assets/template.custom" })?.isReadableText == true)
