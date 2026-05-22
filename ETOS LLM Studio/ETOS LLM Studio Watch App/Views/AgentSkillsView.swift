@@ -32,7 +32,8 @@ struct AgentSkillsView: View {
                     4. 在聊天中让模型调用对应技能。
 
                     SKILL.md 格式
-                    • frontmatter 必须包含 name 与 description。
+                    • frontmatter 可声明 name、description、when_to_use 等字段。
+                    • 导入目录或仓库时，省略 name 会使用技能目录名；省略 description 会使用正文首段。
                     • 正文可写使用说明、参数等 Markdown 内容。
 
                     常见问题

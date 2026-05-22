@@ -22,18 +22,22 @@ public enum SkillBundleImporter {
     }
 
     public static func importSkill(fromDownloadedData data: Data, suggestedFileName: String?) throws -> SkillImportResult {
+        let fallbackName = suggestedSkillName(from: suggestedFileName)
         if suggestedFileName?.lowercased().hasSuffix(".zip") == true || isLikelyZipData(data) {
-            return try importZipData(data)
+            return try importZipData(data, fallbackName: fallbackName)
         }
         if let content = String(data: data, encoding: .utf8) {
-            return try makeResult(files: [SkillStore.defaultSkillFileName: Data(content.utf8)])
+            return try makeResult(files: [SkillStore.defaultSkillFileName: Data(content.utf8)], fallbackName: fallbackName)
         }
-        return try importZipData(data)
+        return try importZipData(data, fallbackName: fallbackName)
     }
 
     private static func importSingleSkillFile(_ fileURL: URL) throws -> SkillImportResult {
         let data = try Data(contentsOf: fileURL)
-        return try makeResult(files: [SkillStore.defaultSkillFileName: data])
+        return try makeResult(
+            files: [SkillStore.defaultSkillFileName: data],
+            fallbackName: fallbackNameForSingleSkillFile(fileURL)
+        )
     }
 
     private static func importDirectory(_ directoryURL: URL) throws -> SkillImportResult {
@@ -55,20 +59,21 @@ public enum SkillBundleImporter {
             guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else { continue }
             files[normalizedPath] = try Data(contentsOf: fileURL)
         }
-        return try makeResult(files: flattenIfNeeded(files))
+        let normalized = normalizeBundleFiles(files, fallbackName: directoryURL.lastPathComponent)
+        return try makeResult(files: normalized.files, fallbackName: normalized.fallbackName)
     }
 
     private static func importZip(_ fileURL: URL) throws -> SkillImportResult {
         let archive = try Archive(url: fileURL, accessMode: .read)
-        return try importArchive(archive)
+        return try importArchive(archive, fallbackName: suggestedSkillName(from: fileURL.lastPathComponent))
     }
 
-    private static func importZipData(_ data: Data) throws -> SkillImportResult {
+    private static func importZipData(_ data: Data, fallbackName: String?) throws -> SkillImportResult {
         let archive = try Archive(data: data, accessMode: .read)
-        return try importArchive(archive)
+        return try importArchive(archive, fallbackName: fallbackName)
     }
 
-    private static func importArchive(_ archive: Archive) throws -> SkillImportResult {
+    private static func importArchive(_ archive: Archive, fallbackName: String?) throws -> SkillImportResult {
         var files: [String: Data] = [:]
         for entry in archive where entry.type == .file {
             guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(entry.path) else { continue }
@@ -78,38 +83,43 @@ public enum SkillBundleImporter {
             }
             files[normalizedPath] = data
         }
-        return try makeResult(files: flattenIfNeeded(files))
+        let normalized = normalizeBundleFiles(files, fallbackName: fallbackName)
+        return try makeResult(files: normalized.files, fallbackName: normalized.fallbackName)
     }
 
-    private static func makeResult(files: [String: Data]) throws -> SkillImportResult {
+    private static func makeResult(files: [String: Data], fallbackName: String?) throws -> SkillImportResult {
         guard let skillData = files[SkillStore.defaultSkillFileName],
               let skillContent = String(data: skillData, encoding: .utf8) else {
             throw SkillStoreError.missingSkillFile
         }
-        let frontmatter = SkillFrontmatterParser.parse(skillContent)
-        guard let skillName = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !skillName.isEmpty else {
-            throw SkillStoreError.invalidSkillContent
-        }
-        return SkillImportResult(skillName: skillName, files: files)
+        let manifest = try SkillManifestResolver.resolve(content: skillContent, fallbackName: fallbackName)
+        return SkillImportResult(skillName: manifest.name, files: files)
     }
 
-    private static func flattenIfNeeded(_ files: [String: Data]) -> [String: Data] {
+    private struct NormalizedBundleFiles {
+        var files: [String: Data]
+        var fallbackName: String?
+    }
+
+    private static func normalizeBundleFiles(_ files: [String: Data], fallbackName: String?) -> NormalizedBundleFiles {
         if files.keys.contains(SkillStore.defaultSkillFileName) {
-            return files
+            return NormalizedBundleFiles(files: files, fallbackName: fallbackName)
         }
         let suffix = "/" + SkillStore.defaultSkillFileName
         let skillFilePaths = files.keys.filter { $0.hasSuffix(suffix) }
         guard skillFilePaths.count == 1, let skillFilePath = skillFilePaths.first else {
-            return files
+            return NormalizedBundleFiles(files: files, fallbackName: fallbackName)
         }
-        let rootPrefix = String(skillFilePath.dropLast(suffix.count)) + "/"
-        return files.reduce(into: [String: Data]()) { result, element in
+        let rootPath = String(skillFilePath.dropLast(suffix.count))
+        let rootPrefix = rootPath + "/"
+        let normalizedFiles = files.reduce(into: [String: Data]()) { result, element in
             guard element.key.hasPrefix(rootPrefix) else { return }
             let relativePath = String(element.key.dropFirst(rootPrefix.count))
             guard !relativePath.isEmpty else { return }
             result[relativePath] = element.value
         }
+        let rootName = rootPath.split(separator: "/").last.map(String.init)
+        return NormalizedBundleFiles(files: normalizedFiles, fallbackName: rootName ?? fallbackName)
     }
 
     private static func relativePath(for fileURL: URL, baseURL: URL) -> String {
@@ -128,5 +138,17 @@ public enum SkillBundleImporter {
             [0x50, 0x4B, 0x07, 0x08]
         ]
         return signatures.contains { data.starts(with: $0) }
+    }
+
+    private static func fallbackNameForSingleSkillFile(_ fileURL: URL) -> String? {
+        suggestedSkillName(from: fileURL.lastPathComponent)
+    }
+
+    private static func suggestedSkillName(from fileName: String?) -> String? {
+        guard let fileName, !fileName.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: fileName)
+        guard url.lastPathComponent != SkillStore.defaultSkillFileName else { return nil }
+        let name = url.deletingPathExtension().lastPathComponent
+        return SkillPaths.isValidSkillName(name) ? name : nil
     }
 }

@@ -81,7 +81,7 @@ public enum SkillStoreError: LocalizedError, Sendable {
         case .invalidSkillName:
             return "技能名称不合法。"
         case .invalidSkillContent:
-            return "技能内容格式不合法，缺少可解析的 name/description。"
+            return "技能内容格式不合法，缺少可解析的技能名称。"
         case .missingSkillFile:
             return "缺少 SKILL.md 文件。"
         case .invalidPath:

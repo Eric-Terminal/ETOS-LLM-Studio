@@ -37,7 +37,8 @@ struct AgentSkillsView: View {
                     4. 在聊天中告知模型你的需求，模型会在合适时机调用 use_skill。
 
                     SKILL.md 格式说明
-                    • 文件头（frontmatter）必须包含 name 和 description 字段。
+                    • 文件头（frontmatter）可声明 name、description、when_to_use 等字段。
+                    • 导入目录或仓库时，省略 name 会使用技能目录名；省略 description 会使用正文首段。
                     • name 作为技能的唯一标识，不能与已有技能重名。
                     • 正文可包含使用说明、参数说明、示例等任意 Markdown 内容。
 

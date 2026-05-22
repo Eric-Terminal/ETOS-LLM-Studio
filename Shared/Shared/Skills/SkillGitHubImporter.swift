@@ -22,6 +22,11 @@ public enum SkillGitHubImporter {
         let downloadURL: String
     }
 
+    struct GitHubSelectedFiles: Equatable {
+        let files: [GitHubListedFile]
+        let fallbackName: String?
+    }
+
     private struct GitHubContentItem: Decodable {
         let type: String
         let path: String
@@ -49,13 +54,13 @@ public enum SkillGitHubImporter {
             result: &files
         )
 
-        let selectedFiles = try selectedFilesForImport(files)
-        guard !selectedFiles.isEmpty else {
+        let selected = try selectedFilesForImport(files)
+        guard !selected.files.isEmpty else {
             throw SkillStoreError.networkError("仓库目录为空，未找到可导入文件。")
         }
 
         var fileContents: [String: Data] = [:]
-        for file in selectedFiles {
+        for file in selected.files {
             let data = try await downloadData(url: file.downloadURL)
             fileContents[file.relativePath] = data
         }
@@ -64,13 +69,12 @@ public enum SkillGitHubImporter {
               let skillMD = String(data: skillData, encoding: .utf8) else {
             throw SkillStoreError.missingSkillFile
         }
-        let frontmatter = SkillFrontmatterParser.parse(skillMD)
-        guard let skillName = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !skillName.isEmpty else {
-            throw SkillStoreError.invalidSkillContent
-        }
+        let fallbackName = selected.fallbackName
+            ?? fallbackSkillName(from: info.path)
+            ?? fallbackRepoName(from: info.repo)
+        let manifest = try SkillManifestResolver.resolve(content: skillMD, fallbackName: fallbackName)
 
-        return SkillImportResult(skillName: skillName, files: fileContents)
+        return SkillImportResult(skillName: manifest.name, files: fileContents)
     }
 
     static func parseGitHubURL(_ url: String) -> GitHubRepoInfo? {
@@ -127,10 +131,10 @@ public enum SkillGitHubImporter {
         }
     }
 
-    static func selectedFilesForImport(_ files: [GitHubListedFile]) throws -> [GitHubListedFile] {
+    static func selectedFilesForImport(_ files: [GitHubListedFile]) throws -> GitHubSelectedFiles {
         let rootFiles = normalizedFiles(files, rootPrefix: "")
         if rootFiles.contains(where: { $0.relativePath == SkillStore.defaultSkillFileName }) {
-            return rootFiles
+            return GitHubSelectedFiles(files: rootFiles, fallbackName: nil)
         }
 
         let skillFilePaths = files
@@ -144,7 +148,11 @@ public enum SkillGitHubImporter {
         }
 
         let rootPrefix = String(skillFilePath.dropLast(SkillStore.defaultSkillFileName.count))
-        return normalizedFiles(files, rootPrefix: rootPrefix)
+        let rootName = rootPrefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .split(separator: "/")
+            .last
+            .map(String.init)
+        return GitHubSelectedFiles(files: normalizedFiles(files, rootPrefix: rootPrefix), fallbackName: rootName)
     }
 
     private static func normalizedFiles(_ files: [GitHubListedFile], rootPrefix: String) -> [GitHubListedFile] {
@@ -254,6 +262,17 @@ public enum SkillGitHubImporter {
         }
         let directory = URL(fileURLWithPath: normalized).deletingLastPathComponent().relativePath
         return directory == "." ? "" : directory
+    }
+
+    private static func fallbackSkillName(from path: String) -> String? {
+        let normalized = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !normalized.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: normalized).lastPathComponent
+        return SkillPaths.isValidSkillName(name) ? name : nil
+    }
+
+    private static func fallbackRepoName(from repo: String) -> String? {
+        SkillPaths.isValidSkillName(repo) ? repo : nil
     }
 
     private static func fetchData(url: URL) async throws -> Data {

@@ -326,25 +326,17 @@ public enum SkillStore {
 
     private static func parseMetadata(from skillFile: URL) -> SkillMetadata? {
         guard let content = try? String(contentsOf: skillFile, encoding: .utf8) else { return nil }
-        let frontmatter = SkillFrontmatterParser.parse(content)
-        guard let name = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !name.isEmpty,
-              let description = frontmatter["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !description.isEmpty else {
+        let fallbackName = skillFile.deletingLastPathComponent().lastPathComponent
+        guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: fallbackName) else {
             return nil
         }
-        let compatibility = frontmatter["compatibility"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let allowedTools = frontmatter["allowed-tools"]?
-            .split(whereSeparator: { $0 == " " || $0 == "," || $0 == "\n" || $0 == "\t" })
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty } ?? []
 
         let updateTime = ((try? skillFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate) ?? Date()
         return SkillMetadata(
-            name: name,
-            description: description,
-            compatibility: compatibility?.isEmpty == true ? nil : compatibility,
-            allowedTools: allowedTools,
+            name: manifest.name,
+            description: manifest.description,
+            compatibility: manifest.compatibility,
+            allowedTools: manifest.allowedTools,
             updatedAt: updateTime
         )
     }

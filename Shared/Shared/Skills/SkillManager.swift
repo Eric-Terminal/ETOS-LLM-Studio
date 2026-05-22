@@ -126,13 +126,11 @@ public final class SkillManager: ObservableObject {
 
     @discardableResult
     public func saveSkillFromContent(_ content: String) -> Bool {
-        let frontmatter = SkillFrontmatterParser.parse(content)
-        guard let name = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !name.isEmpty else {
+        guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: nil) else {
             lastErrorMessage = "SKILL.md 缺少 name 字段。"
             return false
         }
-        return saveSkill(name: name, content: content)
+        return saveSkill(name: manifest.name, content: content)
     }
 
     @discardableResult
@@ -141,11 +139,9 @@ public final class SkillManager: ObservableObject {
             lastErrorMessage = "技能名称不合法。仅支持字母、数字、点、下划线、中划线。"
             return false
         }
-        let frontmatter = SkillFrontmatterParser.parse(content)
-        guard let frontmatterName = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              frontmatterName == name,
-              frontmatter["description"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            lastErrorMessage = "SKILL.md 格式错误：name 或 description 字段无效。"
+        guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: name),
+              manifest.name == name else {
+            lastErrorMessage = "SKILL.md 格式错误：name 字段无效。"
             return false
         }
 
@@ -179,9 +175,8 @@ public final class SkillManager: ObservableObject {
             lastErrorMessage = "导入失败：SKILL.md 不是 UTF-8 文本。"
             return false
         }
-        let frontmatter = SkillFrontmatterParser.parse(skillContent)
-        guard let frontmatterName = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              frontmatterName == skillName else {
+        guard let manifest = try? SkillManifestResolver.resolve(content: skillContent, fallbackName: skillName),
+              manifest.name == skillName else {
             lastErrorMessage = "导入失败：SKILL.md 的 name 与技能目录名不一致。"
             return false
         }
@@ -222,9 +217,8 @@ public final class SkillManager: ObservableObject {
     @discardableResult
     public func saveSkillFile(skillName: String, relativePath: String, content: String) -> Bool {
         if relativePath == "SKILL.md" {
-            let frontmatter = SkillFrontmatterParser.parse(content)
-            let frontmatterName = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if frontmatterName != skillName {
+            guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: skillName),
+                  manifest.name == skillName else {
                 lastErrorMessage = "不允许修改技能名称（name 必须保持为 \(skillName)）。"
                 return false
             }

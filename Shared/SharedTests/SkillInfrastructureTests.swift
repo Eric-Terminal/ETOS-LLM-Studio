@@ -39,11 +39,38 @@ allowed-tools: read_file, search_web
         #expect(body == "第一行正文\n第二行正文")
     }
 
+    @Test("SkillManifestResolver 使用目录名和正文首段补齐缺省元数据")
+    func testSkillManifestResolverUsesOfficialFallbacks() throws {
+        let content = """
+---
+allowed-tools: read_file, search_web
+when_to_use: 用户需要整理导入资料时使用。
+---
+
+# 标题不应作为描述
+
+第一段正文会成为技能描述。
+继续描述能力边界。
+
+后续段落留给详细说明。
+"""
+
+        let manifest = try SkillManifestResolver.resolve(content: content, fallbackName: "fallback-skill")
+
+        #expect(manifest.name == "fallback-skill")
+        #expect(manifest.description.contains("第一段正文会成为技能描述。 继续描述能力边界。"))
+        #expect(manifest.description.contains("用户需要整理导入资料时使用。"))
+        #expect(manifest.allowedTools == ["read_file", "search_web"])
+    }
+
     @Test("SkillPaths 阻止路径穿越")
     func testSkillPathResolutionRejectsTraversal() {
         let root = URL(fileURLWithPath: "/tmp/skills-root-\(UUID().uuidString)", isDirectory: true)
 
         #expect(SkillPaths.isValidSkillName("openai-docs"))
+        #expect(SkillPaths.isValidSkillName("OpenAI-Docs"))
+        #expect(SkillPaths.isValidSkillName("openai_docs"))
+        #expect(SkillPaths.isValidSkillName("openai.docs"))
         #expect(!SkillPaths.isValidSkillName("../openai-docs"))
         #expect(!SkillPaths.isValidSkillName(""))
 
@@ -267,7 +294,8 @@ description: "demo"
 
         let selected = try SkillGitHubImporter.selectedFilesForImport(files)
 
-        #expect(selected.map(\.relativePath).sorted() == ["SKILL.md", "references/guide.md"])
+        #expect(selected.fallbackName == "demo")
+        #expect(selected.files.map(\.relativePath).sorted() == ["SKILL.md", "references/guide.md"])
     }
 
     @Test("GitHub 技能导入遇到多个嵌套技能时要求用户选择具体目录")
@@ -280,6 +308,19 @@ description: "demo"
         #expect(throws: SkillStoreError.self) {
             _ = try SkillGitHubImporter.selectedFilesForImport(files)
         }
+    }
+
+    @Test("GitHub 根目录技能会保留文件并等待仓库名兜底")
+    func testGitHubSkillImporterSelectsRootSkillDirectory() throws {
+        let files = [
+            SkillGitHubImporter.GitHubListedFile(relativePath: "SKILL.md", downloadURL: "https://example.com/SKILL.md"),
+            SkillGitHubImporter.GitHubListedFile(relativePath: "references/guide.md", downloadURL: "https://example.com/guide.md")
+        ]
+
+        let selected = try SkillGitHubImporter.selectedFilesForImport(files)
+
+        #expect(selected.fallbackName == nil)
+        #expect(selected.files.map(\.relativePath).sorted() == ["SKILL.md", "references/guide.md"])
     }
 
     @MainActor
@@ -367,6 +408,50 @@ description: "demo"
             files: files.map { SyncedSkillFile(relativePath: $0.key, data: $0.value) }
         )
         #expect(bundle.files.first(where: { $0.relativePath == "assets/blob.png" })?.fileData == files["assets/blob.png"])
+    }
+
+    @MainActor
+    @Test("保存技能包时允许 SKILL.md 省略 name 和 description")
+    func testSkillStoreAcceptsMissingOptionalManifestFields() throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let skillName = "manifest-fallback-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(skillName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        #expect(manager.saveSkillDataFilesAtomically(skillName: skillName, files: [
+            "SKILL.md": Data("""
+            ---
+            ---
+
+            这一段来自正文，会变成技能描述。
+            """.utf8)
+        ]))
+
+        let saved = try #require(manager.skills.first(where: { $0.name == skillName }))
+        #expect(saved.description == "这一段来自正文，会变成技能描述。")
+    }
+
+    @Test("SkillBundleImporter 用建议文件名补齐单文件下载技能名")
+    func testSkillBundleImporterUsesSuggestedFileNameFallback() throws {
+        let result = try SkillBundleImporter.importSkill(
+            fromDownloadedData: Data("""
+            ---
+            description: "单文件下载技能"
+            ---
+
+            正文
+            """.utf8),
+            suggestedFileName: "download-demo.md"
+        )
+
+        #expect(result.skillName == "download-demo")
     }
 
     @Test("SkillBundleImporter 支持带顶层目录的 zip 技能包")
