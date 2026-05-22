@@ -740,6 +740,35 @@ description: "demo"
         #expect(result.skillName == "download-demo")
     }
 
+    @Test("SkillBundleImporter 用父目录名补齐单文件 SKILL.md 技能名")
+    func testSkillBundleImporterUsesParentDirectoryFallbackForSingleSkillFile() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("single-skill-root-\(UUID().uuidString)", isDirectory: true)
+        let skillDir = root.appendingPathComponent("single-demo", isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let skillFile = skillDir.appendingPathComponent("SKILL.md")
+        try Data("""
+        ---
+        description: "单文件父目录兜底"
+        ---
+
+        正文
+        """.utf8).write(to: skillFile)
+
+        let localResult = try SkillBundleImporter.importSkill(from: skillFile)
+        #expect(localResult.skillName == "single-demo")
+
+        let downloadedResult = try SkillBundleImporter.importSkill(
+            fromDownloadedData: try Data(contentsOf: skillFile),
+            suggestedFileName: "single-demo/SKILL.md"
+        )
+        #expect(downloadedResult.skillName == "single-demo")
+    }
+
     @Test("SkillBundleImporter 支持隐藏外层目录里的技能包")
     func testSkillBundleImporterReadsSkillUnderHiddenParentDirectory() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)

@@ -407,7 +407,10 @@ public final class SkillManager: ObservableObject {
                 return (false, message)
             }
 
-            let fileName = response.suggestedFilename ?? url.lastPathComponent
+            let suggestedFilename = response.suggestedFilename?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let shouldUseSourcePath = suggestedFilename?.isEmpty != false
+                || suggestedFilename?.caseInsensitiveCompare(SkillStore.defaultSkillFileName) == .orderedSame
+            let fileName = shouldUseSourcePath ? url.path : suggestedFilename!
             let result = try await Task.detached(priority: .utility) {
                 try SkillBundleImporter.importSkill(fromDownloadedData: data, suggestedFileName: fileName)
             }.value

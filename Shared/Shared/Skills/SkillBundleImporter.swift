@@ -192,7 +192,10 @@ public enum SkillBundleImporter {
     private static func suggestedSkillName(from fileName: String?) -> String? {
         guard let fileName, !fileName.isEmpty else { return nil }
         let url = URL(fileURLWithPath: fileName)
-        guard url.lastPathComponent != SkillStore.defaultSkillFileName else { return nil }
+        if url.lastPathComponent == SkillStore.defaultSkillFileName {
+            let parentName = url.deletingLastPathComponent().lastPathComponent
+            return SkillPaths.isValidSkillName(parentName) ? parentName : nil
+        }
         let name = url.deletingPathExtension().lastPathComponent
         return SkillPaths.isValidSkillName(name) ? name : nil
     }
