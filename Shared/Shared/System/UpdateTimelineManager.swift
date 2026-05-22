@@ -253,6 +253,7 @@ public final class UpdateTimelineManager: ObservableObject {
         state = loadedState
         displayedCommits = loadedState.rangeCommits
         applyStartupProbeIfNeeded()
+        reindexCachedTimelineIfNeeded()
     }
 
     public func activateOnLaunchIfNeeded() {
@@ -337,6 +338,7 @@ public final class UpdateTimelineManager: ObservableObject {
                 updated.rateLimitResetAt = resetAt ?? Date().addingTimeInterval(3_600)
             }
             state = updated
+            reindexCachedTimelineIfNeeded(persist: false)
             persistState()
             Self.logger.error("刷新检查更新失败: \(Self.localizedDescription(for: error), privacy: .public)")
         }
@@ -418,6 +420,7 @@ public final class UpdateTimelineManager: ObservableObject {
         updated.status = status(for: updated)
         state = updated
         persistState()
+        reindexCachedTimelineIfNeeded()
     }
 
     nonisolated private static func fetchGitHubTimeline(session: URLSession) async throws -> GitHubTimelineFetchResult {
@@ -644,6 +647,9 @@ public final class UpdateTimelineManager: ObservableObject {
     ) -> [UpdateTimelineCommit] {
         guard !commits.isEmpty else { return commits }
         var result = commits
+        for index in result.indices {
+            result[index].inferredBuildNumber = nil
+        }
         guard let currentBuildNumber else { return result }
         guard let currentSHA, !currentSHA.isPlaceholderCommit,
               let currentIndex = result.firstIndex(where: { $0.oid.lowercased().hasPrefix(currentSHA.lowercased()) }) else {
@@ -672,6 +678,25 @@ public final class UpdateTimelineManager: ObservableObject {
             }
         }
         return result
+    }
+
+    private func reindexCachedTimelineIfNeeded(persist shouldPersist: Bool = true) {
+        guard !state.cachedCommits.isEmpty else { return }
+        let commits = Self.inferBuildNumbers(
+            for: state.cachedCommits,
+            currentBuildNumber: state.currentBuildNumber,
+            currentSHA: state.storedCurrentSHA ?? state.realSHA
+        )
+        guard commits != state.cachedCommits else { return }
+
+        var updated = state
+        updated.cachedCommits = commits
+        updated.latestRemoteBuildNumber = commits.first(where: { $0.inferredBuildNumber != nil })?.inferredBuildNumber
+        updated.status = status(for: updated)
+        state = updated
+        if shouldPersist {
+            persistState()
+        }
     }
 
     private func status(for state: UpdateTimelineState) -> UpdateTimelineStatus {
