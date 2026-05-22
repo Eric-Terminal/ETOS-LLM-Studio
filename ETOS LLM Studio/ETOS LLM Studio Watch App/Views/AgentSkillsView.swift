@@ -113,7 +113,7 @@ struct AgentSkillsView: View {
                 }
             }
         }
-        .navigationTitle("Agent Skills")
+        .navigationTitle(NSLocalizedString("Agent Skills", comment: ""))
         .onAppear {
             manager.reloadFromDisk()
         }
@@ -323,7 +323,7 @@ private struct WatchImportSkillSheet: View {
     var body: some View {
         List {
             Section(NSLocalizedString("仓库地址", comment: "")) {
-                TextField("https://github.com/owner/repo", text: $repoURL.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("https://github.com/owner/repo", comment: ""), text: $repoURL.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 Text(NSLocalizedString("支持 /tree/branch 或子目录。", comment: ""))

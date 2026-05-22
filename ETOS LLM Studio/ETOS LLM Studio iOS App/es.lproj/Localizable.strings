@@ -3540,3 +3540,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）" = "Skill %@ resource: %@ (lines %d-%d of %d, %@)";
 "还有更多" = "more available";
 "已到末尾" = "end reached";
+"https://github.com/owner/repo" = "https://github.com/owner/repo";

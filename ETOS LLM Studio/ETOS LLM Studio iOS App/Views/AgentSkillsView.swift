@@ -146,7 +146,7 @@ struct AgentSkillsView: View {
                 }
             }
         }
-        .navigationTitle("Agent Skills")
+        .navigationTitle(NSLocalizedString("Agent Skills", comment: ""))
         .onAppear {
             manager.reloadFromDisk()
         }
@@ -359,7 +359,7 @@ private struct ImportSkillSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("https://github.com/owner/repo", text: $repoURL)
+                    TextField(NSLocalizedString("https://github.com/owner/repo", comment: ""), text: $repoURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } header: {

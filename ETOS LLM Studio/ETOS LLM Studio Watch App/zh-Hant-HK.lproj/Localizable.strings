@@ -3432,3 +3432,4 @@
 "技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）" = "技能 %@ 資源：%@（第 %d-%d 行，共 %d 行，%@）";
 "还有更多" = "還有更多";
 "已到末尾" = "已到末尾";
+"https://github.com/owner/repo" = "https://github.com/owner/repo";
