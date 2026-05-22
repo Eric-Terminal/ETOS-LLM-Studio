@@ -102,6 +102,7 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
     public var errorCount: Int
     public var tokenTotals: RequestLogTokenTotals
     public var cacheHitRate: Double?
+    public var tokenShare: Double
 
     public init(
         id: String,
@@ -111,17 +112,24 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
         totalTokens: Int,
         errorCount: Int,
         tokenTotals: RequestLogTokenTotals? = nil,
-        cacheHitRate: Double? = nil
+        cacheHitRate: Double? = nil,
+        tokenShare: Double = 0
     ) {
         let resolvedTokenTotals = tokenTotals ?? RequestLogTokenTotals(totalTokens: totalTokens)
+        let inferredTotalTokens = resolvedTokenTotals.sentTokens
+            + resolvedTokenTotals.receivedTokens
+            + resolvedTokenTotals.thinkingTokens
+            + resolvedTokenTotals.cacheWriteTokens
+            + resolvedTokenTotals.cacheReadTokens
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.requestCount = requestCount
-        self.totalTokens = resolvedTokenTotals.totalTokens
+        self.totalTokens = max(resolvedTokenTotals.totalTokens, totalTokens, inferredTotalTokens)
         self.errorCount = errorCount
         self.tokenTotals = resolvedTokenTotals
         self.cacheHitRate = cacheHitRate ?? UsageAnalyticsCacheMetrics.hitRate(for: resolvedTokenTotals)
+        self.tokenShare = max(0, min(tokenShare, 1))
     }
 }
 
@@ -182,6 +190,7 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
     public var topModels: [UsageAnalyticsRankItem]
     public var sourceBreakdown: [UsageAnalyticsRankItem]
     public var cacheHitRate: Double?
+    public var tokenTrend: UsageAnalyticsTokenTrendSnapshot
 
     public init(
         title: String = "",
@@ -193,7 +202,8 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         tokenTotals: RequestLogTokenTotals = .init(),
         topModels: [UsageAnalyticsRankItem] = [],
         sourceBreakdown: [UsageAnalyticsRankItem] = [],
-        cacheHitRate: Double? = nil
+        cacheHitRate: Double? = nil,
+        tokenTrend: UsageAnalyticsTokenTrendSnapshot = .init()
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -205,6 +215,90 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         self.topModels = topModels
         self.sourceBreakdown = sourceBreakdown
         self.cacheHitRate = cacheHitRate
+        self.tokenTrend = tokenTrend
+    }
+}
+
+public struct UsageAnalyticsTokenTrendPoint: Identifiable, Hashable, Sendable {
+    public var id: String { dayKey }
+    public var dayKey: String
+    public var date: Date
+    public var dayLabel: String
+    public var requestCount: Int
+    public var totalTokens: Int
+
+    public init(
+        dayKey: String,
+        date: Date,
+        dayLabel: String,
+        requestCount: Int,
+        totalTokens: Int
+    ) {
+        self.dayKey = dayKey
+        self.date = date
+        self.dayLabel = dayLabel
+        self.requestCount = requestCount
+        self.totalTokens = totalTokens
+    }
+}
+
+public struct UsageAnalyticsModelTokenTrendPoint: Identifiable, Hashable, Sendable {
+    public var id: String { "\(modelKey)|\(dayKey)" }
+    public var modelKey: String
+    public var dayKey: String
+    public var totalTokens: Int
+
+    public init(modelKey: String, dayKey: String, totalTokens: Int) {
+        self.modelKey = modelKey
+        self.dayKey = dayKey
+        self.totalTokens = totalTokens
+    }
+}
+
+public struct UsageAnalyticsModelTokenSeries: Identifiable, Hashable, Sendable {
+    public var id: String
+    public var title: String
+    public var subtitle: String
+    public var totalTokens: Int
+    public var tokenShare: Double
+    public var points: [UsageAnalyticsModelTokenTrendPoint]
+
+    public init(
+        id: String,
+        title: String,
+        subtitle: String,
+        totalTokens: Int,
+        tokenShare: Double,
+        points: [UsageAnalyticsModelTokenTrendPoint]
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.totalTokens = totalTokens
+        self.tokenShare = max(0, min(tokenShare, 1))
+        self.points = points
+    }
+}
+
+public struct UsageAnalyticsTokenTrendSnapshot: Hashable, Sendable {
+    public var rangeTitle: String
+    public var totalTokens: Int
+    public var maxDailyTokens: Int
+    public var dailyPoints: [UsageAnalyticsTokenTrendPoint]
+    public var modelSeries: [UsageAnalyticsModelTokenSeries]
+
+    public init(
+        rangeTitle: String = "",
+        totalTokens: Int = 0,
+        maxDailyTokens: Int = 0,
+        dailyPoints: [UsageAnalyticsTokenTrendPoint] = [],
+        modelSeries: [UsageAnalyticsModelTokenSeries] = []
+    ) {
+        self.rangeTitle = rangeTitle
+        self.totalTokens = totalTokens
+        self.maxDailyTokens = maxDailyTokens
+        self.dailyPoints = dailyPoints
+        self.modelSeries = modelSeries
     }
 }
 

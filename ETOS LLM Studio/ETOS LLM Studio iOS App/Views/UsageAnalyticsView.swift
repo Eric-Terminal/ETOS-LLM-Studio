@@ -27,6 +27,7 @@ struct UsageAnalyticsView: View {
                 calendarSection
                 scopeSection
                 overviewSection
+                tokenTrendSection
                 detailSection
             }
             .padding(16)
@@ -88,6 +89,67 @@ struct UsageAnalyticsView: View {
                 .padding(16)
                 .background(overviewCardBackground)
             }
+        }
+    }
+
+    private var tokenTrendSection: some View {
+        let trend = viewModel.state.detail.tokenTrend
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionHeader("Token 趋势")
+                Spacer()
+                Text(trend.rangeTitle.isEmpty ? viewModel.state.detail.subtitle : trend.rangeTitle)
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    trendSummaryMetric(
+                        "总 Token",
+                        value: formattedNumber(trend.totalTokens),
+                        iconName: "sum",
+                        color: .accentColor
+                    )
+                    trendSummaryMetric(
+                        "峰值日",
+                        value: formattedNumber(trend.maxDailyTokens),
+                        iconName: "chart.line.uptrend.xyaxis",
+                        color: .green
+                    )
+                }
+
+                if trend.dailyPoints.contains(where: { $0.totalTokens > 0 }) {
+                    UsageAnalyticsTokenTrendChart(
+                        trend: trend,
+                        modelColors: trendModelColors
+                    )
+                    .frame(height: 190)
+                    .accessibilityLabel(NSLocalizedString("Token 趋势折线图", comment: "Usage token trend chart accessibility label"))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(NSLocalizedString("Top 模型占比", comment: "Usage analytics model share title"))
+                            .etFont(.headline)
+                        if trend.modelSeries.isEmpty {
+                            Text(NSLocalizedString("当前范围内还没有模型 Token 数据。", comment: "Usage analytics empty token trend models"))
+                                .etFont(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
+                                tokenTrendLegendRow(series: series, color: trendModelColors[index % trendModelColors.count])
+                            }
+                        }
+                    }
+                } else {
+                    Text(NSLocalizedString("当前范围内还没有 Token 趋势数据。", comment: "Usage analytics empty token trend"))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                }
+            }
+            .padding(14)
+            .background(surfaceCardBackground)
         }
     }
 
@@ -357,7 +419,7 @@ struct UsageAnalyticsView: View {
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(String(format: NSLocalizedString("%d 次", comment: ""), item.requestCount))
                                 .etFont(.subheadline.monospaced())
-                            Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), item.totalTokens, item.errorCount))
+                            Text(String(format: NSLocalizedString("Token %d · 占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), item.totalTokens, percentageText(item.tokenShare), item.errorCount))
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                             if showsTokenDetails {
@@ -385,6 +447,61 @@ struct UsageAnalyticsView: View {
                     }
                     .padding(.vertical, 2)
                 }
+            }
+        }
+    }
+
+    private func trendSummaryMetric(_ title: String, value: String, iconName: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString(title, comment: "Usage trend summary title"))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .etFont(.headline.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    private func tokenTrendLegendRow(series: UsageAnalyticsModelTokenSeries, color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle()
+                .fill(color)
+                .frame(width: 9, height: 9)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(series.title)
+                    .etFont(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if !series.subtitle.isEmpty {
+                    Text(series.subtitle)
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(percentageText(series.tokenShare))
+                    .etFont(.subheadline.monospaced().weight(.semibold))
+                Text(String(format: NSLocalizedString("%@ Token", comment: "Usage analytics token count"), formattedNumber(series.totalTokens)))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -455,6 +572,10 @@ struct UsageAnalyticsView: View {
     private var surfaceCardBackground: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(Color(.systemBackground))
+    }
+
+    private var trendModelColors: [Color] {
+        [.accentColor, .green, .orange]
     }
 
     private func scopeButtonTitle(_ scope: UsageAnalyticsDetailScope) -> String {
@@ -539,6 +660,20 @@ struct UsageAnalyticsView: View {
         return formatter.string(from: NSNumber(value: rate)) ?? String(format: "%.1f%%", rate * 100)
     }
 
+    private func percentageText(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f%%", value * 100)
+    }
+
+    private func formattedNumber(_ value: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
     private func legendHeatColor(level: Int) -> Color {
         if level == 0 {
             return heatColor(level: 0)
@@ -574,4 +709,102 @@ private struct HeatmapMonthSegment: Identifiable {
     var id: String
     var title: String
     var weekCount: Int
+}
+
+private struct UsageAnalyticsTokenTrendChart: View {
+    let trend: UsageAnalyticsTokenTrendSnapshot
+    let modelColors: [Color]
+
+    private let chartPadding = EdgeInsets(top: 10, leading: 8, bottom: 26, trailing: 8)
+
+    var body: some View {
+        GeometryReader { proxy in
+            let plotRect = CGRect(
+                x: chartPadding.leading,
+                y: chartPadding.top,
+                width: max(1, proxy.size.width - chartPadding.leading - chartPadding.trailing),
+                height: max(1, proxy.size.height - chartPadding.top - chartPadding.bottom)
+            )
+            ZStack(alignment: .bottomLeading) {
+                chartGrid(in: plotRect)
+
+                trendPath(points: trend.dailyPoints.map(\.totalTokens), in: plotRect)
+                    .stroke(Color.primary.opacity(0.30), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+
+                ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
+                    trendPath(points: series.points.map(\.totalTokens), in: plotRect)
+                        .stroke(modelColors[index % modelColors.count], style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round))
+                }
+
+                if trend.dailyPoints.count == 1,
+                   let point = trend.dailyPoints.first,
+                   point.totalTokens > 0 {
+                    Circle()
+                        .fill(Color.primary.opacity(0.30))
+                        .frame(width: 7, height: 7)
+                        .position(pointPosition(index: 0, count: 1, value: point.totalTokens, in: plotRect))
+                }
+
+                xAxisLabels(in: plotRect)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    private func chartGrid(in rect: CGRect) -> some View {
+        Path { path in
+            for step in 0...3 {
+                let y = rect.minY + rect.height * CGFloat(step) / 3
+                path.move(to: CGPoint(x: rect.minX, y: y))
+                path.addLine(to: CGPoint(x: rect.maxX, y: y))
+            }
+        }
+        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+    }
+
+    private func trendPath(points: [Int], in rect: CGRect) -> Path {
+        Path { path in
+            guard !points.isEmpty else { return }
+            for (index, value) in points.enumerated() {
+                let point = pointPosition(index: index, count: points.count, value: value, in: rect)
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+        }
+    }
+
+    private func pointPosition(index: Int, count: Int, value: Int, in rect: CGRect) -> CGPoint {
+        let maxValue = max(trend.maxDailyTokens, 1)
+        let progress = count <= 1 ? 0.5 : CGFloat(index) / CGFloat(count - 1)
+        let x = rect.minX + rect.width * progress
+        let yRatio = CGFloat(value) / CGFloat(maxValue)
+        let y = rect.maxY - rect.height * yRatio
+        return CGPoint(x: x, y: y)
+    }
+
+    private func xAxisLabels(in rect: CGRect) -> some View {
+        HStack {
+            if let first = trend.dailyPoints.first {
+                Text(first.dayLabel)
+            }
+            Spacer()
+            if trend.dailyPoints.count > 2 {
+                Text(trend.dailyPoints[trend.dailyPoints.count / 2].dayLabel)
+            }
+            Spacer()
+            if let last = trend.dailyPoints.last, last.dayKey != trend.dailyPoints.first?.dayKey {
+                Text(last.dayLabel)
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .frame(width: rect.width)
+        .position(x: rect.midX, y: rect.maxY + 16)
+    }
 }

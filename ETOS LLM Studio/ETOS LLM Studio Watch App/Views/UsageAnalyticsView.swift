@@ -133,6 +133,46 @@ struct UsageAnalyticsView: View {
                 }
             }
 
+            Section(NSLocalizedString("Token 趋势", comment: "Usage analytics token trend section")) {
+                let trend = viewModel.state.detail.tokenTrend
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(trend.rangeTitle.isEmpty ? viewModel.state.detail.subtitle : trend.rangeTitle)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    if trend.dailyPoints.contains(where: { $0.totalTokens > 0 }) {
+                        WatchUsageAnalyticsTokenTrendChart(
+                            trend: trend,
+                            modelColors: trendModelColors
+                        )
+                        .frame(height: 78)
+
+                        Text(String(format: NSLocalizedString("总 Token %@ · 峰值日 %@", comment: "Watch usage token trend summary"), formattedNumber(trend.totalTokens), formattedNumber(trend.maxDailyTokens)))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+
+                        ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(trendModelColors[index % trendModelColors.count])
+                                    .frame(width: 6, height: 6)
+                                Text(series.title)
+                                    .etFont(.caption2.weight(.semibold))
+                                    .lineLimit(1)
+                                Spacer(minLength: 4)
+                                Text(percentageText(series.tokenShare))
+                                    .etFont(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        Text(NSLocalizedString("当前范围内还没有 Token 趋势数据。", comment: "Usage analytics empty token trend"))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section(NSLocalizedString("详情", comment: "")) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(viewModel.state.detail.title)
@@ -189,6 +229,9 @@ struct UsageAnalyticsView: View {
                                         .lineLimit(1)
                                 }
                                 Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), model.requestCount, model.totalTokens))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(String(format: NSLocalizedString("占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), percentageText(model.tokenShare), model.errorCount))
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                 Text(
@@ -383,6 +426,24 @@ struct UsageAnalyticsView: View {
         return formatter.string(from: NSNumber(value: rate)) ?? String(format: "%.1f%%", rate * 100)
     }
 
+    private func percentageText(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f%%", value * 100)
+    }
+
+    private func formattedNumber(_ value: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    private var trendModelColors: [Color] {
+        [.accentColor, .green, .orange]
+    }
+
     private func legendHeatColor(level: Int) -> Color {
         heatColor(level: level)
     }
@@ -418,4 +479,76 @@ private struct HeatmapMonthSegment: Identifiable {
     var id: String
     var title: String
     var weekCount: Int
+}
+
+private struct WatchUsageAnalyticsTokenTrendChart: View {
+    let trend: UsageAnalyticsTokenTrendSnapshot
+    let modelColors: [Color]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let rect = CGRect(
+                x: 2,
+                y: 6,
+                width: max(1, proxy.size.width - 4),
+                height: max(1, proxy.size.height - 18)
+            )
+
+            ZStack(alignment: .bottomLeading) {
+                Path { path in
+                    for step in 0...2 {
+                        let y = rect.minY + rect.height * CGFloat(step) / 2
+                        path.move(to: CGPoint(x: rect.minX, y: y))
+                        path.addLine(to: CGPoint(x: rect.maxX, y: y))
+                    }
+                }
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+
+                trendPath(points: trend.dailyPoints.map(\.totalTokens), in: rect)
+                    .stroke(Color.primary.opacity(0.28), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+
+                ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
+                    trendPath(points: series.points.map(\.totalTokens), in: rect)
+                        .stroke(modelColors[index % modelColors.count], style: StrokeStyle(lineWidth: 2.1, lineCap: .round, lineJoin: .round))
+                }
+
+                HStack {
+                    if let first = trend.dailyPoints.first {
+                        Text(first.dayLabel)
+                    }
+                    Spacer()
+                    if let last = trend.dailyPoints.last, last.dayKey != trend.dailyPoints.first?.dayKey {
+                        Text(last.dayLabel)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(width: rect.width)
+                .position(x: rect.midX, y: rect.maxY + 10)
+            }
+        }
+    }
+
+    private func trendPath(points: [Int], in rect: CGRect) -> Path {
+        Path { path in
+            guard !points.isEmpty else { return }
+            for (index, value) in points.enumerated() {
+                let point = pointPosition(index: index, count: points.count, value: value, in: rect)
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+        }
+    }
+
+    private func pointPosition(index: Int, count: Int, value: Int, in rect: CGRect) -> CGPoint {
+        let maxValue = max(trend.maxDailyTokens, 1)
+        let progress = count <= 1 ? 0.5 : CGFloat(index) / CGFloat(count - 1)
+        let x = rect.minX + rect.width * progress
+        let yRatio = CGFloat(value) / CGFloat(maxValue)
+        let y = rect.maxY - rect.height * yRatio
+        return CGPoint(x: x, y: y)
+    }
 }

@@ -3479,3 +3479,7 @@
 "键盘设置..." = "Keyboard Settings...";
 "致谢" = "Acknowledgments";
 "Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";
+"Token 趋势" = "Token Trend";
+"当前范围内还没有 Token 趋势数据。" = "No token trend data in the current range.";
+"总 Token %@ · 峰值日 %@" = "Total tokens %@ · Peak day %@";
+"占比 %@ · 错误 %d" = "Share %@ · Errors %d";

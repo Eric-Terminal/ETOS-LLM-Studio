@@ -3459,3 +3459,7 @@
 "键盘设置..." = "キーボード設定...";
 "致谢" = "謝辞";
 "Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";
+"Token 趋势" = "トークン推移";
+"当前范围内还没有 Token 趋势数据。" = "現在の範囲にはトークン推移データがありません。";
+"总 Token %@ · 峰值日 %@" = "Total tokens %@ · Peak day %@";
+"占比 %@ · 错误 %d" = "比率 %@ · エラー %d";

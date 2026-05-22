@@ -3480,3 +3480,11 @@
 "已验证" = "Verified";
 "关联 Commit" = "Linked Commit";
 "来自反馈工单引用，点按可查看 Commit 详情。" = "Referenced by the feedback issue. Tap to view commit details.";
+"Token 趋势" = "トークン推移";
+"峰值日" = "ピーク日";
+"Token 趋势折线图" = "トークン推移折れ線グラフ";
+"Top 模型占比" = "上位モデル比率";
+"当前范围内还没有模型 Token 数据。" = "現在の範囲にはモデル別トークンデータがありません。";
+"当前范围内还没有 Token 趋势数据。" = "現在の範囲にはトークン推移データがありません。";
+"Token %d · 占比 %@ · 错误 %d" = "Token %d · 比率 %@ · エラー %d";
+"%@ Token" = "%@ Token";

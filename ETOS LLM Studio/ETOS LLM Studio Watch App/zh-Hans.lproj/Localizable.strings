@@ -3454,3 +3454,7 @@
 "键盘设置..." = "键盘设置...";
 "致谢" = "致谢";
 "Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";
+"Token 趋势" = "Token 趋势";
+"当前范围内还没有 Token 趋势数据。" = "当前范围内还没有 Token 趋势数据。";
+"总 Token %@ · 峰值日 %@" = "总 Token %@ · 峰值日 %@";
+"占比 %@ · 错误 %d" = "占比 %@ · 错误 %d";

@@ -211,7 +211,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let scopedTotals = dailyTotals.filter { dayKeys.contains($0.dayKey) }
         let scopedModels = dailyModelTotals.filter { dayKeys.contains($0.dayKey) }
         let requestCount = scopedTotals.reduce(0) { $0 + $1.requestCount }
-        let totalTokens = scopedTotals.reduce(0) { $0 + $1.tokenTotals.totalTokens }
+        let totalTokens = scopedTotals.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
         let errorCount = scopedTotals.reduce(0) { $0 + $1.failedCount }
         let topModelName = aggregateModels(scopedModels).first?.title ?? NSLocalizedString("暂无", comment: "Usage analytics no top model")
 
@@ -301,7 +301,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let totals = totalsByDayKey[dayKey]
         let requestCount = totals?.requestCount ?? 0
         let errorCount = totals?.failedCount ?? 0
-        let totalTokens = totals?.tokenTotals.totalTokens ?? 0
+        let totalTokens = totals.map { inferredTotalTokens($0.tokenTotals) } ?? 0
         return UsageAnalyticsCalendarDay(
             dayKey: dayKey,
             date: date,
@@ -343,17 +343,20 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             subtitle = compactMonthTitle(for: anchorDate, calendar: calendar)
         }
 
-        let dayKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar))
+        let orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar)
+        let dayKeys = Set(orderedDayKeys)
+        let totalsByDayKey = Dictionary(uniqueKeysWithValues: dailyTotals.map { ($0.dayKey, $0) })
         let scopedTotals = dailyTotals.filter { dayKeys.contains($0.dayKey) }
-        let scopedModels = dayKeys.flatMap { modelTotalsByDayKey[$0] ?? [] }
+        let scopedModels = orderedDayKeys.flatMap { modelTotalsByDayKey[$0] ?? [] }
 
         let requestCount = scopedTotals.reduce(0) { $0 + $1.requestCount }
         let successCount = scopedTotals.reduce(0) { $0 + $1.successCount }
         let failedCount = scopedTotals.reduce(0) { $0 + $1.failedCount }
         let cancelledCount = scopedTotals.reduce(0) { $0 + $1.cancelledCount }
-        let tokenTotals = scopedTotals.reduce(into: RequestLogTokenTotals()) { partial, item in
+        var tokenTotals = scopedTotals.reduce(into: RequestLogTokenTotals()) { partial, item in
             mergeTokenTotals(item.tokenTotals, into: &partial)
         }
+        tokenTotals.totalTokens = inferredTotalTokens(tokenTotals)
 
         return UsageAnalyticsDetailSnapshot(
             title: title,
@@ -365,7 +368,93 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             tokenTotals: tokenTotals,
             topModels: aggregateModels(scopedModels),
             sourceBreakdown: aggregateSources(scopedModels),
-            cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals)
+            cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals),
+            tokenTrend: makeTokenTrend(
+                orderedDayKeys: orderedDayKeys,
+                totalsByDayKey: totalsByDayKey,
+                scopedModels: scopedModels,
+                calendar: calendar
+            )
+        )
+    }
+
+    private nonisolated static func makeTokenTrend(
+        orderedDayKeys: [String],
+        totalsByDayKey: [String: UsageDailyTotal],
+        scopedModels: [UsageDailyModelTotal],
+        calendar: Calendar
+    ) -> UsageAnalyticsTokenTrendSnapshot {
+        let dailyPoints = orderedDayKeys.compactMap { dayKey -> UsageAnalyticsTokenTrendPoint? in
+            guard let date = UsageAnalyticsRuntimeContext.date(for: dayKey, calendar: calendar) else { return nil }
+            let total = totalsByDayKey[dayKey]
+            return UsageAnalyticsTokenTrendPoint(
+                dayKey: dayKey,
+                date: date,
+                dayLabel: compactDayTitle(for: date, calendar: calendar),
+                requestCount: total?.requestCount ?? 0,
+                totalTokens: total.map { inferredTotalTokens($0.tokenTotals) } ?? 0
+            )
+        }
+
+        let totalTokens = dailyPoints.reduce(0) { $0 + $1.totalTokens }
+        let maxDailyTokens = dailyPoints.map(\.totalTokens).max() ?? 0
+
+        struct ModelBucket {
+            var providerName: String
+            var modelID: String
+            var totalTokens: Int
+            var tokensByDayKey: [String: Int]
+        }
+
+        var buckets: [String: ModelBucket] = [:]
+        for item in scopedModels {
+            let key = "\(item.providerName)|\(item.modelID)"
+            var bucket = buckets[key] ?? ModelBucket(
+                providerName: item.providerName,
+                modelID: item.modelID,
+                totalTokens: 0,
+                tokensByDayKey: [:]
+            )
+            let itemTokens = inferredTotalTokens(item.tokenTotals)
+            bucket.totalTokens += itemTokens
+            bucket.tokensByDayKey[item.dayKey, default: 0] += itemTokens
+            buckets[key] = bucket
+        }
+
+        let modelSeries = buckets
+            .map { key, bucket in
+                let points = orderedDayKeys.map {
+                    UsageAnalyticsModelTokenTrendPoint(
+                        modelKey: key,
+                        dayKey: $0,
+                        totalTokens: bucket.tokensByDayKey[$0] ?? 0
+                    )
+                }
+                let share = totalTokens > 0 ? Double(bucket.totalTokens) / Double(totalTokens) : 0
+                return UsageAnalyticsModelTokenSeries(
+                    id: key,
+                    title: bucket.modelID,
+                    subtitle: bucket.providerName,
+                    totalTokens: bucket.totalTokens,
+                    tokenShare: share,
+                    points: points
+                )
+            }
+            .filter { $0.totalTokens > 0 }
+            .sorted {
+                if $0.totalTokens == $1.totalTokens {
+                    return $0.title < $1.title
+                }
+                return $0.totalTokens > $1.totalTokens
+            }
+            .prefix(3)
+
+        return UsageAnalyticsTokenTrendSnapshot(
+            rangeTitle: trendRangeTitle(for: dailyPoints),
+            totalTokens: totalTokens,
+            maxDailyTokens: maxDailyTokens,
+            dailyPoints: dailyPoints,
+            modelSeries: Array(modelSeries)
         )
     }
 
@@ -397,21 +486,26 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             buckets[key] = bucket
         }
 
+        let totalTokens = buckets.values.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
+
         return buckets
             .map { key, value in
+                let bucketTotalTokens = inferredTotalTokens(value.tokenTotals)
+                let share = totalTokens > 0 ? Double(bucketTotalTokens) / Double(totalTokens) : 0
                 UsageAnalyticsRankItem(
                     id: key,
                     title: value.modelID,
                     subtitle: value.providerName,
                     requestCount: value.requestCount,
-                    totalTokens: value.tokenTotals.totalTokens,
+                    totalTokens: bucketTotalTokens,
                     errorCount: value.errorCount,
                     tokenTotals: value.tokenTotals,
                     cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(
                         for: value.tokenTotals,
                         providerName: value.providerName,
                         modelID: value.modelID
-                    )
+                    ),
+                    tokenShare: share
                 )
             }
             .sorted(by: rankComparator)
@@ -442,17 +536,22 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             buckets[item.requestSource] = bucket
         }
 
+        let totalTokens = buckets.values.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
+
         return buckets.values
             .map {
+                let bucketTotalTokens = inferredTotalTokens($0.tokenTotals)
+                let share = totalTokens > 0 ? Double(bucketTotalTokens) / Double(totalTokens) : 0
                 UsageAnalyticsRankItem(
                     id: $0.source.rawValue,
                     title: $0.source.displayName,
                     subtitle: "",
                     requestCount: $0.requestCount,
-                    totalTokens: $0.tokenTotals.totalTokens,
+                    totalTokens: bucketTotalTokens,
                     errorCount: $0.errorCount,
                     tokenTotals: $0.tokenTotals,
-                    cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: $0.items)
+                    cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: $0.items),
+                    tokenShare: share
                 )
             }
             .sorted(by: rankComparator)
@@ -467,11 +566,25 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         target.totalTokens += source.totalTokens
     }
 
+    private nonisolated static func inferredTotalTokens(_ totals: RequestLogTokenTotals) -> Int {
+        max(
+            totals.totalTokens,
+            totals.sentTokens
+            + totals.receivedTokens
+            + totals.thinkingTokens
+            + totals.cacheWriteTokens
+            + totals.cacheReadTokens
+        )
+    }
+
     private nonisolated static func rankComparator(_ lhs: UsageAnalyticsRankItem, _ rhs: UsageAnalyticsRankItem) -> Bool {
-        if lhs.requestCount == rhs.requestCount {
-            return lhs.title < rhs.title
+        if lhs.totalTokens == rhs.totalTokens {
+            if lhs.requestCount == rhs.requestCount {
+                return lhs.title < rhs.title
+            }
+            return lhs.requestCount > rhs.requestCount
         }
-        return lhs.requestCount > rhs.requestCount
+        return lhs.totalTokens > rhs.totalTokens
     }
 
     private nonisolated static func intensityLevel(for requestCount: Int, maxRequestCount: Int) -> Int {
@@ -505,6 +618,23 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         formatter.timeZone = calendar.timeZone
         formatter.setLocalizedDateFormatFromTemplate("yMMMd")
         return formatter.string(from: date)
+    }
+
+    private nonisolated static func compactDayTitle(for date: Date, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = .autoupdatingCurrent
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("Md")
+        return formatter.string(from: date)
+    }
+
+    private nonisolated static func trendRangeTitle(for points: [UsageAnalyticsTokenTrendPoint]) -> String {
+        guard let first = points.first, let last = points.last else { return "" }
+        if first.dayKey == last.dayKey {
+            return first.dayLabel
+        }
+        return "\(first.dayLabel) - \(last.dayLabel)"
     }
 
     private nonisolated static func weekdaySymbols(calendar: Calendar) -> [String] {

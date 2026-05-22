@@ -3460,3 +3460,7 @@
 "键盘设置..." = "鍵盤設定...";
 "致谢" = "致謝";
 "Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";
+"Token 趋势" = "Token 趨勢";
+"当前范围内还没有 Token 趋势数据。" = "目前範圍內還沒有 Token 趨勢數據。";
+"总 Token %@ · 峰值日 %@" = "總 Token %@ · 峰值日 %@";
+"占比 %@ · 错误 %d" = "佔比 %@ · 錯誤 %d";
