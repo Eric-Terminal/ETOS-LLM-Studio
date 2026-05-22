@@ -428,17 +428,17 @@ private struct WatchSkillDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(files) { file in
-                        NavigationLink {
-                            WatchEditSkillFileView(skillName: skillName, file: file, manager: manager) {
-                                reload()
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(file.relativePath)
-                                    .etFont(.caption2)
-                                Text(StorageUtility.formatSize(file.size))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
+                        Group {
+                            if file.isReadableText {
+                                NavigationLink {
+                                    WatchEditSkillFileView(skillName: skillName, file: file, manager: manager) {
+                                        reload()
+                                    }
+                                } label: {
+                                    fileRow(file)
+                                }
+                            } else {
+                                fileRow(file)
                             }
                         }
                         .swipeActions(edge: .trailing) {
@@ -491,6 +491,22 @@ private struct WatchSkillDetailView: View {
 
     private func reload() {
         files = manager.listFiles(skillName: skillName)
+    }
+
+    private func fileRow(_ file: SkillFileReference) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(file.relativePath)
+                .etFont(.caption2)
+            Text(fileDetailText(file))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func fileDetailText(_ file: SkillFileReference) -> String {
+        let sizeText = StorageUtility.formatSize(file.size)
+        guard !file.isReadableText else { return sizeText }
+        return "\(sizeText) · \(file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker"))"
     }
 }
 

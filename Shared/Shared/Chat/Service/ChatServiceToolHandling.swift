@@ -199,12 +199,10 @@ extension ChatService {
             }
 
             do {
-                let result = try await MainActor.run {
-                    try SkillManager.shared.executeToolFromChat(
-                        toolName: toolCall.toolName,
-                        argumentsJSON: toolCall.arguments
-                    )
-                }
+                let result = try await SkillManager.shared.executeToolFromChat(
+                    toolName: toolCall.toolName,
+                    argumentsJSON: toolCall.arguments
+                )
                 content = result
                 displayResult = result
                 logger.info("  - Agent Skills 调用成功: \(toolCall.toolName)")

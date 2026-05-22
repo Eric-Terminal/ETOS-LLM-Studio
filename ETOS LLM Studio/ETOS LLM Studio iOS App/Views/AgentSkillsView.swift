@@ -411,22 +411,18 @@ private struct SkillDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(files) { file in
-                        Button {
-                            editingFile = file
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(file.relativePath)
-                                        .etFont(.footnote.monospaced())
-                                        .foregroundStyle(.primary)
-                                    Text(StorageUtility.formatSize(file.size))
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
+                        Group {
+                            if file.isReadableText {
+                                Button {
+                                    editingFile = file
+                                } label: {
+                                    fileRow(file)
                                 }
-                                Spacer()
+                                .buttonStyle(.plain)
+                            } else {
+                                fileRow(file)
                             }
                         }
-                        .buttonStyle(.plain)
                         .swipeActions(edge: .trailing) {
                             if file.relativePath != "SKILL.md" {
                                 Button(role: .destructive) {
@@ -480,6 +476,26 @@ private struct SkillDetailView: View {
 
     private func reload() {
         files = manager.listFiles(skillName: skillName)
+    }
+
+    private func fileRow(_ file: SkillFileReference) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.relativePath)
+                    .etFont(.footnote.monospaced())
+                    .foregroundStyle(.primary)
+                Text(fileDetailText(file))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
+
+    private func fileDetailText(_ file: SkillFileReference) -> String {
+        let sizeText = StorageUtility.formatSize(file.size)
+        guard !file.isReadableText else { return sizeText }
+        return "\(sizeText) · \(file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker"))"
     }
 }
 

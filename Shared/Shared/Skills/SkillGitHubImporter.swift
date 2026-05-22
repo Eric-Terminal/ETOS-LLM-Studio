@@ -51,13 +51,14 @@ public enum SkillGitHubImporter {
             throw SkillStoreError.missingSkillFile
         }
 
-        var fileContents: [String: String] = [:]
+        var fileContents: [String: Data] = [:]
         for file in files {
-            let content = try await downloadText(url: file.downloadURL)
-            fileContents[file.relativePath] = content
+            let data = try await downloadData(url: file.downloadURL)
+            fileContents[file.relativePath] = data
         }
 
-        guard let skillMD = fileContents["SKILL.md"] else {
+        guard let skillData = fileContents["SKILL.md"],
+              let skillMD = String(data: skillData, encoding: .utf8) else {
             throw SkillStoreError.missingSkillFile
         }
         let frontmatter = SkillFrontmatterParser.parse(skillMD)
@@ -112,8 +113,13 @@ public enum SkillGitHubImporter {
                 }
                 let relative = makeRelativePath(itemPath: item.path, basePath: basePath)
                 guard !relative.isEmpty else { continue }
+                guard SkillResourcePolicy.canList(relativePath: relative) else { continue }
                 result.append((relative, downloadURL))
             case "dir":
+                let relative = makeRelativePath(itemPath: item.path, basePath: basePath)
+                if !relative.isEmpty, !SkillResourcePolicy.canList(relativePath: relative) {
+                    continue
+                }
                 try await listFilesRecursively(
                     owner: owner,
                     repo: repo,
@@ -192,14 +198,10 @@ public enum SkillGitHubImporter {
         return data
     }
 
-    private static func downloadText(url: String) async throws -> String {
+    private static func downloadData(url: String) async throws -> Data {
         guard let targetURL = URL(string: url) else {
             throw SkillStoreError.networkError("下载链接无效：\(url)")
         }
-        let data = try await fetchData(url: targetURL)
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw SkillStoreError.networkError("文件不是 UTF-8 文本：\(targetURL.lastPathComponent)")
-        }
-        return text
+        return try await fetchData(url: targetURL)
     }
 }

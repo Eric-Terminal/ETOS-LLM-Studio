@@ -37,27 +37,37 @@ public struct SkillFileReference: Hashable, Identifiable, Sendable {
     public var relativePath: String
     public var size: Int64
     public var modificationDate: Date?
+    public var isReadableText: Bool
+    public var readOnlyReason: String?
 
     public var id: String { relativePath }
 
-    public init(relativePath: String, size: Int64, modificationDate: Date? = nil) {
+    public init(
+        relativePath: String,
+        size: Int64,
+        modificationDate: Date? = nil,
+        isReadableText: Bool = true,
+        readOnlyReason: String? = nil
+    ) {
         self.relativePath = relativePath
         self.size = size
         self.modificationDate = modificationDate
+        self.isReadableText = isReadableText
+        self.readOnlyReason = readOnlyReason
     }
 }
 
 public struct SkillImportResult: Sendable {
     public var skillName: String
-    public var files: [String: String]
+    public var files: [String: Data]
 
-    public init(skillName: String, files: [String: String]) {
+    public init(skillName: String, files: [String: Data]) {
         self.skillName = skillName
         self.files = files
     }
 }
 
-public enum SkillStoreError: LocalizedError {
+public enum SkillStoreError: LocalizedError, Sendable {
     case invalidSkillName
     case invalidSkillContent
     case missingSkillFile

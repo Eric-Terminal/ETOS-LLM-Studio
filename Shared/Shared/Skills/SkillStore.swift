@@ -15,7 +15,7 @@ private let skillStoreLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category
 
 public enum SkillStore {
     public static let directoryName = "Skills"
-    private static let defaultSkillFileName = "SKILL.md"
+    public static let defaultSkillFileName = "SKILL.md"
 
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -93,11 +93,15 @@ public enum SkillStore {
                 continue
             }
             let relativePath = fileURL.path.replacingOccurrences(of: skillDir.path + "/", with: "")
+            let size = Int64(values.fileSize ?? 0)
+            let readability = SkillResourcePolicy.textReadability(relativePath: relativePath, size: size)
             files.append(
                 SkillFileReference(
                     relativePath: relativePath,
-                    size: Int64(values.fileSize ?? 0),
-                    modificationDate: values.contentModificationDate
+                    size: size,
+                    modificationDate: values.contentModificationDate,
+                    isReadableText: readability.isReadable,
+                    readOnlyReason: readability.reason
                 )
             )
         }
@@ -115,6 +119,30 @@ public enum SkillStore {
             return nil
         }
         return try? String(contentsOf: fileURL, encoding: .utf8)
+    }
+
+    public static func loadSkillTextResource(skillName: String, relativePath: String) throws -> String {
+        guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else {
+            throw SkillStoreError.invalidPath
+        }
+        guard let fileURL = resolveSkillFile(skillName: skillName, relativePath: normalizedPath),
+              FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw SkillStoreError.fileNotFound
+        }
+        let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+        guard values.isDirectory != true else {
+            throw SkillStoreError.invalidPath
+        }
+        let size = Int64(values.fileSize ?? 0)
+        let readability = SkillResourcePolicy.textReadability(relativePath: normalizedPath, size: size)
+        guard readability.isReadable else {
+            throw SkillStoreError.saveFailed(readability.reason ?? "该技能资源不能作为文本读取。")
+        }
+        do {
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            throw SkillStoreError.saveFailed("无法读取技能资源：\(normalizedPath)")
+        }
     }
 
     public static func saveSkillFile(skillName: String, relativePath: String, content: String) -> Bool {
@@ -166,11 +194,22 @@ public enum SkillStore {
     }
 
     public static func saveSkillFilesAtomically(skillName: String, files: [String: String]) -> Bool {
+        let dataFiles = files.reduce(into: [String: Data]()) { result, element in
+            result[element.key] = Data(element.value.utf8)
+        }
+        return saveSkillDataFilesAtomically(skillName: skillName, files: dataFiles)
+    }
+
+    public static func saveSkillDataFilesAtomically(skillName: String, files: [String: Data]) -> Bool {
         let root = setupDirectoryIfNeeded()
         guard let targetDir = SkillPaths.resolveSkillDir(skillsRoot: root, skillName: skillName) else {
             return false
         }
         guard files.keys.contains(defaultSkillFileName) else { return false }
+        guard let skillFileData = files[defaultSkillFileName],
+              String(data: skillFileData, encoding: .utf8) != nil else {
+            return false
+        }
 
         let fm = FileManager.default
         guard let stagingDir = createTempSkillDir(root: root, skillName: skillName, suffix: "staging") else {
@@ -188,12 +227,12 @@ public enum SkillStore {
         }
 
         do {
-            for (relativePath, content) in files {
+            for (relativePath, data) in files {
                 guard let target = SkillPaths.resolveSkillFile(skillDir: stagingDir, relativePath: relativePath) else {
                     return false
                 }
                 try target.deletingLastPathComponent().createDirectoryIfNeeded()
-                try content.write(to: target, atomically: true, encoding: .utf8)
+                try data.write(to: target, options: .atomic)
             }
 
             let stagingSkillFile = stagingDir.appendingPathComponent(defaultSkillFileName, isDirectory: false)
@@ -242,13 +281,30 @@ public enum SkillStore {
         let skills = listSkills()
         var bundles: [SyncedSkillBundle] = []
         for skill in skills {
-            guard let filesMap = readAllSkillFiles(skillName: skill.name), !filesMap.isEmpty else { continue }
+            guard let filesMap = readAllSkillFileData(skillName: skill.name), !filesMap.isEmpty else { continue }
             let files = filesMap
-                .map { SyncedSkillFile(relativePath: $0.key, content: $0.value) }
+                .map { SyncedSkillFile(relativePath: $0.key, data: $0.value) }
                 .sorted { $0.relativePath.localizedCaseInsensitiveCompare($1.relativePath) == .orderedAscending }
             bundles.append(SyncedSkillBundle(name: skill.name, files: files))
         }
         return bundles.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    public static func readAllSkillFileData(skillName: String) -> [String: Data]? {
+        guard let skillDir = resolveSkillDir(skillName: skillName),
+              FileManager.default.fileExists(atPath: skillDir.path) else {
+            return nil
+        }
+        let fileRefs = listSkillFiles(skillName: skillName)
+        var files: [String: Data] = [:]
+        for fileRef in fileRefs {
+            guard let fileURL = SkillPaths.resolveSkillFile(skillDir: skillDir, relativePath: fileRef.relativePath),
+                  let data = try? Data(contentsOf: fileURL) else {
+                return nil
+            }
+            files[fileRef.relativePath] = data
+        }
+        return files
     }
 
     public static func readAllSkillFiles(skillName: String) -> [String: String]? {

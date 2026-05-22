@@ -19,6 +19,12 @@ public final class SkillManager: ObservableObject {
 
     public nonisolated static let chatToolName = "use_skill"
 
+    public enum SkillToolAction: String, Codable, Sendable {
+        case readInstructions = "read_instructions"
+        case listResources = "list_resources"
+        case readResource = "read_resource"
+    }
+
     private enum DefaultsKey {
         static let enabledSkillNames = "skills.enabledNames"
         static let chatToolsEnabled = "skills.chatToolsEnabled"
@@ -109,18 +115,30 @@ public final class SkillManager: ObservableObject {
 
     @discardableResult
     public func saveSkillFilesAtomically(skillName: String, files: [String: String]) -> Bool {
+        let dataFiles = files.reduce(into: [String: Data]()) { result, element in
+            result[element.key] = Data(element.value.utf8)
+        }
+        return saveSkillDataFilesAtomically(skillName: skillName, files: dataFiles)
+    }
+
+    @discardableResult
+    public func saveSkillDataFilesAtomically(skillName: String, files: [String: Data]) -> Bool {
         guard let skillMD = files["SKILL.md"] else {
             lastErrorMessage = "导入失败：缺少 SKILL.md。"
             return false
         }
-        let frontmatter = SkillFrontmatterParser.parse(skillMD)
+        guard let skillContent = String(data: skillMD, encoding: .utf8) else {
+            lastErrorMessage = "导入失败：SKILL.md 不是 UTF-8 文本。"
+            return false
+        }
+        let frontmatter = SkillFrontmatterParser.parse(skillContent)
         guard let frontmatterName = frontmatter["name"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               frontmatterName == skillName else {
             lastErrorMessage = "导入失败：SKILL.md 的 name 与技能目录名不一致。"
             return false
         }
 
-        let saved = SkillStore.saveSkillFilesAtomically(skillName: skillName, files: files)
+        let saved = SkillStore.saveSkillDataFilesAtomically(skillName: skillName, files: files)
         if !saved {
             lastErrorMessage = "导入失败：写入技能目录失败。"
             return false
@@ -197,10 +215,21 @@ public final class SkillManager: ObservableObject {
         SkillStore.readSkillContent(skillName: skillName)
     }
 
+    func restoreStateForTests(
+        chatToolsEnabled: Bool,
+        enabledSkillNames: Set<String>
+    ) {
+        self.chatToolsEnabled = chatToolsEnabled
+        self.enabledSkillNames = enabledSkillNames
+        persistEnabledSkillNames()
+        Self.save(chatToolsEnabled, forKey: DefaultsKey.chatToolsEnabled, defaults: defaults)
+        objectWillChange.send()
+    }
+
     public func importSkillFromGitHub(repoURL: String) async -> (success: Bool, message: String) {
         do {
             let result = try await SkillGitHubImporter.importSkill(from: repoURL)
-            let saved = saveSkillFilesAtomically(skillName: result.skillName, files: result.files)
+            let saved = saveSkillDataFilesAtomically(skillName: result.skillName, files: result.files)
             if saved {
                 return (true, result.skillName)
             }
@@ -218,6 +247,11 @@ public final class SkillManager: ObservableObject {
         guard chatToolsEnabled else { return [] }
         let available = skills.filter { enabledSkillNames.contains($0.name) }
         guard !available.isEmpty else { return [] }
+        let actionDescription = [
+            "\(SkillToolAction.readInstructions.rawValue): \(NSLocalizedString("读取 SKILL.md 正文说明。", comment: "Skill tool action description sent to model"))",
+            "\(SkillToolAction.listResources.rawValue): \(NSLocalizedString("列出技能包内可发现资源。", comment: "Skill tool action description sent to model"))",
+            "\(SkillToolAction.readResource.rawValue): \(NSLocalizedString("读取技能包内文本资源；scripts/ 仅允许读取，不能执行。", comment: "Skill tool action description sent to model"))"
+        ].joined(separator: "\n")
         let parameters = JSONValue.dictionary([
             "type": .string("object"),
             "properties": .dictionary([
@@ -225,9 +259,18 @@ public final class SkillManager: ObservableObject {
                     "type": .string("string"),
                     "description": .string(NSLocalizedString("要加载的技能名称。", comment: "Skill tool name parameter description sent to model"))
                 ]),
+                "action": .dictionary([
+                    "type": .string("string"),
+                    "enum": .array([
+                        .string(SkillToolAction.readInstructions.rawValue),
+                        .string(SkillToolAction.listResources.rawValue),
+                        .string(SkillToolAction.readResource.rawValue)
+                    ]),
+                    "description": .string(actionDescription)
+                ]),
                 "path": .dictionary([
                     "type": .string("string"),
-                    "description": .string(NSLocalizedString("技能目录内的相对路径。留空时默认读取 SKILL.md 正文。仅可使用 SKILL.md 中出现过的路径。", comment: "Skill tool path parameter description sent to model"))
+                    "description": .string(NSLocalizedString("技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。", comment: "Skill tool path parameter description sent to model"))
                 ])
             ]),
             "required": .array([.string("name")])
@@ -249,16 +292,24 @@ public final class SkillManager: ObservableObject {
         return "Agent Skills"
     }
 
-    public func executeToolFromChat(toolName: String, argumentsJSON: String) throws -> String {
+    public nonisolated func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
         guard toolName == Self.chatToolName else {
             throw SkillStoreError.invalidPath
         }
-        guard chatToolsEnabled else {
+        let snapshot = await MainActor.run {
+            (
+                chatToolsEnabled: self.chatToolsEnabled,
+                enabledSkillNames: self.enabledSkillNames,
+                skills: self.skills
+            )
+        }
+        guard snapshot.chatToolsEnabled else {
             throw SkillStoreError.saveFailed("Agent Skills 总开关已关闭。")
         }
 
         struct UseSkillArgs: Decodable {
             let name: String
+            let action: SkillToolAction?
             let path: String?
         }
 
@@ -271,40 +322,61 @@ public final class SkillManager: ObservableObject {
         guard !name.isEmpty else {
             throw SkillStoreError.saveFailed("use_skill 的 name 不能为空。")
         }
-        guard enabledSkillNames.contains(name) else {
+        guard snapshot.enabledSkillNames.contains(name),
+              snapshot.skills.contains(where: { $0.name == name }) else {
             throw SkillStoreError.saveFailed("技能 \(name) 未启用。")
         }
 
         let path = args.path?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if path.isEmpty {
-            guard let body = readSkillBody(skillName: name) else {
-                throw SkillStoreError.fileNotFound
+        let action = args.action ?? (path.isEmpty ? .readInstructions : .readResource)
+        return try await Task.detached(priority: .utility) {
+            switch action {
+            case .readInstructions:
+                guard path.isEmpty || path == SkillStore.defaultSkillFileName else {
+                    throw SkillStoreError.saveFailed("read_instructions 不需要 path；读取其他文件请使用 read_resource。")
+                }
+                guard let body = SkillStore.readSkillBody(skillName: name) else {
+                    throw SkillStoreError.fileNotFound
+                }
+                return body
+            case .listResources:
+                let files = SkillStore.listSkillFiles(skillName: name)
+                return Self.formatResourceList(skillName: name, files: files)
+            case .readResource:
+                guard !path.isEmpty else {
+                    throw SkillStoreError.saveFailed("read_resource 必须提供 path。")
+                }
+                let content = try SkillStore.loadSkillTextResource(skillName: name, relativePath: path)
+                let normalizedPath = SkillResourcePolicy.normalizeRelativePath(path) ?? path
+                return Self.formatResourceContent(skillName: name, relativePath: normalizedPath, content: content)
             }
-            return body
+        }.value
+    }
+
+    private nonisolated static func formatResourceList(skillName: String, files: [SkillFileReference]) -> String {
+        guard !files.isEmpty else {
+            return String(format: NSLocalizedString("技能 %@ 没有可列出的资源。", comment: "Skill resource list empty result"), skillName)
         }
 
-        guard let skillContent = readSkillContent(skillName: name) else {
-            throw SkillStoreError.fileNotFound
+        var lines = [
+            String(format: NSLocalizedString("技能 %@ 的资源列表：", comment: "Skill resource list header"), skillName)
+        ]
+        for file in files {
+            let access = file.isReadableText
+                ? NSLocalizedString("可读取", comment: "Skill resource readable marker")
+                : (file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker"))
+            lines.append("- \(file.relativePath) (\(StorageUtility.formatSize(file.size)), \(access))")
         }
-        guard let normalizedPath = SkillLinkedPathPolicy.normalizeRelativePath(path) else {
-            throw SkillStoreError.saveFailed("use_skill 的 path 无效。")
-        }
+        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读取的文本资源；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
+        return lines.joined(separator: "\n")
+    }
 
-        let linkedPaths = SkillLinkedPathPolicy.extractLinkedRelativePaths(from: skillContent)
-        guard linkedPaths.contains(normalizedPath) else {
-            throw SkillStoreError.saveFailed("use_skill 的 path 未在 SKILL.md 链接中声明：\(normalizedPath)")
-        }
-
-        guard let target = resolveSkillFile(skillName: name, relativePath: normalizedPath) else {
-            throw SkillStoreError.invalidPath
-        }
-        guard FileManager.default.fileExists(atPath: target.path) else {
-            throw SkillStoreError.fileNotFound
-        }
-        guard let content = try? String(contentsOf: target, encoding: .utf8) else {
-            throw SkillStoreError.saveFailed("无法读取技能文件：\(normalizedPath)")
-        }
-        return content
+    private nonisolated static func formatResourceContent(skillName: String, relativePath: String, content: String) -> String {
+        [
+            String(format: NSLocalizedString("技能 %@ 资源：%@", comment: "Skill resource content header"), skillName, relativePath),
+            "",
+            content
+        ].joined(separator: "\n")
     }
 
     // MARK: - Private
@@ -312,6 +384,7 @@ public final class SkillManager: ObservableObject {
     private func makeToolDescription(availableSkills: [SkillMetadata]) -> String {
         var lines: [String] = []
         lines.append(NSLocalizedString("按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。", comment: "Skill tool description sent to model"))
+        lines.append(NSLocalizedString("先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。", comment: "Skill progressive disclosure tool instruction sent to model"))
         lines.append(NSLocalizedString("当前可用技能如下：", comment: "Available skills header sent to model"))
         lines.append("<available_skills>")
         for skill in availableSkills {
@@ -342,6 +415,9 @@ public final class SkillManager: ObservableObject {
     }
 
     private static func boolValue(forKey key: String, defaults: UserDefaults, defaultValue: Bool) -> Bool {
+        if key == DefaultsKey.chatToolsEnabled, usesDatabase(defaults: defaults) {
+            return AppConfigStore.boolValue(for: .skillsChatToolsEnabled, defaultValue: defaultValue)
+        }
         guard usesDatabase(defaults: defaults) else {
             return defaults.object(forKey: key) as? Bool ?? defaultValue
         }
@@ -353,6 +429,9 @@ public final class SkillManager: ObservableObject {
     }
 
     private static func stringArrayValue(forKey key: String, defaults: UserDefaults) -> [String] {
+        if key == DefaultsKey.enabledSkillNames, usesDatabase(defaults: defaults) {
+            return AppConfigStore.stringArrayValue(for: .skillsEnabledNames, defaultValue: []) ?? []
+        }
         guard usesDatabase(defaults: defaults) else {
             return defaults.stringArray(forKey: key) ?? []
         }
@@ -365,6 +444,10 @@ public final class SkillManager: ObservableObject {
     }
 
     private static func save(_ value: Bool, forKey key: String, defaults: UserDefaults) {
+        if key == DefaultsKey.chatToolsEnabled, usesDatabase(defaults: defaults) {
+            AppConfigStore.persistSynchronously(.bool(value), for: .skillsChatToolsEnabled)
+            return
+        }
         guard usesDatabase(defaults: defaults) else {
             defaults.set(value, forKey: key)
             return
@@ -373,6 +456,10 @@ public final class SkillManager: ObservableObject {
     }
 
     private static func save(_ value: [String], forKey key: String, defaults: UserDefaults) {
+        if key == DefaultsKey.enabledSkillNames, usesDatabase(defaults: defaults) {
+            AppConfigStore.persistStringArray(value, for: .skillsEnabledNames)
+            return
+        }
         guard usesDatabase(defaults: defaults) else {
             defaults.set(value, forKey: key)
             return
@@ -395,12 +482,11 @@ public final class SkillManager: ObservableObject {
     }
 }
 
-/// use_skill 的路径白名单策略：
-/// - 仅允许读取 SKILL.md 里 Markdown 链接显式声明过的相对路径；
-/// - 自动忽略锚点 / 查询参数 / 外链。
+/// use_skill 的 Markdown 链接发现策略。
+/// 保留该策略用于测试与旧数据兼容；实际资源读取统一走 SkillResourcePolicy。
 enum SkillLinkedPathPolicy {
     private static let inlineLinkRegex = try! NSRegularExpression(
-        pattern: #"(?<!!)\[[^\]]+\]\(([^)\s]+|<[^>]+>)(?:\s+\"[^\"]*\")?\)"#,
+        pattern: #"\[[^\]]+\]\(([^)\s]+|<[^>]+>)(?:\s+\"[^\"]*\")?\)"#,
         options: []
     )
     private static let referenceDefinitionRegex = try! NSRegularExpression(
@@ -465,11 +551,7 @@ enum SkillLinkedPathPolicy {
 
         normalized = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
-        guard !normalized.hasPrefix("/") else { return nil }
-        guard !normalized.contains("\\") else { return nil }
-        guard !normalized.split(separator: "/").contains("..") else { return nil }
-        guard !hasURLScheme(normalized) else { return nil }
-        return normalized
+        return SkillResourcePolicy.normalizeRelativePath(normalized)
     }
 
     private static func captureTargets(

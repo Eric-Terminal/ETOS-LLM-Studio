@@ -39,7 +39,11 @@ public enum SkillPaths {
         guard !normalized.isEmpty else { return nil }
         guard !normalized.hasPrefix("/") else { return nil }
         guard !normalized.contains("\\") else { return nil }
-        guard !normalized.split(separator: "/").contains("..") else { return nil }
+        guard normalized.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({ component in
+            !component.isEmpty && component != "." && component != ".." && !component.hasPrefix(".")
+        }) else {
+            return nil
+        }
 
         let target = skillDir.appendingPathComponent(normalized, isDirectory: false).standardizedFileURL
         let canonicalRoot = skillDir.standardizedFileURL.path

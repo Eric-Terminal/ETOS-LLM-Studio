@@ -370,7 +370,7 @@ extension SyncEngine {
                 continue
             }
 
-            var incomingFiles: [String: String] = [:]
+            var incomingFiles: [String: Data] = [:]
             var hasDuplicatePath = false
             for file in bundle.files {
                 let relativePath = file.relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -378,7 +378,7 @@ extension SyncEngine {
                     hasDuplicatePath = true
                     break
                 }
-                if incomingFiles.updateValue(file.content, forKey: relativePath) != nil {
+                if incomingFiles.updateValue(file.fileData, forKey: relativePath) != nil {
                     hasDuplicatePath = true
                     break
                 }
@@ -392,12 +392,12 @@ extension SyncEngine {
                 continue
             }
 
-            let localFiles = SkillStore.readAllSkillFiles(skillName: skillName)
+            let localFiles = SkillStore.readAllSkillFileData(skillName: skillName)
             if let localFiles {
                 let localBundle = SyncedSkillBundle(
                     name: skillName,
                     files: localFiles
-                        .map { SyncedSkillFile(relativePath: $0.key, content: $0.value) }
+                        .map { SyncedSkillFile(relativePath: $0.key, data: $0.value) }
                 )
                 if localBundle.checksum == bundle.checksum {
                     skipped += 1
@@ -405,7 +405,7 @@ extension SyncEngine {
                 }
             }
 
-            if SkillStore.saveSkillFilesAtomically(skillName: skillName, files: incomingFiles) {
+            if SkillStore.saveSkillDataFilesAtomically(skillName: skillName, files: incomingFiles) {
                 imported += 1
             } else {
                 skipped += 1

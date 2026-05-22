@@ -665,6 +665,8 @@ public final class AppConfigStore: ObservableObject {
              .appToolsKnownDefaultToolIDs,
              .appToolsToolApprovalPolicies,
              .mcpChatToolsEnabled,
+             .skillsChatToolsEnabled,
+             .skillsEnabledNames,
              .shortcutChatToolsEnabled,
              .messageRegexRules,
              .shortcutOfficialImportShortcutName,
@@ -804,6 +806,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncBackupCreateOnLaunch: syncBackupCreateOnLaunch = value
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
+             .skillsChatToolsEnabled,
              .shortcutChatToolsEnabled,
              .chatPickerStyleMigratedToBottomSheet:
             Self.persistSynchronously(.bool(value), for: key, quickSync: false)
@@ -891,6 +894,7 @@ public final class AppConfigStore: ObservableObject {
              .appToolsEnabledToolIDs,
              .appToolsKnownDefaultToolIDs,
              .appToolsToolApprovalPolicies,
+             .skillsEnabledNames,
              .messageRegexRules,
              .shortcutOfficialImportShortcutName:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)

@@ -121,10 +121,47 @@ public struct SyncedImage: Codable {
 public struct SyncedSkillFile: Codable, Hashable, Sendable {
     public var relativePath: String
     public var content: String
+    public var data: Data?
 
     public init(relativePath: String, content: String) {
         self.relativePath = relativePath
         self.content = content
+        self.data = nil
+    }
+
+    public init(relativePath: String, data: Data) {
+        self.relativePath = relativePath
+        if let text = String(data: data, encoding: .utf8) {
+            self.content = text
+            self.data = nil
+        } else {
+            self.content = ""
+            self.data = data
+        }
+    }
+
+    public var fileData: Data {
+        data ?? Data(content.utf8)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case relativePath
+        case content
+        case data
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        relativePath = try container.decode(String.self, forKey: .relativePath)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        data = try container.decodeIfPresent(Data.self, forKey: .data)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(relativePath, forKey: .relativePath)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(data, forKey: .data)
     }
 }
 
