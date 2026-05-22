@@ -33,7 +33,7 @@ struct WatchMessageActionBarSettingsView: View {
     var body: some View {
         List {
             Section(
-                footer: Text(NSLocalizedString("从上到下对应气泡下方的显示顺序。", comment: ""))
+                footer: Text(NSLocalizedString("从上到下对应气泡下方的显示顺序；拖拽右侧把手可调整顺序。", comment: ""))
             ) {
                 Picker(NSLocalizedString("延伸方向", comment: ""), selection: alignmentBinding) {
                     ForEach(MessageActionBarAlignment.allCases) { alignment in
@@ -48,28 +48,8 @@ struct WatchMessageActionBarSettingsView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(selectedItems.enumerated()), id: \.element.id) { index, item in
-                        HStack(spacing: 8) {
-                            Label(item.title, systemImage: item.systemImage)
-                            Spacer(minLength: 8)
-                            HStack(spacing: 4) {
-                                Button {
-                                    moveItem(at: index, offset: -1)
-                                } label: {
-                                    Image(systemName: "chevron.up")
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(index == 0)
-
-                                Button {
-                                    moveItem(at: index, offset: 1)
-                                } label: {
-                                    Image(systemName: "chevron.down")
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(index >= selectedItems.count - 1)
-                            }
-                        }
+                    ForEach(selectedItemsBinding, id: \.id, editActions: .move) { $item in
+                        Label(item.title, systemImage: item.systemImage)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 removeItem(item)
@@ -111,6 +91,17 @@ struct WatchMessageActionBarSettingsView: View {
         )
     }
 
+    private var selectedItemsBinding: Binding<[MessageActionBarItem]> {
+        Binding(
+            get: { selectedItems },
+            set: { orderedItems in
+                var updated = configuration
+                updated.setItems(orderedItems, for: role)
+                configuration = updated
+            }
+        )
+    }
+
     private func addItem(_ item: MessageActionBarItem) {
         var updated = configuration
         var items = updated.items(for: role)
@@ -123,16 +114,6 @@ struct WatchMessageActionBarSettingsView: View {
     private func removeItem(_ item: MessageActionBarItem) {
         var updated = configuration
         let items = updated.items(for: role).filter { $0 != item }
-        updated.setItems(items, for: role)
-        configuration = updated
-    }
-
-    private func moveItem(at index: Int, offset: Int) {
-        var updated = configuration
-        var items = updated.items(for: role)
-        let destination = index + offset
-        guard items.indices.contains(index), items.indices.contains(destination) else { return }
-        items.swapAt(index, destination)
         updated.setItems(items, for: role)
         configuration = updated
     }

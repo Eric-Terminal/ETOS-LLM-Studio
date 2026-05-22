@@ -44,7 +44,7 @@ struct WatchFontSettingsView: View {
                     快速上手
                     1. 可在手表粘贴字体链接直接导入，或在 iPhone 端导入后同步到手表。
                     2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
-                    3. 用上下箭头调整顺序。
+                    3. 拖拽右侧把手调整顺序。
                     4. 点击“添加字体到当前槽位”补入缺失字体。
                     5. 对槽位内字体右滑可“移除”，仅移出当前槽位。
 
@@ -132,7 +132,7 @@ struct WatchFontSettingsView: View {
 
             Section(
                 header: Text(NSLocalizedString("样式优先级", comment: "")),
-                footer: Text(NSLocalizedString("使用上下箭头调整顺序；可通过“添加字体到当前槽位”补入未加入的字体；对槽位内字体右滑可移除。越靠上优先级越高。", comment: ""))
+                footer: Text(NSLocalizedString("拖拽右侧把手可调整顺序；可通过“添加字体到当前槽位”补入未加入的字体；对槽位内字体右滑可移除。越靠上优先级越高。", comment: ""))
             ) {
                 Picker(NSLocalizedString("样式槽位", comment: ""), selection: $selectedRole) {
                     ForEach(FontSemanticRole.allCases) { role in
@@ -144,29 +144,11 @@ struct WatchFontSettingsView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(chainRecords.enumerated()), id: \.element.id) { index, asset in
+                    ForEach(chainRecordsBinding, id: \.id, editActions: .move) { $asset in
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(asset.displayName)
                                     .foregroundStyle(.primary)
-                            }
-                            Spacer(minLength: 8)
-                            HStack(spacing: 4) {
-                                Button {
-                                    moveAsset(at: index, offset: -1)
-                                } label: {
-                                    Image(systemName: "chevron.up")
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(index == 0)
-
-                                Button {
-                                    moveAsset(at: index, offset: 1)
-                                } label: {
-                                    Image(systemName: "chevron.down")
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(index >= chainRecords.count - 1)
                             }
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -283,6 +265,15 @@ struct WatchFontSettingsView: View {
         return routes.chain(for: selectedRole).compactMap { map[$0] }
     }
 
+    private var chainRecordsBinding: Binding<[FontAssetRecord]> {
+        Binding(
+            get: { chainRecords },
+            set: { orderedRecords in
+                updateSelectedRoleChain(orderedRecords.map(\.id))
+            }
+        )
+    }
+
     private var availableAssetsForSelectedRole: [FontAssetRecord] {
         let selectedIDs = Set(routes.chain(for: selectedRole))
         return assets.filter { !selectedIDs.contains($0.id) }
@@ -358,11 +349,7 @@ struct WatchFontSettingsView: View {
         }
     }
 
-    private func moveAsset(at index: Int, offset: Int) {
-        var chain = routes.chain(for: selectedRole)
-        let target = index + offset
-        guard chain.indices.contains(index), chain.indices.contains(target) else { return }
-        chain.swapAt(index, target)
+    private func updateSelectedRoleChain(_ chain: [UUID]) {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
