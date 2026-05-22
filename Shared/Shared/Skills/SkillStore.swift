@@ -425,7 +425,7 @@ public enum SkillStore {
         if SkillResourcePolicy.isExtractableDocumentPath(resource.relativePath) {
             return try extractSkillDocumentText(fileURL: resource.fileURL, relativePath: resource.relativePath)
         }
-        return try loadUTF8Text(fileURL: resource.fileURL, relativePath: resource.relativePath)
+        return try extractSkillPlainText(fileURL: resource.fileURL, relativePath: resource.relativePath)
     }
 
     private static func loadResolvedReadableResource(_ resource: ResolvedSkillResource) async throws -> String {
@@ -435,7 +435,7 @@ public enum SkillStore {
         if SkillResourcePolicy.isOCRImagePath(resource.relativePath) {
             return try await extractSkillImageText(fileURL: resource.fileURL, relativePath: resource.relativePath)
         }
-        return try loadUTF8Text(fileURL: resource.fileURL, relativePath: resource.relativePath)
+        return try extractSkillPlainText(fileURL: resource.fileURL, relativePath: resource.relativePath)
     }
 
     private static func textReadability(fileURL: URL, relativePath: String, size: Int64) -> (isReadable: Bool, reason: String?) {
@@ -457,16 +457,22 @@ public enum SkillStore {
                 ? (true, nil)
                 : (false, NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
         }
-        return String(data: data, encoding: .utf8) != nil
+        return canExtractSkillPlainText(data: data, relativePath: relativePath)
             ? (true, nil)
             : (false, NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
     }
 
-    private static func loadUTF8Text(fileURL: URL, relativePath: String) throws -> String {
+    private static func extractSkillPlainText(fileURL: URL, relativePath: String) throws -> String {
+        let data: Data
         do {
-            return try String(contentsOf: fileURL, encoding: .utf8)
+            data = try Data(contentsOf: fileURL)
         } catch {
-            throw SkillStoreError.saveFailed("该技能资源不是 UTF-8 文本：\(relativePath)")
+            throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
+        }
+        do {
+            return try FileAttachmentTextExtractor().extractText(from: makeAttachment(data: data, relativePath: relativePath))
+        } catch {
+            throw SkillStoreError.saveFailed(error.localizedDescription)
         }
     }
 
@@ -477,13 +483,8 @@ public enum SkillStore {
         } catch {
             throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
         }
-        let attachment = FileAttachment(
-            data: data,
-            mimeType: resolvedMimeType(for: relativePath),
-            fileName: URL(fileURLWithPath: relativePath).lastPathComponent
-        )
         do {
-            return try FileAttachmentTextExtractor().extractText(from: attachment)
+            return try FileAttachmentTextExtractor().extractText(from: makeAttachment(data: data, relativePath: relativePath))
         } catch {
             throw SkillStoreError.saveFailed(error.localizedDescription)
         }
@@ -504,6 +505,18 @@ public enum SkillStore {
         } catch {
             throw SkillStoreError.saveFailed(error.localizedDescription)
         }
+    }
+
+    private static func canExtractSkillPlainText(data: Data, relativePath: String) -> Bool {
+        (try? FileAttachmentTextExtractor().extractText(from: makeAttachment(data: data, relativePath: relativePath))) != nil
+    }
+
+    private static func makeAttachment(data: Data, relativePath: String) -> FileAttachment {
+        FileAttachment(
+            data: data,
+            mimeType: resolvedMimeType(for: relativePath),
+            fileName: URL(fileURLWithPath: relativePath).lastPathComponent
+        )
     }
 
     private static func resolvedMimeType(for relativePath: String) -> String {

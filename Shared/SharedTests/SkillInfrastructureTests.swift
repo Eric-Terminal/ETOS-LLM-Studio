@@ -584,6 +584,47 @@ description: "demo"
     }
 
     @MainActor
+    @Test("use_skill 可读取非 UTF-8 的文本资源")
+    func testUseSkillReadsNonUTF8TextResources() async throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let skillName = "encoded-resource-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(skillName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        let latin1Text = "café résumé"
+        let latin1Data = try #require(latin1Text.data(using: .isoLatin1))
+        #expect(String(data: latin1Data, encoding: .utf8) == nil)
+        #expect(manager.saveSkillDataFilesAtomically(skillName: skillName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(skillName)
+            description: "编码资源读取测试"
+            ---
+
+            正文
+            """.utf8),
+            "references/latin1.notes": latin1Data
+        ]))
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledSkillNames: [skillName])
+
+        let listedFiles = manager.listFiles(skillName: skillName)
+        #expect(listedFiles.first(where: { $0.relativePath == "references/latin1.notes" })?.isReadableText == true)
+
+        let result = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/latin1.notes"}"#
+        )
+        #expect(result.contains(latin1Text))
+    }
+
+    @MainActor
     @Test("保存技能包时允许 SKILL.md 省略 name 和 description")
     func testSkillStoreAcceptsMissingOptionalManifestFields() throws {
         let manager = SkillManager.shared
