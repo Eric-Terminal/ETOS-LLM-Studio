@@ -1312,6 +1312,7 @@
 "技能 %@ 没有可列出的资源。" = "Skill %@ has no resources to list.";
 "技能 %@ 的资源列表：" = "Resources for skill %@:";
 "可读取" = "readable";
+"可分块读取" = "chunk-readable";
 "仅列出" = "listed only";
 "使用 action=read_resource 和对应 path 读取可读取的文本资源；scripts/ 资源只会返回源码，不会执行。" = "Use action=read_resource with the matching path to read readable text resources; scripts/ resources return source only and are not executed.";
 "技能 %@ 资源：%@" = "Skill %@ resource: %@";

@@ -539,6 +539,13 @@ description: "demo"
         ]))
         manager.restoreStateForTests(chatToolsEnabled: true, enabledSkillNames: [skillName])
 
+        let listResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"list_resources"}"#
+        )
+        #expect(listResult.contains("references/large.md"))
+        #expect(listResult.contains("可分块读取"))
+
         let chunkResult = try await manager.executeToolFromChat(
             toolName: SkillManager.chatToolName,
             argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/large.md","start_line":1001,"max_lines":3}"#

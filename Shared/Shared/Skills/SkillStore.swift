@@ -441,6 +441,11 @@ public enum SkillStore {
     private static func textReadability(fileURL: URL, relativePath: String, size: Int64) -> (isReadable: Bool, reason: String?) {
         let candidate = SkillResourcePolicy.candidateTextReadability(relativePath: relativePath, size: size)
         guard candidate.canAttemptRead else {
+            if SkillResourcePolicy.normalizeRelativePath(relativePath) != nil,
+               SkillResourcePolicy.isKnownTextPath(relativePath),
+               size > SkillResourcePolicy.maxReadableTextBytes {
+                return (true, NSLocalizedString("可分块读取", comment: "Skill resource chunk-readable marker"))
+            }
             return (false, candidate.reason)
         }
         if SkillResourcePolicy.isKnownTextPath(relativePath) {

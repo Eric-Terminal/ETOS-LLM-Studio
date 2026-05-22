@@ -574,9 +574,12 @@ public final class SkillManager: ObservableObject {
             String(format: NSLocalizedString("技能 %@ 的资源列表：", comment: "Skill resource list header"), skillName)
         ]
         for file in files {
-            let access = file.isReadableText
-                ? NSLocalizedString("可读取", comment: "Skill resource readable marker")
-                : (file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker"))
+            let access: String
+            if file.isReadableText {
+                access = file.readOnlyReason ?? NSLocalizedString("可读取", comment: "Skill resource readable marker")
+            } else {
+                access = file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker")
+            }
             lines.append("- \(file.relativePath) (\(StorageUtility.formatSize(file.size)), \(access))")
         }
         lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
