@@ -225,4 +225,30 @@ description: "demo"
         )
         #expect(bundle.files.first(where: { $0.relativePath == "assets/blob.png" })?.fileData == files["assets/blob.png"])
     }
+
+    @Test("SkillBundleImporter 支持带顶层目录的 zip 技能包")
+    func testSkillBundleImporterReadsZipBundleWithRootDirectory() throws {
+        let result = try SkillBundleImporter.importSkill(
+            fromDownloadedData: try #require(Data(base64Encoded: zipBundleBase64)),
+            suggestedFileName: nil
+        )
+
+        #expect(result.skillName == "zip-demo")
+        #expect(String(data: result.files["SKILL.md"] ?? Data(), encoding: .utf8)?.contains("zip demo") == true)
+        #expect(String(data: result.files["references/guide.md"] ?? Data(), encoding: .utf8) == zipReferenceContent)
+        #expect(result.files["assets/blob.png"] == zipBinaryContent)
+        #expect(result.files.keys.allSatisfy { !$0.hasPrefix("demo-skill/") })
+    }
+
+    private var zipReferenceContent: String {
+        "zip 参考资料"
+    }
+
+    private var zipBinaryContent: Data {
+        Data([0x89, 0x50, 0x4E, 0x47, 0x00])
+    }
+
+    private var zipBundleBase64: String {
+        "UEsDBBQAAAAIAGiTtlwK+ZucSwAAAE0AAAATAAAAZGVtby1za2lsbC9TS0lMTC5tZNPV1eXKS8xNtVKoyizQTUnNzedKSS1OLsosKMnMz7NSUAIKK4CElbh0gUq5nuzd/3zKCoWi1LTUotS85NRi/fTSzJRUvdyUxw1NAFBLAwQUAAAACABok7ZcDkdrVBMAAAAQAAAAHgAAAGRlbW8tc2tpbGwvcmVmZXJlbmNlcy9ndWlkZS5tZKvKLFB42t/0oqH5xdaWZ9NmAgBQSwMEFAAAAAgAaJO2XFRT5XQHAAAABQAAABoAAABkZW1vLXNraWxsL2Fzc2V0cy9ibG9iLnBuZ+sM8HNnAABQSwECFAMUAAAACABok7ZcCvmbnEsAAABNAAAAEwAAAAAAAAAAAAAAgAEAAAAAZGVtby1za2lsbC9TS0lMTC5tZFBLAQIUAxQAAAAIAGiTtlwOR2tUEwAAABAAAAAeAAAAAAAAAAAAAACAAXwAAABkZW1vLXNraWxsL3JlZmVyZW5jZXMvZ3VpZGUubWRQSwECFAMUAAAACABok7ZcVFPldAcAAAAFAAAAGgAAAAAAAAAAAAAAgAHLAAAAZGVtby1za2lsbC9hc3NldHMvYmxvYi5wbmdQSwUGAAAAAAMAAwDVAAAACgEAAAAA"
+    }
 }

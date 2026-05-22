@@ -73,7 +73,7 @@ struct AgentSkillsView: View {
                 Button {
                     showURLImportSheet = true
                 } label: {
-                    Label(NSLocalizedString("链接导入 SKILL.md", comment: ""), systemImage: "link.badge.plus")
+                    Label(NSLocalizedString("链接导入技能包", comment: ""), systemImage: "link.badge.plus")
                 }
             }
 
@@ -154,11 +154,11 @@ private struct WatchImportSkillFromURLSheet: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("SKILL.md 链接", comment: "")) {
-                TextField("https://example.com/SKILL.md", text: $fileURLText.watchKeyboardNewlineBinding())
+            Section(NSLocalizedString("技能包链接", comment: "")) {
+                TextField(NSLocalizedString("https://example.com/skill.zip", comment: ""), text: $fileURLText.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                Text(NSLocalizedString("支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。", comment: ""))
+                Text(NSLocalizedString("支持 http/https 的 SKILL.md 或 zip 技能包链接。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -223,16 +223,12 @@ private struct WatchImportSkillFromURLSheet: View {
                     return
                 }
 
-                guard let content = String(data: data, encoding: .utf8), !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    await MainActor.run {
-                        localError = NSLocalizedString("下载内容为空或编码不受支持。", comment: "")
-                        isImporting = false
-                    }
-                    return
-                }
-
+                let fileName = response.suggestedFilename ?? url.lastPathComponent
+                let result = try await Task.detached(priority: .utility) {
+                    try SkillBundleImporter.importSkill(fromDownloadedData: data, suggestedFileName: fileName)
+                }.value
                 let success = await MainActor.run {
-                    manager.saveSkillFromContent(content)
+                    manager.saveSkillDataFilesAtomically(skillName: result.skillName, files: result.files)
                 }
 
                 await MainActor.run {
@@ -240,7 +236,7 @@ private struct WatchImportSkillFromURLSheet: View {
                     if success {
                         dismiss()
                     } else {
-                        localError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：SKILL.md 内容无效。", comment: "")
+                        localError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：技能包内容无效。", comment: "")
                     }
                 }
             } catch {

@@ -3,7 +3,7 @@
 // ============================================================================
 // Agent Skills 管理页（iOS）
 // - 管理技能列表与启用状态
-// - 支持新增、删除、文件编辑、GitHub/本地文件导入
+// - 支持新增、删除、文件编辑、GitHub/本地技能包导入
 // ============================================================================
 
 import SwiftUI
@@ -80,7 +80,7 @@ struct AgentSkillsView: View {
                     localImportError = nil
                     showLocalImporter = true
                 } label: {
-                    Label(NSLocalizedString("从本地文件导入", comment: ""), systemImage: "tray.and.arrow.down")
+                    Label(NSLocalizedString("从本地技能包导入", comment: ""), systemImage: "tray.and.arrow.down")
                 }
 
                 if let localImportError {
@@ -92,7 +92,7 @@ struct AgentSkillsView: View {
 
             Section(String(format: NSLocalizedString("已安装技能 (%d)", comment: ""), manager.skills.count)) {
                 if manager.skills.isEmpty {
-                    Text(NSLocalizedString("暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地文件导入。", comment: ""))
+                    Text(NSLocalizedString("暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地技能包导入。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
@@ -172,9 +172,12 @@ struct AgentSkillsView: View {
 
 private extension AgentSkillsView {
     static var localImportContentTypes: [UTType] {
-        var types: [UTType] = [.plainText, .text]
+        var types: [UTType] = [.plainText, .text, .folder]
         if let markdown = UTType(filenameExtension: "md") {
             types.append(markdown)
+        }
+        if let zip = UTType(filenameExtension: "zip") {
+            types.append(zip)
         }
         return types
     }
@@ -193,15 +196,17 @@ private extension AgentSkillsView {
                     }
                 }
                 do {
-                    let content = try String(contentsOf: url, encoding: .utf8)
+                    let result = try await Task.detached(priority: .utility) {
+                        try SkillBundleImporter.importSkill(from: url)
+                    }.value
                     let success = await MainActor.run {
-                        manager.saveSkillFromContent(content)
+                        manager.saveSkillDataFilesAtomically(skillName: result.skillName, files: result.files)
                     }
                     await MainActor.run {
                         if success {
                             localImportError = nil
                         } else {
-                            localImportError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：SKILL.md 内容无效。", comment: "")
+                            localImportError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：技能包内容无效。", comment: "")
                         }
                     }
                 } catch {

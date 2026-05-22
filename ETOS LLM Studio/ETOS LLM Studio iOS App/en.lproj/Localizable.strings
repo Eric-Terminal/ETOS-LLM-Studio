@@ -1547,6 +1547,13 @@
 "读取 SKILL.md 正文说明。" = "Read the SKILL.md body instructions.";
 "列出技能包内可发现资源。" = "List discoverable resources in the skill bundle.";
 "读取技能包内文本资源；scripts/ 仅允许读取，不能执行。" = "Read text resources in the skill bundle; scripts/ can only be read and cannot be executed.";
+"从本地技能包导入" = "Import local skill bundle";
+"暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地技能包导入。" = "No skills yet. Paste SKILL.md, or import from GitHub / a local skill bundle.";
+"导入失败：技能包内容无效。" = "Import failed: invalid skill bundle content.";
+"链接导入技能包" = "Import skill bundle from link";
+"技能包链接" = "Skill bundle link";
+"https://example.com/skill.zip" = "https://example.com/skill.zip";
+"支持 http/https 的 SKILL.md 或 zip 技能包链接。" = "Supports http/https SKILL.md or zip skill bundle links.";
 "当前可用技能如下：" = "Currently available skills:";
 "你是思考摘要助手。请把思考内容压缩成一个短标签。\n约束：\n- 中文输出 6~18 字，其他语言输出 2~8 个词；\n- 只写核心动作或结论方向；\n- 不要复述细节，不要写完整解释；\n- 不要出现“思考内容摘要”“总结：”等前缀；\n- 不要句号，仅输出短标签正文。" = "You are a reasoning summary assistant. Compress the reasoning into a short label.\nConstraints:\n- For Chinese, output 6-18 characters; for other languages, output 2-8 words.\n- Write only the core action or conclusion direction.\n- Do not repeat details or write a full explanation.\n- Do not include prefixes such as \"reasoning summary\" or \"summary:\".\n- Do not use a period; output only the label text.";
 "你是会话压缩助手。请基于给定对话生成“跨对话可复用”的摘要。\n约束：\n- 中文输出 60~140 字，其他语言输出 50~120 个词；\n- 只保留关键主题、用户意图、明确结论；\n- 不要罗列细节，不要添加免责声明；\n- 仅输出摘要正文。" = "You are a conversation compression assistant. Generate a reusable cross-conversation summary from the given dialogue.\nConstraints:\n- For Chinese, output 60-140 characters; for other languages, output 50-120 words.\n- Keep only key topics, user intent, and clear conclusions.\n- Do not list details or add disclaimers.\n- Output only the summary body.";
