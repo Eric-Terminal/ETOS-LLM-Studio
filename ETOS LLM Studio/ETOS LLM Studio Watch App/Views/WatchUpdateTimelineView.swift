@@ -23,7 +23,7 @@ struct WatchUpdateTimelineView: View {
     }
 
     private var previewCommits: [UpdateTimelineCommit] {
-        Array(commits.prefix(3))
+        Array(commits.prefix(2))
     }
 
     var body: some View {
@@ -168,22 +168,23 @@ struct WatchUpdateTimelineView: View {
 private struct WatchUpdateTimelineBrowserView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared
     @State private var crownIndex: Double = 0
+    private let visibleWindowSize = 2
 
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
     }
 
     private var maxIndex: Double {
-        Double(max(commits.count - 3, 0))
+        Double(max(commits.count - visibleWindowSize, 0))
     }
 
     private var startIndex: Int {
-        min(max(Int(crownIndex.rounded()), 0), max(commits.count - 3, 0))
+        min(max(Int(crownIndex.rounded()), 0), max(commits.count - visibleWindowSize, 0))
     }
 
     private var visibleCommitIndices: [Int] {
         guard !commits.isEmpty else { return [] }
-        let endIndex = min(startIndex + 2, commits.count - 1)
+        let endIndex = min(startIndex + visibleWindowSize - 1, commits.count - 1)
         return Array(startIndex...endIndex)
     }
 
@@ -199,7 +200,7 @@ private struct WatchUpdateTimelineBrowserView: View {
         }
         .navigationTitle(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
         .onChange(of: commits.count) { _, newCount in
-            crownIndex = min(crownIndex, Double(max(newCount - 3, 0)))
+            crownIndex = min(crownIndex, Double(max(newCount - visibleWindowSize, 0)))
         }
     }
 
