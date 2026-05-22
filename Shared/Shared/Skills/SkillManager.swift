@@ -49,6 +49,33 @@ public final class SkillManager: ObservableObject {
         name == chatToolName
     }
 
+    nonisolated static func resolveSkillNameForToolCall(
+        _ requestedName: String,
+        enabledSkillNames: Set<String>,
+        skills: [SkillMetadata]
+    ) -> String? {
+        let trimmed = requestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let availableNames = skills.map(\.name).filter { enabledSkillNames.contains($0) }
+        if availableNames.contains(trimmed) {
+            return trimmed
+        }
+
+        let caseInsensitiveMatches = availableNames.filter {
+            $0.caseInsensitiveCompare(trimmed) == .orderedSame
+        }
+        if caseInsensitiveMatches.count == 1 {
+            return caseInsensitiveMatches[0]
+        }
+
+        let lookupKey = normalizedSkillNameLookupKey(trimmed)
+        guard !lookupKey.isEmpty else { return nil }
+        let normalizedMatches = availableNames.filter {
+            normalizedSkillNameLookupKey($0) == lookupKey
+        }
+        return normalizedMatches.count == 1 ? normalizedMatches[0] : nil
+    }
+
     public func reloadFromDisk() {
         skills = SkillStore.listSkills()
         pruneMissingEnabledSkills()
@@ -318,13 +345,16 @@ public final class SkillManager: ObservableObject {
             throw SkillStoreError.saveFailed("无法解析 use_skill 参数，请提供 name，path 可选。")
         }
 
-        let name = args.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
+        let requestedName = args.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !requestedName.isEmpty else {
             throw SkillStoreError.saveFailed("use_skill 的 name 不能为空。")
         }
-        guard snapshot.enabledSkillNames.contains(name),
-              snapshot.skills.contains(where: { $0.name == name }) else {
-            throw SkillStoreError.saveFailed("技能 \(name) 未启用。")
+        guard let name = Self.resolveSkillNameForToolCall(
+            requestedName,
+            enabledSkillNames: snapshot.enabledSkillNames,
+            skills: snapshot.skills
+        ) else {
+            throw SkillStoreError.saveFailed("技能 \(requestedName) 未启用或不存在。")
         }
 
         let path = args.path?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -395,6 +425,12 @@ public final class SkillManager: ObservableObject {
         }
         lines.append("</available_skills>")
         return ModelPromptLanguage.appendingToolArgumentInstruction(to: lines.joined(separator: "\n"))
+    }
+
+    private nonisolated static func normalizedSkillNameLookupKey(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .replacingOccurrences(of: #"[\s._-]+"#, with: "", options: .regularExpression)
     }
 
     private func pruneMissingEnabledSkills() {

@@ -157,6 +157,34 @@ description: "demo"
         #expect(!SkillResourcePolicy.textReadability(relativePath: "references/large.md", size: SkillResourcePolicy.maxReadableTextBytes + 1).isReadable)
     }
 
+    @Test("use_skill 技能名解析支持唯一宽松匹配")
+    func testUseSkillNameResolutionAllowsUniqueLooseMatch() {
+        let skills = [
+            SkillMetadata(name: "openai-docs", description: "OpenAI 文档"),
+            SkillMetadata(name: "writer.assistant", description: "写作助手"),
+            SkillMetadata(name: "disabled-skill", description: "未启用")
+        ]
+        let enabledNames: Set<String> = ["openai-docs", "writer.assistant"]
+
+        #expect(SkillManager.resolveSkillNameForToolCall(" openai-docs ", enabledSkillNames: enabledNames, skills: skills) == "openai-docs")
+        #expect(SkillManager.resolveSkillNameForToolCall("OpenAI Docs", enabledSkillNames: enabledNames, skills: skills) == "openai-docs")
+        #expect(SkillManager.resolveSkillNameForToolCall("openai_docs", enabledSkillNames: enabledNames, skills: skills) == "openai-docs")
+        #expect(SkillManager.resolveSkillNameForToolCall("WRITER ASSISTANT", enabledSkillNames: enabledNames, skills: skills) == "writer.assistant")
+        #expect(SkillManager.resolveSkillNameForToolCall("disabled skill", enabledSkillNames: enabledNames, skills: skills) == nil)
+    }
+
+    @Test("use_skill 技能名解析遇到歧义时不自动猜测")
+    func testUseSkillNameResolutionRejectsAmbiguousLooseMatch() {
+        let skills = [
+            SkillMetadata(name: "foo-bar", description: "A"),
+            SkillMetadata(name: "foobar", description: "B")
+        ]
+        let enabledNames: Set<String> = ["foo-bar", "foobar"]
+
+        #expect(SkillManager.resolveSkillNameForToolCall("foo bar", enabledSkillNames: enabledNames, skills: skills) == nil)
+        #expect(SkillManager.resolveSkillNameForToolCall("foobar", enabledSkillNames: enabledNames, skills: skills) == "foobar")
+    }
+
     @MainActor
     @Test("use_skill 可列出并读取技能包文本资源但不读取二进制资源")
     func testUseSkillReadsBundledTextResources() async throws {
