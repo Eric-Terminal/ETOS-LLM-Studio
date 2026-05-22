@@ -22,6 +22,10 @@ struct WatchUpdateTimelineView: View {
         manager.displayedCommits
     }
 
+    private var previewCommits: [UpdateTimelineCommit] {
+        Array(commits.prefix(3))
+    }
+
     var body: some View {
         List {
             Section {
@@ -32,10 +36,19 @@ struct WatchUpdateTimelineView: View {
                     NavigationLink {
                         WatchUpdateTimelineBrowserView()
                     } label: {
-                        statusRow(
-                            NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"),
-                            value: String(format: NSLocalizedString("共 %d 项", comment: "Total item count"), commits.count)
-                        )
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(previewCommits.enumerated()), id: \.element.id) { index, commit in
+                                WatchUpdateTimelineRow(
+                                    commit: commit,
+                                    isSelected: index == 0,
+                                    isFirst: index == 0,
+                                    isLast: index == previewCommits.count - 1
+                                )
+                            }
+                            Text(String(format: NSLocalizedString("共 %d 项", comment: "Total item count"), commits.count))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             } header: {
@@ -161,11 +174,17 @@ private struct WatchUpdateTimelineBrowserView: View {
     }
 
     private var maxIndex: Double {
-        Double(max(commits.count - 1, 0))
+        Double(max(commits.count - 3, 0))
     }
 
-    private var selectedIndex: Int {
-        min(max(Int(crownIndex.rounded()), 0), max(commits.count - 1, 0))
+    private var startIndex: Int {
+        min(max(Int(crownIndex.rounded()), 0), max(commits.count - 3, 0))
+    }
+
+    private var visibleCommitIndices: [Int] {
+        guard !commits.isEmpty else { return [] }
+        let endIndex = min(startIndex + 2, commits.count - 1)
+        return Array(startIndex...endIndex)
     }
 
     var body: some View {
@@ -180,28 +199,33 @@ private struct WatchUpdateTimelineBrowserView: View {
         }
         .navigationTitle(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
         .onChange(of: commits.count) { _, newCount in
-            crownIndex = min(crownIndex, Double(max(newCount - 1, 0)))
+            crownIndex = min(crownIndex, Double(max(newCount - 3, 0)))
         }
     }
 
     private var browserContent: some View {
-        let commit = commits[selectedIndex]
         return VStack(alignment: .leading, spacing: 8) {
-            Text(String(format: NSLocalizedString("第 %d / %d 条", comment: "Item position counter"), selectedIndex + 1, commits.count))
+            Text(String(format: NSLocalizedString("第 %d / %d 条", comment: "Item position counter"), startIndex + 1, commits.count))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
 
-            NavigationLink {
-                WatchUpdateTimelineCommitDetailView(commit: commit)
-            } label: {
-                WatchUpdateTimelineRow(
-                    commit: commit,
-                    isSelected: true,
-                    isFirst: true,
-                    isLast: true
-                )
+            VStack(spacing: 4) {
+                ForEach(visibleCommitIndices, id: \.self) { index in
+                    let commit = commits[index]
+                    NavigationLink {
+                        WatchUpdateTimelineCommitDetailView(commit: commit)
+                    } label: {
+                        WatchUpdateTimelineRow(
+                            commit: commit,
+                            isSelected: index == startIndex,
+                            isFirst: index == visibleCommitIndices.first,
+                            isLast: index == visibleCommitIndices.last
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .buttonStyle(.plain)
+            .frame(minHeight: 160)
             .focusable(true)
             .digitalCrownRotation(
                 $crownIndex,
@@ -218,7 +242,7 @@ private struct WatchUpdateTimelineBrowserView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal)
-        .animation(.snappy, value: selectedIndex)
+        .animation(.snappy, value: startIndex)
     }
 }
 
@@ -291,7 +315,7 @@ private struct WatchUpdateTimelineRow: View {
                 }
                 Text(commit.displayHeadline)
                     .etFont(.caption2.weight(.semibold))
-                    .lineLimit(3)
+                    .lineLimit(2)
                 if let date = commit.committedDate {
                     Text(date.formatted(date: .numeric, time: .shortened))
                         .etFont(.system(size: 9))
