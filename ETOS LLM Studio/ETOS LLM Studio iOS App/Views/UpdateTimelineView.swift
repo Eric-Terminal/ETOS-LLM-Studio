@@ -15,6 +15,7 @@ struct UpdateTimelineView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @Environment(\.openURL) private var openURL
     @State private var visibleTimelineLimit = 5
+    @State private var preparedSummaryMarkdown: ETPreparedMarkdownRenderPayload?
 
     private let timelineInitialLimit = 5
     private let timelinePageSize = 20
@@ -52,6 +53,9 @@ struct UpdateTimelineView: View {
         }
         .task {
             await manager.refreshIfNeeded()
+        }
+        .task(id: manager.state.summaryText) {
+            await prepareSummaryMarkdown(for: manager.state.summaryText)
         }
         .onChange(of: displayedCommits.count) { _, newCount in
             if newCount <= timelineInitialLimit {
@@ -116,9 +120,12 @@ struct UpdateTimelineView: View {
     private var summarySection: some View {
         Section {
             if let summary = manager.state.summaryText, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(summary)
-                    .etFont(.body)
-                    .textSelection(.enabled)
+                UpdateSummaryMarkdownView(
+                    summary: summary,
+                    preparedSummary: preparedSummaryMarkdown,
+                    enableMarkdown: appConfig.enableMarkdown,
+                    enableAdvancedRenderer: appConfig.enableAdvancedRenderer
+                )
                 if let generatedAt = manager.state.summaryGeneratedAt {
                     Text(String(format: NSLocalizedString("生成于 %@", comment: "Update timeline summary generated at"), generatedAt.formatted(date: .abbreviated, time: .shortened)))
                         .etFont(.caption)
@@ -219,6 +226,50 @@ struct UpdateTimelineView: View {
             return .green
         case .updateAvailable:
             return .blue
+        }
+    }
+
+    @MainActor
+    private func prepareSummaryMarkdown(for summary: String?) async {
+        guard let summary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            preparedSummaryMarkdown = nil
+            return
+        }
+        guard preparedSummaryMarkdown?.sourceText != summary else { return }
+
+        let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: summary)
+        guard !Task.isCancelled else { return }
+        preparedSummaryMarkdown = prepared
+    }
+}
+
+private struct UpdateSummaryMarkdownView: View {
+    let summary: String
+    let preparedSummary: ETPreparedMarkdownRenderPayload?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+
+    var body: some View {
+        if enableMarkdown,
+           let preparedSummary,
+           preparedSummary.sourceText == summary {
+            ETAdvancedMarkdownRenderer(
+                content: summary,
+                preparedContent: preparedSummary,
+                enableMarkdown: true,
+                isOutgoing: false,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableAdvancedRenderer,
+                customTextColor: nil
+            )
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(summary)
+                .etFont(.body, sampleText: summary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

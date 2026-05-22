@@ -17,6 +17,7 @@ struct WatchUpdateTimelineView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var crownIndex: Double = 0
     @State private var webAuthLauncher = UpdateTimelineWatchWebAuthLauncher()
+    @State private var preparedSummaryMarkdown: ETPreparedMarkdownRenderPayload?
 
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
@@ -56,9 +57,12 @@ struct WatchUpdateTimelineView: View {
 
             Section {
                 if let summary = manager.state.summaryText, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(summary)
-                        .etFont(.caption)
-                        .foregroundStyle(.primary)
+                    WatchUpdateSummaryMarkdownView(
+                        summary: summary,
+                        preparedSummary: preparedSummaryMarkdown,
+                        enableMarkdown: appConfig.enableMarkdown,
+                        enableAdvancedRenderer: appConfig.enableAdvancedRenderer
+                    )
                 } else {
                     Text(NSLocalizedString("还没有摘要。", comment: "Update timeline empty summary"))
                         .etFont(.caption)
@@ -107,6 +111,9 @@ struct WatchUpdateTimelineView: View {
         .navigationTitle(NSLocalizedString("检查更新", comment: "Update check navigation title"))
         .task {
             await manager.refreshIfNeeded()
+        }
+        .task(id: manager.state.summaryText) {
+            await prepareSummaryMarkdown(for: manager.state.summaryText)
         }
         .onChange(of: commits.count) { _, newCount in
             crownIndex = min(crownIndex, Double(max(newCount - 1, 0)))
@@ -177,6 +184,49 @@ struct WatchUpdateTimelineView: View {
                 .multilineTextAlignment(.trailing)
         }
         .etFont(.caption)
+    }
+
+    @MainActor
+    private func prepareSummaryMarkdown(for summary: String?) async {
+        guard let summary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            preparedSummaryMarkdown = nil
+            return
+        }
+        guard preparedSummaryMarkdown?.sourceText != summary else { return }
+
+        let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: summary)
+        guard !Task.isCancelled else { return }
+        preparedSummaryMarkdown = prepared
+    }
+}
+
+private struct WatchUpdateSummaryMarkdownView: View {
+    let summary: String
+    let preparedSummary: ETPreparedMarkdownRenderPayload?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+
+    var body: some View {
+        if enableMarkdown,
+           let preparedSummary,
+           preparedSummary.sourceText == summary {
+            ETAdvancedMarkdownRenderer(
+                content: summary,
+                preparedContent: preparedSummary,
+                enableMarkdown: true,
+                isOutgoing: false,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableAdvancedRenderer,
+                customTextColor: .primary
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(summary)
+                .etFont(.caption, sampleText: summary)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
