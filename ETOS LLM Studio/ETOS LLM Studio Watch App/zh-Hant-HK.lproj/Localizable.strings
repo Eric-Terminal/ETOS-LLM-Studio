@@ -3418,3 +3418,4 @@
 "技能包链接" = "Skill bundle link";
 "https://example.com/skill.zip" = "https://example.com/skill.zip";
 "支持 http/https 的 SKILL.md 或 zip 技能包链接。" = "Supports http/https SKILL.md or zip skill bundle links.";
+"怎么用\n1. 添加技能（粘贴 SKILL.md 或 GitHub 导入）。\n2. 确认技能已启用。\n3. 打开\"向模型暴露 Agent Skills\"总开关。\n4. 在聊天中让模型调用对应技能。\n\nSKILL.md 格式\n• frontmatter 可声明 name、description、when_to_use 等字段。\n• 导入目录或仓库时，省略 name 会使用技能目录名；省略 description 会使用正文首段。\n• 正文可写使用说明、参数等 Markdown 内容。\n\n常见问题\n• 模型不调用：检查总开关与技能启用状态。\n• 导入失败：确认仓库地址可访问。\n• 无法本地选文件：可使用链接导入 SKILL.md。\n• 需要更新内容：在技能详情里编辑 SKILL.md。" = "怎麼用\n1. 添加技能（貼上 SKILL.md 或 GitHub 匯入）。\n2. 確認技能已啟用。\n3. 打開\"向模型暴露 Agent Skills\"總開關。\n4. 在聊天中讓模型呼叫對應技能。\n\nSKILL.md 格式\n• frontmatter 可宣告 name、description、when_to_use 等欄位。\n• 匯入目錄或倉庫時，省略 name 會使用技能目錄名；省略 description 會使用正文首段。\n• 正文可寫使用說明、參數等 Markdown 內容。\n\n常見問題\n• 模型不呼叫：檢查總開關與技能啟用狀態。\n• 匯入失敗：確認倉庫地址可存取。\n• 無法本地選檔案：可使用連結匯入 SKILL.md。\n• 需要更新內容：在技能詳情裡編輯 SKILL.md。";
