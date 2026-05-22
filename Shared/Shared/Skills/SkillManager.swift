@@ -327,7 +327,7 @@ public final class SkillManager: ObservableObject {
             "required": .array([.string("name")])
         ])
 
-        let description = makeToolDescription(availableSkills: available)
+        let description = Self.makeToolDescription(availableSkills: available)
         return [
             InternalToolDefinition(
                 name: Self.chatToolName,
@@ -341,6 +341,10 @@ public final class SkillManager: ObservableObject {
     public nonisolated func displayLabel(for toolName: String) -> String? {
         guard toolName == Self.chatToolName else { return nil }
         return "Agent Skills"
+    }
+
+    nonisolated static func makeToolDescriptionForTests(availableSkills: [SkillMetadata]) -> String {
+        makeToolDescription(availableSkills: availableSkills)
     }
 
     public nonisolated func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
@@ -470,20 +474,34 @@ public final class SkillManager: ObservableObject {
 
     // MARK: - Private
 
-    private func makeToolDescription(availableSkills: [SkillMetadata]) -> String {
+    private nonisolated static func makeToolDescription(availableSkills: [SkillMetadata]) -> String {
         var lines: [String] = []
         lines.append(NSLocalizedString("按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。", comment: "Skill tool description sent to model"))
         lines.append(NSLocalizedString("先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。", comment: "Skill progressive disclosure tool instruction sent to model"))
+        lines.append(NSLocalizedString("SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。", comment: "Skill allowed tools limitation sent to model"))
         lines.append(NSLocalizedString("当前可用技能如下：", comment: "Available skills header sent to model"))
         lines.append("<available_skills>")
         for skill in availableSkills {
             lines.append("  <skill>")
-            lines.append("    <name>\(skill.name)</name>")
-            lines.append("    <description>\(skill.description)</description>")
+            lines.append("    <name>\(Self.escapeXMLText(skill.name))</name>")
+            lines.append("    <description>\(Self.escapeXMLText(skill.description))</description>")
+            if let compatibility = skill.compatibility?.trimmingCharacters(in: .whitespacesAndNewlines), !compatibility.isEmpty {
+                lines.append("    <compatibility>\(Self.escapeXMLText(compatibility))</compatibility>")
+            }
+            if !skill.allowedTools.isEmpty {
+                lines.append("    <allowed_tools>\(Self.escapeXMLText(skill.allowedTools.joined(separator: ", ")))</allowed_tools>")
+            }
             lines.append("  </skill>")
         }
         lines.append("</available_skills>")
         return ModelPromptLanguage.appendingToolArgumentInstruction(to: lines.joined(separator: "\n"))
+    }
+
+    private nonisolated static func escapeXMLText(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     private nonisolated static func normalizedSkillNameLookupKey(_ name: String) -> String {

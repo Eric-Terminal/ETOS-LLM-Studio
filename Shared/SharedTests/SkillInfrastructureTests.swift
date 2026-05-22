@@ -95,6 +95,24 @@ when_to_use: 用户需要整理导入资料时使用。
         #expect(manifest.allowedTools == ["read_file", "search_web"])
     }
 
+    @Test("use_skill 工具描述包含元数据且会转义 XML 文本")
+    func testUseSkillToolDescriptionIncludesMetadataAndEscapesXML() {
+        let description = SkillManager.makeToolDescriptionForTests(availableSkills: [
+            SkillMetadata(
+                name: "meta-demo",
+                description: "处理 <xml> & 文本",
+                compatibility: "需要完整技能目录",
+                allowedTools: ["read_file", "search_web"]
+            )
+        ])
+
+        #expect(description.contains("<name>meta-demo</name>"))
+        #expect(description.contains("<description>处理 &lt;xml&gt; &amp; 文本</description>"))
+        #expect(description.contains("<compatibility>需要完整技能目录</compatibility>"))
+        #expect(description.contains("<allowed_tools>read_file, search_web</allowed_tools>"))
+        #expect(description.contains("allowed-tools 仅作为技能作者说明"))
+    }
+
     @Test("SkillPaths 阻止路径穿越")
     func testSkillPathResolutionRejectsTraversal() {
         let root = URL(fileURLWithPath: "/tmp/skills-root-\(UUID().uuidString)", isDirectory: true)

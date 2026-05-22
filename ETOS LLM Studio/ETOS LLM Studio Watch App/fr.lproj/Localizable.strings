@@ -3474,6 +3474,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 /* Agent Skills resources */
 "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。" = "Relative path inside the skill directory, required only for read_resource. Text resources under references/, scripts/, agents/, and assets/ can be read; scripts are not executed.";
 "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。" = "Load the skill body with read_instructions first. When extra material is needed, use list_resources, then read_resource to read text files under references/scripts/agents/assets. scripts can only be read as source and cannot be executed.";
+"SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。" = "allowed-tools dans SKILL.md sert uniquement d’indication fournie par l’auteur de la compétence ; cette app fournit toujours seulement l’accès en lecture via use_skill et n’exécute pas de scripts ni de commandes locales.";
 "路径不合法" = "Invalid path";
 "文件过大，仅列出不读取" = "File too large; listed only";
 "非文本资源，仅列出不读取" = "Non-text resource; listed only";

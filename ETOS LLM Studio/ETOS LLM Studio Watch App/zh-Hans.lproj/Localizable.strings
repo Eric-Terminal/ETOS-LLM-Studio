@@ -1275,6 +1275,7 @@
 "按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。" = "按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。";
 "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。" = "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。";
 "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。" = "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。";
+"SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。" = "SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。";
 "路径不合法" = "路径不合法";
 "文件过大，仅列出不读取" = "文件过大，仅列出不读取";
 "非文本资源，仅列出不读取" = "非文本资源，仅列出不读取";
