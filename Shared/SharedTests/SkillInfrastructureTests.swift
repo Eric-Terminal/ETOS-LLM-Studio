@@ -185,6 +185,18 @@ description: "demo"
         #expect(SkillManager.resolveSkillNameForToolCall("foobar", enabledSkillNames: enabledNames, skills: skills) == "foobar")
     }
 
+    @Test("use_skill action 参数解析支持常见写法")
+    func testUseSkillActionResolutionAllowsCommonVariants() {
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("read_instructions") == .readInstructions)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("instructions") == .readInstructions)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("readInstructions") == .readInstructions)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("list resources") == .listResources)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("list-resources") == .listResources)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("read resource") == .readResource)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("read-resource") == .readResource)
+        #expect(SkillManager.SkillToolAction.resolveToolArgument("run_script") == nil)
+    }
+
     @MainActor
     @Test("use_skill 可列出并读取技能包文本资源但不读取二进制资源")
     func testUseSkillReadsBundledTextResources() async throws {
@@ -219,7 +231,7 @@ description: "demo"
 
         let listResult = try await manager.executeToolFromChat(
             toolName: SkillManager.chatToolName,
-            argumentsJSON: #"{"name":"\#(skillName)","action":"list_resources"}"#
+            argumentsJSON: #"{"name":"\#(skillName)","action":"list resources"}"#
         )
         #expect(listResult.contains("references/guide.md"))
         #expect(listResult.contains("scripts/check.py"))
@@ -230,7 +242,7 @@ description: "demo"
 
         let referenceResult = try await manager.executeToolFromChat(
             toolName: SkillManager.chatToolName,
-            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/guide.md"}"#
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read resource","path":"references/guide.md"}"#
         )
         #expect(referenceResult.contains("参考资料正文"))
 

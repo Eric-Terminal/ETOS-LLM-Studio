@@ -23,6 +23,27 @@ public final class SkillManager: ObservableObject {
         case readInstructions = "read_instructions"
         case listResources = "list_resources"
         case readResource = "read_resource"
+
+        static func resolveToolArgument(_ rawValue: String) -> SkillToolAction? {
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let action = SkillToolAction(rawValue: trimmed) {
+                return action
+            }
+
+            let normalized = trimmed
+                .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+                .replacingOccurrences(of: #"[\s.-]+"#, with: "_", options: .regularExpression)
+            switch normalized {
+            case "read_instructions", "read_instruction", "readinstructions", "readinstruction", "instructions", "instruction", "skill", "skill_instructions":
+                return .readInstructions
+            case "list_resources", "list_resource", "listresources", "listresource", "resources", "resource_list":
+                return .listResources
+            case "read_resource", "readresource", "resource", "resource_content":
+                return .readResource
+            default:
+                return nil
+            }
+        }
     }
 
     private enum DefaultsKey {
@@ -336,7 +357,7 @@ public final class SkillManager: ObservableObject {
 
         struct UseSkillArgs: Decodable {
             let name: String
-            let action: SkillToolAction?
+            let action: String?
             let path: String?
         }
 
@@ -358,7 +379,15 @@ public final class SkillManager: ObservableObject {
         }
 
         let path = args.path?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let action = args.action ?? (path.isEmpty ? .readInstructions : .readResource)
+        let action: SkillToolAction
+        if let rawAction = args.action?.trimmingCharacters(in: .whitespacesAndNewlines), !rawAction.isEmpty {
+            guard let resolvedAction = SkillToolAction.resolveToolArgument(rawAction) else {
+                throw SkillStoreError.saveFailed("use_skill 的 action 无效：\(rawAction)。")
+            }
+            action = resolvedAction
+        } else {
+            action = path.isEmpty ? .readInstructions : .readResource
+        }
         return try await Task.detached(priority: .utility) {
             switch action {
             case .readInstructions:
