@@ -45,7 +45,7 @@ public enum SkillBundleImporter {
         guard let enumerator = fm.enumerator(
             at: directoryURL,
             includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else {
             throw SkillStoreError.fileNotFound
         }
@@ -56,7 +56,7 @@ public enum SkillBundleImporter {
             guard values.isSymbolicLink != true else { continue }
             guard values.isDirectory != true else { continue }
             let relativePath = relativePath(for: fileURL, baseURL: directoryURL)
-            guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else { continue }
+            guard let normalizedPath = normalizeSourceBundlePath(relativePath) else { continue }
             files[normalizedPath] = try Data(contentsOf: fileURL)
         }
         let normalized = normalizeBundleFiles(files, fallbackName: directoryURL.lastPathComponent)
@@ -76,7 +76,7 @@ public enum SkillBundleImporter {
     private static func importArchive(_ archive: Archive, fallbackName: String?) throws -> SkillImportResult {
         var files: [String: Data] = [:]
         for entry in archive where entry.type == .file {
-            guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(entry.path) else { continue }
+            guard let normalizedPath = normalizeSourceBundlePath(entry.path) else { continue }
             var data = Data()
             _ = try archive.extract(entry) { chunk in
                 data.append(chunk)
@@ -103,7 +103,7 @@ public enum SkillBundleImporter {
 
     private static func normalizeBundleFiles(_ files: [String: Data], fallbackName: String?) -> NormalizedBundleFiles {
         if files.keys.contains(SkillStore.defaultSkillFileName) {
-            return NormalizedBundleFiles(files: files, fallbackName: fallbackName)
+            return NormalizedBundleFiles(files: safeSkillFiles(files), fallbackName: fallbackName)
         }
         let suffix = "/" + SkillStore.defaultSkillFileName
         let skillFilePaths = files.keys.filter { $0.hasSuffix(suffix) }
@@ -115,11 +115,49 @@ public enum SkillBundleImporter {
         let normalizedFiles = files.reduce(into: [String: Data]()) { result, element in
             guard element.key.hasPrefix(rootPrefix) else { return }
             let relativePath = String(element.key.dropFirst(rootPrefix.count))
-            guard !relativePath.isEmpty else { return }
-            result[relativePath] = element.value
+            guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else { return }
+            result[normalizedPath] = element.value
         }
         let rootName = rootPath.split(separator: "/").last.map(String.init)
         return NormalizedBundleFiles(files: normalizedFiles, fallbackName: rootName ?? fallbackName)
+    }
+
+    private static func safeSkillFiles(_ files: [String: Data]) -> [String: Data] {
+        files.reduce(into: [String: Data]()) { result, element in
+            guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(element.key) else { return }
+            result[normalizedPath] = element.value
+        }
+    }
+
+    private static func normalizeSourceBundlePath(_ rawPath: String) -> String? {
+        var normalized = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+
+        if normalized.hasPrefix("<"), normalized.hasSuffix(">"), normalized.count >= 2 {
+            normalized = String(normalized.dropFirst().dropLast())
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let queryIndex = normalized.firstIndex(of: "?") {
+            normalized = String(normalized[..<queryIndex])
+        }
+        if let fragmentIndex = normalized.firstIndex(of: "#") {
+            normalized = String(normalized[..<fragmentIndex])
+        }
+        while normalized.hasPrefix("./") {
+            normalized.removeFirst(2)
+        }
+
+        normalized = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        guard !normalized.hasPrefix("/") else { return nil }
+        guard !normalized.contains("\\") else { return nil }
+        guard normalized.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({ component in
+            !component.isEmpty && component != "." && component != ".."
+        }) else {
+            return nil
+        }
+        guard !hasURLScheme(normalized) else { return nil }
+        return normalized
     }
 
     private static func relativePath(for fileURL: URL, baseURL: URL) -> String {
@@ -138,6 +176,13 @@ public enum SkillBundleImporter {
             [0x50, 0x4B, 0x07, 0x08]
         ]
         return signatures.contains { data.starts(with: $0) }
+    }
+
+    private static func hasURLScheme(_ value: String) -> Bool {
+        guard let colon = value.firstIndex(of: ":") else { return false }
+        let scheme = value[..<colon]
+        guard let first = scheme.first, first.isLetter else { return false }
+        return scheme.allSatisfy { $0.isLetter || $0.isNumber || $0 == "+" || $0 == "." || $0 == "-" }
     }
 
     private static func fallbackNameForSingleSkillFile(_ fileURL: URL) -> String? {

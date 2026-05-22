@@ -555,6 +555,36 @@ description: "demo"
         #expect(result.skillName == "download-demo")
     }
 
+    @Test("SkillBundleImporter 支持隐藏外层目录里的技能包")
+    func testSkillBundleImporterReadsSkillUnderHiddenParentDirectory() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("skill-hidden-root-\(UUID().uuidString)", isDirectory: true)
+        let skillDir = root
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("skills", isDirectory: true)
+            .appendingPathComponent("hidden-demo", isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDir.appendingPathComponent("references", isDirectory: true), withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        try Data("""
+        ---
+        description: "隐藏目录技能"
+        ---
+
+        正文
+        """.utf8).write(to: skillDir.appendingPathComponent("SKILL.md"))
+        try Data("隐藏目录参考资料".utf8).write(to: skillDir.appendingPathComponent("references", isDirectory: true).appendingPathComponent("guide.md"))
+
+        let result = try SkillBundleImporter.importSkill(from: root)
+
+        #expect(result.skillName == "hidden-demo")
+        #expect(String(data: result.files["SKILL.md"] ?? Data(), encoding: .utf8)?.contains("隐藏目录技能") == true)
+        #expect(String(data: result.files["references/guide.md"] ?? Data(), encoding: .utf8) == "隐藏目录参考资料")
+        #expect(result.files.keys.allSatisfy { !$0.hasPrefix(".claude/") })
+    }
+
     @Test("SkillBundleImporter 支持带顶层目录的 zip 技能包")
     func testSkillBundleImporterReadsZipBundleWithRootDirectory() throws {
         let result = try SkillBundleImporter.importSkill(
