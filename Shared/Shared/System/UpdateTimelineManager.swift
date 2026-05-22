@@ -40,11 +40,18 @@ public struct UpdateTimelineCommit: Identifiable, Codable, Hashable, Sendable {
 
     public var hasXcodeCloudTrace: Bool {
         ciContexts.contains { context in
-            let normalized = context.lowercased()
-            return normalized.contains("xcode cloud")
-                || normalized.contains("xcodecloud")
-                || normalized.contains("apple cloud")
+            Self.isXcodeCloudContext(context)
         }
+    }
+
+    private static func isXcodeCloudContext(_ context: String) -> Bool {
+        let normalized = context
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+        return normalized.contains("xcode cloud")
+            || normalized.contains("xcodecloud")
+            || normalized.contains("apple cloud")
     }
 
     public init(
@@ -301,7 +308,7 @@ public final class UpdateTimelineManager: ObservableObject {
             var updated = state
             updated.cachedCommits = payload.commits
             updated.latestRemoteSHA = payload.commits.first?.oid
-            updated.latestRemoteBuildNumber = payload.commits.first?.inferredBuildNumber
+            updated.latestRemoteBuildNumber = payload.commits.first(where: { $0.inferredBuildNumber != nil })?.inferredBuildNumber
             if let lookup = payload.appStoreLookup {
                 updated.appStoreVersion = lookup.version
                 updated.appStoreURL = lookup.trackViewURL
@@ -533,10 +540,9 @@ public final class UpdateTimelineManager: ObservableObject {
 
     nonisolated private static func enrichRESTCommitsWithCIContexts(_ commits: [UpdateTimelineCommit], session: URLSession) async -> [UpdateTimelineCommit] {
         guard !commits.isEmpty else { return commits }
-        let enrichmentLimit = min(commits.count, 20)
         var result = commits
 
-        for index in 0..<enrichmentLimit {
+        for index in result.indices {
             guard !Task.isCancelled else { break }
             let oid = result[index].oid
             let contexts = await fetchRESTCIContexts(for: oid, session: session)
@@ -651,8 +657,8 @@ public final class UpdateTimelineManager: ObservableObject {
             for index in stride(from: currentIndex - 1, through: 0, by: -1) {
                 if result[index].hasXcodeCloudTrace {
                     build += 1
+                    result[index].inferredBuildNumber = build
                 }
-                result[index].inferredBuildNumber = build
             }
         }
 
@@ -661,8 +667,8 @@ public final class UpdateTimelineManager: ObservableObject {
             for index in (currentIndex + 1)..<result.count {
                 if result[index].hasXcodeCloudTrace {
                     build = max(1, build - 1)
+                    result[index].inferredBuildNumber = build
                 }
-                result[index].inferredBuildNumber = build
             }
         }
         return result
@@ -887,8 +893,15 @@ public final class UpdateTimelineManager: ObservableObject {
                       nodes {
                         ... on CheckRun {
                           name
-                          app {
-                            name
+                          checkSuite {
+                            app {
+                              name
+                            }
+                            workflowRun {
+                              workflow {
+                                name
+                              }
+                            }
                           }
                         }
                         ... on StatusContext {

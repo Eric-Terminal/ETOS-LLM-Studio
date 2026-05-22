@@ -291,32 +291,30 @@ private struct UpdateTimelineRow: View {
         markerTopY + markerDiameter
     }
 
+    private var isBuildCommit: Bool {
+        commit.inferredBuildNumber != nil
+    }
+
+    private var markerColor: Color {
+        isBuildCommit ? .green : .accentColor
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
-                .fill(Color.accentColor)
+                .fill(markerColor)
                 .frame(width: markerDiameter, height: markerDiameter)
                 .padding(.top, markerTopPadding)
                 .frame(width: markerColumnWidth)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text(commit.shortOID)
-                        .etFont(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                    if let build = commit.inferredBuildNumber {
-                        Text(String(format: NSLocalizedString("Build %d", comment: "Update timeline build badge"), build))
-                            .etFont(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.secondary.opacity(0.12), in: Capsule())
-                    }
-                }
+                Text(commit.shortOID)
+                    .etFont(.caption.monospaced())
+                    .foregroundStyle(isBuildCommit ? markerColor : Color.secondary)
 
                 Text(commit.displayHeadline)
                     .etFont(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isBuildCommit ? markerColor : Color.primary)
                     .lineLimit(2)
 
                 if let date = commit.committedDate {
@@ -326,6 +324,17 @@ private struct UpdateTimelineRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let build = commit.inferredBuildNumber {
+                Text(String(format: NSLocalizedString("Build %d", comment: "Update timeline build badge"), build))
+                    .etFont(.caption2.weight(.semibold))
+                    .foregroundStyle(markerColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(markerColor.opacity(0.14), in: Capsule())
+                    .accessibilityLabel(String(format: NSLocalizedString("Build %d", comment: "Update timeline build badge"), build))
+            }
         }
         .padding(.vertical, rowVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -338,7 +347,7 @@ private struct UpdateTimelineRow: View {
                 lineTopExtension: 8,
                 lineBottomExtension: 8
             )
-            .stroke(Color.secondary.opacity(0.28), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .stroke(markerColor.opacity(isBuildCommit ? 0.42 : 0.28), style: StrokeStyle(lineWidth: 2, lineCap: .round))
             .frame(width: markerColumnWidth)
         }
     }

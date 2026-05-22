@@ -87,19 +87,31 @@ struct GitHubStatusCheckContexts: Decodable {
 
 struct GitHubStatusCheckNode: Decodable {
     let name: String?
-    let app: GitHubGraphQLCheckRunApp?
-    let workflowName: String?
+    let checkSuite: GitHubGraphQLCheckSuite?
     let context: String?
 
     var contextName: String {
-        [app?.name, workflowName, name, context]
+        [checkSuite?.app?.name, checkSuite?.workflowRun?.workflow.name, name, context]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " / ")
     }
 }
 
+struct GitHubGraphQLCheckSuite: Decodable {
+    let app: GitHubGraphQLCheckRunApp?
+    let workflowRun: GitHubGraphQLWorkflowRun?
+}
+
 struct GitHubGraphQLCheckRunApp: Decodable {
+    let name: String
+}
+
+struct GitHubGraphQLWorkflowRun: Decodable {
+    let workflow: GitHubGraphQLWorkflow
+}
+
+struct GitHubGraphQLWorkflow: Decodable {
     let name: String
 }
 
