@@ -101,21 +101,6 @@ struct AboutView: View {
                 
                 Divider()
                 
-                // MARK: - Features
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(NSLocalizedString("核心功能", comment: ""))
-                        .etFont(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    
-                    FeatureRow(icon: "gearshape.2", color: .blue, title: "完全可定制", description: "动态配置 API 提供商和模型")
-                    FeatureRow(icon: "brain", color: .purple, title: "智能记忆", description: "离线 RAG 系统，设备端向量化")
-                    FeatureRow(icon: "hammer", color: .orange, title: "工具调用", description: "AI 智能体自主使用内置工具")
-                    FeatureRow(icon: "arrow.triangle.branch", color: .green, title: "会话分支", description: "从任意节点创建对话分支")
-                    FeatureRow(icon: "applewatch", color: .cyan, title: "双端同步", description: "iPhone 与 Apple Watch 无缝协作")
-                }
-                
-                Divider()
-                
                 // MARK: - Links
                 Button {
                     webAuthLauncher.open(url: githubURL)
@@ -257,34 +242,6 @@ private struct InfoRow: View {
             Spacer()
             Text(value)
                 .etFont(.caption)
-        }
-    }
-}
-
-// MARK: - Feature Row Component
-
-private struct FeatureRow: View {
-    let icon: String
-    let color: Color
-    let title: String
-    let description: String
-    
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .etFont(.system(size: 12))
-                .foregroundStyle(color)
-                .frame(width: 20, height: 20)
-                .background(color.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            
-            VStack(alignment: .leading, spacing: 1) {
-                Text(NSLocalizedString(title, comment: "关于页功能标题"))
-                    .etFont(.caption2.weight(.medium))
-                Text(NSLocalizedString(description, comment: "关于页功能说明"))
-                    .etFont(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 }

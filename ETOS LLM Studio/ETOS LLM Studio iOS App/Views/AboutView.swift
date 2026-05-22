@@ -101,15 +101,6 @@ struct AboutView: View {
                 LabeledContent(NSLocalizedString("平台支持", comment: ""), value: "iOS / watchOS")
             }
             
-            // MARK: - Features
-            Section(header: Text(NSLocalizedString("核心功能", comment: ""))) {
-                FeatureRow(icon: "gearshape.2", color: .blue, title: "完全可定制", description: "动态配置 API 提供商和模型")
-                FeatureRow(icon: "brain", color: .purple, title: "智能记忆", description: "离线 RAG 系统，设备端向量化")
-                FeatureRow(icon: "hammer", color: .orange, title: "工具调用", description: "AI 智能体自主使用内置工具")
-                FeatureRow(icon: "arrow.triangle.branch", color: .green, title: "会话分支", description: "从任意节点创建对话分支")
-                FeatureRow(icon: "applewatch", color: .cyan, title: "双端同步", description: "iPhone 与 Apple Watch 无缝协作")
-            }
-            
             // MARK: - Links
             Section(header: Text(NSLocalizedString("链接", comment: ""))) {
                 Button {
@@ -209,35 +200,6 @@ struct AboutView: View {
         #if canImport(UIKit)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
-    }
-}
-
-// MARK: - Feature Row Component
-
-private struct FeatureRow: View {
-    let icon: String
-    let color: Color
-    let title: String
-    let description: String
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .etFont(.system(size: 18))
-                .foregroundStyle(color)
-                .frame(width: 32, height: 32)
-                .background(color.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(NSLocalizedString(title, comment: "关于页功能标题"))
-                    .etFont(.subheadline.weight(.medium))
-                Text(NSLocalizedString(description, comment: "关于页功能说明"))
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
     }
 }
 
