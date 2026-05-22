@@ -114,6 +114,54 @@ struct SubmitCommentResponse: Decodable {
     }
 }
 
+struct IssueTimelineEventResponse: Decodable {
+    let id: String
+    let type: FeedbackTimelineEventKind
+    let actor: String
+    let createdAt: Date
+    let commit: FeedbackReferencedCommit?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case actor
+        case createdAt = "created_at"
+        case commit
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let stringID = try? container.decode(String.self, forKey: .id) {
+            id = stringID
+        } else if let intID = try? container.decode(Int.self, forKey: .id) {
+            id = String(intID)
+        } else if let int64ID = try? container.decode(Int64.self, forKey: .id) {
+            id = String(int64ID)
+        } else {
+            id = UUID().uuidString
+        }
+        type = try container.decode(FeedbackTimelineEventKind.self, forKey: .type)
+        actor = try container.decode(String.self, forKey: .actor)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        commit = try container.decodeIfPresent(FeedbackReferencedCommit.self, forKey: .commit)
+    }
+
+    func makeTimelineEvent() -> FeedbackTimelineEvent? {
+        switch type {
+        case .comment:
+            return nil
+        case .referencedCommit:
+            guard let commit else { return nil }
+            return .referencedCommit(
+                id: id,
+                actor: actor,
+                createdAt: createdAt,
+                commit: commit
+            )
+        }
+    }
+}
+
 struct IssueStatusResponse: Decodable {
     let issueNumber: Int
     let status: String?
@@ -123,6 +171,7 @@ struct IssueStatusResponse: Decodable {
     let publicURL: URL?
     let closed: Bool
     let comments: [FeedbackComment]
+    let timelineEvents: [IssueTimelineEventResponse]
 
     enum CodingKeys: String, CodingKey {
         case issueNumber = "issue_number"
@@ -133,5 +182,19 @@ struct IssueStatusResponse: Decodable {
         case publicURL = "public_url"
         case closed
         case comments
+        case timelineEvents = "timeline_events"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        issueNumber = try container.decode(Int.self, forKey: .issueNumber)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        title = try container.decode(String.self, forKey: .title)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        labels = try container.decodeIfPresent([String].self, forKey: .labels) ?? []
+        publicURL = try container.decodeIfPresent(URL.self, forKey: .publicURL)
+        closed = try container.decode(Bool.self, forKey: .closed)
+        comments = try container.decodeIfPresent([FeedbackComment].self, forKey: .comments) ?? []
+        timelineEvents = try container.decodeIfPresent([IssueTimelineEventResponse].self, forKey: .timelineEvents) ?? []
     }
 }

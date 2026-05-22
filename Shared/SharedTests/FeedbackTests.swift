@@ -342,3 +342,52 @@ struct FeedbackCommentTests {
         #expect(comment.isDeveloper == true)
     }
 }
+
+@Suite("FeedbackTimelineEvent Tests")
+struct FeedbackTimelineEventTests {
+    @Test("状态响应可解码 referenced commit 动态")
+    func decodeReferencedCommitTimelineEvent() throws {
+        let json = """
+        {
+          "issue_number": 72,
+          "status": "in_progress",
+          "title": "模型选择问题",
+          "updated_at": "2026-05-22T19:29:52Z",
+          "labels": ["status/in-progress"],
+          "public_url": "https://github.com/Eric-Terminal/ETOS-LLM-Studio/issues/72",
+          "closed": false,
+          "comments": [],
+          "timeline_events": [
+            {
+              "id": "25865810670",
+              "type": "referenced_commit",
+              "actor": "Eric-Terminal",
+              "created_at": "2026-05-22T19:10:01Z",
+              "commit": {
+                "sha": "9193ea1567e3e24051f6ce09de5b96a68dff87ee",
+                "short_sha": "9193ea1",
+                "message_headline": "fix(#72): 过滤对话模型选择中的专用模型",
+                "message": "fix(#72): 过滤对话模型选择中的专用模型",
+                "html_url": "https://github.com/Eric-Terminal/ETOS-LLM-Studio/commit/9193ea1567e3e24051f6ce09de5b96a68dff87ee",
+                "committed_at": "2026-05-22T19:08:37Z",
+                "verified": true
+              }
+            }
+          ]
+        }
+        """
+
+        let decoder = FeedbackDateCodec.makeJSONDecoder()
+        let response = try decoder.decode(IssueStatusResponse.self, from: Data(json.utf8))
+        let timelineEvents = response.timelineEvents.compactMap { $0.makeTimelineEvent() }
+
+        #expect(timelineEvents.count == 1)
+        guard case .referencedCommit(_, let actor, _, let commit) = timelineEvents[0] else {
+            Issue.record("期望解码为 referenced commit 动态")
+            return
+        }
+        #expect(actor == "Eric-Terminal")
+        #expect(commit.displayShortSHA == "9193ea1")
+        #expect(commit.verified)
+    }
+}

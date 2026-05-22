@@ -309,7 +309,11 @@ public final class FeedbackService: ObservableObject {
             updatedAt: statusResponse.updatedAt,
             publicURL: statusResponse.publicURL,
             isClosed: statusResponse.closed,
-            comments: statusResponse.comments
+            comments: statusResponse.comments,
+            timelineEvents: makeTimelineEvents(
+                comments: statusResponse.comments,
+                remoteEvents: statusResponse.timelineEvents
+            )
         )
 
         let baselineTicket = FeedbackStore
@@ -429,6 +433,20 @@ public final class FeedbackService: ObservableObject {
             }
         }
         tickets = FeedbackStore.loadTickets()
+    }
+
+    private func makeTimelineEvents(
+        comments: [FeedbackComment],
+        remoteEvents: [IssueTimelineEventResponse]
+    ) -> [FeedbackTimelineEvent] {
+        var events = comments.map(FeedbackTimelineEvent.comment)
+        events.append(contentsOf: remoteEvents.compactMap { $0.makeTimelineEvent() })
+        return events.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
+        }
     }
 
     private func requestChallenge() async throws -> ChallengeResponse {

@@ -16,6 +16,13 @@ struct UpdateTimelineView: View {
     @Environment(\.openURL) private var openURL
     @State private var visibleTimelineLimit = 5
     @State private var preparedSummaryMarkdown: ETPreparedMarkdownRenderPayload?
+    @State private var linkedCommitNavigationTarget: LinkedUpdateTimelineCommit?
+
+    let highlightedCommit: UpdateTimelineCommit?
+
+    init(highlightedCommit: UpdateTimelineCommit? = nil) {
+        self.highlightedCommit = highlightedCommit
+    }
 
     private let timelineInitialLimit = 5
     private let timelinePageSize = 20
@@ -34,6 +41,9 @@ struct UpdateTimelineView: View {
 
     var body: some View {
         List {
+            if let highlightedCommit {
+                linkedCommitSection(highlightedCommit)
+            }
             timelineSection
             summarySection
             statusSection
@@ -63,6 +73,30 @@ struct UpdateTimelineView: View {
             } else {
                 visibleTimelineLimit = min(max(visibleTimelineLimit, timelineInitialLimit), newCount)
             }
+        }
+        .navigationDestination(item: $linkedCommitNavigationTarget) { target in
+            UpdateTimelineCommitDetailView(commit: target.commit)
+        }
+    }
+
+    private func linkedCommitSection(_ commit: UpdateTimelineCommit) -> some View {
+        Section {
+            Button {
+                linkedCommitNavigationTarget = LinkedUpdateTimelineCommit(commit: commit)
+            } label: {
+                UpdateTimelineRow(
+                    commit: commit,
+                    isFirst: true,
+                    isLast: true
+                )
+            }
+            .buttonStyle(.plain)
+        } header: {
+            Text(NSLocalizedString("关联 Commit", comment: "Linked update timeline commit section"))
+        } footer: {
+            Text(NSLocalizedString("来自反馈工单引用，点按可查看 Commit 详情。", comment: "Linked commit section footer"))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -241,6 +275,11 @@ struct UpdateTimelineView: View {
         guard !Task.isCancelled else { return }
         preparedSummaryMarkdown = prepared
     }
+}
+
+private struct LinkedUpdateTimelineCommit: Identifiable, Hashable {
+    let commit: UpdateTimelineCommit
+    var id: String { commit.id }
 }
 
 private struct UpdateSummaryMarkdownView: View {

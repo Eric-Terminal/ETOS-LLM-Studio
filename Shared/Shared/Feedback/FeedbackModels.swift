@@ -180,6 +180,138 @@ public struct FeedbackComment: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+public struct FeedbackReferencedCommit: Codable, Hashable, Sendable {
+    public let sha: String
+    public let shortSHA: String
+    public let messageHeadline: String
+    public let message: String
+    public let htmlURL: URL?
+    public let committedAt: Date?
+    public let verified: Bool
+
+    public init(
+        sha: String,
+        shortSHA: String,
+        messageHeadline: String,
+        message: String,
+        htmlURL: URL?,
+        committedAt: Date?,
+        verified: Bool
+    ) {
+        self.sha = sha
+        self.shortSHA = shortSHA
+        self.messageHeadline = messageHeadline
+        self.message = message
+        self.htmlURL = htmlURL
+        self.committedAt = committedAt
+        self.verified = verified
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case sha
+        case shortSHA = "short_sha"
+        case messageHeadline = "message_headline"
+        case message
+        case htmlURL = "html_url"
+        case committedAt = "committed_at"
+        case verified
+    }
+
+    public var displayShortSHA: String {
+        let trimmed = shortSHA.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return String(sha.prefix(7))
+    }
+
+    public var displayHeadline: String {
+        let trimmed = messageHeadline.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        let fallback = message
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback?.isEmpty == false ? fallback! : displayShortSHA
+    }
+}
+
+public enum FeedbackTimelineEventKind: String, Codable, Sendable {
+    case comment
+    case referencedCommit = "referenced_commit"
+}
+
+public enum FeedbackTimelineEvent: Codable, Hashable, Identifiable, Sendable {
+    case comment(FeedbackComment)
+    case referencedCommit(
+        id: String,
+        actor: String,
+        createdAt: Date,
+        commit: FeedbackReferencedCommit
+    )
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case comment
+        case id
+        case actor
+        case createdAt
+        case commit
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(FeedbackTimelineEventKind.self, forKey: .type)
+        switch type {
+        case .comment:
+            self = .comment(try container.decode(FeedbackComment.self, forKey: .comment))
+        case .referencedCommit:
+            self = .referencedCommit(
+                id: try container.decode(String.self, forKey: .id),
+                actor: try container.decode(String.self, forKey: .actor),
+                createdAt: try container.decode(Date.self, forKey: .createdAt),
+                commit: try container.decode(FeedbackReferencedCommit.self, forKey: .commit)
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .comment(let comment):
+            try container.encode(FeedbackTimelineEventKind.comment, forKey: .type)
+            try container.encode(comment, forKey: .comment)
+        case .referencedCommit(let id, let actor, let createdAt, let commit):
+            try container.encode(FeedbackTimelineEventKind.referencedCommit, forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(actor, forKey: .actor)
+            try container.encode(createdAt, forKey: .createdAt)
+            try container.encode(commit, forKey: .commit)
+        }
+    }
+
+    public var id: String {
+        switch self {
+        case .comment(let comment):
+            return "comment-\(comment.id)"
+        case .referencedCommit(let id, _, _, _):
+            return "referenced-\(id)"
+        }
+    }
+
+    public var createdAt: Date {
+        switch self {
+        case .comment(let comment):
+            return comment.createdAt
+        case .referencedCommit(_, _, let createdAt, _):
+            return createdAt
+        }
+    }
+}
+
 public struct FeedbackStatusSnapshot: Codable, Hashable, Sendable {
     public let issueNumber: Int
     public let title: String
@@ -189,6 +321,7 @@ public struct FeedbackStatusSnapshot: Codable, Hashable, Sendable {
     public let publicURL: URL?
     public let isClosed: Bool
     public let comments: [FeedbackComment]
+    public let timelineEvents: [FeedbackTimelineEvent]
 
     public init(
         issueNumber: Int,
@@ -198,7 +331,8 @@ public struct FeedbackStatusSnapshot: Codable, Hashable, Sendable {
         updatedAt: Date,
         publicURL: URL?,
         isClosed: Bool,
-        comments: [FeedbackComment]
+        comments: [FeedbackComment],
+        timelineEvents: [FeedbackTimelineEvent] = []
     ) {
         self.issueNumber = issueNumber
         self.title = title
@@ -208,6 +342,9 @@ public struct FeedbackStatusSnapshot: Codable, Hashable, Sendable {
         self.publicURL = publicURL
         self.isClosed = isClosed
         self.comments = comments
+        self.timelineEvents = timelineEvents.isEmpty
+            ? comments.map(FeedbackTimelineEvent.comment)
+            : timelineEvents
     }
 }
 

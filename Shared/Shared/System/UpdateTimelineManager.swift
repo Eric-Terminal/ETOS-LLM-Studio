@@ -243,6 +243,17 @@ public final class UpdateTimelineManager: ObservableObject {
         URL(string: "https://github.com/\(Self.repositoryOwner)/\(Self.repositoryName)")!
     }
 
+    public func timelineCommit(matching sha: String) -> UpdateTimelineCommit? {
+        let normalized = sha.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        return state.cachedCommits.first { commit in
+            let commitSHA = commit.oid.lowercased()
+            return commitSHA == normalized
+                || commitSHA.hasPrefix(normalized)
+                || normalized.hasPrefix(commitSHA)
+        }
+    }
+
     public init(session: URLSession = NetworkSessionConfiguration.makeSession(minimumRequestTimeout: 45)) {
         self.session = session
         decoder = JSONDecoder()

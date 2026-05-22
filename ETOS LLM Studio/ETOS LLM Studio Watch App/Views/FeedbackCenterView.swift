@@ -218,6 +218,7 @@ struct WatchFeedbackDetailView: View {
     @State private var errorMessage: String?
     @State private var commentDraft: String = ""
     @State private var isSendingComment = false
+    @State private var selectedReferencedCommit: UpdateTimelineCommit?
 
     private var ticket: FeedbackTicket? {
         service.tickets.first { $0.issueNumber == issueNumber }
@@ -269,14 +270,28 @@ struct WatchFeedbackDetailView: View {
                 }
             }
 
-            Section(NSLocalizedString("开发者公开回复", comment: "Public comments section")) {
-                if displayedComments.isEmpty {
-                    Text(NSLocalizedString("暂无公开回复", comment: "No public comments"))
+            Section(NSLocalizedString("处理动态", comment: "Feedback timeline section")) {
+                if displayedTimelineEvents.isEmpty {
+                    Text(NSLocalizedString("暂无处理动态", comment: "No feedback timeline events"))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(displayedComments) { comment in
-                        WatchFeedbackCommentTimelineRow(comment: comment)
+                    ForEach(displayedTimelineEvents) { event in
+                        switch event {
+                        case .comment(let comment):
+                            WatchFeedbackCommentTimelineRow(comment: comment)
+                        case .referencedCommit(_, let actor, let createdAt, let commit):
+                            Button {
+                                selectedReferencedCommit = makeUpdateTimelineCommit(from: commit)
+                            } label: {
+                                WatchFeedbackReferencedCommitTimelineRow(
+                                    actor: actor,
+                                    createdAt: createdAt,
+                                    commit: commit
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
 
@@ -333,6 +348,9 @@ struct WatchFeedbackDetailView: View {
             }
         }
         .navigationTitle(String(format: NSLocalizedString("工单 #%d", comment: "Issue number title"), issueNumber))
+        .navigationDestination(item: $selectedReferencedCommit) { commit in
+            WatchUpdateTimelineView(highlightedCommit: commit)
+        }
         .task {
             await refreshStatus()
         }
@@ -359,6 +377,33 @@ struct WatchFeedbackDetailView: View {
             }
             return lhs.id < rhs.id
         }
+    }
+
+    private var displayedTimelineEvents: [FeedbackTimelineEvent] {
+        let events = snapshot?.timelineEvents ?? []
+        if events.isEmpty {
+            return displayedComments.map(FeedbackTimelineEvent.comment)
+        }
+        return events.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func makeUpdateTimelineCommit(from commit: FeedbackReferencedCommit) -> UpdateTimelineCommit {
+        if let cached = UpdateTimelineManager.shared.timelineCommit(matching: commit.sha) {
+            return cached
+        }
+        return UpdateTimelineCommit(
+            oid: commit.sha,
+            messageHeadline: commit.displayHeadline,
+            message: commit.message,
+            committedDate: commit.committedAt,
+            url: commit.htmlURL,
+            ciContexts: []
+        )
     }
 
     private var submittedFields: [(label: String, value: String)] {
@@ -477,5 +522,72 @@ private struct WatchFeedbackCommentTimelineRow: View {
 
     private var roleIconColor: Color {
         comment.isDeveloper ? .green : .blue
+    }
+}
+
+private struct WatchFeedbackReferencedCommitTimelineRow: View {
+    let actor: String
+    let createdAt: Date
+    let commit: FeedbackReferencedCommit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Text(actorDisplayName)
+                    .etFont(.system(size: 9, weight: .semibold))
+
+                Image(systemName: "arrow.triangle.branch")
+                    .etFont(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.purple)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(.purple.opacity(0.20), in: Capsule())
+
+                Spacer(minLength: 6)
+
+                Text(createdAt.formatted(date: .numeric, time: .shortened))
+                    .etFont(.system(size: 8))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(NSLocalizedString("引用了 Commit", comment: "Referenced commit timeline action"))
+                .etFont(.system(size: 9))
+                .foregroundStyle(.secondary)
+
+            Text(commit.displayHeadline)
+                .etFont(.caption2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+
+            HStack(spacing: 5) {
+                Text(commit.displayShortSHA)
+                    .etFont(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
+                if commit.verified {
+                    Image(systemName: "checkmark.seal.fill")
+                        .etFont(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.green)
+                        .accessibilityLabel(NSLocalizedString("已验证", comment: "Verified commit badge"))
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(.purple)
+                .frame(width: 3)
+                .padding(.vertical, 5)
+                .padding(.leading, 3)
+        }
+        .padding(.vertical, 1)
+    }
+
+    private var actorDisplayName: String {
+        let trimmed = actor.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? NSLocalizedString("开发者", comment: "Developer fallback author") : trimmed
     }
 }

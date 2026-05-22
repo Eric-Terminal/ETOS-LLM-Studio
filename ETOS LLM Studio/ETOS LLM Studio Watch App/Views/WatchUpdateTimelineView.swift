@@ -18,6 +18,12 @@ struct WatchUpdateTimelineView: View {
     @State private var webAuthLauncher = UpdateTimelineWatchWebAuthLauncher()
     @State private var preparedSummaryMarkdown: ETPreparedMarkdownRenderPayload?
 
+    let highlightedCommit: UpdateTimelineCommit?
+
+    init(highlightedCommit: UpdateTimelineCommit? = nil) {
+        self.highlightedCommit = highlightedCommit
+    }
+
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
     }
@@ -28,6 +34,23 @@ struct WatchUpdateTimelineView: View {
 
     var body: some View {
         List {
+            if let highlightedCommit {
+                Section {
+                    NavigationLink {
+                        WatchUpdateTimelineCommitDetailView(commit: highlightedCommit)
+                    } label: {
+                        WatchUpdateTimelineRow(
+                            commit: highlightedCommit,
+                            isSelected: true,
+                            isFirst: true,
+                            isLast: true
+                        )
+                    }
+                } header: {
+                    Text(NSLocalizedString("关联 Commit", comment: "Linked update timeline commit section"))
+                }
+            }
+
             Section {
                 if commits.isEmpty {
                     Text(NSLocalizedString("暂无时间线", comment: "Update timeline empty title"))
