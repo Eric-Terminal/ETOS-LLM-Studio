@@ -339,6 +339,7 @@ description: "demo"
         #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "HEAD", path: ""))
         #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/tree/main/.claude/skills/demo") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
         #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/blob/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/raw/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
         #expect(SkillGitHubImporter.parseGitHubURL("https://raw.githubusercontent.com/acme/skills/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
     }
 

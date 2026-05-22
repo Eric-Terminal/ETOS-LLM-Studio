@@ -224,13 +224,13 @@ public enum SkillGitHubImporter {
             return GitHubRepoInfo(owner: owner, repo: repo, branch: "HEAD", path: "")
         }
         guard pathComponents.count >= 4,
-              pathComponents[2] == "tree" || pathComponents[2] == "blob" else {
+              pathComponents[2] == "tree" || pathComponents[2] == "blob" || pathComponents[2] == "raw" else {
             return nil
         }
 
         let branch = pathComponents[3]
         let rawPath = pathComponents.dropFirst(4).joined(separator: "/")
-        let path = pathComponents[2] == "blob" ? directoryPathForBlob(rawPath) : rawPath
+        let path = pathComponents[2] == "tree" ? rawPath : directoryPathForBlob(rawPath)
         return GitHubRepoInfo(owner: owner, repo: repo, branch: branch, path: path)
     }
 
