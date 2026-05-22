@@ -39,6 +39,38 @@ allowed-tools: read_file, search_web
         #expect(body == "第一行正文\n第二行正文")
     }
 
+    @Test("frontmatter 解析支持 YAML 列表与多行文本")
+    func testFrontmatterParserSupportsYAMLCollections() {
+        let content = """
+---
+name: yaml-demo
+description: >
+  第一行描述
+  第二行描述
+when_to_use: |
+  用户需要跨文件整理资料时使用。
+  scripts 只能读取源码，不能执行。
+compatibility:
+  需要完整技能目录。
+allowed-tools:
+  - read_file
+  - search_web
+arguments: [topic, depth]
+---
+
+正文
+"""
+
+        let frontmatter = SkillFrontmatterParser.parse(content)
+
+        #expect(frontmatter["name"] == "yaml-demo")
+        #expect(frontmatter["description"] == "第一行描述 第二行描述")
+        #expect(frontmatter["when_to_use"] == "用户需要跨文件整理资料时使用。\nscripts 只能读取源码，不能执行。")
+        #expect(frontmatter["compatibility"] == "需要完整技能目录。")
+        #expect(frontmatter["allowed-tools"] == "read_file, search_web")
+        #expect(frontmatter["arguments"] == "topic, depth")
+    }
+
     @Test("SkillManifestResolver 使用目录名和正文首段补齐缺省元数据")
     func testSkillManifestResolverUsesOfficialFallbacks() throws {
         let content = """
