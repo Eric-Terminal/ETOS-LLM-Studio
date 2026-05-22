@@ -547,6 +547,14 @@ description: "demo"
         #expect(chunkResult.contains("line1002 "))
         #expect(chunkResult.contains("line1003 "))
 
+        let aliasChunkResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"skill_name":"\#(skillName)","action":"read-resource","resource_path":"references/large.md","startLine":"1002","maxLines":"2"}"#
+        )
+        #expect(aliasChunkResult.contains("第 1002-1003 行"))
+        #expect(aliasChunkResult.contains("line1002 "))
+        #expect(aliasChunkResult.contains("line1003 "))
+
         await #expect(throws: SkillStoreError.self) {
             _ = try await manager.executeToolFromChat(
                 toolName: SkillManager.chatToolName,

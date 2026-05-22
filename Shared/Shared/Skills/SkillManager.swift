@@ -46,6 +46,89 @@ public final class SkillManager: ObservableObject {
         }
     }
 
+    private struct UseSkillArgs: Decodable {
+        let name: String
+        let action: String?
+        let path: String?
+        let startLine: Int?
+        let maxLines: Int?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+            guard let name = try Self.decodeString(
+                from: container,
+                keys: ["name", "skill_name", "skillName", "skill"]
+            ) else {
+                throw DecodingError.keyNotFound(
+                    FlexibleCodingKey("name"),
+                    DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing skill name")
+                )
+            }
+            self.name = name
+            self.action = try Self.decodeString(from: container, keys: ["action", "operation"])
+            self.path = try Self.decodeString(
+                from: container,
+                keys: ["path", "resource_path", "resourcePath", "file_path", "filePath", "file"]
+            )
+            self.startLine = try Self.decodeInt(
+                from: container,
+                keys: ["start_line", "startLine", "line_start", "lineStart"]
+            )
+            self.maxLines = try Self.decodeInt(
+                from: container,
+                keys: ["max_lines", "maxLines", "line_count", "lineCount", "limit"]
+            )
+        }
+
+        private static func decodeString(
+            from container: KeyedDecodingContainer<FlexibleCodingKey>,
+            keys: [String]
+        ) throws -> String? {
+            for key in keys {
+                let codingKey = FlexibleCodingKey(key)
+                if let value = try? container.decodeIfPresent(String.self, forKey: codingKey) {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        private static func decodeInt(
+            from container: KeyedDecodingContainer<FlexibleCodingKey>,
+            keys: [String]
+        ) throws -> Int? {
+            for key in keys {
+                let codingKey = FlexibleCodingKey(key)
+                if let value = try? container.decodeIfPresent(Int.self, forKey: codingKey) {
+                    return value
+                }
+                if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
+                   let intValue = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    return intValue
+                }
+            }
+            return nil
+        }
+    }
+
+    private struct FlexibleCodingKey: CodingKey {
+        var stringValue: String
+        var intValue: Int?
+
+        init(_ stringValue: String) {
+            self.stringValue = stringValue
+        }
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+        }
+
+        init?(intValue: Int) {
+            self.stringValue = String(intValue)
+            self.intValue = intValue
+        }
+    }
+
     private enum DefaultsKey {
         static let enabledSkillNames = "skills.enabledNames"
         static let chatToolsEnabled = "skills.chatToolsEnabled"
@@ -419,14 +502,6 @@ public final class SkillManager: ObservableObject {
             throw SkillStoreError.saveFailed("Agent Skills 总开关已关闭。")
         }
 
-        struct UseSkillArgs: Decodable {
-            let name: String
-            let action: String?
-            let path: String?
-            let start_line: Int?
-            let max_lines: Int?
-        }
-
         guard let data = argumentsJSON.data(using: .utf8),
               let args = try? JSONDecoder().decode(UseSkillArgs.self, from: data) else {
             throw SkillStoreError.saveFailed("无法解析 use_skill 参数，请提供 name，path 可选。")
@@ -471,12 +546,12 @@ public final class SkillManager: ObservableObject {
                 guard !path.isEmpty else {
                     throw SkillStoreError.saveFailed("read_resource 必须提供 path。")
                 }
-                if args.start_line != nil || args.max_lines != nil {
+                if args.startLine != nil || args.maxLines != nil {
                     let chunk = try await SkillStore.loadSkillReadableResourceChunk(
                         skillName: name,
                         relativePath: path,
-                        startLine: args.start_line ?? 1,
-                        maxLines: args.max_lines ?? 200
+                        startLine: args.startLine ?? 1,
+                        maxLines: args.maxLines ?? 200
                     )
                     return Self.formatResourceChunk(skillName: name, chunk: chunk)
                 }
