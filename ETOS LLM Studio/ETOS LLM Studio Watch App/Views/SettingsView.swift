@@ -251,10 +251,6 @@ struct SettingsView: View {
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
                     }
-
-                    NavigationLink(destination: WatchUpdateTimelineView()) {
-                        settingsNavigationLabel("检查更新", icon: .about)
-                    }
                 }
                 
                 // MARK: - 公告通知 Section

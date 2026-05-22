@@ -263,12 +263,6 @@ struct SettingsView: View {
                 } label: {
                     SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
                 }
-
-                NavigationLink {
-                    UpdateTimelineView()
-                } label: {
-                    SettingsListIconLabel("检查更新", icon: .about)
-                }
             }
 
             // MARK: - 公告通知 Section
