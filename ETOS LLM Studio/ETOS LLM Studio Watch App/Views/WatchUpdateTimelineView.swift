@@ -167,9 +167,21 @@ struct WatchUpdateTimelineView: View {
 
 private struct WatchUpdateTimelineBrowserView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared
+    @State private var loadedCommits: [UpdateTimelineCommit] = []
+    @State private var isLoadingMoreCommits = false
+    private let maxCommitsPerPage = 20
+    private let loadMoreTriggerRemainingCount = 4
 
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
+    }
+
+    private var hasMoreCommits: Bool {
+        loadedCommits.count < commits.count
+    }
+
+    private var shouldShowLoadingMoreFooter: Bool {
+        isLoadingMoreCommits || hasMoreCommits
     }
 
     var body: some View {
@@ -179,8 +191,8 @@ private struct WatchUpdateTimelineBrowserView: View {
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(commits.enumerated()), id: \.element.id) { index, _ in
-                    let commit = commits[index]
+                ForEach(Array(loadedCommits.enumerated()), id: \.element.id) { index, item in
+                    let commit = item.element
                     NavigationLink {
                         WatchUpdateTimelineCommitDetailView(commit: commit)
                     } label: {
@@ -188,16 +200,67 @@ private struct WatchUpdateTimelineBrowserView: View {
                             commit: commit,
                             isSelected: index == 0,
                             isFirst: index == 0,
-                            isLast: index == commits.count - 1
+                            isLast: index == loadedCommits.count - 1 && !hasMoreCommits
                         )
                     }
+                    .onAppear {
+                        loadMoreCommitsIfNeeded(currentID: commit.id)
+                    }
                 }
-                Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+
+                if shouldShowLoadingMoreFooter {
+                    loadingMoreFooter
+                }
             }
         }
         .navigationTitle(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
+        .onAppear {
+            syncLoadedCommitsWithSource()
+        }
+        .onChange(of: commits) { _, _ in
+            syncLoadedCommitsWithSource()
+        }
+    }
+
+    private func appendNextCommitsPage() {
+        guard !isLoadingMoreCommits, hasMoreCommits else { return }
+        isLoadingMoreCommits = true
+
+        let start = loadedCommits.count
+        let end = min(start + maxCommitsPerPage, commits.count)
+        guard start < end else {
+            isLoadingMoreCommits = false
+            return
+        }
+        loadedCommits.append(contentsOf: commits[start..<end])
+        DispatchQueue.main.async {
+            isLoadingMoreCommits = false
+        }
+    }
+
+    private func syncLoadedCommitsWithSource() {
+        guard !commits.isEmpty else {
+            loadedCommits = []
+            isLoadingMoreCommits = false
+            return
+        }
+        let loadedCount = min(max(loadedCommits.count, maxCommitsPerPage), commits.count)
+        loadedCommits = Array(commits.prefix(loadedCount))
+    }
+
+    private func loadMoreCommitsIfNeeded(currentID: String) {
+        guard loadedCommits.suffix(loadMoreTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
+        appendNextCommitsPage()
+    }
+
+    private var loadingMoreFooter: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(NSLocalizedString("正在加载", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
