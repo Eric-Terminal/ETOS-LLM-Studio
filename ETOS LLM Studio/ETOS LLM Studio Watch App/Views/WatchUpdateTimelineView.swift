@@ -15,27 +15,11 @@ import AuthenticationServices
 struct WatchUpdateTimelineView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var crownIndex: Double = 0
     @State private var webAuthLauncher = UpdateTimelineWatchWebAuthLauncher()
     @State private var preparedSummaryMarkdown: ETPreparedMarkdownRenderPayload?
 
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
-    }
-
-    private var maxIndex: Double {
-        Double(max(commits.count - 1, 0))
-    }
-
-    private var selectedIndex: Int {
-        min(max(Int(crownIndex.rounded()), 0), max(commits.count - 1, 0))
-    }
-
-    private var visibleCommitIndices: [Int] {
-        guard !commits.isEmpty else { return [] }
-        let lowerBound = max(selectedIndex - 1, 0)
-        let upperBound = min(selectedIndex + 1, commits.count - 1)
-        return Array(lowerBound...upperBound)
     }
 
     var body: some View {
@@ -45,14 +29,17 @@ struct WatchUpdateTimelineView: View {
                     Text(NSLocalizedString("暂无时间线", comment: "Update timeline empty title"))
                         .foregroundStyle(.secondary)
                 } else {
-                    crownTimeline
+                    NavigationLink {
+                        WatchUpdateTimelineBrowserView()
+                    } label: {
+                        statusRow(
+                            NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"),
+                            value: String(format: NSLocalizedString("共 %d 项", comment: "Total item count"), commits.count)
+                        )
+                    }
                 }
             } header: {
                 Text(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
-            } footer: {
-                Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -115,41 +102,6 @@ struct WatchUpdateTimelineView: View {
         .task(id: manager.state.summaryText) {
             await prepareSummaryMarkdown(for: manager.state.summaryText)
         }
-        .onChange(of: commits.count) { _, newCount in
-            crownIndex = min(crownIndex, Double(max(newCount - 1, 0)))
-        }
-    }
-
-    private var crownTimeline: some View {
-        VStack(spacing: 6) {
-            ForEach(visibleCommitIndices, id: \.self) { index in
-                let commit = commits[index]
-                NavigationLink {
-                    WatchUpdateTimelineCommitDetailView(commit: commit)
-                } label: {
-                    WatchUpdateTimelineRow(
-                        commit: commit,
-                        isSelected: selectedIndex == index,
-                        isFirst: index == 0,
-                        isLast: index == commits.count - 1
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(minHeight: 168)
-        .focusable(true)
-        .digitalCrownRotation(
-            $crownIndex,
-            from: 0,
-            through: maxIndex,
-            by: 1,
-            sensitivity: .medium,
-            isContinuous: false,
-            isHapticFeedbackEnabled: true
-        )
-        .animation(.snappy, value: selectedIndex)
-        .listRowInsets(EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6))
     }
 
     private var autoCheckBinding: Binding<Bool> {
@@ -197,6 +149,76 @@ struct WatchUpdateTimelineView: View {
         let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: summary)
         guard !Task.isCancelled else { return }
         preparedSummaryMarkdown = prepared
+    }
+}
+
+private struct WatchUpdateTimelineBrowserView: View {
+    @ObservedObject private var manager = UpdateTimelineManager.shared
+    @State private var crownIndex: Double = 0
+
+    private var commits: [UpdateTimelineCommit] {
+        manager.displayedCommits
+    }
+
+    private var maxIndex: Double {
+        Double(max(commits.count - 1, 0))
+    }
+
+    private var selectedIndex: Int {
+        min(max(Int(crownIndex.rounded()), 0), max(commits.count - 1, 0))
+    }
+
+    var body: some View {
+        Group {
+            if commits.isEmpty {
+                Text(NSLocalizedString("暂无时间线", comment: "Update timeline empty title"))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                browserContent
+            }
+        }
+        .navigationTitle(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
+        .onChange(of: commits.count) { _, newCount in
+            crownIndex = min(crownIndex, Double(max(newCount - 1, 0)))
+        }
+    }
+
+    private var browserContent: some View {
+        let commit = commits[selectedIndex]
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(String(format: NSLocalizedString("第 %d / %d 条", comment: "Item position counter"), selectedIndex + 1, commits.count))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+
+            NavigationLink {
+                WatchUpdateTimelineCommitDetailView(commit: commit)
+            } label: {
+                WatchUpdateTimelineRow(
+                    commit: commit,
+                    isSelected: true,
+                    isFirst: true,
+                    isLast: true
+                )
+            }
+            .buttonStyle(.plain)
+            .focusable(true)
+            .digitalCrownRotation(
+                $crownIndex,
+                from: 0,
+                through: maxIndex,
+                by: 1,
+                sensitivity: .medium,
+                isContinuous: false,
+                isHapticFeedbackEnabled: true
+            )
+
+            Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+        .animation(.snappy, value: selectedIndex)
     }
 }
 
