@@ -10,11 +10,16 @@
 import Foundation
 
 public enum SkillGitHubImporter {
-    private struct GitHubRepoInfo {
+    struct GitHubRepoInfo: Equatable {
         let owner: String
         let repo: String
         let branch: String
         let path: String
+    }
+
+    struct GitHubListedFile: Equatable {
+        let relativePath: String
+        let downloadURL: String
     }
 
     private struct GitHubContentItem: Decodable {
@@ -34,7 +39,7 @@ public enum SkillGitHubImporter {
             throw SkillStoreError.networkError("无效的 GitHub 仓库链接。")
         }
 
-        var files: [(relativePath: String, downloadURL: String)] = []
+        var files: [GitHubListedFile] = []
         try await listFilesRecursively(
             owner: info.owner,
             repo: info.repo,
@@ -44,15 +49,13 @@ public enum SkillGitHubImporter {
             result: &files
         )
 
-        guard !files.isEmpty else {
+        let selectedFiles = try selectedFilesForImport(files)
+        guard !selectedFiles.isEmpty else {
             throw SkillStoreError.networkError("仓库目录为空，未找到可导入文件。")
-        }
-        guard files.contains(where: { $0.relativePath == "SKILL.md" }) else {
-            throw SkillStoreError.missingSkillFile
         }
 
         var fileContents: [String: Data] = [:]
-        for file in files {
+        for file in selectedFiles {
             let data = try await downloadData(url: file.downloadURL)
             fileContents[file.relativePath] = data
         }
@@ -70,27 +73,22 @@ public enum SkillGitHubImporter {
         return SkillImportResult(skillName: skillName, files: fileContents)
     }
 
-    private static func parseGitHubURL(_ url: String) -> GitHubRepoInfo? {
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let regex = try! NSRegularExpression(
-            pattern: #"^https://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+)(/.*)?)?$"#,
-            options: [.caseInsensitive]
-        )
-        let range = NSRange(location: 0, length: trimmed.utf16.count)
-        guard let match = regex.firstMatch(in: trimmed, options: [], range: range) else { return nil }
-
-        func value(at index: Int) -> String {
-            guard let range = Range(match.range(at: index), in: trimmed), match.range(at: index).location != NSNotFound else {
-                return ""
-            }
-            return String(trimmed[range])
+    static func parseGitHubURL(_ url: String) -> GitHubRepoInfo? {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let components = URLComponents(string: trimmed),
+              let host = components.host?.lowercased() else {
+            return nil
         }
 
-        let owner = value(at: 1)
-        let repo = value(at: 2)
-        let branch = value(at: 3).isEmpty ? "HEAD" : value(at: 3)
-        let rawPath = value(at: 4).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return GitHubRepoInfo(owner: owner, repo: repo, branch: branch, path: rawPath)
+        let pathComponents = decodedPathComponents(from: components.percentEncodedPath)
+        if host == "github.com" {
+            return parseGitHubWebURL(pathComponents)
+        }
+        if host == "raw.githubusercontent.com" {
+            return parseGitHubRawURL(pathComponents)
+        }
+        return nil
     }
 
     private static func listFilesRecursively(
@@ -99,7 +97,7 @@ public enum SkillGitHubImporter {
         branch: String,
         dirPath: String,
         basePath: String,
-        result: inout [(relativePath: String, downloadURL: String)]
+        result: inout [GitHubListedFile]
     ) async throws {
         let url = try makeGitHubContentsAPIURL(owner: owner, repo: repo, branch: branch, path: dirPath)
         let data = try await fetchData(url: url)
@@ -113,13 +111,8 @@ public enum SkillGitHubImporter {
                 }
                 let relative = makeRelativePath(itemPath: item.path, basePath: basePath)
                 guard !relative.isEmpty else { continue }
-                guard SkillResourcePolicy.canList(relativePath: relative) else { continue }
-                result.append((relative, downloadURL))
+                result.append(GitHubListedFile(relativePath: relative, downloadURL: downloadURL))
             case "dir":
-                let relative = makeRelativePath(itemPath: item.path, basePath: basePath)
-                if !relative.isEmpty, !SkillResourcePolicy.canList(relativePath: relative) {
-                    continue
-                }
                 try await listFilesRecursively(
                     owner: owner,
                     repo: repo,
@@ -131,6 +124,37 @@ public enum SkillGitHubImporter {
             default:
                 continue
             }
+        }
+    }
+
+    static func selectedFilesForImport(_ files: [GitHubListedFile]) throws -> [GitHubListedFile] {
+        let rootFiles = normalizedFiles(files, rootPrefix: "")
+        if rootFiles.contains(where: { $0.relativePath == SkillStore.defaultSkillFileName }) {
+            return rootFiles
+        }
+
+        let skillFilePaths = files
+            .map(\.relativePath)
+            .filter { URL(fileURLWithPath: $0).lastPathComponent == SkillStore.defaultSkillFileName }
+        guard skillFilePaths.count == 1, let skillFilePath = skillFilePaths.first else {
+            if skillFilePaths.count > 1 {
+                throw SkillStoreError.saveFailed("仓库中找到多个 SKILL.md，请使用 GitHub tree 链接指向具体技能目录。")
+            }
+            throw SkillStoreError.missingSkillFile
+        }
+
+        let rootPrefix = String(skillFilePath.dropLast(SkillStore.defaultSkillFileName.count))
+        return normalizedFiles(files, rootPrefix: rootPrefix)
+    }
+
+    private static func normalizedFiles(_ files: [GitHubListedFile], rootPrefix: String) -> [GitHubListedFile] {
+        files.compactMap { file in
+            guard file.relativePath.hasPrefix(rootPrefix) else { return nil }
+            let relativePath = String(file.relativePath.dropFirst(rootPrefix.count))
+            guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else {
+                return nil
+            }
+            return GitHubListedFile(relativePath: normalizedPath, downloadURL: file.downloadURL)
         }
     }
 
@@ -181,6 +205,55 @@ public enum SkillGitHubImporter {
             throw SkillStoreError.networkError("无法构造 GitHub API 地址。")
         }
         return url
+    }
+
+    private static func parseGitHubWebURL(_ pathComponents: [String]) -> GitHubRepoInfo? {
+        guard pathComponents.count >= 2 else { return nil }
+        let owner = pathComponents[0]
+        let repo = normalizedRepoName(pathComponents[1])
+        guard !owner.isEmpty, !repo.isEmpty else { return nil }
+        guard pathComponents.count > 2 else {
+            return GitHubRepoInfo(owner: owner, repo: repo, branch: "HEAD", path: "")
+        }
+        guard pathComponents.count >= 4,
+              pathComponents[2] == "tree" || pathComponents[2] == "blob" else {
+            return nil
+        }
+
+        let branch = pathComponents[3]
+        let rawPath = pathComponents.dropFirst(4).joined(separator: "/")
+        let path = pathComponents[2] == "blob" ? directoryPathForBlob(rawPath) : rawPath
+        return GitHubRepoInfo(owner: owner, repo: repo, branch: branch, path: path)
+    }
+
+    private static func parseGitHubRawURL(_ pathComponents: [String]) -> GitHubRepoInfo? {
+        guard pathComponents.count >= 4 else { return nil }
+        let owner = pathComponents[0]
+        let repo = normalizedRepoName(pathComponents[1])
+        let branch = pathComponents[2]
+        let rawPath = pathComponents.dropFirst(3).joined(separator: "/")
+        guard !owner.isEmpty, !repo.isEmpty, !branch.isEmpty else { return nil }
+        return GitHubRepoInfo(owner: owner, repo: repo, branch: branch, path: directoryPathForBlob(rawPath))
+    }
+
+    private static func decodedPathComponents(from percentEncodedPath: String) -> [String] {
+        percentEncodedPath
+            .split(separator: "/")
+            .map { String($0).removingPercentEncoding ?? String($0) }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func normalizedRepoName(_ repo: String) -> String {
+        repo.hasSuffix(".git") ? String(repo.dropLast(4)) : repo
+    }
+
+    private static func directoryPathForBlob(_ path: String) -> String {
+        let normalized = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard URL(fileURLWithPath: normalized).lastPathComponent == SkillStore.defaultSkillFileName else {
+            return normalized
+        }
+        let directory = URL(fileURLWithPath: normalized).deletingLastPathComponent().relativePath
+        return directory == "." ? "" : directory
     }
 
     private static func fetchData(url: URL) async throws -> Data {

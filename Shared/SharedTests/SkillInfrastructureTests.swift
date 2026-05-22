@@ -249,6 +249,39 @@ description: "demo"
         #expect(!nameEnum.contains(.string(disabledSkillName)))
     }
 
+    @Test("GitHub 技能导入支持 tree、blob 与 raw 链接解析")
+    func testGitHubSkillImporterParsesCommonURLs() {
+        #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "HEAD", path: ""))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/tree/main/.claude/skills/demo") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/blob/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://raw.githubusercontent.com/acme/skills/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
+    }
+
+    @Test("GitHub 技能导入会展开唯一嵌套技能目录")
+    func testGitHubSkillImporterSelectsSingleNestedSkillDirectory() throws {
+        let files = [
+            SkillGitHubImporter.GitHubListedFile(relativePath: ".claude/skills/demo/SKILL.md", downloadURL: "https://example.com/SKILL.md"),
+            SkillGitHubImporter.GitHubListedFile(relativePath: ".claude/skills/demo/references/guide.md", downloadURL: "https://example.com/guide.md"),
+            SkillGitHubImporter.GitHubListedFile(relativePath: "README.md", downloadURL: "https://example.com/README.md")
+        ]
+
+        let selected = try SkillGitHubImporter.selectedFilesForImport(files)
+
+        #expect(selected.map(\.relativePath).sorted() == ["SKILL.md", "references/guide.md"])
+    }
+
+    @Test("GitHub 技能导入遇到多个嵌套技能时要求用户选择具体目录")
+    func testGitHubSkillImporterRejectsMultipleNestedSkills() throws {
+        let files = [
+            SkillGitHubImporter.GitHubListedFile(relativePath: ".claude/skills/a/SKILL.md", downloadURL: "https://example.com/a.md"),
+            SkillGitHubImporter.GitHubListedFile(relativePath: ".claude/skills/b/SKILL.md", downloadURL: "https://example.com/b.md")
+        ]
+
+        #expect(throws: SkillStoreError.self) {
+            _ = try SkillGitHubImporter.selectedFilesForImport(files)
+        }
+    }
+
     @MainActor
     @Test("use_skill 可列出并读取技能包文本资源但不读取二进制资源")
     func testUseSkillReadsBundledTextResources() async throws {
