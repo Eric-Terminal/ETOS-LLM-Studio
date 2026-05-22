@@ -7,17 +7,12 @@
 // ============================================================================
 
 import Foundation
-import SQLite3
+import GRDB
 
 extension AppToolManager {
     private static var sqliteToolDefaultMaxRows: Int { 50 }
     private static var sqliteToolMaximumMaxRows: Int { 500 }
     private static var sqliteToolMaxBlobPreviewBytes: Int { 1024 }
-    /// 使用 SQLite 官方约定的 transient 析构标记，强制 SQLite 复制绑定文本。
-    /// 这里改为从指针位模式转换，避免在 arm64_32（watchOS 真机）上因 Int/函数指针尺寸不一致触发启动崩溃。
-    private nonisolated static var sqliteTransientDestructor: sqlite3_destructor_type {
-        unsafeBitCast(UnsafeMutableRawPointer(bitPattern: -1), to: sqlite3_destructor_type.self)
-    }
 
     static func parseSQLiteDatabase(rawValue: String) -> AppToolSQLiteDatabase? {
         AppToolSQLiteDatabase(
@@ -50,7 +45,7 @@ extension AppToolManager {
     static func withSQLiteConnection<T>(
         database: AppToolSQLiteDatabase,
         readOnly: Bool,
-        operation: (OpaquePointer) throws -> T
+        operation: (Database) throws -> T
     ) throws -> T {
         let databaseURL = sqliteDatabaseURL(for: database)
         guard FileManager.default.fileExists(atPath: databaseURL.path) else {
@@ -62,36 +57,23 @@ extension AppToolManager {
             )
         }
 
-        let flags: Int32
-        if readOnly {
-            flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
-        } else {
-            flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
-        }
-
-        var connection: OpaquePointer?
-        let openResult = sqlite3_open_v2(databaseURL.path, &connection, flags, nil)
-        guard openResult == SQLITE_OK, let connection else {
-            let fallback = NSLocalizedString("打开数据库失败。", comment: "SQLite open database failure")
-            let message = sqliteErrorMessage(database: connection, fallback: fallback)
-            if let connection {
-                sqlite3_close(connection)
-            }
+        do {
+            return try Persistence.withRawDatabase(
+                at: databaseURL,
+                readOnly: readOnly,
+                operation: operation
+            )
+        } catch let connectionError as Persistence.RawSQLiteConnectionError {
             throw AppToolExecutionError.invalidArguments(
                 String(
                     format: NSLocalizedString("错误：无法打开%@数据库：%@", comment: "SQLite open database error"),
                     database.displayName,
-                    message
+                    connectionError.localizedDescription
                 )
             )
+        } catch {
+            throw error
         }
-
-        defer {
-            sqlite3_close(connection)
-        }
-
-        sqlite3_busy_timeout(connection, 5_000)
-        return try operation(connection)
     }
 
     static func listSQLiteTables(
@@ -99,7 +81,7 @@ extension AppToolManager {
         includeInternal: Bool,
         includeCreateSQL: Bool
     ) throws -> [String: Any] {
-        try withSQLiteConnection(database: database, readOnly: true) { connection in
+        try withSQLiteConnection(database: database, readOnly: true) { db in
             let sql: String
             if includeInternal {
                 sql = """
@@ -118,32 +100,13 @@ extension AppToolManager {
                 """
             }
 
-            let statement = try prepareSQLiteStatement(
-                on: connection,
-                sql: sql,
-                allowedLeadingKeywords: ["SELECT"]
-            )
-            defer { sqlite3_finalize(statement) }
-
             var tables: [[String: Any]] = []
-            while true {
-                let stepResult = sqlite3_step(statement)
-                if stepResult == SQLITE_DONE {
-                    break
-                }
-                guard stepResult == SQLITE_ROW else {
-                    throw AppToolExecutionError.invalidArguments(
-                        sqliteErrorMessage(
-                            database: connection,
-                            fallback: NSLocalizedString("读取数据库表结构失败。", comment: "SQLite list tables step failure")
-                        )
-                    )
-                }
-
-                let tableName = sqliteTextColumn(from: statement, at: 0) ?? ""
-                let tableType = sqliteTextColumn(from: statement, at: 1) ?? "table"
-                let createSQL = sqliteTextColumn(from: statement, at: 2)
-                let columns = try loadSQLiteTableColumns(connection: connection, tableName: tableName)
+            let rows = try Row.fetchAll(db, sql: sql)
+            for row in rows {
+                let tableName = (row[0] as String?) ?? ""
+                let tableType = (row[1] as String?) ?? "table"
+                let createSQL = row[2] as String?
+                let columns = try loadSQLiteTableColumns(db: db, tableName: tableName)
 
                 var item: [String: Any] = [
                     "name": tableName,
@@ -172,33 +135,15 @@ extension AppToolManager {
         parameters: [JSONValue],
         maxRows: Int
     ) throws -> [String: Any] {
-        try withSQLiteConnection(database: database, readOnly: true) { connection in
-            let statement = try prepareSQLiteStatement(
-                on: connection,
-                sql: sql,
-                allowedLeadingKeywords: ["SELECT", "WITH", "PRAGMA"]
-            )
-            defer { sqlite3_finalize(statement) }
-
-            try bindSQLiteParameters(parameters, to: statement, connection: connection)
-            let columnNames = sqliteColumnNames(from: statement)
+        try withSQLiteConnection(database: database, readOnly: true) { db in
+            try validateSQLiteStatement(db: db, sql: sql, allowedLeadingKeywords: ["SELECT", "WITH", "PRAGMA"])
+            let arguments = try makeStatementArguments(parameters)
+            let cursor = try Row.fetchCursor(db, sql: sql, arguments: arguments)
+            let columnNames = uniqueColumnNames(from: cursor.columnNames)
             var rows: [[String: Any]] = []
             var wasTruncated = false
 
-            while true {
-                let stepResult = sqlite3_step(statement)
-                if stepResult == SQLITE_DONE {
-                    break
-                }
-                guard stepResult == SQLITE_ROW else {
-                    throw AppToolExecutionError.invalidArguments(
-                        sqliteErrorMessage(
-                            database: connection,
-                            fallback: NSLocalizedString("执行查询失败。", comment: "SQLite query step failure")
-                        )
-                    )
-                }
-
+            while let row = try cursor.next() {
                 if rows.count >= maxRows {
                     wasTruncated = true
                     continue
@@ -206,7 +151,7 @@ extension AppToolManager {
 
                 var rowPayload: [String: Any] = [:]
                 for (index, name) in columnNames.enumerated() {
-                    rowPayload[name] = sqliteColumnValue(from: statement, at: Int32(index))
+                    rowPayload[name] = sqliteColumnValue(from: row, at: index)
                 }
                 rows.append(rowPayload)
             }
@@ -237,35 +182,16 @@ extension AppToolManager {
             )
         }
 
-        return try withSQLiteConnection(database: database, readOnly: false) { connection in
-            let statement = try prepareSQLiteStatement(
-                on: connection,
-                sql: sql,
-                allowedLeadingKeywords: ["INSERT", "UPDATE", "DELETE", "REPLACE"]
-            )
-            defer { sqlite3_finalize(statement) }
-
-            try bindSQLiteParameters(parameters, to: statement, connection: connection)
-
-            let returningColumns = sqliteColumnNames(from: statement)
+        return try withSQLiteConnection(database: database, readOnly: false) { db in
+            try validateSQLiteStatement(db: db, sql: sql, allowedLeadingKeywords: ["INSERT", "UPDATE", "DELETE", "REPLACE"])
+            let arguments = try makeStatementArguments(parameters)
+            let cursor = try Row.fetchCursor(db, sql: sql, arguments: arguments)
+            let returningColumns = uniqueColumnNames(from: cursor.columnNames)
             let hasReturningRows = !returningColumns.isEmpty
             var returningRows: [[String: Any]] = []
             var returningTruncated = false
 
-            while true {
-                let stepResult = sqlite3_step(statement)
-                if stepResult == SQLITE_DONE {
-                    break
-                }
-                guard stepResult == SQLITE_ROW else {
-                    throw AppToolExecutionError.invalidArguments(
-                        sqliteErrorMessage(
-                            database: connection,
-                            fallback: NSLocalizedString("执行写入 SQL 失败。", comment: "Mutate SQLite step failure")
-                        )
-                    )
-                }
-
+            while let row = try cursor.next() {
                 if returningRows.count >= returningMaxRows {
                     returningTruncated = true
                     continue
@@ -273,16 +199,16 @@ extension AppToolManager {
 
                 var rowPayload: [String: Any] = [:]
                 for (index, name) in returningColumns.enumerated() {
-                    rowPayload[name] = sqliteColumnValue(from: statement, at: Int32(index))
+                    rowPayload[name] = sqliteColumnValue(from: row, at: index)
                 }
                 returningRows.append(rowPayload)
             }
 
             var payload: [String: Any] = [
                 "database": database.rawValue,
-                "affectedRows": Int(sqlite3_changes(connection)),
-                "totalChanges": Int(sqlite3_total_changes(connection)),
-                "lastInsertRowID": Int64(sqlite3_last_insert_rowid(connection))
+                "affectedRows": db.changesCount,
+                "totalChanges": db.totalChangesCount,
+                "lastInsertRowID": db.lastInsertedRowID
             ]
 
             if hasReturningRows {
@@ -295,11 +221,11 @@ extension AppToolManager {
         }
     }
 
-    private static func prepareSQLiteStatement(
-        on connection: OpaquePointer,
+    private static func validateSQLiteStatement(
+        db: Database,
         sql: String,
         allowedLeadingKeywords: Set<String>
-    ) throws -> OpaquePointer {
+    ) throws {
         let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSQL.isEmpty else {
             throw AppToolExecutionError.invalidArguments(
@@ -318,113 +244,24 @@ extension AppToolManager {
             )
         }
 
-        var statement: OpaquePointer?
-        var tail: UnsafePointer<Int8>?
-        let prepareResult = sqlite3_prepare_v2(connection, trimmedSQL, -1, &statement, &tail)
-        guard prepareResult == SQLITE_OK, let statement else {
-            throw AppToolExecutionError.invalidArguments(
-                sqliteErrorMessage(
-                    database: connection,
-                    fallback: NSLocalizedString("SQL 预编译失败。", comment: "SQLite prepare failure")
-                )
-            )
-        }
-
-        let remainingText = tail.map { String(cString: $0) } ?? ""
-        let normalizedRemaining = remainingText
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: ";"))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !normalizedRemaining.isEmpty {
-            sqlite3_finalize(statement)
-            throw AppToolExecutionError.invalidArguments(
-                NSLocalizedString("错误：仅支持执行单条 SQL 语句。", comment: "SQLite multiple statements unsupported")
-            )
-        }
-
-        return statement
-    }
-
-    private static func bindSQLiteParameters(
-        _ parameters: [JSONValue],
-        to statement: OpaquePointer,
-        connection: OpaquePointer
-    ) throws {
-        let expectedCount = Int(sqlite3_bind_parameter_count(statement))
-        guard expectedCount == parameters.count else {
+        do {
+            _ = try db.makeStatement(sql: trimmedSQL)
+        } catch {
             throw AppToolExecutionError.invalidArguments(
                 String(
-                    format: NSLocalizedString("错误：SQL 需要 %d 个参数，但实际提供了 %d 个。", comment: "SQLite parameter count mismatch"),
-                    expectedCount,
-                    parameters.count
+                    format: NSLocalizedString("SQL 预编译失败：%@", comment: "SQLite prepare failure"),
+                    error.localizedDescription
                 )
             )
         }
-
-        for (index, parameter) in parameters.enumerated() {
-            let bindIndex = Int32(index + 1)
-            let result: Int32
-            switch parameter {
-            case .string(let value):
-                result = sqlite3_bind_text(
-                    statement,
-                    bindIndex,
-                    value,
-                    -1,
-                    sqliteTransientDestructor
-                )
-            case .int(let value):
-                result = sqlite3_bind_int64(statement, bindIndex, Int64(value))
-            case .double(let value):
-                result = sqlite3_bind_double(statement, bindIndex, value)
-            case .bool(let value):
-                result = sqlite3_bind_int(statement, bindIndex, value ? 1 : 0)
-            case .null:
-                result = sqlite3_bind_null(statement, bindIndex)
-            case .dictionary, .array:
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.sortedKeys]
-                let encodedText: String
-                if let data = try? encoder.encode(parameter),
-                   let text = String(data: data, encoding: .utf8) {
-                    encodedText = text
-                } else {
-                    encodedText = "null"
-                }
-                result = sqlite3_bind_text(
-                    statement,
-                    bindIndex,
-                    encodedText,
-                    -1,
-                    sqliteTransientDestructor
-                )
-            }
-
-            guard result == SQLITE_OK else {
-                throw AppToolExecutionError.invalidArguments(
-                    sqliteErrorMessage(
-                        database: connection,
-                        fallback: NSLocalizedString("绑定 SQL 参数失败。", comment: "SQLite bind parameter failure")
-                    )
-                )
-            }
-        }
     }
 
-    private static func sqliteColumnNames(from statement: OpaquePointer) -> [String] {
-        let count = Int(sqlite3_column_count(statement))
+    private static func uniqueColumnNames(from rawNames: [String]) -> [String] {
         var seenNames: [String: Int] = [:]
         var names: [String] = []
-        names.reserveCapacity(count)
+        names.reserveCapacity(rawNames.count)
 
-        for index in 0..<count {
-            let rawName: String
-            if let cName = sqlite3_column_name(statement, Int32(index)) {
-                rawName = String(cString: cName)
-            } else {
-                rawName = ""
-            }
-
+        for (index, rawName) in rawNames.enumerated() {
             let baseName = rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "column_\(index + 1)"
                 : rawName
@@ -439,106 +276,110 @@ extension AppToolManager {
         return names
     }
 
-    private static func sqliteColumnValue(from statement: OpaquePointer, at index: Int32) -> Any {
-        switch sqlite3_column_type(statement, index) {
-        case SQLITE_INTEGER:
-            return Int64(sqlite3_column_int64(statement, index))
-        case SQLITE_FLOAT:
-            return sqlite3_column_double(statement, index)
-        case SQLITE_TEXT:
-            return sqliteTextColumn(from: statement, at: index) ?? ""
-        case SQLITE_BLOB:
-            let byteCount = Int(sqlite3_column_bytes(statement, index))
-            guard byteCount > 0, let rawBuffer = sqlite3_column_blob(statement, index) else {
-                return [
-                    "kind": "blob",
-                    "byteCount": 0
-                ]
-            }
-            let data = Data(bytes: rawBuffer, count: byteCount)
-            if let utf8Text = String(data: data, encoding: .utf8) {
-                if utf8Text.count <= sqliteToolMaxBlobPreviewBytes {
-                    return utf8Text
+    private static func makeStatementArguments(_ parameters: [JSONValue]) throws -> StatementArguments {
+        StatementArguments(parameters.map { parameter -> (any DatabaseValueConvertible)? in
+            switch parameter {
+            case .string(let value):
+                return value
+            case .int(let value):
+                return value
+            case .double(let value):
+                return value
+            case .bool(let value):
+                return value
+            case .null:
+                return nil
+            case .dictionary, .array:
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                guard let data = try? encoder.encode(parameter),
+                      let text = String(data: data, encoding: .utf8) else {
+                    return "null"
                 }
-                return [
-                    "kind": "blob_utf8",
-                    "byteCount": byteCount,
-                    "preview": String(utf8Text.prefix(sqliteToolMaxBlobPreviewBytes)),
-                    "truncated": true
-                ]
+                return text
             }
+        })
+    }
 
-            let previewData = data.prefix(sqliteToolMaxBlobPreviewBytes)
-            return [
-                "kind": "blob_base64",
-                "byteCount": byteCount,
-                "base64Preview": previewData.base64EncodedString(),
-                "truncated": data.count > previewData.count
-            ]
-        default:
+    private static func sqliteColumnValue(from row: Row, at index: Int) -> Any {
+        guard let value = row[index] as (any DatabaseValueConvertible)? else {
             return NSNull()
+        }
+
+        switch value {
+        case let value as Int64:
+            return value
+        case let value as Int:
+            return value
+        case let value as Double:
+            return value
+        case let value as String:
+            return value
+        case let value as Data:
+            return sqliteBlobPayload(value)
+        case let value as Bool:
+            return value
+        default:
+            return "\(value)"
         }
     }
 
-    private static func sqliteTextColumn(from statement: OpaquePointer, at index: Int32) -> String? {
-        guard let cText = sqlite3_column_text(statement, index) else { return nil }
-        return String(cString: cText)
+    private static func sqliteBlobPayload(_ data: Data) -> Any {
+        guard !data.isEmpty else {
+            return [
+                "kind": "blob",
+                "byteCount": 0
+            ]
+        }
+
+        if let utf8Text = String(data: data, encoding: .utf8) {
+            if utf8Text.count <= sqliteToolMaxBlobPreviewBytes {
+                return utf8Text
+            }
+            return [
+                "kind": "blob_utf8",
+                "byteCount": data.count,
+                "preview": String(utf8Text.prefix(sqliteToolMaxBlobPreviewBytes)),
+                "truncated": true
+            ]
+        }
+
+        let previewData = data.prefix(sqliteToolMaxBlobPreviewBytes)
+        return [
+            "kind": "blob_base64",
+            "byteCount": data.count,
+            "base64Preview": previewData.base64EncodedString(),
+            "truncated": data.count > previewData.count
+        ]
     }
 
     private static func loadSQLiteTableColumns(
-        connection: OpaquePointer,
+        db: Database,
         tableName: String
     ) throws -> [[String: Any]] {
-        let escapedTableName = tableName.replacingOccurrences(of: "\"", with: "\"\"")
-        let pragmaSQL = "PRAGMA table_info(\"\(escapedTableName)\")"
-        let statement = try prepareSQLiteStatement(
-            on: connection,
-            sql: pragmaSQL,
-            allowedLeadingKeywords: ["PRAGMA"]
+        let rows = try Row.fetchAll(
+            db,
+            sql: "PRAGMA table_info(\(quoteSQLiteIdentifier(tableName)))"
         )
-        defer { sqlite3_finalize(statement) }
 
-        var columns: [[String: Any]] = []
-        while true {
-            let stepResult = sqlite3_step(statement)
-            if stepResult == SQLITE_DONE {
-                break
-            }
-            guard stepResult == SQLITE_ROW else {
-                throw AppToolExecutionError.invalidArguments(
-                    sqliteErrorMessage(
-                        database: connection,
-                        fallback: NSLocalizedString("读取字段信息失败。", comment: "SQLite load table columns step failure")
-                    )
-                )
-            }
-
-            let name = sqliteTextColumn(from: statement, at: 1) ?? ""
-            let type = sqliteTextColumn(from: statement, at: 2) ?? ""
-            let notNull = sqlite3_column_int(statement, 3) != 0
-            let defaultValue = sqliteTextColumn(from: statement, at: 4)
-            let primaryKey = sqlite3_column_int(statement, 5) != 0
-            columns.append([
+        return rows.map { row in
+            let name = (row[1] as String?) ?? ""
+            let type = (row[2] as String?) ?? ""
+            let notNull = ((row[3] as Int64?) ?? 0) != 0
+            let defaultValue = row[4] as String?
+            let primaryKey = ((row[5] as Int64?) ?? 0) != 0
+            return [
                 "name": name,
                 "type": type,
                 "notNull": notNull,
                 "defaultValue": defaultValue ?? NSNull(),
                 "isPrimaryKey": primaryKey
-            ])
+            ]
         }
-        return columns
     }
 
-    private static func sqliteErrorMessage(
-        database: OpaquePointer?,
-        fallback: String
-    ) -> String {
-        guard let database,
-              let cMessage = sqlite3_errmsg(database) else {
-            return fallback
-        }
-        let message = String(cString: cMessage).trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? fallback : message
+    private static func quoteSQLiteIdentifier(_ identifier: String) -> String {
+        "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 
     private static func leadingSQLiteKeyword(from sql: String) -> String? {

@@ -10,6 +10,17 @@ import Foundation
 import GRDB
 
 extension Persistence {
+    enum RawSQLiteConnectionError: LocalizedError {
+        case openFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .openFailed(let message):
+                return message
+            }
+        }
+    }
+
     static let sqlCipherKDFIterations = DatabaseEncryptionManager.kdfIterations
 
     static func databaseEncryptionHasStoredPassphrase() -> Bool {
@@ -139,6 +150,19 @@ extension Persistence {
                 try db.execute(sql: "PRAGMA journal_mode=DELETE")
             }
         }
+    }
+
+    static func withRawDatabase<T>(
+        at databaseURL: URL,
+        readOnly: Bool,
+        operation: (Database) throws -> T
+    ) throws -> T {
+        let queue = try makeRawSQLiteQueue(at: databaseURL, readOnly: readOnly)
+        defer { try? queue.close() }
+        if readOnly {
+            return try queue.read(operation)
+        }
+        return try queue.writeWithoutTransaction(operation)
     }
 
     static func setDatabaseEncryptionEnabled(
@@ -323,6 +347,82 @@ extension Persistence {
 }
 
 private extension Persistence {
+    static func rawSQLiteConnectionConfigurations(
+        at databaseURL: URL,
+        readOnly: Bool
+    ) -> [Configuration] {
+        let plainConfiguration = makePlainDatabaseConfiguration(readonly: readOnly)
+        guard databaseEncryptionHasStoredPassphrase() else {
+            return [plainConfiguration]
+        }
+
+        let encryptedConfiguration = makeEncryptedDatabaseConfiguration(readonly: readOnly)
+        if shouldPreferEncryptedRawSQLiteConnection(at: databaseURL) {
+            return [encryptedConfiguration, plainConfiguration]
+        }
+        return [plainConfiguration, encryptedConfiguration]
+    }
+
+    static func makeRawSQLiteQueue(
+        at databaseURL: URL,
+        readOnly: Bool
+    ) throws -> DatabaseQueue {
+        let configurations = rawSQLiteConnectionConfigurations(at: databaseURL, readOnly: readOnly)
+        var lastConnectionError: Error?
+
+        for configuration in configurations {
+            do {
+                return try makeValidatedRawSQLiteQueue(
+                    at: databaseURL,
+                    configuration: configuration
+                )
+            } catch {
+                lastConnectionError = error
+            }
+        }
+
+        throw RawSQLiteConnectionError.openFailed(
+            lastConnectionError?.localizedDescription
+                ?? NSLocalizedString("打开数据库失败。", comment: "SQLite open database failure")
+        )
+    }
+
+    static func makeValidatedRawSQLiteQueue(
+        at databaseURL: URL,
+        configuration: Configuration
+    ) throws -> DatabaseQueue {
+        let queue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
+        do {
+            try queue.read { db in
+                try db.execute(sql: "PRAGMA busy_timeout=5000")
+                _ = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_master")
+            }
+        } catch {
+            try? queue.close()
+            throw error
+        }
+        return queue
+    }
+
+    static func shouldPreferEncryptedRawSQLiteConnection(at databaseURL: URL) -> Bool {
+        protectedRawSQLiteDatabasePaths().contains(databaseURL.standardizedFileURL.path)
+    }
+
+    static func protectedRawSQLiteDatabasePaths() -> Set<String> {
+        let targets = snapshotRestoreTargetURLs()
+        let databaseURLs = [
+            targets.chatStoreURL,
+            targets.configStoreURL,
+            targets.memoryStoreURL
+        ]
+        let backupURLs = databaseURLs.map { databaseURL in
+            databaseURL.deletingLastPathComponent()
+                .appendingPathComponent(launchBackupDirectoryName, isDirectory: true)
+                .appendingPathComponent(databaseURL.lastPathComponent, isDirectory: false)
+        }
+        return Set((databaseURLs + backupURLs).map { $0.standardizedFileURL.path })
+    }
+
     static func databaseEncryptionTargetURLs() -> SnapshotRestoreDatabaseURLs {
         snapshotRestoreTargetURLs()
     }

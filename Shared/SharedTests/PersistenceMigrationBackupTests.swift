@@ -238,13 +238,46 @@ extension PersistenceTests {
         #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: true))
         #expect(!Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
         #expect(Persistence.loadMessages(for: session.id).first?.content == "encrypt me")
+        let encryptedTables = try StorageBrowserSupport.listSQLiteTables(at: chatStoreSQLiteURL)
+        #expect(encryptedTables.contains(where: { $0.name == "messages" }))
+        let encryptedPage = try StorageBrowserSupport.querySQLitePage(
+            at: chatStoreSQLiteURL,
+            sql: "SELECT content FROM messages WHERE session_id = '\(session.id.uuidString)'",
+            pageIndex: 0,
+            pageSize: 10
+        )
+        #expect(encryptedPage.rows.first?.cells.first?.value == "encrypt me")
+
+        let queryResult = try AppToolManager.querySQLite(
+            in: .chat,
+            sql: "SELECT content FROM messages WHERE session_id = ?",
+            parameters: [.string(session.id.uuidString)],
+            maxRows: 10
+        )
+        let queryRows = queryResult["rows"] as? [[String: Any]] ?? []
+        #expect(queryRows.first?["content"] as? String == "encrypt me")
+
+        let updateResult = try AppToolManager.mutateSQLite(
+            in: .chat,
+            sql: "UPDATE messages SET content = ?, content_versions_json = CAST(? AS BLOB) WHERE session_id = ? AND content = ?",
+            parameters: [
+                .string("tool-updated"),
+                .string("[\"tool-updated\"]"),
+                .string(session.id.uuidString),
+                .string("encrypt me")
+            ],
+            allowWithoutWhere: false,
+            returningMaxRows: 10
+        )
+        #expect((updateResult["affectedRows"] as? Int) == 1)
+        #expect(Persistence.loadMessages(for: session.id).first?.content == "tool-updated")
 
         try Persistence.disableDatabaseEncryption(passphrase: "database-passphrase")
 
         #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
         #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: false))
         #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: false))
-        #expect(Persistence.loadMessages(for: session.id).first?.content == "encrypt me")
+        #expect(Persistence.loadMessages(for: session.id).first?.content == "tool-updated")
     }
 
     @Test("明文离线快照可以恢复三处分库")

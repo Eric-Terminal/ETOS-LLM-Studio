@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import SQLite3
+import GRDB
 
 public struct StorageTextPage: Identifiable, Hashable, Sendable {
     public let id: Int
@@ -180,7 +180,7 @@ public enum StorageBrowserSupport {
         at databaseURL: URL,
         includeInternal: Bool = false
     ) throws -> [StorageSQLiteTableInfo] {
-        try withSQLiteConnection(databaseURL: databaseURL) { connection in
+        try withSQLiteConnection(databaseURL: databaseURL) { db in
             let sql = includeInternal
                 ? """
                 SELECT name, type
@@ -196,26 +196,12 @@ public enum StorageBrowserSupport {
                 ORDER BY type ASC, name COLLATE NOCASE ASC
                 """
 
-            let statement = try prepareSQLiteStatement(
-                on: connection,
-                sql: sql,
-                allowedLeadingKeywords: ["SELECT"]
-            )
-            defer { sqlite3_finalize(statement) }
-
             var tables: [StorageSQLiteTableInfo] = []
-            while true {
-                let stepResult = sqlite3_step(statement)
-                if stepResult == SQLITE_DONE {
-                    break
-                }
-                guard stepResult == SQLITE_ROW else {
-                    throw StorageSQLiteBrowserError.stepFailed(sqliteErrorMessage(connection))
-                }
-
-                let tableName = sqliteTextColumn(from: statement, at: 0) ?? ""
-                let tableType = sqliteTextColumn(from: statement, at: 1) ?? "table"
-                let columns = try loadSQLiteTableColumns(connection: connection, tableName: tableName)
+            let rows = try Row.fetchAll(db, sql: sql)
+            for row in rows {
+                let tableName = (row[0] as String?) ?? ""
+                let tableType = (row[1] as String?) ?? "table"
+                let columns = try loadSQLiteTableColumns(db: db, tableName: tableName)
                 tables.append(StorageSQLiteTableInfo(name: tableName, type: tableType, columns: columns))
             }
             return tables
@@ -228,20 +214,17 @@ public enum StorageBrowserSupport {
         pageIndex: Int,
         pageSize: Int
     ) throws -> StorageSQLiteQueryPage {
-        try withSQLiteConnection(databaseURL: databaseURL) { connection in
+        try withSQLiteConnection(databaseURL: databaseURL) { db in
             let sanitizedPageIndex = max(0, pageIndex)
             let sanitizedPageSize = sanitizedSQLitePageSize(pageSize)
             let offset = sanitizedPageIndex * sanitizedPageSize
             let sql = "SELECT * FROM \(quoteSQLiteIdentifier(tableName))"
-            let statement = try prepareSQLiteStatement(
-                on: connection,
-                sql: sql,
-                allowedLeadingKeywords: ["SELECT"]
-            )
-            defer { sqlite3_finalize(statement) }
+            try validateSQLiteStatement(db: db, sql: sql, allowedLeadingKeywords: ["SELECT"])
+            let cursor = try Row.fetchCursor(db, sql: sql)
 
             return try readSQLiteQueryPage(
-                statement: statement,
+                cursor: cursor,
+                columns: uniqueColumnNames(from: cursor.columnNames),
                 pageIndex: sanitizedPageIndex,
                 pageSize: sanitizedPageSize,
                 rowIndexOffset: offset,
@@ -256,7 +239,7 @@ public enum StorageBrowserSupport {
         pageIndex: Int,
         pageSize: Int
     ) throws -> StorageSQLiteQueryPage {
-        try withSQLiteConnection(databaseURL: databaseURL) { connection in
+        try withSQLiteConnection(databaseURL: databaseURL) { db in
             let trimmedSQL = normalizedSQLiteSQL(rawSQL)
             guard let keyword = leadingSQLiteKeyword(from: trimmedSQL) else {
                 throw StorageSQLiteBrowserError.emptySQL
@@ -265,26 +248,20 @@ public enum StorageBrowserSupport {
                 throw StorageSQLiteBrowserError.unsupportedSQL("SELECT/WITH/PRAGMA")
             }
 
-            let validationStatement = try prepareSQLiteStatement(
-                on: connection,
-                sql: trimmedSQL,
-                allowedLeadingKeywords: ["SELECT", "WITH", "PRAGMA"]
-            )
-            sqlite3_finalize(validationStatement)
-
             let sanitizedPageIndex = max(0, pageIndex)
             let sanitizedPageSize = sanitizedSQLitePageSize(pageSize)
             let offset = sanitizedPageIndex * sanitizedPageSize
 
-            let statement = try prepareSQLiteStatement(
-                on: connection,
+            try validateSQLiteStatement(
+                db: db,
                 sql: trimmedSQL,
                 allowedLeadingKeywords: keyword == "PRAGMA" ? ["PRAGMA"] : ["SELECT", "WITH"]
             )
-            defer { sqlite3_finalize(statement) }
+            let cursor = try Row.fetchCursor(db, sql: trimmedSQL)
 
             return try readSQLiteQueryPage(
-                statement: statement,
+                cursor: cursor,
+                columns: uniqueColumnNames(from: cursor.columnNames),
                 pageIndex: sanitizedPageIndex,
                 pageSize: sanitizedPageSize,
                 rowIndexOffset: offset,
@@ -327,37 +304,30 @@ public enum StorageBrowserSupport {
 
     private static func withSQLiteConnection<T>(
         databaseURL: URL,
-        operation: (OpaquePointer) throws -> T
+        operation: (Database) throws -> T
     ) throws -> T {
         guard FileManager.default.fileExists(atPath: databaseURL.path) else {
             throw StorageSQLiteBrowserError.databaseMissing
         }
 
-        var connection: OpaquePointer?
-        let openResult = sqlite3_open_v2(
-            databaseURL.path,
-            &connection,
-            SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX,
-            nil
-        )
-        guard openResult == SQLITE_OK, let connection else {
-            let message = sqliteErrorMessage(connection)
-            if let connection {
-                sqlite3_close(connection)
-            }
-            throw StorageSQLiteBrowserError.openFailed(message)
+        do {
+            return try Persistence.withRawDatabase(
+                at: databaseURL,
+                readOnly: true,
+                operation: operation
+            )
+        } catch let connectionError as Persistence.RawSQLiteConnectionError {
+            throw StorageSQLiteBrowserError.openFailed(connectionError.localizedDescription)
+        } catch {
+            throw error
         }
-
-        defer { sqlite3_close(connection) }
-        sqlite3_busy_timeout(connection, 5_000)
-        return try operation(connection)
     }
 
-    private static func prepareSQLiteStatement(
-        on connection: OpaquePointer,
+    private static func validateSQLiteStatement(
+        db: Database,
         sql: String,
         allowedLeadingKeywords: Set<String>
-    ) throws -> OpaquePointer {
+    ) throws {
         let trimmedSQL = normalizedSQLiteSQL(sql)
         guard !trimmedSQL.isEmpty else {
             throw StorageSQLiteBrowserError.emptySQL
@@ -368,47 +338,29 @@ public enum StorageBrowserSupport {
             throw StorageSQLiteBrowserError.unsupportedSQL(allowedLeadingKeywords.sorted().joined(separator: "/"))
         }
 
-        var statement: OpaquePointer?
-        var tail: UnsafePointer<Int8>?
-        let prepareResult = sqlite3_prepare_v2(connection, trimmedSQL, -1, &statement, &tail)
-        guard prepareResult == SQLITE_OK, let statement else {
-            throw StorageSQLiteBrowserError.prepareFailed(sqliteErrorMessage(connection))
+        do {
+            _ = try db.makeStatement(sql: trimmedSQL)
+        } catch {
+            if error.localizedDescription.localizedCaseInsensitiveContains("multiple statements") {
+                throw StorageSQLiteBrowserError.multipleStatements
+            }
+            throw StorageSQLiteBrowserError.prepareFailed(error.localizedDescription)
         }
-
-        let remainingText = tail.map { String(cString: $0) } ?? ""
-        let normalizedRemaining = remainingText
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: ";"))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !normalizedRemaining.isEmpty {
-            sqlite3_finalize(statement)
-            throw StorageSQLiteBrowserError.multipleStatements
-        }
-
-        return statement
     }
 
     private static func readSQLiteQueryPage(
-        statement: OpaquePointer,
+        cursor: RowCursor,
+        columns: [String],
         pageIndex: Int,
         pageSize: Int,
         rowIndexOffset: Int,
         rowsToSkip: Int = 0
     ) throws -> StorageSQLiteQueryPage {
-        let columns = sqliteColumnNames(from: statement)
         var rows: [StorageSQLiteRow] = []
         var skippedRows = 0
         var hasNextPage = false
 
-        while true {
-            let stepResult = sqlite3_step(statement)
-            if stepResult == SQLITE_DONE {
-                break
-            }
-            guard stepResult == SQLITE_ROW else {
-                throw StorageSQLiteBrowserError.stepFailed("SQLite step result: \(stepResult)")
-            }
-
+        while let row = try cursor.next() {
             if skippedRows < rowsToSkip {
                 skippedRows += 1
                 continue
@@ -423,7 +375,7 @@ public enum StorageBrowserSupport {
             let cells = columns.enumerated().map { index, column in
                 StorageSQLiteCell(
                     column: column,
-                    value: sqliteDisplayValue(from: statement, at: Int32(index))
+                    value: sqliteDisplayValue(from: row, at: index)
                 )
             }
             rows.append(StorageSQLiteRow(index: rowIndex, cells: cells))
@@ -439,90 +391,69 @@ public enum StorageBrowserSupport {
     }
 
     private static func loadSQLiteTableColumns(
-        connection: OpaquePointer,
+        db: Database,
         tableName: String
     ) throws -> [StorageSQLiteColumnInfo] {
-        let statement = try prepareSQLiteStatement(
-            on: connection,
-            sql: "PRAGMA table_info(\(quoteSQLiteIdentifier(tableName)))",
-            allowedLeadingKeywords: ["PRAGMA"]
+        let rows = try Row.fetchAll(
+            db,
+            sql: "PRAGMA table_info(\(quoteSQLiteIdentifier(tableName)))"
         )
-        defer { sqlite3_finalize(statement) }
 
-        var columns: [StorageSQLiteColumnInfo] = []
-        while true {
-            let stepResult = sqlite3_step(statement)
-            if stepResult == SQLITE_DONE {
-                break
-            }
-            guard stepResult == SQLITE_ROW else {
-                throw StorageSQLiteBrowserError.stepFailed(sqliteErrorMessage(connection))
-            }
-
-            columns.append(
-                StorageSQLiteColumnInfo(
-                    name: sqliteTextColumn(from: statement, at: 1) ?? "",
-                    type: sqliteTextColumn(from: statement, at: 2) ?? "",
-                    isPrimaryKey: sqlite3_column_int(statement, 5) != 0,
-                    notNull: sqlite3_column_int(statement, 3) != 0
-                )
+        return rows.map { row in
+            StorageSQLiteColumnInfo(
+                name: (row[1] as String?) ?? "",
+                type: (row[2] as String?) ?? "",
+                isPrimaryKey: ((row[5] as Int64?) ?? 0) != 0,
+                notNull: ((row[3] as Int64?) ?? 0) != 0
             )
         }
-        return columns
     }
 
-    private static func sqliteColumnNames(from statement: OpaquePointer) -> [String] {
-        let count = Int(sqlite3_column_count(statement))
+    private static func uniqueColumnNames(from rawNames: [String]) -> [String] {
         var seenNames: [String: Int] = [:]
         var names: [String] = []
-        names.reserveCapacity(count)
+        names.reserveCapacity(rawNames.count)
 
-        for index in 0..<count {
-            let rawName: String
-            if let cName = sqlite3_column_name(statement, Int32(index)) {
-                rawName = String(cString: cName)
-            } else {
-                rawName = ""
-            }
+        for (index, rawName) in rawNames.enumerated() {
             let baseName = rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "column_\(index + 1)"
                 : rawName
             let nextCount = (seenNames[baseName] ?? 0) + 1
             seenNames[baseName] = nextCount
-            names.append(nextCount == 1 ? baseName : "\(baseName)_\(nextCount)")
+            if nextCount == 1 {
+                names.append(baseName)
+            } else {
+                names.append("\(baseName)_\(nextCount)")
+            }
         }
 
         return names
     }
 
-    private static func sqliteDisplayValue(from statement: OpaquePointer, at index: Int32) -> String {
-        switch sqlite3_column_type(statement, index) {
-        case SQLITE_INTEGER:
-            return String(sqlite3_column_int64(statement, index))
-        case SQLITE_FLOAT:
-            return String(sqlite3_column_double(statement, index))
-        case SQLITE_TEXT:
-            return sqliteTextColumn(from: statement, at: index) ?? ""
-        case SQLITE_BLOB:
-            let byteCount = Int(sqlite3_column_bytes(statement, index))
-            return String(format: NSLocalizedString("BLOB（%d 字节）", comment: "SQLite blob display value"), byteCount)
-        default:
+    private static func sqliteDisplayValue(from row: Row, at index: Int) -> String {
+        guard let value = row[index] as (any DatabaseValueConvertible)? else {
             return "NULL"
         }
-    }
 
-    private static func sqliteTextColumn(from statement: OpaquePointer, at index: Int32) -> String? {
-        guard let cText = sqlite3_column_text(statement, index) else { return nil }
-        return String(cString: cText)
-    }
-
-    private static func sqliteErrorMessage(_ connection: OpaquePointer?) -> String {
-        guard let connection,
-              let cMessage = sqlite3_errmsg(connection) else {
-            return NSLocalizedString("未知 SQLite 错误", comment: "Unknown SQLite error")
+        switch value {
+        case let value as Int64:
+            return String(value)
+        case let value as Int:
+            return String(value)
+        case let value as Double:
+            return String(value)
+        case let value as String:
+            return value
+        case let value as Data:
+            return String(
+                format: NSLocalizedString("BLOB（%d 字节）", comment: "SQLite blob display value"),
+                value.count
+            )
+        case let value as Bool:
+            return value ? "1" : "0"
+        default:
+            return "\(value)"
         }
-        let message = String(cString: cMessage).trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? NSLocalizedString("未知 SQLite 错误", comment: "Unknown SQLite error") : message
     }
 
     private static func sanitizedSQLitePageSize(_ pageSize: Int) -> Int {
