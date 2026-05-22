@@ -20,6 +20,7 @@ struct BackupRestoreView: View {
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var uploadProgress: SyncPackageUploadProgress?
+    @State private var selectedSnapshotKind: SnapshotBuilder.BackupKind = .database
     @State private var encryptExport = false
     @State private var useStrongPasswordDerivation = false
     @State private var exportPassword = ""
@@ -40,6 +41,15 @@ struct BackupRestoreView: View {
     var body: some View {
         List {
             Section {
+                Picker(NSLocalizedString("快照类型", comment: ""), selection: $selectedSnapshotKind) {
+                    Text(NSLocalizedString("数据库快照", comment: ""))
+                        .tag(SnapshotBuilder.BackupKind.database)
+                    Text(NSLocalizedString("完整快照", comment: ""))
+                        .tag(SnapshotBuilder.BackupKind.full)
+                }
+                .pickerStyle(.segmented)
+                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+
                 Button {
                     createManualSnapshot()
                 } label: {
@@ -78,7 +88,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("手动快照", comment: ""))
             } footer: {
-                Text(NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。", comment: ""))
+                Text(snapshotKindFooter + "\n" + NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。", comment: ""))
             }
 
             Section {
@@ -131,7 +141,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
             } footer: {
-                Text(NSLocalizedString("会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。", comment: ""))
+                Text(snapshotKindFooter + "\n" + NSLocalizedString("会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。", comment: ""))
             }
 
             Section {
@@ -153,10 +163,10 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("恢复", comment: ""))
             } footer: {
-                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库。请选择可信的 .elsbackup 文件；加密快照会先要求输入密码，解密与校验成功后才会替换本机数据。", comment: ""))
+                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: ""))
             }
         }
-        .navigationTitle(NSLocalizedString("数据库快照", comment: ""))
+        .navigationTitle(NSLocalizedString("快照备份", comment: ""))
         .fileImporter(
             isPresented: $isImportingSnapshot,
             allowedContentTypes: snapshotContentTypes,
@@ -192,6 +202,15 @@ struct BackupRestoreView: View {
         }
     }
 
+    private var snapshotKindFooter: String {
+        switch selectedSnapshotKind {
+        case .database:
+            return NSLocalizedString("数据库快照只包含聊天、配置与记忆数据库，会排除壁纸、附件、字体与记忆向量索引，适合日常轻量备份。", comment: "")
+        case .full:
+            return NSLocalizedString("完整快照会额外包含壁纸、音频附件、图片附件、文件附件、自定义字体与记忆向量索引，体积可能明显增大。", comment: "")
+        }
+    }
+
     private func createManualSnapshot() {
         guard validateExportPasswordIfNeeded() else { return }
         isCreatingSnapshot = true
@@ -199,12 +218,14 @@ struct BackupRestoreView: View {
         errorMessage = nil
         let password = encryptExport ? exportPassword : nil
         let useStrongPasswordDerivation = useStrongPasswordDerivation
+        let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
             do {
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                let snapshotURL = try SnapshotBuilder.buildSnapshot()
+                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
                 if let password {
                     try BackupRestoreFileWriter.encryptSnapshotInPlace(
                         snapshotURL,
@@ -280,13 +301,15 @@ struct BackupRestoreView: View {
         uploadProgress = nil
         let password = encryptExport ? exportPassword : nil
         let useStrongPasswordDerivation = useStrongPasswordDerivation
+        let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
             do {
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
 
-                let snapshotURL = try SnapshotBuilder.buildSnapshot()
+                let snapshotURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
                 defer { try? FileManager.default.removeItem(at: snapshotURL) }
                 if let password {
                     try BackupRestoreFileWriter.encryptSnapshotInPlace(

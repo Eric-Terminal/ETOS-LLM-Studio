@@ -19,6 +19,7 @@ struct DeviceSyncSettingsView: View {
     @State private var isCreatingSnapshot: Bool = false
     @State private var isUploadingSnapshot: Bool = false
     @State private var uploadProgress: SyncPackageUploadProgress?
+    @State private var selectedSnapshotKind: SnapshotBuilder.BackupKind = .database
     @State private var encryptSnapshot: Bool = false
     @State private var useStrongSnapshotPasswordDerivation: Bool = false
     @State private var snapshotPassword: String = ""
@@ -31,7 +32,15 @@ struct DeviceSyncSettingsView: View {
     
     var body: some View {
         List {
-            Section(NSLocalizedString("数据库快照", comment: "")) {
+            Section(NSLocalizedString("快照备份", comment: "")) {
+                Picker(NSLocalizedString("快照类型", comment: ""), selection: $selectedSnapshotKind) {
+                    Text(NSLocalizedString("数据库快照", comment: ""))
+                        .tag(SnapshotBuilder.BackupKind.database)
+                    Text(NSLocalizedString("完整快照", comment: ""))
+                        .tag(SnapshotBuilder.BackupKind.full)
+                }
+                .disabled(isSnapshotBusy)
+
                 Toggle(NSLocalizedString("设置密码", comment: ""), isOn: $encryptSnapshot)
                     .buttonStyle(.plain)
                     .disabled(isSnapshotBusy)
@@ -200,11 +209,11 @@ struct DeviceSyncSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text(NSLocalizedString("快照会包含聊天、配置与记忆数据库，不包含 memory_vectors.sqlite；加密快照需要在恢复时输入这里设置的密码。", comment: ""))
+                Text(snapshotKindFooter)
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
-                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库。请选择可信的 .elsbackup 文件；加密快照会先要求输入密码，解密与校验成功后才会替换本机数据。", comment: ""))
+                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -273,6 +282,15 @@ struct DeviceSyncSettingsView: View {
 
     private var isSnapshotBusy: Bool {
         isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot
+    }
+
+    private var snapshotKindFooter: String {
+        switch selectedSnapshotKind {
+        case .database:
+            return NSLocalizedString("数据库快照只包含聊天、配置与记忆数据库，会排除壁纸、附件、字体与记忆向量索引，适合日常轻量备份。", comment: "")
+        case .full:
+            return NSLocalizedString("完整快照会额外包含壁纸、音频附件、图片附件、文件附件、自定义字体与记忆向量索引，体积可能明显增大。", comment: "")
+        }
     }
     
     @ViewBuilder
@@ -379,12 +397,14 @@ struct DeviceSyncSettingsView: View {
         snapshotStatusMessage = nil
         let password = encryptSnapshot ? snapshotPassword : nil
         let useStrongDerivation = useStrongSnapshotPasswordDerivation
+        let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
             do {
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
-                let fileURL = try SnapshotBuilder.buildSnapshot()
+                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
                 if let password {
                     try WatchSnapshotFileWriter.encryptSnapshotInPlace(
                         fileURL,
@@ -424,13 +444,15 @@ struct DeviceSyncSettingsView: View {
         uploadProgress = nil
         let password = encryptSnapshot ? snapshotPassword : nil
         let useStrongDerivation = useStrongSnapshotPasswordDerivation
+        let snapshotKind = selectedSnapshotKind
 
         Task.detached(priority: .userInitiated) {
             do {
                 await AppConfigStore.shared.flushPendingWrites()
                 await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
 
-                let fileURL = try SnapshotBuilder.buildSnapshot()
+                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
                 defer { try? FileManager.default.removeItem(at: fileURL) }
                 if let password {
                     try WatchSnapshotFileWriter.encryptSnapshotInPlace(

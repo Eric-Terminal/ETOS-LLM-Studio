@@ -120,37 +120,85 @@ extension PersistenceTests {
         let result = try SnapshotBuilder.buildSnapshotResult()
         defer { removeIfExists(result.fileURL) }
 
-        let entries = try readStoredZipEntries(from: result.fileURL)
-        let entryPaths = Set(entries.keys)
-        #expect(entryPaths.contains("manifest.json"))
-        #expect(entryPaths.contains("Databases/chat-store.sqlite"))
-        #expect(entryPaths.contains("Databases/config-store.sqlite"))
-        #expect(entryPaths.contains("Databases/memory-store.sqlite"))
-        #expect(!entryPaths.contains("memory_vectors.sqlite"))
+        #expect(result.backupKind == .database)
+        #expect(Set(result.includedDatabaseNames) == ["chat-store.sqlite", "config-store.sqlite", "memory-store.sqlite"])
+        #expect(result.includedFilePaths.isEmpty)
+    }
 
-        let extractDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ETOS-Snapshot-Test-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
-        defer { removeIfExists(extractDirectory) }
+    @Test("完整快照会打包用户文件并可恢复")
+    func testFullSnapshotIncludesAndRestoresUserFiles() throws {
+        cleanup(sessions: [])
 
-        for (path, data) in entries {
-            let destinationURL = extractDirectory.appendingPathComponent(path, isDirectory: false)
-            try FileManager.default.createDirectory(
-                at: destinationURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: destinationURL, options: .atomic)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        let session = ChatSession(id: UUID(), name: "Full Snapshot Session", isTemporary: false)
+        let backgroundURL = documentsDirectory
+            .appendingPathComponent("Backgrounds", isDirectory: true)
+            .appendingPathComponent("full-snapshot-bg.png", isDirectory: false)
+        let imageURL = documentsDirectory
+            .appendingPathComponent("ImageFiles", isDirectory: true)
+            .appendingPathComponent("full-snapshot-image.png", isDirectory: false)
+        let fileURL = documentsDirectory
+            .appendingPathComponent("FileAttachments", isDirectory: true)
+            .appendingPathComponent("full-snapshot-note.txt", isDirectory: false)
+        let vectorURL = memoryDirectory.appendingPathComponent("memory_vectors.sqlite", isDirectory: false)
+
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+            cleanup(sessions: [session])
+            removeIfExists(backgroundURL)
+            removeIfExists(imageURL)
+            removeIfExists(fileURL)
+            removeIfExists(vectorURL)
         }
 
-        let snapshotChatStore = extractDirectory.appendingPathComponent("Databases/chat-store.sqlite", isDirectory: false)
-        let snapshotConfigStore = extractDirectory.appendingPathComponent("Databases/config-store.sqlite", isDirectory: false)
-        let snapshotMemoryStore = extractDirectory.appendingPathComponent("Databases/memory-store.sqlite", isDirectory: false)
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([ChatMessage(role: .user, content: "full-snapshot")], for: session.id)
+        try FileManager.default.createDirectory(
+            at: backgroundURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: imageURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: vectorURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("background-data".utf8).write(to: backgroundURL, options: .atomic)
+        try Data("image-data".utf8).write(to: imageURL, options: .atomic)
+        try Data("file-data".utf8).write(to: fileURL, options: .atomic)
+        try Data("vector-data".utf8).write(to: vectorURL, options: .atomic)
 
-        #expect(sqliteCount(snapshotChatStore, sql: "SELECT COUNT(*) FROM messages") == messages.count)
-        #expect(!sqliteExists(snapshotChatStore, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"))
-        #expect(!sqliteExists(snapshotChatStore, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'messages_fts_%'"))
-        #expect(sqliteCount(snapshotConfigStore, sql: "SELECT COUNT(*) FROM json_blobs WHERE key = 'providers_v1'") == 1)
-        #expect(sqliteCount(snapshotMemoryStore, sql: "SELECT COUNT(*) FROM conversation_user_profile WHERE source_session_id = '\(session.id.uuidString)'") == 1)
+        let result = try SnapshotBuilder.buildSnapshotResult(kind: .full)
+        let snapshotURL = result.fileURL
+        defer { removeIfExists(snapshotURL) }
+
+        let filePaths = Set(result.includedFilePaths)
+        #expect(result.backupKind == .full)
+        #expect(filePaths.contains("Backgrounds/full-snapshot-bg.png"))
+        #expect(filePaths.contains("ImageFiles/full-snapshot-image.png"))
+        #expect(filePaths.contains("FileAttachments/full-snapshot-note.txt"))
+        #expect(filePaths.contains("Memory/memory_vectors.sqlite"))
+
+        try Data("changed".utf8).write(to: backgroundURL, options: .atomic)
+        try FileManager.default.removeItem(at: imageURL)
+        try FileManager.default.removeItem(at: fileURL)
+        try FileManager.default.removeItem(at: vectorURL)
+
+        try SnapshotRestoreService.restorePlainSnapshot(from: snapshotURL)
+
+        #expect(try Data(contentsOf: backgroundURL) == Data("background-data".utf8))
+        #expect(try Data(contentsOf: imageURL) == Data("image-data".utf8))
+        #expect(try Data(contentsOf: fileURL) == Data("file-data".utf8))
+        #expect(try Data(contentsOf: vectorURL) == Data("vector-data".utf8))
     }
 
     @Test("数据库物理加密可在三处分库间启用并关闭")
@@ -241,6 +289,7 @@ extension PersistenceTests {
         #expect(restoredSessions.contains(where: { $0.id == snapshotSession.id }))
         #expect(!restoredSessions.contains(where: { $0.id == replacementSession.id }))
         #expect(Persistence.loadMessages(for: snapshotSession.id).map(\.content) == ["snapshot-restore-source"])
+        #expect(sqliteCount(chatStoreSQLiteURL, sql: "SELECT COUNT(*) FROM messages_fts") == 1)
         let restoredProviderBlob = Persistence.loadAuxiliaryBlob([String: String].self, forKey: "providers_v1")
         #expect(restoredProviderBlob?["value"] == "snapshot")
         let restoredProfile = ConversationMemoryManager.loadUserProfile()

@@ -27,6 +27,8 @@ public enum SnapshotRestoreService {
         case missingDatabase(String)
         case invalidDatabase(String)
         case unreadableArchive
+        case unsafeFilePath(String)
+        case missingFile(String)
 
         public var errorDescription: String? {
             switch self {
@@ -38,6 +40,10 @@ public enum SnapshotRestoreService {
                 return String(format: NSLocalizedString("快照中的数据库校验失败：%@", comment: ""), name)
             case .unreadableArchive:
                 return NSLocalizedString("无法读取快照归档。", comment: "")
+            case .unsafeFilePath(let path):
+                return String(format: NSLocalizedString("快照包含不安全的文件路径：%@", comment: ""), path)
+            case .missingFile(let path):
+                return String(format: NSLocalizedString("快照缺少文件：%@", comment: ""), path)
             }
         }
     }
@@ -60,13 +66,44 @@ public enum SnapshotRestoreService {
 
         let readableURL = try makeReadableSnapshotURL(fileURL, in: workingDirectory)
         let archiveURL = try decryptedArchiveURLIfNeeded(readableURL, password: password, workingDirectory: workingDirectory)
-        let databaseURLs = try extractDatabases(from: archiveURL, to: workingDirectory)
+        let archive = try Archive(url: archiveURL, accessMode: .read)
+        let manifest = try decodeManifest(from: archive)
+        let databaseURLs = try extractDatabases(from: archive, to: workingDirectory)
+        if manifest.backupKind == .full {
+            try validateRestorableFiles(from: archive, manifest: manifest)
+        }
+        MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
         try Persistence.installSnapshotDatabases(databaseURLs)
+        if manifest.backupKind == .full {
+            try restoreFiles(from: archive, manifest: manifest)
+        }
         NotificationCenter.default.post(name: .snapshotRestoreDidFinish, object: nil)
     }
 }
 
 private extension SnapshotRestoreService {
+    struct ManifestFileEntry: Decodable {
+        let path: String
+        let byteSize: Int64?
+    }
+
+    struct Manifest: Decodable {
+        let schemaVersion: Int?
+        let backupKind: SnapshotBuilder.BackupKind
+        let files: [ManifestFileEntry]
+
+        enum CodingKeys: String, CodingKey {
+            case schemaVersion, backupKind, files
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            backupKind = try container.decodeIfPresent(SnapshotBuilder.BackupKind.self, forKey: .backupKind) ?? .database
+            files = try container.decodeIfPresent([ManifestFileEntry].self, forKey: .files) ?? []
+        }
+    }
+
     static let databaseArchivePaths: [(archivePath: String, fileName: String)] = [
         ("Databases/chat-store.sqlite", "chat-store.sqlite"),
         ("Databases/config-store.sqlite", "config-store.sqlite"),
@@ -115,9 +152,18 @@ private extension SnapshotRestoreService {
         return decryptedURL
     }
 
-    static func extractDatabases(from archiveURL: URL, to workingDirectory: URL) throws -> SnapshotRestoreDatabaseURLs {
-        let archive = try Archive(url: archiveURL, accessMode: .read)
+    static func decodeManifest(from archive: Archive) throws -> Manifest {
+        guard let entry = archive["manifest.json"] else {
+            return try JSONDecoder().decode(Manifest.self, from: Data("{}".utf8))
+        }
+        var data = Data()
+        _ = try archive.extract(entry) { chunk in
+            data.append(chunk)
+        }
+        return try JSONDecoder().decode(Manifest.self, from: data)
+    }
 
+    static func extractDatabases(from archive: Archive, to workingDirectory: URL) throws -> SnapshotRestoreDatabaseURLs {
         let extractedDirectory = workingDirectory.appendingPathComponent("Databases", isDirectory: true)
         try FileManager.default.createDirectory(at: extractedDirectory, withIntermediateDirectories: true)
 
@@ -151,4 +197,87 @@ private extension SnapshotRestoreService {
         )
     }
 
+    static func validateRestorableFiles(from archive: Archive, manifest: Manifest) throws {
+        for file in manifest.files {
+            guard SnapshotBuilder.isSafeRelativePath(file.path) else {
+                throw RestoreError.unsafeFilePath(file.path)
+            }
+            _ = try destinationURL(for: file.path)
+            guard archive["Files/\(file.path)"] != nil else {
+                throw RestoreError.missingFile(file.path)
+            }
+        }
+    }
+
+    static func restoreFiles(from archive: Archive, manifest: Manifest) throws {
+        guard !manifest.files.isEmpty else { return }
+
+        var restoredBackgrounds = false
+        var restoredFonts = false
+        for file in manifest.files {
+            guard SnapshotBuilder.isSafeRelativePath(file.path) else {
+                throw RestoreError.unsafeFilePath(file.path)
+            }
+            let archivePath = "Files/\(file.path)"
+            guard let entry = archive[archivePath] else {
+                throw RestoreError.missingFile(file.path)
+            }
+            let destinationURL = try destinationURL(for: file.path)
+            try FileManager.default.createDirectory(
+                at: destinationURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            _ = try archive.extract(entry, to: destinationURL)
+            if file.path.hasPrefix("Backgrounds/") {
+                restoredBackgrounds = true
+            } else if file.path.hasPrefix("FontFiles/") {
+                restoredFonts = true
+            }
+        }
+
+        if restoredBackgrounds {
+            NotificationCenter.default.post(name: .syncBackgroundsUpdated, object: nil)
+        }
+        if restoredFonts {
+            FontLibrary.registerAllFontsIfNeeded()
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
+    }
+
+    static func destinationURL(for relativePath: String) throws -> URL {
+        let components = relativePath.split(separator: "/").map(String.init)
+        guard let rootName = components.first else {
+            throw RestoreError.unsafeFilePath(relativePath)
+        }
+        let remaining = components.dropFirst()
+        let rootURL: URL
+        switch rootName {
+        case "Backgrounds":
+            rootURL = ConfigLoader.getBackgroundsDirectory()
+        case "AudioFiles":
+            rootURL = Persistence.getAudioDirectory()
+        case "ImageFiles":
+            rootURL = Persistence.getImageDirectory()
+        case "FileAttachments":
+            rootURL = Persistence.getFileDirectory()
+        case "FontFiles":
+            rootURL = Persistence.getFontDirectory()
+        case "Memory":
+            guard relativePath == "Memory/memory_vectors.sqlite" else {
+                throw RestoreError.unsafeFilePath(relativePath)
+            }
+            rootURL = MemoryStoragePaths.rootDirectory()
+        default:
+            throw RestoreError.unsafeFilePath(relativePath)
+        }
+
+        var destinationURL = rootURL
+        for component in remaining {
+            destinationURL.appendPathComponent(component, isDirectory: false)
+        }
+        return destinationURL
+    }
 }

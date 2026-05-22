@@ -68,6 +68,7 @@ extension Persistence {
                 try replaceDatabaseFile(replacement)
             }
             bootstrapGRDBStoreOnLaunch()
+            activeGRDBStore()?.rebuildMessagesFTSIndex()
             if shouldPreserveDatabaseEncryption {
                 writeDatabaseEncryptionEnabled(true)
             }

@@ -3485,3 +3485,12 @@
 "还有更多" = "more available";
 "已到末尾" = "end reached";
 "https://github.com/owner/repo" = "https://github.com/owner/repo";
+
+"快照类型" = "Snapshot Type";
+"快照备份" = "Snapshot Backup";
+"完整快照" = "Full Snapshot";
+"数据库快照只包含聊天、配置与记忆数据库，会排除壁纸、附件、字体与记忆向量索引，适合日常轻量备份。" = "Database snapshots include only the chat, configuration, and memory databases. Wallpapers, attachments, fonts, and the memory vector index are excluded for lightweight daily backups.";
+"完整快照会额外包含壁纸、音频附件、图片附件、文件附件、自定义字体与记忆向量索引，体积可能明显增大。" = "Full snapshots also include wallpapers, audio attachments, image attachments, file attachments, custom fonts, and the memory vector index. The file can be much larger.";
+"恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。" = "Restore replaces the current chat, configuration, and memory databases. Full snapshots also restore wallpapers, attachments, fonts, and the memory vector index file. Choose a trusted .elsbackup file.";
+"快照包含不安全的文件路径：%@" = "Snapshot contains an unsafe file path: %@";
+"快照缺少文件：%@" = "Snapshot is missing file: %@";

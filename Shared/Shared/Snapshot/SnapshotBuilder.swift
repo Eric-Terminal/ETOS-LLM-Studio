@@ -13,10 +13,17 @@ import ZIPFoundation
 public enum SnapshotBuilder {
     public static let fileExtension = "elsbackup"
 
+    public enum BackupKind: String, Codable, Sendable, CaseIterable, Hashable {
+        case database
+        case full
+    }
+
     public struct Result: Sendable {
         public let fileURL: URL
         public let createdAt: Date
+        public let backupKind: BackupKind
         public let includedDatabaseNames: [String]
+        public let includedFilePaths: [String]
     }
 
     public enum SnapshotError: LocalizedError {
@@ -34,11 +41,15 @@ public enum SnapshotBuilder {
     }
 
     @discardableResult
-    public static func buildSnapshot(fileManager: FileManager = .default) throws -> URL {
-        try buildSnapshotResult(fileManager: fileManager).fileURL
+    public static func buildSnapshot(
+        kind: BackupKind = .database,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        try buildSnapshotResult(kind: kind, fileManager: fileManager).fileURL
     }
 
     public static func buildSnapshotResult(
+        kind: BackupKind = .database,
         now: Date = Date(),
         fileManager: FileManager = .default
     ) throws -> Result {
@@ -49,37 +60,81 @@ public enum SnapshotBuilder {
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
         let databaseItems = try cloneDatabases(to: payloadDirectory)
+        let fileItems = try collectFiles(for: kind)
         let manifestURL = payloadDirectory.appendingPathComponent("manifest.json", isDirectory: false)
         let manifest = Manifest(
+            backupKind: kind,
             createdAt: Persistence.iso8601Timestamp(from: now),
             databases: databaseItems.map(\.archivePath),
-            excludedFiles: ["memory_vectors.sqlite"]
+            files: fileItems.map(\.manifestEntry),
+            excludedFiles: excludedFiles(for: kind)
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(manifest).write(to: manifestURL, options: .atomic)
 
         let archiveURL = try makeArchiveURL(now: now, fileManager: fileManager)
-        try createArchive(at: archiveURL, payloadDirectory: payloadDirectory, databaseItems: databaseItems)
+        try createArchive(
+            at: archiveURL,
+            payloadDirectory: payloadDirectory,
+            databaseItems: databaseItems,
+            fileItems: fileItems
+        )
         return Result(
             fileURL: archiveURL,
             createdAt: now,
-            includedDatabaseNames: databaseItems.map(\.fileName)
+            backupKind: kind,
+            includedDatabaseNames: databaseItems.map(\.fileName),
+            includedFilePaths: fileItems.map(\.relativePath)
         )
+    }
+
+    static func isSafeRelativePath(_ path: String) -> Bool {
+        guard !path.isEmpty,
+              !path.hasPrefix("/"),
+              !path.contains("\\") else {
+            return false
+        }
+        return path.split(separator: "/").allSatisfy { component in
+            !component.isEmpty && component != "." && component != ".."
+        }
     }
 }
 
 private extension SnapshotBuilder {
+    struct ManifestFileEntry: Encodable {
+        let path: String
+        let byteSize: Int64
+    }
+
     struct DatabaseItem {
         let fileName: String
         let archivePath: String
         let fileURL: URL
     }
 
+    struct FileItem {
+        let relativePath: String
+        let archivePath: String
+        let fileURL: URL
+        let byteSize: Int64
+
+        var manifestEntry: ManifestFileEntry {
+            ManifestFileEntry(path: relativePath, byteSize: byteSize)
+        }
+    }
+
+    struct AssetDirectory {
+        let relativePath: String
+        let directoryURL: URL
+    }
+
     struct Manifest: Encodable {
-        let schemaVersion = 1
+        let schemaVersion = 2
+        let backupKind: BackupKind
         let createdAt: String
         let databases: [String]
+        let files: [ManifestFileEntry]
         let excludedFiles: [String]
     }
 
@@ -151,6 +206,106 @@ private extension SnapshotBuilder {
             ))
         }
         return items
+    }
+
+    static func collectFiles(for kind: BackupKind) throws -> [FileItem] {
+        guard kind == .full else { return [] }
+
+        var items: [FileItem] = []
+        let directories = [
+            AssetDirectory(relativePath: "Backgrounds", directoryURL: ConfigLoader.getBackgroundsDirectory()),
+            AssetDirectory(relativePath: "AudioFiles", directoryURL: Persistence.getAudioDirectory()),
+            AssetDirectory(relativePath: "ImageFiles", directoryURL: Persistence.getImageDirectory()),
+            AssetDirectory(relativePath: "FileAttachments", directoryURL: Persistence.getFileDirectory()),
+            AssetDirectory(relativePath: "FontFiles", directoryURL: Persistence.getFontDirectory())
+        ]
+
+        for directory in directories {
+            items.append(contentsOf: try collectRegularFiles(in: directory))
+        }
+
+        let vectorStoreURL = MemoryStoragePaths.vectorStoreDirectory()
+            .appendingPathComponent("\(MemoryStoragePaths.vectorStoreName).sqlite", isDirectory: false)
+        if let vectorItem = try makeFileItem(
+            fileURL: vectorStoreURL,
+            relativePath: "Memory/\(vectorStoreURL.lastPathComponent)"
+        ) {
+            items.append(vectorItem)
+        }
+
+        return items.sorted { $0.relativePath < $1.relativePath }
+    }
+
+    static func collectRegularFiles(in directory: AssetDirectory) throws -> [FileItem] {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: directory.directoryURL.path) else { return [] }
+
+        let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
+        guard let enumerator = fileManager.enumerator(
+            at: directory.directoryURL,
+            includingPropertiesForKeys: resourceKeys,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var items: [FileItem] = []
+        for case let fileURL as URL in enumerator {
+            guard let item = try makeFileItem(
+                fileURL: fileURL,
+                relativePath: relativePath(for: fileURL, in: directory)
+            ) else {
+                continue
+            }
+            items.append(item)
+        }
+        return items
+    }
+
+    static func relativePath(for fileURL: URL, in directory: AssetDirectory) -> String {
+        let rootPath = directory.directoryURL.standardizedFileURL.path
+        let filePath = fileURL.standardizedFileURL.path
+        let suffix: String
+        if filePath.hasPrefix(rootPath + "/") {
+            suffix = String(filePath.dropFirst(rootPath.count + 1))
+        } else {
+            suffix = fileURL.lastPathComponent
+        }
+        return [directory.relativePath, suffix]
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+    }
+
+    static func makeFileItem(fileURL: URL, relativePath: String) throws -> FileItem? {
+        guard isSafeRelativePath(relativePath) else { return nil }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+
+        let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values.isRegularFile == true else { return nil }
+        guard !isSQLiteSidecar(fileURL.lastPathComponent) else { return nil }
+
+        return FileItem(
+            relativePath: relativePath,
+            archivePath: "Files/\(relativePath)",
+            fileURL: fileURL,
+            byteSize: Int64(values.fileSize ?? 0)
+        )
+    }
+
+    static func excludedFiles(for kind: BackupKind) -> [String] {
+        switch kind {
+        case .database:
+            return [
+                "memory_vectors.sqlite",
+                "Backgrounds/",
+                "AudioFiles/",
+                "ImageFiles/",
+                "FileAttachments/",
+                "FontFiles/"
+            ]
+        case .full:
+            return []
+        }
     }
 
     static func cloneDatabase(_ source: SourceDatabase, to destinationURL: URL) throws {
@@ -226,7 +381,8 @@ private extension SnapshotBuilder {
     static func createArchive(
         at archiveURL: URL,
         payloadDirectory: URL,
-        databaseItems: [DatabaseItem]
+        databaseItems: [DatabaseItem],
+        fileItems: [FileItem]
     ) throws {
         try Persistence.removeItemIfExists(at: archiveURL)
         let archive = try Archive(url: archiveURL, accessMode: .create)
@@ -238,6 +394,13 @@ private extension SnapshotBuilder {
         for item in databaseItems {
             try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
         }
+        for item in fileItems {
+            try archive.addEntry(with: item.archivePath, fileURL: item.fileURL, compressionMethod: .deflate)
+        }
+    }
+
+    static func isSQLiteSidecar(_ fileName: String) -> Bool {
+        fileName.hasSuffix("-wal") || fileName.hasSuffix("-shm") || fileName.hasSuffix("-journal")
     }
 
     static func quotedIdentifier(_ name: String) -> String {

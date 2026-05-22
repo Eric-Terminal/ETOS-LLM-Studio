@@ -16,10 +16,15 @@ struct MemoryRawStore {
     private static var isRunningUnitTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
-    private static let sqliteWriteQueue = DispatchQueue(
-        label: "com.etos.memory.sqlite.incremental.write.queue",
-        qos: .userInitiated
-    )
+    private static let sqliteWriteQueueSpecificKey = DispatchSpecificKey<UInt8>()
+    private static let sqliteWriteQueue: DispatchQueue = {
+        let queue = DispatchQueue(
+            label: "com.etos.memory.sqlite.incremental.write.queue",
+            qos: .userInitiated
+        )
+        queue.setSpecific(key: sqliteWriteQueueSpecificKey, value: 1)
+        return queue
+    }()
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let rootDirectory: URL?
@@ -69,6 +74,13 @@ struct MemoryRawStore {
         if canUseGRDB {
             _ = saveMemoriesToSQLite(memories, asynchronously: !Self.isRunningUnitTests)
         }
+    }
+
+    static func flushPendingSQLiteWritesForSnapshot() {
+        if DispatchQueue.getSpecific(key: sqliteWriteQueueSpecificKey) != nil {
+            return
+        }
+        sqliteWriteQueue.sync {}
     }
 
     private var canUseGRDB: Bool {

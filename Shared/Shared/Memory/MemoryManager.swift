@@ -17,7 +17,20 @@ public class MemoryManager {
 
     // MARK: - 单例
     
-    public static let shared = MemoryManager()
+    private static weak var currentInstance: MemoryManager?
+    public static let shared = {
+        let instance = MemoryManager()
+        currentInstance = instance
+        return instance
+    }()
+
+    public static func flushCurrentInstancePersistenceWritesForSnapshot() {
+        if let currentInstance {
+            currentInstance.flushPendingPersistenceWritesForSnapshot()
+        } else {
+            MemoryRawStore.flushPendingSQLiteWritesForSnapshot()
+        }
+    }
 
     // MARK: - 公开属性
     
@@ -51,6 +64,7 @@ public class MemoryManager {
     let internalDimensionMismatchPublisher = PassthroughSubject<(query: Int, index: Int), Never>()
     let internalEmbeddingProgressPublisher = PassthroughSubject<MemoryEmbeddingProgress, Never>()
     let persistenceQueue = DispatchQueue(label: "com.etos.memory.persistence.queue")
+    let persistenceQueueSpecificKey = DispatchSpecificKey<UInt8>()
     var initializationTask: Task<Void, Never>!
     var cachedMemories: [MemoryItem] = []
     let dateFormatter = ISO8601DateFormatter()
@@ -91,6 +105,8 @@ public class MemoryManager {
         self.embeddingRetryPolicy = retryPolicy
         self.storageRootDirectory = storageRootDirectory ?? Self.defaultStorageRootDirectory(forTests: Self.isRunningUnitTests)
         self.rawStore = MemoryRawStore(rootDirectory: self.storageRootDirectory)
+        self.persistenceQueue.setSpecific(key: persistenceQueueSpecificKey, value: 1)
+        Self.currentInstance = self
         logger.info("MemoryManager 正在初始化...")
         self.initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
@@ -112,7 +128,9 @@ public class MemoryManager {
         self.embeddingRetryPolicy = retryPolicy
         self.storageRootDirectory = storageRootDirectory ?? Self.defaultStorageRootDirectory(forTests: Self.isRunningUnitTests)
         self.rawStore = MemoryRawStore(rootDirectory: self.storageRootDirectory)
+        self.persistenceQueue.setSpecific(key: persistenceQueueSpecificKey, value: 1)
         self.similarityIndex = testIndex
+        Self.currentInstance = self
         self.initializationTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             do {
@@ -130,11 +148,19 @@ public class MemoryManager {
         }
     }
     
-    // MARK: - 公开方法 (测试辅助)
+    // MARK: - 公开方法
     
     /// 等待异步初始化过程完成。仅用于测试。
     public func waitForInitialization() async {
         await initializationTask.value
+    }
+
+    /// 阻塞等待记忆原文与向量索引的持久化队列清空，确保随后读取拿到最新快照。
+    public func flushPendingPersistenceWritesForSnapshot() {
+        if DispatchQueue.getSpecific(key: persistenceQueueSpecificKey) == nil {
+            persistenceQueue.sync {}
+        }
+        MemoryRawStore.flushPendingSQLiteWritesForSnapshot()
     }
 
     /// 快照恢复会替换底层数据库，恢复完成后需要重新加载原文记忆与向量索引。
