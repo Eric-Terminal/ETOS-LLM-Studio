@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch App
 //
-// 小屏更新时间线视图，使用数码表冠逐条浏览 Commit。
+// 小屏检查更新视图，使用数码表冠逐条浏览 Commit。
 // ============================================================================
 
 import SwiftUI
@@ -104,7 +104,7 @@ struct WatchUpdateTimelineView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(NSLocalizedString("更新时间线", comment: "Update timeline navigation title"))
+        .navigationTitle(NSLocalizedString("检查更新", comment: "Update check navigation title"))
         .task {
             await manager.refreshIfNeeded()
         }

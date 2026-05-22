@@ -26,7 +26,7 @@ public extension Notification.Name {
     static let requestOpenChatSession = Notification.Name("com.ETOS.chat.requestOpenSession")
     /// 请求当前设备直接打开隐藏日记页面。
     static let requestOpenAchievementJournal = Notification.Name("com.ETOS.achievementJournal.requestOpen")
-    /// 请求当前设备直接打开更新时间线页面。
+    /// 请求当前设备直接打开检查更新页面。
     static let requestOpenUpdateTimeline = Notification.Name("com.ETOS.updateTimeline.requestOpen")
 }
 

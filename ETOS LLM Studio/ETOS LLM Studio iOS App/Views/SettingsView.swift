@@ -267,7 +267,7 @@ struct SettingsView: View {
                 NavigationLink {
                     UpdateTimelineView()
                 } label: {
-                    SettingsListIconLabel("更新时间线", icon: .about)
+                    SettingsListIconLabel("检查更新", icon: .about)
                 }
             }
 

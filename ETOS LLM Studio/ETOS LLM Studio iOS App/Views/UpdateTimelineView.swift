@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio iOS App
 //
-// 显示 Git 提交更新时间线与 AI 摘要。
+// 显示 Git 提交检查更新与 AI 摘要。
 // ============================================================================
 
 import SwiftUI
@@ -26,7 +26,7 @@ struct UpdateTimelineView: View {
             summarySection
             timelineSection
         }
-        .navigationTitle(NSLocalizedString("更新时间线", comment: "Update timeline navigation title"))
+        .navigationTitle(NSLocalizedString("检查更新", comment: "Update check navigation title"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -35,7 +35,7 @@ struct UpdateTimelineView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .disabled(manager.isRefreshing)
-                .accessibilityLabel(NSLocalizedString("刷新更新时间线", comment: ""))
+                .accessibilityLabel(NSLocalizedString("刷新检查更新", comment: ""))
             }
         }
         .task {

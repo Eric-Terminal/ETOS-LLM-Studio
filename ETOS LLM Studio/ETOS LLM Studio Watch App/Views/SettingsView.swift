@@ -253,7 +253,7 @@ struct SettingsView: View {
                     }
 
                     NavigationLink(destination: WatchUpdateTimelineView()) {
-                        settingsNavigationLabel("更新时间线", icon: .about)
+                        settingsNavigationLabel("检查更新", icon: .about)
                     }
                 }
                 

@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 负责无后端更新时间线、版本坐标推移、GitHub 缓存和 AI 摘要。
+// 负责无后端检查更新、版本坐标推移、GitHub 缓存和 AI 摘要。
 // ============================================================================
 
 import Combine
@@ -331,7 +331,7 @@ public final class UpdateTimelineManager: ObservableObject {
             }
             state = updated
             persistState()
-            Self.logger.error("刷新更新时间线失败: \(Self.localizedDescription(for: error), privacy: .public)")
+            Self.logger.error("刷新检查更新失败: \(Self.localizedDescription(for: error), privacy: .public)")
         }
     }
 

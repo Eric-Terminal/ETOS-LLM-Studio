@@ -3445,8 +3445,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "测试已取消。" = "Test cancelled.";
 
 /* Update timeline */
-"更新时间线" = "Update Timeline";
-"刷新更新时间线" = "Refresh Update Timeline";
+"检查更新" = "Check for Updates";
+"刷新检查更新" = "Refresh Update Check";
 "通道" = "Channel";
 "当前 Build" = "Current Build";
 "推算最新 Build" = "Estimated Latest Build";
@@ -3473,9 +3473,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "打开 GitHub Commit" = "Open GitHub Commit";
 "转动数码表冠逐条浏览。" = "Turn the Digital Crown to browse one commit at a time.";
 "B%d" = "B%d";
-"更新时间线摘要" = "Update Timeline Summary";
+"检查更新摘要" = "Update Check Summary";
 "更新入口" = "Update Entry";
-"打开更新时间线" = "Open Update Timeline";
+"打开检查更新" = "Open Update Check";
 "状态未知" = "Unknown";
 "已是最新" = "Up to Date";
 "发现更新" = "Update Available";
