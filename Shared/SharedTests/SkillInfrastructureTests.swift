@@ -198,6 +198,58 @@ description: "demo"
     }
 
     @MainActor
+    @Test("use_skill 工具 schema 限定当前启用技能名")
+    func testUseSkillToolSchemaIncludesEnabledSkillNameEnum() {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let enabledSkillName = "schema-enabled-\(UUID().uuidString.lowercased())"
+        let disabledSkillName = "schema-disabled-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(enabledSkillName)
+            _ = manager.deleteSkill(disabledSkillName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        #expect(manager.saveSkillDataFilesAtomically(skillName: enabledSkillName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(enabledSkillName)
+            description: "启用技能"
+            ---
+
+            正文
+            """.utf8)
+        ]))
+        #expect(manager.saveSkillDataFilesAtomically(skillName: disabledSkillName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(disabledSkillName)
+            description: "停用技能"
+            ---
+
+            正文
+            """.utf8)
+        ]))
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledSkillNames: [enabledSkillName])
+
+        let tool = manager.chatToolsForLLM().first
+        guard case let .dictionary(parameters)? = tool?.parameters,
+              case let .dictionary(properties)? = parameters["properties"],
+              case let .dictionary(nameSchema)? = properties["name"],
+              case let .array(nameEnum)? = nameSchema["enum"] else {
+            Issue.record("use_skill 工具缺少 name enum schema")
+            return
+        }
+
+        #expect(nameEnum.contains(.string(enabledSkillName)))
+        #expect(!nameEnum.contains(.string(disabledSkillName)))
+    }
+
+    @MainActor
     @Test("use_skill 可列出并读取技能包文本资源但不读取二进制资源")
     func testUseSkillReadsBundledTextResources() async throws {
         let manager = SkillManager.shared

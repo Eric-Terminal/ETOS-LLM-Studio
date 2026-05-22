@@ -305,6 +305,7 @@ public final class SkillManager: ObservableObject {
             "properties": .dictionary([
                 "name": .dictionary([
                     "type": .string("string"),
+                    "enum": .array(available.map { .string($0.name) }),
                     "description": .string(NSLocalizedString("要加载的技能名称。", comment: "Skill tool name parameter description sent to model"))
                 ]),
                 "action": .dictionary([
