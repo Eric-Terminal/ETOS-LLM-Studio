@@ -343,6 +343,25 @@ description: "demo"
         #expect(SkillGitHubImporter.parseGitHubURL("https://raw.githubusercontent.com/acme/skills/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
     }
 
+    @Test("GitHub 默认分支导入省略 ref 参数")
+    func testGitHubContentsAPIURLUsesDefaultBranchWhenRefIsHEAD() throws {
+        let defaultBranchURL = try SkillGitHubImporter.makeGitHubContentsAPIURL(
+            owner: "acme",
+            repo: "skills",
+            branch: "HEAD",
+            path: ""
+        )
+        #expect(defaultBranchURL.absoluteString == "https://api.github.com/repos/acme/skills/contents")
+
+        let explicitBranchURL = try SkillGitHubImporter.makeGitHubContentsAPIURL(
+            owner: "acme",
+            repo: "skills",
+            branch: "main",
+            path: ".claude/skills/demo"
+        )
+        #expect(explicitBranchURL.absoluteString == "https://api.github.com/repos/acme/skills/contents/.claude/skills/demo?ref=main")
+    }
+
     @Test("GitHub 技能导入会展开唯一嵌套技能目录")
     func testGitHubSkillImporterSelectsSingleNestedSkillDirectory() throws {
         let files = [

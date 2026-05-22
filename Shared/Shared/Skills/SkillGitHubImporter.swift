@@ -181,7 +181,7 @@ public enum SkillGitHubImporter {
         return normalizedItem
     }
 
-    private static func makeGitHubContentsAPIURL(
+    static func makeGitHubContentsAPIURL(
         owner: String,
         repo: String,
         branch: String,
@@ -208,7 +208,9 @@ public enum SkillGitHubImporter {
         } else {
             components.path = "/repos/\(owner)/\(repo)/contents/\(encodedPath)"
         }
-        components.queryItems = [URLQueryItem(name: "ref", value: branch)]
+        if !branch.isEmpty && branch != "HEAD" {
+            components.queryItems = [URLQueryItem(name: "ref", value: branch)]
+        }
         guard let url = components.url else {
             throw SkillStoreError.networkError("无法构造 GitHub API 地址。")
         }
