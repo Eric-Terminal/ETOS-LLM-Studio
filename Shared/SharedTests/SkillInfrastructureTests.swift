@@ -611,6 +611,34 @@ description: "demo"
         #expect(saved.description == "这一段来自正文，会变成技能描述。")
     }
 
+    @MainActor
+    @Test("粘贴 SKILL.md 时可用输入名称补齐缺省 name")
+    func testSaveSkillFromContentUsesFallbackName() throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let skillName = "paste-fallback-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(skillName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        #expect(manager.saveSkillFromContent("""
+        ---
+        description: "粘贴导入"
+        ---
+
+        正文首段
+        """, fallbackName: skillName))
+
+        let saved = try #require(manager.skills.first(where: { $0.name == skillName }))
+        #expect(saved.description == "粘贴导入")
+        #expect(manager.isSkillEnabled(skillName))
+    }
+
     @Test("SkillBundleImporter 用建议文件名补齐单文件下载技能名")
     func testSkillBundleImporterUsesSuggestedFileNameFallback() throws {
         let result = try SkillBundleImporter.importSkill(

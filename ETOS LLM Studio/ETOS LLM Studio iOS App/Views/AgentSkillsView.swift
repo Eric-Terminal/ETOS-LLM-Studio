@@ -270,10 +270,16 @@ description: "技能描述"
 
 在这里编写技能说明。
 """
+    @State private var fallbackName: String = ""
     @State private var localError: String?
 
     private var parsedName: String {
         SkillFrontmatterParser.parse(content)["name"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var canSave: Bool {
+        !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!parsedName.isEmpty || !fallbackName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     var body: some View {
@@ -291,7 +297,12 @@ description: "技能描述"
                             .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                     }
 
-                if !parsedName.isEmpty {
+                if parsedName.isEmpty {
+                    TextField(NSLocalizedString("名称", comment: ""), text: $fallbackName)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .textFieldStyle(.roundedBorder)
+                } else {
                     Text(String(format: NSLocalizedString("技能名称：%@", comment: ""), parsedName))
                         .etFont(.caption)
                         .foregroundStyle(.secondary)
@@ -312,14 +323,14 @@ description: "技能描述"
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(NSLocalizedString("保存", comment: "")) {
-                        let success = manager.saveSkillFromContent(content)
+                        let success = manager.saveSkillFromContent(content, fallbackName: fallbackName)
                         if success {
                             dismiss()
                         } else {
                             localError = manager.lastErrorMessage ?? NSLocalizedString("保存失败。", comment: "")
                         }
                     }
-                    .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!canSave)
                 }
             }
         }

@@ -297,10 +297,16 @@ description: "技能描述"
 
 在这里编写技能说明。
 """
+    @State private var fallbackName: String = ""
     @State private var localError: String?
 
     private var parsedName: String {
         SkillFrontmatterParser.parse(content)["name"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var canSave: Bool {
+        !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!parsedName.isEmpty || !fallbackName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     var body: some View {
@@ -310,8 +316,12 @@ description: "技能描述"
                     .lineLimit(8...20)
             }
 
-            if !parsedName.isEmpty {
-                Section(NSLocalizedString("名称", comment: "")) {
+            Section(NSLocalizedString("名称", comment: "")) {
+                if parsedName.isEmpty {
+                    TextField(NSLocalizedString("名称", comment: ""), text: $fallbackName)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } else {
                     Text(parsedName)
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
@@ -328,14 +338,14 @@ description: "技能描述"
 
             Section {
                 Button(NSLocalizedString("保存", comment: "")) {
-                    let success = manager.saveSkillFromContent(content)
+                    let success = manager.saveSkillFromContent(content, fallbackName: fallbackName)
                     if success {
                         dismiss()
                     } else {
                         localError = manager.lastErrorMessage ?? NSLocalizedString("保存失败。", comment: "")
                     }
                 }
-                .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!canSave)
             }
         }
         .navigationTitle(NSLocalizedString("新增技能", comment: ""))

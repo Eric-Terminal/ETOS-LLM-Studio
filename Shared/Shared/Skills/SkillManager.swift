@@ -125,9 +125,22 @@ public final class SkillManager: ObservableObject {
     }
 
     @discardableResult
-    public func saveSkillFromContent(_ content: String) -> Bool {
-        guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: nil) else {
+    public func saveSkillFromContent(_ content: String, fallbackName: String? = nil) -> Bool {
+        if let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: nil) {
+            return saveSkill(name: manifest.name, content: content)
+        }
+
+        let fallback = fallbackName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !fallback.isEmpty else {
             lastErrorMessage = "SKILL.md 缺少 name 字段。"
+            return false
+        }
+        guard SkillPaths.isValidSkillName(fallback) else {
+            lastErrorMessage = "技能名称不合法。仅支持字母、数字、点、下划线、中划线。"
+            return false
+        }
+        guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: fallback) else {
+            lastErrorMessage = "SKILL.md 格式错误：name 字段无效。"
             return false
         }
         return saveSkill(name: manifest.name, content: content)
