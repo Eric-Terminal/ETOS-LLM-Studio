@@ -200,11 +200,26 @@ private struct UpdateTimelineRow: View {
     let commit: UpdateTimelineCommit
     let isFirst: Bool
     let isLast: Bool
+    private let markerColumnWidth: CGFloat = 22
+    private let markerDiameter: CGFloat = 9
+    private let markerTopPadding: CGFloat = 5
+    private let rowVerticalPadding: CGFloat = 6
+
+    private var markerTopY: CGFloat {
+        rowVerticalPadding + markerTopPadding
+    }
+
+    private var markerBottomY: CGFloat {
+        markerTopY + markerDiameter
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            UpdateTimelineRail(isFirst: isFirst, isLast: isLast)
-                .frame(width: 22)
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: markerDiameter, height: markerDiameter)
+                .padding(.top, markerTopPadding)
+                .frame(width: markerColumnWidth)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
@@ -234,26 +249,43 @@ private struct UpdateTimelineRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, rowVerticalPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .leading) {
+            UpdateTimelineConnectorShape(
+                isFirst: isFirst,
+                isLast: isLast,
+                markerTopY: markerTopY,
+                markerBottomY: markerBottomY,
+                lineTopExtension: 8,
+                lineBottomExtension: 8
+            )
+            .stroke(Color.secondary.opacity(0.28), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: markerColumnWidth)
+        }
     }
 }
 
-private struct UpdateTimelineRail: View {
+private struct UpdateTimelineConnectorShape: Shape {
     let isFirst: Bool
     let isLast: Bool
+    let markerTopY: CGFloat
+    let markerBottomY: CGFloat
+    let lineTopExtension: CGFloat
+    let lineBottomExtension: CGFloat
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(isFirst ? Color.clear : Color.secondary.opacity(0.28))
-                .frame(width: 2)
-            Circle()
-                .fill(Color.accentColor)
-                .frame(width: 9, height: 9)
-            Rectangle()
-                .fill(isLast ? Color.clear : Color.secondary.opacity(0.28))
-                .frame(width: 2)
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let x = rect.midX
+        if !isFirst {
+            path.move(to: CGPoint(x: x, y: rect.minY - lineTopExtension))
+            path.addLine(to: CGPoint(x: x, y: rect.minY + markerTopY))
         }
+        if !isLast {
+            path.move(to: CGPoint(x: x, y: rect.minY + markerBottomY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY + lineBottomExtension))
+        }
+        return path
     }
 }
 

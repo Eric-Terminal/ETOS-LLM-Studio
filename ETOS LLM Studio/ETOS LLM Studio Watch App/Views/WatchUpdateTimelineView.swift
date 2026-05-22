@@ -185,20 +185,26 @@ private struct WatchUpdateTimelineRow: View {
     let isSelected: Bool
     let isFirst: Bool
     let isLast: Bool
+    private let markerColumnWidth: CGFloat = 10
+    private let markerDiameter: CGFloat = 8
+    private let markerTopPadding: CGFloat = 6
+    private let rowVerticalPadding: CGFloat = 4
+
+    private var markerTopY: CGFloat {
+        rowVerticalPadding + markerTopPadding
+    }
+
+    private var markerBottomY: CGFloat {
+        markerTopY + markerDiameter
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(isFirst ? Color.clear : Color.secondary.opacity(0.25))
-                    .frame(width: 2, height: 10)
-                Circle()
-                    .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
-                    .frame(width: 8, height: 8)
-                Rectangle()
-                    .fill(isLast ? Color.clear : Color.secondary.opacity(0.25))
-                    .frame(width: 2, height: 42)
-            }
+            Circle()
+                .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
+                .frame(width: markerDiameter, height: markerDiameter)
+                .padding(.top, markerTopPadding)
+                .frame(width: markerColumnWidth)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
@@ -222,8 +228,44 @@ private struct WatchUpdateTimelineRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, rowVerticalPadding)
         .padding(.horizontal, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .leading) {
+            WatchUpdateTimelineConnectorShape(
+                isFirst: isFirst,
+                isLast: isLast,
+                markerTopY: markerTopY,
+                markerBottomY: markerBottomY,
+                lineTopExtension: 3,
+                lineBottomExtension: 3
+            )
+            .stroke(Color.secondary.opacity(0.25), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: markerColumnWidth + 4)
+        }
+    }
+}
+
+private struct WatchUpdateTimelineConnectorShape: Shape {
+    let isFirst: Bool
+    let isLast: Bool
+    let markerTopY: CGFloat
+    let markerBottomY: CGFloat
+    let lineTopExtension: CGFloat
+    let lineBottomExtension: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let x = rect.midX
+        if !isFirst {
+            path.move(to: CGPoint(x: x, y: rect.minY - lineTopExtension))
+            path.addLine(to: CGPoint(x: x, y: rect.minY + markerTopY))
+        }
+        if !isLast {
+            path.move(to: CGPoint(x: x, y: rect.minY + markerBottomY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY + lineBottomExtension))
+        }
+        return path
     }
 }
 
