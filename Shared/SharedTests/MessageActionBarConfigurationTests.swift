@@ -11,11 +11,35 @@ import Testing
 @Suite("气泡功能栏配置测试")
 struct MessageActionBarConfigurationTests {
 
-    @Test("默认配置只在助手气泡启用多版本切换")
-    func defaultConfigurationOnlyKeepsVersionSwitcher() {
-        let configuration = MessageActionBarConfiguration.defaultConfiguration
+    @Test("iOS 默认配置只在助手气泡启用多版本切换")
+    func iOSDefaultConfigurationOnlyKeepsVersionSwitcher() {
+        let configuration = MessageActionBarConfiguration.iOSDefaultConfiguration
 
         #expect(configuration.assistantItems == [.versionSwitcher])
+        #expect(configuration.userItems.isEmpty)
+        #expect(configuration.assistantAlignment == .trailing)
+        #expect(configuration.userAlignment == .trailing)
+    }
+
+    @Test("watchOS 默认配置不启用气泡功能栏项目")
+    func watchOSDefaultConfigurationKeepsActionBarEmpty() {
+        let configuration = MessageActionBarConfiguration.watchOSDefaultConfiguration
+
+        #expect(configuration.assistantItems.isEmpty)
+        #expect(configuration.userItems.isEmpty)
+        #expect(configuration.assistantAlignment == .trailing)
+        #expect(configuration.userAlignment == .trailing)
+    }
+
+    @Test("当前平台默认配置符合平台策略")
+    func defaultConfigurationFollowsCurrentPlatformPolicy() {
+        let configuration = MessageActionBarConfiguration.defaultConfiguration
+
+        #if os(watchOS)
+        #expect(configuration.assistantItems.isEmpty)
+        #else
+        #expect(configuration.assistantItems == [.versionSwitcher])
+        #endif
         #expect(configuration.userItems.isEmpty)
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)

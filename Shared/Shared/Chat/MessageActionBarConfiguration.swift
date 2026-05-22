@@ -62,12 +62,27 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
         self.userAlignment = userAlignment
     }
 
-    public static let defaultConfiguration = MessageActionBarConfiguration(
+    public static let iOSDefaultConfiguration = MessageActionBarConfiguration(
         assistantItems: [.versionSwitcher],
         userItems: [],
         assistantAlignment: .trailing,
         userAlignment: .trailing
     )
+
+    public static let watchOSDefaultConfiguration = MessageActionBarConfiguration(
+        assistantItems: [],
+        userItems: [],
+        assistantAlignment: .trailing,
+        userAlignment: .trailing
+    )
+
+    public static var defaultConfiguration: MessageActionBarConfiguration {
+        #if os(watchOS)
+        return watchOSDefaultConfiguration
+        #else
+        return iOSDefaultConfiguration
+        #endif
+    }
 
     public static var defaultConfigurationJSON: String {
         defaultConfiguration.encodedString()
