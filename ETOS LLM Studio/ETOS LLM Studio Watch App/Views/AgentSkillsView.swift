@@ -194,56 +194,17 @@ private struct WatchImportSkillFromURLSheet: View {
     }
 
     private func startImportFromURL() {
-        let trimmed = fileURLText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            localError = NSLocalizedString("链接不能为空。", comment: "")
-            return
-        }
-        guard let url = URL(string: trimmed) else {
-            localError = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "")
-            return
-        }
-        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            localError = NSLocalizedString("仅支持 http/https 链接。", comment: "")
-            return
-        }
-
         isImporting = true
         localError = nil
 
         Task {
-            do {
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 45
-                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
-                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                    await MainActor.run {
-                        localError = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
-                        isImporting = false
-                    }
-                    return
-                }
-
-                let fileName = response.suggestedFilename ?? url.lastPathComponent
-                let result = try await Task.detached(priority: .utility) {
-                    try SkillBundleImporter.importSkill(fromDownloadedData: data, suggestedFileName: fileName)
-                }.value
-                let success = await MainActor.run {
-                    manager.saveSkillDataFilesAtomically(skillName: result.skillName, files: result.files)
-                }
-
-                await MainActor.run {
-                    isImporting = false
-                    if success {
-                        dismiss()
-                    } else {
-                        localError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：技能包内容无效。", comment: "")
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    localError = error.localizedDescription
-                    isImporting = false
+            let result = await manager.importSkillFromURL(urlString: fileURLText)
+            await MainActor.run {
+                isImporting = false
+                if result.success {
+                    dismiss()
+                } else {
+                    localError = result.message
                 }
             }
         }

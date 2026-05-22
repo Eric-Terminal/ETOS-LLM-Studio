@@ -683,6 +683,20 @@ description: "demo"
         #expect(manager.isSkillEnabled(skillName))
     }
 
+    @MainActor
+    @Test("链接导入会拒绝非法 URL")
+    func testImportSkillFromURLRejectsInvalidURL() async {
+        let manager = SkillManager.shared
+
+        let empty = await manager.importSkillFromURL(urlString: "  ")
+        #expect(!empty.success)
+        #expect(empty.message == NSLocalizedString("链接不能为空。", comment: ""))
+
+        let unsupportedScheme = await manager.importSkillFromURL(urlString: "file:///tmp/SKILL.md")
+        #expect(!unsupportedScheme.success)
+        #expect(unsupportedScheme.message == NSLocalizedString("仅支持 http/https 链接。", comment: ""))
+    }
+
     @Test("SkillBundleImporter 用建议文件名补齐单文件下载技能名")
     func testSkillBundleImporterUsesSuggestedFileNameFallback() throws {
         let result = try SkillBundleImporter.importSkill(

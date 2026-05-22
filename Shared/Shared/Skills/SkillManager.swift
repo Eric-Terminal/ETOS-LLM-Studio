@@ -296,6 +296,50 @@ public final class SkillManager: ObservableObject {
         }
     }
 
+    public func importSkillFromURL(urlString: String) async -> (success: Bool, message: String) {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            let message = NSLocalizedString("链接不能为空。", comment: "")
+            lastErrorMessage = message
+            return (false, message)
+        }
+        guard let url = URL(string: trimmed) else {
+            let message = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "")
+            lastErrorMessage = message
+            return (false, message)
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            let message = NSLocalizedString("仅支持 http/https 链接。", comment: "")
+            lastErrorMessage = message
+            return (false, message)
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 45
+            let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                let message = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
+                lastErrorMessage = message
+                return (false, message)
+            }
+
+            let fileName = response.suggestedFilename ?? url.lastPathComponent
+            let result = try await Task.detached(priority: .utility) {
+                try SkillBundleImporter.importSkill(fromDownloadedData: data, suggestedFileName: fileName)
+            }.value
+            let saved = saveSkillDataFilesAtomically(skillName: result.skillName, files: result.files)
+            if saved {
+                return (true, result.skillName)
+            }
+            return (false, lastErrorMessage ?? NSLocalizedString("导入失败：技能包内容无效。", comment: ""))
+        } catch {
+            let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            lastErrorMessage = reason
+            return (false, reason)
+        }
+    }
+
     // MARK: - Chat integration
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
