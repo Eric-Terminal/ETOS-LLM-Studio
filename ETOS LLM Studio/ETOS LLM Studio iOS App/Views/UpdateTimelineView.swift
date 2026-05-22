@@ -21,10 +21,10 @@ struct UpdateTimelineView: View {
 
     var body: some View {
         List {
+            timelineSection
+            summarySection
             statusSection
             controlsSection
-            summarySection
-            timelineSection
         }
         .navigationTitle(NSLocalizedString("检查更新", comment: "Update check navigation title"))
         .toolbar {

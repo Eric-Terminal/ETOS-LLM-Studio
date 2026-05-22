@@ -40,25 +40,18 @@ struct WatchUpdateTimelineView: View {
     var body: some View {
         List {
             Section {
-                statusRow(NSLocalizedString("通道", comment: "Update timeline channel label"), value: manager.state.channel.displayName)
-                statusRow(NSLocalizedString("状态", comment: "Update timeline status label"), value: manager.state.status.displayName)
-                if let build = manager.state.currentBuildNumber {
-                    statusRow(NSLocalizedString("当前 Build", comment: "Update timeline current build label"), value: "\(build)")
+                if commits.isEmpty {
+                    Text(NSLocalizedString("暂无时间线", comment: "Update timeline empty title"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    crownTimeline
                 }
-                if let appStoreVersion = manager.state.appStoreVersion {
-                    statusRow(NSLocalizedString("App Store 版本", comment: "Update timeline app store version label"), value: appStoreVersion)
-                }
-            }
-
-            Section {
-                Toggle(NSLocalizedString("自动检查更新", comment: "Update timeline auto check toggle"), isOn: autoCheckBinding)
-                Toggle(NSLocalizedString("自动检查并总结", comment: "Update timeline auto summary toggle"), isOn: autoSummaryBinding)
-                Button {
-                    Task { await manager.refresh(forceNetwork: true) }
-                } label: {
-                    Label(NSLocalizedString("刷新", comment: "Update timeline refresh button"), systemImage: "arrow.clockwise")
-                }
-                .disabled(manager.isRefreshing)
+            } header: {
+                Text(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
+            } footer: {
+                Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -90,18 +83,25 @@ struct WatchUpdateTimelineView: View {
             }
 
             Section {
-                if commits.isEmpty {
-                    Text(NSLocalizedString("暂无时间线", comment: "Update timeline empty title"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    crownTimeline
+                statusRow(NSLocalizedString("通道", comment: "Update timeline channel label"), value: manager.state.channel.displayName)
+                statusRow(NSLocalizedString("状态", comment: "Update timeline status label"), value: manager.state.status.displayName)
+                if let build = manager.state.currentBuildNumber {
+                    statusRow(NSLocalizedString("当前 Build", comment: "Update timeline current build label"), value: "\(build)")
                 }
-            } header: {
-                Text(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
-            } footer: {
-                Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                if let appStoreVersion = manager.state.appStoreVersion {
+                    statusRow(NSLocalizedString("App Store 版本", comment: "Update timeline app store version label"), value: appStoreVersion)
+                }
+            }
+
+            Section {
+                Toggle(NSLocalizedString("自动检查更新", comment: "Update timeline auto check toggle"), isOn: autoCheckBinding)
+                Toggle(NSLocalizedString("自动检查并总结", comment: "Update timeline auto summary toggle"), isOn: autoSummaryBinding)
+                Button {
+                    Task { await manager.refresh(forceNetwork: true) }
+                } label: {
+                    Label(NSLocalizedString("刷新", comment: "Update timeline refresh button"), systemImage: "arrow.clockwise")
+                }
+                .disabled(manager.isRefreshing)
             }
         }
         .navigationTitle(NSLocalizedString("检查更新", comment: "Update check navigation title"))
