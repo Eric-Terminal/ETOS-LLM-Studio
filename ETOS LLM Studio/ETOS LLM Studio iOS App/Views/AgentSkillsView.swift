@@ -3,10 +3,11 @@
 // ============================================================================
 // Agent Skills 管理页（iOS）
 // - 管理技能列表与启用状态
-// - 支持新增、删除、文件编辑、GitHub/本地技能包导入
+// - 支持新增、删除、文件编辑、GitHub/链接/本地技能包导入
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import Shared
 import UniformTypeIdentifiers
 
@@ -14,6 +15,7 @@ struct AgentSkillsView: View {
     @StateObject private var manager = SkillManager.shared
     @State private var showAddSheet = false
     @State private var showImportSheet = false
+    @State private var showURLImportSheet = false
     @State private var showLocalImporter = false
     @State private var localImportError: String?
     @State private var deleteTarget: SkillMetadata?
@@ -75,6 +77,12 @@ struct AgentSkillsView: View {
                     showImportSheet = true
                 } label: {
                     Label(NSLocalizedString("从 GitHub 导入", comment: ""), systemImage: "square.and.arrow.down")
+                }
+
+                Button {
+                    showURLImportSheet = true
+                } label: {
+                    Label(NSLocalizedString("链接导入技能包", comment: ""), systemImage: "link.badge.plus")
                 }
 
                 Button {
@@ -147,6 +155,9 @@ struct AgentSkillsView: View {
         }
         .sheet(isPresented: $showImportSheet) {
             ImportSkillSheet(manager: manager)
+        }
+        .sheet(isPresented: $showURLImportSheet) {
+            ImportSkillFromURLSheet(manager: manager)
         }
         .fileImporter(
             isPresented: $showLocalImporter,
@@ -397,6 +408,119 @@ private struct ImportSkillSheet: View {
                         }
                     }
                     .disabled(isImporting || repoURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct ImportSkillFromURLSheet: View {
+    @ObservedObject var manager: SkillManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var fileURLText = ""
+    @State private var isImporting = false
+    @State private var localError: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(NSLocalizedString("https://example.com/skill.zip", comment: ""), text: $fileURLText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                } header: {
+                    Text(NSLocalizedString("技能包链接", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("支持 http/https 的 SKILL.md 或 zip 技能包链接。", comment: ""))
+                }
+
+                if isImporting {
+                    Section {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text(NSLocalizedString("正在导入，请稍候…", comment: ""))
+                                .etFont(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if let localError {
+                    Section(NSLocalizedString("错误", comment: "")) {
+                        Text(localError)
+                            .foregroundStyle(.red)
+                            .etFont(.footnote)
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("链接导入", comment: ""))
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                        .disabled(isImporting)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(NSLocalizedString("导入", comment: "")) {
+                        startImportFromURL()
+                    }
+                    .disabled(isImporting || fileURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func startImportFromURL() {
+        let trimmed = fileURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            localError = NSLocalizedString("链接不能为空。", comment: "")
+            return
+        }
+        guard let url = URL(string: trimmed) else {
+            localError = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "")
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            localError = NSLocalizedString("仅支持 http/https 链接。", comment: "")
+            return
+        }
+
+        isImporting = true
+        localError = nil
+
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 45
+                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    await MainActor.run {
+                        localError = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
+                        isImporting = false
+                    }
+                    return
+                }
+
+                let fileName = response.suggestedFilename ?? url.lastPathComponent
+                let result = try await Task.detached(priority: .utility) {
+                    try SkillBundleImporter.importSkill(fromDownloadedData: data, suggestedFileName: fileName)
+                }.value
+                let success = await MainActor.run {
+                    manager.saveSkillDataFilesAtomically(skillName: result.skillName, files: result.files)
+                }
+
+                await MainActor.run {
+                    isImporting = false
+                    if success {
+                        dismiss()
+                    } else {
+                        localError = manager.lastErrorMessage ?? NSLocalizedString("导入失败：技能包内容无效。", comment: "")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    localError = error.localizedDescription
+                    isImporting = false
                 }
             }
         }
