@@ -167,83 +167,37 @@ struct WatchUpdateTimelineView: View {
 
 private struct WatchUpdateTimelineBrowserView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared
-    @State private var crownIndex: Double = 0
-    private let visibleWindowSize = 2
 
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
     }
 
-    private var maxIndex: Double {
-        Double(max(commits.count - visibleWindowSize, 0))
-    }
-
-    private var startIndex: Int {
-        min(max(Int(crownIndex.rounded()), 0), max(commits.count - visibleWindowSize, 0))
-    }
-
-    private var visibleCommitIndices: [Int] {
-        guard !commits.isEmpty else { return [] }
-        let endIndex = min(startIndex + visibleWindowSize - 1, commits.count - 1)
-        return Array(startIndex...endIndex)
-    }
-
     var body: some View {
-        Group {
+        List {
             if commits.isEmpty {
                 Text(NSLocalizedString("暂无时间线", comment: "Update timeline empty title"))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                browserContent
-            }
-        }
-        .navigationTitle(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
-        .onChange(of: commits.count) { _, newCount in
-            crownIndex = min(crownIndex, Double(max(newCount - visibleWindowSize, 0)))
-        }
-    }
-
-    private var browserContent: some View {
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(String(format: NSLocalizedString("第 %d / %d 条", comment: "Item position counter"), startIndex + 1, commits.count))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: 4) {
-                ForEach(visibleCommitIndices, id: \.self) { index in
+                ForEach(Array(commits.enumerated()), id: \.element.id) { index, _ in
                     let commit = commits[index]
                     NavigationLink {
                         WatchUpdateTimelineCommitDetailView(commit: commit)
                     } label: {
                         WatchUpdateTimelineRow(
                             commit: commit,
-                            isSelected: index == startIndex,
-                            isFirst: index == visibleCommitIndices.first,
-                            isLast: index == visibleCommitIndices.last
+                            isSelected: index == 0,
+                            isFirst: index == 0,
+                            isLast: index == commits.count - 1
                         )
                     }
-                    .buttonStyle(.plain)
                 }
+                Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
-            .frame(minHeight: 160)
-            .focusable(true)
-            .digitalCrownRotation(
-                $crownIndex,
-                from: 0,
-                through: maxIndex,
-                by: 1,
-                sensitivity: .medium,
-                isContinuous: false,
-                isHapticFeedbackEnabled: true
-            )
-
-            Text(NSLocalizedString("转动数码表冠逐条浏览。", comment: "Watch update timeline crown footer"))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal)
-        .animation(.snappy, value: startIndex)
+        .navigationTitle(NSLocalizedString("Commit 时间线", comment: "Update timeline commits section"))
     }
 }
 
