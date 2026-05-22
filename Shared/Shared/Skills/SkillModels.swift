@@ -67,6 +67,31 @@ public struct SkillImportResult: Sendable {
     }
 }
 
+public struct SkillTextResourceChunk: Sendable {
+    public var relativePath: String
+    public var startLine: Int
+    public var endLine: Int
+    public var totalLines: Int
+    public var hasMore: Bool
+    public var content: String
+
+    public init(
+        relativePath: String,
+        startLine: Int,
+        endLine: Int,
+        totalLines: Int,
+        hasMore: Bool,
+        content: String
+    ) {
+        self.relativePath = relativePath
+        self.startLine = startLine
+        self.endLine = endLine
+        self.totalLines = totalLines
+        self.hasMore = hasMore
+        self.content = content
+    }
+}
+
 public enum SkillStoreError: LocalizedError, Sendable {
     case invalidSkillName
     case invalidSkillContent

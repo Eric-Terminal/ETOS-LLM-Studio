@@ -314,6 +314,14 @@ public final class SkillManager: ObservableObject {
                 "path": .dictionary([
                     "type": .string("string"),
                     "description": .string(NSLocalizedString("技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。", comment: "Skill tool path parameter description sent to model"))
+                ]),
+                "start_line": .dictionary([
+                    "type": .string("integer"),
+                    "description": .string(NSLocalizedString("read_resource 分块读取的起始行号，从 1 开始；大文本资源建议使用。", comment: "Skill tool start line parameter description sent to model"))
+                ]),
+                "max_lines": .dictionary([
+                    "type": .string("integer"),
+                    "description": .string(NSLocalizedString("read_resource 分块读取的最多行数，默认 200，最大 1000。", comment: "Skill tool max lines parameter description sent to model"))
                 ])
             ]),
             "required": .array([.string("name")])
@@ -354,6 +362,8 @@ public final class SkillManager: ObservableObject {
             let name: String
             let action: String?
             let path: String?
+            let start_line: Int?
+            let max_lines: Int?
         }
 
         guard let data = argumentsJSON.data(using: .utf8),
@@ -400,6 +410,15 @@ public final class SkillManager: ObservableObject {
                 guard !path.isEmpty else {
                     throw SkillStoreError.saveFailed("read_resource 必须提供 path。")
                 }
+                if args.start_line != nil || args.max_lines != nil {
+                    let chunk = try SkillStore.loadSkillTextResourceChunk(
+                        skillName: name,
+                        relativePath: path,
+                        startLine: args.start_line ?? 1,
+                        maxLines: args.max_lines ?? 200
+                    )
+                    return Self.formatResourceChunk(skillName: name, chunk: chunk)
+                }
                 let content = try SkillStore.loadSkillTextResource(skillName: name, relativePath: path)
                 let normalizedPath = SkillResourcePolicy.normalizeRelativePath(path) ?? path
                 return Self.formatResourceContent(skillName: name, relativePath: normalizedPath, content: content)
@@ -421,8 +440,24 @@ public final class SkillManager: ObservableObject {
                 : (file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker"))
             lines.append("- \(file.relativePath) (\(StorageUtility.formatSize(file.size)), \(access))")
         }
-        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读取的文本资源；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
+        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读取的文本资源；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
         return lines.joined(separator: "\n")
+    }
+
+    private nonisolated static func formatResourceChunk(skillName: String, chunk: SkillTextResourceChunk) -> String {
+        [
+            String(
+                format: NSLocalizedString("技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）", comment: "Skill resource chunk content header"),
+                skillName,
+                chunk.relativePath,
+                chunk.startLine,
+                chunk.endLine,
+                chunk.totalLines,
+                chunk.hasMore ? NSLocalizedString("还有更多", comment: "Skill resource chunk has more marker") : NSLocalizedString("已到末尾", comment: "Skill resource chunk end marker")
+            ),
+            "",
+            chunk.content
+        ].joined(separator: "\n")
     }
 
     private nonisolated static func formatResourceContent(skillName: String, relativePath: String, content: String) -> String {

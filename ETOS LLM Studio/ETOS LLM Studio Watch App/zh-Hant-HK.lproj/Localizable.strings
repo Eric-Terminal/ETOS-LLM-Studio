@@ -2656,7 +2656,7 @@
 "关闭时请求体日志会隐藏 message、content 等消息字段；开启后会记录明文消息文本，但图片、音频和文件的 Base64 仍会隐藏。" = "關閉时請求體日志會隐藏 message、content 等消息字段；開啟后會記录明文消息文本，但圖片、音頻和文件的 Base64 仍會隐藏。";
 "其他文件" = "其他文件";
 "冲突预览为本地启发式估算，最终结果以导入完成后的统计为准。" = "冲突预覽為本地啟發式估算，最終結果以導入完成后的統計為准。";
-"分块读取参数无效，请检查 start_line 和 max_lines。" = "分块讀取參數无效，請检查 start_line 和 max_lines。";
+"分块读取参数无效，请检查 start_line 和 max_lines。" = "分塊讀取參數無效，請檢查 start_line 和 max_lines。";
 "分块读取沙盒文件" = "分块讀取沙盒文件";
 "分类（category）" = "分类（category）";
 "分页查看记忆列表并支持关键词筛选。" = "分頁查看記憶列表并支持關键词筛選。";
@@ -3419,3 +3419,9 @@
 "https://example.com/skill.zip" = "https://example.com/skill.zip";
 "支持 http/https 的 SKILL.md 或 zip 技能包链接。" = "Supports http/https SKILL.md or zip skill bundle links.";
 "怎么用\n1. 添加技能（粘贴 SKILL.md 或 GitHub 导入）。\n2. 确认技能已启用。\n3. 打开\"向模型暴露 Agent Skills\"总开关。\n4. 在聊天中让模型调用对应技能。\n\nSKILL.md 格式\n• frontmatter 可声明 name、description、when_to_use 等字段。\n• 导入目录或仓库时，省略 name 会使用技能目录名；省略 description 会使用正文首段。\n• 正文可写使用说明、参数等 Markdown 内容。\n\n常见问题\n• 模型不调用：检查总开关与技能启用状态。\n• 导入失败：确认仓库地址可访问。\n• 无法本地选文件：可使用链接导入 SKILL.md。\n• 需要更新内容：在技能详情里编辑 SKILL.md。" = "怎麼用\n1. 添加技能（貼上 SKILL.md 或 GitHub 匯入）。\n2. 確認技能已啟用。\n3. 打開\"向模型暴露 Agent Skills\"總開關。\n4. 在聊天中讓模型呼叫對應技能。\n\nSKILL.md 格式\n• frontmatter 可宣告 name、description、when_to_use 等欄位。\n• 匯入目錄或倉庫時，省略 name 會使用技能目錄名；省略 description 會使用正文首段。\n• 正文可寫使用說明、參數等 Markdown 內容。\n\n常見問題\n• 模型不呼叫：檢查總開關與技能啟用狀態。\n• 匯入失敗：確認倉庫地址可存取。\n• 無法本地選檔案：可使用連結匯入 SKILL.md。\n• 需要更新內容：在技能詳情裡編輯 SKILL.md。";
+"read_resource 分块读取的起始行号，从 1 开始；大文本资源建议使用。" = "read_resource 分塊讀取的起始行號，從 1 開始；大文本資源建議使用。";
+"read_resource 分块读取的最多行数，默认 200，最大 1000。" = "read_resource 分塊讀取的最多行數，預設 200，最大 1000。";
+"使用 action=read_resource 和对应 path 读取可读取的文本资源；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。" = "使用 action=read_resource 和對應 path 讀取可讀取的文本資源；大型檔案可額外提供 start_line 與 max_lines 分塊讀取；scripts/ 資源只會返回原始碼，不會執行。";
+"技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）" = "技能 %@ 資源：%@（第 %d-%d 行，共 %d 行，%@）";
+"还有更多" = "還有更多";
+"已到末尾" = "已到末尾";

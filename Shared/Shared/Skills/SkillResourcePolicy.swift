@@ -103,11 +103,15 @@ public enum SkillResourcePolicy {
         normalizeRelativePath(relativePath) != nil
     }
 
-    public static func candidateTextReadability(relativePath: String, size: Int64) -> (canAttemptRead: Bool, reason: String?) {
+    public static func candidateTextReadability(
+        relativePath: String,
+        size: Int64,
+        enforceSizeLimit: Bool = true
+    ) -> (canAttemptRead: Bool, reason: String?) {
         guard normalizeRelativePath(relativePath) != nil else {
             return (false, NSLocalizedString("路径不合法", comment: "Skill resource unreadable reason"))
         }
-        guard size <= maxReadableTextBytes else {
+        guard !enforceSizeLimit || size <= maxReadableTextBytes else {
             return (false, NSLocalizedString("文件过大，仅列出不读取", comment: "Skill resource unreadable reason"))
         }
         return (true, nil)

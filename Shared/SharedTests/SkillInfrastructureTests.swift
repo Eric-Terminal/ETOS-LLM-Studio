@@ -443,6 +443,57 @@ description: "demo"
     }
 
     @MainActor
+    @Test("use_skill 支持分块读取大文本资源")
+    func testUseSkillReadsLargeTextResourcesByLineChunk() async throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let skillName = "large-resource-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(skillName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        let largeText = (1...1200)
+            .map { "line\($0) " + String(repeating: "x", count: 256) }
+            .joined(separator: "\n")
+        #expect(Data(largeText.utf8).count > SkillResourcePolicy.maxReadableTextBytes)
+        #expect(manager.saveSkillDataFilesAtomically(skillName: skillName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(skillName)
+            description: "大文本分块读取测试"
+            ---
+
+            正文
+            """.utf8),
+            "references/large.md": Data(largeText.utf8)
+        ]))
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledSkillNames: [skillName])
+
+        let chunkResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/large.md","start_line":1001,"max_lines":3}"#
+        )
+
+        #expect(chunkResult.contains("第 1001-1003 行"))
+        #expect(chunkResult.contains("还有更多"))
+        #expect(chunkResult.contains("line1001 "))
+        #expect(chunkResult.contains("line1002 "))
+        #expect(chunkResult.contains("line1003 "))
+
+        await #expect(throws: SkillStoreError.self) {
+            _ = try await manager.executeToolFromChat(
+                toolName: SkillManager.chatToolName,
+                argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/large.md"}"#
+            )
+        }
+    }
+
+    @MainActor
     @Test("保存技能包时允许 SKILL.md 省略 name 和 description")
     func testSkillStoreAcceptsMissingOptionalManifestFields() throws {
         let manager = SkillManager.shared

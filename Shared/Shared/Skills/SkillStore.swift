@@ -145,6 +145,70 @@ public enum SkillStore {
         }
     }
 
+    public static func loadSkillTextResourceChunk(
+        skillName: String,
+        relativePath: String,
+        startLine: Int = 1,
+        maxLines: Int = 200
+    ) throws -> SkillTextResourceChunk {
+        guard startLine >= 1, maxLines >= 1 else {
+            throw SkillStoreError.saveFailed(NSLocalizedString("分块读取参数无效，请检查 start_line 和 max_lines。", comment: "Skill resource chunk invalid range"))
+        }
+        guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else {
+            throw SkillStoreError.invalidPath
+        }
+        guard let fileURL = resolveSkillFile(skillName: skillName, relativePath: normalizedPath),
+              FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw SkillStoreError.fileNotFound
+        }
+        let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+        guard values.isDirectory != true else {
+            throw SkillStoreError.invalidPath
+        }
+        let candidate = SkillResourcePolicy.candidateTextReadability(
+            relativePath: normalizedPath,
+            size: Int64(values.fileSize ?? 0),
+            enforceSizeLimit: false
+        )
+        guard candidate.canAttemptRead else {
+            throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
+        }
+        let content: String
+        do {
+            content = try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            throw SkillStoreError.saveFailed("该技能资源不是 UTF-8 文本：\(normalizedPath)")
+        }
+        let lines = normalizedTextLines(content)
+        let totalLines = lines.count
+        guard totalLines > 0 else {
+            return SkillTextResourceChunk(
+                relativePath: normalizedPath,
+                startLine: 1,
+                endLine: 0,
+                totalLines: 0,
+                hasMore: false,
+                content: ""
+            )
+        }
+        guard startLine <= totalLines else {
+            throw SkillStoreError.saveFailed(NSLocalizedString("分块读取参数无效，请检查 start_line 和 max_lines。", comment: "Skill resource chunk invalid range"))
+        }
+
+        let resolvedMaxLines = min(maxLines, 1000)
+        let startIndex = startLine - 1
+        let endExclusive = min(startIndex + resolvedMaxLines, totalLines)
+        let selected = Array(lines[startIndex..<endExclusive])
+        return SkillTextResourceChunk(
+            relativePath: normalizedPath,
+            startLine: startLine,
+            endLine: startLine + selected.count - 1,
+            totalLines: totalLines,
+            hasMore: endExclusive < totalLines,
+            content: selected.joined(separator: "\n")
+        )
+    }
+
     public static func saveSkillFile(skillName: String, relativePath: String, content: String) -> Bool {
         guard let fileURL = resolveSkillFile(skillName: skillName, relativePath: relativePath) else { return false }
         do {
@@ -371,6 +435,12 @@ public enum SkillStore {
             }
         }
         return nil
+    }
+
+    private static func normalizedTextLines(_ content: String) -> [String] {
+        let normalized = content.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        return normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     }
 }
 
