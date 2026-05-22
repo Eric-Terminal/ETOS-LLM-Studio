@@ -94,7 +94,7 @@ public enum SkillStore {
             }
             let relativePath = fileURL.path.replacingOccurrences(of: skillDir.path + "/", with: "")
             let size = Int64(values.fileSize ?? 0)
-            let readability = SkillResourcePolicy.textReadability(relativePath: relativePath, size: size)
+            let readability = textReadability(fileURL: fileURL, relativePath: relativePath, size: size)
             files.append(
                 SkillFileReference(
                     relativePath: relativePath,
@@ -134,14 +134,14 @@ public enum SkillStore {
             throw SkillStoreError.invalidPath
         }
         let size = Int64(values.fileSize ?? 0)
-        let readability = SkillResourcePolicy.textReadability(relativePath: normalizedPath, size: size)
-        guard readability.isReadable else {
-            throw SkillStoreError.saveFailed(readability.reason ?? "该技能资源不能作为文本读取。")
+        let candidate = SkillResourcePolicy.candidateTextReadability(relativePath: normalizedPath, size: size)
+        guard candidate.canAttemptRead else {
+            throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
         }
         do {
             return try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
-            throw SkillStoreError.saveFailed("无法读取技能资源：\(normalizedPath)")
+            throw SkillStoreError.saveFailed("该技能资源不是 UTF-8 文本：\(normalizedPath)")
         }
     }
 
@@ -347,6 +347,22 @@ public enum SkillStore {
             allowedTools: allowedTools,
             updatedAt: updateTime
         )
+    }
+
+    private static func textReadability(fileURL: URL, relativePath: String, size: Int64) -> (isReadable: Bool, reason: String?) {
+        let candidate = SkillResourcePolicy.candidateTextReadability(relativePath: relativePath, size: size)
+        guard candidate.canAttemptRead else {
+            return (false, candidate.reason)
+        }
+        if SkillResourcePolicy.isKnownTextPath(relativePath) {
+            return (true, nil)
+        }
+        guard let data = try? Data(contentsOf: fileURL) else {
+            return (false, NSLocalizedString("无法读取文件", comment: "Skill resource unreadable reason"))
+        }
+        return String(data: data, encoding: .utf8) != nil
+            ? (true, nil)
+            : (false, NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
     }
 
     private static func createTempSkillDir(root: URL, skillName: String, suffix: String) -> URL? {

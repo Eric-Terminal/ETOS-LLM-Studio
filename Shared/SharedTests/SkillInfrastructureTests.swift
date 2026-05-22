@@ -153,7 +153,7 @@ description: "demo"
 
         #expect(SkillResourcePolicy.textReadability(relativePath: "scripts/run.py", size: 128).isReadable)
         #expect(SkillResourcePolicy.textReadability(relativePath: "references/guide.md", size: 128).isReadable)
-        #expect(!SkillResourcePolicy.textReadability(relativePath: "assets/icon.png", size: 128).isReadable)
+        #expect(SkillResourcePolicy.candidateTextReadability(relativePath: "assets/template.unknown", size: 128).canAttemptRead)
         #expect(!SkillResourcePolicy.textReadability(relativePath: "references/large.md", size: SkillResourcePolicy.maxReadableTextBytes + 1).isReadable)
     }
 
@@ -307,6 +307,8 @@ description: "demo"
             先读取正文，再按需查看资源。
             """.utf8),
             "references/guide.md": Data("参考资料正文".utf8),
+            "references/FORM": Data("无扩展名表单".utf8),
+            "assets/template.custom": Data("未知扩展文本模板".utf8),
             "scripts/check.py": Data("print('只读脚本')".utf8),
             "agents/openai.yaml": Data("interface:\n  display_name: Resource Test".utf8),
             "assets/blob.png": Data([0x89, 0x50, 0x4E, 0x47, 0x00])
@@ -319,10 +321,14 @@ description: "demo"
             argumentsJSON: #"{"name":"\#(skillName)","action":"list resources"}"#
         )
         #expect(listResult.contains("references/guide.md"))
+        #expect(listResult.contains("references/FORM"))
+        #expect(listResult.contains("assets/template.custom"))
         #expect(listResult.contains("scripts/check.py"))
         #expect(listResult.contains("assets/blob.png"))
         #expect(listResult.contains("不会执行"))
         let listedFiles = manager.listFiles(skillName: skillName)
+        #expect(listedFiles.first(where: { $0.relativePath == "references/FORM" })?.isReadableText == true)
+        #expect(listedFiles.first(where: { $0.relativePath == "assets/template.custom" })?.isReadableText == true)
         #expect(listedFiles.first(where: { $0.relativePath == "assets/blob.png" })?.isReadableText == false)
 
         let referenceResult = try await manager.executeToolFromChat(
@@ -330,6 +336,18 @@ description: "demo"
             argumentsJSON: #"{"name":"\#(skillName)","action":"read resource","path":"references/guide.md"}"#
         )
         #expect(referenceResult.contains("参考资料正文"))
+
+        let extensionlessResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/FORM"}"#
+        )
+        #expect(extensionlessResult.contains("无扩展名表单"))
+
+        let customExtensionResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"assets/template.custom"}"#
+        )
+        #expect(customExtensionResult.contains("未知扩展文本模板"))
 
         let scriptResult = try await manager.executeToolFromChat(
             toolName: SkillManager.chatToolName,

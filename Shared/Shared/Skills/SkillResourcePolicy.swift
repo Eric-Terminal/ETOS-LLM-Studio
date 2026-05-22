@@ -103,17 +103,24 @@ public enum SkillResourcePolicy {
         normalizeRelativePath(relativePath) != nil
     }
 
-    public static func textReadability(relativePath: String, size: Int64) -> (isReadable: Bool, reason: String?) {
+    public static func candidateTextReadability(relativePath: String, size: Int64) -> (canAttemptRead: Bool, reason: String?) {
         guard normalizeRelativePath(relativePath) != nil else {
             return (false, NSLocalizedString("路径不合法", comment: "Skill resource unreadable reason"))
         }
         guard size <= maxReadableTextBytes else {
             return (false, NSLocalizedString("文件过大，仅列出不读取", comment: "Skill resource unreadable reason"))
         }
-        if isKnownTextPath(relativePath) {
-            return (true, nil)
+        return (true, nil)
+    }
+
+    public static func textReadability(relativePath: String, size: Int64) -> (isReadable: Bool, reason: String?) {
+        let candidate = candidateTextReadability(relativePath: relativePath, size: size)
+        guard candidate.canAttemptRead else {
+            return (false, candidate.reason)
         }
-        return (false, NSLocalizedString("非文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
+        return isKnownTextPath(relativePath)
+            ? (true, nil)
+            : (false, NSLocalizedString("需读取时确认文本编码", comment: "Skill resource unreadable reason"))
     }
 
     public static func isKnownTextPath(_ relativePath: String) -> Bool {

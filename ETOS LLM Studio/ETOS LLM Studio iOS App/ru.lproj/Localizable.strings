@@ -3428,6 +3428,9 @@
 "路径不合法" = "Invalid path";
 "文件过大，仅列出不读取" = "File too large; listed only";
 "非文本资源，仅列出不读取" = "Non-text resource; listed only";
+"需读取时确认文本编码" = "Text encoding checked on read";
+"无法读取文件" = "Unable to read file";
+"非 UTF-8 文本资源，仅列出不读取" = "Non-UTF-8 text resource; listed only";
 "技能 %@ 没有可列出的资源。" = "Skill %@ has no resources to list.";
 "技能 %@ 的资源列表：" = "Resources for skill %@:";
 "可读取" = "readable";
