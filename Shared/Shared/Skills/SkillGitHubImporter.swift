@@ -230,8 +230,11 @@ public enum SkillGitHubImporter {
             return nil
         }
 
-        let branch = pathComponents[3]
-        let rawPath = pathComponents.dropFirst(4).joined(separator: "/")
+        guard let split = splitBranchAndPath(from: pathComponents.dropFirst(3)) else {
+            return nil
+        }
+        let branch = split.branch
+        let rawPath = split.path
         let path = pathComponents[2] == "tree" ? rawPath : directoryPathForBlob(rawPath)
         return GitHubRepoInfo(owner: owner, repo: repo, branch: branch, path: path)
     }
@@ -240,10 +243,34 @@ public enum SkillGitHubImporter {
         guard pathComponents.count >= 4 else { return nil }
         let owner = pathComponents[0]
         let repo = normalizedRepoName(pathComponents[1])
-        let branch = pathComponents[2]
-        let rawPath = pathComponents.dropFirst(3).joined(separator: "/")
+        guard let split = splitBranchAndPath(from: pathComponents.dropFirst(2)) else {
+            return nil
+        }
+        let branch = split.branch
+        let rawPath = split.path
         guard !owner.isEmpty, !repo.isEmpty, !branch.isEmpty else { return nil }
         return GitHubRepoInfo(owner: owner, repo: repo, branch: branch, path: directoryPathForBlob(rawPath))
+    }
+
+    private static func splitBranchAndPath(from components: ArraySlice<String>) -> (branch: String, path: String)? {
+        guard !components.isEmpty else { return nil }
+        let componentArray = Array(components)
+        if let skillRootIndex = skillRootIndex(in: componentArray), skillRootIndex > 0 {
+            let branch = componentArray[..<skillRootIndex].joined(separator: "/")
+            let path = componentArray[skillRootIndex...].joined(separator: "/")
+            return branch.isEmpty ? nil : (branch, path)
+        }
+        let branch = componentArray[0]
+        let path = componentArray.dropFirst().joined(separator: "/")
+        return branch.isEmpty ? nil : (branch, path)
+    }
+
+    private static func skillRootIndex(in components: [String]) -> Int? {
+        guard components.count >= 2 else { return nil }
+        for index in 0..<(components.count - 1) where components[index] == ".claude" && components[index + 1] == "skills" {
+            return index
+        }
+        return nil
     }
 
     private static func decodedPathComponents(from percentEncodedPath: String) -> [String] {

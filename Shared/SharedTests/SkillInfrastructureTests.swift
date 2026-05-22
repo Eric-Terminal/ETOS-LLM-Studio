@@ -341,6 +341,9 @@ description: "demo"
         #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/blob/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
         #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/raw/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
         #expect(SkillGitHubImporter.parseGitHubURL("https://raw.githubusercontent.com/acme/skills/main/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "main", path: ".claude/skills/demo"))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/tree/feature/agent-skills/.claude/skills/demo") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "feature/agent-skills", path: ".claude/skills/demo"))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://github.com/acme/skills/blob/feature/agent-skills/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "feature/agent-skills", path: ".claude/skills/demo"))
+        #expect(SkillGitHubImporter.parseGitHubURL("https://raw.githubusercontent.com/acme/skills/feature/agent-skills/.claude/skills/demo/SKILL.md") == SkillGitHubImporter.GitHubRepoInfo(owner: "acme", repo: "skills", branch: "feature/agent-skills", path: ".claude/skills/demo"))
     }
 
     @Test("GitHub 默认分支导入省略 ref 参数")
