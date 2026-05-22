@@ -14,7 +14,7 @@ import Darwin
 public enum FeedbackEnvironmentCollector {
     public static func collectSnapshot() -> FeedbackEnvironmentSnapshot {
         let distributionChannel = UpdateTimelineManager.currentDistributionChannel().rawValue
-        FeedbackEnvironmentSnapshot(
+        return FeedbackEnvironmentSnapshot(
             platform: platformName,
             appVersion: appVersion,
             appBuild: appBuild,
