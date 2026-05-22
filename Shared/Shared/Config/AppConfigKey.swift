@@ -148,6 +148,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchAttachmentSourceHistory = "watch.attachment.sourceHistory"
     case watchBackgroundLastSource = "watch.background.lastSource"
     case watchBackgroundSourceHistory = "watch.background.sourceHistory"
+    case watchUseThirdPartyKeyboard = "watch.keyboard.useThirdPartyKeyboard"
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
     case chatPickerPresentationStyle = "ui.chatPickerPresentationStyle"
     case chatPickerStyleMigratedToBottomSheet = "chatPickerStyleMigratedToBottomSheet"
@@ -350,6 +351,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .watchAttachmentSourceHistory,
              .watchBackgroundSourceHistory:
             return .text("[]")
+        case .watchUseThirdPartyKeyboard:
+            return .bool(false)
         case .settingsColorfulIconsEnabled:
             #if os(watchOS)
             return .bool(false)
@@ -418,6 +421,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .hideAnnouncementSection,
              .hiddenAnnouncementKeys,
              .requestLogPlainMessageEnabled,
+             .watchUseThirdPartyKeyboard,
              .appLockEnabled,
              .appLockTimeoutSeconds,
              .appLockBiometricEnabled,

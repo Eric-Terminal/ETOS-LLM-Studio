@@ -219,6 +219,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var watchAttachmentSourceHistory: String { didSet { write(.watchAttachmentSourceHistory, watchAttachmentSourceHistory) } }
     @Published public var watchBackgroundLastSource: String { didSet { write(.watchBackgroundLastSource, watchBackgroundLastSource) } }
     @Published public var watchBackgroundSourceHistory: String { didSet { write(.watchBackgroundSourceHistory, watchBackgroundSourceHistory) } }
+    @Published public var watchUseThirdPartyKeyboard: Bool { didSet { write(.watchUseThirdPartyKeyboard, watchUseThirdPartyKeyboard) } }
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
     @Published public var chatPickerPresentationStyle: String { didSet { write(.chatPickerPresentationStyle, chatPickerPresentationStyle) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
@@ -343,6 +344,7 @@ public final class AppConfigStore: ObservableObject {
         watchAttachmentSourceHistory = Self.textValue(.watchAttachmentSourceHistory, userDefaults: userDefaults)
         watchBackgroundLastSource = Self.textValue(.watchBackgroundLastSource, userDefaults: userDefaults)
         watchBackgroundSourceHistory = Self.textValue(.watchBackgroundSourceHistory, userDefaults: userDefaults)
+        watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
         chatPickerPresentationStyle = Self.textValue(.chatPickerPresentationStyle, userDefaults: userDefaults)
         chatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
@@ -737,6 +739,7 @@ public final class AppConfigStore: ObservableObject {
         case .watchAttachmentSourceHistory: return .text(watchAttachmentSourceHistory)
         case .watchBackgroundLastSource: return .text(watchBackgroundLastSource)
         case .watchBackgroundSourceHistory: return .text(watchBackgroundSourceHistory)
+        case .watchUseThirdPartyKeyboard: return .bool(watchUseThirdPartyKeyboard)
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
         case .chatPickerPresentationStyle: return .text(chatPickerPresentationStyle)
         case .chatPickerStyleMigratedToBottomSheet:
@@ -836,6 +839,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableChatTopBlurFade: enableChatTopBlurFade = value
         case .enableNoBubbleUI: enableNoBubbleUI = value
         case .fontUseCustomFonts: fontUseCustomFonts = value
+        case .watchUseThirdPartyKeyboard: watchUseThirdPartyKeyboard = value
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
         case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
         case .providerDetailGroupByMainstream: providerDetailGroupByMainstream = value

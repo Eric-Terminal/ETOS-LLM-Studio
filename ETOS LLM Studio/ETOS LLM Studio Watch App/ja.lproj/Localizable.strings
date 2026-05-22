@@ -3448,3 +3448,12 @@
 "已验证" = "Verified";
 "关联 Commit" = "Linked Commit";
 "来自反馈工单引用，点按可查看 Commit 详情。" = "Referenced by the feedback issue. Tap to view commit details.";
+"键盘" = "キーボード";
+"第三方全键盘" = "サードパーティ製フルキーボード";
+"不支持系统全键盘的 Apple Watch 可打开此开关使用第三方全键盘，支持中文拼音输入。" = "システムのフルキーボードに対応していない Apple Watch では、このサードパーティ製フルキーボードを使えます。中国語ピンイン入力にも対応しています。";
+"预览..." = "プレビュー...";
+"清空预览" = "プレビューを消去";
+"添加 CepheusKeyboardKit 依赖后可在这里预览第三方键盘。" = "CepheusKeyboardKit 依存関係を追加すると、ここでサードパーティ製キーボードをプレビューできます。";
+"键盘设置..." = "キーボード設定...";
+"致谢" = "謝辞";
+"Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";

@@ -16,6 +16,7 @@
 		07BEEE0D2FB6DB57000D31FC /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 07BEEE0B2FB6DB57000D31FC /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		07BEEE0F2FB6DB5E000D31FC /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07BEEE0E2FB6DB5E000D31FC /* Shared.framework */; };
 		07BEEE102FB6DB5E000D31FC /* Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 07BEEE0E2FB6DB5E000D31FC /* Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		07E153EA2FC0EBA90056CC91 /* CepheusKeyboardKit in Frameworks */ = {isa = PBXBuildFile; productRef = 07E153E92FC0EBA90056CC91 /* CepheusKeyboardKit */; };
 		09A06C4C2F75031D0089D1E1 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = 09A06C4B2F75031D0089D1E1 /* SwiftMath */; };
 /* End PBXBuildFile section */
 
@@ -140,6 +141,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07E153EA2FC0EBA90056CC91 /* CepheusKeyboardKit in Frameworks */,
 				07BEEE0A2FB6DAB8000D31FC /* SQLCipher in Frameworks */,
 				07BEEE0F2FB6DB5E000D31FC /* Shared.framework in Frameworks */,
 				079679BE2F1279C8006562BC /* MarkdownUI in Frameworks */,
@@ -247,6 +249,7 @@
 			packageProductDependencies = (
 				079679BD2F1279C8006562BC /* MarkdownUI */,
 				07BEEE092FB6DAB8000D31FC /* SQLCipher */,
+				07E153E92FC0EBA90056CC91 /* CepheusKeyboardKit */,
 			);
 			productName = "ETOS LLM Studio Watch App";
 			productReference = 0796794F2F1278F2006562BC /* ETOS LLM Studio Watch App.app */;
@@ -344,6 +347,7 @@
 				077CD2602E962D8D00AD6556 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				09A06C4A2F75031D0089D1E1 /* XCRemoteSwiftPackageReference "SwiftMath" */,
 				07BEEE052FB6DAAA000D31FC /* XCRemoteSwiftPackageReference "SQLCipher.swift" */,
+				07E153E82FC0EBA90056CC91 /* XCRemoteSwiftPackageReference "Cepheus" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 073CA6DC2E8CFD65004516A0 /* Products */;
@@ -912,6 +916,14 @@
 				minimumVersion = 4.16.0;
 			};
 		};
+		07E153E82FC0EBA90056CC91 /* XCRemoteSwiftPackageReference "Cepheus" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Serene-Garden/Cepheus";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 		09A06C4A2F75031D0089D1E1 /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/mgriebling/SwiftMath";
@@ -947,6 +959,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 07BEEE052FB6DAAA000D31FC /* XCRemoteSwiftPackageReference "SQLCipher.swift" */;
 			productName = SQLCipher;
+		};
+		07E153E92FC0EBA90056CC91 /* CepheusKeyboardKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07E153E82FC0EBA90056CC91 /* XCRemoteSwiftPackageReference "Cepheus" */;
+			productName = CepheusKeyboardKit;
 		};
 		09A06C4B2F75031D0089D1E1 /* SwiftMath */ = {
 			isa = XCSwiftPackageProductDependency;

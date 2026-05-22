@@ -3449,3 +3449,12 @@
 "已验证" = "已驗證";
 "关联 Commit" = "關聯 Commit";
 "来自反馈工单引用，点按可查看 Commit 详情。" = "來自回饋工單引用，點按可查看 Commit 詳情。";
+"键盘" = "鍵盤";
+"第三方全键盘" = "第三方全鍵盤";
+"不支持系统全键盘的 Apple Watch 可打开此开关使用第三方全键盘，支持中文拼音输入。" = "不支援系統全鍵盤的 Apple Watch 可打開此開關使用第三方全鍵盤，支援中文拼音輸入。";
+"预览..." = "預覽...";
+"清空预览" = "清空預覽";
+"添加 CepheusKeyboardKit 依赖后可在这里预览第三方键盘。" = "加入 CepheusKeyboardKit 依賴後可在這裡預覽第三方鍵盤。";
+"键盘设置..." = "鍵盤設定...";
+"致谢" = "致謝";
+"Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";

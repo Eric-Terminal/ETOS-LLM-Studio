@@ -241,7 +241,7 @@ struct SettingsView: View {
                     )) {
                         settingsNavigationLabel("显示与外观", icon: .display)
                     }
-                    
+
                     NavigationLink(destination: DeviceSyncSettingsView()) {
                         settingsNavigationLabel("同步与备份", icon: .sync)
                     }
@@ -270,6 +270,12 @@ struct SettingsView: View {
                         }
                     } header: {
                         Text(NSLocalizedString("系统公告", comment: "系统公告分组"))
+                    }
+                }
+
+                Section {
+                    NavigationLink(destination: WatchKeyboardSettingsView()) {
+                        settingsNavigationLabel("键盘", icon: .keyboard)
                     }
                 }
             }
@@ -474,6 +480,7 @@ extension SettingsListIcon {
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo, legacySystemName: "puzzlepiece.extension")
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple, legacySystemName: "photo.on.rectangle")
+    static let keyboard = SettingsListIcon(systemName: "keyboard", backgroundColor: .gray)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green, legacySystemName: "arrow.triangle.2.circlepath")
     static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)
     static let about = SettingsListIcon(systemName: "info.circle", backgroundColor: .gray)

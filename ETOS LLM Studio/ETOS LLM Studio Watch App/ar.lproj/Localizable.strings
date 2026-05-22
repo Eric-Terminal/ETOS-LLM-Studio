@@ -3527,3 +3527,12 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "已验证" = "Verified";
 "关联 Commit" = "Linked Commit";
 "来自反馈工单引用，点按可查看 Commit 详情。" = "Referenced by the feedback issue. Tap to view commit details.";
+"键盘" = "Keyboard";
+"第三方全键盘" = "Third-party Full Keyboard";
+"不支持系统全键盘的 Apple Watch 可打开此开关使用第三方全键盘，支持中文拼音输入。" = "Apple Watch models without the system full keyboard can use this third-party full keyboard, including Chinese Pinyin input.";
+"预览..." = "Preview...";
+"清空预览" = "Clear Preview";
+"添加 CepheusKeyboardKit 依赖后可在这里预览第三方键盘。" = "Add the CepheusKeyboardKit dependency to preview the third-party keyboard here.";
+"键盘设置..." = "Keyboard Settings...";
+"致谢" = "Acknowledgments";
+"Powered by Cepheus Keyboard" = "Powered by Cepheus Keyboard";
