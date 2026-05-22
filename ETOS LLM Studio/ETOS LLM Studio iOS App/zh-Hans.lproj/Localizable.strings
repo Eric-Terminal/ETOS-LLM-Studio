@@ -1511,7 +1511,9 @@
 "技能目录内的相对路径。留空时默认读取 SKILL.md 正文。仅可使用 SKILL.md 中出现过的路径。" = "技能目录内的相对路径。留空时默认读取 SKILL.md 正文。仅可使用 SKILL.md 中出现过的路径。";
 "按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。" = "按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。";
 "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。" = "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。";
+"技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源，并可从 docx/pptx/xlsx 与支持平台上的 PDF 抽取纯文本；不会执行 scripts/ 里的脚本。" = "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源，并可从 docx/pptx/xlsx 与支持平台上的 PDF 抽取纯文本；不会执行 scripts/ 里的脚本。";
 "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。" = "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。";
+"先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的可读资源。文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts 只能读取源码，不能执行。" = "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的可读资源。文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts 只能读取源码，不能执行。";
 "SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。" = "SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。";
 "路径不合法" = "路径不合法";
 "文件过大，仅列出不读取" = "文件过大，仅列出不读取";
@@ -1528,6 +1530,7 @@
 "读取 SKILL.md 正文说明。" = "读取 SKILL.md 正文说明。";
 "列出技能包内可发现资源。" = "列出技能包内可发现资源。";
 "读取技能包内文本资源；scripts/ 仅允许读取，不能执行。" = "读取技能包内文本资源；scripts/ 仅允许读取，不能执行。";
+"读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts/ 仅允许读取，不能执行。" = "读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts/ 仅允许读取，不能执行。";
 "从本地技能包导入" = "从本地技能包导入";
 "暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地技能包导入。" = "暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地技能包导入。";
 "导入失败：技能包内容无效。" = "导入失败：技能包内容无效。";
@@ -3447,6 +3450,7 @@
 "read_resource 分块读取的起始行号，从 1 开始；大文本资源建议使用。" = "read_resource 分块读取的起始行号，从 1 开始；大文本资源建议使用。";
 "read_resource 分块读取的最多行数，默认 200，最大 1000。" = "read_resource 分块读取的最多行数，默认 200，最大 1000。";
 "使用 action=read_resource 和对应 path 读取可读取的文本资源；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。" = "使用 action=read_resource 和对应 path 读取可读取的文本资源；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。";
+"使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。" = "使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。";
 "技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）" = "技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）";
 "还有更多" = "还有更多";
 "已到末尾" = "已到末尾";

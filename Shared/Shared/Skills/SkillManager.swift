@@ -292,7 +292,7 @@ public final class SkillManager: ObservableObject {
         let actionDescription = [
             "\(SkillToolAction.readInstructions.rawValue): \(NSLocalizedString("读取 SKILL.md 正文说明。", comment: "Skill tool action description sent to model"))",
             "\(SkillToolAction.listResources.rawValue): \(NSLocalizedString("列出技能包内可发现资源。", comment: "Skill tool action description sent to model"))",
-            "\(SkillToolAction.readResource.rawValue): \(NSLocalizedString("读取技能包内文本资源；scripts/ 仅允许读取，不能执行。", comment: "Skill tool action description sent to model"))"
+            "\(SkillToolAction.readResource.rawValue): \(NSLocalizedString("读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts/ 仅允许读取，不能执行。", comment: "Skill tool action description sent to model"))"
         ].joined(separator: "\n")
         let parameters = JSONValue.dictionary([
             "type": .string("object"),
@@ -313,7 +313,7 @@ public final class SkillManager: ObservableObject {
                 ]),
                 "path": .dictionary([
                     "type": .string("string"),
-                    "description": .string(NSLocalizedString("技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。", comment: "Skill tool path parameter description sent to model"))
+                    "description": .string(NSLocalizedString("技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源，并可从 docx/pptx/xlsx 与支持平台上的 PDF 抽取纯文本；不会执行 scripts/ 里的脚本。", comment: "Skill tool path parameter description sent to model"))
                 ]),
                 "start_line": .dictionary([
                     "type": .string("integer"),
@@ -444,7 +444,7 @@ public final class SkillManager: ObservableObject {
                 : (file.readOnlyReason ?? NSLocalizedString("仅列出", comment: "Skill resource list-only marker"))
             lines.append("- \(file.relativePath) (\(StorageUtility.formatSize(file.size)), \(access))")
         }
-        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读取的文本资源；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
+        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
         return lines.joined(separator: "\n")
     }
 
@@ -477,7 +477,7 @@ public final class SkillManager: ObservableObject {
     private nonisolated static func makeToolDescription(availableSkills: [SkillMetadata]) -> String {
         var lines: [String] = []
         lines.append(NSLocalizedString("按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。", comment: "Skill tool description sent to model"))
-        lines.append(NSLocalizedString("先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。", comment: "Skill progressive disclosure tool instruction sent to model"))
+        lines.append(NSLocalizedString("先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的可读资源。文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts 只能读取源码，不能执行。", comment: "Skill progressive disclosure tool instruction sent to model"))
         lines.append(NSLocalizedString("SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。", comment: "Skill allowed tools limitation sent to model"))
         lines.append(NSLocalizedString("当前可用技能如下：", comment: "Available skills header sent to model"))
         lines.append("<available_skills>")

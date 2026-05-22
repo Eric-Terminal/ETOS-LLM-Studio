@@ -138,11 +138,10 @@ public enum SkillStore {
         guard candidate.canAttemptRead else {
             throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
         }
-        do {
-            return try String(contentsOf: fileURL, encoding: .utf8)
-        } catch {
-            throw SkillStoreError.saveFailed("该技能资源不是 UTF-8 文本：\(normalizedPath)")
+        if SkillResourcePolicy.isExtractableDocumentPath(normalizedPath) {
+            return try extractSkillDocumentText(fileURL: fileURL, relativePath: normalizedPath)
         }
+        return try loadUTF8Text(fileURL: fileURL, relativePath: normalizedPath)
     }
 
     public static func loadSkillTextResourceChunk(
@@ -168,17 +167,14 @@ public enum SkillStore {
         let candidate = SkillResourcePolicy.candidateTextReadability(
             relativePath: normalizedPath,
             size: Int64(values.fileSize ?? 0),
-            enforceSizeLimit: false
+            enforceSizeLimit: SkillResourcePolicy.isExtractableDocumentPath(normalizedPath)
         )
         guard candidate.canAttemptRead else {
             throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
         }
-        let content: String
-        do {
-            content = try String(contentsOf: fileURL, encoding: .utf8)
-        } catch {
-            throw SkillStoreError.saveFailed("该技能资源不是 UTF-8 文本：\(normalizedPath)")
-        }
+        let content = SkillResourcePolicy.isExtractableDocumentPath(normalizedPath)
+            ? try extractSkillDocumentText(fileURL: fileURL, relativePath: normalizedPath)
+            : try loadUTF8Text(fileURL: fileURL, relativePath: normalizedPath)
         let lines = normalizedTextLines(content)
         let totalLines = lines.count
         guard totalLines > 0 else {
@@ -413,12 +409,57 @@ public enum SkillStore {
         if SkillResourcePolicy.isKnownTextPath(relativePath) {
             return (true, nil)
         }
+        if SkillResourcePolicy.isExtractableDocumentPath(relativePath) {
+            return (true, nil)
+        }
         guard let data = try? Data(contentsOf: fileURL) else {
             return (false, NSLocalizedString("无法读取文件", comment: "Skill resource unreadable reason"))
         }
         return String(data: data, encoding: .utf8) != nil
             ? (true, nil)
             : (false, NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
+    }
+
+    private static func loadUTF8Text(fileURL: URL, relativePath: String) throws -> String {
+        do {
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            throw SkillStoreError.saveFailed("该技能资源不是 UTF-8 文本：\(relativePath)")
+        }
+    }
+
+    private static func extractSkillDocumentText(fileURL: URL, relativePath: String) throws -> String {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
+        }
+        let attachment = FileAttachment(
+            data: data,
+            mimeType: resolvedMimeType(for: relativePath),
+            fileName: URL(fileURLWithPath: relativePath).lastPathComponent
+        )
+        do {
+            return try FileAttachmentTextExtractor().extractText(from: attachment)
+        } catch {
+            throw SkillStoreError.saveFailed(error.localizedDescription)
+        }
+    }
+
+    private static func resolvedMimeType(for relativePath: String) -> String {
+        switch URL(fileURLWithPath: relativePath).pathExtension.lowercased() {
+        case "docx":
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "pptx":
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case "xlsx":
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "pdf":
+            return "application/pdf"
+        default:
+            return "application/octet-stream"
+        }
     }
 
     private static func createTempSkillDir(root: URL, skillName: String, suffix: String) -> URL? {

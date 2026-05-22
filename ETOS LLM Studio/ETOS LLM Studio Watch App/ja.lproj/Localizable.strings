@@ -3394,7 +3394,9 @@
 
 /* Agent Skills resources */
 "技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源；不会执行 scripts/ 里的脚本。" = "Relative path inside the skill directory, required only for read_resource. Text resources under references/, scripts/, agents/, and assets/ can be read; scripts are not executed.";
+"技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源，并可从 docx/pptx/xlsx 与支持平台上的 PDF 抽取纯文本；不会执行 scripts/ 里的脚本。" = "スキルディレクトリ内の相対パスです。read_resource の場合のみ必要です。references/、scripts/、agents/、assets/ 内のテキストリソースを読み取れ、docx/pptx/xlsx と対応プラットフォーム上の PDF からプレーンテキストを抽出できます。scripts/ 内のスクリプトは実行しません。";
 "先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的文本文件。scripts 只能读取源码，不能执行。" = "Load the skill body with read_instructions first. When extra material is needed, use list_resources, then read_resource to read text files under references/scripts/agents/assets. scripts can only be read as source and cannot be executed.";
+"先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的可读资源。文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts 只能读取源码，不能执行。" = "まず read_instructions でスキル本文を読み込みます。追加資料が必要な場合は list_resources でリソースを確認し、read_resource で references/scripts/agents/assets 内の読み取り可能なリソースを読み取ります。テキストファイルはそのまま読み取り、docx/pptx/xlsx と対応プラットフォーム上の PDF はプレーンテキストを抽出します。scripts はソースとして読み取るだけで、実行できません。";
 "SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。" = "SKILL.md の allowed-tools はスキル作者による説明としてのみ扱われます。このアプリは引き続き use_skill の読み取り機能だけを提供し、スクリプトやローカルコマンドは実行しません。";
 "路径不合法" = "Invalid path";
 "文件过大，仅列出不读取" = "File too large; listed only";
@@ -3411,6 +3413,7 @@
 "读取 SKILL.md 正文说明。" = "Read the SKILL.md body instructions.";
 "列出技能包内可发现资源。" = "List discoverable resources in the skill bundle.";
 "读取技能包内文本资源；scripts/ 仅允许读取，不能执行。" = "Read text resources in the skill bundle; scripts/ can only be read and cannot be executed.";
+"读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts/ 仅允许读取，不能执行。" = "スキルバンドル内の読み取り可能なリソースを読み取ります。テキストファイルはそのまま読み取り、docx/pptx/xlsx と対応プラットフォーム上の PDF はプレーンテキストを抽出します。scripts/ は読み取りのみで実行できません。";
 "从本地技能包导入" = "Import local skill bundle";
 "暂无技能。可粘贴 SKILL.md，或从 GitHub / 本地技能包导入。" = "No skills yet. Paste SKILL.md, or import from GitHub / a local skill bundle.";
 "导入失败：技能包内容无效。" = "Import failed: invalid skill bundle content.";
@@ -3422,6 +3425,7 @@
 "read_resource 分块读取的起始行号，从 1 开始；大文本资源建议使用。" = "read_resource chunk start line, starting from 1; recommended for large text resources.";
 "read_resource 分块读取的最多行数，默认 200，最大 1000。" = "Maximum lines to read in a read_resource chunk. Default 200, maximum 1000.";
 "使用 action=read_resource 和对应 path 读取可读取的文本资源；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。" = "Use action=read_resource with the matching path to read readable text resources. For large files, also provide start_line and max_lines to read by chunk. scripts/ resources return source only and are not executed.";
+"使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。" = "action=read_resource と対応する path で読み取り可能なリソースを読み取ります。テキストファイルはそのまま読み取り、docx/pptx/xlsx と対応プラットフォーム上の PDF はプレーンテキストを抽出します。大きなファイルでは start_line と max_lines を追加して分割読み取りできます。scripts/ リソースはソースだけを返し、実行しません。";
 "技能 %@ 资源：%@（第 %d-%d 行，共 %d 行，%@）" = "Skill %@ resource: %@ (lines %d-%d of %d, %@)";
 "还有更多" = "more available";
 "已到末尾" = "end reached";

@@ -512,6 +512,56 @@ description: "demo"
     }
 
     @MainActor
+    @Test("use_skill 可抽取技能包文档资源文本")
+    func testUseSkillExtractsDocumentResources() async throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let skillName = "document-resource-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(skillName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        #expect(manager.saveSkillDataFilesAtomically(skillName: skillName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(skillName)
+            description: "文档资源读取测试"
+            ---
+
+            正文
+            """.utf8),
+            "references/guide.docx": try FileAttachmentTextFixtureFactory.makeDOCXFixture()
+        ]))
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledSkillNames: [skillName])
+
+        let listResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"list_resources"}"#
+        )
+        #expect(listResult.contains("references/guide.docx"))
+        #expect(listResult.contains("可读取"))
+
+        let fullResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/guide.docx"}"#
+        )
+        #expect(fullResult.contains("DOCX 第一段"))
+        #expect(fullResult.contains("DOCX 第二段"))
+
+        let chunkResult = try await manager.executeToolFromChat(
+            toolName: SkillManager.chatToolName,
+            argumentsJSON: #"{"name":"\#(skillName)","action":"read_resource","path":"references/guide.docx","start_line":1,"max_lines":1}"#
+        )
+        #expect(chunkResult.contains("第 1-1 行"))
+        #expect(chunkResult.contains("DOCX 第一段"))
+    }
+
+    @MainActor
     @Test("保存技能包时允许 SKILL.md 省略 name 和 description")
     func testSkillStoreAcceptsMissingOptionalManifestFields() throws {
         let manager = SkillManager.shared

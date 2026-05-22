@@ -11,6 +11,7 @@ import Foundation
 
 public enum SkillResourcePolicy {
     public static let maxReadableTextBytes: Int64 = 256 * 1024
+    public static let maxExtractableDocumentBytes: Int64 = 20 * 1024 * 1024
 
     private static let readableExtensions: Set<String> = [
         "bash",
@@ -111,7 +112,8 @@ public enum SkillResourcePolicy {
         guard normalizeRelativePath(relativePath) != nil else {
             return (false, NSLocalizedString("路径不合法", comment: "Skill resource unreadable reason"))
         }
-        guard !enforceSizeLimit || size <= maxReadableTextBytes else {
+        let sizeLimit = isExtractableDocumentPath(relativePath) ? maxExtractableDocumentBytes : maxReadableTextBytes
+        guard !enforceSizeLimit || size <= sizeLimit else {
             return (false, NSLocalizedString("文件过大，仅列出不读取", comment: "Skill resource unreadable reason"))
         }
         return (true, nil)
@@ -123,6 +125,7 @@ public enum SkillResourcePolicy {
             return (false, candidate.reason)
         }
         return isKnownTextPath(relativePath)
+            || isExtractableDocumentPath(relativePath)
             ? (true, nil)
             : (false, NSLocalizedString("需读取时确认文本编码", comment: "Skill resource unreadable reason"))
     }
@@ -132,6 +135,22 @@ public enum SkillResourcePolicy {
         if readableFileNames.contains(fileName) { return true }
         let ext = URL(fileURLWithPath: relativePath).pathExtension.lowercased()
         return !ext.isEmpty && readableExtensions.contains(ext)
+    }
+
+    public static func isExtractableDocumentPath(_ relativePath: String) -> Bool {
+        let ext = URL(fileURLWithPath: relativePath).pathExtension.lowercased()
+        switch ext {
+        case "docx", "pptx", "xlsx":
+            return true
+        case "pdf":
+            #if canImport(PDFKit) && !os(watchOS)
+            return true
+            #else
+            return false
+            #endif
+        default:
+            return false
+        }
     }
 
     private static func hasURLScheme(_ value: String) -> Bool {
