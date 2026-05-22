@@ -415,7 +415,7 @@ public final class SkillManager: ObservableObject {
                     throw SkillStoreError.saveFailed("read_resource 必须提供 path。")
                 }
                 if args.start_line != nil || args.max_lines != nil {
-                    let chunk = try SkillStore.loadSkillTextResourceChunk(
+                    let chunk = try await SkillStore.loadSkillReadableResourceChunk(
                         skillName: name,
                         relativePath: path,
                         startLine: args.start_line ?? 1,
@@ -423,7 +423,7 @@ public final class SkillManager: ObservableObject {
                     )
                     return Self.formatResourceChunk(skillName: name, chunk: chunk)
                 }
-                let content = try SkillStore.loadSkillTextResource(skillName: name, relativePath: path)
+                let content = try await SkillStore.loadSkillReadableResource(skillName: name, relativePath: path)
                 let normalizedPath = SkillResourcePolicy.normalizeRelativePath(path) ?? path
                 return Self.formatResourceContent(skillName: name, relativePath: normalizedPath, content: content)
             }

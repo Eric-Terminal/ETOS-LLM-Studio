@@ -122,26 +122,23 @@ public enum SkillStore {
     }
 
     public static func loadSkillTextResource(skillName: String, relativePath: String) throws -> String {
-        guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else {
-            throw SkillStoreError.invalidPath
-        }
-        guard let fileURL = resolveSkillFile(skillName: skillName, relativePath: normalizedPath),
-              FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw SkillStoreError.fileNotFound
-        }
-        let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-        guard values.isDirectory != true else {
-            throw SkillStoreError.invalidPath
-        }
-        let size = Int64(values.fileSize ?? 0)
-        let candidate = SkillResourcePolicy.candidateTextReadability(relativePath: normalizedPath, size: size)
-        guard candidate.canAttemptRead else {
-            throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
-        }
-        if SkillResourcePolicy.isExtractableDocumentPath(normalizedPath) {
-            return try extractSkillDocumentText(fileURL: fileURL, relativePath: normalizedPath)
-        }
-        return try loadUTF8Text(fileURL: fileURL, relativePath: normalizedPath)
+        let normalizedPath = try normalizedReadablePath(relativePath)
+        let resolved = try resolveReadableResource(
+            skillName: skillName,
+            normalizedPath: normalizedPath,
+            enforceSizeLimit: true
+        )
+        return try loadResolvedTextResource(resolved)
+    }
+
+    public static func loadSkillReadableResource(skillName: String, relativePath: String) async throws -> String {
+        let normalizedPath = try normalizedReadablePath(relativePath)
+        let resolved = try resolveReadableResource(
+            skillName: skillName,
+            normalizedPath: normalizedPath,
+            enforceSizeLimit: true
+        )
+        return try await loadResolvedReadableResource(resolved)
     }
 
     public static func loadSkillTextResourceChunk(
@@ -150,58 +147,39 @@ public enum SkillStore {
         startLine: Int = 1,
         maxLines: Int = 200
     ) throws -> SkillTextResourceChunk {
-        guard startLine >= 1, maxLines >= 1 else {
-            throw SkillStoreError.saveFailed(NSLocalizedString("分块读取参数无效，请检查 start_line 和 max_lines。", comment: "Skill resource chunk invalid range"))
-        }
-        guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else {
-            throw SkillStoreError.invalidPath
-        }
-        guard let fileURL = resolveSkillFile(skillName: skillName, relativePath: normalizedPath),
-              FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw SkillStoreError.fileNotFound
-        }
-        let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-        guard values.isDirectory != true else {
-            throw SkillStoreError.invalidPath
-        }
-        let candidate = SkillResourcePolicy.candidateTextReadability(
-            relativePath: normalizedPath,
-            size: Int64(values.fileSize ?? 0),
-            enforceSizeLimit: SkillResourcePolicy.isExtractableDocumentPath(normalizedPath)
+        let normalizedPath = try normalizedReadablePath(relativePath)
+        let resolved = try resolveReadableResource(
+            skillName: skillName,
+            normalizedPath: normalizedPath,
+            enforceSizeLimit: requiresFullReadSizeLimit(relativePath: normalizedPath)
         )
-        guard candidate.canAttemptRead else {
-            throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
-        }
-        let content = SkillResourcePolicy.isExtractableDocumentPath(normalizedPath)
-            ? try extractSkillDocumentText(fileURL: fileURL, relativePath: normalizedPath)
-            : try loadUTF8Text(fileURL: fileURL, relativePath: normalizedPath)
-        let lines = normalizedTextLines(content)
-        let totalLines = lines.count
-        guard totalLines > 0 else {
-            return SkillTextResourceChunk(
-                relativePath: normalizedPath,
-                startLine: 1,
-                endLine: 0,
-                totalLines: 0,
-                hasMore: false,
-                content: ""
-            )
-        }
-        guard startLine <= totalLines else {
-            throw SkillStoreError.saveFailed(NSLocalizedString("分块读取参数无效，请检查 start_line 和 max_lines。", comment: "Skill resource chunk invalid range"))
-        }
-
-        let resolvedMaxLines = min(maxLines, 1000)
-        let startIndex = startLine - 1
-        let endExclusive = min(startIndex + resolvedMaxLines, totalLines)
-        let selected = Array(lines[startIndex..<endExclusive])
-        return SkillTextResourceChunk(
+        let content = try loadResolvedTextResource(resolved)
+        return try makeResourceChunk(
             relativePath: normalizedPath,
+            content: content,
             startLine: startLine,
-            endLine: startLine + selected.count - 1,
-            totalLines: totalLines,
-            hasMore: endExclusive < totalLines,
-            content: selected.joined(separator: "\n")
+            maxLines: maxLines
+        )
+    }
+
+    public static func loadSkillReadableResourceChunk(
+        skillName: String,
+        relativePath: String,
+        startLine: Int = 1,
+        maxLines: Int = 200
+    ) async throws -> SkillTextResourceChunk {
+        let normalizedPath = try normalizedReadablePath(relativePath)
+        let resolved = try resolveReadableResource(
+            skillName: skillName,
+            normalizedPath: normalizedPath,
+            enforceSizeLimit: requiresFullReadSizeLimit(relativePath: normalizedPath)
+        )
+        let content = try await loadResolvedReadableResource(resolved)
+        return try makeResourceChunk(
+            relativePath: normalizedPath,
+            content: content,
+            startLine: startLine,
+            maxLines: maxLines
         )
     }
 
@@ -401,6 +379,65 @@ public enum SkillStore {
         )
     }
 
+    private struct ResolvedSkillResource {
+        let relativePath: String
+        let fileURL: URL
+    }
+
+    private static func normalizedReadablePath(_ relativePath: String) throws -> String {
+        guard let normalizedPath = SkillResourcePolicy.normalizeRelativePath(relativePath) else {
+            throw SkillStoreError.invalidPath
+        }
+        return normalizedPath
+    }
+
+    private static func resolveReadableResource(
+        skillName: String,
+        normalizedPath: String,
+        enforceSizeLimit: Bool
+    ) throws -> ResolvedSkillResource {
+        guard let fileURL = resolveSkillFile(skillName: skillName, relativePath: normalizedPath),
+              FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw SkillStoreError.fileNotFound
+        }
+        let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+        guard values.isDirectory != true else {
+            throw SkillStoreError.invalidPath
+        }
+        let size = Int64(values.fileSize ?? 0)
+        let candidate = SkillResourcePolicy.candidateTextReadability(
+            relativePath: normalizedPath,
+            size: size,
+            enforceSizeLimit: enforceSizeLimit
+        )
+        guard candidate.canAttemptRead else {
+            throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
+        }
+        return ResolvedSkillResource(relativePath: normalizedPath, fileURL: fileURL)
+    }
+
+    private static func requiresFullReadSizeLimit(relativePath: String) -> Bool {
+        SkillResourcePolicy.isExtractableDocumentPath(relativePath)
+            || SkillResourcePolicy.isImagePath(relativePath)
+    }
+
+    private static func loadResolvedTextResource(_ resource: ResolvedSkillResource) throws -> String {
+        if SkillResourcePolicy.isExtractableDocumentPath(resource.relativePath) {
+            return try extractSkillDocumentText(fileURL: resource.fileURL, relativePath: resource.relativePath)
+        }
+        return try loadUTF8Text(fileURL: resource.fileURL, relativePath: resource.relativePath)
+    }
+
+    private static func loadResolvedReadableResource(_ resource: ResolvedSkillResource) async throws -> String {
+        if SkillResourcePolicy.isExtractableDocumentPath(resource.relativePath) {
+            return try extractSkillDocumentText(fileURL: resource.fileURL, relativePath: resource.relativePath)
+        }
+        if SkillResourcePolicy.isOCRImagePath(resource.relativePath) {
+            return try await extractSkillImageText(fileURL: resource.fileURL, relativePath: resource.relativePath)
+        }
+        return try loadUTF8Text(fileURL: resource.fileURL, relativePath: resource.relativePath)
+    }
+
     private static func textReadability(fileURL: URL, relativePath: String, size: Int64) -> (isReadable: Bool, reason: String?) {
         let candidate = SkillResourcePolicy.candidateTextReadability(relativePath: relativePath, size: size)
         guard candidate.canAttemptRead else {
@@ -414,6 +451,11 @@ public enum SkillStore {
         }
         guard let data = try? Data(contentsOf: fileURL) else {
             return (false, NSLocalizedString("无法读取文件", comment: "Skill resource unreadable reason"))
+        }
+        if SkillResourcePolicy.isOCRImagePath(relativePath) {
+            return isRecognizableImageData(data, relativePath: relativePath)
+                ? (true, nil)
+                : (false, NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
         }
         return String(data: data, encoding: .utf8) != nil
             ? (true, nil)
@@ -442,6 +484,23 @@ public enum SkillStore {
         )
         do {
             return try FileAttachmentTextExtractor().extractText(from: attachment)
+        } catch {
+            throw SkillStoreError.saveFailed(error.localizedDescription)
+        }
+    }
+
+    private static func extractSkillImageText(fileURL: URL, relativePath: String) async throws -> String {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
+        }
+        guard isRecognizableImageData(data, relativePath: relativePath) else {
+            throw SkillStoreError.saveFailed(NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))
+        }
+        do {
+            return try await SystemImageOCRService.recognizeText(in: data)
         } catch {
             throw SkillStoreError.saveFailed(error.localizedDescription)
         }
@@ -482,6 +541,98 @@ public enum SkillStore {
         let normalized = content.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         return normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    private static func makeResourceChunk(
+        relativePath: String,
+        content: String,
+        startLine: Int,
+        maxLines: Int
+    ) throws -> SkillTextResourceChunk {
+        guard startLine >= 1, maxLines >= 1 else {
+            throw SkillStoreError.saveFailed(NSLocalizedString("分块读取参数无效，请检查 start_line 和 max_lines。", comment: "Skill resource chunk invalid range"))
+        }
+        let lines = normalizedTextLines(content)
+        let totalLines = lines.count
+        guard totalLines > 0 else {
+            return SkillTextResourceChunk(
+                relativePath: relativePath,
+                startLine: 1,
+                endLine: 0,
+                totalLines: 0,
+                hasMore: false,
+                content: ""
+            )
+        }
+        guard startLine <= totalLines else {
+            throw SkillStoreError.saveFailed(NSLocalizedString("分块读取参数无效，请检查 start_line 和 max_lines。", comment: "Skill resource chunk invalid range"))
+        }
+
+        let resolvedMaxLines = min(maxLines, 1000)
+        let startIndex = startLine - 1
+        let endExclusive = min(startIndex + resolvedMaxLines, totalLines)
+        let selected = Array(lines[startIndex..<endExclusive])
+        return SkillTextResourceChunk(
+            relativePath: relativePath,
+            startLine: startLine,
+            endLine: startLine + selected.count - 1,
+            totalLines: totalLines,
+            hasMore: endExclusive < totalLines,
+            content: selected.joined(separator: "\n")
+        )
+    }
+
+    private static func isRecognizableImageData(_ data: Data, relativePath: String) -> Bool {
+        guard SkillResourcePolicy.isOCRImagePath(relativePath) else { return false }
+        let bytes = Array(data.prefix(64))
+        return hasPrefix([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], in: bytes)
+            || hasPrefix([0xFF, 0xD8, 0xFF], in: bytes)
+            || hasPrefix(Array("GIF87a".utf8), in: bytes)
+            || hasPrefix(Array("GIF89a".utf8), in: bytes)
+            || hasPrefix(Array("BM".utf8), in: bytes)
+            || hasPrefix(Array("II*\0".utf8), in: bytes)
+            || hasPrefix(Array("MM\0*".utf8), in: bytes)
+            || isRecognizableWebP(bytes)
+            || hasRecognizableISOImageBrand(bytes)
+    }
+
+    private static func hasPrefix(_ prefix: [UInt8], in bytes: [UInt8]) -> Bool {
+        bytes.count >= prefix.count && Array(bytes.prefix(prefix.count)) == prefix
+    }
+
+    private static func isRecognizableWebP(_ bytes: [UInt8]) -> Bool {
+        bytes.count >= 12
+            && asciiString(bytes[0..<4]) == "RIFF"
+            && asciiString(bytes[8..<12]) == "WEBP"
+    }
+
+    private static func hasRecognizableISOImageBrand(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 12, asciiString(bytes[4..<8]) == "ftyp" else {
+            return false
+        }
+        let imageBrands: Set<String> = [
+            "avif",
+            "heic",
+            "heix",
+            "hevc",
+            "hevx",
+            "heis",
+            "hevm",
+            "hevs",
+            "mif1",
+            "msf1"
+        ]
+        for start in stride(from: 8, through: bytes.count - 4, by: 4) {
+            let brand = asciiString(bytes[start..<start + 4])
+            if imageBrands.contains(brand) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func asciiString(_ bytes: ArraySlice<UInt8>) -> String {
+        String(decoding: bytes, as: UTF8.self)
     }
 }
 

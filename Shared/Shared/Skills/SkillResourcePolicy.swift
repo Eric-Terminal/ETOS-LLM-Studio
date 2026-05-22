@@ -12,6 +12,7 @@ import Foundation
 public enum SkillResourcePolicy {
     public static let maxReadableTextBytes: Int64 = 256 * 1024
     public static let maxExtractableDocumentBytes: Int64 = 20 * 1024 * 1024
+    public static let maxOCRImageBytes: Int64 = 10 * 1024 * 1024
 
     private static let readableExtensions: Set<String> = [
         "bash",
@@ -69,6 +70,19 @@ public enum SkillResourcePolicy {
         "README"
     ]
 
+    private static let ocrImageExtensions: Set<String> = [
+        "bmp",
+        "gif",
+        "heic",
+        "heif",
+        "jpg",
+        "jpeg",
+        "png",
+        "tif",
+        "tiff",
+        "webp"
+    ]
+
     public static func normalizeRelativePath(_ rawPath: String) -> String? {
         var normalized = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
@@ -112,7 +126,14 @@ public enum SkillResourcePolicy {
         guard normalizeRelativePath(relativePath) != nil else {
             return (false, NSLocalizedString("路径不合法", comment: "Skill resource unreadable reason"))
         }
-        let sizeLimit = isExtractableDocumentPath(relativePath) ? maxExtractableDocumentBytes : maxReadableTextBytes
+        let sizeLimit: Int64
+        if isExtractableDocumentPath(relativePath) {
+            sizeLimit = maxExtractableDocumentBytes
+        } else if isImagePath(relativePath) {
+            sizeLimit = maxOCRImageBytes
+        } else {
+            sizeLimit = maxReadableTextBytes
+        }
         guard !enforceSizeLimit || size <= sizeLimit else {
             return (false, NSLocalizedString("文件过大，仅列出不读取", comment: "Skill resource unreadable reason"))
         }
@@ -151,6 +172,20 @@ public enum SkillResourcePolicy {
         default:
             return false
         }
+    }
+
+    public static func isImagePath(_ relativePath: String) -> Bool {
+        let ext = URL(fileURLWithPath: relativePath).pathExtension.lowercased()
+        return !ext.isEmpty && ocrImageExtensions.contains(ext)
+    }
+
+    public static func isOCRImagePath(_ relativePath: String) -> Bool {
+        #if canImport(Vision) && !os(watchOS)
+        return isImagePath(relativePath)
+        #else
+        _ = relativePath
+        return false
+        #endif
     }
 
     private static func hasURLScheme(_ value: String) -> Bool {
