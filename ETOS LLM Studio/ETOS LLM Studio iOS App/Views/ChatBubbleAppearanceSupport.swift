@@ -89,10 +89,20 @@ extension ChatBubble {
 
     @ViewBuilder
     var messageActionBarRow: some View {
-        let row = HStack(spacing: 6) {
-            ForEach(displayedMessageActionBarItems) { item in
-                messageActionBarItemView(item)
+        let row = ViewThatFits(in: .horizontal) {
+            messageActionBarContent
+                .messageActionBarGroupStyle(
+                    background: versionSwitcherBackgroundColor,
+                    showsBorder: messageActionBarConfiguration.showsOuterBorder
+                )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                messageActionBarContent
             }
+            .messageActionBarGroupStyle(
+                background: versionSwitcherBackgroundColor,
+                showsBorder: messageActionBarConfiguration.showsOuterBorder
+            )
         }
 
         if shouldForceMergedWidth {
@@ -107,6 +117,18 @@ extension ChatBubble {
     }
 
     @ViewBuilder
+    var messageActionBarContent: some View {
+        HStack(spacing: 6) {
+            ForEach(displayedMessageActionBarItems) { item in
+                messageActionBarItemView(item)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
+    }
+
+    @ViewBuilder
     func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
         switch item {
         case .quickRetry:
@@ -116,7 +138,7 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+            .messageActionBarItemStyle()
         case .copyMessage:
             Button(action: onCopy) {
                 Image(systemName: item.systemImage)
@@ -124,21 +146,21 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+            .messageActionBarItemStyle()
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
                 .etFont(.system(size: 12, weight: .semibold))
-                .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+                .messageActionBarItemStyle()
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
-                .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+                .messageActionBarItemStyle()
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
-                .messageActionBarCapsuleStyle(background: versionSwitcherBackgroundColor)
+                .messageActionBarItemStyle()
         case .versionSwitcher:
             compactVersionIndicator
         }
@@ -176,17 +198,7 @@ extension ChatBubble {
         .foregroundStyle(
             resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.86)
         )
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(versionSwitcherBackgroundColor)
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
-        )
-        .contentShape(Capsule())
+        .messageActionBarItemStyle()
     }
 
     var shouldShowVersionIndicator: Bool {
@@ -682,30 +694,46 @@ extension ChatBubble {
     }
 }
 
-private struct MessageActionBarCapsuleStyle: ViewModifier {
-    let background: Color
-    @Environment(\.colorScheme) private var colorScheme
-
+private struct MessageActionBarItemStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .foregroundStyle(.secondary)
             .labelStyle(.titleAndIcon)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .fixedSize(horizontal: true, vertical: false)
+            .contentShape(Capsule())
+    }
+}
+
+private struct MessageActionBarGroupStyle: ViewModifier {
+    let background: Color
+    let showsBorder: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
             .background(
                 Capsule()
                     .fill(background)
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
+                    .strokeBorder(
+                        Color.primary.opacity(showsBorder ? (colorScheme == .dark ? 0.14 : 0.1) : 0),
+                        lineWidth: showsBorder ? 0.5 : 0
+                    )
             )
             .contentShape(Capsule())
     }
 }
 
 private extension View {
-    func messageActionBarCapsuleStyle(background: Color) -> some View {
-        modifier(MessageActionBarCapsuleStyle(background: background))
+    func messageActionBarItemStyle() -> some View {
+        modifier(MessageActionBarItemStyle())
+    }
+
+    func messageActionBarGroupStyle(background: Color, showsBorder: Bool) -> some View {
+        modifier(MessageActionBarGroupStyle(background: background, showsBorder: showsBorder))
     }
 }

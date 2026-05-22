@@ -33,6 +33,7 @@ struct WatchMessageActionBarSettingsView: View {
     var body: some View {
         List {
             Section(
+                header: Text(NSLocalizedString("显示方式", comment: "")),
                 footer: Text(NSLocalizedString("从上到下对应气泡下方的显示顺序；拖拽右侧把手可调整顺序。", comment: ""))
             ) {
                 Picker(NSLocalizedString("延伸方向", comment: ""), selection: alignmentBinding) {
@@ -40,6 +41,8 @@ struct WatchMessageActionBarSettingsView: View {
                         Text(alignment.title).tag(alignment)
                     }
                 }
+
+                Toggle(NSLocalizedString("显示外围边框", comment: ""), isOn: outerBorderBinding)
             }
 
             Section(NSLocalizedString("已启用项目", comment: "")) {
@@ -97,6 +100,17 @@ struct WatchMessageActionBarSettingsView: View {
             set: { orderedItems in
                 var updated = configuration
                 updated.setItems(orderedItems, for: role)
+                configuration = updated
+            }
+        )
+    }
+
+    private var outerBorderBinding: Binding<Bool> {
+        Binding(
+            get: { configuration.showsOuterBorder },
+            set: { newValue in
+                var updated = configuration
+                updated.showsOuterBorder = newValue
                 configuration = updated
             }
         )

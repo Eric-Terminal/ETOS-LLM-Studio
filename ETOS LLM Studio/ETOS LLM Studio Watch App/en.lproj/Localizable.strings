@@ -2884,6 +2884,8 @@
 "创建沙盒目录" = "Create Sandbox Directory";
 "功能栏" = "Action Bar";
 "功能栏位置" = "Action Bar Position";
+"显示方式" = "Display";
+"显示外围边框" = "Show Outer Border";
 "功能栏自定义" = "Action Bar";
 "加载更早的 %d 条消息" = "Load %d earlier messages";
 "动态时间注入" = "Dynamic Time Injection";

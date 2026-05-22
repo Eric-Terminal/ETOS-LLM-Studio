@@ -42,13 +42,35 @@ extension ChatBubble {
 
     @ViewBuilder
     var messageActionBarRow: some View {
+        ViewThatFits(in: .horizontal) {
+            messageActionBarContent
+                .watchMessageActionBarGroupStyle(
+                    background: messageActionBarBackgroundColor,
+                    showsBorder: messageActionBarConfiguration.showsOuterBorder
+                )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                messageActionBarContent
+            }
+            .watchMessageActionBarGroupStyle(
+                background: messageActionBarBackgroundColor,
+                showsBorder: messageActionBarConfiguration.showsOuterBorder
+            )
+        }
+        .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    var messageActionBarContent: some View {
         HStack(spacing: 5) {
             ForEach(displayedMessageActionBarItems) { item in
                 messageActionBarItemView(item)
             }
         }
-        .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
-        .padding(.top, 2)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -61,7 +83,7 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+            .watchMessageActionBarItemStyle()
         case .copyMessage:
             Button(action: onCopy) {
                 Image(systemName: item.systemImage)
@@ -69,21 +91,21 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+            .watchMessageActionBarItemStyle()
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
                 .etFont(.system(size: 10, weight: .semibold))
-                .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+                .watchMessageActionBarItemStyle()
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
-                .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+                .watchMessageActionBarItemStyle()
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
-                .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+                .watchMessageActionBarItemStyle()
         case .versionSwitcher:
             compactVersionIndicator
         }
@@ -118,7 +140,7 @@ extension ChatBubble {
             .disabled(currentIndex >= totalCount - 1)
             .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
         }
-        .watchMessageActionBarCapsuleStyle(background: messageActionBarBackgroundColor)
+        .watchMessageActionBarItemStyle()
     }
 
     var messageActionBarBackgroundColor: Color {
@@ -419,30 +441,46 @@ extension ChatBubble {
     }
 }
 
-private struct WatchMessageActionBarCapsuleStyle: ViewModifier {
-    let background: Color
-    @Environment(\.colorScheme) private var colorScheme
-
+private struct WatchMessageActionBarItemStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .foregroundStyle(.secondary)
             .labelStyle(.titleAndIcon)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+            .fixedSize(horizontal: true, vertical: false)
+            .contentShape(Capsule())
+    }
+}
+
+private struct WatchMessageActionBarGroupStyle: ViewModifier {
+    let background: Color
+    let showsBorder: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
             .background(
                 Capsule()
                     .fill(background)
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08), lineWidth: 0.5)
+                    .strokeBorder(
+                        Color.primary.opacity(showsBorder ? (colorScheme == .dark ? 0.14 : 0.1) : 0),
+                        lineWidth: showsBorder ? 0.5 : 0
+                    )
             )
             .contentShape(Capsule())
     }
 }
 
 private extension View {
-    func watchMessageActionBarCapsuleStyle(background: Color) -> some View {
-        modifier(WatchMessageActionBarCapsuleStyle(background: background))
+    func watchMessageActionBarItemStyle() -> some View {
+        modifier(WatchMessageActionBarItemStyle())
+    }
+
+    func watchMessageActionBarGroupStyle(background: Color, showsBorder: Bool) -> some View {
+        modifier(WatchMessageActionBarGroupStyle(background: background, showsBorder: showsBorder))
     }
 }

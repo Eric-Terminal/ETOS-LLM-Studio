@@ -2671,6 +2671,8 @@
 "刷新已连接服务器" = "Refresh Connected Servers";
 "功能栏" = "Action Bar";
 "功能栏位置" = "Action Bar Position";
+"显示方式" = "表示方法";
+"显示外围边框" = "外枠を表示";
 "功能栏自定义" = "Action Bar";
 "加入 Pulse 任务" = "Add to Pulse Tasks";
 "加载更早的 %d 条消息" = "Load %d earlier messages";

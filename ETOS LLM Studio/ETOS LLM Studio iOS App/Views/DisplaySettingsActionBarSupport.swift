@@ -31,7 +31,7 @@ struct MessageActionBarSettingsView: View {
     var body: some View {
         Form {
             roleSection
-            alignmentSection
+            layoutSection
             enabledItemsSection
             availableItemsSection
         }
@@ -55,13 +55,15 @@ struct MessageActionBarSettingsView: View {
         }
     }
 
-    private var alignmentSection: some View {
-        Section(NSLocalizedString("延伸方向", comment: "")) {
+    private var layoutSection: some View {
+        Section(NSLocalizedString("显示方式", comment: "")) {
             Picker(NSLocalizedString("功能栏位置", comment: ""), selection: alignmentBinding) {
                 ForEach(MessageActionBarAlignment.allCases) { alignment in
                     Text(alignment.title).tag(alignment)
                 }
             }
+
+            Toggle(NSLocalizedString("显示外围边框", comment: ""), isOn: outerBorderBinding)
         }
     }
 
@@ -109,6 +111,17 @@ struct MessageActionBarSettingsView: View {
             set: { newValue in
                 var updated = configuration
                 updated.setAlignment(newValue, for: selectedRole)
+                configuration = updated
+            }
+        )
+    }
+
+    private var outerBorderBinding: Binding<Bool> {
+        Binding(
+            get: { configuration.showsOuterBorder },
+            set: { newValue in
+                var updated = configuration
+                updated.showsOuterBorder = newValue
                 configuration = updated
             }
         )

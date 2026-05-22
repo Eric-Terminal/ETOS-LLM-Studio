@@ -49,17 +49,44 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public var userItems: [MessageActionBarItem]
     public var assistantAlignment: MessageActionBarAlignment
     public var userAlignment: MessageActionBarAlignment
+    public var showsOuterBorder: Bool
 
     public init(
         assistantItems: [MessageActionBarItem],
         userItems: [MessageActionBarItem],
         assistantAlignment: MessageActionBarAlignment,
-        userAlignment: MessageActionBarAlignment
+        userAlignment: MessageActionBarAlignment,
+        showsOuterBorder: Bool = false
     ) {
         self.assistantItems = Self.normalizedItems(assistantItems, for: .assistant)
         self.userItems = Self.normalizedItems(userItems, for: .user)
         self.assistantAlignment = assistantAlignment
         self.userAlignment = userAlignment
+        self.showsOuterBorder = showsOuterBorder
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case assistantItems
+        case userItems
+        case assistantAlignment
+        case userAlignment
+        case showsOuterBorder
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let assistantItems = try container.decodeIfPresent([MessageActionBarItem].self, forKey: .assistantItems) ?? []
+        let userItems = try container.decodeIfPresent([MessageActionBarItem].self, forKey: .userItems) ?? []
+        let assistantAlignment = try container.decodeIfPresent(MessageActionBarAlignment.self, forKey: .assistantAlignment) ?? .trailing
+        let userAlignment = try container.decodeIfPresent(MessageActionBarAlignment.self, forKey: .userAlignment) ?? .trailing
+        let showsOuterBorder = try container.decodeIfPresent(Bool.self, forKey: .showsOuterBorder) ?? false
+        self.init(
+            assistantItems: assistantItems,
+            userItems: userItems,
+            assistantAlignment: assistantAlignment,
+            userAlignment: userAlignment,
+            showsOuterBorder: showsOuterBorder
+        )
     }
 
     public static let iOSDefaultConfiguration = MessageActionBarConfiguration(
@@ -99,7 +126,7 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public func encodedString() -> String {
         guard let data = try? JSONEncoder().encode(normalized()),
               let string = String(data: data, encoding: .utf8) else {
-            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing"}"#
+            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing","showsOuterBorder":false}"#
         }
         return string
     }
@@ -145,7 +172,8 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
             assistantItems: assistantItems,
             userItems: userItems,
             assistantAlignment: assistantAlignment,
-            userAlignment: userAlignment
+            userAlignment: userAlignment,
+            showsOuterBorder: showsOuterBorder
         )
     }
 

@@ -19,6 +19,7 @@ struct MessageActionBarConfigurationTests {
         #expect(configuration.userItems.isEmpty)
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
+        #expect(configuration.showsOuterBorder == false)
     }
 
     @Test("watchOS 默认配置不启用气泡功能栏项目")
@@ -29,6 +30,7 @@ struct MessageActionBarConfigurationTests {
         #expect(configuration.userItems.isEmpty)
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
+        #expect(configuration.showsOuterBorder == false)
     }
 
     @Test("当前平台默认配置符合平台策略")
@@ -43,6 +45,7 @@ struct MessageActionBarConfigurationTests {
         #expect(configuration.userItems.isEmpty)
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
+        #expect(configuration.showsOuterBorder == false)
     }
 
     @Test("配置编解码会去重并保留助手用户独立顺序")
@@ -51,7 +54,8 @@ struct MessageActionBarConfigurationTests {
             assistantItems: [.quickRetry, .copyMessage, .quickRetry, .versionSwitcher],
             userItems: [.requestTime, .inputTokens, .outputTokens, .requestTime],
             assistantAlignment: .leading,
-            userAlignment: .trailing
+            userAlignment: .trailing,
+            showsOuterBorder: true
         )
 
         let decoded = MessageActionBarConfiguration.decoded(from: configuration.encodedString())
@@ -60,6 +64,18 @@ struct MessageActionBarConfigurationTests {
         #expect(decoded.userItems == [.requestTime, .inputTokens, .outputTokens])
         #expect(decoded.assistantAlignment == .leading)
         #expect(decoded.userAlignment == .trailing)
+        #expect(decoded.showsOuterBorder == true)
+    }
+
+    @Test("旧配置缺少外围边框字段时默认关闭")
+    func legacyConfigurationDefaultsOuterBorderToOff() {
+        let rawValue = #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing"}"#
+
+        let decoded = MessageActionBarConfiguration.decoded(from: rawValue)
+
+        #expect(decoded.assistantItems == [.versionSwitcher])
+        #expect(decoded.userItems.isEmpty)
+        #expect(decoded.showsOuterBorder == false)
     }
 
     @Test("用户气泡配置会过滤重试和多版本切换")

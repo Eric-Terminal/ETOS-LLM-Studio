@@ -2796,6 +2796,8 @@
 "助手气泡和用户气泡可以分别配置。列表从上到下对应气泡下方从左到右或从右到左的显示顺序。" = "Assistant and user bubbles can be configured separately. The list order maps to the row below each bubble from left to right or right to left.";
 "延伸方向" = "Direction";
 "功能栏位置" = "Action Bar Position";
+"显示方式" = "Display";
+"显示外围边框" = "Show Outer Border";
 "已启用项目" = "Enabled Items";
 "当前没有启用项目，可从下方添加。" = "No items are enabled. Add one below.";
 "点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。多版本切换移除后，仍可在长按菜单里管理版本。" = "Tap Edit in the top-right corner to drag the reorder handle. Swipe right to remove. If version switching is removed, versions remain available from the long-press menu.";
