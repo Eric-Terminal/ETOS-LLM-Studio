@@ -14,9 +14,21 @@ struct UpdateTimelineView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
     @Environment(\.openURL) private var openURL
+    @State private var visibleTimelineLimit = 5
+
+    private let timelineInitialLimit = 5
+    private let timelinePageSize = 20
 
     private var displayedCommits: [UpdateTimelineCommit] {
         manager.displayedCommits
+    }
+
+    private var visibleTimelineCommits: [UpdateTimelineCommit] {
+        Array(displayedCommits.prefix(visibleTimelineLimit))
+    }
+
+    private var hasMoreTimelineCommits: Bool {
+        visibleTimelineCommits.count < displayedCommits.count
     }
 
     var body: some View {
@@ -40,6 +52,13 @@ struct UpdateTimelineView: View {
         }
         .task {
             await manager.refreshIfNeeded()
+        }
+        .onChange(of: displayedCommits.count) { _, newCount in
+            if newCount <= timelineInitialLimit {
+                visibleTimelineLimit = timelineInitialLimit
+            } else {
+                visibleTimelineLimit = min(max(visibleTimelineLimit, timelineInitialLimit), newCount)
+            }
         }
     }
 
@@ -144,15 +163,23 @@ struct UpdateTimelineView: View {
                 )
                 .listRowBackground(Color.clear)
             } else {
-                ForEach(Array(displayedCommits.enumerated()), id: \.element.id) { index, commit in
+                ForEach(Array(visibleTimelineCommits.enumerated()), id: \.element.id) { index, commit in
                     NavigationLink {
                         UpdateTimelineCommitDetailView(commit: commit)
                     } label: {
                         UpdateTimelineRow(
                             commit: commit,
                             isFirst: index == 0,
-                            isLast: index == displayedCommits.count - 1
+                            isLast: index == visibleTimelineCommits.count - 1
                         )
+                    }
+                }
+
+                if hasMoreTimelineCommits {
+                    Button {
+                        visibleTimelineLimit = min(displayedCommits.count, visibleTimelineLimit + timelinePageSize)
+                    } label: {
+                        Label(NSLocalizedString("展开更多", comment: "Show more update timeline commits"), systemImage: "chevron.down.circle")
                     }
                 }
             }
