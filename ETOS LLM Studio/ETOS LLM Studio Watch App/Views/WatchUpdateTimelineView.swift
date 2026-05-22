@@ -191,8 +191,7 @@ private struct WatchUpdateTimelineBrowserView: View {
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(loadedCommits.enumerated()), id: \.element.id) { index, item in
-                    let commit = item.element
+                ForEach(Array(loadedCommits.enumerated()), id: \.element.id) { index, commit in
                     NavigationLink {
                         WatchUpdateTimelineCommitDetailView(commit: commit)
                     } label: {
