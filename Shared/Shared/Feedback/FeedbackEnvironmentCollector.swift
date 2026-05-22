@@ -13,11 +13,13 @@ import Darwin
 
 public enum FeedbackEnvironmentCollector {
     public static func collectSnapshot() -> FeedbackEnvironmentSnapshot {
+        let distributionChannel = UpdateTimelineManager.currentDistributionChannel().rawValue
         FeedbackEnvironmentSnapshot(
             platform: platformName,
             appVersion: appVersion,
             appBuild: appBuild,
             gitCommitHash: gitCommitHash,
+            distributionChannel: distributionChannel,
             osVersion: osVersion,
             deviceModel: deviceModelIdentifier(),
             localeIdentifier: Locale.current.identifier,
@@ -29,12 +31,14 @@ public enum FeedbackEnvironmentCollector {
         let providerCount = ConfigLoader.loadProviders().count
         let sessionCount = Persistence.loadChatSessions().filter { !$0.isTemporary }.count
         let now = ISO8601DateFormatter().string(from: Date())
+        let distributionChannel = UpdateTimelineManager.currentDistributionChannel().rawValue
 
         return [
             "timestamp=\(now)",
             "provider_count=\(providerCount)",
             "session_count=\(sessionCount)",
             "platform=\(platformName)",
+            "distribution_channel=\(distributionChannel)",
             "app_version=\(appVersion)(\(appBuild))"
         ]
     }

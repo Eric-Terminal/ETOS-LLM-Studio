@@ -198,11 +198,12 @@ private struct FeedbackComposeView: View {
     private var environmentSummary: String {
         let snapshot = FeedbackEnvironmentCollector.collectSnapshot()
         return String(
-            format: NSLocalizedString("将自动附带环境信息：%@ %@ (Build %@) · %@", comment: "Environment summary"),
+            format: NSLocalizedString("将自动附带环境信息：%@ %@ (Build %@) · %@ · %@", comment: "Environment summary"),
             snapshot.platform,
             snapshot.appVersion,
             snapshot.appBuild,
-            snapshot.deviceModel
+            snapshot.deviceModel,
+            snapshot.localizedDistributionChannel
         )
     }
 

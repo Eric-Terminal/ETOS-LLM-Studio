@@ -1155,6 +1155,7 @@ Veuillez Générer a short, concise Titre for ce conversation based activé le u
 "提交中..." = "Submitting…";
 "提交" = "Submit";
 "将自动附带环境信息：%@ %@ (Build %@) · %@" = "Les informations d’environnement seront jointes automatiquement : %@ %@ (Build %@) · %@";
+"将自动附带环境信息：%@ %@ (Build %@) · %@ · %@" = "Les informations d’environnement seront jointes automatiquement : %@ %@ (Build %@) · %@ · %@";
 "请至少填写标题和详细描述。" = "Veuillez fournir at least a Titre et Détails.";
 "提交失败" = "Submit Échec";
 "状态" = "État";

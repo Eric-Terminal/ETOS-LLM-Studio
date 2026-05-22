@@ -147,6 +147,7 @@ struct FeedbackEnvironmentSnapshotTests {
             appVersion: "1.2.3",
             appBuild: "456",
             gitCommitHash: "abcdef1234567890",
+            distributionChannel: "testFlight",
             osVersion: "iOS 26.0",
             deviceModel: "iPhone17,1",
             localeIdentifier: "zh_Hans_CN",
@@ -157,6 +158,8 @@ struct FeedbackEnvironmentSnapshotTests {
         let decoded = try JSONDecoder().decode(FeedbackEnvironmentSnapshot.self, from: data)
 
         #expect(decoded.gitCommitHash == "abcdef1234567890")
+        #expect(decoded.distributionChannel == "testFlight")
+        #expect(decoded.localizedDistributionChannel == "TestFlight")
         #expect(decoded.appBuild == "456")
         #expect(decoded.platform == "iOS")
     }

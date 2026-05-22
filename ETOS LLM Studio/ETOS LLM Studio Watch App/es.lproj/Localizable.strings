@@ -1076,6 +1076,7 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "提交中..." = "Submitting…";
 "提交" = "Submit";
 "将自动附带环境信息：%@ %@ (Build %@) · %@" = "Se adjuntará automáticamente la información de entorno: %@ %@ (Build %@) · %@";
+"将自动附带环境信息：%@ %@ (Build %@) · %@ · %@" = "Se adjuntará automáticamente la información de entorno: %@ %@ (Build %@) · %@ · %@";
 "请至少填写标题和详细描述。" = "Por favor proporcionar at least a Título y Detalles.";
 "提交失败" = "Submit Falló";
 "状态" = "Estado";

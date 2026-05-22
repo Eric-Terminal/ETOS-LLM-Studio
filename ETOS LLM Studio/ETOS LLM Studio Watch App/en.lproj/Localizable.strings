@@ -1030,6 +1030,7 @@
 "提交中..." = "Submitting...";
 "提交" = "Submit";
 "将自动附带环境信息：%@ %@ (Build %@) · %@" = "Environment info will be attached automatically: %@ %@ (Build %@) · %@";
+"将自动附带环境信息：%@ %@ (Build %@) · %@ · %@" = "Environment info will be attached automatically: %@ %@ (Build %@) · %@ · %@";
 "请至少填写标题和详细描述。" = "Please provide at least a title and details.";
 "提交失败" = "Submit Failed";
 "状态" = "Status";

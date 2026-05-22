@@ -67,6 +67,7 @@ public struct FeedbackEnvironmentSnapshot: Codable, Hashable, Sendable {
     public let appVersion: String
     public let appBuild: String
     public let gitCommitHash: String
+    public let distributionChannel: String
     public let osVersion: String
     public let deviceModel: String
     public let localeIdentifier: String
@@ -77,6 +78,7 @@ public struct FeedbackEnvironmentSnapshot: Codable, Hashable, Sendable {
         appVersion: String,
         appBuild: String,
         gitCommitHash: String,
+        distributionChannel: String = "",
         osVersion: String,
         deviceModel: String,
         localeIdentifier: String,
@@ -86,10 +88,61 @@ public struct FeedbackEnvironmentSnapshot: Codable, Hashable, Sendable {
         self.appVersion = appVersion
         self.appBuild = appBuild
         self.gitCommitHash = gitCommitHash
+        self.distributionChannel = distributionChannel
         self.osVersion = osVersion
         self.deviceModel = deviceModel
         self.localeIdentifier = localeIdentifier
         self.timezoneIdentifier = timezoneIdentifier
+    }
+
+    public var localizedDistributionChannel: String {
+        let normalized = distributionChannel.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch normalized.lowercased() {
+        case "appstore", "app_store":
+            return UpdateTimelineChannel.appStore.displayName
+        case "testflight", "test_flight":
+            return UpdateTimelineChannel.testFlight.displayName
+        default:
+            return normalized.isEmpty ? NSLocalizedString("未知状态", comment: "Unknown feedback distribution channel") : normalized
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case platform
+        case appVersion
+        case appBuild
+        case gitCommitHash
+        case distributionChannel
+        case osVersion
+        case deviceModel
+        case localeIdentifier
+        case timezoneIdentifier
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        platform = try container.decode(String.self, forKey: .platform)
+        appVersion = try container.decode(String.self, forKey: .appVersion)
+        appBuild = try container.decode(String.self, forKey: .appBuild)
+        gitCommitHash = try container.decode(String.self, forKey: .gitCommitHash)
+        distributionChannel = try container.decodeIfPresent(String.self, forKey: .distributionChannel) ?? ""
+        osVersion = try container.decode(String.self, forKey: .osVersion)
+        deviceModel = try container.decode(String.self, forKey: .deviceModel)
+        localeIdentifier = try container.decode(String.self, forKey: .localeIdentifier)
+        timezoneIdentifier = try container.decode(String.self, forKey: .timezoneIdentifier)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(platform, forKey: .platform)
+        try container.encode(appVersion, forKey: .appVersion)
+        try container.encode(appBuild, forKey: .appBuild)
+        try container.encode(gitCommitHash, forKey: .gitCommitHash)
+        try container.encode(distributionChannel, forKey: .distributionChannel)
+        try container.encode(osVersion, forKey: .osVersion)
+        try container.encode(deviceModel, forKey: .deviceModel)
+        try container.encode(localeIdentifier, forKey: .localeIdentifier)
+        try container.encode(timezoneIdentifier, forKey: .timezoneIdentifier)
     }
 }
 

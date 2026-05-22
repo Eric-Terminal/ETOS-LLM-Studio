@@ -407,6 +407,10 @@ public final class UpdateTimelineManager: ObservableObject {
         persistState()
     }
 
+    nonisolated public static func currentDistributionChannel() -> UpdateTimelineChannel {
+        detectChannel()
+    }
+
     private func applyStartupProbeIfNeeded() {
         let realSHA = Self.bundleCommitHash()
         let buildNumber = Self.bundleBuildNumber()
@@ -904,7 +908,7 @@ public final class UpdateTimelineManager: ObservableObject {
         return normalized
     }
 
-    private static func detectChannel() -> UpdateTimelineChannel {
+    nonisolated private static func detectChannel() -> UpdateTimelineChannel {
         let receiptPath = Bundle.main.appStoreReceiptURL?.lastPathComponent.lowercased() ?? ""
         return receiptPath.contains("sandboxreceipt") ? .testFlight : .appStore
     }
