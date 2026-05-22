@@ -856,6 +856,13 @@ public final class UpdateTimelineManager: ObservableObject {
     }
 
     private static func bundleCommitHash() -> String? {
+        #if DEBUG
+        if let override = ProcessInfo.processInfo.environment["ETOS_DEBUG_COMMIT_HASH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
+        #endif
+
         let rawValue = Bundle.main.object(forInfoDictionaryKey: "ETCommitHash") as? String
         let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let normalized, !normalized.isEmpty else { return nil }
@@ -863,6 +870,13 @@ public final class UpdateTimelineManager: ObservableObject {
     }
 
     private static func bundleBuildNumber() -> Int? {
+        #if DEBUG
+        if let override = ProcessInfo.processInfo.environment["ETOS_DEBUG_BUILD_NUMBER"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let buildNumber = Int(override) {
+            return buildNumber
+        }
+        #endif
+
         let rawValue = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         guard let rawValue else { return nil }
         return Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
