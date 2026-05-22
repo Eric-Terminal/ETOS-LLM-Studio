@@ -423,6 +423,10 @@ public extension Model {
         kind == .chat
     }
 
+    var isConversationModel: Bool {
+        kind == .chat || kind == .image
+    }
+
     /// 识别是否属于主流模型家族（用于模型列表分组与筛选）
     var mainstreamFamily: MainstreamModelFamily? {
         MainstreamModelFamily.detect(

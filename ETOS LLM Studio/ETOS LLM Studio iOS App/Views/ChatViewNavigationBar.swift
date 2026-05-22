@@ -88,7 +88,7 @@ extension ChatView {
             .foregroundColor(TelegramColors.navBarText)
             .allowsHitTesting(false)
 
-            if viewModel.activatedModels.isEmpty {
+            if viewModel.activatedConversationModels.isEmpty {
                 MarqueeText(content: NSLocalizedString("选择模型以开始", comment: ""), uiFont: navBarSubtitleFont)
                     .foregroundColor(TelegramColors.navBarSubtitle)
                     .allowsHitTesting(false)

@@ -73,6 +73,8 @@ class ChatViewModel: ObservableObject {
     @Published var configuredModels: [RunnableModel] = []
     @Published var selectedModel: RunnableModel?
     @Published var activatedModels: [RunnableModel] = []
+    @Published var activatedConversationModels: [RunnableModel] = []
+    @Published var activatedChatModels: [RunnableModel] = []
     
     @Published var memories: [MemoryItem] = []
     @Published var conversationSessionSummaries: [ConversationSessionSummary] = []

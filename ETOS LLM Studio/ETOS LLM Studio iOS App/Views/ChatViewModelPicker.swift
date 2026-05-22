@@ -27,7 +27,7 @@ extension ChatView {
 
     var nativeModelPickerContent: some View {
         List {
-            if viewModel.activatedModels.isEmpty {
+            if viewModel.activatedConversationModels.isEmpty {
                 VStack(spacing: 6) {
                     Text(NSLocalizedString("暂无可用模型", comment: ""))
                         .etFont(.headline)
@@ -74,7 +74,7 @@ extension ChatView {
     var nativeModelPickerAllModelsList: some View {
         List {
             Section {
-                ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                ForEach(viewModel.activatedConversationModels, id: \.id) { runnable in
                     nativeModelPickerModelRow(runnable)
                 }
             } header: {
@@ -125,7 +125,7 @@ extension ChatView {
                 VStack(spacing: 12) {
                     modelPickerHeader
 
-                    if viewModel.activatedModels.isEmpty {
+                    if viewModel.activatedConversationModels.isEmpty {
                         modelPickerEmptyState
                     } else if let control = modelPickerRequestControl,
                               let selectedModel = viewModel.selectedModel {
@@ -256,7 +256,7 @@ extension ChatView {
     var modelPickerAllModelsList: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                ForEach(viewModel.activatedModels, id: \.id) { runnable in
+                ForEach(viewModel.activatedConversationModels, id: \.id) { runnable in
                     modelPickerRow(runnable)
                 }
             }
@@ -266,11 +266,11 @@ extension ChatView {
     }
 
     var topModelChoices: [RunnableModel] {
-        Array(viewModel.activatedModels.prefix(3))
+        Array(viewModel.activatedConversationModels.prefix(3))
     }
 
     var hasMoreModelChoices: Bool {
-        viewModel.activatedModels.count > topModelChoices.count
+        viewModel.activatedConversationModels.count > topModelChoices.count
     }
 
     var selectedModelRequestControls: [ModelRequestBodyControl] {

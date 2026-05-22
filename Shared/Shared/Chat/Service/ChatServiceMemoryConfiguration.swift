@@ -131,7 +131,7 @@ extension ChatService {
     }
 
     func resolvedChatCapableModel(storedIdentifier: String? = nil) -> RunnableModel? {
-        let candidates = activatedRunnableModels.filter { $0.model.isChatModel }
+        let candidates = activatedChatModels
         guard !candidates.isEmpty else { return nil }
 
         if let storedIdentifier, !storedIdentifier.isEmpty,

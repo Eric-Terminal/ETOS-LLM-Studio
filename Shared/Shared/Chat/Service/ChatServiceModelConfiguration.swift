@@ -22,6 +22,14 @@ extension ChatService {
         configuredRunnableModels.filter { $0.model.isActivated }
     }
 
+    public var activatedConversationModels: [RunnableModel] {
+        activatedRunnableModels.filter { $0.model.isConversationModel }
+    }
+
+    public var activatedChatModels: [RunnableModel] {
+        activatedRunnableModels.filter { $0.model.isChatModel }
+    }
+
     public var activatedSpeechModels: [RunnableModel] {
         let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
         var candidates = speechCapable.isEmpty ? activatedRunnableModels : speechCapable
@@ -37,7 +45,7 @@ extension ChatService {
     }
 
     public var activatedOCRModels: [RunnableModel] {
-        activatedRunnableModels.filter { $0.model.isChatModel && $0.model.supportsVisionInput }
+        activatedChatModels.filter { $0.model.supportsVisionInput }
     }
 
     func resolveSelectedSpeechModel() -> RunnableModel? {
@@ -121,8 +129,8 @@ extension ChatService {
             legacyUserDefaultsKey: Self.selectedRunnableModelStorageKey
         )
         let nextModel = selectedID.isEmpty
-            ? activatedRunnableModels.first
-            : activatedRunnableModels.first { $0.id == selectedID } ?? activatedRunnableModels.first
+            ? activatedConversationModels.first
+            : activatedConversationModels.first { $0.id == selectedID } ?? activatedConversationModels.first
         if selectedModelSubject.value?.id != nextModel?.id {
             selectedModelSubject.send(nextModel)
         }
@@ -135,7 +143,7 @@ extension ChatService {
         self.providers = ConfigLoader.loadProviders()
         self.reconcileStoredModelOrder()
 
-        let allRunnable = activatedRunnableModels
+        let allRunnable = activatedConversationModels
         var newSelectedModel: RunnableModel?
         if let currentID = currentSelectedID {
             newSelectedModel = allRunnable.first { $0.id == currentID }
@@ -157,6 +165,7 @@ extension ChatService {
     }
 
     public func setSelectedModel(_ model: RunnableModel?) {
+        guard model?.model.isConversationModel ?? true else { return }
         guard selectedModelSubject.value?.id != model?.id else { return }
         selectedModelSubject.send(model)
         persistSelectedRunnableModelID(model?.id)

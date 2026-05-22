@@ -50,7 +50,7 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section(NSLocalizedString("当前模型", comment: "设置当前模型分组")) {
-                let options = viewModel.activatedModels
+                let options = viewModel.activatedConversationModels
                 if options.isEmpty {
                     Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
                         .etFont(.footnote)
@@ -287,14 +287,14 @@ struct SettingsView: View {
         }
         .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
         .onAppear {
-            ensureSelectedModel(in: viewModel.activatedModels)
+            ensureSelectedModel(in: viewModel.activatedConversationModels)
             scheduleSettingsResearchAchievementIfNeeded()
         }
         .onDisappear {
             cancelSettingsResearchAchievementTask()
         }
         .onChange(of: viewModel.activatedModelListVersion) { _, _ in
-            ensureSelectedModel(in: viewModel.activatedModels)
+            ensureSelectedModel(in: viewModel.activatedConversationModels)
         }
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
             if !isEnabled, viewModel.enableAdvancedRenderer {

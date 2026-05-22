@@ -197,6 +197,8 @@ extension ChatViewModel {
                 self.providers = providers
                 self.configuredModels = self.chatService.configuredRunnableModels
                 self.applyActivatedModels(self.chatService.activatedRunnableModels)
+                self.applyActivatedConversationModels(self.chatService.activatedConversationModels)
+                self.applyActivatedChatModels(self.chatService.activatedChatModels)
                 self.speechModels = self.chatService.activatedSpeechModels
                 self.ttsModels = self.chatService.activatedTTSModels
                 self.syncSpeechModelSelection()
@@ -383,6 +385,18 @@ extension ChatViewModel {
         if identityChanged {
             activatedModelIDs = ids
             activatedModelListVersion &+= 1
+        }
+    }
+
+    func applyActivatedConversationModels(_ models: [RunnableModel]) {
+        if activatedConversationModels != models {
+            activatedConversationModels = models
+        }
+    }
+
+    func applyActivatedChatModels(_ models: [RunnableModel]) {
+        if activatedChatModels != models {
+            activatedChatModels = models
         }
     }
 

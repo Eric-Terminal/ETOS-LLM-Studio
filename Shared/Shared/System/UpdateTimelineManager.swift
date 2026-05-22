@@ -359,7 +359,11 @@ public final class UpdateTimelineManager: ObservableObject {
             return
         }
         guard state.allowsSummary else { return }
-        guard let model = ChatService.shared.selectedModelSubject.value ?? ChatService.shared.activatedRunnableModels.first(where: { $0.model.isChatModel }) else {
+        let selectedModel = ChatService.shared.selectedModelSubject.value
+        let model = selectedModel?.model.isChatModel == true
+            ? selectedModel
+            : ChatService.shared.activatedChatModels.first
+        guard let model else {
             setError(UpdateTimelineError.noModelSelected)
             return
         }

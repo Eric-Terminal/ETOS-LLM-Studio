@@ -315,7 +315,7 @@ extension ChatService {
         metadata: [String: JSONValue],
         source: String?
     ) async -> String? {
-        guard let runnableModel = selectedModelSubject.value else {
+        guard let runnableModel = resolvedChatCapableModel() else {
             return nil
         }
 
@@ -373,7 +373,10 @@ extension ChatService {
         guard !trimmedUserPrompt.isEmpty else { return "" }
         let promptLanguage = ModelPromptLanguage.current
 
-        guard let targetModel = runnableModel ?? selectedModelSubject.value ?? activatedRunnableModels.first else {
+        let fallbackModel = selectedModelSubject.value?.model.isChatModel == true
+            ? selectedModelSubject.value
+            : activatedChatModels.first
+        guard let targetModel = runnableModel ?? fallbackModel else {
             throw DetachedCompletionError.noAvailableModel
         }
         guard let adapter = adapters[targetModel.provider.apiFormat] else {
@@ -597,11 +600,15 @@ extension ChatService {
     private func resolveTitleGenerationModel() -> RunnableModel? {
         let dedicatedModelIdentifier = Persistence.readAppConfigText(key: AppConfigKey.titleGenerationModelIdentifier.rawValue) ?? ""
         if !dedicatedModelIdentifier.isEmpty,
-           let dedicatedModel = activatedRunnableModels.first(
+           let dedicatedModel = activatedChatModels.first(
                 where: { $0.id == dedicatedModelIdentifier && $0.model.isChatModel }
            ) {
             return dedicatedModel
         }
-        return selectedModelSubject.value
+        if let selectedModel = selectedModelSubject.value,
+           selectedModel.model.isChatModel {
+            return selectedModel
+        }
+        return activatedChatModels.first
     }
 }

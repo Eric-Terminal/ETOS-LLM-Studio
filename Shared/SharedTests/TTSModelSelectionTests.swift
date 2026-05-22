@@ -77,6 +77,76 @@ struct TTSModelSelectionTests {
         #expect(service.resolveSelectedTTSModel() == nil)
     }
 
+    @Test("对话模型列表会排除嵌入等专用用途模型")
+    func testActivatedConversationModelsExcludesEmbeddingModels() {
+        let backupProviders = ConfigLoader.loadProviders()
+        let backupSelectedModelID = Persistence.readAppConfigText(key: AppConfigKey.selectedRunnableModelID.rawValue)
+        defer {
+            restoreProviders(backupProviders)
+            if let backupSelectedModelID {
+                Persistence.writeAppConfig(
+                    key: AppConfigKey.selectedRunnableModelID.rawValue,
+                    text: backupSelectedModelID,
+                    typeHint: AppConfigKey.selectedRunnableModelID.typeHint
+                )
+            } else {
+                Persistence.deleteAppConfig(key: AppConfigKey.selectedRunnableModelID.rawValue)
+            }
+        }
+
+        clearAllProviders()
+
+        let chatModel = Model(
+            id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+            modelName: "chat-model",
+            displayName: "聊天模型",
+            isActivated: true,
+            kind: .chat
+        )
+        let embeddingModel = Model(
+            id: UUID(uuidString: "22222222-3333-4444-5555-666666666666")!,
+            modelName: "embedding-model",
+            displayName: "嵌入模型",
+            isActivated: true,
+            kind: .embedding
+        )
+        let imageModel = Model(
+            id: UUID(uuidString: "33333333-4444-5555-6666-777777777777")!,
+            modelName: "image-model",
+            displayName: "生图模型",
+            isActivated: true,
+            kind: .image
+        )
+        let provider = Provider(
+            id: UUID(uuidString: "44444444-5555-6666-7777-888888888888")!,
+            name: "用途过滤提供商",
+            baseURL: "https://example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [embeddingModel, imageModel, chatModel]
+        )
+        ConfigLoader.saveProvider(provider)
+        let embeddingRunnable = RunnableModel(provider: provider, model: embeddingModel)
+        Persistence.writeAppConfig(
+            key: AppConfigKey.selectedRunnableModelID.rawValue,
+            text: embeddingRunnable.id,
+            typeHint: AppConfigKey.selectedRunnableModelID.typeHint
+        )
+
+        let service = ChatService()
+
+        #expect(service.activatedRunnableModels.contains(where: { $0.id == embeddingRunnable.id }))
+        #expect(!service.activatedConversationModels.contains(where: { $0.id == embeddingRunnable.id }))
+        #expect(service.activatedConversationModels.contains(where: { $0.model.kind == .image }))
+        #expect(service.activatedConversationModels.contains(where: { $0.model.kind == .chat }))
+        #expect(service.activatedChatModels.map(\.model.kind) == [.chat])
+        #expect(service.selectedModelSubject.value?.model.isConversationModel == true)
+
+        let selectedBeforeEmbeddingAttempt = service.selectedModelSubject.value?.id
+        service.setSelectedModel(embeddingRunnable)
+        #expect(service.selectedModelSubject.value?.id == selectedBeforeEmbeddingAttempt)
+    }
+
     @Test("删除当前选中提供商后会切换到可用模型")
     func testDeletingSelectedProviderReconcilesSelectedModel() {
         let backupProviders = ConfigLoader.loadProviders()

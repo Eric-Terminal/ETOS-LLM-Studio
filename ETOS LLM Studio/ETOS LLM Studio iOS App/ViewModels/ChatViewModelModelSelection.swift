@@ -16,19 +16,19 @@ extension ChatViewModel {
     }
 
     var titleGenerationModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.kind == .chat }
+        activatedChatModels
     }
 
     var dailyPulseModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.kind == .chat }
+        activatedChatModels
     }
 
     var conversationSummaryModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.kind == .chat }
+        activatedChatModels
     }
 
     var reasoningSummaryModelOptions: [RunnableModel] {
-        activatedModels.filter { $0.model.kind == .chat }
+        activatedChatModels
     }
 
     var ocrModelOptions: [RunnableModel] {

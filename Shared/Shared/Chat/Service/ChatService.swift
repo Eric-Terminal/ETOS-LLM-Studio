@@ -473,7 +473,7 @@ public class ChatService {
             for: .selectedRunnableModelID,
             legacyUserDefaultsKey: Self.selectedRunnableModelStorageKey
         )
-        let allRunnable = activatedRunnableModels
+        let allRunnable = activatedConversationModels
         var initialModel: RunnableModel? = allRunnable.first { $0.id == savedModelID }
         if initialModel == nil {
             initialModel = allRunnable.first
