@@ -736,14 +736,7 @@ private struct UsageAnalyticsTokenTrendChart: View {
                         .stroke(modelColors[index % modelColors.count], style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round))
                 }
 
-                if trend.dailyPoints.count == 1,
-                   let point = trend.dailyPoints.first,
-                   point.totalTokens > 0 {
-                    Circle()
-                        .fill(Color.primary.opacity(0.30))
-                        .frame(width: 7, height: 7)
-                        .position(pointPosition(index: 0, count: 1, value: point.totalTokens, in: plotRect))
-                }
+                singleDayMarkers(in: plotRect)
 
                 xAxisLabels(in: plotRect)
             }
@@ -765,6 +758,43 @@ private struct UsageAnalyticsTokenTrendChart: View {
         .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
     }
 
+    @ViewBuilder
+    private func singleDayMarkers(in rect: CGRect) -> some View {
+        if trend.dailyPoints.count == 1,
+           let point = trend.dailyPoints.first,
+           point.totalTokens > 0 {
+            Path { path in
+                let marker = pointPosition(index: 0, count: 1, value: point.totalTokens, in: rect)
+                let halfWidth = min(rect.width * 0.14, 28)
+                path.move(to: CGPoint(x: marker.x - halfWidth, y: marker.y))
+                path.addLine(to: CGPoint(x: marker.x + halfWidth, y: marker.y))
+            }
+            .stroke(Color.primary.opacity(0.24), style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+
+            Circle()
+                .fill(Color.primary.opacity(0.24))
+                .frame(width: 10, height: 10)
+                .position(pointPosition(index: 0, count: 1, value: point.totalTokens, in: rect))
+
+            ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
+                if let value = series.points.first?.totalTokens, value > 0 {
+                    Path { path in
+                        let marker = pointPosition(index: 0, count: 1, value: value, in: rect)
+                        let halfWidth = min(rect.width * 0.10, 22)
+                        path.move(to: CGPoint(x: marker.x - halfWidth, y: marker.y))
+                        path.addLine(to: CGPoint(x: marker.x + halfWidth, y: marker.y))
+                    }
+                    .stroke(modelColors[index % modelColors.count], style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+
+                    Circle()
+                        .fill(modelColors[index % modelColors.count])
+                        .frame(width: 7, height: 7)
+                        .position(pointPosition(index: 0, count: 1, value: value, in: rect))
+                }
+            }
+        }
+    }
+
     private func trendPath(points: [Int], in rect: CGRect) -> Path {
         Path { path in
             guard !points.isEmpty else { return }
@@ -783,8 +813,9 @@ private struct UsageAnalyticsTokenTrendChart: View {
         let maxValue = max(trend.maxDailyTokens, 1)
         let progress = count <= 1 ? 0.5 : CGFloat(index) / CGFloat(count - 1)
         let x = rect.minX + rect.width * progress
-        let yRatio = CGFloat(value) / CGFloat(maxValue)
-        let y = rect.maxY - rect.height * yRatio
+        let yRatio = min(1, max(0, CGFloat(value) / CGFloat(maxValue)))
+        let verticalInset = min(rect.height * 0.10, 12)
+        let y = rect.maxY - verticalInset - (rect.height - verticalInset * 2) * yRatio
         return CGPoint(x: x, y: y)
     }
 
