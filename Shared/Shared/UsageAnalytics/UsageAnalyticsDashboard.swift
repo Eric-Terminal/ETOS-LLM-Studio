@@ -492,7 +492,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             .map { key, value in
                 let bucketTotalTokens = inferredTotalTokens(value.tokenTotals)
                 let share = totalTokens > 0 ? Double(bucketTotalTokens) / Double(totalTokens) : 0
-                UsageAnalyticsRankItem(
+                return UsageAnalyticsRankItem(
                     id: key,
                     title: value.modelID,
                     subtitle: value.providerName,
@@ -542,7 +542,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             .map {
                 let bucketTotalTokens = inferredTotalTokens($0.tokenTotals)
                 let share = totalTokens > 0 ? Double(bucketTotalTokens) / Double(totalTokens) : 0
-                UsageAnalyticsRankItem(
+                return UsageAnalyticsRankItem(
                     id: $0.source.rawValue,
                     title: $0.source.displayName,
                     subtitle: "",
