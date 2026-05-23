@@ -31,14 +31,30 @@ extension ContentView {
                         viewModel.loadMoreHistoryChunk()
                     }
                 }) {
-                    Label(
-                        String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk),
-                        systemImage: "arrow.up.circle"
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.up.circle")
+                            .etFont(.system(size: 13, weight: .semibold))
+                        Text(String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk))
+                            .etFont(.caption)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background {
+                        historyLoadButtonBackground
+                    }
+                    .overlay(
+                        Capsule()
+                            .stroke(inputStrokeColor, lineWidth: 0.6)
                     )
+                    .contentShape(Capsule())
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
+                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8))
             }
 
             ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
@@ -369,6 +385,23 @@ extension ContentView {
 
     var inputFillColor: Color {
         viewModel.enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
+    }
+
+    @ViewBuilder
+    var historyLoadButtonBackground: some View {
+        let shape = Capsule()
+        if isLiquidGlassEnabled {
+            if #available(watchOS 26.0, *) {
+                shape
+                    .fill(inputFillColor)
+                    .glassEffect(.clear, in: shape)
+                    .clipShape(shape)
+            } else {
+                shape.fill(inputFillColor)
+            }
+        } else {
+            shape.fill(inputFillColor)
+        }
     }
 
     func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {

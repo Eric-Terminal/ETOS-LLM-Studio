@@ -167,20 +167,48 @@ extension ChatView {
                         .etFont(.system(size: 14))
                     Text(String(format: NSLocalizedString("加载更早的 %d 条消息", comment: ""), chunk))
                         .etFont(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
                 }
                 .foregroundColor(TelegramColors.attachButtonColor)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(
+                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .background {
+                    historyBannerBackground
+                }
+                .overlay(
                     Capsule()
-                        .fill(Color(uiColor: .systemBackground).opacity(0.9))
-                        .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 1)
+                        .stroke(historyBannerStrokeColor, lineWidth: 0.8)
                 )
+                .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
+                .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
         } else {
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    var historyBannerBackground: some View {
+        let shape = Capsule()
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                shape
+                    .fill(Color(uiColor: .systemBackground).opacity(0.62))
+                    .glassEffect(.regular.tint(scrollToBottomButtonGlassTintColor).interactive(), in: shape)
+                    .clipShape(shape)
+            } else {
+                shape.fill(Color(uiColor: .systemBackground).opacity(0.9))
+            }
+        } else {
+            shape.fill(Color(uiColor: .systemBackground).opacity(0.9))
+        }
+    }
+
+    var historyBannerStrokeColor: Color {
+        isLiquidGlassEnabled ? scrollToBottomButtonGlassStrokeColor : scrollToBottomButtonBorderColor
     }
 }
