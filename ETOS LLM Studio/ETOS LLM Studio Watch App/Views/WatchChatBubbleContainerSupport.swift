@@ -24,6 +24,14 @@ extension ChatBubble {
         return enableBackground ? Color.blue.opacity(0.7) : Color.blue
     }
 
+    var userLiquidGlassBackground: Color {
+        (resolvedUserBubbleColorOverride ?? .blue).opacity(0.5)
+    }
+
+    var errorLiquidGlassBackground: Color {
+        Color.red.opacity(0.5)
+    }
+
     @ViewBuilder
     func errorBubbleFallback<Content: View>(_ content: Content) -> some View {
         content
@@ -51,6 +59,10 @@ extension ChatBubble {
             return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.7) : resolvedAssistantBubbleColorOverride
         }
         return enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
+    }
+
+    var assistantLiquidGlassBackground: Color {
+        resolvedAssistantBubbleColorOverride.map { enableBackground ? $0.opacity(0.5) : $0 } ?? Color.clear
     }
 
     var standaloneAssistantBubbleShape: BubbleCornerShape {
@@ -104,10 +116,8 @@ extension ChatBubble {
                             .glassEffect(.clear, in: shape)
                             .background(
                                 isError
-                                    ? Color.red.opacity(0.5)
-                                    : resolvedAssistantBubbleColorOverride.map {
-                                        enableBackground ? $0.opacity(0.5) : $0
-                                    }
+                                    ? errorLiquidGlassBackground
+                                    : assistantLiquidGlassBackground
                             )
                     } else {
                         assistantBubbleFallback(sizedContent, isError: isError, shape: shape)

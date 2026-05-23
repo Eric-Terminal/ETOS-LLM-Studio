@@ -115,14 +115,14 @@ extension ChatBubble {
             if enableLiquidGlass {
                 if #available(iOS 26.0, *) {
                     shape
-                        .fill(bubbleGradient)
+                        .fill(messageActionBarFillStyle)
                         .glassEffect(.clear, in: shape)
                         .clipShape(shape)
                 } else {
-                    shape.fill(bubbleGradient)
+                    shape.fill(messageActionBarFillStyle)
                 }
             } else {
-                shape.fill(bubbleGradient)
+                shape.fill(messageActionBarFillStyle)
             }
         }
     }
@@ -380,6 +380,37 @@ extension ChatBubble {
             return AnyShapeStyle(Color.red.opacity(0.15 * errorOpacity))
         @unknown default:
             return AnyShapeStyle(Color(UIColor.secondarySystemBackground))
+        }
+    }
+
+    var messageActionBarFillStyle: some ShapeStyle {
+        if usesNoBubbleStyle {
+            return AnyShapeStyle(Color.clear)
+        }
+        let userOpacity = enableBackground ? 0.85 : 1.0
+        let assistantOpacity = enableBackground ? 0.75 : 1.0
+        let errorOpacity = enableBackground ? 0.8 : 1.0
+
+        if isError {
+            return AnyShapeStyle(Color.red.opacity(0.7 * errorOpacity))
+        }
+
+        switch message.role {
+        case .user:
+            return AnyShapeStyle(resolvedUserBubbleEndColor.opacity(userOpacity))
+        case .assistant, .system, .tool:
+            if let resolvedAssistantBubbleColor {
+                return AnyShapeStyle(resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1))
+            }
+            return AnyShapeStyle(
+                enableBackground
+                    ? Color(uiColor: .secondarySystemBackground).opacity(assistantOpacity)
+                    : Color(uiColor: .systemBackground)
+            )
+        case .error:
+            return AnyShapeStyle(Color.red.opacity(0.7 * errorOpacity))
+        @unknown default:
+            return AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
         }
     }
 

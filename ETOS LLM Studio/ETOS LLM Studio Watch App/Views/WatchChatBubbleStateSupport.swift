@@ -86,7 +86,7 @@ extension ChatBubble {
                 if enableLiquidGlass {
                     if #available(watchOS 26.0, *) {
                         shape
-                            .fill(userFallbackBackground)
+                            .fill(userLiquidGlassBackground)
                             .glassEffect(.clear, in: shape)
                             .clipShape(shape)
                     } else {
@@ -99,7 +99,7 @@ extension ChatBubble {
                 if enableLiquidGlass {
                     if #available(watchOS 26.0, *) {
                         shape
-                            .fill(Color.red.opacity(0.5))
+                            .fill(errorLiquidGlassBackground)
                             .glassEffect(.clear, in: shape)
                             .clipShape(shape)
                     } else {
@@ -111,7 +111,7 @@ extension ChatBubble {
             } else if enableLiquidGlass {
                 if #available(watchOS 26.0, *) {
                     shape
-                        .fill(assistantFallbackBackground)
+                        .fill(assistantLiquidGlassBackground)
                         .glassEffect(.clear, in: shape)
                         .clipShape(shape)
                 } else {

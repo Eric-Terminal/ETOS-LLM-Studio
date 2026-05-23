@@ -268,7 +268,7 @@ struct ChatBubble: View {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                    .background(Color.red.opacity(0.5))
+                    .background(errorLiquidGlassBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
                 errorBubbleFallback(content)
@@ -334,7 +334,7 @@ struct ChatBubble: View {
             if #available(watchOS 26.0, *) {
                 content
                     .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12))
-                    .background((resolvedUserBubbleColorOverride ?? .blue).opacity(0.5))
+                    .background(userLiquidGlassBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
                 userBubbleFallback(content)
