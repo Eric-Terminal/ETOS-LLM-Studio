@@ -242,7 +242,6 @@ struct MessageActionSheet: View {
                 } label: {
                     Label(NSLocalizedString("跳转到该条消息", comment: "Jump to message button title"), systemImage: "location")
                 }
-                .buttonStyle(.borderedProminent)
 
                 if let jumpError, !jumpError.isEmpty {
                     Text(jumpError)
