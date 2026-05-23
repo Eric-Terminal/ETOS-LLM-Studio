@@ -68,7 +68,7 @@ struct SessionFolderBrowserView: View {
         if hasPreparedSessionBrowserSource {
             return cachedFolderByID
         }
-        Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
+        return Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
     }
 
     var currentFolder: SessionFolder? {
@@ -80,14 +80,14 @@ struct SessionFolderBrowserView: View {
         if hasPreparedSessionBrowserSource {
             return cachedChildFolders
         }
-        folders.filter { normalizedParentID(of: $0) == folderID }
+        return folders.filter { normalizedParentID(of: $0) == folderID }
     }
 
     var directSessions: [ChatSession] {
         if hasPreparedSessionBrowserSource {
             return cachedDirectSessions
         }
-        sessions.filter { normalizedFolderID(of: $0) == folderID }
+        return sessions.filter { normalizedFolderID(of: $0) == folderID }
     }
 
     var totalDirectSessionCount: Int {
@@ -102,7 +102,7 @@ struct SessionFolderBrowserView: View {
         if hasPreparedSessionBrowserSource {
             return cachedSessionOrderByID
         }
-        Dictionary(uniqueKeysWithValues: sessions.enumerated().map { ($1.id, $0) })
+        return Dictionary(uniqueKeysWithValues: sessions.enumerated().map { ($1.id, $0) })
     }
 
     var mergedEntries: [SessionMergedEntry] {
