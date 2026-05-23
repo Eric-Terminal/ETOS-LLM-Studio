@@ -311,10 +311,10 @@ struct MessageActionsView: View {
                     if let thinking = usage.thinkingTokens {
                         LabeledContent(NSLocalizedString("思考 Tokens", comment: "Thinking tokens label"), value: "\(thinking)")
                     }
-                    if let cacheWrite = usage.cacheWriteTokens {
+                    if let cacheWrite = usage.cacheWriteTokens, cacheWrite > 0 {
                         LabeledContent(NSLocalizedString("缓存写入 Tokens", comment: "Cache write tokens label"), value: "\(cacheWrite)")
                     }
-                    if let cacheRead = usage.cacheReadTokens {
+                    if let cacheRead = usage.cacheReadTokens, cacheRead > 0 {
                         LabeledContent(NSLocalizedString("缓存读取 Tokens", comment: "Cache read tokens label"), value: "\(cacheRead)")
                     }
                     if let total = usage.totalTokens, (usage.promptTokens != total || usage.completionTokens != total) {

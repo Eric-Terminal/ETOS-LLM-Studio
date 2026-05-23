@@ -268,12 +268,12 @@ struct MessageActionSheet: View {
                         Text("\(thinking)")
                     }
                 }
-                if let cacheWrite = usage.cacheWriteTokens {
+                if let cacheWrite = usage.cacheWriteTokens, cacheWrite > 0 {
                     LabeledContent(NSLocalizedString("缓存写入 Tokens", comment: "Cache write tokens label")) {
                         Text("\(cacheWrite)")
                     }
                 }
-                if let cacheRead = usage.cacheReadTokens {
+                if let cacheRead = usage.cacheReadTokens, cacheRead > 0 {
                     LabeledContent(NSLocalizedString("缓存读取 Tokens", comment: "Cache read tokens label")) {
                         Text("\(cacheRead)")
                     }
