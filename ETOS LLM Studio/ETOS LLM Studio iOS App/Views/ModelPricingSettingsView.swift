@@ -100,10 +100,10 @@ struct ModelPricingSettingsView: View {
 
     private func deleteTiers(at offsets: IndexSet) {
         let orderedIndices = sortedTierIndices
-        let removingIDs = Set(offsets.compactMap { offset in
+        let removingIDs: [UUID] = offsets.compactMap { offset in
             guard orderedIndices.indices.contains(offset) else { return nil }
             return draft.tiers[orderedIndices[offset]].id
-        })
+        }
         draft.tiers.removeAll { removingIDs.contains($0.id) }
         persistDraft()
     }
