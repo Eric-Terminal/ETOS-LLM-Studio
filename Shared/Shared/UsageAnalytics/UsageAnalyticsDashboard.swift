@@ -119,9 +119,18 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         await Task.detached(priority: .userInitiated) {
             let dailyTotals = Persistence.loadUsageDailyTotals()
             let dailyModelTotals = Persistence.loadUsageDailyModelTotals()
+            let effectiveSelectedDayKey = resolvedSelectedDayKey(
+                selectedDayKey,
+                dailyTotals: dailyTotals,
+                calendar: calendar
+            )
+            let selectedDayEvents = selectedScope == .day
+                ? Persistence.loadUsageStatsDayBundles(dayKeys: [effectiveSelectedDayKey]).first?.events ?? []
+                : []
             return Self.buildState(
                 dailyTotals: dailyTotals,
                 dailyModelTotals: dailyModelTotals,
+                selectedDayEvents: selectedDayEvents,
                 selectedScope: selectedScope,
                 selectedDayKey: selectedDayKey,
                 displayedMonthAnchor: displayedMonthAnchor,
@@ -133,6 +142,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     private nonisolated static func buildState(
         dailyTotals: [UsageDailyTotal],
         dailyModelTotals: [UsageDailyModelTotal],
+        selectedDayEvents: [UsageAnalyticsEvent],
         selectedScope: UsageAnalyticsDetailScope,
         selectedDayKey: String,
         displayedMonthAnchor: Date,
@@ -141,8 +151,11 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let totalsByDayKey = Dictionary(uniqueKeysWithValues: dailyTotals.map { ($0.dayKey, $0) })
         let modelTotalsByDayKey = Dictionary(grouping: dailyModelTotals, by: \.dayKey)
         let today = Date()
-        let todayKey = UsageAnalyticsRuntimeContext.dayKey(for: today, calendar: calendar)
-        let effectiveSelectedDayKey = totalsByDayKey[selectedDayKey] != nil || dailyTotals.isEmpty ? selectedDayKey : (totalsByDayKey[todayKey] != nil ? todayKey : (dailyTotals.last?.dayKey ?? selectedDayKey))
+        let effectiveSelectedDayKey = resolvedSelectedDayKey(
+            selectedDayKey,
+            dailyTotals: dailyTotals,
+            calendar: calendar
+        )
         let effectiveDisplayedMonthAnchor = calendar.dateInterval(of: .month, for: displayedMonthAnchor)?.start ?? displayedMonthAnchor
         let maxRequestCount = max(dailyTotals.map(\.requestCount).max() ?? 0, 1)
 
@@ -168,6 +181,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             selectedScope: selectedScope,
             selectedDayKey: effectiveSelectedDayKey,
             dailyTotals: dailyTotals,
+            selectedDayEvents: selectedDayEvents,
             modelTotalsByDayKey: modelTotalsByDayKey,
             calendar: calendar
         )
@@ -195,13 +209,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let todayStart = calendar.startOfDay(for: referenceDate)
         let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? referenceDate
         let dayKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: todayStart, end: todayEnd), calendar: calendar))
-        let weekKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: UsageAnalyticsRuntimeContext.weekInterval(containing: referenceDate, calendar: calendar), calendar: calendar))
-        let monthKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: UsageAnalyticsRuntimeContext.monthInterval(containing: referenceDate, calendar: calendar), calendar: calendar))
+        let weekKeys = Set(rollingDayKeys(endingAt: referenceDate, dayCount: 7, calendar: calendar))
+        let monthKeys = Set(rollingDayKeys(endingAt: referenceDate, dayCount: 30, calendar: calendar))
 
         return [
             makeOverviewCard(scope: .day, title: NSLocalizedString("今日", comment: "Usage overview card title"), dayKeys: dayKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
-            makeOverviewCard(scope: .week, title: NSLocalizedString("本周", comment: "Usage overview card title"), dayKeys: weekKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
-            makeOverviewCard(scope: .month, title: NSLocalizedString("本月", comment: "Usage overview card title"), dayKeys: monthKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
+            makeOverviewCard(scope: .week, title: NSLocalizedString("近 7 天", comment: "Usage overview card title"), dayKeys: weekKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
+            makeOverviewCard(scope: .month, title: NSLocalizedString("近 30 天", comment: "Usage overview card title"), dayKeys: monthKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
             makeOverviewCard(scope: .allTime, title: NSLocalizedString("全部", comment: "Usage overview card title"), dayKeys: nil, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals)
         ]
     }
@@ -323,6 +337,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         selectedScope: UsageAnalyticsDetailScope,
         selectedDayKey: String,
         dailyTotals: [UsageDailyTotal],
+        selectedDayEvents: [UsageAnalyticsEvent],
         modelTotalsByDayKey: [String: [UsageDailyModelTotal]],
         calendar: Calendar
     ) -> UsageAnalyticsDetailSnapshot {
@@ -339,15 +354,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             title = NSLocalizedString("日详情", comment: "Usage analytics detail title")
             subtitle = dayTitle(for: anchorDate, calendar: calendar)
         case .week:
-            let interval = UsageAnalyticsRuntimeContext.weekInterval(containing: anchorDate, calendar: calendar)
-            orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar)
-            title = NSLocalizedString("周详情", comment: "Usage analytics detail title")
-            subtitle = "\(dayTitle(for: interval.start, calendar: calendar)) - \(dayTitle(for: interval.end.addingTimeInterval(-1), calendar: calendar))"
+            orderedDayKeys = rollingDayKeys(endingAt: anchorDate, dayCount: 7, calendar: calendar)
+            title = NSLocalizedString("近 7 天详情", comment: "Usage analytics detail title")
+            subtitle = dayRangeTitle(for: orderedDayKeys, calendar: calendar)
         case .month:
-            let interval = UsageAnalyticsRuntimeContext.monthInterval(containing: anchorDate, calendar: calendar)
-            orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar)
-            title = NSLocalizedString("月详情", comment: "Usage analytics detail title")
-            subtitle = compactMonthTitle(for: anchorDate, calendar: calendar)
+            orderedDayKeys = rollingDayKeys(endingAt: anchorDate, dayCount: 30, calendar: calendar)
+            title = NSLocalizedString("近 30 天详情", comment: "Usage analytics detail title")
+            subtitle = dayRangeTitle(for: orderedDayKeys, calendar: calendar)
         case .allTime:
             orderedDayKeys = allTimeDayKeys(dailyTotals: dailyTotals, modelTotalsByDayKey: modelTotalsByDayKey, calendar: calendar)
             title = NSLocalizedString("全部详情", comment: "Usage analytics detail title")
@@ -379,13 +392,43 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             topModels: aggregateModels(scopedModels),
             sourceBreakdown: aggregateSources(scopedModels),
             cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals),
-            tokenTrend: makeTokenTrend(
-                orderedDayKeys: orderedDayKeys,
-                totalsByDayKey: totalsByDayKey,
-                scopedModels: scopedModels,
-                calendar: calendar
-            )
+            tokenTrend: selectedScope == .day
+                ? makeHourlyTokenTrend(events: selectedDayEvents, anchorDate: anchorDate, calendar: calendar)
+                : makeDailyTokenTrend(
+                    orderedDayKeys: orderedDayKeys,
+                    totalsByDayKey: totalsByDayKey,
+                    scopedModels: scopedModels,
+                    calendar: calendar
+                )
         )
+    }
+
+    private nonisolated static func rollingDayKeys(
+        endingAt date: Date,
+        dayCount: Int,
+        calendar: Calendar
+    ) -> [String] {
+        let safeDayCount = max(1, dayCount)
+        let endDayStart = calendar.startOfDay(for: date)
+        let start = calendar.date(byAdding: .day, value: -(safeDayCount - 1), to: endDayStart) ?? endDayStart
+        let end = calendar.date(byAdding: .day, value: 1, to: endDayStart) ?? endDayStart
+        return UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: start, end: end), calendar: calendar)
+    }
+
+    private nonisolated static func resolvedSelectedDayKey(
+        _ selectedDayKey: String,
+        dailyTotals: [UsageDailyTotal],
+        calendar: Calendar
+    ) -> String {
+        let dayKeys = Set(dailyTotals.map(\.dayKey))
+        let todayKey = UsageAnalyticsRuntimeContext.dayKey(for: Date(), calendar: calendar)
+        if dayKeys.contains(selectedDayKey) || dailyTotals.isEmpty {
+            return selectedDayKey
+        }
+        if dayKeys.contains(todayKey) {
+            return todayKey
+        }
+        return dailyTotals.last?.dayKey ?? selectedDayKey
     }
 
     private nonisolated static func allTimeDayKeys(
@@ -404,7 +447,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         return UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: start, end: end), calendar: calendar)
     }
 
-    private nonisolated static func makeTokenTrend(
+    private nonisolated static func makeDailyTokenTrend(
         orderedDayKeys: [String],
         totalsByDayKey: [String: UsageDailyTotal],
         scopedModels: [UsageDailyModelTotal],
@@ -477,9 +520,102 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
 
         return UsageAnalyticsTokenTrendSnapshot(
             rangeTitle: trendRangeTitle(for: dailyPoints),
+            granularity: .day,
             totalTokens: totalTokens,
             maxDailyTokens: maxDailyTokens,
             dailyPoints: dailyPoints,
+            modelSeries: Array(modelSeries)
+        )
+    }
+
+    private nonisolated static func makeHourlyTokenTrend(
+        events: [UsageAnalyticsEvent],
+        anchorDate: Date,
+        calendar: Calendar
+    ) -> UsageAnalyticsTokenTrendSnapshot {
+        let dayStart = calendar.startOfDay(for: anchorDate)
+        let hourStarts = (0..<24).compactMap {
+            calendar.date(byAdding: .hour, value: $0, to: dayStart)
+        }
+        let hourKeys = hourStarts.map { hourBucketKey(for: $0, calendar: calendar) }
+        let hourLabels = hourStarts.map { compactHourTitle(for: $0, calendar: calendar) }
+
+        struct ModelBucket {
+            var providerName: String
+            var modelID: String
+            var totalTokens: Int
+            var tokensByHourKey: [String: Int]
+        }
+
+        var requestCountsByHour: [String: Int] = [:]
+        var tokensByHour: [String: Int] = [:]
+        var buckets: [String: ModelBucket] = [:]
+
+        for event in events {
+            let hourKey = hourBucketKey(for: event.requestedAt, calendar: calendar)
+            guard hourKeys.contains(hourKey) else { continue }
+            let eventTokens = inferredTotalTokens(tokenTotals(for: event.tokenUsage))
+            requestCountsByHour[hourKey, default: 0] += 1
+            tokensByHour[hourKey, default: 0] += eventTokens
+
+            let modelKey = "\(event.providerName)|\(event.modelID)"
+            var bucket = buckets[modelKey] ?? ModelBucket(
+                providerName: event.providerName,
+                modelID: event.modelID,
+                totalTokens: 0,
+                tokensByHourKey: [:]
+            )
+            bucket.totalTokens += eventTokens
+            bucket.tokensByHourKey[hourKey, default: 0] += eventTokens
+            buckets[modelKey] = bucket
+        }
+
+        let points = zip(hourKeys, zip(hourStarts, hourLabels)).map { hourKey, value in
+            let (date, label) = value
+            return UsageAnalyticsTokenTrendPoint(
+                dayKey: hourKey,
+                date: date,
+                dayLabel: label,
+                requestCount: requestCountsByHour[hourKey] ?? 0,
+                totalTokens: tokensByHour[hourKey] ?? 0
+            )
+        }
+        let totalTokens = points.reduce(0) { $0 + $1.totalTokens }
+        let maxHourlyTokens = points.map(\.totalTokens).max() ?? 0
+        let modelSeries = buckets
+            .map { key, bucket in
+                let points = hourKeys.map {
+                    UsageAnalyticsModelTokenTrendPoint(
+                        modelKey: key,
+                        dayKey: $0,
+                        totalTokens: bucket.tokensByHourKey[$0] ?? 0
+                    )
+                }
+                let share = totalTokens > 0 ? Double(bucket.totalTokens) / Double(totalTokens) : 0
+                return UsageAnalyticsModelTokenSeries(
+                    id: key,
+                    title: bucket.modelID,
+                    subtitle: bucket.providerName,
+                    totalTokens: bucket.totalTokens,
+                    tokenShare: share,
+                    points: points
+                )
+            }
+            .filter { $0.totalTokens > 0 }
+            .sorted {
+                if $0.totalTokens == $1.totalTokens {
+                    return $0.title < $1.title
+                }
+                return $0.totalTokens > $1.totalTokens
+            }
+            .prefix(3)
+
+        return UsageAnalyticsTokenTrendSnapshot(
+            rangeTitle: dayTitle(for: anchorDate, calendar: calendar),
+            granularity: .hour,
+            totalTokens: totalTokens,
+            maxDailyTokens: maxHourlyTokens,
+            dailyPoints: points,
             modelSeries: Array(modelSeries)
         )
     }
@@ -592,6 +728,18 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         target.totalTokens += source.totalTokens
     }
 
+    private nonisolated static func tokenTotals(for usage: MessageTokenUsage?) -> RequestLogTokenTotals {
+        guard let usage else { return .init() }
+        return RequestLogTokenTotals(
+            sentTokens: usage.promptTokens ?? 0,
+            receivedTokens: usage.completionTokens ?? 0,
+            thinkingTokens: usage.thinkingTokens ?? 0,
+            cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+            cacheReadTokens: usage.cacheReadTokens ?? 0,
+            totalTokens: usage.totalTokens ?? 0
+        )
+    }
+
     private nonisolated static func inferredTotalTokens(_ totals: RequestLogTokenTotals) -> Int {
         max(
             totals.totalTokens,
@@ -655,12 +803,47 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
+    private nonisolated static func compactHourTitle(for date: Date, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = .autoupdatingCurrent
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private nonisolated static func hourBucketKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+        return String(
+            format: "%04d-%02d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0,
+            components.hour ?? 0
+        )
+    }
+
     private nonisolated static func trendRangeTitle(for points: [UsageAnalyticsTokenTrendPoint]) -> String {
         guard let first = points.first, let last = points.last else { return "" }
         if first.dayKey == last.dayKey {
             return first.dayLabel
         }
         return "\(first.dayLabel) - \(last.dayLabel)"
+    }
+
+    private nonisolated static func dayRangeTitle(for dayKeys: [String], calendar: Calendar) -> String {
+        guard
+            let firstKey = dayKeys.first,
+            let lastKey = dayKeys.last,
+            let firstDate = UsageAnalyticsRuntimeContext.date(for: firstKey, calendar: calendar),
+            let lastDate = UsageAnalyticsRuntimeContext.date(for: lastKey, calendar: calendar)
+        else {
+            return ""
+        }
+        if firstKey == lastKey {
+            return dayTitle(for: firstDate, calendar: calendar)
+        }
+        return "\(dayTitle(for: firstDate, calendar: calendar)) - \(dayTitle(for: lastDate, calendar: calendar))"
     }
 
     private nonisolated static func allTimeSubtitle(for dayKeys: [String], calendar: Calendar) -> String {

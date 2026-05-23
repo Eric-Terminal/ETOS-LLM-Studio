@@ -147,7 +147,7 @@ struct UsageAnalyticsView: View {
                         )
                         .frame(height: 78)
 
-                        Text(String(format: NSLocalizedString("总 Token %@ · 峰值日 %@", comment: "Watch usage token trend summary"), formattedNumber(trend.totalTokens), formattedNumber(trend.maxDailyTokens)))
+                        Text(String(format: NSLocalizedString("总 Token %@ · %@ %@", comment: "Watch usage token trend summary"), formattedNumber(trend.totalTokens), tokenTrendPeakTitle(for: trend), formattedNumber(trend.maxDailyTokens)))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
 
@@ -435,11 +435,20 @@ struct UsageAnalyticsView: View {
         case .day:
             return NSLocalizedString("今日", comment: "")
         case .week:
-            return NSLocalizedString("本周", comment: "")
+            return NSLocalizedString("近 7 天", comment: "")
         case .month:
-            return NSLocalizedString("本月", comment: "")
+            return NSLocalizedString("近 30 天", comment: "")
         case .allTime:
             return NSLocalizedString("全部", comment: "")
+        }
+    }
+
+    private func tokenTrendPeakTitle(for trend: UsageAnalyticsTokenTrendSnapshot) -> String {
+        switch trend.granularity {
+        case .hour:
+            return NSLocalizedString("峰值小时", comment: "Hourly usage trend peak metric")
+        case .day:
+            return NSLocalizedString("峰值日", comment: "Daily usage trend peak metric")
         }
     }
 }

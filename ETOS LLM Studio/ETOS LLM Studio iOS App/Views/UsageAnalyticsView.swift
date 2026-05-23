@@ -112,7 +112,7 @@ struct UsageAnalyticsView: View {
                         color: .accentColor
                     )
                     trendSummaryMetric(
-                        "峰值日",
+                        tokenTrendPeakTitle(for: trend),
                         value: formattedNumber(trend.maxDailyTokens),
                         iconName: "chart.line.uptrend.xyaxis",
                         color: .green
@@ -583,9 +583,9 @@ struct UsageAnalyticsView: View {
         case .day:
             return NSLocalizedString("今日", comment: "")
         case .week:
-            return NSLocalizedString("本周", comment: "")
+            return NSLocalizedString("近 7 天", comment: "")
         case .month:
-            return NSLocalizedString("本月", comment: "")
+            return NSLocalizedString("近 30 天", comment: "")
         case .allTime:
             return NSLocalizedString("全部", comment: "")
         }
@@ -603,11 +603,20 @@ struct UsageAnalyticsView: View {
         case .day:
             return NSLocalizedString("聚焦今天的模型请求情况", comment: "")
         case .week:
-            return NSLocalizedString("查看本周整体用量趋势", comment: "")
+            return NSLocalizedString("查看最近 7 天整体用量趋势", comment: "")
         case .month:
-            return NSLocalizedString("从月度角度回看使用密度", comment: "")
+            return NSLocalizedString("查看最近 30 天使用密度", comment: "")
         case .allTime:
             return NSLocalizedString("回看全部历史用量", comment: "")
+        }
+    }
+
+    private func tokenTrendPeakTitle(for trend: UsageAnalyticsTokenTrendSnapshot) -> String {
+        switch trend.granularity {
+        case .hour:
+            return NSLocalizedString("峰值小时", comment: "Hourly usage trend peak metric")
+        case .day:
+            return NSLocalizedString("峰值日", comment: "Daily usage trend peak metric")
         }
     }
 

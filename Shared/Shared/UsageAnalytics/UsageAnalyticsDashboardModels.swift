@@ -283,8 +283,14 @@ public struct UsageAnalyticsModelTokenSeries: Identifiable, Hashable, Sendable {
     }
 }
 
+public enum UsageAnalyticsTokenTrendGranularity: String, Hashable, Sendable {
+    case hour
+    case day
+}
+
 public struct UsageAnalyticsTokenTrendSnapshot: Hashable, Sendable {
     public var rangeTitle: String
+    public var granularity: UsageAnalyticsTokenTrendGranularity
     public var totalTokens: Int
     public var maxDailyTokens: Int
     public var dailyPoints: [UsageAnalyticsTokenTrendPoint]
@@ -292,12 +298,14 @@ public struct UsageAnalyticsTokenTrendSnapshot: Hashable, Sendable {
 
     public init(
         rangeTitle: String = "",
+        granularity: UsageAnalyticsTokenTrendGranularity = .day,
         totalTokens: Int = 0,
         maxDailyTokens: Int = 0,
         dailyPoints: [UsageAnalyticsTokenTrendPoint] = [],
         modelSeries: [UsageAnalyticsModelTokenSeries] = []
     ) {
         self.rangeTitle = rangeTitle
+        self.granularity = granularity
         self.totalTokens = totalTokens
         self.maxDailyTokens = maxDailyTokens
         self.dailyPoints = dailyPoints

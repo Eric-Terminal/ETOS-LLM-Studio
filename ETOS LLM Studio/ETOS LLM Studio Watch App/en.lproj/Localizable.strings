@@ -3487,3 +3487,11 @@
 "完整历史" = "Full History";
 "回看全部历史用量" = "Review all-time usage";
 "当前范围内还没有来源数据。" = "No source data in the current range.";
+"近 7 天" = "Last 7 Days";
+"近 30 天" = "Last 30 Days";
+"近 7 天详情" = "Last 7 Days Details";
+"近 30 天详情" = "Last 30 Days Details";
+"查看最近 7 天整体用量趋势" = "View usage trends over the last 7 days";
+"查看最近 30 天使用密度" = "Review usage density over the last 30 days";
+"峰值小时" = "Peak Hour";
+"总 Token %@ · %@ %@" = "Total tokens %@ · %@ %@";
