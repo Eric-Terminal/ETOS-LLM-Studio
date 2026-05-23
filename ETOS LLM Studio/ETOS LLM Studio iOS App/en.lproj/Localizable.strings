@@ -3545,6 +3545,10 @@
 "添加阶梯" = "Add Tier";
 "清空价格设置" = "Clear Price Settings";
 "从 %d tokens 起" = "From %d tokens";
+"<= %@ tokens" = "<= %@ tokens";
+"> %@ tokens" = "> %@ tokens";
+"> %@ 且 <= %@ tokens" = "> %@ and <= %@ tokens";
+"全部 tokens" = "All tokens";
 "未填写价格，将不会保存" = "No prices filled; this tier will not be saved";
 "已填写 %d 项价格" = "%d prices filled";
 "阶梯条件" = "Tier Condition";

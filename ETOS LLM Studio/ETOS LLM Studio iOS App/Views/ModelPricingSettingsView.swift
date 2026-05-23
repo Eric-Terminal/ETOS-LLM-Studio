@@ -54,7 +54,7 @@ struct ModelPricingSettingsView: View {
                             ModelPricingTierSettingsView(tier: $tier)
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(tierTitle(tier))
+                                Text(tierRangeTitle(tier))
                                 Text(tierSubtitle(tier))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
@@ -102,28 +102,48 @@ struct ModelPricingSettingsView: View {
         persistDraft()
     }
 
-    private func tierTitle(_ tier: ModelPricingTierDraft) -> String {
-        let minimum = Int(tier.minimumTokens) ?? 0
-        return String(
-            format: NSLocalizedString("从 %d tokens 起", comment: "Pricing tier minimum token title"),
-            max(0, minimum)
+    private func tierRangeTitle(_ tier: ModelPricingTierDraft) -> String {
+        ModelPricingTierRangeText.text(
+            minimumTokens: tier.minimumTokenValue,
+            nextMinimumTokens: nextTierMinimum(after: tier)
         )
     }
 
     private func tierSubtitle(_ tier: ModelPricingTierDraft) -> String {
-        let filledCount = [
-            tier.inputPrice,
-            tier.outputPrice,
-            tier.cacheWritePrice,
-            tier.cacheReadPrice
-        ].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
-        if filledCount == 0 {
+        let priceParts = [
+            priceSummary(title: NSLocalizedString("输入", comment: "Cost component input title"), text: tier.inputPrice),
+            priceSummary(title: NSLocalizedString("输出", comment: "Cost component output title"), text: tier.outputPrice),
+            priceSummary(title: NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: tier.cacheWritePrice),
+            priceSummary(title: NSLocalizedString("缓存命中", comment: "Cost component cache read title"), text: tier.cacheReadPrice)
+        ].compactMap { $0 }
+        if priceParts.isEmpty {
             return NSLocalizedString("未填写价格，将不会保存", comment: "Empty pricing tier hint")
         }
-        return String(
-            format: NSLocalizedString("已填写 %d 项价格", comment: "Pricing tier filled price count"),
-            filledCount
-        )
+        return priceParts.joined(separator: " • ")
+    }
+
+    private func priceSummary(title: String, text: String) -> String? {
+        let price = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !price.isEmpty else { return nil }
+        let currency = draft.currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = "\(currency.isEmpty ? ModelPricing.defaultCurrencySymbol : currency)\(price)"
+        return String(format: NSLocalizedString("%@：%@", comment: "Label value pair"), title, value)
+    }
+
+    private func nextTierMinimum(after tier: ModelPricingTierDraft) -> Int? {
+        let orderedTiers = draft.tiers
+            .map { ($0.id, $0.minimumTokenValue) }
+            .sorted {
+                if $0.1 == $1.1 {
+                    return $0.0.uuidString < $1.0.uuidString
+                }
+                return $0.1 < $1.1
+            }
+        guard let index = orderedTiers.firstIndex(where: { $0.0 == tier.id }) else {
+            return nil
+        }
+        let minimum = orderedTiers[index].1
+        return orderedTiers.dropFirst(index + 1).map(\.1).first { $0 > minimum }
     }
 }
 
@@ -245,10 +265,14 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
         cacheReadPrice = ModelPricingDraft.string(from: tier.cacheReadPerMillionTokens)
     }
 
+    nonisolated var minimumTokenValue: Int {
+        max(0, Int(minimumTokens.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0)
+    }
+
     nonisolated var modelPricingTier: ModelPricingTier? {
         let tier = ModelPricingTier(
             id: id,
-            minimumTokens: Int(minimumTokens.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+            minimumTokens: minimumTokenValue,
             inputPerMillionTokens: ModelPricingDraft.double(from: inputPrice),
             outputPerMillionTokens: ModelPricingDraft.double(from: outputPrice),
             cacheWritePerMillionTokens: ModelPricingDraft.double(from: cacheWritePrice),

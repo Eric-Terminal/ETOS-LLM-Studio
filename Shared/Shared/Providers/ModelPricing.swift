@@ -147,6 +147,57 @@ public struct ModelPricingEffectivePrices: Hashable, Sendable {
     public var cacheReadPerMillionTokens: Double?
 }
 
+public enum ModelPricingTierRangeText {
+    nonisolated public static func text(
+        minimumTokens: Int,
+        nextMinimumTokens: Int? = nil
+    ) -> String {
+        let minimumTokens = max(0, minimumTokens)
+        if let nextMinimumTokens = nextMinimumTokens.map({ max(0, $0) }),
+           nextMinimumTokens > minimumTokens {
+            let upperBoundary = max(0, nextMinimumTokens - 1)
+            if minimumTokens == 0 {
+                return String(
+                    format: NSLocalizedString("<= %@ tokens", comment: "Pricing tier upper-bound title"),
+                    compactTokenText(upperBoundary)
+                )
+            }
+            return String(
+                format: NSLocalizedString("> %@ 且 <= %@ tokens", comment: "Pricing tier closed range title"),
+                compactTokenText(max(0, minimumTokens - 1)),
+                compactTokenText(upperBoundary)
+            )
+        }
+
+        if minimumTokens == 0 {
+            return NSLocalizedString("全部 tokens", comment: "Pricing tier all tokens title")
+        }
+        return String(
+            format: NSLocalizedString("> %@ tokens", comment: "Pricing tier lower-bound title"),
+            compactTokenText(max(0, minimumTokens - 1))
+        )
+    }
+
+    nonisolated private static func compactTokenText(_ tokens: Int) -> String {
+        let tokens = max(0, tokens)
+        if tokens >= 1_000_000 {
+            return compactScaledTokenText(tokens, divisor: 1_000_000, suffix: "M")
+        }
+        if tokens >= 1_000 {
+            return compactScaledTokenText(tokens, divisor: 1_000, suffix: "K")
+        }
+        return "\(tokens)"
+    }
+
+    nonisolated private static func compactScaledTokenText(_ tokens: Int, divisor: Int, suffix: String) -> String {
+        let scaledTenths = Int((Double(tokens) / Double(divisor) * 10).rounded())
+        if scaledTenths % 10 == 0 {
+            return "\(scaledTenths / 10)\(suffix)"
+        }
+        return String(format: "%.1f%@", Double(scaledTenths) / 10, suffix)
+    }
+}
+
 public struct MessageModelReference: Codable, Hashable, Sendable {
     public var providerID: UUID?
     public var providerName: String

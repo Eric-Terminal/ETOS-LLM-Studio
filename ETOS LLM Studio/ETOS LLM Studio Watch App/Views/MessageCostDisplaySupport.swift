@@ -71,7 +71,7 @@ struct MessageCostDetailSection: View {
 
             if let tierMinimumTokens = estimate.tierMinimumTokens {
                 LabeledContent(NSLocalizedString("命中阶梯", comment: "Matched pricing tier label")) {
-                    Text(String(format: NSLocalizedString("从 %d tokens 起", comment: "Matched tier minimum tokens"), tierMinimumTokens))
+                    Text(tierRangeText(minimumTokens: tierMinimumTokens))
                 }
             }
 
@@ -101,5 +101,9 @@ struct MessageCostDetailSection: View {
             component.tokens,
             MessageCostFormatter.formatPriceValue(component.pricePerMillionTokens, currencySymbol: estimate.currencySymbol)
         )
+    }
+
+    private func tierRangeText(minimumTokens: Int) -> String {
+        ModelPricingTierRangeText.text(minimumTokens: minimumTokens)
     }
 }

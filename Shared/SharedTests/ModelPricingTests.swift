@@ -78,6 +78,16 @@ struct ModelPricingTests {
         #expect(abs(estimate.totalCost - 0.0127) < 0.000001)
     }
 
+    @Test("阶梯范围文本使用紧凑 token 边界")
+    func tierRangeTextUsesCompactBoundaries() {
+        #expect(ModelPricingTierRangeText.text(minimumTokens: 0, nextMinimumTokens: 200_001).contains("200K"))
+        #expect(ModelPricingTierRangeText.text(minimumTokens: 200_001).contains("200K"))
+
+        let middleRange = ModelPricingTierRangeText.text(minimumTokens: 100_001, nextMinimumTokens: 200_001)
+        #expect(middleRange.contains("100K"))
+        #expect(middleRange.contains("200K"))
+    }
+
     @Test("旧模型配置解码时价格为空")
     func legacyModelDecodesWithEmptyPricing() throws {
         let data = try #require(
