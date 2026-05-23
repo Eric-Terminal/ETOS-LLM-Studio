@@ -75,33 +75,25 @@ extension ChatBubble {
         }
     }
 
-    var versionSwitcherBackgroundColor: Color {
-        if isOutgoing, responseAttemptVersionInfo == nil {
-            return resolvedUserBubbleEndColor.opacity(colorScheme == .dark ? 0.28 : 0.18)
-        }
-        if let resolvedAssistantBubbleColor {
-            return resolvedAssistantBubbleColor.opacity(enableBackground ? 0.75 : 1)
-        }
-        return enableBackground
-            ? Color(uiColor: .secondarySystemBackground).opacity(0.75)
-            : Color(uiColor: .systemBackground)
-    }
-
     @ViewBuilder
     var messageActionBarRow: some View {
         let row = ViewThatFits(in: .horizontal) {
             messageActionBarContent
                 .messageActionBarGroupStyle(
-                    background: versionSwitcherBackgroundColor,
-                    showsBorder: messageActionBarConfiguration.showsOuterBorder
+                    showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                    background: {
+                        messageActionBarBackground()
+                    }
                 )
 
             ScrollView(.horizontal, showsIndicators: false) {
                 messageActionBarContent
             }
             .messageActionBarGroupStyle(
-                background: versionSwitcherBackgroundColor,
-                showsBorder: messageActionBarConfiguration.showsOuterBorder
+                showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                background: {
+                    messageActionBarBackground()
+                }
             )
         }
 
@@ -114,6 +106,34 @@ extension ChatBubble {
                 .frame(maxWidth: .infinity, alignment: messageActionBarAlignment)
                 .padding(.top, 2)
         }
+    }
+
+    @ViewBuilder
+    func messageActionBarBackground() -> some View {
+        if messageActionBarConfiguration.showsOuterBorder {
+            let shape = Capsule()
+            if usesNoBubbleStyle {
+                shape.fill(Color.clear)
+            } else if enableLiquidGlass {
+                if #available(iOS 26.0, *) {
+                    shape
+                        .fill(bubbleGradient)
+                        .glassEffect(.clear, in: shape)
+                        .clipShape(shape)
+                } else {
+                    shape.fill(bubbleGradient)
+                }
+            } else {
+                shape.fill(bubbleGradient)
+            }
+        }
+    }
+
+    var messageActionBarForegroundColor: Color {
+        if messageActionBarConfiguration.showsOuterBorder && !usesNoBubbleStyle {
+            return resolvedTextColor(default: isOutgoing || isError ? .white : .primary)
+        }
+        return resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.86)
     }
 
     @ViewBuilder
@@ -138,7 +158,7 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .messageActionBarItemStyle()
+            .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .copyMessage:
             Button(action: onCopy) {
                 Image(systemName: item.systemImage)
@@ -146,21 +166,21 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .messageActionBarItemStyle()
+            .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
                 .etFont(.system(size: 12, weight: .semibold))
-                .messageActionBarItemStyle()
+                .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
-                .messageActionBarItemStyle()
+                .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
-                .messageActionBarItemStyle()
+                .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .versionSwitcher:
             compactVersionIndicator
         }
@@ -195,10 +215,7 @@ extension ChatBubble {
             .disabled(currentIndex >= totalCount - 1)
             .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
         }
-        .foregroundStyle(
-            resolvedSecondaryTextColor(default: Color.secondary, customOpacity: 0.86)
-        )
-        .messageActionBarItemStyle()
+        .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
     }
 
     var shouldShowVersionIndicator: Bool {
@@ -695,9 +712,11 @@ extension ChatBubble {
 }
 
 private struct MessageActionBarItemStyle: ViewModifier {
+    let foreground: Color
+
     func body(content: Content) -> some View {
         content
-            .foregroundStyle(.secondary)
+            .foregroundStyle(foreground)
             .labelStyle(.titleAndIcon)
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
@@ -707,16 +726,13 @@ private struct MessageActionBarItemStyle: ViewModifier {
 }
 
 private struct MessageActionBarGroupStyle: ViewModifier {
-    let background: Color
     let showsBorder: Bool
+    let background: AnyView
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
-            .background(
-                Capsule()
-                    .fill(background)
-            )
+            .background(background)
             .overlay(
                 Capsule()
                     .strokeBorder(
@@ -729,11 +745,14 @@ private struct MessageActionBarGroupStyle: ViewModifier {
 }
 
 private extension View {
-    func messageActionBarItemStyle() -> some View {
-        modifier(MessageActionBarItemStyle())
+    func messageActionBarItemStyle(foreground: Color) -> some View {
+        modifier(MessageActionBarItemStyle(foreground: foreground))
     }
 
-    func messageActionBarGroupStyle(background: Color, showsBorder: Bool) -> some View {
-        modifier(MessageActionBarGroupStyle(background: background, showsBorder: showsBorder))
+    func messageActionBarGroupStyle<Background: View>(
+        showsBorder: Bool,
+        @ViewBuilder background: () -> Background
+    ) -> some View {
+        modifier(MessageActionBarGroupStyle(showsBorder: showsBorder, background: AnyView(background())))
     }
 }

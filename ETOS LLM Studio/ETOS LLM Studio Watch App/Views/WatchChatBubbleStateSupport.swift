@@ -45,16 +45,20 @@ extension ChatBubble {
         ViewThatFits(in: .horizontal) {
             messageActionBarContent
                 .watchMessageActionBarGroupStyle(
-                    background: messageActionBarBackgroundColor,
-                    showsBorder: messageActionBarConfiguration.showsOuterBorder
+                    showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                    background: {
+                        messageActionBarBackground()
+                    }
                 )
 
             ScrollView(.horizontal, showsIndicators: false) {
                 messageActionBarContent
             }
             .watchMessageActionBarGroupStyle(
-                background: messageActionBarBackgroundColor,
-                showsBorder: messageActionBarConfiguration.showsOuterBorder
+                showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                background: {
+                    messageActionBarBackground()
+                }
             )
         }
         .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
@@ -74,6 +78,68 @@ extension ChatBubble {
     }
 
     @ViewBuilder
+    func messageActionBarBackground() -> some View {
+        if messageActionBarConfiguration.showsOuterBorder {
+            let shape = Capsule()
+
+            if usesNoBubbleStyle {
+                shape.fill(Color.clear)
+            } else if message.role == .user {
+                if enableLiquidGlass {
+                    if #available(watchOS 26.0, *) {
+                        shape
+                            .fill(userFallbackBackground)
+                            .glassEffect(.clear, in: shape)
+                            .clipShape(shape)
+                    } else {
+                        shape.fill(userFallbackBackground)
+                    }
+                } else {
+                    shape.fill(userFallbackBackground)
+                }
+            } else if message.role == .error {
+                if enableLiquidGlass {
+                    if #available(watchOS 26.0, *) {
+                        shape
+                            .fill(Color.red.opacity(0.5))
+                            .glassEffect(.clear, in: shape)
+                            .clipShape(shape)
+                    } else {
+                        shape.fill(enableBackground ? Color.red.opacity(0.7) : Color.red)
+                    }
+                } else {
+                    shape.fill(enableBackground ? Color.red.opacity(0.7) : Color.red)
+                }
+            } else if enableLiquidGlass {
+                if #available(watchOS 26.0, *) {
+                    shape
+                        .fill(assistantFallbackBackground)
+                        .glassEffect(.clear, in: shape)
+                        .clipShape(shape)
+                } else {
+                    shape.fill(assistantFallbackBackground)
+                }
+            } else {
+                shape.fill(assistantFallbackBackground)
+            }
+        }
+    }
+
+    var messageActionBarForegroundColor: Color {
+        if messageActionBarConfiguration.showsOuterBorder && !usesNoBubbleStyle {
+            switch message.role {
+            case .user, .error:
+                return resolvedTextColor(default: .white)
+            case .assistant, .system, .tool:
+                return resolvedTextColor(default: .primary)
+            @unknown default:
+                return resolvedTextColor(default: .primary)
+            }
+        }
+        return resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.86)
+    }
+
+    @ViewBuilder
     func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
         switch item {
         case .quickRetry:
@@ -83,7 +149,7 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .watchMessageActionBarItemStyle()
+            .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .copyMessage:
             Button(action: onCopy) {
                 Image(systemName: item.systemImage)
@@ -91,21 +157,21 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
-            .watchMessageActionBarItemStyle()
+            .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
                 .etFont(.system(size: 10, weight: .semibold))
-                .watchMessageActionBarItemStyle()
+                .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
-                .watchMessageActionBarItemStyle()
+                .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
                 .etFont(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
-                .watchMessageActionBarItemStyle()
+                .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .versionSwitcher:
             compactVersionIndicator
         }
@@ -140,17 +206,7 @@ extension ChatBubble {
             .disabled(currentIndex >= totalCount - 1)
             .opacity(currentIndex < totalCount - 1 ? 1 : 0.4)
         }
-        .watchMessageActionBarItemStyle()
-    }
-
-    var messageActionBarBackgroundColor: Color {
-        if message.role == .user {
-            return (resolvedUserBubbleColorOverride ?? .blue).opacity(colorScheme == .dark ? 0.28 : 0.18)
-        }
-        if let resolvedAssistantBubbleColorOverride {
-            return resolvedAssistantBubbleColorOverride.opacity(enableBackground ? 0.75 : 1)
-        }
-        return Color(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: enableBackground ? 0.75 : 1)
+        .watchMessageActionBarItemStyle(foreground: messageActionBarForegroundColor)
     }
 
     var shouldShowVersionIndicator: Bool {
@@ -442,9 +498,11 @@ extension ChatBubble {
 }
 
 private struct WatchMessageActionBarItemStyle: ViewModifier {
+    let foreground: Color
+
     func body(content: Content) -> some View {
         content
-            .foregroundStyle(.secondary)
+            .foregroundStyle(foreground)
             .labelStyle(.titleAndIcon)
             .padding(.horizontal, 5)
             .padding(.vertical, 3)
@@ -454,16 +512,13 @@ private struct WatchMessageActionBarItemStyle: ViewModifier {
 }
 
 private struct WatchMessageActionBarGroupStyle: ViewModifier {
-    let background: Color
     let showsBorder: Bool
+    let background: AnyView
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
-            .background(
-                Capsule()
-                    .fill(background)
-            )
+            .background(background)
             .overlay(
                 Capsule()
                     .strokeBorder(
@@ -476,11 +531,14 @@ private struct WatchMessageActionBarGroupStyle: ViewModifier {
 }
 
 private extension View {
-    func watchMessageActionBarItemStyle() -> some View {
-        modifier(WatchMessageActionBarItemStyle())
+    func watchMessageActionBarItemStyle(foreground: Color) -> some View {
+        modifier(WatchMessageActionBarItemStyle(foreground: foreground))
     }
 
-    func watchMessageActionBarGroupStyle(background: Color, showsBorder: Bool) -> some View {
-        modifier(WatchMessageActionBarGroupStyle(background: background, showsBorder: showsBorder))
+    func watchMessageActionBarGroupStyle<Background: View>(
+        showsBorder: Bool,
+        @ViewBuilder background: () -> Background
+    ) -> some View {
+        modifier(WatchMessageActionBarGroupStyle(showsBorder: showsBorder, background: AnyView(background())))
     }
 }
