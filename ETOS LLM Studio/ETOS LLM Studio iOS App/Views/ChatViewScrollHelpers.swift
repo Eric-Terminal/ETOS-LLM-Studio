@@ -27,6 +27,8 @@ extension ChatView {
             return false
         }
 
+        prepareForMessageJump()
+
         let targetMessageID = viewModel.allMessagesForSession[targetZeroBasedIndex].id
         let isVisible = viewModel.displayMessages.contains(where: { $0.id == targetMessageID })
         if !isVisible {
@@ -37,6 +39,14 @@ extension ChatView {
             pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
         }
         return true
+    }
+
+    func prepareForMessageJump() {
+        pendingHistoryResetWorkItem?.cancel()
+        pendingHistoryResetWorkItem = nil
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = nil
+        needsImmediateBottomSnap = false
     }
 
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
