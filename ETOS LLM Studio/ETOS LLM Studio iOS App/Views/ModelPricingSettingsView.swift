@@ -186,23 +186,23 @@ struct ModelPricingDraft: Equatable {
     var cacheReadPrice: String = ""
     var tiers: [ModelPricingTierDraft] = []
 
-    init() {}
+    nonisolated init() {}
 
-    init(pricing: ModelPricing?) {
+    nonisolated init(pricing: ModelPricing?) {
         let pricing = pricing?.normalized
         currencySymbol = pricing?.currencySymbol ?? ModelPricing.defaultCurrencySymbol
         inputPrice = Self.string(from: pricing?.inputPerMillionTokens)
         outputPrice = Self.string(from: pricing?.outputPerMillionTokens)
         cacheWritePrice = Self.string(from: pricing?.cacheWritePerMillionTokens)
         cacheReadPrice = Self.string(from: pricing?.cacheReadPerMillionTokens)
-        tiers = pricing?.tiers.map(ModelPricingTierDraft.init) ?? []
+        tiers = pricing?.tiers.map { ModelPricingTierDraft(tier: $0) } ?? []
     }
 
-    var isEmpty: Bool {
+    nonisolated var isEmpty: Bool {
         modelPricing == nil
     }
 
-    var modelPricing: ModelPricing? {
+    nonisolated var modelPricing: ModelPricing? {
         let normalized = ModelPricing(
             currencySymbol: currencySymbol,
             inputPerMillionTokens: Self.double(from: inputPrice),
@@ -214,13 +214,13 @@ struct ModelPricingDraft: Equatable {
         return normalized.isEffectivelyEmpty ? nil : normalized
     }
 
-    static func double(from text: String) -> Double? {
+    nonisolated static func double(from text: String) -> Double? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return Double(trimmed).flatMap(ModelPricing.normalizedPrice)
     }
 
-    static func string(from value: Double?) -> String {
+    nonisolated static func string(from value: Double?) -> String {
         guard let value else { return "" }
         return String(format: "%.6f", value).trimmingTrailingZerosForPrice()
     }
@@ -234,9 +234,9 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
     var cacheWritePrice: String = ""
     var cacheReadPrice: String = ""
 
-    init() {}
+    nonisolated init() {}
 
-    init(tier: ModelPricingTier) {
+    nonisolated init(tier: ModelPricingTier) {
         id = tier.id
         minimumTokens = "\(tier.minimumTokens)"
         inputPrice = ModelPricingDraft.string(from: tier.inputPerMillionTokens)
@@ -245,7 +245,7 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
         cacheReadPrice = ModelPricingDraft.string(from: tier.cacheReadPerMillionTokens)
     }
 
-    var modelPricingTier: ModelPricingTier? {
+    nonisolated var modelPricingTier: ModelPricingTier? {
         let tier = ModelPricingTier(
             id: id,
             minimumTokens: Int(minimumTokens.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
@@ -259,7 +259,7 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
 }
 
 private extension String {
-    func trimmingTrailingZerosForPrice() -> String {
+    nonisolated func trimmingTrailingZerosForPrice() -> String {
         var value = self
         while value.contains("."), value.last == "0" {
             value.removeLast()
