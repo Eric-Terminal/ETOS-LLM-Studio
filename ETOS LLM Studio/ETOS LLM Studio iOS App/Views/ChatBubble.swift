@@ -45,7 +45,7 @@ struct ChatBubble: View {
     let onCopy: () -> Void
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
-    let onOpenMore: (() -> Void)?
+    let onOpenMore: ((ChatMessage) -> Void)?
     let providers: [Provider]
     
     @StateObject var audioPlayer = AudioPlayerManager()
@@ -87,7 +87,7 @@ struct ChatBubble: View {
         onCopy: @escaping () -> Void = {},
         onSwitchToPreviousVersion: @escaping () -> Void,
         onSwitchToNextVersion: @escaping () -> Void,
-        onOpenMore: (() -> Void)? = nil,
+        onOpenMore: ((ChatMessage) -> Void)? = nil,
         providers: [Provider] = []
     ) {
         self.messageState = messageState
@@ -124,6 +124,13 @@ struct ChatBubble: View {
     
     var message: ChatMessage {
         messageState.visualMessage
+    }
+
+    var openMoreAction: (() -> Void)? {
+        guard let onOpenMore else { return nil }
+        return {
+            onOpenMore(messageState.message)
+        }
     }
 
     var body: some View {
@@ -179,7 +186,7 @@ struct ChatBubble: View {
         .padding(.horizontal, rowHorizontalPadding)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
-        .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: onOpenMore))
+        .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: openMoreAction))
         .sheet(item: $imagePreview) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()

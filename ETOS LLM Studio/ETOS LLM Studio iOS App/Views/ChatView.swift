@@ -419,8 +419,8 @@ struct ChatView: View {
                                     onSwitchToNextVersion: {
                                         viewModel.switchToNextVersion(of: message)
                                     },
-                                    onOpenMore: {
-                                        messageActionSheetPayload = MessageActionSheetPayload(message: message)
+                                    onOpenMore: { latestMessage in
+                                        messageActionSheetPayload = MessageActionSheetPayload(message: latestMessage)
                                     },
                                     providers: viewModel.providers
                                 )

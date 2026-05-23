@@ -3626,3 +3626,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "%d tokens / 1M tokens × %@" = "%d tokens / 1M tokens × %@";
 "缓存创建" = "Création du cache";
 "缓存命中" = "Lecture du cache";
+"暂无可用于费用估算的 Token 用量。" = "Aucune utilisation de tokens n’est encore disponible pour l’estimation du coût.";
+"这条消息缺少模型引用，无法匹配价格设置。" = "Ce message n’a pas de référence de modèle, les prix ne peuvent donc pas être associés.";
+"未找到这条消息所用模型的价格设置。" = "Aucun prix n’est configuré pour le modèle utilisé par ce message.";
+"当前 Token 用量没有命中可计费的价格项。" = "L’utilisation actuelle de tokens ne correspond à aucun prix facturable.";
