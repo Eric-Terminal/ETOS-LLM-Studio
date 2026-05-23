@@ -1,0 +1,114 @@
+// ============================================================================
+// MessageCostDisplaySupport.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// iOS 端消息费用展示辅助。
+// ============================================================================
+
+import SwiftUI
+import Foundation
+import Shared
+
+enum MessageCostFormatter {
+    static func formatTotal(_ value: Double, currencySymbol: String) -> String {
+        let symbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ModelPricing.defaultCurrencySymbol
+            : currencySymbol
+        if value > 0, value < 0.000001 {
+            return "<\(symbol)0.000001"
+        }
+        return "\(symbol)\(formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6))"
+    }
+
+    static func formatPricePerMillion(_ value: Double, currencySymbol: String) -> String {
+        let symbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ModelPricing.defaultCurrencySymbol
+            : currencySymbol
+        return String(
+            format: NSLocalizedString("%@%@ / 1M tokens", comment: "Price per million tokens text"),
+            symbol,
+            formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6)
+        )
+    }
+
+    static func formatPriceValue(_ value: Double, currencySymbol: String) -> String {
+        let symbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ModelPricing.defaultCurrencySymbol
+            : currencySymbol
+        return "\(symbol)\(formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6))"
+    }
+
+    static func formatCompact(_ estimate: MessageCostEstimate) -> String {
+        formatTotal(estimate.totalCost, currencySymbol: estimate.currencySymbol)
+    }
+
+    private static func formatNumber(
+        _ value: Double,
+        minimumFractionDigits: Int,
+        maximumFractionDigits: Int
+    ) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = minimumFractionDigits
+        formatter.maximumFractionDigits = maximumFractionDigits
+        return formatter.string(from: NSNumber(value: max(0, value))) ?? String(format: "%.6f", max(0, value))
+    }
+}
+
+struct MessageCostDetailSection: View {
+    let estimate: MessageCostEstimate
+    var showsEstimatedHint: Bool = true
+
+    var body: some View {
+        Section(NSLocalizedString("费用", comment: "Message cost section title")) {
+            LabeledContent(NSLocalizedString("估算费用", comment: "Estimated cost label")) {
+                Text(MessageCostFormatter.formatTotal(estimate.totalCost, currencySymbol: estimate.currencySymbol))
+                    .monospacedDigit()
+            }
+
+            LabeledContent(NSLocalizedString("阶梯依据", comment: "Tier basis label")) {
+                Text(String(format: NSLocalizedString("%d tokens", comment: "Token count with unit"), estimate.tierBasisTokens))
+            }
+
+            if let tierMinimumTokens = estimate.tierMinimumTokens {
+                LabeledContent(NSLocalizedString("命中阶梯", comment: "Matched pricing tier label")) {
+                    Text(String(format: NSLocalizedString("从 %d tokens 起", comment: "Matched tier minimum tokens"), tierMinimumTokens))
+                }
+            }
+
+            ForEach(estimate.components) { component in
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent(component.kind.localizedTitle) {
+                        Text(MessageCostFormatter.formatTotal(component.subtotal, currencySymbol: estimate.currencySymbol))
+                            .monospacedDigit()
+                    }
+                    Text(componentFormula(component))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Text(footerText)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var footerText: String {
+        if estimate.isEstimatedFromCurrentPricing, showsEstimatedHint {
+            return NSLocalizedString("按当前模型价格估算，仅供参考，以服务商实际扣费为准。", comment: "Current pricing estimated cost footer")
+        }
+        return NSLocalizedString("仅供参考，以服务商实际扣费为准。", comment: "Estimated cost footer")
+    }
+
+    private func componentFormula(_ component: MessageCostComponent) -> String {
+        String(
+            format: NSLocalizedString("%d tokens / 1M tokens × %@", comment: "Cost component calculation formula"),
+            component.tokens,
+            MessageCostFormatter.formatPriceValue(component.pricePerMillionTokens, currencySymbol: estimate.currencySymbol)
+        )
+    }
+}

@@ -234,6 +234,32 @@ public class ChatService {
         let requestSource: UsageRequestSource
         let isStreaming: Bool
         let requestedAt: Date
+        let modelReference: MessageModelReference?
+        let modelPricing: ModelPricing?
+
+        init(
+            requestID: UUID,
+            sessionID: UUID?,
+            providerID: UUID?,
+            providerName: String,
+            modelID: String,
+            requestSource: UsageRequestSource,
+            isStreaming: Bool,
+            requestedAt: Date,
+            modelReference: MessageModelReference? = nil,
+            modelPricing: ModelPricing? = nil
+        ) {
+            self.requestID = requestID
+            self.sessionID = sessionID
+            self.providerID = providerID
+            self.providerName = providerName
+            self.modelID = modelID
+            self.requestSource = requestSource
+            self.isStreaming = isStreaming
+            self.requestedAt = requestedAt
+            self.modelReference = modelReference
+            self.modelPricing = modelPricing?.normalized
+        }
     }
 
     func messagesSnapshot(for sessionID: UUID) -> [ChatMessage] {

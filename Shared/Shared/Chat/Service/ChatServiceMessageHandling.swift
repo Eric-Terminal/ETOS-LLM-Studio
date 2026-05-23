@@ -121,6 +121,8 @@ extension ChatService {
                         role: .error,
                         content: "重试失败\n\n\(formattedContent)",
                         requestedAt: loadingMessage.requestedAt,
+                        modelReference: loadingMessage.modelReference,
+                        costEstimate: loadingMessage.costEstimate,
                         fullErrorContent: fullContent.map { "重试失败\n\n\($0)" },
                         responseGroupID: loadingMessage.responseGroupID,
                         responseAttemptID: loadingMessage.responseAttemptID,
@@ -139,13 +141,15 @@ extension ChatService {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(
                     id: loadingMessage.id,
-                    role: .error,
-                    content: formattedContent,
-                    requestedAt: loadingMessage.requestedAt,
-                    fullErrorContent: fullContent,
-                    responseGroupID: loadingMessage.responseGroupID,
-                    responseAttemptID: loadingMessage.responseAttemptID,
-                    responseAttemptIndex: loadingMessage.responseAttemptIndex,
+                        role: .error,
+                        content: formattedContent,
+                        requestedAt: loadingMessage.requestedAt,
+                        modelReference: loadingMessage.modelReference,
+                        costEstimate: loadingMessage.costEstimate,
+                        fullErrorContent: fullContent,
+                        responseGroupID: loadingMessage.responseGroupID,
+                        responseAttemptID: loadingMessage.responseAttemptID,
+                        responseAttemptIndex: loadingMessage.responseAttemptIndex,
                     selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID ?? loadingMessage.responseAttemptID
                 )
                 logger.error("错误消息已添加: \(content)")
@@ -264,6 +268,17 @@ extension ChatService {
         return updated
     }
 
+    func attachCostEstimateIfPossible(
+        to message: inout ChatMessage,
+        using context: RequestLogContext
+    ) {
+        message.modelReference = message.modelReference ?? context.modelReference
+        message.costEstimate = ModelCostCalculator.estimateCost(
+            usage: message.tokenUsage,
+            pricing: context.modelPricing
+        )
+    }
+
     func removeMessage(withID messageID: UUID, in sessionID: UUID) {
         var messages = messagesSnapshot(for: sessionID)
         if let index = messages.firstIndex(where: { $0.id == messageID }) {
@@ -350,6 +365,10 @@ extension ChatService {
             if let newUsage = newMessage.tokenUsage {
                 targetMessage.tokenUsage = newUsage
             }
+            targetMessage.modelReference = newMessage.modelReference ?? targetMessage.modelReference
+            if newMessage.modelReference != nil {
+                targetMessage.costEstimate = newMessage.costEstimate
+            }
 
             // 如果新消息有工具调用，也要更新
             if let newToolCalls = newMessage.toolCalls {
@@ -397,6 +416,8 @@ extension ChatService {
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
                 tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage,
+                modelReference: newMessage.modelReference ?? messages[index].modelReference,
+                costEstimate: newMessage.costEstimate ?? messages[index].costEstimate,
                 audioFileName: newMessage.audioFileName ?? messages[index].audioFileName,
                 imageFileNames: newMessage.imageFileNames ?? messages[index].imageFileNames,
                 fileFileNames: newMessage.fileFileNames ?? messages[index].fileFileNames,

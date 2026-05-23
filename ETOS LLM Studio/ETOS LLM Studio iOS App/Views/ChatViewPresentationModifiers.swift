@@ -103,7 +103,8 @@ extension ChatView {
                             messageInfo = MessageInfoPayload(
                                 message: message,
                                 displayIndex: index + 1,
-                                totalCount: viewModel.allMessagesForSession.count
+                                totalCount: viewModel.allMessagesForSession.count,
+                                providers: viewModel.providers
                             )
                         }
                     }

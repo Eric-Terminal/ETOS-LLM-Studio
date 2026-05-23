@@ -158,7 +158,7 @@ extension MessageActionBarAlignment {
 extension MessageActionBarItem {
     var isSupportedOnCurrentPlatform: Bool {
         switch self {
-        case .quickRetry, .copyMessage, .requestTime, .inputTokens, .outputTokens, .versionSwitcher:
+        case .quickRetry, .copyMessage, .requestTime, .inputTokens, .outputTokens, .costEstimate, .versionSwitcher:
             return true
         }
     }
@@ -175,6 +175,8 @@ extension MessageActionBarItem {
             return NSLocalizedString("输入 Token", comment: "")
         case .outputTokens:
             return NSLocalizedString("输出 Token", comment: "")
+        case .costEstimate:
+            return NSLocalizedString("费用", comment: "Message action bar cost item title")
         case .versionSwitcher:
             return NSLocalizedString("多版本切换", comment: "")
         }
@@ -192,6 +194,8 @@ extension MessageActionBarItem {
             return "arrow.up"
         case .outputTokens:
             return "arrow.down"
+        case .costEstimate:
+            return "dollarsign.circle"
         case .versionSwitcher:
             return "arrow.left.arrow.right"
         }

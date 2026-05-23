@@ -99,6 +99,13 @@ extension ChatService {
         }
 
         let requestStartedAt = Date()
+        let modelReference = MessageModelReference(
+            providerID: runnableModel.provider.id,
+            providerName: runnableModel.provider.name,
+            modelUUID: runnableModel.model.id,
+            modelName: runnableModel.model.modelName,
+            modelDisplayName: runnableModel.model.displayName
+        )
         let requestLogContext = RequestLogContext(
             requestID: UUID(),
             sessionID: currentSessionID,
@@ -107,7 +114,9 @@ extension ChatService {
             modelID: runnableModel.model.modelName,
             requestSource: .chat,
             isStreaming: enableStreaming,
-            requestedAt: requestStartedAt
+            requestedAt: requestStartedAt,
+            modelReference: modelReference,
+            modelPricing: runnableModel.model.pricing
         )
 
         if let configurationError = providerConfigurationValidationErrorMessage(

@@ -189,6 +189,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var toolCalls: [InternalToolCall]? // AI发出的工具调用指令
     public var toolCallsPlacement: ToolCallsPlacement? // 工具调用在正文前/后显示
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
+    public var modelReference: MessageModelReference? // 生成该消息时使用的模型快照
+    public var costEstimate: MessageCostEstimate? // 基于本地模型价格配置计算的费用快照
     public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
     public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
@@ -209,6 +211,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         toolCalls: [InternalToolCall]? = nil,
         toolCallsPlacement: ToolCallsPlacement? = nil,
         tokenUsage: MessageTokenUsage? = nil,
+        modelReference: MessageModelReference? = nil,
+        costEstimate: MessageCostEstimate? = nil,
         audioFileName: String? = nil,
         imageFileNames: [String]? = nil,
         fileFileNames: [String]? = nil,
@@ -229,6 +233,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.toolCalls = toolCalls
         self.toolCallsPlacement = toolCallsPlacement
         self.tokenUsage = tokenUsage
+        self.modelReference = modelReference
+        self.costEstimate = costEstimate
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
         self.fileFileNames = fileFileNames
@@ -282,6 +288,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, reasoningProviderSpecificFields, toolCalls, toolCallsPlacement, tokenUsage
+        case modelReference, costEstimate
         case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
         case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
     }
@@ -314,6 +321,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.toolCalls = try container.decodeIfPresent([InternalToolCall].self, forKey: .toolCalls)
         self.toolCallsPlacement = try container.decodeIfPresent(ToolCallsPlacement.self, forKey: .toolCallsPlacement)
         self.tokenUsage = try container.decodeIfPresent(MessageTokenUsage.self, forKey: .tokenUsage)
+        self.modelReference = try container.decodeIfPresent(MessageModelReference.self, forKey: .modelReference)
+        self.costEstimate = try container.decodeIfPresent(MessageCostEstimate.self, forKey: .costEstimate)
         self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
         self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
@@ -344,6 +353,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
         try container.encodeIfPresent(toolCallsPlacement, forKey: .toolCallsPlacement)
         try container.encodeIfPresent(tokenUsage, forKey: .tokenUsage)
+        try container.encodeIfPresent(modelReference, forKey: .modelReference)
+        try container.encodeIfPresent(costEstimate, forKey: .costEstimate)
         try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
         try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)

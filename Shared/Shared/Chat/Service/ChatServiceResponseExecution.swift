@@ -111,6 +111,7 @@ extension ChatService {
                         fallbackCompletedAt: responseCompletedAt
                     )
                 }
+                attachCostEstimateIfPossible(to: &parsedMessage, using: requestLogContext)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .success,

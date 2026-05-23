@@ -17,6 +17,7 @@ struct MessageInfoPayload: Identifiable {
     let message: ChatMessage
     let displayIndex: Int
     let totalCount: Int
+    let providers: [Provider]
 }
 
 /// 用于承载完整错误响应内容的数据结构
@@ -159,6 +160,13 @@ struct MessageInfoSheet: View {
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                if let costEstimate = MessageCostResolver.resolvedCost(
+                    for: payload.message,
+                    providers: payload.providers
+                ) {
+                    MessageCostDetailSection(estimate: costEstimate)
                 }
 
                 if let metrics = payload.message.responseMetrics,

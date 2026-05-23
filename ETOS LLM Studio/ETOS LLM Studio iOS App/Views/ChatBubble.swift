@@ -46,6 +46,7 @@ struct ChatBubble: View {
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
     let onOpenMore: (() -> Void)?
+    let providers: [Provider]
     
     @StateObject var audioPlayer = AudioPlayerManager()
     @State var imagePreview: ImagePreviewPayload?
@@ -86,7 +87,8 @@ struct ChatBubble: View {
         onCopy: @escaping () -> Void = {},
         onSwitchToPreviousVersion: @escaping () -> Void,
         onSwitchToNextVersion: @escaping () -> Void,
-        onOpenMore: (() -> Void)? = nil
+        onOpenMore: (() -> Void)? = nil,
+        providers: [Provider] = []
     ) {
         self.messageState = messageState
         self.layoutWidth = layoutWidth
@@ -117,6 +119,7 @@ struct ChatBubble: View {
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
         self.onSwitchToNextVersion = onSwitchToNextVersion
         self.onOpenMore = onOpenMore
+        self.providers = providers
     }
     
     var message: ChatMessage {

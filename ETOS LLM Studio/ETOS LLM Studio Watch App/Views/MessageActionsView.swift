@@ -32,6 +32,7 @@ struct MessageActionsView: View {
     let onJumpToMessageIndex: (Int) -> Bool
     let session: ChatSession?
     let allMessages: [ChatMessage]
+    let providers: [Provider]
     
     let messageIndex: Int?
     let totalMessages: Int
@@ -54,6 +55,7 @@ struct MessageActionsView: View {
         onJumpToMessageIndex: @escaping (Int) -> Bool,
         session: ChatSession?,
         allMessages: [ChatMessage],
+        providers: [Provider],
         messageIndex: Int?,
         totalMessages: Int
     ) {
@@ -74,6 +76,7 @@ struct MessageActionsView: View {
         self.onJumpToMessageIndex = onJumpToMessageIndex
         self.session = session
         self.allMessages = allMessages
+        self.providers = providers
         self.messageIndex = messageIndex
         self.totalMessages = totalMessages
     }
@@ -320,6 +323,10 @@ struct MessageActionsView: View {
                         LabeledContent(NSLocalizedString("总计", comment: ""), value: "\(totalOnly)")
                     }
                 }
+            }
+
+            if let costEstimate = MessageCostResolver.resolvedCost(for: message, providers: providers) {
+                MessageCostDetailSection(estimate: costEstimate)
             }
 
             if let metrics = message.responseMetrics,

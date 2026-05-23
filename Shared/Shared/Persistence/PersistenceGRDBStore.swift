@@ -131,6 +131,8 @@ final class PersistenceGRDBStore {
                     tool_calls_json BLOB,
                     tool_calls_placement TEXT CHECK(tool_calls_placement IN ('afterReasoning', 'afterContent')),
                     token_usage_json BLOB,
+                    model_reference_json BLOB,
+                    cost_estimate_json BLOB,
                     audio_file_name TEXT,
                     image_file_names_json BLOB,
                     file_file_names_json BLOB,
@@ -415,6 +417,23 @@ final class PersistenceGRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_usage_daily_model_totals_model ON usage_daily_model_totals(provider_name, model_id, day_key)")
         }
 
+        migrator.registerMigration("v4_add_message_cost_snapshot") { db in
+            func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                return columns.contains { row in
+                    let name: String = row["name"]
+                    return name == columnName
+                }
+            }
+
+            if !(try tableHasColumn("messages", columnName: "model_reference_json")) {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN model_reference_json BLOB")
+            }
+            if !(try tableHasColumn("messages", columnName: "cost_estimate_json")) {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN cost_estimate_json BLOB")
+            }
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -445,6 +464,8 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "messages", column: "tool_calls_json", definition: "tool_calls_json BLOB")
             try ensureColumn(db, table: "messages", column: "tool_calls_placement", definition: "tool_calls_placement TEXT CHECK(tool_calls_placement IN ('afterReasoning', 'afterContent'))")
             try ensureColumn(db, table: "messages", column: "token_usage_json", definition: "token_usage_json BLOB")
+            try ensureColumn(db, table: "messages", column: "model_reference_json", definition: "model_reference_json BLOB")
+            try ensureColumn(db, table: "messages", column: "cost_estimate_json", definition: "cost_estimate_json BLOB")
             try ensureColumn(db, table: "messages", column: "audio_file_name", definition: "audio_file_name TEXT")
             try ensureColumn(db, table: "messages", column: "image_file_names_json", definition: "image_file_names_json BLOB")
             try ensureColumn(db, table: "messages", column: "file_file_names_json", definition: "file_file_names_json BLOB")
@@ -516,6 +537,8 @@ final class PersistenceGRDBStore {
                 tool_calls_json BLOB,
                 tool_calls_placement TEXT CHECK(tool_calls_placement IN ('afterReasoning', 'afterContent')),
                 token_usage_json BLOB,
+                model_reference_json BLOB,
+                cost_estimate_json BLOB,
                 audio_file_name TEXT,
                 image_file_names_json BLOB,
                 file_file_names_json BLOB,

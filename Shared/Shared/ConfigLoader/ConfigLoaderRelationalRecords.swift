@@ -91,6 +91,7 @@ extension ConfigLoader {
             case requestBodyOverrideMode = "request_body_override_mode"
             case rawRequestBodyJSON = "raw_request_body_json"
             case requestBodyControlsJSON = "request_body_controls_json"
+            case pricingJSON = "pricing_json"
             case sortIndex = "sort_index"
             case updatedAt = "updated_at"
         }
@@ -110,6 +111,7 @@ extension ConfigLoader {
         var requestBodyOverrideMode: String?
         var rawRequestBodyJSON: String?
         var requestBodyControlsJSON: String?
+        var pricingJSON: String?
         var sortIndex: Int
         var updatedAt: Double
     }

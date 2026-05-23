@@ -28,6 +28,7 @@ public enum MessageActionBarItem: String, CaseIterable, Identifiable, Codable, S
     case requestTime
     case inputTokens
     case outputTokens
+    case costEstimate
     case versionSwitcher
 
     public var id: String { rawValue }

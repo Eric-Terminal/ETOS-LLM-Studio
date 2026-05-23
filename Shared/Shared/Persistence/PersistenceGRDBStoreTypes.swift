@@ -93,6 +93,8 @@ struct PersistedMessageRecord: Equatable {
     let toolCallsJSON: Data?
     let toolCallsPlacement: String?
     let tokenUsageJSON: Data?
+    let modelReferenceJSON: Data?
+    let costEstimateJSON: Data?
     let audioFileName: String?
     let imageFileNamesJSON: Data?
     let fileFileNamesJSON: Data?

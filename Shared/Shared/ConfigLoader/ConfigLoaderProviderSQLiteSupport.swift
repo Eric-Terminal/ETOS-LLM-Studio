@@ -86,6 +86,7 @@ extension ConfigLoader {
                         requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
                         rawRequestBodyJSON: model.rawRequestBodyJSON,
                         requestBodyControlsJSON: encodeJSON(model.requestBodyControls),
+                        pricingJSON: model.pricing.flatMap { encodeJSON($0.normalized) },
                         sortIndex: modelIndex,
                         updatedAt: now
                     )
@@ -235,7 +236,8 @@ extension ConfigLoader {
                     legacyCapabilityRawValues: legacyCapabilityRawValues,
                     requestBodyOverrideMode: requestBodyOverrideMode,
                     rawRequestBodyJSON: modelRow.rawRequestBodyJSON,
-                    requestBodyControls: decodeJSON(modelRow.requestBodyControlsJSON, as: [ModelRequestBodyControl].self) ?? []
+                    requestBodyControls: decodeJSON(modelRow.requestBodyControlsJSON, as: [ModelRequestBodyControl].self) ?? [],
+                    pricing: decodeJSON(modelRow.pricingJSON, as: ModelPricing.self)
                 )
                 if !hasStoredCapabilityShape {
                     model = model.applyingInferredCapabilityHints()

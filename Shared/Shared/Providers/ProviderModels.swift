@@ -266,6 +266,7 @@ public struct Model: Codable, Identifiable, Hashable {
     public var requestBodyOverrideMode: RequestBodyOverrideMode
     public var rawRequestBodyJSON: String?
     public var requestBodyControls: [ModelRequestBodyControl]
+    public var pricing: ModelPricing?
 
     public init(
         id: UUID = UUID(),
@@ -280,7 +281,8 @@ public struct Model: Codable, Identifiable, Hashable {
         legacyCapabilityRawValues: [String]? = nil,
         requestBodyOverrideMode: RequestBodyOverrideMode = .keyValue,
         rawRequestBodyJSON: String? = nil,
-        requestBodyControls: [ModelRequestBodyControl] = []
+        requestBodyControls: [ModelRequestBodyControl] = [],
+        pricing: ModelPricing? = nil
     ) {
         let normalized = Self.normalizedCapabilityShape(
             kind: kind,
@@ -301,6 +303,8 @@ public struct Model: Codable, Identifiable, Hashable {
         self.requestBodyOverrideMode = requestBodyOverrideMode
         self.rawRequestBodyJSON = rawRequestBodyJSON
         self.requestBodyControls = requestBodyControls
+        let normalizedPricing = pricing?.normalized
+        self.pricing = normalizedPricing?.isEffectivelyEmpty == true ? nil : normalizedPricing
     }
 
     public init(
@@ -312,7 +316,8 @@ public struct Model: Codable, Identifiable, Hashable {
         capabilities legacyCapabilities: [Capability],
         requestBodyOverrideMode: RequestBodyOverrideMode = .keyValue,
         rawRequestBodyJSON: String? = nil,
-        requestBodyControls: [ModelRequestBodyControl] = []
+        requestBodyControls: [ModelRequestBodyControl] = [],
+        pricing: ModelPricing? = nil
     ) {
         self.init(
             id: id,
@@ -324,7 +329,8 @@ public struct Model: Codable, Identifiable, Hashable {
             legacyCapabilityRawValues: legacyCapabilities.map(\.rawValue),
             requestBodyOverrideMode: requestBodyOverrideMode,
             rawRequestBodyJSON: rawRequestBodyJSON,
-            requestBodyControls: requestBodyControls
+            requestBodyControls: requestBodyControls,
+            pricing: pricing
         )
     }
 
@@ -334,6 +340,7 @@ public struct Model: Codable, Identifiable, Hashable {
         case requestBodyOverrideMode
         case rawRequestBodyJSON
         case requestBodyControls
+        case pricing
     }
 
     public init(from decoder: Decoder) throws {
@@ -365,6 +372,8 @@ public struct Model: Codable, Identifiable, Hashable {
         self.requestBodyOverrideMode = try container.decodeIfPresent(RequestBodyOverrideMode.self, forKey: .requestBodyOverrideMode) ?? .keyValue
         self.rawRequestBodyJSON = try container.decodeIfPresent(String.self, forKey: .rawRequestBodyJSON)
         self.requestBodyControls = try container.decodeIfPresent([ModelRequestBodyControl].self, forKey: .requestBodyControls) ?? []
+        let decodedPricing = try container.decodeIfPresent(ModelPricing.self, forKey: .pricing)?.normalized
+        self.pricing = decodedPricing?.isEffectivelyEmpty == true ? nil : decodedPricing
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -398,6 +407,9 @@ public struct Model: Codable, Identifiable, Hashable {
         }
         if !requestBodyControls.isEmpty {
             try container.encode(requestBodyControls, forKey: .requestBodyControls)
+        }
+        if let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty {
+            try container.encode(pricing, forKey: .pricing)
         }
     }
 }

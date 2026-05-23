@@ -222,6 +222,11 @@ extension SyncEngine {
             changed = true
         }
 
+        if merged.pricing == nil, let incomingPricing = incoming.pricing?.normalized, !incomingPricing.isEffectivelyEmpty {
+            merged.pricing = incomingPricing
+            changed = true
+        }
+
         return (merged, changed)
     }
 
@@ -475,6 +480,17 @@ extension SyncEngine {
         }
         if requestBodyControls != local.requestBodyControls {
             merged.requestBodyControls = requestBodyControls
+            changed = true
+        }
+
+        guard let pricing = mergeOptionalScalarField(
+            local.pricing?.normalized,
+            incoming.pricing?.normalized
+        ) else {
+            return .conflict
+        }
+        if pricing.value != local.pricing?.normalized {
+            merged.pricing = pricing.value
             changed = true
         }
 

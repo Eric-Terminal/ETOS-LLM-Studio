@@ -221,6 +221,7 @@ extension PersistenceGRDBStore {
                     sql: """
                     SELECT id, role, requested_at, content, content_versions_json, current_version_index,
                            reasoning_content, tool_calls_json, tool_calls_placement, token_usage_json,
+                           model_reference_json, cost_estimate_json,
                            audio_file_name, image_file_names_json, file_file_names_json,
                            full_error_content, response_metrics_json,
                            response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id
@@ -245,6 +246,8 @@ extension PersistenceGRDBStore {
 
                     let toolCallsData: Data? = row["tool_calls_json"]
                     let tokenUsageData: Data? = row["token_usage_json"]
+                    let modelReferenceData: Data? = row["model_reference_json"]
+                    let costEstimateData: Data? = row["cost_estimate_json"]
                     let imageFileNamesData: Data? = row["image_file_names_json"]
                     let fileFileNamesData: Data? = row["file_file_names_json"]
                     let responseMetricsData: Data? = row["response_metrics_json"]
@@ -252,6 +255,8 @@ extension PersistenceGRDBStore {
                     let toolCalls = decodeJSON([InternalToolCall].self, from: toolCallsData)
                     let toolCallsPlacementRaw: String? = row["tool_calls_placement"]
                     let tokenUsage = decodeJSON(MessageTokenUsage.self, from: tokenUsageData)
+                    let modelReference = decodeJSON(MessageModelReference.self, from: modelReferenceData)
+                    let costEstimate = decodeJSON(MessageCostEstimate.self, from: costEstimateData)
                     let imageFileNames = decodeJSON([String].self, from: imageFileNamesData)
                     let fileFileNames = decodeJSON([String].self, from: fileFileNamesData)
                     let responseMetrics = decodeJSON(MessageResponseMetrics.self, from: responseMetricsData)
@@ -265,6 +270,8 @@ extension PersistenceGRDBStore {
                         toolCalls: toolCalls,
                         toolCallsPlacement: toolCallsPlacementRaw.flatMap(ToolCallsPlacement.init(rawValue:)),
                         tokenUsage: tokenUsage,
+                        modelReference: modelReference,
+                        costEstimate: costEstimate,
                         audioFileName: row["audio_file_name"],
                         imageFileNames: imageFileNames,
                         fileFileNames: fileFileNames,

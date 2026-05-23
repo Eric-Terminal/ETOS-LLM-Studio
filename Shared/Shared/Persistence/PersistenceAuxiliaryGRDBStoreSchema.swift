@@ -125,6 +125,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         request_body_override_mode TEXT NOT NULL,
                         raw_request_body_json TEXT,
                         request_body_controls_json TEXT,
+                        pricing_json TEXT,
                         sort_index INTEGER NOT NULL,
                         updated_at REAL NOT NULL
                     )
@@ -500,6 +501,20 @@ extension PersistenceAuxiliaryGRDBStore {
                     )
                 """)
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_app_config_updated_at ON app_config(updated_at DESC)")
+            }
+
+            migrator.registerMigration("v10_add_provider_model_pricing") { db in
+                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                    return columns.contains { row in
+                        let name: String = row["name"]
+                        return name == columnName
+                    }
+                }
+
+                if !(try tableHasColumn("provider_models", columnName: "pricing_json")) {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN pricing_json TEXT")
+                }
             }
         }
 

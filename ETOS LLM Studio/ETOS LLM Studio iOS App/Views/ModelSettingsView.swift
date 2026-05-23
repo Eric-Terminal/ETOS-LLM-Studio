@@ -58,6 +58,20 @@ struct ModelSettingsView: View {
                 modelCapabilityRows
             }
 
+            Section(
+                header: Text(NSLocalizedString("计费", comment: "Model billing section title")),
+                footer: Text(NSLocalizedString("用于在消息详情中估算本地费用，仅供参考，实际扣费以服务商为准。", comment: "Model pricing section footer"))
+            ) {
+                NavigationLink {
+                    ModelPricingSettingsView(pricing: $model.pricing)
+                } label: {
+                    LabeledContent(NSLocalizedString("价格设置", comment: "Model pricing settings row title")) {
+                        Text(modelPricingSummary)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section(NSLocalizedString("自定义Body", comment: "")) {
                 Picker(NSLocalizedString("编辑方式", comment: ""), selection: $requestBodyMode) {
                     Text(NSLocalizedString("键值对", comment: "")).tag(Model.RequestBodyOverrideMode.keyValue)
@@ -208,6 +222,26 @@ extension ModelSettingsView {
         case .embedding, .rerank, .speechToText, .textToSpeech:
             return NSLocalizedString("专用模型的输入和输出由用途决定，通常不需要额外配置。", comment: "专用模型能力说明")
         }
+    }
+
+    private var modelPricingSummary: String {
+        guard let pricing = model.pricing?.normalized, !pricing.isEffectivelyEmpty else {
+            return NSLocalizedString("未配置", comment: "Model pricing not configured summary")
+        }
+        let baseCount = [
+            pricing.inputPerMillionTokens,
+            pricing.outputPerMillionTokens,
+            pricing.cacheWritePerMillionTokens,
+            pricing.cacheReadPerMillionTokens
+        ].compactMap { $0 }.count
+        if pricing.tiers.isEmpty {
+            return String(format: NSLocalizedString("已填写 %d 项", comment: "Model pricing configured fields summary"), baseCount)
+        }
+        return String(
+            format: NSLocalizedString("已填写 %d 项，%d 个阶梯", comment: "Model pricing configured fields and tiers summary"),
+            baseCount,
+            pricing.tiers.count
+        )
     }
 
     @ViewBuilder

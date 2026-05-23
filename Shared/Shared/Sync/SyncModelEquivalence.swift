@@ -56,7 +56,8 @@ extension Model {
         capabilities == other.capabilities &&
         requestBodyOverrideMode == other.requestBodyOverrideMode &&
         rawRequestBodyJSON == other.rawRequestBodyJSON &&
-        requestBodyControls == other.requestBodyControls
+        requestBodyControls == other.requestBodyControls &&
+        pricing?.normalized == other.pricing?.normalized
     }
 }
 

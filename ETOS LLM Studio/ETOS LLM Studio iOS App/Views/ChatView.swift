@@ -421,7 +421,8 @@ struct ChatView: View {
                                     },
                                     onOpenMore: {
                                         messageActionSheetPayload = MessageActionSheetPayload(message: message)
-                                    }
+                                    },
+                                    providers: viewModel.providers
                                 )
                                 .id(ChatScrollTargetID.message(state.id))
                             }

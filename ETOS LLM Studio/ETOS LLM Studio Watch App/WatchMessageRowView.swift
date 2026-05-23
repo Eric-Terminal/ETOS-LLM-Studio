@@ -104,7 +104,8 @@ struct WatchMessageRowView: View {
             onSwitchToNextVersion: {
                 viewModel.switchToNextVersion(of: message)
             },
-            onOpenMore: hasActivePermission ? nil : onOpenMore
+            onOpenMore: hasActivePermission ? nil : onOpenMore,
+            providers: viewModel.providers
         )
         .id(state.id)
         .listRowInsets(EdgeInsets())

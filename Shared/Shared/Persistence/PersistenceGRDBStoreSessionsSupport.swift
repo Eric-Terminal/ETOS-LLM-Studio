@@ -342,7 +342,8 @@ extension PersistenceGRDBStore {
             sql: """
             SELECT id, session_id, role, requested_at, content, content_versions_json,
                    current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
-                   token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
+                   token_usage_json, model_reference_json, cost_estimate_json,
+                   audio_file_name, image_file_names_json, file_file_names_json,
                    full_error_content, response_metrics_json,
                    response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                    position, created_at
@@ -367,6 +368,8 @@ extension PersistenceGRDBStore {
                 toolCallsJSON: row["tool_calls_json"],
                 toolCallsPlacement: row["tool_calls_placement"],
                 tokenUsageJSON: row["token_usage_json"],
+                modelReferenceJSON: row["model_reference_json"],
+                costEstimateJSON: row["cost_estimate_json"],
                 audioFileName: row["audio_file_name"],
                 imageFileNamesJSON: row["image_file_names_json"],
                 fileFileNamesJSON: row["file_file_names_json"],
@@ -417,6 +420,8 @@ extension PersistenceGRDBStore {
             toolCallsJSON: encodeJSON(message.toolCalls),
             toolCallsPlacement: message.toolCallsPlacement?.rawValue,
             tokenUsageJSON: encodeJSON(message.tokenUsage),
+            modelReferenceJSON: encodeJSON(message.modelReference),
+            costEstimateJSON: encodeJSON(message.costEstimate),
             audioFileName: message.audioFileName,
             imageFileNamesJSON: encodeJSON(message.imageFileNames),
             fileFileNamesJSON: encodeJSON(message.fileFileNames),
@@ -440,11 +445,12 @@ extension PersistenceGRDBStore {
             INSERT INTO messages (
                 id, session_id, role, requested_at, content, content_versions_json,
                 current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
-                token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
+                token_usage_json, model_reference_json, cost_estimate_json,
+                audio_file_name, image_file_names_json, file_file_names_json,
                 full_error_content, response_metrics_json,
                 response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                 position, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 session_id = excluded.session_id,
                 role = excluded.role,
@@ -456,6 +462,8 @@ extension PersistenceGRDBStore {
                 tool_calls_json = excluded.tool_calls_json,
                 tool_calls_placement = excluded.tool_calls_placement,
                 token_usage_json = excluded.token_usage_json,
+                model_reference_json = excluded.model_reference_json,
+                cost_estimate_json = excluded.cost_estimate_json,
                 audio_file_name = excluded.audio_file_name,
                 image_file_names_json = excluded.image_file_names_json,
                 file_file_names_json = excluded.file_file_names_json,
@@ -480,6 +488,8 @@ extension PersistenceGRDBStore {
                 record.toolCallsJSON,
                 record.toolCallsPlacement,
                 record.tokenUsageJSON,
+                record.modelReferenceJSON,
+                record.costEstimateJSON,
                 record.audioFileName,
                 record.imageFileNamesJSON,
                 record.fileFileNamesJSON,

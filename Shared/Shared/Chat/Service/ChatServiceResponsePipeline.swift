@@ -303,6 +303,7 @@ extension ChatService {
                         speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                     )
                 }
+                attachCostEstimateIfPossible(to: &messages[index], using: requestLogContext)
                 finalAssistantMessage = messages[index]
                 persistAndPublishMessages(messages, for: currentSessionID, keepingSpeedSamplesFor: loadingMessageID)
             }

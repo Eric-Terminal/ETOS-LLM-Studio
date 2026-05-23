@@ -183,6 +183,13 @@ extension ChatBubble {
                 .etFont(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
+        case .costEstimate:
+            if let estimate = resolvedCostEstimate {
+                Label(MessageCostFormatter.formatCompact(estimate), systemImage: item.systemImage)
+                    .etFont(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+                    .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
+            }
         case .versionSwitcher:
             compactVersionIndicator
         }
@@ -240,6 +247,8 @@ extension ChatBubble {
             return message.tokenUsage?.promptTokens != nil
         case .outputTokens:
             return message.tokenUsage?.completionTokens != nil
+        case .costEstimate:
+            return resolvedCostEstimate != nil
         case .versionSwitcher:
             return shouldShowVersionIndicator
         }
@@ -260,6 +269,10 @@ extension ChatBubble {
 
     var outputTokenCount: Int {
         message.tokenUsage?.completionTokens ?? 0
+    }
+
+    var resolvedCostEstimate: MessageCostEstimate? {
+        MessageCostResolver.resolvedCost(for: message, providers: providers)
     }
 
     var customTextColorOverride: Color? {

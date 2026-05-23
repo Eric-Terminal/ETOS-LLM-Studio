@@ -247,6 +247,8 @@ extension SyncEngine {
         let mergedFileFiles = mergeOrderedStrings(local.fileFileNames, incoming.fileFileNames)
         let mergedTokenUsage = mergeTokenUsage(local.tokenUsage, incoming.tokenUsage)
         let mergedResponseMetrics = mergeResponseMetrics(local.responseMetrics, incoming.responseMetrics)
+        let mergedModelReference = incoming.modelReference ?? local.modelReference
+        let mergedCostEstimate = incoming.costEstimate ?? local.costEstimate
         let mergedRequestedAt = minOptional(local.requestedAt, incoming.requestedAt)
 
         var merged = buildMessage(
@@ -262,7 +264,9 @@ extension SyncEngine {
             imageFileNames: mergedImageFiles,
             fileFileNames: mergedFileFiles,
             fullErrorContent: fullErrorContent.value,
-            responseMetrics: mergedResponseMetrics
+            responseMetrics: mergedResponseMetrics,
+            modelReference: mergedModelReference,
+            costEstimate: mergedCostEstimate
         )
         merged.responseGroupID = responseGroupID.value
         merged.responseAttemptID = responseAttemptID.value
@@ -307,7 +311,9 @@ extension SyncEngine {
         imageFileNames: [String]?,
         fileFileNames: [String]?,
         fullErrorContent: String?,
-        responseMetrics: MessageResponseMetrics?
+        responseMetrics: MessageResponseMetrics?,
+        modelReference: MessageModelReference? = nil,
+        costEstimate: MessageCostEstimate? = nil
     ) -> ChatMessage {
         let safeVersions = versions.isEmpty ? [""] : versions
         var message = ChatMessage(
@@ -319,6 +325,8 @@ extension SyncEngine {
             toolCalls: toolCalls,
             toolCallsPlacement: toolCallsPlacement,
             tokenUsage: tokenUsage,
+            modelReference: modelReference,
+            costEstimate: costEstimate,
             audioFileName: audioFileName,
             imageFileNames: imageFileNames,
             fileFileNames: fileFileNames,

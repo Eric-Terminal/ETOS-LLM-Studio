@@ -51,8 +51,8 @@ struct MessageActionBarConfigurationTests {
     @Test("配置编解码会去重并保留助手用户独立顺序")
     func configurationRoundTripKeepsIndependentOrderedItems() {
         let configuration = MessageActionBarConfiguration(
-            assistantItems: [.quickRetry, .copyMessage, .quickRetry, .versionSwitcher],
-            userItems: [.requestTime, .inputTokens, .outputTokens, .requestTime],
+            assistantItems: [.quickRetry, .copyMessage, .costEstimate, .quickRetry, .versionSwitcher],
+            userItems: [.requestTime, .inputTokens, .costEstimate, .outputTokens, .requestTime],
             assistantAlignment: .leading,
             userAlignment: .trailing,
             showsOuterBorder: true
@@ -60,8 +60,8 @@ struct MessageActionBarConfigurationTests {
 
         let decoded = MessageActionBarConfiguration.decoded(from: configuration.encodedString())
 
-        #expect(decoded.assistantItems == [.quickRetry, .copyMessage, .versionSwitcher])
-        #expect(decoded.userItems == [.requestTime, .inputTokens, .outputTokens])
+        #expect(decoded.assistantItems == [.quickRetry, .copyMessage, .costEstimate, .versionSwitcher])
+        #expect(decoded.userItems == [.requestTime, .inputTokens, .costEstimate, .outputTokens])
         #expect(decoded.assistantAlignment == .leading)
         #expect(decoded.userAlignment == .trailing)
         #expect(decoded.showsOuterBorder == true)

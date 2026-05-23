@@ -250,8 +250,29 @@ extension SyncEngine {
                 hasher.combine(key)
                 hasher.combine(value.prettyPrintedCompact())
             }
+            combineModelPricing(model.pricing, into: &hasher)
         }
         return String(hasher.finalize())
+    }
+
+    static func combineModelPricing(_ pricing: ModelPricing?, into hasher: inout Hasher) {
+        guard let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty else {
+            hasher.combine("pricing:nil")
+            return
+        }
+        hasher.combine(pricing.currencySymbol)
+        hasher.combine(pricing.inputPerMillionTokens ?? -1)
+        hasher.combine(pricing.outputPerMillionTokens ?? -1)
+        hasher.combine(pricing.cacheWritePerMillionTokens ?? -1)
+        hasher.combine(pricing.cacheReadPerMillionTokens ?? -1)
+        for tier in pricing.tiers {
+            hasher.combine(tier.id.uuidString)
+            hasher.combine(tier.minimumTokens)
+            hasher.combine(tier.inputPerMillionTokens ?? -1)
+            hasher.combine(tier.outputPerMillionTokens ?? -1)
+            hasher.combine(tier.cacheWritePerMillionTokens ?? -1)
+            hasher.combine(tier.cacheReadPerMillionTokens ?? -1)
+        }
     }
 
     static func computeMCPServerContentHash(_ server: MCPServerConfiguration) -> String {
@@ -336,6 +357,22 @@ extension SyncEngine {
         hasher.combine(message.tokenUsage?.thinkingTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheWriteTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheReadTokens ?? -1)
+        hasher.combine(message.modelReference?.providerID?.uuidString ?? "")
+        hasher.combine(message.modelReference?.providerName ?? "")
+        hasher.combine(message.modelReference?.modelUUID?.uuidString ?? "")
+        hasher.combine(message.modelReference?.modelName ?? "")
+        hasher.combine(message.modelReference?.modelDisplayName ?? "")
+        hasher.combine(message.costEstimate?.currencySymbol ?? "")
+        hasher.combine(message.costEstimate?.totalCost ?? -1)
+        hasher.combine(message.costEstimate?.tierBasisTokens ?? -1)
+        hasher.combine(message.costEstimate?.tierMinimumTokens ?? -1)
+        hasher.combine(message.costEstimate?.isEstimatedFromCurrentPricing ?? false)
+        for component in message.costEstimate?.components ?? [] {
+            hasher.combine(component.kind.rawValue)
+            hasher.combine(component.tokens)
+            hasher.combine(component.pricePerMillionTokens)
+            hasher.combine(component.subtotal)
+        }
         hasher.combine(message.responseMetrics?.schemaVersion ?? 0)
         hasher.combine(message.responseMetrics?.requestStartedAt?.timeIntervalSince1970 ?? -1)
         hasher.combine(message.responseMetrics?.responseCompletedAt?.timeIntervalSince1970 ?? -1)

@@ -331,6 +331,7 @@ extension ContentView {
                 },
                 session: viewModel.currentSession,
                 allMessages: viewModel.allMessagesForSession,
+                providers: viewModel.providers,
                 messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                 totalMessages: viewModel.allMessagesForSession.count
             )
