@@ -27,14 +27,6 @@ extension ChatView {
                 }
                 .presentationDetents([.medium, .large])
             }
-            .sheet(item: $messageInfo) { info in
-                MessageInfoSheet(
-                    payload: info,
-                    onJumpToMessage: { displayIndex in
-                        jumpToMessage(displayIndex: displayIndex)
-                    }
-                )
-            }
             .sheet(item: $messageActionSheetPayload) { payload in
                 MessageActionSheet(
                     payload: payload,
@@ -43,6 +35,7 @@ extension ChatView {
                     displayCurrentVersionIndex: viewModel.displayCurrentVersionIndex(for: payload.message),
                     canRetry: viewModel.canRetry(message: payload.message),
                     allMessages: viewModel.allMessagesForSession,
+                    providers: viewModel.providers,
                     ttsManager: ttsManager,
                     onEdit: { message in
                         dismissMessageActionSheet {
@@ -98,15 +91,8 @@ extension ChatView {
                         UIPasteboard.general.string = message.content
                         messageActionSheetPayload = nil
                     },
-                    onInfo: { message, index in
-                        dismissMessageActionSheet {
-                            messageInfo = MessageInfoPayload(
-                                message: message,
-                                displayIndex: index + 1,
-                                totalCount: viewModel.allMessagesForSession.count,
-                                providers: viewModel.providers
-                            )
-                        }
+                    onJumpToMessage: { displayIndex in
+                        jumpToMessage(displayIndex: displayIndex)
                     }
                 )
                 .presentationDetents([.medium, .large])

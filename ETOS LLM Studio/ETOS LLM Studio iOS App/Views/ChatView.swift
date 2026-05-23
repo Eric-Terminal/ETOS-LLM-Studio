@@ -29,7 +29,6 @@ struct ChatView: View {
     @State var suppressAutoScrollOnce = false
     @State var navigationDestination: ChatNavigationDestination?
     @State var editingMessage: ChatMessage?
-    @State var messageInfo: MessageInfoPayload?
     @State var showBranchOptions = false
     @State var messageToBranch: ChatMessage?
     @State var messageToDelete: ChatMessage?
