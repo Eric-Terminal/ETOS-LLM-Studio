@@ -214,26 +214,28 @@ extension ContentView {
     func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         let scrollAction = {
             pendingHistoryResetWorkItem?.cancel()
+            pendingHistoryResetWorkItem = nil
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
-            scrollToBottom(proxy: proxy, animated: true)
 
             guard viewModel.lazyLoadMessageCount > 0 else {
-                pendingHistoryResetWorkItem = nil
+                scrollToBottom(proxy: proxy, animated: true)
                 return
             }
 
             let workItem = DispatchWorkItem {
+                pendingBottomSnapTask?.cancel()
+                pendingBottomSnapTask = nil
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
                     viewModel.resetLazyLoadState()
                 }
-                scrollToBottom(proxy: proxy, animated: false)
                 pendingHistoryResetWorkItem = nil
+                scheduleDeferredBottomSnap(proxy: proxy)
             }
             pendingHistoryResetWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.56, execute: workItem)
+            DispatchQueue.main.async(execute: workItem)
         }
 
         return Button(action: scrollAction) {
@@ -363,6 +365,20 @@ extension ContentView {
             }
             guard !Task.isCancelled else { return }
             needsImmediateBottomSnap = false
+            pendingBottomSnapTask = nil
+        }
+    }
+
+    func scheduleDeferredBottomSnap(proxy: ScrollViewProxy) {
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            for _ in 0..<3 {
+                guard !Task.isCancelled else { return }
+                scrollToBottom(proxy: proxy, animated: false)
+                try? await Task.sleep(nanoseconds: 30_000_000)
+            }
+            guard !Task.isCancelled else { return }
             pendingBottomSnapTask = nil
         }
     }

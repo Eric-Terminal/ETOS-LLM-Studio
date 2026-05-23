@@ -96,28 +96,31 @@ extension ChatView {
 
     func handleScrollToBottomButtonTap() {
         pendingHistoryResetWorkItem?.cancel()
+        pendingHistoryResetWorkItem = nil
 
         let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
         showScrollToBottom = false
-        scrollToBottom(animated: true, animation: scrollToBottomButtonAnimation)
 
         guard shouldResetHistoryWindow else {
-            pendingHistoryResetWorkItem = nil
+            scrollToBottom(animated: true, animation: scrollToBottomButtonAnimation)
             return
         }
 
         let workItem = DispatchWorkItem {
+            pendingBottomSnapTask?.cancel()
+            pendingBottomSnapTask = nil
+            chatScrollTarget = nil
             var transaction = Transaction()
             transaction.animation = nil
             withTransaction(transaction) {
                 viewModel.resetLazyLoadState()
             }
-            scrollToBottom(animated: false)
             pendingHistoryResetWorkItem = nil
+            scheduleDeferredBottomSnap()
         }
         pendingHistoryResetWorkItem = workItem
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.56, execute: workItem)
+        DispatchQueue.main.async(execute: workItem)
     }
 
     func scheduleImmediateBottomSnap() {
@@ -130,6 +133,20 @@ extension ChatView {
             }
             guard !Task.isCancelled else { return }
             needsImmediateBottomSnap = false
+            pendingBottomSnapTask = nil
+        }
+    }
+
+    func scheduleDeferredBottomSnap() {
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            for _ in 0..<3 {
+                guard !Task.isCancelled else { return }
+                scrollToBottom(animated: false)
+                try? await Task.sleep(nanoseconds: 30_000_000)
+            }
+            guard !Task.isCancelled else { return }
             pendingBottomSnapTask = nil
         }
     }
