@@ -123,13 +123,6 @@ struct MessageActionsView: View {
         
         Form {
             Section {
-                Button {
-                    onCopy()
-                    dismiss()
-                } label: {
-                    Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
-                }
-
                 if !hasAttachments {
                     Button {
                         onEdit()
@@ -190,6 +183,13 @@ struct MessageActionsView: View {
                             systemImage: isMathRenderingEnabled ? "xmark.circle" : "function"
                         )
                     }
+                }
+
+                Button {
+                    onCopy()
+                    dismiss()
+                } label: {
+                    Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
                 }
             }
 
