@@ -65,9 +65,21 @@ struct MessageActionSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                messageInfoSections
-
                 Section {
+                    Button {
+                        onCopy(message)
+                    } label: {
+                        Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
+                    }
+
+                    if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
+                        Button {
+                            onDownloadImages(imageFileNames)
+                        } label: {
+                            Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+                        }
+                    }
+
                     if !hasAttachments {
                         Button {
                             onEdit(message)
@@ -110,24 +122,11 @@ struct MessageActionSheet: View {
                     }
                 }
 
-                Section(NSLocalizedString("导出", comment: "")) {
-                    Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
-
-                    ForEach(MessageActionExportScope.allCases) { scope in
-                        Menu {
-                            ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
-                                Button {
-                                    onExport(format, includeReasoning, scope == .upToMessage ? message : nil)
-                                } label: {
-                                    Label(format.displayName, systemImage: iconName(for: format))
-                                }
-                            }
-                        } label: {
-                            Label(
-                                exportScopeTitle(scope),
-                                systemImage: scope == .upToMessage ? "arrow.up.doc" : "square.and.arrow.up"
-                            )
-                        }
+                Section {
+                    Button(role: .destructive) {
+                        onDelete(message)
+                    } label: {
+                        Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
                     }
                 }
 
@@ -156,29 +155,28 @@ struct MessageActionSheet: View {
                     }
                 }
 
-                Section {
-                    if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
-                        Button {
-                            onDownloadImages(imageFileNames)
+                Section(NSLocalizedString("导出", comment: "")) {
+                    Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
+
+                    ForEach(MessageActionExportScope.allCases) { scope in
+                        Menu {
+                            ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
+                                Button {
+                                    onExport(format, includeReasoning, scope == .upToMessage ? message : nil)
+                                } label: {
+                                    Label(format.displayName, systemImage: iconName(for: format))
+                                }
+                            }
                         } label: {
-                            Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+                            Label(
+                                exportScopeTitle(scope),
+                                systemImage: scope == .upToMessage ? "arrow.up.doc" : "square.and.arrow.up"
+                            )
                         }
                     }
-
-                    Button {
-                        onCopy(message)
-                    } label: {
-                        Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
-                    }
                 }
 
-                Section {
-                    Button(role: .destructive) {
-                        onDelete(message)
-                    } label: {
-                        Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
-                    }
-                }
+                messageInfoSections
             }
             .navigationTitle(NSLocalizedString("消息操作", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
