@@ -236,6 +236,10 @@ private struct KnowledgeBaseDetailView: View {
     @State private var isShowingURLSheet = false
     @State private var isShowingFileImporter = false
     @State private var isImportingFile = false
+    @State private var searchQuery = ""
+    @State private var searchResults: [KnowledgeBaseSearchResult] = []
+    @State private var isSearching = false
+    @State private var hasSearched = false
     @State private var errorMessage: String?
 
     private var base: KnowledgeBase? {
@@ -290,6 +294,39 @@ private struct KnowledgeBaseDetailView: View {
                 }
 
                 Section {
+                    TextField(NSLocalizedString("搜索资料", comment: "知识库检索输入框"), text: $searchQuery)
+                        .textInputAutocapitalization(.never)
+                        .onSubmit {
+                            Task { await search(in: base) }
+                        }
+
+                    Button {
+                        Task { await search(in: base) }
+                    } label: {
+                        Label(NSLocalizedString("搜索分块", comment: "知识库搜索分块按钮"), systemImage: "magnifyingglass")
+                    }
+                    .disabled(isSearching || searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    if isSearching {
+                        ProgressView()
+                    } else if hasSearched, searchResults.isEmpty {
+                        Text(NSLocalizedString("没有匹配结果。", comment: "知识库搜索无结果"))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(searchResults) { result in
+                            KnowledgeBaseSearchResultRow(result: result)
+                        }
+                    }
+                } header: {
+                    Text(NSLocalizedString("检索预览", comment: "知识库检索预览分组"))
+                } footer: {
+                    Text(NSLocalizedString("输入关键词后可以先检查知识库分块是否能被召回；聊天引用会在下一段接入。", comment: "知识库检索预览说明"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
                     if base.items.isEmpty {
                         Text(NSLocalizedString("还没有资料。", comment: "知识库资料空状态"))
                             .etFont(.footnote)
@@ -314,6 +351,10 @@ private struct KnowledgeBaseDetailView: View {
         .navigationTitle(base?.name ?? NSLocalizedString("知识库", comment: "知识库页标题"))
         .task {
             store.refresh()
+        }
+        .onChange(of: searchQuery) { _, _ in
+            hasSearched = false
+            searchResults = []
         }
         .sheet(isPresented: $isShowingNoteSheet) {
             NavigationStack {
@@ -352,6 +393,29 @@ private struct KnowledgeBaseDetailView: View {
         do {
             try await store.deleteItem(baseID: baseID, itemID: item.id)
         } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func search(in base: KnowledgeBase) async {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            searchResults = []
+            hasSearched = false
+            return
+        }
+
+        do {
+            isSearching = true
+            searchResults = try await store.search(
+                query: query,
+                baseID: base.id,
+                limit: base.settings.retrievalDocumentCount
+            )
+            hasSearched = true
+            isSearching = false
+        } catch {
+            isSearching = false
             errorMessage = error.localizedDescription
         }
     }
@@ -426,6 +490,31 @@ private struct KnowledgeBaseItemRow: View {
         let chunkCount = String(format: NSLocalizedString("%d 个分块", comment: "知识库分块数量"), item.chunkCount)
         let charCount = String(format: NSLocalizedString("%d 字", comment: "知识库字符数量"), item.contentCharacterCount)
         return "\(status) · \(chunkCount) · \(charCount)"
+    }
+}
+
+private struct KnowledgeBaseSearchResultRow: View {
+    let result: KnowledgeBaseSearchResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(result.itemTitle)
+                    .etFont(.body)
+                Spacer()
+                Text(result.itemKind.localizedTitle)
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(result.text)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+            Text(String(format: NSLocalizedString("分块 %d", comment: "知识库搜索结果分块序号"), result.chunkIndex + 1))
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
     }
 }
 

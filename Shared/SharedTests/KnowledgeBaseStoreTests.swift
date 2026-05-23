@@ -61,6 +61,32 @@ struct KnowledgeBaseStoreTests {
         #expect(chunks.isEmpty)
     }
 
+    @Test("关键词检索只返回命中的知识库分块")
+    @MainActor
+    func testSearchReturnsMatchingChunks() async throws {
+        let databaseURL = temporaryDatabaseURL()
+        defer { removeSQLiteFiles(at: databaseURL) }
+
+        let store = KnowledgeBaseStore(database: KnowledgeBaseDatabase(databaseURL: databaseURL))
+        let base = try await store.createKnowledgeBase(name: "检索测试")
+        _ = try await store.addNote(
+            to: base.id,
+            title: "API 说明",
+            content: "Cherry Studio 知识库会把资料切成分块，再用于检索。"
+        )
+        _ = try await store.addNote(
+            to: base.id,
+            title: "无关资料",
+            content: "这段只描述主题颜色和显示设置。"
+        )
+
+        let results = try await store.search(query: "知识库 检索", baseID: base.id, limit: 5)
+
+        #expect(results.count == 1)
+        #expect(results.first?.itemTitle == "API 说明")
+        #expect(results.first?.text.contains("分块") == true)
+    }
+
     private func temporaryDatabaseURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("KnowledgeBaseStoreTests-\(UUID().uuidString)", isDirectory: true)

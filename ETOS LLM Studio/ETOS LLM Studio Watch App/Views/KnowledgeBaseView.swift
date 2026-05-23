@@ -189,6 +189,10 @@ private struct KnowledgeBaseDetailView: View {
 
     @State private var isShowingNoteSheet = false
     @State private var isShowingURLSheet = false
+    @State private var searchQuery = ""
+    @State private var searchResults: [KnowledgeBaseSearchResult] = []
+    @State private var isSearching = false
+    @State private var hasSearched = false
     @State private var errorMessage: String?
 
     private var base: KnowledgeBase? {
@@ -226,6 +230,34 @@ private struct KnowledgeBaseDetailView: View {
                 }
 
                 Section {
+                    TextField(NSLocalizedString("搜索资料", comment: "知识库检索输入框"), text: $searchQuery)
+                        .onSubmit {
+                            Task { await search(in: base) }
+                        }
+
+                    Button {
+                        Task { await search(in: base) }
+                    } label: {
+                        Label(NSLocalizedString("搜索", comment: "搜索按钮"), systemImage: "magnifyingglass")
+                    }
+                    .disabled(isSearching || searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    if isSearching {
+                        ProgressView()
+                    } else if hasSearched, searchResults.isEmpty {
+                        Text(NSLocalizedString("没有匹配结果。", comment: "知识库搜索无结果"))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(searchResults) { result in
+                            KnowledgeBaseSearchResultRow(result: result)
+                        }
+                    }
+                } header: {
+                    Text(NSLocalizedString("检索预览", comment: "知识库检索预览分组"))
+                }
+
+                Section {
                     if base.items.isEmpty {
                         Text(NSLocalizedString("还没有资料。", comment: "知识库资料空状态"))
                             .etFont(.caption2)
@@ -251,6 +283,10 @@ private struct KnowledgeBaseDetailView: View {
         .navigationTitle(base?.name ?? NSLocalizedString("知识库", comment: "知识库页标题"))
         .task {
             store.refresh()
+        }
+        .onChange(of: searchQuery) { _, _ in
+            hasSearched = false
+            searchResults = []
         }
         .sheet(isPresented: $isShowingNoteSheet) {
             KnowledgeBaseNoteSheet(baseID: baseID)
@@ -281,6 +317,29 @@ private struct KnowledgeBaseDetailView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func search(in base: KnowledgeBase) async {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            searchResults = []
+            hasSearched = false
+            return
+        }
+
+        do {
+            isSearching = true
+            searchResults = try await store.search(
+                query: query,
+                baseID: base.id,
+                limit: min(base.settings.retrievalDocumentCount, 5)
+            )
+            hasSearched = true
+            isSearching = false
+        } catch {
+            isSearching = false
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 private struct KnowledgeBaseItemRow: View {
@@ -308,6 +367,25 @@ private struct KnowledgeBaseItemRow: View {
         let kind = item.kind.localizedTitle
         let chunkCount = String(format: NSLocalizedString("%d 个分块", comment: "知识库分块数量"), item.chunkCount)
         return "\(kind) · \(status) · \(chunkCount)"
+    }
+}
+
+private struct KnowledgeBaseSearchResultRow: View {
+    let result: KnowledgeBaseSearchResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(result.itemTitle)
+                .etFont(.footnote)
+            Text(result.text)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+            Text(String(format: NSLocalizedString("分块 %d", comment: "知识库搜索结果分块序号"), result.chunkIndex + 1))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
     }
 }
 

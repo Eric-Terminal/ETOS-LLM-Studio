@@ -187,6 +187,41 @@ public struct KnowledgeBaseChunk: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+public struct KnowledgeBaseSearchResult: Identifiable, Codable, Hashable, Sendable {
+    public var id: UUID { chunkID }
+    public var baseID: UUID
+    public var baseName: String
+    public var itemID: UUID
+    public var itemTitle: String
+    public var itemKind: KnowledgeBaseSourceKind
+    public var chunkID: UUID
+    public var chunkIndex: Int
+    public var text: String
+    public var score: Double
+
+    public init(
+        baseID: UUID,
+        baseName: String,
+        itemID: UUID,
+        itemTitle: String,
+        itemKind: KnowledgeBaseSourceKind,
+        chunkID: UUID,
+        chunkIndex: Int,
+        text: String,
+        score: Double
+    ) {
+        self.baseID = baseID
+        self.baseName = baseName
+        self.itemID = itemID
+        self.itemTitle = itemTitle
+        self.itemKind = itemKind
+        self.chunkID = chunkID
+        self.chunkIndex = max(0, chunkIndex)
+        self.text = text
+        self.score = max(0, score)
+    }
+}
+
 public struct KnowledgeBaseURLImportResult: Hashable, Sendable {
     public var title: String
     public var text: String

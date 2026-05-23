@@ -189,6 +189,50 @@ public final class KnowledgeBaseStore: ObservableObject {
         }.value
     }
 
+    public func search(
+        query: String,
+        baseID: UUID? = nil,
+        limit: Int = 12
+    ) async throws -> [KnowledgeBaseSearchResult] {
+        let tokens = KnowledgeBaseTextProcessor.keywordTokens(from: query)
+        guard !tokens.isEmpty else { return [] }
+
+        let database = self.database
+        let resolvedLimit = max(1, min(limit, 30))
+        return try await Task.detached(priority: .userInitiated) { () throws -> [KnowledgeBaseSearchResult] in
+            let candidates = try database.read { db in
+                try Self.searchCandidates(baseID: baseID, in: db)
+            }
+            return candidates
+                .compactMap { candidate -> KnowledgeBaseSearchResult? in
+                    let score = Self.keywordScore(for: candidate.text, tokens: tokens)
+                    guard score > 0 else { return nil }
+                    return KnowledgeBaseSearchResult(
+                        baseID: candidate.baseID,
+                        baseName: candidate.baseName,
+                        itemID: candidate.itemID,
+                        itemTitle: candidate.itemTitle,
+                        itemKind: candidate.itemKind,
+                        chunkID: candidate.chunkID,
+                        chunkIndex: candidate.chunkIndex,
+                        text: candidate.text,
+                        score: score
+                    )
+                }
+                .sorted { lhs, rhs in
+                    if lhs.score != rhs.score {
+                        return lhs.score > rhs.score
+                    }
+                    if lhs.itemTitle != rhs.itemTitle {
+                        return lhs.itemTitle.localizedCaseInsensitiveCompare(rhs.itemTitle) == .orderedAscending
+                    }
+                    return lhs.chunkIndex < rhs.chunkIndex
+                }
+                .prefix(resolvedLimit)
+                .map { $0 }
+        }.value
+    }
+
     @discardableResult
     private func addTextItem(
         to baseID: UUID,
@@ -314,6 +358,84 @@ public final class KnowledgeBaseStore: ObservableObject {
                 updatedAt: Date(timeIntervalSince1970: record.updatedAt)
             )
         }
+    }
+
+    private struct KnowledgeBaseSearchCandidate {
+        var baseID: UUID
+        var baseName: String
+        var itemID: UUID
+        var itemTitle: String
+        var itemKind: KnowledgeBaseSourceKind
+        var chunkID: UUID
+        var chunkIndex: Int
+        var text: String
+    }
+
+    private static func searchCandidates(baseID: UUID?, in db: Database) throws -> [KnowledgeBaseSearchCandidate] {
+        var sql = """
+        SELECT
+            c.id AS chunk_id,
+            c.base_id AS base_id,
+            c.item_id AS item_id,
+            c.chunk_index AS chunk_index,
+            c.text AS text,
+            b.name AS base_name,
+            i.title AS item_title,
+            i.kind AS item_kind
+        FROM knowledge_base_chunks c
+        JOIN knowledge_base_items i ON i.id = c.item_id
+        JOIN knowledge_bases b ON b.id = c.base_id
+        WHERE i.status IN ('chunked', 'indexed')
+        """
+        let rows: [Row]
+        if let baseID {
+            sql += "\nAND c.base_id = ?"
+            sql += "\nORDER BY b.updated_at DESC, i.updated_at DESC, c.chunk_index ASC"
+            rows = try Row.fetchAll(db, sql: sql, arguments: [baseID.uuidString])
+        } else {
+            sql += "\nORDER BY b.updated_at DESC, i.updated_at DESC, c.chunk_index ASC"
+            rows = try Row.fetchAll(db, sql: sql)
+        }
+
+        return rows.map { row in
+            KnowledgeBaseSearchCandidate(
+                baseID: UUID(uuidString: row["base_id"]) ?? UUID(),
+                baseName: row["base_name"],
+                itemID: UUID(uuidString: row["item_id"]) ?? UUID(),
+                itemTitle: row["item_title"],
+                itemKind: KnowledgeBaseSourceKind(rawValue: row["item_kind"]) ?? .note,
+                chunkID: UUID(uuidString: row["chunk_id"]) ?? UUID(),
+                chunkIndex: row["chunk_index"],
+                text: row["text"]
+            )
+        }
+    }
+
+    private static func keywordScore(for text: String, tokens: [String]) -> Double {
+        let normalizedText = KnowledgeBaseTextProcessor.normalizedSearchText(text)
+        guard !normalizedText.isEmpty else { return 0 }
+
+        var score = 0.0
+        for token in tokens {
+            let count = occurrenceCount(of: token, in: normalizedText)
+            guard count > 0 else { return 0 }
+            let tokenWeight = token.count >= 4 ? 1.5 : 1.0
+            score += Double(count) * tokenWeight
+        }
+
+        let lengthPenalty = max(1.0, log(Double(normalizedText.count + 10)))
+        return score / lengthPenalty
+    }
+
+    private static func occurrenceCount(of token: String, in text: String) -> Int {
+        guard !token.isEmpty, !text.isEmpty else { return 0 }
+        var count = 0
+        var searchRange = text.startIndex..<text.endIndex
+        while let range = text.range(of: token, options: [], range: searchRange) {
+            count += 1
+            searchRange = range.upperBound..<text.endIndex
+        }
+        return count
     }
 
     private static func baseRecord(id: UUID, in db: Database) throws -> KnowledgeBaseRecord? {

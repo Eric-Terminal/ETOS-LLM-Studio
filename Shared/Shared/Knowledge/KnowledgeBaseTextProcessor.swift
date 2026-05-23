@@ -37,6 +37,39 @@ enum KnowledgeBaseTextProcessor {
         return String(normalized[..<endIndex])
     }
 
+    static func normalizedSearchText(_ text: String) -> String {
+        normalize(text)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    static func keywordTokens(from query: String) -> [String] {
+        let normalized = normalizedSearchText(query)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+
+        let separators = CharacterSet.whitespacesAndNewlines
+            .union(.punctuationCharacters)
+            .union(.symbols)
+        var tokens = normalized
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if tokens.isEmpty {
+            tokens = [normalized]
+        }
+
+        var seen = Set<String>()
+        var deduplicated: [String] = []
+        for token in tokens {
+            if seen.insert(token).inserted {
+                deduplicated.append(token)
+            }
+        }
+        return Array(deduplicated.prefix(8))
+    }
+
     static func chunks(
         from text: String,
         baseID: UUID,
