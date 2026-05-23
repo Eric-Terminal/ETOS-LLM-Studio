@@ -192,24 +192,29 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         dailyModelTotals: [UsageDailyModelTotal],
         calendar: Calendar
     ) -> [UsageAnalyticsOverviewCard] {
-        [
-            makeOverviewCard(scope: .day, title: NSLocalizedString("今日", comment: "Usage overview card title"), interval: DateInterval(start: calendar.startOfDay(for: referenceDate), end: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: referenceDate)) ?? referenceDate), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar),
-            makeOverviewCard(scope: .week, title: NSLocalizedString("本周", comment: "Usage overview card title"), interval: UsageAnalyticsRuntimeContext.weekInterval(containing: referenceDate, calendar: calendar), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar),
-            makeOverviewCard(scope: .month, title: NSLocalizedString("本月", comment: "Usage overview card title"), interval: UsageAnalyticsRuntimeContext.monthInterval(containing: referenceDate, calendar: calendar), dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, calendar: calendar)
+        let todayStart = calendar.startOfDay(for: referenceDate)
+        let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? referenceDate
+        let dayKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: todayStart, end: todayEnd), calendar: calendar))
+        let weekKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: UsageAnalyticsRuntimeContext.weekInterval(containing: referenceDate, calendar: calendar), calendar: calendar))
+        let monthKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: UsageAnalyticsRuntimeContext.monthInterval(containing: referenceDate, calendar: calendar), calendar: calendar))
+
+        return [
+            makeOverviewCard(scope: .day, title: NSLocalizedString("今日", comment: "Usage overview card title"), dayKeys: dayKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
+            makeOverviewCard(scope: .week, title: NSLocalizedString("本周", comment: "Usage overview card title"), dayKeys: weekKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
+            makeOverviewCard(scope: .month, title: NSLocalizedString("本月", comment: "Usage overview card title"), dayKeys: monthKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
+            makeOverviewCard(scope: .allTime, title: NSLocalizedString("全部", comment: "Usage overview card title"), dayKeys: nil, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals)
         ]
     }
 
     private nonisolated static func makeOverviewCard(
         scope: UsageAnalyticsDetailScope,
         title: String,
-        interval: DateInterval,
+        dayKeys: Set<String>?,
         dailyTotals: [UsageDailyTotal],
-        dailyModelTotals: [UsageDailyModelTotal],
-        calendar: Calendar
+        dailyModelTotals: [UsageDailyModelTotal]
     ) -> UsageAnalyticsOverviewCard {
-        let dayKeys = Set(UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar))
-        let scopedTotals = dailyTotals.filter { dayKeys.contains($0.dayKey) }
-        let scopedModels = dailyModelTotals.filter { dayKeys.contains($0.dayKey) }
+        let scopedTotals = dayKeys.map { keys in dailyTotals.filter { keys.contains($0.dayKey) } } ?? dailyTotals
+        let scopedModels = dayKeys.map { keys in dailyModelTotals.filter { keys.contains($0.dayKey) } } ?? dailyModelTotals
         let requestCount = scopedTotals.reduce(0) { $0 + $1.requestCount }
         let totalTokens = scopedTotals.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
         let errorCount = scopedTotals.reduce(0) { $0 + $1.failedCount }
@@ -322,28 +327,33 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         calendar: Calendar
     ) -> UsageAnalyticsDetailSnapshot {
         let anchorDate = UsageAnalyticsRuntimeContext.date(for: selectedDayKey, calendar: calendar) ?? Date()
-        let interval: DateInterval
         let title: String
         let subtitle: String
+        let orderedDayKeys: [String]
 
         switch selectedScope {
         case .day:
             let start = calendar.startOfDay(for: anchorDate)
             let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
-            interval = DateInterval(start: start, end: end)
+            orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: start, end: end), calendar: calendar)
             title = NSLocalizedString("日详情", comment: "Usage analytics detail title")
             subtitle = dayTitle(for: anchorDate, calendar: calendar)
         case .week:
-            interval = UsageAnalyticsRuntimeContext.weekInterval(containing: anchorDate, calendar: calendar)
+            let interval = UsageAnalyticsRuntimeContext.weekInterval(containing: anchorDate, calendar: calendar)
+            orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar)
             title = NSLocalizedString("周详情", comment: "Usage analytics detail title")
             subtitle = "\(dayTitle(for: interval.start, calendar: calendar)) - \(dayTitle(for: interval.end.addingTimeInterval(-1), calendar: calendar))"
         case .month:
-            interval = UsageAnalyticsRuntimeContext.monthInterval(containing: anchorDate, calendar: calendar)
+            let interval = UsageAnalyticsRuntimeContext.monthInterval(containing: anchorDate, calendar: calendar)
+            orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar)
             title = NSLocalizedString("月详情", comment: "Usage analytics detail title")
             subtitle = compactMonthTitle(for: anchorDate, calendar: calendar)
+        case .allTime:
+            orderedDayKeys = allTimeDayKeys(dailyTotals: dailyTotals, modelTotalsByDayKey: modelTotalsByDayKey, calendar: calendar)
+            title = NSLocalizedString("全部详情", comment: "Usage analytics detail title")
+            subtitle = allTimeSubtitle(for: orderedDayKeys, calendar: calendar)
         }
 
-        let orderedDayKeys = UsageAnalyticsRuntimeContext.dayKeys(in: interval, calendar: calendar)
         let dayKeys = Set(orderedDayKeys)
         let totalsByDayKey = Dictionary(uniqueKeysWithValues: dailyTotals.map { ($0.dayKey, $0) })
         let scopedTotals = dailyTotals.filter { dayKeys.contains($0.dayKey) }
@@ -376,6 +386,22 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 calendar: calendar
             )
         )
+    }
+
+    private nonisolated static func allTimeDayKeys(
+        dailyTotals: [UsageDailyTotal],
+        modelTotalsByDayKey: [String: [UsageDailyModelTotal]],
+        calendar: Calendar
+    ) -> [String] {
+        let rawDayKeys = Set(dailyTotals.map(\.dayKey)).union(modelTotalsByDayKey.keys)
+        let dates = rawDayKeys.compactMap { UsageAnalyticsRuntimeContext.date(for: $0, calendar: calendar) }
+        guard let firstDate = dates.min(), let lastDate = dates.max() else {
+            return []
+        }
+        let start = calendar.startOfDay(for: firstDate)
+        let lastDayStart = calendar.startOfDay(for: lastDate)
+        let end = calendar.date(byAdding: .day, value: 1, to: lastDayStart) ?? lastDayStart
+        return UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: start, end: end), calendar: calendar)
     }
 
     private nonisolated static func makeTokenTrend(
@@ -635,6 +661,22 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             return first.dayLabel
         }
         return "\(first.dayLabel) - \(last.dayLabel)"
+    }
+
+    private nonisolated static func allTimeSubtitle(for dayKeys: [String], calendar: Calendar) -> String {
+        guard
+            let firstKey = dayKeys.first,
+            let lastKey = dayKeys.last,
+            let firstDate = UsageAnalyticsRuntimeContext.date(for: firstKey, calendar: calendar),
+            let lastDate = UsageAnalyticsRuntimeContext.date(for: lastKey, calendar: calendar)
+        else {
+            return NSLocalizedString("完整历史", comment: "Usage analytics all time subtitle")
+        }
+
+        if firstKey == lastKey {
+            return dayTitle(for: firstDate, calendar: calendar)
+        }
+        return "\(dayTitle(for: firstDate, calendar: calendar)) - \(dayTitle(for: lastDate, calendar: calendar))"
     }
 
     private nonisolated static func weekdaySymbols(calendar: Calendar) -> [String] {

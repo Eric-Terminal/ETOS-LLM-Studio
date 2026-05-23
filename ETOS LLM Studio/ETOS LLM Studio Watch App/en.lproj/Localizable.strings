@@ -3483,3 +3483,6 @@
 "当前范围内还没有 Token 趋势数据。" = "No token trend data in the current range.";
 "总 Token %@ · 峰值日 %@" = "Total tokens %@ · Peak day %@";
 "占比 %@ · 错误 %d" = "Share %@ · Errors %d";
+"全部详情" = "All Time Details";
+"完整历史" = "Full History";
+"回看全部历史用量" = "Review all-time usage";

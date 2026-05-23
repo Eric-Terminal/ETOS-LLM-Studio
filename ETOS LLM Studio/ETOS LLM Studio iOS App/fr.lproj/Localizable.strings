@@ -3567,3 +3567,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "当前范围内还没有 Token 趋势数据。" = "No token trend data in the current range.";
 "Token %d · 占比 %@ · 错误 %d" = "Token %d · Share %@ · Errors %d";
 "%@ Token" = "%@ tokens";
+"全部详情" = "Détails de toute la période";
+"完整历史" = "Historique complet";
+"回看全部历史用量" = "Revoir l’utilisation globale";

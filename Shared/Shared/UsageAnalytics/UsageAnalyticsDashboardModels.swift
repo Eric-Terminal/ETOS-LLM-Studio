@@ -12,6 +12,7 @@ public enum UsageAnalyticsDetailScope: String, CaseIterable, Sendable {
     case day
     case week
     case month
+    case allTime
 
     public var title: String {
         switch self {
@@ -21,6 +22,8 @@ public enum UsageAnalyticsDetailScope: String, CaseIterable, Sendable {
             return NSLocalizedString("周", comment: "Usage analytics detail scope")
         case .month:
             return NSLocalizedString("月", comment: "Usage analytics detail scope")
+        case .allTime:
+            return NSLocalizedString("全部", comment: "Usage analytics detail scope")
         }
     }
 }

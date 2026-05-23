@@ -3542,3 +3542,6 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "当前范围内还没有 Token 趋势数据。" = "No token trend data in the current range.";
 "总 Token %@ · 峰值日 %@" = "Total tokens %@ · Peak day %@";
 "占比 %@ · 错误 %d" = "Share %@ · Errors %d";
+"全部详情" = "تفاصيل كل الوقت";
+"完整历史" = "السجل الكامل";
+"回看全部历史用量" = "مراجعة الاستخدام طوال الوقت";

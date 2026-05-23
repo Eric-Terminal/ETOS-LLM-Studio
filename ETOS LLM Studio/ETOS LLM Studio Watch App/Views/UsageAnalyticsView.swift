@@ -471,6 +471,8 @@ struct UsageAnalyticsView: View {
             return NSLocalizedString("本周", comment: "")
         case .month:
             return NSLocalizedString("本月", comment: "")
+        case .allTime:
+            return NSLocalizedString("全部", comment: "")
         }
     }
 }

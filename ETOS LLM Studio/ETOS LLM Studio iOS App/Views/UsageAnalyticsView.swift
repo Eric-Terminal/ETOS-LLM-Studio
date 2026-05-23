@@ -586,6 +586,8 @@ struct UsageAnalyticsView: View {
             return NSLocalizedString("本周", comment: "")
         case .month:
             return NSLocalizedString("本月", comment: "")
+        case .allTime:
+            return NSLocalizedString("全部", comment: "")
         }
     }
 
@@ -604,6 +606,8 @@ struct UsageAnalyticsView: View {
             return NSLocalizedString("查看本周整体用量趋势", comment: "")
         case .month:
             return NSLocalizedString("从月度角度回看使用密度", comment: "")
+        case .allTime:
+            return NSLocalizedString("回看全部历史用量", comment: "")
         }
     }
 
