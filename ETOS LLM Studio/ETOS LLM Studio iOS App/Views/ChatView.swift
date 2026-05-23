@@ -366,6 +366,7 @@ struct ChatView: View {
                                 let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                                 let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                                let messageActionBarContinuesToNext = shouldContinueMessageActionBar(message, with: nextMessage)
                                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
@@ -393,6 +394,7 @@ struct ChatView: View {
                                     showsStreamingIndicators: showsStreamingIndicators,
                                     mergeWithPrevious: mergeWithPrevious,
                                     mergeWithNext: mergeWithNext,
+                                    messageActionBarContinuesToNext: messageActionBarContinuesToNext,
                                     connectsTimelineFromPrevious: connectsTimelineFromPrevious,
                                     connectsTimelineToNext: connectsTimelineToNext,
                                     responseAttemptVersionInfo: viewModel.responseAttemptVersionInfo(for: message),

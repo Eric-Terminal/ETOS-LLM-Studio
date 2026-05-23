@@ -106,7 +106,7 @@ public enum ChatResponseAttemptSupport {
     }
 
     public static func versionInfo(for message: ChatMessage, in messages: [ChatMessage]) -> ChatResponseAttemptVersionInfo? {
-        guard (message.role == .assistant || message.role == .error),
+        guard canCarryResponseAttemptVersionInfo(message),
               let groupID = message.responseGroupID,
               let attemptID = message.responseAttemptID else {
             return nil
@@ -126,8 +126,8 @@ public enum ChatResponseAttemptSupport {
         let visibleAttemptMessages = messages.filter {
             $0.responseGroupID == groupID && $0.responseAttemptID == attemptID
         }
-        let lastDisplayableID = visibleAttemptMessages.last(where: { $0.role == .assistant || $0.role == .error })?.id
-        guard lastDisplayableID == message.id else { return nil }
+        let lastCarrierID = visibleAttemptMessages.last(where: canCarryResponseAttemptVersionInfo)?.id
+        guard lastCarrierID == message.id else { return nil }
 
         return ChatResponseAttemptVersionInfo(
             responseGroupID: groupID,
@@ -299,6 +299,15 @@ public enum ChatResponseAttemptSupport {
         case .assistant, .tool, .system:
             return true
         case .user, .error:
+            return false
+        }
+    }
+
+    private static func canCarryResponseAttemptVersionInfo(_ message: ChatMessage) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .system, .error:
+            return true
+        case .user:
             return false
         }
     }

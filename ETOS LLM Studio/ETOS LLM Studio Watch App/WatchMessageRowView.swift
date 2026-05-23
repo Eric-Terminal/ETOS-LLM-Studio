@@ -16,6 +16,7 @@ struct WatchMessageRowView: View {
     let state: ChatMessageRenderState
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let messageActionBarContinuesToNext: Bool
     let connectsTimelineFromPrevious: Bool
     let connectsTimelineToNext: Bool
     let isLiquidGlassEnabled: Bool
@@ -75,6 +76,7 @@ struct WatchMessageRowView: View {
             showsStreamingIndicators: showsStreamingIndicators,
             mergeWithPrevious: mergeWithPrevious,
             mergeWithNext: mergeWithNext,
+            messageActionBarContinuesToNext: messageActionBarContinuesToNext,
             connectsTimelineFromPrevious: connectsTimelineFromPrevious,
             connectsTimelineToNext: connectsTimelineToNext,
             hasAutoOpenedPendingToolCall: { toolCallID in

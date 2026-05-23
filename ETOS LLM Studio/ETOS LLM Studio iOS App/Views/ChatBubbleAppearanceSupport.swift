@@ -206,7 +206,7 @@ extension ChatBubble {
     }
 
     var shouldShowMessageActionBar: Bool {
-        !configuredMessageActionBarItems.isEmpty
+        !messageActionBarContinuesToNext && !configuredMessageActionBarItems.isEmpty
     }
 
     func isMessageActionBarItemAvailable(_ item: MessageActionBarItem) -> Bool {

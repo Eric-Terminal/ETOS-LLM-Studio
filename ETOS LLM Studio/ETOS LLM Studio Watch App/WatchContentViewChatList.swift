@@ -47,6 +47,7 @@ extension ContentView {
                 let nextMessage = index + 1 < displayedMessages.count ? displayedMessages[index + 1].message : nil
                 let mergeWithPrevious = shouldMergeTurnMessages(previousMessage, with: message)
                 let mergeWithNext = shouldMergeTurnMessages(message, with: nextMessage)
+                let messageActionBarContinuesToNext = shouldContinueMessageActionBar(message, with: nextMessage)
                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                 WatchMessageRowView(
@@ -55,6 +56,7 @@ extension ContentView {
                     state: state,
                     mergeWithPrevious: mergeWithPrevious,
                     mergeWithNext: mergeWithNext,
+                    messageActionBarContinuesToNext: messageActionBarContinuesToNext,
                     connectsTimelineFromPrevious: connectsTimelineFromPrevious,
                     connectsTimelineToNext: connectsTimelineToNext,
                     isLiquidGlassEnabled: isLiquidGlassEnabled,
@@ -259,6 +261,14 @@ extension ContentView {
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard let message, let nextMessage else { return false }
         return ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(message, nextMessage)
+    }
+
+    func shouldContinueMessageActionBar(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard let message, let nextMessage else { return false }
+        if shouldMergeTurnMessages(message, with: nextMessage) {
+            return true
+        }
+        return message.role == .user && nextMessage.role == .user
     }
 
     func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {

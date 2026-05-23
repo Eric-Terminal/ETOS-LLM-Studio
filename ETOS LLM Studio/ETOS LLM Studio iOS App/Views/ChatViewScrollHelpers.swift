@@ -44,6 +44,14 @@ extension ChatView {
         return ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(message, nextMessage)
     }
 
+    func shouldContinueMessageActionBar(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
+        guard let message, let nextMessage else { return false }
+        if shouldMergeTurnMessages(message, with: nextMessage) {
+            return true
+        }
+        return message.role == .user && nextMessage.role == .user
+    }
+
     func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
         guard shouldMergeTurnMessages(message, with: nextMessage) else { return false }
         return hasTimelineLineContent(message) && hasTimelineLineContent(nextMessage)

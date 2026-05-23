@@ -422,6 +422,54 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertFalse(ChatResponseAttemptSupport.shouldMergeAdjacentAssistantTurnMessages(legacyAssistant, userMessage))
     }
 
+    /// 测试工具调用结果位于回复组底部时，由底部气泡承载版本切换信息
+    func testResponseAttemptVersionInfoMovesToBottomToolMessage() throws {
+        let userID = UUID()
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let userMessage = ChatMessage(
+            id: userID,
+            role: .user,
+            content: "需要调用工具的问题",
+            selectedResponseAttemptID: firstAttemptID
+        )
+        let firstAssistant = ChatMessage(
+            role: .assistant,
+            content: "准备调用工具",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let firstToolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            responseGroupID: userID,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondAssistant = ChatMessage(
+            role: .assistant,
+            content: "第二次回复",
+            responseGroupID: userID,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1
+        )
+        let messages = [userMessage, firstAssistant, firstToolResult, secondAssistant]
+
+        XCTAssertNil(ChatResponseAttemptSupport.versionInfo(for: firstAssistant, in: messages))
+
+        let toolInfo = try XCTUnwrap(ChatResponseAttemptSupport.versionInfo(for: firstToolResult, in: messages))
+        XCTAssertEqual(toolInfo.currentAttemptID, firstAttemptID)
+        XCTAssertEqual(toolInfo.currentIndex, 0)
+        XCTAssertEqual(toolInfo.totalCount, 2)
+
+        let switchedMessages = try XCTUnwrap(ChatResponseAttemptSupport.selectNextAttempt(for: firstToolResult, in: messages))
+        XCTAssertEqual(ChatResponseAttemptSupport.visibleMessages(from: switchedMessages).map(\.id), [
+            userMessage.id,
+            secondAssistant.id
+        ])
+    }
+
     /// 测试扩展 Token 字段的序列化与反序列化兼容
     func testExtendedTokenUsageRoundTrip() throws {
         let originalUsage = MessageTokenUsage(

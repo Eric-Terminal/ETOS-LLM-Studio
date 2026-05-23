@@ -34,6 +34,7 @@ struct ChatBubble: View {
     let showsStreamingIndicators: Bool
     let mergeWithPrevious: Bool
     let mergeWithNext: Bool
+    let messageActionBarContinuesToNext: Bool
     let connectsTimelineFromPrevious: Bool
     let connectsTimelineToNext: Bool
     let responseAttemptVersionInfo: ChatResponseAttemptVersionInfo?
@@ -74,6 +75,7 @@ struct ChatBubble: View {
         showsStreamingIndicators: Bool,
         mergeWithPrevious: Bool,
         mergeWithNext: Bool,
+        messageActionBarContinuesToNext: Bool = false,
         connectsTimelineFromPrevious: Bool = false,
         connectsTimelineToNext: Bool = false,
         responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? = nil,
@@ -103,6 +105,7 @@ struct ChatBubble: View {
         self.showsStreamingIndicators = showsStreamingIndicators
         self.mergeWithPrevious = mergeWithPrevious
         self.mergeWithNext = mergeWithNext
+        self.messageActionBarContinuesToNext = messageActionBarContinuesToNext
         self.connectsTimelineFromPrevious = connectsTimelineFromPrevious
         self.connectsTimelineToNext = connectsTimelineToNext
         self.responseAttemptVersionInfo = responseAttemptVersionInfo
