@@ -225,28 +225,64 @@ struct SessionFolderBrowserView: View {
 
     private var listScaffold: some View {
         let entries = mergedEntries
+        let folderEntries = entries.filter {
+            if case .folder = $0 { return true }
+            return false
+        }
+        let sessionEntries = entries.filter {
+            if case .session = $0 { return true }
+            return false
+        }
         let baseList = List {
             if isSearchActive {
                 searchResultSection
             } else {
                 if entries.isEmpty {
-                    Text(emptyStateText)
-                        .foregroundStyle(.secondary)
+                    emptyStateRow
                 }
 
-                ForEach(entries) { entry in
-                    mergedEntryRow(entry)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.visible)
+                if !folderEntries.isEmpty {
+                    Section {
+                        ForEach(folderEntries) { entry in
+                            mergedEntryRow(entry)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    } header: {
+                        SessionGroupHeader(
+                            title: NSLocalizedString("文件夹", comment: ""),
+                            systemImage: "folder.fill"
+                        )
+                    }
+                }
+
+                if !sessionEntries.isEmpty {
+                    Section {
+                        ForEach(sessionEntries) { entry in
+                            mergedEntryRow(entry)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    } header: {
+                        SessionGroupHeader(
+                            title: NSLocalizedString("会话", comment: ""),
+                            systemImage: "bubble.left.and.bubble.right.fill"
+                        )
+                    }
                 }
 
                 if shouldShowLoadingMoreFooter {
                     loadingMoreFooter
                         .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemGroupedBackground))
         .navigationTitle(isRoot ? NSLocalizedString("会话管理", comment: "") : (currentFolder?.name ?? NSLocalizedString("文件夹", comment: "")))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -259,6 +295,15 @@ struct SessionFolderBrowserView: View {
             }
         }
         return applySearchModifier(to: baseList)
+    }
+
+    private var emptyStateRow: some View {
+        Text(emptyStateText)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 28)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 
     var pagedSessionIDs: [UUID] {

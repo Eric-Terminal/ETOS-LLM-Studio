@@ -4,6 +4,7 @@
 // ETOS LLM Studio
 //
 // 提供 iOS 会话列表的行组件、批量选择行与会话信息 Sheet。
+// 行采用卡片样式（圆角 14、淡描边、当前会话三重强调），适合分组浏览。
 // ============================================================================
 
 import Foundation
@@ -34,6 +35,78 @@ struct SessionMoveFolderOption: Identifiable {
     let title: String
 }
 
+// MARK: - 通用卡片容器
+
+/// 会话/文件夹行的统一卡片背景，包含当前态高亮、左侧强调条与描边。
+struct SessionRowCard<Content: View>: View {
+    let isCurrent: Bool
+    let content: () -> Content
+
+    init(isCurrent: Bool = false, @ViewBuilder content: @escaping () -> Content) {
+        self.isCurrent = isCurrent
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(
+                        isCurrent
+                            ? Color.accentColor.opacity(0.10)
+                            : Color(.secondarySystemGroupedBackground)
+                    )
+            }
+            .overlay(alignment: .leading) {
+                if isCurrent {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color.accentColor)
+                        .frame(width: 3)
+                        .padding(.vertical, 10)
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(
+                        isCurrent
+                            ? Color.accentColor.opacity(0.35)
+                            : Color(.separator).opacity(0.35),
+                        lineWidth: 0.5
+                    )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+// MARK: - 分组标题
+
+/// 列表分组标题（文件夹 / 会话 / 搜索结果），样式贴近邮件 App。
+struct SessionGroupHeader: View {
+    let title: String
+    let systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Text(title)
+                .font(.system(size: 11.5, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - 批量选择行
+
 struct BatchSelectableFolderRow: View {
     let folder: SessionFolder
     let sessionCount: Int
@@ -42,32 +115,34 @@ struct BatchSelectableFolderRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                    .padding(.top, 2)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Label {
-                        Text(folder.name)
-                    } icon: {
-                        Image(systemName: "folder")
-                            .foregroundStyle(Color.accentColor)
+            SessionRowCard(isCurrent: false) {
+                HStack(alignment: .center, spacing: 12) {
+                    selectionIndicator
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                            Text(folder.name)
+                                .etFont(.system(size: 15.5, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                        }
+                        Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
+                            .etFont(.system(size: 12.5))
+                            .foregroundStyle(.secondary)
                     }
-                    .etFont(.system(size: 16, weight: .medium))
-
-                    Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
-                        .etFont(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
                 }
-
-                Spacer(minLength: 8)
             }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
+    }
+
+    private var selectionIndicator: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: 20, weight: .regular))
+            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
     }
 }
 
@@ -78,24 +153,30 @@ struct BatchSelectableSessionRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 10) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                SessionListRowContent(
-                    title: session.name,
-                    subtitle: session.topicPrompt,
-                    footnote: nil,
-                    isCurrent: false,
-                    isRunning: false
-                )
+            SessionRowCard(isCurrent: false) {
+                HStack(alignment: .center, spacing: 12) {
+                    selectionIndicator
+                    SessionListRowContentBody(
+                        title: session.name,
+                        subtitle: session.topicPrompt,
+                        footnote: nil,
+                        isCurrent: false,
+                        isRunning: false
+                    )
+                }
             }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
     }
+
+    private var selectionIndicator: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: 20, weight: .regular))
+            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+    }
 }
+
+// MARK: - 普通会话行
 
 struct SessionRow: View {
     let session: ChatSession
@@ -122,111 +203,124 @@ struct SessionRow: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        SessionRowCard(isCurrent: isCurrent) {
             if isEditing {
-                TextField(NSLocalizedString("会话名称", comment: ""), text: $draftName)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focused)
-                    .onSubmit {
-                        commit()
-                    }
-                    .onAppear { focused = true }
-
-                HStack {
-                    Button(NSLocalizedString("保存", comment: "")) {
-                        commit()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button(NSLocalizedString("取消", comment: "")) {
-                        onCancelRename()
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.top, 4)
+                editingBody
             } else {
-                SessionListRowContent(
-                    title: session.name,
-                    subtitle: primarySubtitle,
-                    footnote: secondarySubtitle,
-                    isCurrent: isCurrent,
-                    isRunning: isRunning
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onSelect()
-                }
+                normalBody
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
         .contextMenu {
+            contextMenuContent
+        }
+    }
+
+    private var normalBody: some View {
+        SessionListRowContentBody(
+            title: session.name,
+            subtitle: primarySubtitle,
+            footnote: secondarySubtitle,
+            isCurrent: isCurrent,
+            isRunning: isRunning
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onSelect()
+        }
+    }
+
+    private var editingBody: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField(NSLocalizedString("会话名称", comment: ""), text: $draftName)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit { commit() }
+                .onAppear { focused = true }
+
+            HStack(spacing: 8) {
+                Button(NSLocalizedString("保存", comment: "")) {
+                    commit()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(NSLocalizedString("取消", comment: "")) {
+                    onCancelRename()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        Button {
+            onSelect()
+        } label: {
+            Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
+        }
+
+        Button {
+            onRename()
+        } label: {
+            Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
+        }
+
+        Menu {
             Button {
-                onSelect()
+                onMoveToFolder(nil)
             } label: {
-                Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
+                Label(
+                    NSLocalizedString("未分类", comment: ""),
+                    systemImage: currentFolderID == nil ? "checkmark" : "tray"
+                )
             }
 
-            Button {
-                onRename()
-            } label: {
-                Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
-            }
-
-            Menu {
+            ForEach(moveOptions) { option in
                 Button {
-                    onMoveToFolder(nil)
+                    onMoveToFolder(option.id)
                 } label: {
-                    Label(NSLocalizedString("未分类", comment: ""), systemImage: currentFolderID == nil ? "checkmark" : "tray")
+                    Label(option.title, systemImage: currentFolderID == option.id ? "checkmark" : "folder")
                 }
-
-                ForEach(moveOptions) { option in
-                    Button {
-                        onMoveToFolder(option.id)
-                    } label: {
-                        Label(option.title, systemImage: currentFolderID == option.id ? "checkmark" : "folder")
-                    }
-                }
-            } label: {
-                Label(NSLocalizedString("移动到文件夹", comment: ""), systemImage: "folder")
             }
+        } label: {
+            Label(NSLocalizedString("移动到文件夹", comment: ""), systemImage: "folder")
+        }
 
-            Button {
-                onBranch(false)
-            } label: {
-                Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
-            }
+        Button {
+            onBranch(false)
+        } label: {
+            Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
+        }
 
-            Button {
-                onBranch(true)
-            } label: {
-                Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
-            }
+        Button {
+            onBranch(true)
+        } label: {
+            Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
+        }
 
-            Button {
-                onDeleteLastMessage()
-            } label: {
-                Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
-            }
+        Button {
+            onDeleteLastMessage()
+        } label: {
+            Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
+        }
 
-            Button {
-                onInfo()
-            } label: {
-                Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
-            }
+        Button {
+            onInfo()
+        } label: {
+            Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
+        }
 
-            Button {
-                onSendToCompanion()
-            } label: {
-                Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
-            }
-            .disabled(session.isTemporary)
+        Button {
+            onSendToCompanion()
+        } label: {
+            Label(NSLocalizedString("发送到 Apple Watch", comment: ""), systemImage: "applewatch")
+        }
+        .disabled(session.isTemporary)
 
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
-            }
+        Button(role: .destructive) {
+            onDelete()
+        } label: {
+            Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
         }
     }
 
@@ -257,6 +351,66 @@ struct SessionRow: View {
     }
 }
 
+// MARK: - 行文本主体（标题 + 副信息 + 状态徽标）
+
+/// 卡片内部的文本结构，独立于卡片外壳，便于复用。
+struct SessionListRowContentBody: View {
+    let title: String
+    let subtitle: String?
+    let footnote: String?
+    let isCurrent: Bool
+    let isRunning: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .etFont(.system(size: 15.5, weight: .semibold))
+                    .foregroundStyle(isCurrent ? Color.accentColor : .primary)
+                    .lineLimit(2)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .etFont(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let footnote, !footnote.isEmpty {
+                    Text(footnote)
+                        .etFont(.system(size: 11.5))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            trailingStatus
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var trailingStatus: some View {
+        if isRunning {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+                Text(NSLocalizedString("生成中", comment: ""))
+                    .etFont(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.green)
+            }
+        } else if isCurrent {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+        }
+    }
+}
+
+/// 兼容性外壳：保持旧的调用入口（搜索结果行依然使用此组件）。
+/// 自带头像 + 卡片背景，调用方仅需关心文本字段。
 struct SessionListRowContent: View {
     let title: String
     let subtitle: String?
@@ -265,54 +419,19 @@ struct SessionListRowContent: View {
     let isRunning: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .etFont(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .etFont(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if let footnote, !footnote.isEmpty {
-                    Text(footnote)
-                        .etFont(.system(size: 12))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            trailingStatus
+        SessionRowCard(isCurrent: isCurrent) {
+            SessionListRowContentBody(
+                title: title,
+                subtitle: subtitle,
+                footnote: footnote,
+                isCurrent: isCurrent,
+                isRunning: isRunning
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private var trailingStatus: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            if isRunning {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 8, height: 8)
-            }
-
-            if isCurrent {
-                Image(systemName: "checkmark")
-                    .etFont(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-            }
-        }
-        .frame(minWidth: 22, alignment: .topTrailing)
     }
 }
+
+// MARK: - 会话信息 Sheet
 
 struct SessionInfoPayload: Identifiable {
     let id = UUID()

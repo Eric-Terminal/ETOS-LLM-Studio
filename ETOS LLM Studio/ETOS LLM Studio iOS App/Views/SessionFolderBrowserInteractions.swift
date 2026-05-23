@@ -232,14 +232,21 @@ extension SessionFolderBrowserView {
                     Text(NSLocalizedString("正在搜索历史会话…", comment: ""))
                         .foregroundStyle(.secondary)
                 }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             } else if searchResultSessions.isEmpty {
                 Text(NSLocalizedString("未找到匹配的搜索结果。", comment: ""))
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
             } else {
                 ForEach(pagedSearchResultItems) { result in
                     searchResultRow(result)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.visible)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                         .onAppear {
                             loadMoreSearchResultItemsIfNeeded(currentID: result.id)
                         }
@@ -247,10 +254,15 @@ extension SessionFolderBrowserView {
 
                 if shouldShowLoadingMoreFooter {
                     loadingMoreFooter
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
             }
         } header: {
-            Text(NSLocalizedString("搜索结果", comment: ""))
+            SessionGroupHeader(
+                title: NSLocalizedString("搜索结果", comment: ""),
+                systemImage: "magnifyingglass"
+            )
         } footer: {
             if !isSearching {
                 Text(String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), searchResultItems.count, searchResultSessions.count))
@@ -466,37 +478,31 @@ extension SessionFolderBrowserView {
                     isCurrent: session.id == viewModel.currentSession?.id,
                     isRunning: viewModel.runningSessionIDs.contains(session.id)
                 )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            .contentShape(Rectangle())
         }
     }
 
     @ViewBuilder
     func folderLabel(for folder: SessionFolder) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Label {
-                    Text(folder.name)
-                } icon: {
-                    Image(systemName: "folder")
+        SessionRowCard(isCurrent: false) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
+                    Text(folder.name)
+                        .etFont(.system(size: 15.5, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
                 }
-                .etFont(.system(size: 16, weight: .medium))
 
                 let count = recursiveSessionCount(in: folder.id)
                 Text(String(format: NSLocalizedString("%d 个会话", comment: ""), count))
-                    .etFont(.system(size: 12))
+                    .etFont(.system(size: 12.5))
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
     func toggleBatchMode() {
