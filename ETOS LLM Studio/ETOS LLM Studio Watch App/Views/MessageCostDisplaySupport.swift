@@ -60,39 +60,47 @@ struct MessageCostDetailSection: View {
 
     var body: some View {
         Section(NSLocalizedString("费用", comment: "Message cost section title")) {
-            LabeledContent(NSLocalizedString("估算费用", comment: "Estimated cost label")) {
-                Text(MessageCostFormatter.formatTotal(estimate.totalCost, currencySymbol: estimate.currencySymbol))
-                    .monospacedDigit()
-            }
-
-            LabeledContent(NSLocalizedString("阶梯依据", comment: "Tier basis label")) {
-                Text(String(format: NSLocalizedString("%d tokens", comment: "Token count with unit"), estimate.tierBasisTokens))
-            }
-
-            if let tierMinimumTokens = estimate.tierMinimumTokens {
-                LabeledContent(NSLocalizedString("命中阶梯", comment: "Matched pricing tier label")) {
-                    Text(tierRangeText(minimumTokens: tierMinimumTokens))
-                }
-            }
-
-            ForEach(estimate.components) { component in
-                VStack(alignment: .leading, spacing: 3) {
-                    LabeledContent(component.kind.localizedTitle) {
-                        Text(MessageCostFormatter.formatTotal(component.subtotal, currencySymbol: estimate.currencySymbol))
-                            .monospacedDigit()
-                    }
-                    Text(componentFormula(component))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(estimate.isEstimatedFromCurrentPricing
-                 ? NSLocalizedString("按当前模型价格估算，仅供参考。", comment: "Watch current pricing estimated cost footer")
-                 : NSLocalizedString("仅供参考，以服务商实际扣费为准。", comment: "Estimated cost footer"))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
+            MessageCostDetailRows(estimate: estimate)
         }
+    }
+}
+
+struct MessageCostDetailRows: View {
+    let estimate: MessageCostEstimate
+
+    var body: some View {
+        LabeledContent(NSLocalizedString("估算费用", comment: "Estimated cost label")) {
+            Text(MessageCostFormatter.formatTotal(estimate.totalCost, currencySymbol: estimate.currencySymbol))
+                .monospacedDigit()
+        }
+
+        LabeledContent(NSLocalizedString("阶梯依据", comment: "Tier basis label")) {
+            Text(String(format: NSLocalizedString("%d tokens", comment: "Token count with unit"), estimate.tierBasisTokens))
+        }
+
+        if let tierMinimumTokens = estimate.tierMinimumTokens {
+            LabeledContent(NSLocalizedString("命中阶梯", comment: "Matched pricing tier label")) {
+                Text(tierRangeText(minimumTokens: tierMinimumTokens))
+            }
+        }
+
+        ForEach(estimate.components) { component in
+            VStack(alignment: .leading, spacing: 3) {
+                LabeledContent(component.kind.localizedTitle) {
+                    Text(MessageCostFormatter.formatTotal(component.subtotal, currencySymbol: estimate.currencySymbol))
+                        .monospacedDigit()
+                }
+                Text(componentFormula(component))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+
+        Text(estimate.isEstimatedFromCurrentPricing
+             ? NSLocalizedString("按当前模型价格估算，仅供参考。", comment: "Watch current pricing estimated cost footer")
+             : NSLocalizedString("仅供参考，以服务商实际扣费为准。", comment: "Estimated cost footer"))
+            .etFont(.caption2)
+            .foregroundStyle(.secondary)
     }
 
     private func componentFormula(_ component: MessageCostComponent) -> String {

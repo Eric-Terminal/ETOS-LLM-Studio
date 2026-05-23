@@ -115,6 +115,12 @@ struct MessageActionsView: View {
         ChatResponseAttemptSupport.visibleMessages(from: allMessages)
     }
 
+    private var resolvedCostEstimate: MessageCostEstimate? {
+        let estimate = MessageCostResolver.resolvedCost(for: message, providers: providers)
+        guard let estimate, estimate.totalCost > 0 else { return nil }
+        return estimate
+    }
+
     // MARK: - 视图主体
     
     var body: some View {
@@ -273,11 +279,16 @@ struct MessageActionsView: View {
                     } else if let totalOnly = usage.totalTokens, usage.promptTokens == nil && usage.completionTokens == nil {
                         LabeledContent(NSLocalizedString("总计", comment: ""), value: "\(totalOnly)")
                     }
+                    if let costEstimate = resolvedCostEstimate {
+                        MessageCostDetailRows(estimate: costEstimate)
+                    }
                 }
             }
 
-            if let costEstimate = MessageCostResolver.resolvedCost(for: message, providers: providers) {
-                MessageCostDetailSection(estimate: costEstimate)
+            if message.tokenUsage?.hasData != true, let costEstimate = resolvedCostEstimate {
+                Section(NSLocalizedString("Token 用量", comment: "")) {
+                    MessageCostDetailRows(estimate: costEstimate)
+                }
             }
 
             if let metrics = message.responseMetrics,

@@ -58,6 +58,15 @@ struct MessageActionSheet: View {
         allMessages.count
     }
 
+    private var resolvedCostEstimate: MessageCostEstimate? {
+        let estimate = MessageCostResolver.resolvedCost(
+            for: message,
+            providers: providers
+        )
+        guard let estimate, estimate.totalCost > 0 else { return nil }
+        return estimate
+    }
+
     private var isSpeakingThisMessage: Bool {
         ttsManager.currentSpeakingMessageID == message.id && ttsManager.isSpeaking
     }
@@ -293,20 +302,23 @@ struct MessageActionSheet: View {
                         Text("\(totalOnly)")
                     }
                 }
+                if let costEstimate = resolvedCostEstimate {
+                    MessageCostDetailRows(estimate: costEstimate)
+                }
             }
         } else if let metrics = message.responseMetrics, metrics.isTokenPerSecondEstimated {
             Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
                 Text(NSLocalizedString("当前响应未返回官方 token 用量（仅有估算速度）。", comment: "No official token usage returned hint"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
+                if let costEstimate = resolvedCostEstimate {
+                    MessageCostDetailRows(estimate: costEstimate)
+                }
             }
-        }
-
-        if let costEstimate = MessageCostResolver.resolvedCost(
-            for: message,
-            providers: providers
-        ), costEstimate.totalCost > 0 {
-            MessageCostDetailSection(estimate: costEstimate)
+        } else if let costEstimate = resolvedCostEstimate {
+            Section(NSLocalizedString("Token 用量", comment: "Token usage section title")) {
+                MessageCostDetailRows(estimate: costEstimate)
+            }
         }
 
         if let metrics = message.responseMetrics,
