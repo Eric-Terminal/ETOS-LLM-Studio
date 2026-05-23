@@ -47,6 +47,7 @@ extension ChatView {
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
         needsImmediateBottomSnap = false
+        bottomSnapSuppressionExpiresAt = Date().addingTimeInterval(2)
     }
 
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {

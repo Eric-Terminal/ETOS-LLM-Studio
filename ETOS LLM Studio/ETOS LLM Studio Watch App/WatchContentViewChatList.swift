@@ -204,6 +204,25 @@ extension ContentView {
             resolvePendingSearchJumpIfNeeded()
         }
         .onAppear {
+            if let expiresAt = bottomSnapSuppressionExpiresAt {
+                bottomSnapSuppressionExpiresAt = nil
+                guard expiresAt > Date() else {
+                    shouldKeepBottomPinned = true
+                    needsImmediateBottomSnap = true
+                    scheduleImmediateBottomSnap(proxy: proxy)
+                    resolvePendingSearchJumpIfNeeded()
+                    return
+                }
+                resolvePendingSearchJumpIfNeeded()
+                DispatchQueue.main.async {
+                    if let request = pendingJumpRequest {
+                        withAnimation {
+                            proxy.scrollTo(request.messageID, anchor: .center)
+                        }
+                    }
+                }
+                return
+            }
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
             scheduleImmediateBottomSnap(proxy: proxy)
@@ -337,6 +356,7 @@ extension ContentView {
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
         needsImmediateBottomSnap = false
+        bottomSnapSuppressionExpiresAt = Date().addingTimeInterval(2)
         shouldKeepBottomPinned = false
         shouldForceScrollToBottom = false
     }

@@ -73,6 +73,7 @@ struct ChatView: View {
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var needsImmediateBottomSnap: Bool = true
+    @State var bottomSnapSuppressionExpiresAt: Date?
     @State var pendingJumpRequest: MessageJumpRequest?
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
@@ -486,6 +487,22 @@ struct ChatView: View {
                     resolvePendingSearchJumpIfNeeded()
                 }
                 .onAppear {
+                    if let expiresAt = bottomSnapSuppressionExpiresAt {
+                        bottomSnapSuppressionExpiresAt = nil
+                        guard expiresAt > Date() else {
+                            needsImmediateBottomSnap = true
+                            scheduleImmediateBottomSnap()
+                            resolvePendingSearchJumpIfNeeded()
+                            return
+                        }
+                        resolvePendingSearchJumpIfNeeded()
+                        DispatchQueue.main.async {
+                            if let request = pendingJumpRequest {
+                                scrollToMessage(request.messageID)
+                            }
+                        }
+                        return
+                    }
                     needsImmediateBottomSnap = true
                     scheduleImmediateBottomSnap()
                     resolvePendingSearchJumpIfNeeded()
