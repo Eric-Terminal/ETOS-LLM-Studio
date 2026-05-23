@@ -17,6 +17,7 @@ struct MessageActionsView: View {
     
     let message: ChatMessage
     let canRetry: Bool
+    let onCopy: () -> Void
     let onEdit: () -> Void
     let onRetry: (ChatMessage) -> Void
     let onSpeak: (ChatMessage) -> Void
@@ -40,6 +41,7 @@ struct MessageActionsView: View {
     init(
         message: ChatMessage,
         canRetry: Bool,
+        onCopy: @escaping () -> Void,
         onEdit: @escaping () -> Void,
         onRetry: @escaping (ChatMessage) -> Void,
         onSpeak: @escaping (ChatMessage) -> Void,
@@ -61,6 +63,7 @@ struct MessageActionsView: View {
     ) {
         self.message = message
         self.canRetry = canRetry
+        self.onCopy = onCopy
         self.onEdit = onEdit
         self.onRetry = onRetry
         self.onSpeak = onSpeak
@@ -120,6 +123,13 @@ struct MessageActionsView: View {
         
         Form {
             Section {
+                Button {
+                    onCopy()
+                    dismiss()
+                } label: {
+                    Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
+                }
+
                 if !hasAttachments {
                     Button {
                         onEdit()

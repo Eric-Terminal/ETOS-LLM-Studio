@@ -293,6 +293,11 @@ extension ContentView {
             MessageActionsView(
                 message: message,
                 canRetry: viewModel.canRetry(message: message),
+                onCopy: {
+                    viewModel.applyToolInputDraftRequest(
+                        AppToolInputDraftRequest(text: message.content, mode: .replace)
+                    )
+                },
                 onEdit: {
                     viewModel.messageToEdit = message
                     viewModel.activeSheet = .editMessage
