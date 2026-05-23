@@ -1,48 +1,275 @@
+/* =============================================================================
+ * ETOS LLM Studio 文档站 —— 主题样式
+ * 设计语言遵循 DESIGN.md（Apple 风格分析）：
+ *   - 单一品牌强调色 Action Blue（#0066cc）
+ *   - SF Pro Display / SF Pro Text 字体堆栈，显示尺寸采用负字距
+ *   - 白 / Parchment(#f5f5f7) / 近黑 Tile(#272729) 三层表面
+ *   - 全胶囊主按钮 + 1px Hairline 边框的工具卡片
+ *   - 仅产品摄影才有阴影（rgba(0,0,0,0.22) 3px 5px 30px），UI Chrome 不加阴影
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * 设计令牌（直接来源于 DESIGN.md 的 YAML frontmatter）
+ * ----------------------------------------------------------------------------- */
 :root {
-  --vp-c-brand-1: #52525b;
-  --vp-c-brand-2: #3f3f46;
-  --vp-c-brand-3: #27272a;
-  --vp-c-brand-soft: rgba(82, 82, 91, 0.12);
-  --vp-button-brand-bg: #27272a;
-  --vp-button-brand-hover-bg: #3f3f46;
-  --vp-button-brand-active-bg: #18181b;
-  --vp-button-brand-border: #27272a;
-  --vp-button-brand-hover-border: #3f3f46;
-  --vp-button-brand-active-border: #18181b;
-  --vp-button-brand-text: #fafafa;
-  --vp-home-hero-name-color: #18181b;
+  /* —— 颜色 —— */
+  --etos-primary: #0066cc;
+  --etos-primary-focus: #0071e3;
+  --etos-primary-on-dark: #2997ff;
+  --etos-ink: #1d1d1f;
+  --etos-ink-muted-80: #333333;
+  --etos-ink-muted-48: #7a7a7a;
+  --etos-body-muted: #cccccc;
+  --etos-divider-soft: #f0f0f0;
+  --etos-hairline: #e0e0e0;
+  --etos-canvas: #ffffff;
+  --etos-canvas-parchment: #f5f5f7;
+  --etos-surface-pearl: #fafafc;
+  --etos-surface-tile-1: #272729;
+  --etos-surface-tile-2: #2a2a2c;
+  --etos-surface-tile-3: #252527;
+  --etos-surface-black: #000000;
+  --etos-chip-translucent: rgba(210, 210, 215, 0.64);
+
+  /* —— 字体堆栈：优先解析为系统 SF Pro —— */
+  --etos-font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --etos-font-text: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", sans-serif;
+
+  /* —— 圆角 —— */
+  --etos-radius-sm: 8px;
+  --etos-radius-md: 11px;
+  --etos-radius-lg: 18px;
+  --etos-radius-pill: 9999px;
+
+  /* —— 阴影：全站唯一一颗，仅用在产品图上 —— */
+  --etos-shadow-product: 3px 5px 30px rgba(0, 0, 0, 0.22);
+
+  /* —— VitePress 品牌色覆盖 —— */
+  --vp-c-brand-1: var(--etos-primary);
+  --vp-c-brand-2: var(--etos-primary-focus);
+  --vp-c-brand-3: var(--etos-primary);
+  --vp-c-brand-soft: rgba(0, 102, 204, 0.1);
+
+  /* —— VitePress 文字色覆盖 —— */
+  --vp-c-text-1: var(--etos-ink);
+  --vp-c-text-2: var(--etos-ink-muted-80);
+  --vp-c-text-3: var(--etos-ink-muted-48);
+
+  /* —— VitePress 表面 —— */
+  --vp-c-bg: var(--etos-canvas);
+  --vp-c-bg-alt: var(--etos-canvas-parchment);
+  --vp-c-bg-soft: var(--etos-canvas-parchment);
+  --vp-c-bg-elv: var(--etos-canvas);
+
+  /* —— VitePress 分割线 —— */
+  --vp-c-divider: var(--etos-hairline);
+  --vp-c-gutter: var(--etos-divider-soft);
+  --vp-c-border: var(--etos-hairline);
+
+  /* —— 主按钮（VitePress brand button）映射到 Action Blue —— */
+  --vp-button-brand-bg: var(--etos-primary);
+  --vp-button-brand-hover-bg: var(--etos-primary-focus);
+  --vp-button-brand-active-bg: var(--etos-primary);
+  --vp-button-brand-border: var(--etos-primary);
+  --vp-button-brand-hover-border: var(--etos-primary-focus);
+  --vp-button-brand-active-border: var(--etos-primary);
+  --vp-button-brand-text: #ffffff;
+
+  /* —— Alt 按钮：ghost pill，透明底 + 蓝边蓝字 —— */
+  --vp-button-alt-bg: transparent;
+  --vp-button-alt-hover-bg: rgba(0, 102, 204, 0.06);
+  --vp-button-alt-active-bg: rgba(0, 102, 204, 0.12);
+  --vp-button-alt-border: var(--etos-primary);
+  --vp-button-alt-hover-border: var(--etos-primary);
+  --vp-button-alt-active-border: var(--etos-primary);
+  --vp-button-alt-text: var(--etos-primary);
+
+  /* —— Hero —— */
+  --vp-home-hero-name-color: var(--etos-ink);
   --vp-home-hero-name-background: none;
   --vp-home-hero-image-background-image: none;
   --vp-home-hero-image-filter: none;
+
+  /* —— 字体根 —— */
+  --vp-font-family-base: var(--etos-font-text);
+  --vp-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* -----------------------------------------------------------------------------
+ * Dark Mode：参考 DESIGN.md 的 near-black tile 体系
+ * 浅蓝（#2997ff）替换深色表面下的 Action Blue，避免与暗底融合
+ * ----------------------------------------------------------------------------- */
 .dark {
-  --vp-c-brand-1: #d4d4d8;
-  --vp-c-brand-2: #a1a1aa;
-  --vp-c-brand-3: #71717a;
-  --vp-c-brand-soft: rgba(212, 212, 216, 0.14);
-  --vp-button-brand-bg: #f4f4f5;
-  --vp-button-brand-hover-bg: #e4e4e7;
-  --vp-button-brand-active-bg: #d4d4d8;
-  --vp-button-brand-border: #f4f4f5;
-  --vp-button-brand-hover-border: #e4e4e7;
-  --vp-button-brand-active-border: #d4d4d8;
-  --vp-button-brand-text: #18181b;
-  --vp-home-hero-name-color: #fafafa;
+  --vp-c-brand-1: var(--etos-primary-on-dark);
+  --vp-c-brand-2: #5aaeff;
+  --vp-c-brand-3: var(--etos-primary-on-dark);
+  --vp-c-brand-soft: rgba(41, 151, 255, 0.14);
+
+  --vp-c-text-1: #ffffff;
+  --vp-c-text-2: var(--etos-body-muted);
+  --vp-c-text-3: #8e8e93;
+
+  --vp-c-bg: var(--etos-surface-tile-1);
+  --vp-c-bg-alt: var(--etos-surface-tile-3);
+  --vp-c-bg-soft: var(--etos-surface-tile-2);
+  --vp-c-bg-elv: var(--etos-surface-tile-2);
+
+  --vp-c-divider: rgba(255, 255, 255, 0.1);
+  --vp-c-gutter: rgba(255, 255, 255, 0.06);
+  --vp-c-border: rgba(255, 255, 255, 0.1);
+
+  --vp-button-brand-bg: var(--etos-primary-on-dark);
+  --vp-button-brand-hover-bg: #5aaeff;
+  --vp-button-brand-active-bg: var(--etos-primary-on-dark);
+  --vp-button-brand-border: var(--etos-primary-on-dark);
+  --vp-button-brand-hover-border: #5aaeff;
+  --vp-button-brand-active-border: var(--etos-primary-on-dark);
+  --vp-button-brand-text: var(--etos-surface-tile-1);
+
+  --vp-button-alt-bg: transparent;
+  --vp-button-alt-hover-bg: rgba(41, 151, 255, 0.1);
+  --vp-button-alt-active-bg: rgba(41, 151, 255, 0.18);
+  --vp-button-alt-border: var(--etos-primary-on-dark);
+  --vp-button-alt-hover-border: var(--etos-primary-on-dark);
+  --vp-button-alt-active-border: var(--etos-primary-on-dark);
+  --vp-button-alt-text: var(--etos-primary-on-dark);
+
+  --vp-home-hero-name-color: #ffffff;
 }
 
+/* -----------------------------------------------------------------------------
+ * 全局排版：SF Pro + 17px Body + Apple Tight 字距
+ * ----------------------------------------------------------------------------- */
+html {
+  font-family: var(--etos-font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body,
+.vp-doc {
+  font-family: var(--etos-font-text);
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.374px;
+}
+
+/* —— Heading 全用 Display 字体 + 负字距 —— */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4,
+.vp-doc h5,
+.vp-doc h6 {
+  font-family: var(--etos-font-display);
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc h1 {
+  font-size: 40px;
+  line-height: 1.1;
+  letter-spacing: -0.28px;
+}
+
+.vp-doc h2 {
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.224px;
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 24px;
+  margin-top: 48px;
+}
+
+.vp-doc h3 {
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.224px;
+}
+
+.vp-doc p,
+.vp-doc li {
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.374px;
+}
+
+.vp-doc strong {
+  font-weight: 600;
+}
+
+/* -----------------------------------------------------------------------------
+ * Hero（首页）：headline 56/600/-0.28，tagline 21/600
+ * ----------------------------------------------------------------------------- */
+.VPHome .VPHero .name,
+.VPHome .VPHero .text {
+  font-family: var(--etos-font-display);
+  font-weight: 600;
+  font-size: 56px;
+  line-height: 1.07;
+  letter-spacing: -0.28px;
+}
+
+.VPHome .VPHero .tagline {
+  font-family: var(--etos-font-display);
+  font-weight: 400;
+  font-size: 21px;
+  line-height: 1.3;
+  letter-spacing: 0.196px;
+  color: var(--vp-c-text-2);
+  margin-top: 16px;
+}
+
+@media (max-width: 1068px) {
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    font-size: 40px;
+    letter-spacing: -0.224px;
+  }
+}
+
+@media (max-width: 640px) {
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    font-size: 34px;
+  }
+
+  .VPHome .VPHero .tagline {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 419px) {
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    font-size: 28px;
+  }
+}
+
+/* —— Hero 配图：剥离原本的边框 / 阴影；只在产品图上挂唯一一颗系统阴影 —— */
 .VPHome .VPHero .image {
-  overflow: hidden;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 24px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+  box-shadow: none;
 }
 
-.VPHome .VPHero .image img {
+.VPHome .VPHero .image img,
+.VPHome .VPHero .image .image-src {
   display: block;
   width: 100%;
-  border-radius: inherit;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  border-radius: var(--etos-radius-lg);
+  box-shadow: var(--etos-shadow-product);
 }
 
 .VPHome .VPHero .image .image-container {
@@ -51,31 +278,338 @@
   transform: none;
 }
 
-.VPHome .VPHero .image .image-src {
-  position: relative;
-  top: auto;
-  left: auto;
-  max-width: none;
-  max-height: none;
-  width: 100%;
-  height: auto;
-  transform: none;
+/* -----------------------------------------------------------------------------
+ * 按钮：胶囊主按钮（brand）/ Ghost 胶囊副按钮（alt）
+ * 按 DESIGN.md 给出的 padding 11px × 22px + 17px / 400
+ * ----------------------------------------------------------------------------- */
+.VPButton {
+  font-family: var(--etos-font-text);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: -0.374px;
+  border-radius: var(--etos-radius-pill) !important;
+  padding: 11px 22px !important;
+  transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.VPButton.medium {
+  padding: 11px 22px !important;
+  font-size: 17px;
+}
+
+.VPButton.big {
+  padding: 14px 28px !important;
+  font-size: 18px;
+  font-weight: 300; /* DESIGN.md：button-large 字重 300 是有意为之 */
+  letter-spacing: 0;
+}
+
+.VPButton:active {
+  transform: scale(0.95);
+}
+
+.VPButton:focus-visible {
+  outline: 2px solid var(--etos-primary-focus);
+  outline-offset: 2px;
+}
+
+/* —— 文档内行内链接：Action Blue，文字下划线偏移 —— */
+.vp-doc a {
+  color: var(--vp-c-brand-1);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  font-weight: 400;
+}
+
+.vp-doc a:hover {
+  text-decoration-color: var(--vp-c-brand-2);
+}
+
+/* -----------------------------------------------------------------------------
+ * Feature 卡片 = DESIGN.md 的 store-utility-card
+ * 白底 + 1px hairline + 18px 圆角 + 24px padding，禁用阴影
+ * ----------------------------------------------------------------------------- */
+.VPHome .VPFeatures .container {
+  padding: 0 24px;
 }
 
 .VPHome .VPFeature {
-  border: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-soft);
+  background: var(--etos-canvas);
+  border: 1px solid var(--etos-hairline);
+  border-radius: var(--etos-radius-lg);
+  padding: 24px;
+  box-shadow: none;
+  transition: border-color 0.2s ease, transform 0.15s ease;
+}
+
+.VPHome .VPFeature:hover {
+  border-color: var(--etos-primary);
+}
+
+.VPHome .VPFeature .icon {
+  background: var(--etos-canvas-parchment);
+  border-radius: var(--etos-radius-md);
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  border: 0;
+}
+
+.VPHome .VPFeature .title {
+  font-family: var(--etos-font-display);
+  font-weight: 600;
+  font-size: 21px;
+  line-height: 1.19;
+  letter-spacing: 0;
+  color: var(--vp-c-text-1);
+  margin-top: 20px;
+}
+
+.VPHome .VPFeature .details {
+  font-family: var(--etos-font-text);
+  font-size: 15px;
+  line-height: 1.47;
+  letter-spacing: -0.224px;
+  color: var(--vp-c-text-2);
+  margin-top: 8px;
+}
+
+.dark .VPHome .VPFeature {
+  background: var(--etos-surface-tile-2);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark .VPHome .VPFeature .icon {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* -----------------------------------------------------------------------------
+ * 顶部 Nav：保持极薄的 Apple 全局导航观感
+ *   - 浅色模式：白底 + 底部 hairline；不加阴影
+ *   - 深色模式：近黑底
+ * ----------------------------------------------------------------------------- */
+.VPNav,
+.VPNavBar {
+  background-color: transparent;
+}
+
+.VPNavBar.has-sidebar .content-body,
+.VPNavBar .content-body {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.dark .VPNavBar .content-body {
+  background: rgba(29, 29, 31, 0.72);
+}
+
+.VPNavBar:not(.home) {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.VPNavBarTitle .title {
+  font-family: var(--etos-font-display);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.374px;
+  color: var(--vp-c-text-1);
+  border: 0;
+}
+
+.VPNavBarMenuLink,
+.VPNavBarMenuGroup .text {
+  font-family: var(--etos-font-text);
+  font-size: 14px;
+  letter-spacing: -0.224px;
+  font-weight: 400;
+}
+
+/* -----------------------------------------------------------------------------
+ * 侧边栏：扁平、原生、靠 hairline 划区域，不堆背景色
+ * ----------------------------------------------------------------------------- */
+.VPSidebar {
+  background-color: var(--vp-c-bg);
+  border-right: 1px solid var(--vp-c-divider);
+}
+
+.VPSidebarItem .text {
+  font-family: var(--etos-font-text);
+  font-size: 14px;
+  letter-spacing: -0.224px;
+}
+
+.VPSidebarItem.level-0 > .item > .text {
+  font-family: var(--etos-font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.224px;
+  color: var(--vp-c-text-1);
+}
+
+.VPSidebarItem.is-active > .item .link .text {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+/* -----------------------------------------------------------------------------
+ * 文档容器：白底、放气
+ * ----------------------------------------------------------------------------- */
+.VPContent.is-home {
+  background: var(--etos-canvas);
 }
 
 .vp-doc table {
   display: table;
   width: 100%;
+  font-size: 15px;
 }
 
-.vp-doc a {
-  text-underline-offset: 3px;
+.vp-doc th,
+.vp-doc td {
+  border-color: var(--vp-c-divider);
 }
 
+.vp-doc blockquote {
+  border-left: 3px solid var(--etos-primary);
+  color: var(--vp-c-text-2);
+  font-style: normal;
+}
+
+/* —— 代码块：弱化背景，沿用 Apple 的低对比偏好 —— */
+.vp-doc div[class*="language-"] {
+  background: var(--etos-canvas-parchment);
+  border-radius: var(--etos-radius-md);
+}
+
+.dark .vp-doc div[class*="language-"] {
+  background: var(--etos-surface-tile-3);
+}
+
+.vp-doc :not(pre) > code {
+  background: var(--etos-canvas-parchment);
+  color: var(--etos-ink-muted-80);
+  border-radius: var(--etos-radius-sm);
+  padding: 2px 6px;
+  font-size: 0.92em;
+}
+
+.dark .vp-doc :not(pre) > code {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* -----------------------------------------------------------------------------
+ * 搜索框：胶囊形，呼应 DESIGN.md 的 search-input
+ * ----------------------------------------------------------------------------- */
+.DocSearch-Button {
+  border-radius: var(--etos-radius-pill) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--etos-canvas);
+  height: 40px;
+  padding: 0 16px;
+}
+
+.dark .DocSearch-Button {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* -----------------------------------------------------------------------------
+ * 自定义组件：截图画廊（首页 etos-gallery）
+ *   按 store-utility-card 重写：hairline + 18px 圆角，禁用阴影
+ *   截图本身按 DESIGN.md 的「产品摄影」规则挂唯一一颗系统阴影
+ * ----------------------------------------------------------------------------- */
+.etos-gallery {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 32px 0 0;
+}
+
+.etos-gallery figure {
+  margin: 0;
+  padding: 24px;
+  background: var(--etos-canvas);
+  border: 1px solid var(--etos-hairline);
+  border-radius: var(--etos-radius-lg);
+  box-shadow: none;
+  transition: border-color 0.2s ease;
+}
+
+.etos-gallery figure:hover {
+  border-color: var(--etos-primary);
+}
+
+.etos-gallery img {
+  width: 100%;
+  border-radius: var(--etos-radius-sm);
+  box-shadow: var(--etos-shadow-product);
+}
+
+.etos-gallery figcaption {
+  margin-top: 16px;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.43;
+  letter-spacing: -0.224px;
+}
+
+.dark .etos-gallery figure {
+  background: var(--etos-surface-tile-2);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* -----------------------------------------------------------------------------
+ * 页脚：parchment 底，按 DESIGN.md footer 规格
+ * ----------------------------------------------------------------------------- */
+.VPFooter,
+.tk-footer-info {
+  background: var(--etos-canvas-parchment);
+  padding-top: 32px;
+  padding-bottom: 32px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.dark .VPFooter,
+.dark .tk-footer-info {
+  background: var(--etos-surface-tile-3);
+}
+
+.tk-footer-info p,
+.tk-footer-info__list__item {
+  width: 100%;
+  margin: 0 0 8px;
+  text-align: center;
+  color: var(--etos-ink-muted-80);
+  font-size: 12px;
+  letter-spacing: -0.12px;
+  line-height: 1.6;
+}
+
+.dark .tk-footer-info p,
+.dark .tk-footer-info__list__item {
+  color: var(--etos-body-muted);
+}
+
+.tk-footer-info__list {
+  gap: 0;
+  justify-content: center;
+  text-align: center;
+}
+
+.etos-footer-copy {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: -0.12px;
+}
+
+/* -----------------------------------------------------------------------------
+ * teek 主题图标：保持原工具类
+ * ----------------------------------------------------------------------------- */
 .tk-icon {
   display: inline-flex;
   width: var(--icon-size, 1em);
@@ -89,66 +623,20 @@
   height: var(--icon-size, 1em);
 }
 
-.etos-gallery {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 24px 0 0;
-}
-
-.etos-gallery figure {
-  margin: 0;
-  padding: 16px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 20px;
-  background: var(--vp-c-bg-soft);
-}
-
-.etos-gallery img {
-  width: 100%;
-  border-radius: 14px;
-}
-
-.etos-gallery figcaption {
-  margin-top: 12px;
-  color: var(--vp-c-text-2);
-  font-size: 0.95rem;
-}
-
-.tk-footer-info {
-  padding-top: 28px;
-}
-
-.tk-footer-info p {
-  width: 100%;
-  margin: 0 0 8px;
-  text-align: center;
-  color: var(--vp-c-text-2);
-  font-size: 0.95rem;
-}
-
-.tk-footer-info__list {
-  gap: 0;
-  justify-content: center;
-  text-align: center;
-}
-
-.tk-footer-info__list__item {
-  font-size: 0.95rem;
-}
-
-.etos-footer-copy {
-  display: block;
-  width: 100%;
-  text-align: center;
-}
-
+/* -----------------------------------------------------------------------------
+ * 响应式收尾
+ * ----------------------------------------------------------------------------- */
 @media (max-width: 720px) {
   .etos-gallery {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  .VPHome .VPHero .image {
-    border-radius: 22px;
+  .vp-doc h1 {
+    font-size: 32px;
+  }
+
+  .vp-doc h2 {
+    font-size: 24px;
   }
 }
