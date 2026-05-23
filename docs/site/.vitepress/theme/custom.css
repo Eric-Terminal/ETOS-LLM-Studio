@@ -1,37 +1,86 @@
 /* =============================================================================
  * ETOS LLM Studio 文档站 —— 主题样式
  * 设计语言遵循 DESIGN.md（Apple 风格分析）：
- *   - 单一品牌强调色 Action Blue（#0066cc）
+ *   - 单一品牌强调色 Action Blue（#0066cc，暗色下切换为 #2997ff）
  *   - SF Pro Display / SF Pro Text 字体堆栈，显示尺寸采用负字距
- *   - 白 / Parchment(#f5f5f7) / 近黑 Tile(#272729) 三层表面
+ *   - 白 / Parchment(#f5f5f7) / 近黑 Tile(#1d1d1f / #272729 / #2a2a2c) 三层表面
  *   - 全胶囊主按钮 + 1px Hairline 边框的工具卡片
- *   - 仅产品摄影才有阴影（rgba(0,0,0,0.22) 3px 5px 30px），UI Chrome 不加阴影
+ *   - 仅产品摄影才有阴影，UI Chrome 不加阴影
+ *
+ * 颜色策略（重要）：
+ *   所有 surface / text / hairline 都使用「主题感知令牌」——同一个变量名
+ *   在 :root 与 .dark 里各赋一次值。组件只读令牌，从不写死 hex 或浅色专用
+ *   token，避免暗色模式漏白。
  * ============================================================================= */
 
 /* -----------------------------------------------------------------------------
- * 设计令牌（直接来源于 DESIGN.md 的 YAML frontmatter）
+ * 1. 纯色调色板（不直接给组件用，仅供令牌指向）
  * ----------------------------------------------------------------------------- */
 :root {
-  /* —— 颜色 —— */
-  --etos-primary: #0066cc;
-  --etos-primary-focus: #0071e3;
-  --etos-primary-on-dark: #2997ff;
+  --etos-action-blue: #0066cc;
+  --etos-action-blue-focus: #0071e3;
+  --etos-sky-blue: #2997ff;
+  --etos-sky-blue-hover: #5aaeff;
+
+  --etos-white: #ffffff;
+  --etos-parchment: #f5f5f7;
+  --etos-pearl: #fafafc;
+  --etos-hairline-light: #e0e0e0;
+  --etos-divider-light: #f0f0f0;
+
+  --etos-tile-1: #1d1d1f; /* 整体页面背景（暗色）—— 用 ink 而非 #272729，更接近 Apple Web 真实暗色 */
+  --etos-tile-2: #2a2a2c; /* 卡片 / 浮起表面 */
+  --etos-tile-3: #252527; /* 略低于卡片的表面（footer / 代码块） */
+
   --etos-ink: #1d1d1f;
+  --etos-ink-strong: #1d1d1f;
   --etos-ink-muted-80: #333333;
   --etos-ink-muted-48: #7a7a7a;
-  --etos-body-muted: #cccccc;
-  --etos-divider-soft: #f0f0f0;
-  --etos-hairline: #e0e0e0;
-  --etos-canvas: #ffffff;
-  --etos-canvas-parchment: #f5f5f7;
-  --etos-surface-pearl: #fafafc;
-  --etos-surface-tile-1: #272729;
-  --etos-surface-tile-2: #2a2a2c;
-  --etos-surface-tile-3: #252527;
-  --etos-surface-black: #000000;
-  --etos-chip-translucent: rgba(210, 210, 215, 0.64);
+  --etos-on-dark: #f5f5f7;
+  --etos-on-dark-muted: #d2d2d7;
+  --etos-on-dark-faint: #98989d;
+}
 
-  /* —— 字体堆栈：优先解析为系统 SF Pro —— */
+/* -----------------------------------------------------------------------------
+ * 2. 主题感知令牌（:root 默认 = 浅色）
+ *    任何组件只读这些 etos-* 令牌，永远不直接读纯色 palette。
+ * ----------------------------------------------------------------------------- */
+:root {
+  /* —— 表面层 —— */
+  --etos-bg-page: var(--etos-white);            /* 整站主背景 */
+  --etos-bg-soft: var(--etos-parchment);        /* 略弱的背景（侧栏 / 输入 / 代码块） */
+  --etos-bg-card: var(--etos-white);            /* 卡片背景（Feature / Gallery 等） */
+  --etos-bg-card-icon: var(--etos-parchment);   /* 卡片内 icon 底 */
+  --etos-bg-footer: var(--etos-parchment);      /* footer */
+  --etos-bg-elevated: var(--etos-white);        /* 悬浮表面 */
+  --etos-bg-input: var(--etos-white);           /* 搜索框 */
+  --etos-bg-inline-code: var(--etos-parchment); /* 行内 code */
+  --etos-bg-block-code: var(--etos-parchment);  /* 代码块 */
+  --etos-bg-table-stripe: var(--etos-pearl);    /* 表格 zebra */
+
+  /* —— Nav 毛玻璃底 —— */
+  --etos-bg-nav-frosted: rgba(255, 255, 255, 0.72);
+
+  /* —— 文字 —— */
+  --etos-text-strong: var(--etos-ink-strong);
+  --etos-text-body: var(--etos-ink);
+  --etos-text-secondary: var(--etos-ink-muted-80);
+  --etos-text-muted: var(--etos-ink-muted-48);
+
+  /* —— 边线 —— */
+  --etos-hairline: var(--etos-hairline-light);
+  --etos-divider: var(--etos-divider-light);
+
+  /* —— 强调 —— */
+  --etos-accent: var(--etos-action-blue);
+  --etos-accent-hover: var(--etos-action-blue-focus);
+  --etos-accent-soft: rgba(0, 102, 204, 0.1);
+  --etos-accent-on-btn: #ffffff;
+
+  /* —— 阴影：仅产品图用 —— */
+  --etos-shadow-product: 3px 5px 30px rgba(0, 0, 0, 0.22);
+
+  /* —— 字体 —— */
   --etos-font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont,
     "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", sans-serif;
   --etos-font-text: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont,
@@ -42,52 +91,93 @@
   --etos-radius-md: 11px;
   --etos-radius-lg: 18px;
   --etos-radius-pill: 9999px;
+}
 
-  /* —— 阴影：全站唯一一颗，仅用在产品图上 —— */
-  --etos-shadow-product: 3px 5px 30px rgba(0, 0, 0, 0.22);
+/* -----------------------------------------------------------------------------
+ * 3. 暗色模式覆盖：只改令牌，组件无需任何 .dark 选择器
+ * ----------------------------------------------------------------------------- */
+.dark {
+  /* —— 表面层（核心修复点）—— */
+  --etos-bg-page: var(--etos-tile-1);
+  --etos-bg-soft: var(--etos-tile-3);
+  --etos-bg-card: var(--etos-tile-2);
+  --etos-bg-card-icon: rgba(255, 255, 255, 0.06);
+  --etos-bg-footer: var(--etos-tile-3);
+  --etos-bg-elevated: var(--etos-tile-2);
+  --etos-bg-input: rgba(255, 255, 255, 0.06);
+  --etos-bg-inline-code: rgba(255, 255, 255, 0.08);
+  --etos-bg-block-code: var(--etos-tile-3);
+  --etos-bg-table-stripe: rgba(255, 255, 255, 0.03);
 
-  /* —— VitePress 品牌色覆盖 —— */
-  --vp-c-brand-1: var(--etos-primary);
-  --vp-c-brand-2: var(--etos-primary-focus);
-  --vp-c-brand-3: var(--etos-primary);
-  --vp-c-brand-soft: rgba(0, 102, 204, 0.1);
+  --etos-bg-nav-frosted: rgba(29, 29, 31, 0.72);
 
-  /* —— VitePress 文字色覆盖 —— */
-  --vp-c-text-1: var(--etos-ink);
-  --vp-c-text-2: var(--etos-ink-muted-80);
-  --vp-c-text-3: var(--etos-ink-muted-48);
+  /* —— 文字 —— */
+  --etos-text-strong: var(--etos-on-dark);
+  --etos-text-body: var(--etos-on-dark);
+  --etos-text-secondary: var(--etos-on-dark-muted);
+  --etos-text-muted: var(--etos-on-dark-faint);
 
-  /* —— VitePress 表面 —— */
-  --vp-c-bg: var(--etos-canvas);
-  --vp-c-bg-alt: var(--etos-canvas-parchment);
-  --vp-c-bg-soft: var(--etos-canvas-parchment);
-  --vp-c-bg-elv: var(--etos-canvas);
+  /* —— 边线（半透明白线避免硬边）—— */
+  --etos-hairline: rgba(255, 255, 255, 0.1);
+  --etos-divider: rgba(255, 255, 255, 0.06);
 
-  /* —— VitePress 分割线 —— */
+  /* —— 强调切换为 Sky Blue —— */
+  --etos-accent: var(--etos-sky-blue);
+  --etos-accent-hover: var(--etos-sky-blue-hover);
+  --etos-accent-soft: rgba(41, 151, 255, 0.14);
+  --etos-accent-on-btn: var(--etos-tile-1);
+
+  /* 暗色下的产品图阴影更深，否则在深底上几乎看不见 */
+  --etos-shadow-product: 4px 6px 36px rgba(0, 0, 0, 0.55);
+}
+
+/* -----------------------------------------------------------------------------
+ * 4. 把令牌桥接到 VitePress 的内置 CSS 变量
+ *    VitePress / teek 大量组件直接读 --vp-c-*，全部指向我们的主题感知令牌
+ * ----------------------------------------------------------------------------- */
+:root {
+  /* —— 品牌强调 —— */
+  --vp-c-brand-1: var(--etos-accent);
+  --vp-c-brand-2: var(--etos-accent-hover);
+  --vp-c-brand-3: var(--etos-accent);
+  --vp-c-brand-soft: var(--etos-accent-soft);
+
+  /* —— 文字 —— */
+  --vp-c-text-1: var(--etos-text-body);
+  --vp-c-text-2: var(--etos-text-secondary);
+  --vp-c-text-3: var(--etos-text-muted);
+
+  /* —— 表面 —— */
+  --vp-c-bg: var(--etos-bg-page);
+  --vp-c-bg-alt: var(--etos-bg-soft);
+  --vp-c-bg-soft: var(--etos-bg-soft);
+  --vp-c-bg-elv: var(--etos-bg-elevated);
+
+  /* —— 边线 —— */
   --vp-c-divider: var(--etos-hairline);
-  --vp-c-gutter: var(--etos-divider-soft);
+  --vp-c-gutter: var(--etos-divider);
   --vp-c-border: var(--etos-hairline);
 
-  /* —— 主按钮（VitePress brand button）映射到 Action Blue —— */
-  --vp-button-brand-bg: var(--etos-primary);
-  --vp-button-brand-hover-bg: var(--etos-primary-focus);
-  --vp-button-brand-active-bg: var(--etos-primary);
-  --vp-button-brand-border: var(--etos-primary);
-  --vp-button-brand-hover-border: var(--etos-primary-focus);
-  --vp-button-brand-active-border: var(--etos-primary);
-  --vp-button-brand-text: #ffffff;
+  /* —— 主按钮：Action Blue 胶囊 —— */
+  --vp-button-brand-bg: var(--etos-accent);
+  --vp-button-brand-hover-bg: var(--etos-accent-hover);
+  --vp-button-brand-active-bg: var(--etos-accent);
+  --vp-button-brand-border: var(--etos-accent);
+  --vp-button-brand-hover-border: var(--etos-accent-hover);
+  --vp-button-brand-active-border: var(--etos-accent);
+  --vp-button-brand-text: var(--etos-accent-on-btn);
 
-  /* —— Alt 按钮：ghost pill，透明底 + 蓝边蓝字 —— */
+  /* —— Alt 按钮：ghost pill —— */
   --vp-button-alt-bg: transparent;
-  --vp-button-alt-hover-bg: rgba(0, 102, 204, 0.06);
-  --vp-button-alt-active-bg: rgba(0, 102, 204, 0.12);
-  --vp-button-alt-border: var(--etos-primary);
-  --vp-button-alt-hover-border: var(--etos-primary);
-  --vp-button-alt-active-border: var(--etos-primary);
-  --vp-button-alt-text: var(--etos-primary);
+  --vp-button-alt-hover-bg: var(--etos-accent-soft);
+  --vp-button-alt-active-bg: var(--etos-accent-soft);
+  --vp-button-alt-border: var(--etos-accent);
+  --vp-button-alt-hover-border: var(--etos-accent);
+  --vp-button-alt-active-border: var(--etos-accent);
+  --vp-button-alt-text: var(--etos-accent);
 
-  /* —— Hero —— */
-  --vp-home-hero-name-color: var(--etos-ink);
+  /* —— 首页 Hero name —— */
+  --vp-home-hero-name-color: var(--etos-text-strong);
   --vp-home-hero-name-background: none;
   --vp-home-hero-image-background-image: none;
   --vp-home-hero-image-filter: none;
@@ -95,57 +185,24 @@
   /* —— 字体根 —— */
   --vp-font-family-base: var(--etos-font-text);
   --vp-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* —— Callout 容器（custom-block）颜色由 VitePress 默认管理，
+        但我们把 tip 的 accent 同步过去，让 tip 边框跟随品牌色 —— */
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-tip-text: var(--etos-text-body);
+  --vp-custom-block-tip-bg: var(--etos-accent-soft);
+  --vp-custom-block-tip-code-bg: var(--etos-bg-inline-code);
 }
 
 /* -----------------------------------------------------------------------------
- * Dark Mode：参考 DESIGN.md 的 near-black tile 体系
- * 浅蓝（#2997ff）替换深色表面下的 Action Blue，避免与暗底融合
- * ----------------------------------------------------------------------------- */
-.dark {
-  --vp-c-brand-1: var(--etos-primary-on-dark);
-  --vp-c-brand-2: #5aaeff;
-  --vp-c-brand-3: var(--etos-primary-on-dark);
-  --vp-c-brand-soft: rgba(41, 151, 255, 0.14);
-
-  --vp-c-text-1: #ffffff;
-  --vp-c-text-2: var(--etos-body-muted);
-  --vp-c-text-3: #8e8e93;
-
-  --vp-c-bg: var(--etos-surface-tile-1);
-  --vp-c-bg-alt: var(--etos-surface-tile-3);
-  --vp-c-bg-soft: var(--etos-surface-tile-2);
-  --vp-c-bg-elv: var(--etos-surface-tile-2);
-
-  --vp-c-divider: rgba(255, 255, 255, 0.1);
-  --vp-c-gutter: rgba(255, 255, 255, 0.06);
-  --vp-c-border: rgba(255, 255, 255, 0.1);
-
-  --vp-button-brand-bg: var(--etos-primary-on-dark);
-  --vp-button-brand-hover-bg: #5aaeff;
-  --vp-button-brand-active-bg: var(--etos-primary-on-dark);
-  --vp-button-brand-border: var(--etos-primary-on-dark);
-  --vp-button-brand-hover-border: #5aaeff;
-  --vp-button-brand-active-border: var(--etos-primary-on-dark);
-  --vp-button-brand-text: var(--etos-surface-tile-1);
-
-  --vp-button-alt-bg: transparent;
-  --vp-button-alt-hover-bg: rgba(41, 151, 255, 0.1);
-  --vp-button-alt-active-bg: rgba(41, 151, 255, 0.18);
-  --vp-button-alt-border: var(--etos-primary-on-dark);
-  --vp-button-alt-hover-border: var(--etos-primary-on-dark);
-  --vp-button-alt-active-border: var(--etos-primary-on-dark);
-  --vp-button-alt-text: var(--etos-primary-on-dark);
-
-  --vp-home-hero-name-color: #ffffff;
-}
-
-/* -----------------------------------------------------------------------------
- * 全局排版：SF Pro + 17px Body + Apple Tight 字距
+ * 5. 全局排版
  * ----------------------------------------------------------------------------- */
 html {
   font-family: var(--etos-font-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: var(--etos-bg-page);
+  color: var(--etos-text-body);
 }
 
 body,
@@ -154,9 +211,10 @@ body,
   font-size: 17px;
   line-height: 1.47;
   letter-spacing: -0.374px;
+  background: var(--etos-bg-page);
+  color: var(--etos-text-body);
 }
 
-/* —— Heading 全用 Display 字体 + 负字距 —— */
 .vp-doc h1,
 .vp-doc h2,
 .vp-doc h3,
@@ -165,7 +223,7 @@ body,
 .vp-doc h6 {
   font-family: var(--etos-font-display);
   font-weight: 600;
-  color: var(--vp-c-text-1);
+  color: var(--etos-text-strong);
 }
 
 .vp-doc h1 {
@@ -178,7 +236,7 @@ body,
   font-size: 28px;
   line-height: 1.2;
   letter-spacing: -0.224px;
-  border-top: 1px solid var(--vp-c-divider);
+  border-top: 1px solid var(--etos-hairline);
   padding-top: 24px;
   margin-top: 48px;
 }
@@ -194,14 +252,16 @@ body,
   font-size: 17px;
   line-height: 1.47;
   letter-spacing: -0.374px;
+  color: var(--etos-text-body);
 }
 
 .vp-doc strong {
   font-weight: 600;
+  color: var(--etos-text-strong);
 }
 
 /* -----------------------------------------------------------------------------
- * Hero（首页）：headline 56/600/-0.28，tagline 21/600
+ * 6. Hero（首页）
  * ----------------------------------------------------------------------------- */
 .VPHome .VPHero .name,
 .VPHome .VPHero .text {
@@ -210,6 +270,7 @@ body,
   font-size: 56px;
   line-height: 1.07;
   letter-spacing: -0.28px;
+  color: var(--etos-text-strong);
 }
 
 .VPHome .VPHero .tagline {
@@ -218,7 +279,7 @@ body,
   font-size: 21px;
   line-height: 1.3;
   letter-spacing: 0.196px;
-  color: var(--vp-c-text-2);
+  color: var(--etos-text-secondary);
   margin-top: 16px;
 }
 
@@ -248,7 +309,7 @@ body,
   }
 }
 
-/* —— Hero 配图：剥离原本的边框 / 阴影；只在产品图上挂唯一一颗系统阴影 —— */
+/* —— Hero 配图：剥离原边框 / 阴影；只挂唯一一颗产品阴影 —— */
 .VPHome .VPHero .image {
   overflow: visible;
   border: 0;
@@ -279,8 +340,7 @@ body,
 }
 
 /* -----------------------------------------------------------------------------
- * 按钮：胶囊主按钮（brand）/ Ghost 胶囊副按钮（alt）
- * 按 DESIGN.md 给出的 padding 11px × 22px + 17px / 400
+ * 7. 按钮：胶囊主按钮 + Ghost 副按钮
  * ----------------------------------------------------------------------------- */
 .VPButton {
   font-family: var(--etos-font-text);
@@ -310,32 +370,31 @@ body,
 }
 
 .VPButton:focus-visible {
-  outline: 2px solid var(--etos-primary-focus);
+  outline: 2px solid var(--etos-accent-hover);
   outline-offset: 2px;
 }
 
-/* —— 文档内行内链接：Action Blue，文字下划线偏移 —— */
+/* —— 文档内行内链接 —— */
 .vp-doc a {
-  color: var(--vp-c-brand-1);
+  color: var(--etos-accent);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   font-weight: 400;
 }
 
 .vp-doc a:hover {
-  text-decoration-color: var(--vp-c-brand-2);
+  text-decoration-color: var(--etos-accent-hover);
 }
 
 /* -----------------------------------------------------------------------------
- * Feature 卡片 = DESIGN.md 的 store-utility-card
- * 白底 + 1px hairline + 18px 圆角 + 24px padding，禁用阴影
+ * 8. Feature 卡片（store-utility-card）
  * ----------------------------------------------------------------------------- */
 .VPHome .VPFeatures .container {
   padding: 0 24px;
 }
 
 .VPHome .VPFeature {
-  background: var(--etos-canvas);
+  background: var(--etos-bg-card);
   border: 1px solid var(--etos-hairline);
   border-radius: var(--etos-radius-lg);
   padding: 24px;
@@ -344,11 +403,11 @@ body,
 }
 
 .VPHome .VPFeature:hover {
-  border-color: var(--etos-primary);
+  border-color: var(--etos-accent);
 }
 
 .VPHome .VPFeature .icon {
-  background: var(--etos-canvas-parchment);
+  background: var(--etos-bg-card-icon);
   border-radius: var(--etos-radius-md);
   font-size: 24px;
   width: 48px;
@@ -362,7 +421,7 @@ body,
   font-size: 21px;
   line-height: 1.19;
   letter-spacing: 0;
-  color: var(--vp-c-text-1);
+  color: var(--etos-text-strong);
   margin-top: 20px;
 }
 
@@ -371,23 +430,12 @@ body,
   font-size: 15px;
   line-height: 1.47;
   letter-spacing: -0.224px;
-  color: var(--vp-c-text-2);
+  color: var(--etos-text-secondary);
   margin-top: 8px;
 }
 
-.dark .VPHome .VPFeature {
-  background: var(--etos-surface-tile-2);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.dark .VPHome .VPFeature .icon {
-  background: rgba(255, 255, 255, 0.06);
-}
-
 /* -----------------------------------------------------------------------------
- * 顶部 Nav：保持极薄的 Apple 全局导航观感
- *   - 浅色模式：白底 + 底部 hairline；不加阴影
- *   - 深色模式：近黑底
+ * 9. 顶部 Nav：frosted glass
  * ----------------------------------------------------------------------------- */
 .VPNav,
 .VPNavBar {
@@ -396,17 +444,13 @@ body,
 
 .VPNavBar.has-sidebar .content-body,
 .VPNavBar .content-body {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--etos-bg-nav-frosted);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
-.dark .VPNavBar .content-body {
-  background: rgba(29, 29, 31, 0.72);
-}
-
 .VPNavBar:not(.home) {
-  border-bottom: 1px solid var(--vp-c-divider);
+  border-bottom: 1px solid var(--etos-hairline);
 }
 
 .VPNavBarTitle .title {
@@ -414,7 +458,7 @@ body,
   font-weight: 600;
   font-size: 17px;
   letter-spacing: -0.374px;
-  color: var(--vp-c-text-1);
+  color: var(--etos-text-strong);
   border: 0;
 }
 
@@ -424,20 +468,27 @@ body,
   font-size: 14px;
   letter-spacing: -0.224px;
   font-weight: 400;
+  color: var(--etos-text-body);
+}
+
+.VPNavBarMenuLink:hover,
+.VPNavBarMenuGroup:hover .text {
+  color: var(--etos-accent);
 }
 
 /* -----------------------------------------------------------------------------
- * 侧边栏：扁平、原生、靠 hairline 划区域，不堆背景色
+ * 10. 侧边栏
  * ----------------------------------------------------------------------------- */
 .VPSidebar {
-  background-color: var(--vp-c-bg);
-  border-right: 1px solid var(--vp-c-divider);
+  background-color: var(--etos-bg-page);
+  border-right: 1px solid var(--etos-hairline);
 }
 
 .VPSidebarItem .text {
   font-family: var(--etos-font-text);
   font-size: 14px;
   letter-spacing: -0.224px;
+  color: var(--etos-text-body);
 }
 
 .VPSidebarItem.level-0 > .item > .text {
@@ -445,19 +496,21 @@ body,
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.224px;
-  color: var(--vp-c-text-1);
+  color: var(--etos-text-strong);
 }
 
 .VPSidebarItem.is-active > .item .link .text {
-  color: var(--vp-c-brand-1);
+  color: var(--etos-accent);
   font-weight: 600;
 }
 
 /* -----------------------------------------------------------------------------
- * 文档容器：白底、放气
+ * 11. 文档主体容器 —— 关键修复：原本写死了 var(--etos-canvas) 白色
  * ----------------------------------------------------------------------------- */
-.VPContent.is-home {
-  background: var(--etos-canvas);
+.VPContent,
+.VPContent.is-home,
+.VPDoc {
+  background: var(--etos-bg-page);
 }
 
 .vp-doc table {
@@ -468,58 +521,119 @@ body,
 
 .vp-doc th,
 .vp-doc td {
-  border-color: var(--vp-c-divider);
+  border-color: var(--etos-hairline);
+  color: var(--etos-text-body);
+}
+
+.vp-doc tr:nth-child(2n) {
+  background: var(--etos-bg-table-stripe);
 }
 
 .vp-doc blockquote {
-  border-left: 3px solid var(--etos-primary);
-  color: var(--vp-c-text-2);
+  border-left: 3px solid var(--etos-accent);
+  color: var(--etos-text-secondary);
   font-style: normal;
+  background: transparent;
 }
 
-/* —— 代码块：弱化背景，沿用 Apple 的低对比偏好 —— */
+/* —— 代码块 —— */
 .vp-doc div[class*="language-"] {
-  background: var(--etos-canvas-parchment);
+  background: var(--etos-bg-block-code);
   border-radius: var(--etos-radius-md);
 }
 
-.dark .vp-doc div[class*="language-"] {
-  background: var(--etos-surface-tile-3);
-}
-
 .vp-doc :not(pre) > code {
-  background: var(--etos-canvas-parchment);
-  color: var(--etos-ink-muted-80);
+  background: var(--etos-bg-inline-code);
+  color: var(--etos-text-secondary);
   border-radius: var(--etos-radius-sm);
   padding: 2px 6px;
   font-size: 0.92em;
 }
 
 .dark .vp-doc :not(pre) > code {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  color: var(--etos-text-strong);
 }
 
 /* -----------------------------------------------------------------------------
- * 搜索框：胶囊形，呼应 DESIGN.md 的 search-input
+ * 12. Callout（::: tip / warning / danger / info）
+ *      VitePress 默认会处理 dark，但 tip 的强调色绑回 Action Blue / Sky Blue
+ * ----------------------------------------------------------------------------- */
+.vp-doc .custom-block {
+  border-radius: var(--etos-radius-md);
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.224px;
+}
+
+.vp-doc .custom-block.tip {
+  background: var(--etos-accent-soft);
+  border-color: transparent;
+  color: var(--etos-text-body);
+}
+
+.vp-doc .custom-block.tip .custom-block-title {
+  color: var(--etos-accent);
+}
+
+.vp-doc .custom-block.info {
+  background: var(--etos-bg-soft);
+  border-color: transparent;
+  color: var(--etos-text-body);
+}
+
+.vp-doc .custom-block.info .custom-block-title {
+  color: var(--etos-text-secondary);
+}
+
+/* warning / danger / important 沿用 VitePress 默认色，仅修圆角 */
+
+/* -----------------------------------------------------------------------------
+ * 13. 搜索框：胶囊形
  * ----------------------------------------------------------------------------- */
 .DocSearch-Button {
   border-radius: var(--etos-radius-pill) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: var(--etos-canvas);
+  border: 1px solid var(--etos-hairline);
+  background: var(--etos-bg-input);
   height: 40px;
   padding: 0 16px;
+  color: var(--etos-text-secondary);
 }
 
-.dark .DocSearch-Button {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+.DocSearch-Button-Placeholder {
+  color: var(--etos-text-muted);
+}
+
+.DocSearch-Search-Icon {
+  color: var(--etos-text-muted);
+}
+
+/* —— 本地搜索弹层 —— */
+.VPLocalSearchBox {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.VPLocalSearchBox .shell {
+  background: var(--etos-bg-elevated);
+  border: 1px solid var(--etos-hairline);
+}
+
+.VPLocalSearchBox .search-input {
+  background: var(--etos-bg-input);
+  color: var(--etos-text-body);
+  border: 1px solid var(--etos-hairline);
+}
+
+.VPLocalSearchBox .result {
+  background: var(--etos-bg-card);
+  color: var(--etos-text-body);
+}
+
+.VPLocalSearchBox .result.selected {
+  background: var(--etos-accent-soft);
 }
 
 /* -----------------------------------------------------------------------------
- * 自定义组件：截图画廊（首页 etos-gallery）
- *   按 store-utility-card 重写：hairline + 18px 圆角，禁用阴影
- *   截图本身按 DESIGN.md 的「产品摄影」规则挂唯一一颗系统阴影
+ * 14. 截图画廊（首页 etos-gallery）
  * ----------------------------------------------------------------------------- */
 .etos-gallery {
   display: grid;
@@ -531,7 +645,7 @@ body,
 .etos-gallery figure {
   margin: 0;
   padding: 24px;
-  background: var(--etos-canvas);
+  background: var(--etos-bg-card);
   border: 1px solid var(--etos-hairline);
   border-radius: var(--etos-radius-lg);
   box-shadow: none;
@@ -539,7 +653,7 @@ body,
 }
 
 .etos-gallery figure:hover {
-  border-color: var(--etos-primary);
+  border-color: var(--etos-accent);
 }
 
 .etos-gallery img {
@@ -550,31 +664,22 @@ body,
 
 .etos-gallery figcaption {
   margin-top: 16px;
-  color: var(--vp-c-text-2);
+  color: var(--etos-text-secondary);
   font-size: 14px;
   line-height: 1.43;
   letter-spacing: -0.224px;
 }
 
-.dark .etos-gallery figure {
-  background: var(--etos-surface-tile-2);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
 /* -----------------------------------------------------------------------------
- * 页脚：parchment 底，按 DESIGN.md footer 规格
+ * 15. 页脚
  * ----------------------------------------------------------------------------- */
 .VPFooter,
 .tk-footer-info {
-  background: var(--etos-canvas-parchment);
+  background: var(--etos-bg-footer);
   padding-top: 32px;
   padding-bottom: 32px;
-  border-top: 1px solid var(--vp-c-divider);
-}
-
-.dark .VPFooter,
-.dark .tk-footer-info {
-  background: var(--etos-surface-tile-3);
+  border-top: 1px solid var(--etos-hairline);
+  color: var(--etos-text-secondary);
 }
 
 .tk-footer-info p,
@@ -582,15 +687,14 @@ body,
   width: 100%;
   margin: 0 0 8px;
   text-align: center;
-  color: var(--etos-ink-muted-80);
+  color: var(--etos-text-secondary);
   font-size: 12px;
   letter-spacing: -0.12px;
   line-height: 1.6;
 }
 
-.dark .tk-footer-info p,
-.dark .tk-footer-info__list__item {
-  color: var(--etos-body-muted);
+.tk-footer-info a {
+  color: var(--etos-accent);
 }
 
 .tk-footer-info__list {
@@ -605,10 +709,11 @@ body,
   text-align: center;
   font-size: 12px;
   letter-spacing: -0.12px;
+  color: var(--etos-text-secondary);
 }
 
 /* -----------------------------------------------------------------------------
- * teek 主题图标：保持原工具类
+ * 16. teek 主题图标
  * ----------------------------------------------------------------------------- */
 .tk-icon {
   display: inline-flex;
@@ -624,7 +729,38 @@ body,
 }
 
 /* -----------------------------------------------------------------------------
- * 响应式收尾
+ * 17. 文档页 outline / 上下篇 / aside —— 跟主题走
+ * ----------------------------------------------------------------------------- */
+.VPDocAsideOutline .outline-marker {
+  background-color: var(--etos-accent);
+}
+
+.VPDocAsideOutline .outline-link {
+  color: var(--etos-text-secondary);
+}
+
+.VPDocAsideOutline .outline-link:hover,
+.VPDocAsideOutline .outline-link.active {
+  color: var(--etos-accent);
+}
+
+.VPDocFooter,
+.VPDocFooterLink {
+  border-color: var(--etos-hairline);
+  color: var(--etos-text-body);
+}
+
+.VPDocFooterLink:hover {
+  color: var(--etos-accent);
+}
+
+/* —— last updated 时间戳颜色 —— */
+.VPLastUpdated {
+  color: var(--etos-text-muted);
+}
+
+/* -----------------------------------------------------------------------------
+ * 18. 响应式收尾
  * ----------------------------------------------------------------------------- */
 @media (max-width: 720px) {
   .etos-gallery {
