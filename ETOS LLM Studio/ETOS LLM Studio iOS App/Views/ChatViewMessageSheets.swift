@@ -299,14 +299,8 @@ struct MessageActionSheet: View {
         if let costEstimate = MessageCostResolver.resolvedCost(
             for: message,
             providers: providers
-        ) {
+        ), costEstimate.totalCost > 0 {
             MessageCostDetailSection(estimate: costEstimate)
-        } else if let costUnavailableText {
-            Section(NSLocalizedString("费用", comment: "Message cost section title")) {
-                Text(costUnavailableText)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
 
         if let metrics = message.responseMetrics,
@@ -381,22 +375,6 @@ struct MessageActionSheet: View {
             return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
         }
         return base
-    }
-
-    private var costUnavailableText: String? {
-        guard message.role == .assistant || message.role == .tool || message.role == .system else {
-            return nil
-        }
-        guard message.tokenUsage?.hasAnyData == true else {
-            return NSLocalizedString("暂无可用于费用估算的 Token 用量。", comment: "Cost unavailable without token usage")
-        }
-        guard let modelReference = message.modelReference else {
-            return NSLocalizedString("这条消息缺少模型引用，无法匹配价格设置。", comment: "Cost unavailable without model reference")
-        }
-        guard MessageCostResolver.matchingPricing(for: modelReference, providers: providers) != nil else {
-            return NSLocalizedString("未找到这条消息所用模型的价格设置。", comment: "Cost unavailable without pricing")
-        }
-        return NSLocalizedString("当前 Token 用量没有命中可计费的价格项。", comment: "Cost unavailable without billable token categories")
     }
 
     private func submitJump() {

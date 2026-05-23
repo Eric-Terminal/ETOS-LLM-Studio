@@ -3570,7 +3570,3 @@
 "%d tokens / 1M tokens × %@" = "%d tokens / 1M tokens × %@";
 "缓存创建" = "Cache Write";
 "缓存命中" = "Cache Read";
-"暂无可用于费用估算的 Token 用量。" = "No token usage is available for cost estimation yet.";
-"这条消息缺少模型引用，无法匹配价格设置。" = "This message has no model reference, so pricing cannot be matched.";
-"未找到这条消息所用模型的价格设置。" = "No pricing is configured for the model used by this message.";
-"当前 Token 用量没有命中可计费的价格项。" = "The current token usage did not match any billable price item.";
