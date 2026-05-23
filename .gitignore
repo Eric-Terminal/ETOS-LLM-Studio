@@ -104,3 +104,6 @@ PLAN.md
 # VitePress 本地构建产物
 docs/site/.vitepress/cache/
 docs/site/.vitepress/dist/
+
+# Landing（Vite）本地构建产物
+docs/landing/dist/

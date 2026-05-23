@@ -1,0 +1,23 @@
+{
+  "name": "etos-llm-studio-landing",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ETOS LLM Studio 产品介绍首页（与文档站分离，独立部署到 Cloudflare Pages）",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.0.5"
+  }
+}
