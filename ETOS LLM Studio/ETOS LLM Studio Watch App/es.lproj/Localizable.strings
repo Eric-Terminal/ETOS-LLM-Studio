@@ -3545,3 +3545,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "全部详情" = "Detalles de todo el periodo";
 "完整历史" = "Historial completo";
 "回看全部历史用量" = "Revisar el uso histórico completo";
+"当前范围内还没有来源数据。" = "No hay datos de origen en el rango actual.";

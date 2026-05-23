@@ -3545,3 +3545,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "全部详情" = "Détails de toute la période";
 "完整历史" = "Historique complet";
 "回看全部历史用量" = "Revoir l’utilisation globale";
+"当前范围内还没有来源数据。" = "Aucune donnée source dans la plage actuelle.";

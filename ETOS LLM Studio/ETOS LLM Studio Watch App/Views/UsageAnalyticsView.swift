@@ -194,79 +194,46 @@ struct UsageAnalyticsView: View {
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
+            }
 
+            Section {
                 if viewModel.state.detail.topModels.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(NSLocalizedString("模型 Top", comment: ""))
-                            .etFont(.caption.weight(.semibold))
-                        Text(NSLocalizedString("当前范围内还没有模型请求。", comment: ""))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(NSLocalizedString("当前范围内还没有模型请求。", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
                 } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(NSLocalizedString("模型 Top", comment: ""))
-                                .etFont(.caption.weight(.semibold))
-                            Spacer()
-                            Text(String(format: NSLocalizedString("共 %d 项", comment: "用量统计榜单数量"), viewModel.state.detail.topModels.count))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        ForEach(Array(viewModel.state.detail.topModels.enumerated()), id: \.element.id) { index, model in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(String(format: NSLocalizedString("第 %d 名", comment: "用量统计榜单名次"), index + 1))
-                                    .etFont(.caption2.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                Text(model.title)
-                                    .etFont(.footnote.weight(.semibold))
-                                    .lineLimit(1)
-                                if !model.subtitle.isEmpty {
-                                    Text(model.subtitle)
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), model.requestCount, model.totalTokens))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(String(format: NSLocalizedString("占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), percentageText(model.tokenShare), model.errorCount))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
-                                        model.tokenTotals.sentTokens,
-                                        model.tokenTotals.receivedTokens
-                                    )
-                                )
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
-                                        model.tokenTotals.cacheReadTokens,
-                                        model.tokenTotals.cacheWriteTokens,
-                                        cacheHitRateText(model.cacheHitRate)
-                                    )
-                                )
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                    ForEach(Array(viewModel.state.detail.topModels.enumerated()), id: \.element.id) { index, model in
+                        WatchUsageAnalyticsRankRow(
+                            rank: index + 1,
+                            item: model,
+                            showsTokenDetails: true,
+                            tokenShareText: percentageText(model.tokenShare),
+                            cacheHitRateText: cacheHitRateText(model.cacheHitRate)
+                        )
                     }
                 }
+            } header: {
+                HStack {
+                    Text(NSLocalizedString("模型 Top", comment: ""))
+                    Spacer()
+                    Text(String(format: NSLocalizedString("共 %d 项", comment: "用量统计榜单数量"), viewModel.state.detail.topModels.count))
+                }
+            }
 
-                if let topSource = viewModel.state.detail.sourceBreakdown.first {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(NSLocalizedString("来源 Top", comment: ""))
-                            .etFont(.caption.weight(.semibold))
-                        Text(topSource.title)
-                            .etFont(.footnote.weight(.semibold))
-                        Text(String(format: NSLocalizedString("%d 次 · 错误 %d", comment: ""), topSource.requestCount, topSource.errorCount))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
+            Section(NSLocalizedString("来源 Top", comment: "")) {
+                if viewModel.state.detail.sourceBreakdown.isEmpty {
+                    Text(NSLocalizedString("当前范围内还没有来源数据。", comment: "Usage analytics empty source breakdown"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(viewModel.state.detail.sourceBreakdown.enumerated()), id: \.element.id) { index, source in
+                        WatchUsageAnalyticsRankRow(
+                            rank: index + 1,
+                            item: source,
+                            showsTokenDetails: false,
+                            tokenShareText: percentageText(source.tokenShare),
+                            cacheHitRateText: cacheHitRateText(source.cacheHitRate)
+                        )
                     }
                 }
             }
@@ -592,5 +559,70 @@ private struct WatchUsageAnalyticsTokenTrendChart: View {
         let verticalInset = min(rect.height * 0.12, 7)
         let y = rect.maxY - verticalInset - (rect.height - verticalInset * 2) * yRatio
         return CGPoint(x: x, y: y)
+    }
+}
+
+private struct WatchUsageAnalyticsRankRow: View {
+    let rank: Int
+    let item: UsageAnalyticsRankItem
+    let showsTokenDetails: Bool
+    let tokenShareText: String
+    let cacheHitRateText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(String(format: NSLocalizedString("第 %d 名", comment: "用量统计榜单名次"), rank))
+                    .etFont(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Text(tokenShareText)
+                    .etFont(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(item.title)
+                .etFont(.footnote.weight(.semibold))
+                .lineLimit(1)
+
+            if !item.subtitle.isEmpty {
+                Text(item.subtitle)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Text(String(format: NSLocalizedString("%d 次 · Token %d", comment: ""), item.requestCount, item.totalTokens))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(String(format: NSLocalizedString("占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), tokenShareText, item.errorCount))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+
+            if showsTokenDetails {
+                Text(
+                    String(
+                        format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
+                        item.tokenTotals.sentTokens,
+                        item.tokenTotals.receivedTokens
+                    )
+                )
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    String(
+                        format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
+                        item.tokenTotals.cacheReadTokens,
+                        item.tokenTotals.cacheWriteTokens,
+                        cacheHitRateText
+                    )
+                )
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
