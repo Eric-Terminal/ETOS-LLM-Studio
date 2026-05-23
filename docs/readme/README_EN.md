@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**A native AI client for iOS and Apple Watch. It supports OpenAI, Anthropic Claude, Google Gemini, multiple compatible providers, MCP tool calling, local RAG memory, Worldbook, Daily Pulse, Siri Shortcuts, and cross-device sync.**
+**A native AI client for iOS and Apple Watch. It supports OpenAI, Anthropic Claude, Google Gemini and other model providers, with built-in MCP tool calling, Agent Skills packages, local RAG memory, Worldbook, Daily Pulse, an app lock with SQLCipher full-disk encryption, CloudKit / WatchConnectivity cross-device sync, and Siri Shortcuts.**
 
 [Simplified Chinese](../../README.md) | [Traditional Chinese](README_ZH_HANT.md) | [Japanese](README_JA.md) | [Русский](README_RU.md)
 
@@ -23,7 +23,7 @@
 
 School life can be pretty boring, and I always seem to have a lot of things I want to ask AI. At the time, most AI apps on the App Store were either absurdly expensive or too limited to be useful—especially on Apple Watch—so I ended up building one myself.
 
-What started as a rough little app with only 1,800 lines of code and hardcoded API keys has grown into a project with **235 Swift source files and 118,070 lines of code** (including Shared / iOS / watchOS / tests). “ETOS LLM Studio” may sound a bit over the top, but in reality it is still my playground for exploring the boundaries of LLM applications.
+What started as a rough little app with only 1,800 lines of code and hardcoded API keys has grown into a project with **595 Swift source files and 167,821 lines of Swift code** (counted with `cloc . --timeout=0`, Swift only; VitePress doc-site dependencies are not included). “ETOS LLM Studio” may sound a bit over the top, but in reality it is still my playground for exploring the boundaries of LLM applications.
 
 It is no longer just a Watch app either. I have gradually expanded the iOS side into a complete experience for managing models, tools, memory, worldbooks, and Daily Pulse, and the two platforms stay in sync through the built-in sync engine.
 
@@ -33,40 +33,46 @@ Since I mostly use a Mac and an Apple Watch in daily life, the iPhone side still
 
 #### Chat and Models
 
-*   **Native on Both Platforms**: Built natively for iOS and Apple Watch, with a consistent visual language and platform-specific interaction tuning.
-*   **Session Management Enhancements**: Supports full-text session search, message index jump, folder classification, batch move, and per-session cross-device send.
-*   **Multi-Model Support**: Native adapters for OpenAI, Anthropic (Claude), Google (Gemini), and compatible APIs, with in-app provider and model management.
-*   **Advanced Request Configuration**: Supports custom headers, parameter expressions, and raw JSON request bodies for experimental or provider-compatible setups.
-*   **Multimodal and Image Generation**: Supports voice input, image input, and AI image generation.
-*   **Conversation Import/Export**: Supports importing from Cherry Studio, RikkaHub, Kelivo, and ChatGPT conversations, plus export to PDF / Markdown / TXT.
+*   **Native on Both Platforms**: Built natively for iOS and Apple Watch, with a consistent visual language and platform-specific interaction tuning. On iOS, the session list uses a card-style layout with clear folder/session grouping, and switches to a fixed dual-column sidebar in landscape.
+*   **Session Management Enhancements**: Supports full-text session search, in-context match preview, message-index jump, folder classification, nested moves, batch operations, per-session cross-device send, and infinite-scroll history loading.
+*   **Multi-Model Support**: Native adapters for OpenAI Chat, OpenAI Responses, Anthropic (Claude), and Google (Gemini), with in-app provider/model management and batch connectivity tests across all models under a provider.
+*   **Advanced Request Configuration**: Supports custom headers, parameter expressions, structured request controls, key/value payload editing, raw JSON request bodies, and request preview for experimental or provider-compatible setups.
+*   **Message Regex Rules**: Supports rule-based rewriting of outgoing and incoming messages, manageable as multiple rules from the preferences and quickly reachable from the provider page.
+*   **Model Pricing and Cost Estimation**: Lets you configure per-model local prices (including tiered price ranges) and automatically estimates the cost of each message based on token usage.
+*   **Multimodal and Image Generation**: Supports voice, image, and file attachments; images can go through a dedicated OCR channel, file attachments are textified before sending, and AI image generation is supported.
+*   **Conversation Import/Export**: Supports importing from ETOS, Cherry Studio, RikkaHub, Kelivo, and ChatGPT conversations, plus export to PDF / Markdown / TXT.
 *   **Speech-to-Text (STT)**: Integrates system `SFSpeechRecognizer` streaming transcription, with real-time transcript preview and one-tap insertion.
 *   **Text-to-Speech (TTS)**: Supports system TTS, cloud TTS, and automatic fallback, with separate model and playback parameter settings.
+*   **Concurrent Session Requests**: Each session keeps its own request state, with per-session cancellation, background-completion notifications, and tap-to-jump back to the originating chat.
 
 #### Display and Reading Experience
 
-*   **Customizable Display System**: Supports custom fonts (including WOFF / WOFF2), font-slot priority, bubble/text color customization, and bubbleless UI.
+*   **Customizable Display System**: Supports custom fonts (including WOFF / WOFF2), font scale, font-slot priority, bubble/text color customization, chat color profiles, time-based color switching, and a bubbleless assistant UI.
+*   **Bubble Toolbar**: A configurable toolbar can be attached below each chat bubble — single-row horizontal scroll, optional outer border, separate default items for iOS and watchOS per user/assistant role, and drag-to-reorder on watchOS.
 *   **Font Fallback Strategy**: Supports paragraph-level and glyph-level fallback scope selection for more stable mixed-language and symbol rendering.
-*   **Thinking and Content Preview**: Auto-preview for thinking content is enabled by default to reduce manual expansion.
-*   **Markdown and Code Block Enhancements**: Supports syntax highlighting, copy feedback, collapse toggle, iOS code preview, Mermaid rendering, and blockquote left-border styling.
+*   **Thinking and Tool Timeline**: Includes rolling thinking preview, thinking-time tracking, asynchronous thinking summaries, tool-call connected timeline, error-retry resumption, and multi-version reply switching. Tool approval has been redesigned as a native Q&A sheet with row/column option layout.
+*   **Markdown and Code Block Enhancements**: Supports syntax highlighting, copy feedback, collapse toggle, iOS code preview, Mermaid rendering, SwiftMath formulas, and blockquote left-border styling.
+*   **watchOS Image Reading**: Markdown images and generated images support Digital Crown zoom and drag, so even small screens are good for actually looking at images.
 
 #### Tools and Automation
 
-*   **Tool Center + Extended Tools**: Unified management for MCP, Shortcuts, and local tools, with toggles, approval policies, and session-level enablement.
-*   **Agent Skills**: End-to-end skill integration with unified toggles in Tool Center, plus local file import on iOS and URL-based import on watchOS.
+*   **Tool Center + Extended Tools**: Unified management for MCP, Shortcuts, local tools, Agent Skills, and built-in tools like `getSystemTime`, with toggles, approval policies, session-level enablement, categorization, and quick debugging.
+*   **Agent Skills Packages**: Supports importing skill bundles from local folders, GitHub repository links, GitHub raw / nested directories, default branches, and hidden directories. Skill resources support text-encoding reads, large-file chunking, document text extraction, and image OCR; skill metadata is exposed to the model for on-demand activation.
 *   **Structured Q&A Tool (`ask_user_input`)**: Supports step-by-step single-question flow, single/multi choice exclusivity rules, custom input, and previous-question navigation.
-*   **Extended Tooling Coverage**: Adds SQLite CRUD tools, web card display tools, and automatic feedback ticket submission tools.
+*   **Extended Tooling Coverage**: Adds built-in system time, SQLite CRUD tools, web card display, and automatic feedback ticket submission.
 *   **Sandbox File System Tools**: Supports search, chunked reading, diff viewing, partial edits, move / copy / delete, and other file operations.
-*   **MCP Integration**: Supports remote [Model Context Protocol](https://modelcontextprotocol.io) with a full MCP client, streamable HTTP/SSE transport, reconnect handling, timeouts, handshake governance, and capability negotiation.
+*   **MCP Integration**: Built on the official Swift [Model Context Protocol](https://modelcontextprotocol.io) SDK, with streamable HTTP / SSE transport, reconnect handling, timeouts, handshake governance, metadata refresh, resource/template/prompt reads, and capability negotiation. Auto-connect can be deferred per chat-exposure toggle, and manual disconnects stop further reconnect attempts.
 *   **Siri Shortcuts**: Integrates with the Shortcuts framework, supports AI invocation through shortcuts, custom tools, and URL Scheme routing.
-*   **In-App File Management**: Includes a built-in file manager for browsing and managing sandbox files directly inside the app.
+*   **In-App File Management**: Includes a built-in file manager for browsing and managing sandbox files directly inside the app, with inline preview for plain-text files.
 
 #### Memory and Knowledge Organization
 
 *   **Local RAG Memory**: Embeddings can use cloud APIs, but the **vector database itself runs fully locally on SQLite**. Also supports chunking, embedding progress visualization, memory editing, and active retrieval tools.
-*   **GRDB Relational Persistence**: Core persistence migrated from JSON to GRDB + SQLite, covering sessions, configuration, MCP, worldbooks, memory, feedback, shortcuts, and more.
-*   **Worldbook**: A Lorebook-style system similar to SillyTavern, with background setting management, conditional triggers, session-bound isolation, system injection, and URL import.
+*   **GRDB Relational Persistence**: Core persistence migrated from JSON to GRDB + SQLite, covering sessions, configuration, MCP, worldbooks, memory, feedback, shortcuts, usage analytics, and global prompts; SQLCipher full-disk physical encryption can be turned on as a base layer.
+*   **Worldbook**: A Lorebook-style system similar to SillyTavern, with background setting management, conditional triggers, session-bound isolation, system injection, and URL import. SillyTavern compatibility has been further improved for multi-book injection, injection-budget control, and field isolation.
 *   **Broad Format Compatibility**: Compatible with PNG naidata, top-level JSON arrays, and `character_book` worldbook formats.
-*   **Request Logs and Speed Insights**: Includes independent request logs, detailed token summaries, and streaming response speed charts.
+*   **Request Logs and Speed Insights**: Includes independent request logs, payload detail pages, an optional toggle for plain-text request message logging, detailed token summaries, and streaming-response speed charts.
+*   **Usage Analytics**: Tracks text requests, model rankings, tokens, and cached tokens. Provides iOS/watchOS dashboards, a green heatmap, cache-hit rate, and cross-device sync; today's trend is split by hour, and per-model token trend charts, share analysis, and an all-time range are available.
 *   **Advanced Rendering**: Built-in Markdown rendering with syntax highlighting, tables, and LaTeX math support.
 
 #### Daily Pulse Proactive Briefing
@@ -76,15 +82,21 @@ Since I mostly use a Mac and an Apple Watch in daily life, the iPhone side still
 *   **Feedback History Learning**: Likes, downranks, hides, and saves become long-term preference signals that keep shaping future results.
 *   **Morning Reminders and Continue Chat**: Supports scheduled reminders, notification quick actions, saving cards as sessions, and continuing into chat flows on both iOS and watchOS.
 
-#### Sync, Debugging, and Operations
+#### Security, Sync, and Operations
 
-*   **Cross-Device Sync**: Built-in iOS ↔ watchOS sync engine for providers, sessions, worldbooks, tool settings, Daily Pulse data, and more, with Manifest/Delta differential sync in the main path.
-*   **Sync and Backup**: Supports ETOS package export/import, full import on watchOS, startup backup with corruption self-healing, and signed snapshot uploads to S3-compatible object storage such as AWS S3 or Cloudflare R2.
-*   **In-App Feedback Assistant**: Supports feedback categories, environment collection, PoW submission flow, and dual-platform sync.
+*   **App Lock**: Two-factor protection backed by a Keychain-stored PBKDF2 master password and biometrics (Face ID / Touch ID); supports verifying the old password when changing it and auto-presenting the unlock screen on lock. Available on both iOS and watchOS.
+*   **Full-Disk Database Encryption**: SQLCipher applies physical-layer encryption to the core SQLite databases, with encrypted migration, new-password verification, and reads from encrypted side-databases. The in-app file browser and debug tools are fully compatible.
+*   **Snapshot Backup and Encryption**: Builds offline database snapshots through the SQLite Online Backup API (with FTS stripping), supports a full snapshot mode, and offers dual-mode AES-256-GCM encryption (simple password / PBKDF2), along with binary `.elsbackup` upload and a secure restore flow.
+*   **Cross-Device Sync**: A built-in iOS ↔ watchOS sync engine that automatically syncs provider config, sessions, worldbooks, tool settings, Daily Pulse, usage analytics, user profile, global prompts, and more. Supports Manifest/Delta differential sync, a WatchConnectivity fast channel, offline session-fork isolation, and merging of retry-version history for the same message.
+*   **Multi-Channel Cloud Backup**: Supports ETOS package export/import, full import on watchOS, CloudKit transport (including APNs silent push to trigger background sync), iCloud Drive backup export/import, startup backup with corruption self-healing, and signed snapshot uploads to S3-compatible object storage (AWS S3 / Cloudflare R2), plus restore by downloading from the cloud.
+*   **AppConfigStore Configuration Hub**: Fully replaces `@AppStorage`; every runtime setting goes through GRDB persistence with a runtime read cache and background async writes dispatched back to the main thread, avoiding main-thread I/O and multi-device config drift. A one-time migration from legacy UserDefaults is included.
+*   **Update Timeline**: A back-end-free version tracking system that rebuilds the release timeline locally from build info and cache, with AI summaries rendered as Markdown — iOS shows it in batches, watchOS splits it into a second-level browser.
+*   **In-App Feedback Assistant**: Supports feedback categories, environment collection, Git commit hash, PoW submission flow, in-ticket comments, jumping from referenced commits into the update timeline, distribution-channel display, and cross-device sync.
 *   **Network Proxy Support**: Supports global and provider-level HTTP(S)/SOCKS proxy with authentication.
 *   **Feedback Center and Notifications**: Supports in-ticket comments, developer badge display, status auto-refresh, and high-priority local notifications with deep links.
-*   **LAN Debugging**: Includes a LAN debugging client, a Go-based companion service, and a built-in web console for browser-based file/session management.
-*   **Localization**: Supports 8 languages — English, Simplified Chinese, Traditional Chinese (Hong Kong), Japanese, Russian, French, Spanish, and Arabic.
+*   **LAN Debugging**: Includes a LAN debugging client, a Go-based companion service, and a built-in web console for browser-based file/session management and OpenAI request capture.
+*   **Doc Site**: A new VitePress documentation site covering installation, first chat, provider setup, UI tours, module references, design docs, and usage tips.
+*   **Localization**: Supports 8 languages — English, Simplified Chinese, Traditional Chinese (Hong Kong), Japanese, Russian, French, Spanish, and Arabic, with in-app language switching.
 
 ---
 
@@ -111,45 +123,58 @@ Technology should be shared. I do not want a small price barrier to block someon
 *   **Language**: Swift 6
 *   **UI**: SwiftUI
 *   **Architecture**: MVVM + Protocol Oriented Programming
-*   **Data**: GRDB + SQLite (core persistence for sessions / configuration / memory and local vector store), JSON (import/export and compatibility formats)
-*   **Networking and Transport**: URLSession (API requests), Streamable HTTP / SSE (MCP transport), WebSocket / HTTP polling (LAN debugging)
-*   **AI Protocol**: Model Context Protocol (MCP)
-*   **System Integrations**: Siri Shortcuts, WatchConnectivity, UserNotifications, BackgroundTasks (iOS)
-*   **Dependency Management**: Swift Package Manager (current explicit dependencies: `GRDB.swift` and `swift-markdown-ui`, with transitive dependencies `networkimage` and `swift-cmark`)
+*   **Data**: GRDB + SQLite + SQLCipher (core persistence, local vector store, and optional full-disk physical encryption), JSON (import/export and compatibility formats)
+*   **Configuration**: AppConfigStore (replaces `@AppStorage`; GRDB-backed persistence + runtime cache + background async writes)
+*   **Security**: SQLCipher full-disk encryption, Keychain PBKDF2 master password, LocalAuthentication biometrics, AES-256-GCM snapshot encryption
+*   **Networking and Transport**: URLSession (API requests), Streamable HTTP / SSE (MCP transport), WatchConnectivity / CloudKit / APNs silent push (cross-device and cloud transport), WebSocket / HTTP polling (LAN debugging)
+*   **AI Protocol**: Model Context Protocol (built on the official [swift-sdk](https://github.com/modelcontextprotocol/swift-sdk)), OpenAI Chat / Responses, Anthropic Messages, Gemini API
+*   **System Integrations**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, BackgroundTasks (iOS), LocalAuthentication, Speech / AVFoundation
+*   **Doc Site**: VitePress / Teek (doc site only; its dependencies are not counted in the code-size figures above)
+*   **Dependency Management**: Swift Package Manager (current explicit dependencies: `GRDB.swift` (Eric-Terminal fork), `SQLCipher.swift`, `swift-sdk` (MCP), `swift-markdown-ui`, `SwiftMath`, `ZIPFoundation`, `Cepheus` (watchOS third-party keyboard), with transitive dependencies such as `networkimage`, `swift-cmark`, `eventsource`, `swift-nio`)
 
 ---
 
 ## 🏗️ Project Architecture
 
-The project uses a two-layer structure: a platform-independent Shared framework plus platform-specific view layers.
+The project uses a two-layer structure: a platform-independent Shared framework plus platform-specific view layers. The latest round of refactoring introduced the `Config/AppConfigStore` configuration hub, fully replacing `@AppStorage` and consolidating every runtime setting into GRDB; the largest single Swift file is about 1,224 lines (`Config/AppConfigStore.swift`) and every other module stays under 1,000 lines, which keeps Shared / iOS / watchOS / test code easier to maintain locally.
 
 ```
-Shared/Shared/                  ← Platform-agnostic business logic (87 Swift source files)
-├── ChatService.swift            ← Central singleton for sessions, messages, model selection, and request orchestration
-├── APIAdapter.swift             ← API adapter layer for OpenAI / Anthropic / Gemini and related formats
-├── Models.swift                 ← Core data models
-├── Persistence.swift            ← Storage entry, migration bootstrap, and lifecycle coordination
-├── PersistenceGRDBStore.swift   ← Core GRDB relational persistence implementation
-├── DailyPulse.swift             ← Daily Pulse engine, cards, feedback, and task data
-├── DailyPulseDeliveryCoordinator.swift ← Morning reminders, delivery state, and preparation window coordination
-├── Memory/                      ← Memory subsystem (chunking, embeddings, storage)
-├── SimilaritySearch/            ← Local vector database (SQLite)
-├── MCP/                         ← Model Context Protocol client and transport layer
-├── Feedback/                    ← In-app feedback assistant (collection, signing, storage, upload)
-├── Worldbook/                   ← Worldbook engine, import, and export
-├── Sync/                        ← iOS ↔ watchOS sync engine
-├── TTS/                         ← Text-to-speech playback, settings, and presets
-├── Shortcuts/                   ← Siri Shortcuts and URL router integration
-├── AppToolManager.swift         ← Local tools and tool catalog governance
-├── StorageBrowserSupport.swift  ← File browsing and management support
-└── LocalDebugServer.swift       ← LAN debugging client
+Shared/Shared/                         ← Platform-agnostic business logic (268 Swift source files)
+├── AppTool/                            ← Local tools, ask_user_input, SQLite and sandbox file tools
+├── Attachments/                        ← File attachment text extraction
+├── Chat/                               ← Chat models, message versions, export, render state
+│   └── Service/                        ← ChatService request orchestration, response parsing, retry, tools, memory & worldbook injection
+├── Config/                             ← AppConfigStore hub, key definitions, and legacy UserDefaults migration
+├── ConfigLoader/                       ← Provider config, SQLite storage, background and one-shot download state
+├── Core/                               ← Core models, JSONValue, request-body controls and shared infrastructure
+├── DailyPulse/                         ← Daily Pulse generation, filtering, delivery, feedback, and task data
+├── Feedback/                           ← In-app feedback assistant, environment collection, DTOs, and local storage
+├── Font/                               ← Custom font library, font routing, and fallback scopes
+├── LocalDebugServer/                   ← LAN debugging client, web console, file commands, and request capture
+├── Math/                               ← LaTeX / math formula rendering engine
+├── MCP/                                ← MCP client, server storage, Streamable HTTP / SSE transport (built on the official swift-sdk)
+├── Memory/ + SimilaritySearch/         ← Local RAG, embedding, chunking, SQLite vector retrieval
+├── Parsing/                            ← Request-header and parameter-expression parsers
+├── Persistence/                        ← GRDB main/auxiliary databases, migrations, startup backup, media and file storage
+├── Providers/                          ← Provider models, proxy configuration, and OpenAI / Anthropic / Gemini adapters
+├── Security/                           ← App lock state machine, PBKDF2 master password, and database encryption manager
+├── Shortcuts/                          ← Siri Shortcuts, URL router, import and execution relays
+├── Skills/                             ← Agent Skills bundle import, parsing, GitHub fetch, resource reading, and policies
+├── Snapshot/                           ← Offline database snapshot builder, AES-256-GCM encryption, and secure restore
+├── Storage/                            ← Sandbox file browsing, storage statistics, cache cleanup
+├── Sync/                               ← WatchConnectivity fast channel / CloudKit / Manifest / Delta / iCloud Drive / S3 and third-party imports
+├── System/                             ← Global prompts, notifications, announcements, logging, speech recognition, OCR, update timeline
+├── TTS/                                ← System / cloud text-to-speech, queued playback, configuration, and presets
+├── UI/                                 ← Cross-platform UI components (app-lock views, marquee text, etc.)
+├── UsageAnalytics/                     ← Usage events, dashboards, per-hour trends, and per-model token share
+└── Worldbook/                          ← Worldbook models, import/export, SQLite storage, and trigger engine
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (44 Swift source files)
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (47 Swift source files)
-Shared/SharedTests/                         ← Shared-layer tests (54 Swift source files)
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (127 Swift source files)
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (107 Swift source files)
+Shared/SharedTests/                         ← Shared-layer tests (91 Swift source files)
 ```
 
-Data flow: `View → ChatViewModel → ChatService.shared → APIAdapter → LLM API`, with UI updates driven through Combine subjects.
+Data flow: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Sessions, tools, memory, worldbooks, usage analytics, and sync data are all governed through Shared-layer services and GRDB / SQLite storage.
 
 ---
 
@@ -183,4 +208,4 @@ If you want to build it yourself:
 
 ---
 
-This README was last revised on April 18, 2026 (after 31d1e21). The project moves quickly, so if the README falls behind the code, the commit history is the best source of truth.
+This README was last revised on May 23, 2026 (based on commits after `7d150f1c`). The project moves quickly, so if the README falls behind the code, the commit history is the best source of truth.

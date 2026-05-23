@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**iOS と Apple Watch で動作するネイティブ AI クライアントです。OpenAI、Anthropic Claude、Google Gemini、各種互換プロバイダに対応し、MCP ツール呼び出し、ローカル RAG メモリ、Worldbook、Daily Pulse、Siri ショートカット、デバイス間同期を備えています。**
+**iOS と Apple Watch で動作するネイティブ AI クライアントです。OpenAI、Anthropic Claude、Google Gemini など複数のモデルプロバイダに対応し、MCP ツール呼び出し、Agent Skills（スキルパック）、ローカル RAG メモリ、Worldbook、Daily Pulse、アプリロックと SQLCipher フルディスク暗号化、CloudKit / WatchConnectivity によるデバイス間同期、Siri ショートカットを備えています。**
 
 [簡體中文](../../README.md) | [English](README_EN.md) | [Traditional Chinese](README_ZH_HANT.md) | [Русский](README_RU.md)
 
@@ -23,7 +23,7 @@
 
 学校生活はけっこう退屈で、普段から AI に聞きたいことが次々に出てきます。当時 App Store にある AI アプリは、値段が高すぎるか、機能が物足りなすぎるかのどちらかで、とくに Watch 側はなおさらでした。なので、いっそ自分で作ることにしました。
 
-最初は 1,800 行しかなく、API Key もハードコーディングしていた雑な試作でしたが、今では **235 個の Swift ソースファイルと 118,070 行のコード**（Shared / iOS / watchOS / テストを含む）を持つプロジェクトにまで育ちました。「ETOS LLM Studio」という名前は少し大げさかもしれませんが、本質的には LLM アプリの境界を探るための私の実験場です。
+最初は 1,800 行しかなく、API Key もハードコーディングしていた雑な試作でしたが、今では **595 個の Swift ソースファイルと 167,821 行の Swift コード**（`cloc . --timeout=0` で計測、Swift のみ。VitePress ドキュメントサイトの依存は含みません）を持つプロジェクトにまで育ちました。「ETOS LLM Studio」という名前は少し大げさかもしれませんが、本質的には LLM アプリの境界を探るための私の実験場です。
 
 いまでは単なる Watch アプリではなく、iOS 側もモデル、ツール、記憶、Worldbook、Daily Pulse を管理しやすい形へ少しずつ育てています。さらに、両プラットフォームは内蔵の同期エンジンでデータを共有できます。
 
@@ -33,40 +33,46 @@
 
 #### チャットとモデル
 
-*   **両プラットフォーム向けネイティブ体験**：iOS と Apple Watch にネイティブ対応し、全体のデザインは揃えつつ、画面サイズごとに操作感を最適化しています。
-*   **会話管理の強化**：会話全文検索、メッセージ番号ジャンプ、フォルダ分類、一括移動、会話単位のデバイス間送信に対応しています。
-*   **マルチモデル対応**：OpenAI、Anthropic（Claude）、Google（Gemini）などの API 形式にネイティブ対応し、アプリ内でプロバイダとモデルを管理できます。
-*   **高度なリクエスト設定**：カスタムヘッダー、パラメータ式、生 JSON リクエストボディに対応し、互換 API や実験的な設定も扱いやすくしています。
-*   **マルチモーダルと画像生成**：音声入力、画像入力、AI 画像生成をサポートします。
-*   **会話インポート / エクスポート**：Cherry Studio、RikkaHub、Kelivo、ChatGPT conversations からの取り込みと、PDF / Markdown / TXT への書き出しに対応しています。
+*   **両プラットフォーム向けネイティブ体験**：iOS と Apple Watch にネイティブ対応し、全体のデザインは揃えつつ、画面サイズごとに操作感を最適化しています。iOS のセッション一覧はカード型レイアウトで、フォルダとセッションが分かれて並び、横向き時には固定 2 カラムのサイドバーに自動切り替わります。
+*   **会話管理の強化**：会話全文検索、ヒット箇所プレビュー、メッセージ番号ジャンプ、フォルダ分類、ネスト移動、一括操作、会話単位のデバイス間送信に対応し、会話履歴は無限スクロール読み込みに変更しました。
+*   **マルチモデル対応**：OpenAI Chat、OpenAI Responses、Anthropic（Claude）、Google（Gemini）などの API 形式にネイティブ対応し、アプリ内でプロバイダ／モデルを管理できるほか、プロバイダ配下の全モデルに対する一括接続テストにも対応します。
+*   **高度なリクエスト設定**：カスタムヘッダー、パラメータ式、構造化リクエスト制御、Key/Value Payload 編集、生 JSON リクエストボディ、リクエストプレビューに対応し、互換 API や特殊なモデルも扱いやすくしています。
+*   **メッセージ正規表現ルール**：送受信メッセージをルールで一括書き換えでき、複数ルールを設定で管理し、プロバイダ画面から素早く開けます。
+*   **モデル料金と費用見積もり**：モデルごとにローカル価格（段階価格区間を含む）を設定でき、トークン使用量に応じて各メッセージのコストを自動計算します。
+*   **マルチモーダルと画像生成**：音声、画像、ファイル添付の送信に対応。画像は専用 OCR チャネルを通せるほか、ファイル添付は送信前にテキスト化され、AI 画像生成にも対応します。
+*   **会話インポート / エクスポート**：ETOS、Cherry Studio、RikkaHub、Kelivo、ChatGPT conversations からの取り込みと、PDF / Markdown / TXT への書き出しに対応しています。
 *   **音声入力（STT）**：`SFSpeechRecognizer` のストリーミング認識に対応し、録音シートでのリアルタイム文字起こしと入力欄への反映が可能です。
 *   **音声読み上げ（TTS）**：システム TTS、クラウド TTS、自動フォールバックに対応し、TTS モデルと再生パラメータを個別に設定できます。
+*   **並列セッションリクエスト**：セッションごとに独立したリクエスト状態を保持し、セッション単位のキャンセル、バックグラウンド完了通知、通知からの該当チャットへのジャンプに対応します。
 
 #### 表示と閲覧体験
 
-*   **表示システムのカスタマイズ**：カスタムフォント（WOFF / WOFF2）、フォントスロット優先順、吹き出し / 文字色設定、バブルレス UI に対応しています。
+*   **表示システムのカスタマイズ**：カスタムフォント（WOFF / WOFF2）、フォントスケール、フォントスロット優先順、吹き出し／文字色設定、チャット配色プロファイル、時刻に応じた配色自動切り替え、アシスタント吹き出しの無効化に対応しています。
+*   **バブルツールバー**：チャットバブルの下にカスタマイズ可能なツールバーを表示でき、1 行横スクロール、外枠ボーダーの無効化、iOS と watchOS で別々の既定項目（ユーザー／アシスタント別）、watchOS でのドラッグ並び替えに対応します。
 *   **フォントフォールバック戦略**：段落単位 / 文字単位のフォールバック範囲を切り替えでき、多言語混在や記号表示の安定性を高めます。
-*   **思考・本文プレビュー**：思考の自動プレビューが既定で有効で、手動展開の手間を減らします。
-*   **Markdown / コード表示の強化**：構文ハイライト、コピー完了フィードバック、折りたたみ、iOS コードプレビュー、Mermaid 描画、引用ブロック左ラインに対応しています。
+*   **思考とツールタイムライン**：思考のローリングプレビュー、思考時間表示、非同期思考サマリー、ツール呼び出しのつながったタイムライン、エラー再試行の継続実行、複数バージョンの返信切り替えに対応します。ツール承認は行／列レイアウトのオプションを備えたネイティブな質問シートに刷新されました。
+*   **Markdown / コード表示の強化**：構文ハイライト、コピー完了フィードバック、折りたたみ、iOS コードプレビュー、Mermaid 描画、SwiftMath 数式、引用ブロック左ラインに対応しています。
+*   **watchOS 画像閲覧**：Markdown 画像と生成画像のプレビューが Digital Crown のズームとドラッグに対応し、小さな画面でもしっかり画像を見られます。
 
 #### ツールと自動化
 
-*   **ツールセンター + 拡張ツール**：MCP、Shortcuts、ローカルツールを一元管理し、ツール切り替え、承認ポリシー、セッション単位の有効化に対応します。
-*   **Agent Skills**：ツールセンターから一元管理でき、iOS はローカルファイル、watchOS は URL ダウンロードでスキルを導入できます。
-*   **構造化質問ツール（ask_user_input）**：1 問ずつの段階回答、単一/複数選択の排他ルール、自由入力、前の質問へ戻る操作に対応します。
-*   **拡張ツール機能の拡充**：SQLite の CRUD、Web カード表示、フィードバックチケット自動送信ツールを追加しました。
+*   **ツールセンター + 拡張ツール**：MCP / Shortcuts / ローカルツール / Agent Skills と組み込みの `getSystemTime` などを一元管理し、チャットでのツール切り替え、承認ポリシー、セッション単位の有効化、カテゴリ分け、迅速なデバッグに対応します。
+*   **Agent Skills スキルパック**：ローカルフォルダ、GitHub リポジトリリンク、GitHub raw / ネストフォルダ、デフォルトブランチ、隠しフォルダからスキルパックを取り込めます。スキルリソースは複数のテキストエンコーディング読み込み、大容量テキストのチャンク化、ドキュメント抽出、画像 OCR に対応し、スキルのメタデータはオンデマンド有効化のためモデルに公開されます。
+*   **構造化質問ツール（`ask_user_input`）**：1 問ずつの段階回答、単一/複数選択の排他ルール、自由入力、前の質問へ戻る操作に対応します。
+*   **拡張ツール機能の拡充**：システム時刻、SQLite の CRUD、Web カード表示、フィードバックチケット自動送信ツールを内蔵しています。
 *   **サンドボックスファイルツール**：検索、分割読み込み、差分確認、部分編集、移動 / コピー / 削除などのファイル操作を行えます。
-*   **MCP ツール呼び出し**：リモート [Model Context Protocol](https://modelcontextprotocol.io) に対応し、完全な MCP クライアント、Streamable HTTP/SSE 伝送、再接続、タイムアウト、ハンドシェイク制御、能力交渉を備えています。
+*   **MCP ツール呼び出し**：公式 Swift [Model Context Protocol](https://modelcontextprotocol.io) SDK を基盤に、Streamable HTTP / SSE 伝送、再接続、タイムアウト、ハンドシェイク制御、メタデータ更新、リソース／テンプレート／プロンプト読み込み、能力交渉に対応します。チャット公開トグルにより自動接続を遅延でき、手動切断後は再接続を停止します。
 *   **Siri ショートカット**：Shortcuts フレームワークと統合されており、ショートカットから AI を呼び出したり、カスタムツールや URL Scheme ルーティングを利用できます。
-*   **アプリ内ファイル管理**：サンドボックス内ファイルを直接閲覧・管理できるファイルマネージャを内蔵しています。
+*   **アプリ内ファイル管理**：サンドボックス内ファイルを直接閲覧・管理できるファイルマネージャを内蔵し、プレーンテキストファイルはその場でプレビューできます。
 
 #### 記憶と知識整理
 
 *   **ローカル RAG メモリ**：Embedding はクラウド API を利用できますが、**ベクトルデータベース自体は SQLite 上で完全にローカル動作**します。テキスト分割、埋め込み進捗表示、記憶編集、能動検索ツールにも対応しています。
-*   **GRDB 関係データ永続化**：コア永続化を JSON から GRDB + SQLite に移行し、会話、設定、MCP、Worldbook、記憶、フィードバック、ショートカットなどをカバーしています。
-*   **Worldbook**：SillyTavern の Lorebook に近い仕組みで、背景設定管理、条件トリガー、セッション単位の分離送信、system 注入、URL インポートに対応します。
+*   **GRDB 関係データ永続化**：コア永続化を JSON から GRDB + SQLite に移行し、会話、設定、MCP、Worldbook、記憶、フィードバック、ショートカット、使用量分析、グローバルプロンプトなどをカバーしています。土台として SQLCipher のフルディスク物理暗号化を任意で有効化できます。
+*   **Worldbook**：SillyTavern の Lorebook に近い仕組みで、背景設定管理、条件トリガー、セッション単位の分離送信、system 注入、URL インポートに対応します。SillyTavern との互換性として、複数本の同時注入、注入バジェット制御、フィールド分離をさらに改善しました。
 *   **幅広い形式互換**：PNG naidata、JSON トップレベル配列、`character_book` 形式の Worldbook を扱えます。
-*   **リクエストログと速度分析**：独立したリクエストログ、詳細な Token 集計、ストリーミング応答速度グラフを備えています。
+*   **リクエストログと速度分析**：独立したリクエストログ、ペイロード詳細ページの展開、リクエスト本文の平文記録を切り替えるトグル、詳細な Token 集計、ストリーミング応答速度グラフを備えています。
+*   **使用量分析**：テキストリクエスト、モデルランキング、Token とキャッシュ Token を記録し、iOS / watchOS 両方のダッシュボード、緑色ヒートマップ、キャッシュヒット率、デバイス間同期を提供します。今日の傾向は時間単位で分割され、モデル別の Token トレンドグラフ、占有率分析、全期間レンジに対応します。
 *   **高度なレンダリング**：Markdown レンダラを内蔵し、コードハイライト、表、LaTeX 数式を表示できます。
 
 #### Daily Pulse の先回りブリーフィング
@@ -76,15 +82,21 @@
 *   **フィードバック履歴の学習**：高評価、低評価、非表示、保存といった反応が長期的な好みとして蓄積され、今後の結果に影響します。
 *   **朝の通知と会話継続**：定時通知、通知クイックアクション、セッション保存、会話継続に対応し、iOS と watchOS の両方で流れをつなげられます。
 
-#### 同期・デバッグ・運用
+#### セキュリティ・同期・運用
 
-*   **デバイス間同期**：iOS ↔ watchOS の同期エンジンを内蔵し、プロバイダ設定、会話、Worldbook、ツール設定、Daily Pulse データなどを自動共有しつつ、Manifest/Delta 差分同期を主経路に採用しています。
-*   **同期とバックアップ**：ETOS パッケージのエクスポート/インポート、watch 側フルインポート、起動時バックアップと破損時自己修復、AWS S3 / Cloudflare R2 などの S3 互換オブジェクトストレージへの署名付きスナップショットアップロードに対応します。
-*   **アプリ内フィードバックアシスタント**：フィードバック分類、環境情報収集、PoW 送信フロー、両プラットフォーム同期をサポートします。
+*   **アプリロック**：Keychain に保存される PBKDF2 マスターパスワードと生体認証（Face ID / Touch ID）の二重保護に対応します。パスワード変更時の旧パスワード検証や、ロック時のアンロック画面自動表示にも対応し、iOS／watchOS の両方で利用できます。
+*   **データベース全体の暗号化**：SQLCipher によりコア SQLite データベースを物理層で暗号化します。暗号化マイグレーション、新パスワード検証、暗号化サブデータベースからの読み込みに対応し、アプリ内ファイルブラウザやデバッグツールとも完全に互換です。
+*   **スナップショットのバックアップと暗号化**：SQLite Online Backup API でオフラインのデータベーススナップショット（FTS は剥離）を構築でき、フルスナップショットモードに対応します。シンプルパスワードと PBKDF2 の 2 モードによる AES-256-GCM 暗号化に加え、バイナリ `.elsbackup` のアップロードと安全な復元フローを提供します。
+*   **デバイス間同期**：iOS ↔ watchOS の同期エンジンを内蔵し、プロバイダ設定、会話、Worldbook、ツール設定、Daily Pulse、使用量分析、ユーザープロファイル、グローバルプロンプトなどを自動共有します。Manifest/Delta の差分同期、WatchConnectivity の高速チャネル、オフラインでのセッションフォーク分離、同一メッセージのリトライ版履歴マージに対応します。
+*   **マルチチャネルのクラウドバックアップ**：ETOS パッケージのエクスポート／インポート、watch 側フルインポート、CloudKit 伝送（APNs サイレントプッシュによるバックグラウンド同期トリガーを含む）、iCloud Drive のバックアップ書き出し／読み込み、起動時バックアップと破損時自己修復、AWS S3 / Cloudflare R2 などの S3 互換オブジェクトストレージへの署名付きスナップショットアップロード、クラウドからのダウンロード復元に対応します。
+*   **AppConfigStore 設定ハブ**：`@AppStorage` を完全に置き換え、すべての実行時設定が GRDB の永続化、実行時読み取りキャッシュ、メインスレッドへディスパッチされるバックグラウンド非同期書き込みを経由します。これによりメインスレッド I/O や複数端末間での設定ずれを防ぎます。旧 UserDefaults 設定の一回限りの移行にも対応します。
+*   **更新タイムライン**：バックエンド不要のバージョントラッキング。Build 情報とキャッシュからリリースタイムラインをローカルで再構築し、AI 要約は Markdown でレンダリングします。iOS ではバッチ表示、watchOS では 2 階層ページに分けて閲覧できます。
+*   **アプリ内フィードバックアシスタント**：フィードバック分類、環境情報の収集、Git コミットハッシュ、PoW 送信フロー、チケット内コメント、参照コミットから更新タイムラインへのジャンプ、配布チャネル情報のアップロード、デバイス間同期をサポートします。
 *   **ネットワークプロキシ**：グローバル / プロバイダ単位の HTTP(S) / SOCKS プロキシ（認証付き）をサポートします。
 *   **フィードバックセンターと通知強化**：チケット内コメント、開発者バッジ表示、状態自動更新、高優先度ローカル通知から詳細への遷移をサポートします。
-*   **LAN デバッグ**：LAN デバッグクライアントに加え、Go 版デバッグサービスと内蔵 Web コンソールでブラウザからファイル/会話を管理できます。
-*   **ローカライズ**：英語、簡体字中国語、繁体字中国語（香港）、日本語、ロシア語、フランス語、スペイン語、アラビア語の 8 言語に対応しています。
+*   **LAN デバッグ**：LAN デバッグクライアントに加え、Go 版デバッグサービスと内蔵 Web コンソールでブラウザからファイル／会話／OpenAI リクエストキャプチャを管理できます。
+*   **ドキュメントサイト**：VitePress 製のドキュメントサイトを新設し、インストール、初回チャット、プロバイダ設定、UI ツアー、モジュール解説、設計ドキュメント、利用ヒントを網羅しています。
+*   **ローカライズ**：英語、簡体字中国語、繁体字中国語（香港）、日本語、ロシア語、フランス語、スペイン語、アラビア語の 8 言語に対応し、アプリ内で言語を切り替えられます。
 
 ---
 
@@ -111,45 +123,58 @@
 *   **言語**: Swift 6
 *   **UI**: SwiftUI
 *   **アーキテクチャ**: MVVM + Protocol Oriented Programming
-*   **データ**: GRDB + SQLite（会話 / 設定 / 記憶などの中核永続化とローカルベクトルDB）, JSON（インポート / エクスポートと互換フォーマット）
-*   **ネットワークと伝送**: URLSession（API リクエスト）, Streamable HTTP / SSE（MCP 伝送）, WebSocket / HTTP Polling（LAN デバッグ）
-*   **AI プロトコル**: Model Context Protocol (MCP)
-*   **システム連携**: Siri Shortcuts, WatchConnectivity, UserNotifications, BackgroundTasks（iOS）
-*   **依存管理**: Swift Package Manager（現在の明示的依存は `GRDB.swift` と `swift-markdown-ui`。推移的依存として `networkimage` と `swift-cmark` を含みます）
+*   **データ**: GRDB + SQLite + SQLCipher（中核永続化、ローカルベクトルDB、任意のフルディスク物理暗号化）, JSON（インポート / エクスポートと互換フォーマット）
+*   **設定**: AppConfigStore（`@AppStorage` を置き換え、GRDB 永続化 + 実行時キャッシュ + バックグラウンド非同期書き込み）
+*   **セキュリティ**: SQLCipher フルディスク暗号化、Keychain PBKDF2 マスターパスワード、LocalAuthentication 生体認証、AES-256-GCM スナップショット暗号化
+*   **ネットワークと伝送**: URLSession（API リクエスト）, Streamable HTTP / SSE（MCP 伝送）, WatchConnectivity / CloudKit / APNs サイレントプッシュ（デバイス間とクラウド伝送）, WebSocket / HTTP Polling（LAN デバッグ）
+*   **AI プロトコル**: Model Context Protocol（公式の [swift-sdk](https://github.com/modelcontextprotocol/swift-sdk) を基盤）, OpenAI Chat / Responses, Anthropic Messages, Gemini API
+*   **システム連携**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, BackgroundTasks（iOS）, LocalAuthentication, Speech / AVFoundation
+*   **ドキュメントサイト**: VitePress / Teek（ドキュメントサイトのみで使用。README の規模指標にはその依存を含めません）
+*   **依存管理**: Swift Package Manager（現在の明示的依存は `GRDB.swift`（Eric-Terminal fork）、`SQLCipher.swift`、`swift-sdk`（MCP）、`swift-markdown-ui`、`SwiftMath`、`ZIPFoundation`、`Cepheus`（watchOS サードパーティキーボード）。推移的依存として `networkimage`、`swift-cmark`、`eventsource`、`swift-nio` などを含みます）
 
 ---
 
 ## 🏗️ プロジェクト構成
 
-このプロジェクトは、プラットフォーム非依存の Shared フレームワークと、各プラットフォーム専用のビュー層からなる二層構造です。
+このプロジェクトは、プラットフォーム非依存の Shared フレームワークと、各プラットフォーム専用のビュー層からなる二層構造です。最新のリファクタで `Config/AppConfigStore` 設定ハブを導入し、`@AppStorage` を全面的に置き換えて実行時設定をすべて GRDB に集約しました。現在最大の Swift ファイルは約 1,224 行（`Config/AppConfigStore.swift`）で、他のモジュールはどれも 1,000 行以内に収まり、Shared / iOS / watchOS / テストコードのいずれも局所的に保守しやすくなっています。
 
 ```
-Shared/Shared/                  ← プラットフォーム非依存の業務ロジック（87 個の Swift ソースファイル）
-├── ChatService.swift            ← セッション、メッセージ、モデル選択、リクエスト編成を管理する中核シングルトン
-├── APIAdapter.swift             ← OpenAI / Anthropic / Gemini など向け API アダプタ層
-├── Models.swift                 ← コアデータモデル
-├── Persistence.swift            ← ストレージ入口、移行起動、ライフサイクル調整
-├── PersistenceGRDBStore.swift   ← GRDB 関係データ永続化の中核実装
-├── DailyPulse.swift             ← Daily Pulse エンジン、カード、フィードバック、タスクデータ
-├── DailyPulseDeliveryCoordinator.swift ← 朝の通知、配信状態、準備ウィンドウの調整
-├── Memory/                      ← 記憶サブシステム（分割、埋め込み、保存）
-├── SimilaritySearch/            ← ローカルベクトルデータベース（SQLite）
-├── MCP/                         ← Model Context Protocol クライアントと伝送層
-├── Feedback/                    ← アプリ内フィードバックアシスタント（収集、署名、保存、送信）
-├── Worldbook/                   ← Worldbook エンジン、インポート、エクスポート
-├── Sync/                        ← iOS ↔ watchOS 同期エンジン
-├── TTS/                         ← 音声読み上げの再生、設定、プリセット
-├── Shortcuts/                   ← Siri ショートカットと URL ルータ統合
-├── AppToolManager.swift         ← ローカルツールとツールカタログの制御
-├── StorageBrowserSupport.swift  ← ファイル閲覧・管理サポート
-└── LocalDebugServer.swift       ← LAN デバッグクライアント
+Shared/Shared/                         ← プラットフォーム非依存の業務ロジック（268 個の Swift ソースファイル）
+├── AppTool/                            ← ローカルツール、ask_user_input、SQLite とサンドボックスファイル系ツール
+├── Attachments/                        ← ファイル添付のテキスト抽出
+├── Chat/                               ← チャットモデル、メッセージバージョン、エクスポート、描画状態
+│   └── Service/                        ← ChatService のリクエスト編成、応答解析、リトライ、ツール、記憶と Worldbook 注入
+├── Config/                             ← AppConfigStore 設定ハブ、キー定義、旧 UserDefaults マイグレーション
+├── ConfigLoader/                       ← Provider 設定、SQLite ストレージ、背景画像と単発ダウンロード状態
+├── Core/                               ← コアモデル、JSONValue、リクエストボディ制御、共通基盤
+├── DailyPulse/                         ← Daily Pulse の生成、フィルタリング、配信、フィードバック、タスクデータ
+├── Feedback/                           ← アプリ内フィードバックアシスタント、環境採取、DTO、ローカル保存
+├── Font/                               ← カスタムフォントライブラリ、フォントルーティング、フォールバック範囲
+├── LocalDebugServer/                   ← LAN デバッグクライアント、Web コンソール、ファイルコマンド、リクエストキャプチャ
+├── Math/                               ← LaTeX / 数式レンダリングエンジン
+├── MCP/                                ← MCP クライアント、サーバーストレージ、Streamable HTTP / SSE 伝送（公式 swift-sdk ベース）
+├── Memory/ + SimilaritySearch/         ← ローカル RAG、Embedding、チャンク化、SQLite ベクトル検索
+├── Parsing/                            ← リクエストヘッダーとパラメータ式のパーサ
+├── Persistence/                        ← GRDB のメイン／補助 DB、マイグレーション、起動時バックアップ、メディアとファイル保存
+├── Providers/                          ← Provider モデル、プロキシ設定、OpenAI / Anthropic / Gemini アダプタ
+├── Security/                           ← アプリロックの状態機械、PBKDF2 マスターパスワード、データベース暗号化管理
+├── Shortcuts/                          ← Siri ショートカット、URL ルータ、インポートと実行中継
+├── Skills/                             ← Agent Skills のインポート、解析、GitHub 取得、リソース読み込み、ポリシー
+├── Snapshot/                           ← オフラインデータベーススナップショット構築、AES-256-GCM 暗号化、安全な復元
+├── Storage/                            ← サンドボックスファイル閲覧、ストレージ統計、キャッシュ整理
+├── Sync/                               ← WatchConnectivity 高速チャネル / CloudKit / Manifest / Delta / iCloud Drive / S3 とサードパーティインポート
+├── System/                             ← グローバルプロンプト、通知、お知らせ、ログ、音声認識、OCR、更新タイムライン
+├── TTS/                                ← システム／クラウド読み上げ、キュー再生、設定、プリセット
+├── UI/                                 ← クロスプラットフォーム UI コンポーネント（アプリロック画面、マーキー文字など）
+├── UsageAnalytics/                     ← 使用量イベント、ダッシュボード、時間単位トレンド、モデル別 Token 占有率
+└── Worldbook/                          ← Worldbook モデル、インポート／エクスポート、SQLite ストレージ、トリガーエンジン
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS ビュー層（44 個の Swift ソースファイル）
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS ビュー層（47 個の Swift ソースファイル）
-Shared/SharedTests/                         ← Shared 層テスト（54 個の Swift ソースファイル）
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS ビュー層（127 個の Swift ソースファイル）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS ビュー層（107 個の Swift ソースファイル）
+Shared/SharedTests/                         ← Shared 層テスト（91 個の Swift ソースファイル）
 ```
 
-データフローは `View → ChatViewModel → ChatService.shared → APIAdapter → LLM API` で、UI 更新は Combine の Subjects によって駆動されます。
+データフローは `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API` の流れで、セッション、ツール、記憶、Worldbook、使用量分析、同期データは Shared 層サービスと GRDB / SQLite ストレージにより一元的に管理されます。
 
 ---
 
@@ -183,4 +208,4 @@ Shared/SharedTests/                         ← Shared 層テスト（54 個の 
 
 ---
 
-この README は 2026 年 4 月 18 日（31d1e21 の後）に更新されました。プロジェクトの更新速度はかなり速いので、README が追いついていない場合はコミット履歴のほうが正確です。
+この README は 2026 年 5 月 23 日に更新されました（`7d150f1c` 以降のコミットを基準）。プロジェクトの更新速度はかなり速いので、README が追いついていない場合はコミット履歴のほうが正確です。
