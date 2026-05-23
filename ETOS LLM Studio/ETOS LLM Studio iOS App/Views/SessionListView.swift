@@ -242,34 +242,28 @@ struct SessionFolderBrowserView: View {
                 }
 
                 if !folderEntries.isEmpty {
-                    Section {
-                        ForEach(folderEntries) { entry in
-                            mergedEntryRow(entry)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                        }
-                    } header: {
-                        SessionGroupHeader(
-                            title: NSLocalizedString("文件夹", comment: ""),
-                            systemImage: "folder.fill"
-                        )
+                    sectionLabelRow(
+                        title: NSLocalizedString("文件夹", comment: ""),
+                        systemImage: "folder.fill"
+                    )
+                    ForEach(folderEntries) { entry in
+                        mergedEntryRow(entry)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
                 }
 
                 if !sessionEntries.isEmpty {
-                    Section {
-                        ForEach(sessionEntries) { entry in
-                            mergedEntryRow(entry)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                        }
-                    } header: {
-                        SessionGroupHeader(
-                            title: NSLocalizedString("会话", comment: ""),
-                            systemImage: "bubble.left.and.bubble.right.fill"
-                        )
+                    sectionLabelRow(
+                        title: NSLocalizedString("会话", comment: ""),
+                        systemImage: "bubble.left.and.bubble.right.fill"
+                    )
+                    ForEach(sessionEntries) { entry in
+                        mergedEntryRow(entry)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
                 }
 
@@ -295,6 +289,17 @@ struct SessionFolderBrowserView: View {
             }
         }
         return applySearchModifier(to: baseList)
+    }
+
+    /// 把分组标题渲染为普通 row，避免 plain List 的 Section header
+    /// 在向上滚动时贴顶并与搜索框毛玻璃穿模。
+    private func sectionLabelRow(title: String, systemImage: String?) -> some View {
+        SessionGroupHeader(title: title, systemImage: systemImage)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 
     private var emptyStateRow: some View {

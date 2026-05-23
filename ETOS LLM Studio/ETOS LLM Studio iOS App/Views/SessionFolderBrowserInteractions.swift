@@ -225,48 +225,59 @@ extension SessionFolderBrowserView {
 
     @ViewBuilder
     var searchResultSection: some View {
-        Section {
-            if isSearching {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text(NSLocalizedString("正在搜索历史会话…", comment: ""))
-                        .foregroundStyle(.secondary)
-                }
+        SessionGroupHeader(
+            title: NSLocalizedString("搜索结果", comment: ""),
+            systemImage: "magnifyingglass"
+        )
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+
+        if isSearching {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text(NSLocalizedString("正在搜索历史会话…", comment: ""))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 16)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+        } else if searchResultSessions.isEmpty {
+            Text(NSLocalizedString("未找到匹配的搜索结果。", comment: ""))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 24)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
-            } else if searchResultSessions.isEmpty {
-                Text(NSLocalizedString("未找到匹配的搜索结果。", comment: ""))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 24)
+        } else {
+            ForEach(pagedSearchResultItems) { result in
+                searchResultRow(result)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-            } else {
-                ForEach(pagedSearchResultItems) { result in
-                    searchResultRow(result)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .onAppear {
-                            loadMoreSearchResultItemsIfNeeded(currentID: result.id)
-                        }
-                }
+                    .onAppear {
+                        loadMoreSearchResultItemsIfNeeded(currentID: result.id)
+                    }
+            }
 
-                if shouldShowLoadingMoreFooter {
-                    loadingMoreFooter
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
+            if shouldShowLoadingMoreFooter {
+                loadingMoreFooter
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
             }
-        } header: {
-            SessionGroupHeader(
-                title: NSLocalizedString("搜索结果", comment: ""),
-                systemImage: "magnifyingglass"
-            )
-        } footer: {
-            if !isSearching {
-                Text(String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), searchResultItems.count, searchResultSessions.count))
-            }
+
+            Text(String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), searchResultItems.count, searchResultSessions.count))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
         }
     }
 
