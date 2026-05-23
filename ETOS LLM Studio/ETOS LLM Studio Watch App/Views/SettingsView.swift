@@ -273,11 +273,6 @@ struct SettingsView: View {
                     }
                 }
 
-                Section {
-                    NavigationLink(destination: WatchKeyboardSettingsView()) {
-                        settingsNavigationLabel("键盘", icon: .keyboard)
-                    }
-                }
             }
             .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
             .onAppear {

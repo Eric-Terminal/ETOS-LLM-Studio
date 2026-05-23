@@ -221,6 +221,12 @@ struct ModelAdvancedSettingsView: View {
                     Slider(value: topPBinding, in: topPRange, step: samplingParameterStep)
                 }
             }
+
+            Section {
+                NavigationLink(destination: WatchKeyboardSettingsView()) {
+                    Label(NSLocalizedString("键盘", comment: "Keyboard settings title"), systemImage: "keyboard")
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
         .onAppear {
