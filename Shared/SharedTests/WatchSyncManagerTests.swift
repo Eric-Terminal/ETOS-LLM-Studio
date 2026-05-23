@@ -22,10 +22,13 @@ struct WatchSyncManagerTests {
             .syncDailyPulse,
             .syncUsageStats,
             .syncFontFiles,
-            .syncAppStorage,
-            .syncAutoSyncEnabled
+            .syncAppStorage
         ])
-        defer { restoreAppConfigValues(backup) }
+        let autoSyncEnabledBackup = AppConfigStore.shared.syncAutoSyncEnabled
+        defer {
+            restoreAppConfigValues(backup)
+            AppConfigStore.shared.syncAutoSyncEnabled = autoSyncEnabledBackup
+        }
 
         AppConfigStore.shared.syncProviders = false
         AppConfigStore.shared.syncSessions = false
@@ -50,6 +53,11 @@ struct WatchSyncManagerTests {
         AppConfigStore.shared.syncAutoSyncEnabled = true
         #expect(watchConnectivitySyncOptions() == .fullSync)
         #expect(isWatchConnectivitySyncEnabled() == true)
+    }
+
+    @Test("Watch 同步开关只保留在本机")
+    func testWatchConnectivitySwitchDoesNotParticipateInAppConfigSync() {
+        #expect(AppConfigKey.syncAutoSyncEnabled.participatesInSync == false)
     }
 
     @Test("接收的同步文件会先复制到稳定位置")

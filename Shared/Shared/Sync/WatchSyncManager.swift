@@ -72,6 +72,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private static let inlineExchangeKind = "com.ETOS.watchSync.exchange.inline.v1"
     private static let quickAppConfigKind = "com.ETOS.watchSync.appConfig.quick.v1"
     private static let cloudSyncRemoteChangeKind = "com.ETOS.watchSync.cloudSync.remoteChange.v1"
+    private static let senderSyncEnabledKey = "senderSyncEnabled"
     private static let inlineExchangePayloadLimit = 60 * 1024
     
     @Published public private(set) var state: SyncState = .idle
@@ -306,6 +307,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             "kind": Self.quickAppConfigKind,
             "key": key,
             "value": value,
+            Self.senderSyncEnabledKey: isWatchConnectivitySyncEnabled(),
             "timestamp": Date().timeIntervalSince1970
         ]
         session.sendMessage(message, replyHandler: nil, errorHandler: { [weak self] _ in
@@ -489,6 +491,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             "response": payload.isResponse,
             "expectsResponse": payload.expectsResponse,
             "silent": payload.isSilent,
+            Self.senderSyncEnabledKey: isWatchConnectivitySyncEnabled(),
             "timestamp": Date().timeIntervalSince1970
         ]
         if let requestID = payload.requestID {
@@ -507,8 +510,19 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         message["kind"] = Self.inlineExchangeKind
         message["payload"] = data
 
-        session.sendMessage(message, replyHandler: { [weak self] _ in
+        session.sendMessage(message, replyHandler: { [weak self] reply in
             Task { @MainActor [weak self] in
+                if (reply["accepted"] as? Bool) == false {
+                    self?.failSyncOperation(
+                        operationID: context.operationID,
+                        fallbackSilent: context.isSilent,
+                        message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
+                    )
+                    if let fileURL = context.fileURL {
+                        try? FileManager.default.removeItem(at: fileURL)
+                    }
+                    return
+                }
                 self?.handleOutboundExchangeFinished(context: context, error: nil, removeFile: true)
             }
         }, errorHandler: { [weak self] _ in
@@ -746,6 +760,16 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             return true
         }
 
+        guard message[Self.senderSyncEnabledKey] as? Bool == true else {
+            replyHandler(["accepted": false, "reason": "remoteSyncDisabled"])
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: silent,
+                message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
+            )
+            return true
+        }
+
         guard let data = message["payload"] as? Data else {
             replyHandler(["accepted": false])
             failSyncOperation(
@@ -795,6 +819,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         guard message["kind"] as? String == Self.quickAppConfigKind else { return false }
         guard isWatchConnectivitySyncEnabled() else {
             replyHandler(["accepted": false, "reason": "syncDisabled"])
+            return true
+        }
+        guard message[Self.senderSyncEnabledKey] as? Bool == true else {
+            replyHandler(["accepted": false, "reason": "remoteSyncDisabled"])
             return true
         }
         guard let key = message["key"] as? String,
@@ -867,6 +895,7 @@ extension WatchSyncManager: WCSessionDelegate {
         let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
         let operationID = requestID.flatMap(UUID.init(uuidString:))
         let silent = (file.metadata?["silent"] as? Bool) ?? false
+        let senderSyncEnabled = file.metadata?[Self.senderSyncEnabledKey] as? Bool == true
 
         let stagedFileURL: URL
         do {
@@ -894,6 +923,16 @@ extension WatchSyncManager: WCSessionDelegate {
                     fallbackSilent: silent,
                     message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
                 )
+                try? FileManager.default.removeItem(at: stagedFileURL)
+                return
+            }
+            guard senderSyncEnabled else {
+                self.failSyncOperation(
+                    operationID: operationID,
+                    fallbackSilent: silent,
+                    message: NSLocalizedString("同步已关闭，已拒绝接收对端数据。", comment: "")
+                )
+                try? FileManager.default.removeItem(at: stagedFileURL)
                 return
             }
             let effectiveSilent = self.isSyncSilent(operationID: operationID, fallback: silent)

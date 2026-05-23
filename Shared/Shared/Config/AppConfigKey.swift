@@ -411,6 +411,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         switch self {
         case .chatComposerDraft,
              .lastActiveSessionID,
+             .syncAutoSyncEnabled,
              .appToolsKnownDefaultToolIDs,
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,

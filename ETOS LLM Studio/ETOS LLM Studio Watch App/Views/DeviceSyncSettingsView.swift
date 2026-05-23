@@ -218,6 +218,15 @@ struct DeviceSyncSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(NSLocalizedString("Apple Watch 同步", comment: "")) {
+                Toggle(NSLocalizedString("启用 Apple Watch 同步", comment: ""), isOn: $appConfig.syncAutoSyncEnabled)
+                    .buttonStyle(.plain)
+
+                Text(NSLocalizedString("开启后，iPhone 与 Apple Watch 会全量漫游支持的数据；关闭后会拒绝近场同步入站数据。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(NSLocalizedString("iCloud 同步", comment: "")) {
                 Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
 
