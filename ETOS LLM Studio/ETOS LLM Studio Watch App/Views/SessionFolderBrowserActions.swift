@@ -190,36 +190,51 @@ extension SessionFolderBrowserView {
     }
 
     func resetLoadedDirectSessions() {
+        pendingLoadMoreSessionsTask?.cancel()
+        pendingLoadMoreSessionsTask = nil
         isLoadingMoreSessions = false
         loadedDirectSessions = []
-        appendNextDirectSessionsPage()
+        appendInitialDirectSessionsPage()
     }
 
-    func appendNextDirectSessionsPage() {
-        guard !isLoadingMoreSessions, hasMoreDirectSessions else { return }
-        isLoadingMoreSessions = true
+    func appendInitialDirectSessionsPage() {
+        let end = min(maxSessionsPerPage, directSessions.count)
+        guard end > 0 else { return }
+        loadedDirectSessions = Array(directSessions.prefix(end))
+    }
 
-        let source = directSessions
-        let start = loadedDirectSessions.count
-        let end = min(start + maxSessionsPerPage, source.count)
-        guard start < end else {
+    func scheduleNextDirectSessionsPage() {
+        guard !isLoadingMoreSessions, hasMoreDirectSessions, pendingLoadMoreSessionsTask == nil else { return }
+        isLoadingMoreSessions = true
+        pendingLoadMoreSessionsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else {
+                isLoadingMoreSessions = false
+                pendingLoadMoreSessionsTask = nil
+                return
+            }
+
+            let start = loadedDirectSessions.count
+            let end = min(start + maxSessionsPerPage, directSessions.count)
+            if start < end {
+                loadedDirectSessions.append(contentsOf: directSessions[start..<end])
+            }
             isLoadingMoreSessions = false
-            return
-        }
-        loadedDirectSessions.append(contentsOf: source[start..<end])
-        DispatchQueue.main.async {
-            isLoadingMoreSessions = false
+            pendingLoadMoreSessionsTask = nil
         }
     }
 
     func syncLoadedDirectSessionsWithSource() {
+        pendingLoadMoreSessionsTask?.cancel()
+        pendingLoadMoreSessionsTask = nil
+        isLoadingMoreSessions = false
         let loadedCount = min(max(loadedDirectSessions.count, maxSessionsPerPage), directSessions.count)
         loadedDirectSessions = Array(directSessions.prefix(loadedCount))
     }
 
     func loadMoreDirectSessionsIfNeeded(currentID: UUID) {
         guard loadedDirectSessions.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
-        appendNextDirectSessionsPage()
+        scheduleNextDirectSessionsPage()
     }
 
     var loadingMoreFooter: some View {
@@ -243,6 +258,85 @@ extension SessionFolderBrowserView {
             guard !hasUnlocked else { return }
             await AchievementCenter.shared.unlock(id: .conversationArchaeologist)
         }
+    }
+
+    func rebuildSessionBrowserSource() {
+        let foldersSnapshot = folders
+        let sessionsSnapshot = sessions
+        let folderByID = Dictionary(uniqueKeysWithValues: foldersSnapshot.map { ($0.id, $0) })
+        let childFolders = foldersSnapshot.filter { folder in
+            normalizedParentID(of: folder, folderByID: folderByID) == folderID
+        }
+        let directSessions = sessionsSnapshot.filter { session in
+            normalizedFolderID(of: session, folderByID: folderByID) == folderID
+        }
+        let sessionOrderByID = Dictionary(uniqueKeysWithValues: sessionsSnapshot.enumerated().map { ($1.id, $0) })
+        let folderAncestorIDsByFolderID = folderAncestorLookup(
+            folders: foldersSnapshot,
+            folderByID: folderByID
+        )
+
+        var recentActivityIndexByFolderID: [UUID: Int] = [:]
+        var recursiveSessionCountByFolderID: [UUID: Int] = [:]
+        for folder in foldersSnapshot {
+            recentActivityIndexByFolderID[folder.id] = .max
+            recursiveSessionCountByFolderID[folder.id] = 0
+        }
+
+        for (index, session) in sessionsSnapshot.enumerated() {
+            guard let assignedFolderID = normalizedFolderID(of: session, folderByID: folderByID) else { continue }
+            for ancestorID in folderAncestorIDsByFolderID[assignedFolderID, default: []] {
+                recursiveSessionCountByFolderID[ancestorID, default: 0] += 1
+                recentActivityIndexByFolderID[ancestorID] = min(
+                    recentActivityIndexByFolderID[ancestorID, default: .max],
+                    index
+                )
+            }
+        }
+
+        cachedFolderByID = folderByID
+        cachedChildFolders = childFolders
+        cachedDirectSessions = directSessions
+        cachedSessionOrderByID = sessionOrderByID
+        cachedRecentActivityIndexByFolderID = recentActivityIndexByFolderID
+        cachedRecursiveSessionCountByFolderID = recursiveSessionCountByFolderID
+        hasPreparedSessionBrowserSource = true
+    }
+
+    func folderAncestorLookup(
+        folders: [SessionFolder],
+        folderByID: [UUID: SessionFolder]
+    ) -> [UUID: [UUID]] {
+        var lookup: [UUID: [UUID]] = [:]
+        for folder in folders {
+            var ancestors: [UUID] = []
+            var cursor: UUID? = folder.id
+            var visited = Set<UUID>()
+            while let current = cursor {
+                guard visited.insert(current).inserted else { break }
+                ancestors.append(current)
+                guard let folder = folderByID[current] else { break }
+                cursor = normalizedParentID(of: folder, folderByID: folderByID)
+            }
+            lookup[folder.id] = ancestors
+        }
+        return lookup
+    }
+
+    func normalizedFolderID(
+        of session: ChatSession,
+        folderByID: [UUID: SessionFolder]
+    ) -> UUID? {
+        guard let folderID = session.folderID else { return nil }
+        return folderByID[folderID] == nil ? nil : folderID
+    }
+
+    func normalizedParentID(
+        of folder: SessionFolder,
+        folderByID: [UUID: SessionFolder]
+    ) -> UUID? {
+        guard let parentID = folder.parentID else { return nil }
+        return folderByID[parentID] == nil ? nil : parentID
     }
 
     func openCreateFolderEditor(parentID: UUID?) {
@@ -276,6 +370,9 @@ extension SessionFolderBrowserView {
     }
 
     func recentActivityIndex(for folderID: UUID) -> Int {
+        if hasPreparedSessionBrowserSource, let cached = cachedRecentActivityIndexByFolderID[folderID] {
+            return cached
+        }
         for (index, session) in sessions.enumerated() {
             guard let assignedFolderID = normalizedFolderID(of: session) else { continue }
             if folderHierarchyContains(descendantFolderID: assignedFolderID, ancestorFolderID: folderID) {
@@ -314,6 +411,9 @@ extension SessionFolderBrowserView {
     }
 
     func recursiveSessionCount(in folderID: UUID) -> Int {
+        if hasPreparedSessionBrowserSource {
+            return cachedRecursiveSessionCountByFolderID[folderID, default: 0]
+        }
         let descendants = descendantFolderIDs(rootID: folderID)
         return sessions.filter { session in
             guard let assignedFolderID = normalizedFolderID(of: session) else { return false }

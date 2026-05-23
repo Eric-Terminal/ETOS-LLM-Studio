@@ -52,11 +52,22 @@ struct SessionFolderBrowserView: View {
     @State var showSessionSearch = false
     @State var loadedDirectSessions: [ChatSession] = []
     @State var isLoadingMoreSessions = false
+    @State var pendingLoadMoreSessionsTask: Task<Void, Never>?
+    @State var hasPreparedSessionBrowserSource = false
+    @State var cachedFolderByID: [UUID: SessionFolder] = [:]
+    @State var cachedChildFolders: [SessionFolder] = []
+    @State var cachedDirectSessions: [ChatSession] = []
+    @State var cachedSessionOrderByID: [UUID: Int] = [:]
+    @State var cachedRecentActivityIndexByFolderID: [UUID: Int] = [:]
+    @State var cachedRecursiveSessionCountByFolderID: [UUID: Int] = [:]
 
     let maxSessionsPerPage = 50
-    let infiniteScrollTriggerRemainingCount = 5
+    let infiniteScrollTriggerRemainingCount = 10
 
     var folderByID: [UUID: SessionFolder] {
+        if hasPreparedSessionBrowserSource {
+            return cachedFolderByID
+        }
         Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
     }
 
@@ -66,10 +77,16 @@ struct SessionFolderBrowserView: View {
     }
 
     var childFolders: [SessionFolder] {
+        if hasPreparedSessionBrowserSource {
+            return cachedChildFolders
+        }
         folders.filter { normalizedParentID(of: $0) == folderID }
     }
 
     var directSessions: [ChatSession] {
+        if hasPreparedSessionBrowserSource {
+            return cachedDirectSessions
+        }
         sessions.filter { normalizedFolderID(of: $0) == folderID }
     }
 
@@ -82,6 +99,9 @@ struct SessionFolderBrowserView: View {
     }
 
     var sessionOrderByID: [UUID: Int] {
+        if hasPreparedSessionBrowserSource {
+            return cachedSessionOrderByID
+        }
         Dictionary(uniqueKeysWithValues: sessions.enumerated().map { ($1.id, $0) })
     }
 
@@ -218,6 +238,7 @@ struct SessionFolderBrowserView: View {
     func applyStateHandlers<Content: View>(to content: Content) -> some View {
         content
             .onChange(of: folders) { _, _ in
+                rebuildSessionBrowserSource()
                 syncLoadedDirectSessionsWithSource()
                 guard folderID != nil else { return }
                 if currentFolder == nil {
@@ -225,6 +246,7 @@ struct SessionFolderBrowserView: View {
                 }
             }
             .onChange(of: sessions) { _, _ in
+                rebuildSessionBrowserSource()
                 syncLoadedDirectSessionsWithSource()
             }
             .onChange(of: pagedSessionIDs) { _, visibleIDs in
@@ -237,7 +259,13 @@ struct SessionFolderBrowserView: View {
                 syncLoadedDirectSessionsWithSource()
             }
             .onAppear {
+                rebuildSessionBrowserSource()
                 resetLoadedDirectSessions()
+            }
+            .onDisappear {
+                pendingLoadMoreSessionsTask?.cancel()
+                pendingLoadMoreSessionsTask = nil
+                isLoadingMoreSessions = false
             }
     }
 

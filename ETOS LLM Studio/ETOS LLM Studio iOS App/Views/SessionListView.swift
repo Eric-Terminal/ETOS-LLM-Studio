@@ -66,9 +66,11 @@ struct SessionFolderBrowserView: View {
     @State var loadedSearchResultItems: [SessionHistorySearchResult] = []
     @State var isLoadingMoreSessions: Bool = false
     @State var isLoadingMoreSearchResults: Bool = false
+    @State var pendingLoadMoreSessionsTask: Task<Void, Never>?
+    @State var pendingLoadMoreSearchResultsTask: Task<Void, Never>?
 
     let maxSessionsPerPage = 100
-    let infiniteScrollTriggerRemainingCount = 5
+    let infiniteScrollTriggerRemainingCount = 10
 
     var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })

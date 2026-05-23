@@ -192,8 +192,9 @@ private struct WatchUpdateTimelineBrowserView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared
     @State private var loadedCommits: [UpdateTimelineCommit] = []
     @State private var isLoadingMoreCommits = false
+    @State private var pendingLoadMoreCommitsTask: Task<Void, Never>?
     private let maxCommitsPerPage = 20
-    private let loadMoreTriggerRemainingCount = 4
+    private let loadMoreTriggerRemainingCount = 8
 
     private var commits: [UpdateTimelineCommit] {
         manager.displayedCommits
@@ -242,28 +243,40 @@ private struct WatchUpdateTimelineBrowserView: View {
         .onChange(of: commits) { _, _ in
             syncLoadedCommitsWithSource()
         }
+        .onDisappear {
+            pendingLoadMoreCommitsTask?.cancel()
+            pendingLoadMoreCommitsTask = nil
+            isLoadingMoreCommits = false
+        }
     }
 
-    private func appendNextCommitsPage() {
-        guard !isLoadingMoreCommits, hasMoreCommits else { return }
+    private func scheduleNextCommitsPage() {
+        guard !isLoadingMoreCommits, hasMoreCommits, pendingLoadMoreCommitsTask == nil else { return }
         isLoadingMoreCommits = true
+        pendingLoadMoreCommitsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else {
+                isLoadingMoreCommits = false
+                pendingLoadMoreCommitsTask = nil
+                return
+            }
 
-        let start = loadedCommits.count
-        let end = min(start + maxCommitsPerPage, commits.count)
-        guard start < end else {
+            let start = loadedCommits.count
+            let end = min(start + maxCommitsPerPage, commits.count)
+            if start < end {
+                loadedCommits.append(contentsOf: commits[start..<end])
+            }
             isLoadingMoreCommits = false
-            return
-        }
-        loadedCommits.append(contentsOf: commits[start..<end])
-        DispatchQueue.main.async {
-            isLoadingMoreCommits = false
+            pendingLoadMoreCommitsTask = nil
         }
     }
 
     private func syncLoadedCommitsWithSource() {
+        pendingLoadMoreCommitsTask?.cancel()
+        pendingLoadMoreCommitsTask = nil
+        isLoadingMoreCommits = false
         guard !commits.isEmpty else {
             loadedCommits = []
-            isLoadingMoreCommits = false
             return
         }
         let loadedCount = min(max(loadedCommits.count, maxCommitsPerPage), commits.count)
@@ -272,7 +285,7 @@ private struct WatchUpdateTimelineBrowserView: View {
 
     private func loadMoreCommitsIfNeeded(currentID: String) {
         guard loadedCommits.suffix(loadMoreTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
-        appendNextCommitsPage()
+        scheduleNextCommitsPage()
     }
 
     private var loadingMoreFooter: some View {

@@ -54,6 +54,8 @@ struct ChatView: View {
     @State var loadedSessionPickerSearchResults: [SessionHistorySearchResult] = []
     @State var isLoadingMoreSessionPickerSessions: Bool = false
     @State var isLoadingMoreSessionPickerSearchResults: Bool = false
+    @State var pendingLoadMoreSessionPickerSessionsTask: Task<Void, Never>?
+    @State var pendingLoadMoreSessionPickerSearchResultsTask: Task<Void, Never>?
     @State var imageDownloadAlertMessage: String?
     @State var exportSharePayload: ChatExportSharePayload?
     @State var exportErrorMessage: String?

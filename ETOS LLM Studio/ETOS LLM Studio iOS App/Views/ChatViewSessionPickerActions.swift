@@ -12,56 +12,93 @@ import Shared
 
 extension ChatView {
     func resetSessionPickerLoadedSessions() {
+        pendingLoadMoreSessionPickerSessionsTask?.cancel()
+        pendingLoadMoreSessionPickerSessionsTask = nil
         isLoadingMoreSessionPickerSessions = false
         loadedSessionPickerSessions = []
-        appendNextSessionPickerSessionsPage()
+        appendInitialSessionPickerSessionsPage()
     }
 
     func resetSessionPickerLoadedSearchResults() {
+        pendingLoadMoreSessionPickerSearchResultsTask?.cancel()
+        pendingLoadMoreSessionPickerSearchResultsTask = nil
         isLoadingMoreSessionPickerSearchResults = false
         loadedSessionPickerSearchResults = []
-        appendNextSessionPickerSearchResultsPage()
+        appendInitialSessionPickerSearchResultsPage()
     }
 
-    func appendNextSessionPickerSessionsPage() {
-        guard !isLoadingMoreSessionPickerSessions, hasMoreSessionPickerSessions else { return }
-        isLoadingMoreSessionPickerSessions = true
-
-        let start = loadedSessionPickerSessions.count
-        let end = min(start + sessionPickerMaxSessionsPerPage, viewModel.chatSessions.count)
-        guard start < end else {
-            isLoadingMoreSessionPickerSessions = false
-            return
-        }
-        loadedSessionPickerSessions.append(contentsOf: viewModel.chatSessions[start..<end])
-        DispatchQueue.main.async {
-            isLoadingMoreSessionPickerSessions = false
-        }
+    func appendInitialSessionPickerSessionsPage() {
+        let end = min(sessionPickerMaxSessionsPerPage, viewModel.chatSessions.count)
+        guard end > 0 else { return }
+        loadedSessionPickerSessions = Array(viewModel.chatSessions.prefix(end))
     }
 
-    func appendNextSessionPickerSearchResultsPage() {
-        guard !isLoadingMoreSessionPickerSearchResults, hasMoreSessionPickerSearchResults else { return }
-        isLoadingMoreSessionPickerSearchResults = true
-
+    func appendInitialSessionPickerSearchResultsPage() {
         let results = sessionPickerSearchResults
-        let start = loadedSessionPickerSearchResults.count
-        let end = min(start + sessionPickerMaxSessionsPerPage, results.count)
-        guard start < end else {
-            isLoadingMoreSessionPickerSearchResults = false
-            return
+        let end = min(sessionPickerMaxSessionsPerPage, results.count)
+        guard end > 0 else { return }
+        loadedSessionPickerSearchResults = Array(results.prefix(end))
+    }
+
+    func scheduleNextSessionPickerSessionsPage() {
+        guard !isLoadingMoreSessionPickerSessions,
+              hasMoreSessionPickerSessions,
+              pendingLoadMoreSessionPickerSessionsTask == nil else { return }
+        isLoadingMoreSessionPickerSessions = true
+        pendingLoadMoreSessionPickerSessionsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else {
+                isLoadingMoreSessionPickerSessions = false
+                pendingLoadMoreSessionPickerSessionsTask = nil
+                return
+            }
+
+            let start = loadedSessionPickerSessions.count
+            let end = min(start + sessionPickerMaxSessionsPerPage, viewModel.chatSessions.count)
+            if start < end {
+                loadedSessionPickerSessions.append(contentsOf: viewModel.chatSessions[start..<end])
+            }
+            isLoadingMoreSessionPickerSessions = false
+            pendingLoadMoreSessionPickerSessionsTask = nil
         }
-        loadedSessionPickerSearchResults.append(contentsOf: results[start..<end])
-        DispatchQueue.main.async {
+    }
+
+    func scheduleNextSessionPickerSearchResultsPage() {
+        guard !isLoadingMoreSessionPickerSearchResults,
+              hasMoreSessionPickerSearchResults,
+              pendingLoadMoreSessionPickerSearchResultsTask == nil else { return }
+        isLoadingMoreSessionPickerSearchResults = true
+        pendingLoadMoreSessionPickerSearchResultsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else {
+                isLoadingMoreSessionPickerSearchResults = false
+                pendingLoadMoreSessionPickerSearchResultsTask = nil
+                return
+            }
+
+            let results = sessionPickerSearchResults
+            let start = loadedSessionPickerSearchResults.count
+            let end = min(start + sessionPickerMaxSessionsPerPage, results.count)
+            if start < end {
+                loadedSessionPickerSearchResults.append(contentsOf: results[start..<end])
+            }
             isLoadingMoreSessionPickerSearchResults = false
+            pendingLoadMoreSessionPickerSearchResultsTask = nil
         }
     }
 
     func syncLoadedSessionPickerSessionsWithSource() {
+        pendingLoadMoreSessionPickerSessionsTask?.cancel()
+        pendingLoadMoreSessionPickerSessionsTask = nil
+        isLoadingMoreSessionPickerSessions = false
         let loadedCount = min(max(loadedSessionPickerSessions.count, sessionPickerMaxSessionsPerPage), viewModel.chatSessions.count)
         loadedSessionPickerSessions = Array(viewModel.chatSessions.prefix(loadedCount))
     }
 
     func syncLoadedSessionPickerSearchResultsWithSource() {
+        pendingLoadMoreSessionPickerSearchResultsTask?.cancel()
+        pendingLoadMoreSessionPickerSearchResultsTask = nil
+        isLoadingMoreSessionPickerSearchResults = false
         let results = sessionPickerSearchResults
         let loadedCount = min(max(loadedSessionPickerSearchResults.count, sessionPickerMaxSessionsPerPage), results.count)
         loadedSessionPickerSearchResults = Array(results.prefix(loadedCount))
@@ -70,13 +107,22 @@ extension ChatView {
     func loadMoreSessionPickerItemsIfNeeded(currentID: String, queryActive: Bool) {
         if queryActive {
             guard loadedSessionPickerSearchResults.suffix(sessionPickerInfiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
-            appendNextSessionPickerSearchResultsPage()
+            scheduleNextSessionPickerSearchResultsPage()
             return
         }
 
         guard let sessionID = UUID(uuidString: currentID) else { return }
         guard loadedSessionPickerSessions.suffix(sessionPickerInfiniteScrollTriggerRemainingCount).contains(where: { $0.id == sessionID }) else { return }
-        appendNextSessionPickerSessionsPage()
+        scheduleNextSessionPickerSessionsPage()
+    }
+
+    func cancelSessionPickerPagingTasks() {
+        pendingLoadMoreSessionPickerSessionsTask?.cancel()
+        pendingLoadMoreSessionPickerSessionsTask = nil
+        pendingLoadMoreSessionPickerSearchResultsTask?.cancel()
+        pendingLoadMoreSessionPickerSearchResultsTask = nil
+        isLoadingMoreSessionPickerSessions = false
+        isLoadingMoreSessionPickerSearchResults = false
     }
 
     func unlockConversationArchaeologistIfNeeded(for session: ChatSession) {

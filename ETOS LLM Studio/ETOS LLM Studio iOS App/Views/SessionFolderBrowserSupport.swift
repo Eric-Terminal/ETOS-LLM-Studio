@@ -12,57 +12,91 @@ import SwiftUI
 
 extension SessionFolderBrowserView {
     func resetLoadedDirectSessions() {
+        pendingLoadMoreSessionsTask?.cancel()
+        pendingLoadMoreSessionsTask = nil
         isLoadingMoreSessions = false
         loadedDirectSessions = []
-        appendNextDirectSessionsPage()
+        appendInitialDirectSessionsPage()
     }
 
     func resetLoadedSearchResultItems() {
+        pendingLoadMoreSearchResultsTask?.cancel()
+        pendingLoadMoreSearchResultsTask = nil
         isLoadingMoreSearchResults = false
         loadedSearchResultItems = []
-        appendNextSearchResultItemsPage()
+        appendInitialSearchResultItemsPage()
     }
 
-    func appendNextDirectSessionsPage() {
-        guard !isLoadingMoreSessions, hasMoreDirectSessions else { return }
-        isLoadingMoreSessions = true
-
+    func appendInitialDirectSessionsPage() {
         let source = directSessions
-        let start = loadedDirectSessions.count
-        let end = min(start + maxSessionsPerPage, source.count)
-        guard start < end else {
+        let end = min(maxSessionsPerPage, source.count)
+        guard end > 0 else { return }
+        loadedDirectSessions = Array(source.prefix(end))
+    }
+
+    func appendInitialSearchResultItemsPage() {
+        let source = searchResultItems
+        let end = min(maxSessionsPerPage, source.count)
+        guard end > 0 else { return }
+        loadedSearchResultItems = Array(source.prefix(end))
+    }
+
+    func scheduleNextDirectSessionsPage() {
+        guard !isLoadingMoreSessions, hasMoreDirectSessions, pendingLoadMoreSessionsTask == nil else { return }
+        isLoadingMoreSessions = true
+        pendingLoadMoreSessionsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else {
+                isLoadingMoreSessions = false
+                pendingLoadMoreSessionsTask = nil
+                return
+            }
+
+            let source = directSessions
+            let start = loadedDirectSessions.count
+            let end = min(start + maxSessionsPerPage, source.count)
+            if start < end {
+                loadedDirectSessions.append(contentsOf: source[start..<end])
+            }
             isLoadingMoreSessions = false
-            return
-        }
-        loadedDirectSessions.append(contentsOf: source[start..<end])
-        DispatchQueue.main.async {
-            isLoadingMoreSessions = false
+            pendingLoadMoreSessionsTask = nil
         }
     }
 
-    func appendNextSearchResultItemsPage() {
-        guard !isLoadingMoreSearchResults, hasMoreSearchResults else { return }
+    func scheduleNextSearchResultItemsPage() {
+        guard !isLoadingMoreSearchResults, hasMoreSearchResults, pendingLoadMoreSearchResultsTask == nil else { return }
         isLoadingMoreSearchResults = true
+        pendingLoadMoreSearchResultsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else {
+                isLoadingMoreSearchResults = false
+                pendingLoadMoreSearchResultsTask = nil
+                return
+            }
 
-        let source = searchResultItems
-        let start = loadedSearchResultItems.count
-        let end = min(start + maxSessionsPerPage, source.count)
-        guard start < end else {
+            let source = searchResultItems
+            let start = loadedSearchResultItems.count
+            let end = min(start + maxSessionsPerPage, source.count)
+            if start < end {
+                loadedSearchResultItems.append(contentsOf: source[start..<end])
+            }
             isLoadingMoreSearchResults = false
-            return
-        }
-        loadedSearchResultItems.append(contentsOf: source[start..<end])
-        DispatchQueue.main.async {
-            isLoadingMoreSearchResults = false
+            pendingLoadMoreSearchResultsTask = nil
         }
     }
 
     func syncLoadedDirectSessionsWithSource() {
+        pendingLoadMoreSessionsTask?.cancel()
+        pendingLoadMoreSessionsTask = nil
+        isLoadingMoreSessions = false
         let loadedCount = min(max(loadedDirectSessions.count, maxSessionsPerPage), directSessions.count)
         loadedDirectSessions = Array(directSessions.prefix(loadedCount))
     }
 
     func syncLoadedSearchResultItemsWithSource() {
+        pendingLoadMoreSearchResultsTask?.cancel()
+        pendingLoadMoreSearchResultsTask = nil
+        isLoadingMoreSearchResults = false
         let source = searchResultItems
         let loadedCount = min(max(loadedSearchResultItems.count, maxSessionsPerPage), source.count)
         loadedSearchResultItems = Array(source.prefix(loadedCount))
@@ -70,12 +104,12 @@ extension SessionFolderBrowserView {
 
     func loadMoreDirectSessionsIfNeeded(currentID: UUID) {
         guard loadedDirectSessions.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
-        appendNextDirectSessionsPage()
+        scheduleNextDirectSessionsPage()
     }
 
     func loadMoreSearchResultItemsIfNeeded(currentID: String) {
         guard loadedSearchResultItems.suffix(infiniteScrollTriggerRemainingCount).contains(where: { $0.id == currentID }) else { return }
-        appendNextSearchResultItemsPage()
+        scheduleNextSearchResultItemsPage()
     }
 
     func unlockConversationArchaeologistIfNeeded(for session: ChatSession) {

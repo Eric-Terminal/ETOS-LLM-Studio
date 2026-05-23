@@ -121,6 +121,7 @@ extension ChatView {
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onDisappear {
+            cancelSessionPickerPagingTasks()
             sessionPickerPendingSearchWorkItem?.cancel()
             sessionPickerPendingSearchWorkItem = nil
         }
@@ -258,6 +259,7 @@ extension ChatView {
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onDisappear {
+            cancelSessionPickerPagingTasks()
             sessionPickerPendingSearchWorkItem?.cancel()
             sessionPickerPendingSearchWorkItem = nil
         }

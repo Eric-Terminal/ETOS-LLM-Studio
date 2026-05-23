@@ -69,6 +69,12 @@ extension SessionFolderBrowserView {
 
         return searchContent
             .onDisappear {
+                pendingLoadMoreSessionsTask?.cancel()
+                pendingLoadMoreSessionsTask = nil
+                pendingLoadMoreSearchResultsTask?.cancel()
+                pendingLoadMoreSearchResultsTask = nil
+                isLoadingMoreSessions = false
+                isLoadingMoreSearchResults = false
                 guard isRoot else { return }
                 pendingSearchWorkItem?.cancel()
                 pendingSearchWorkItem = nil
