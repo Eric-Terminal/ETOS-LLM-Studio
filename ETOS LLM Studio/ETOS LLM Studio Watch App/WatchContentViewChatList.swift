@@ -191,6 +191,7 @@ extension ContentView {
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
+            shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
             showScrollToBottomButton = false
@@ -204,15 +205,8 @@ extension ContentView {
             resolvePendingSearchJumpIfNeeded()
         }
         .onAppear {
-            if let expiresAt = bottomSnapSuppressionExpiresAt {
-                bottomSnapSuppressionExpiresAt = nil
-                guard expiresAt > Date() else {
-                    shouldKeepBottomPinned = true
-                    needsImmediateBottomSnap = true
-                    scheduleImmediateBottomSnap(proxy: proxy)
-                    resolvePendingSearchJumpIfNeeded()
-                    return
-                }
+            if shouldRestorePendingJumpOnAppear {
+                shouldRestorePendingJumpOnAppear = false
                 resolvePendingSearchJumpIfNeeded()
                 DispatchQueue.main.async {
                     if let request = pendingJumpRequest {
@@ -223,10 +217,11 @@ extension ContentView {
                 }
                 return
             }
-            shouldKeepBottomPinned = true
-            needsImmediateBottomSnap = true
-            scheduleImmediateBottomSnap(proxy: proxy)
             resolvePendingSearchJumpIfNeeded()
+            if needsImmediateBottomSnap {
+                shouldKeepBottomPinned = true
+                scheduleImmediateBottomSnap(proxy: proxy)
+            }
         }
     }
 
@@ -234,6 +229,7 @@ extension ContentView {
         let scrollAction = {
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
+            shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
 
@@ -356,7 +352,7 @@ extension ContentView {
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
         needsImmediateBottomSnap = false
-        bottomSnapSuppressionExpiresAt = Date().addingTimeInterval(2)
+        shouldRestorePendingJumpOnAppear = true
         shouldKeepBottomPinned = false
         shouldForceScrollToBottom = false
     }

@@ -47,7 +47,7 @@ extension ChatView {
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
         needsImmediateBottomSnap = false
-        bottomSnapSuppressionExpiresAt = Date().addingTimeInterval(2)
+        shouldRestorePendingJumpOnAppear = true
     }
 
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
@@ -98,6 +98,7 @@ extension ChatView {
     func handleScrollToBottomButtonTap() {
         pendingHistoryResetWorkItem?.cancel()
         pendingHistoryResetWorkItem = nil
+        shouldRestorePendingJumpOnAppear = false
 
         let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
         showScrollToBottom = false

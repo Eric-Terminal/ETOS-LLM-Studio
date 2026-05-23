@@ -73,7 +73,7 @@ struct ChatView: View {
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var needsImmediateBottomSnap: Bool = true
-    @State var bottomSnapSuppressionExpiresAt: Date?
+    @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
@@ -475,6 +475,7 @@ struct ChatView: View {
                 .onChange(of: viewModel.currentSession?.id) { _, _ in
                     pendingHistoryResetWorkItem?.cancel()
                     pendingHistoryResetWorkItem = nil
+                    shouldRestorePendingJumpOnAppear = false
                     showScrollToBottom = false
                     needsImmediateBottomSnap = true
                     scheduleImmediateBottomSnap()
@@ -487,14 +488,8 @@ struct ChatView: View {
                     resolvePendingSearchJumpIfNeeded()
                 }
                 .onAppear {
-                    if let expiresAt = bottomSnapSuppressionExpiresAt {
-                        bottomSnapSuppressionExpiresAt = nil
-                        guard expiresAt > Date() else {
-                            needsImmediateBottomSnap = true
-                            scheduleImmediateBottomSnap()
-                            resolvePendingSearchJumpIfNeeded()
-                            return
-                        }
+                    if shouldRestorePendingJumpOnAppear {
+                        shouldRestorePendingJumpOnAppear = false
                         resolvePendingSearchJumpIfNeeded()
                         DispatchQueue.main.async {
                             if let request = pendingJumpRequest {
@@ -503,9 +498,10 @@ struct ChatView: View {
                         }
                         return
                     }
-                    needsImmediateBottomSnap = true
-                    scheduleImmediateBottomSnap()
                     resolvePendingSearchJumpIfNeeded()
+                    if needsImmediateBottomSnap {
+                        scheduleImmediateBottomSnap()
+                    }
                 }
                 .overlay(alignment: .top) {
                     if viewModel.enableChatTopBlurFade {

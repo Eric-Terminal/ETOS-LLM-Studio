@@ -34,7 +34,7 @@ struct ContentView: View {
     @State var pendingBottomSnapTask: Task<Void, Never>?
     @State var needsImmediateBottomSnap = true
     @State var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
-    @State var bottomSnapSuppressionExpiresAt: Date?
+    @State var shouldRestorePendingJumpOnAppear = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var launchRecoveryNoticeMessage: String?
     @State var rootBodyFont: Font = .body
