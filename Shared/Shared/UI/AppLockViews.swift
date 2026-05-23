@@ -12,8 +12,10 @@ public struct AppLockOverlayView: View {
     @ObservedObject private var lockManager = AppLockManager.shared
     @State private var password = ""
     @State private var errorMessage: String?
+    #if !os(watchOS)
     @State private var hasAttemptedBiometricUnlock = false
     @State private var isBiometricUnlocking = false
+    #endif
 
     public init() {}
 
@@ -49,16 +51,18 @@ public struct AppLockOverlayView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                if lockManager.isBiometricEnabled {
-                    Button {
-                        startBiometricUnlock()
-                    } label: {
-                        Label(NSLocalizedString("使用生物识别", comment: ""), systemImage: "faceid")
-                            .frame(maxWidth: .infinity)
+                #if !os(watchOS)
+                    if lockManager.isBiometricEnabled {
+                        Button {
+                            startBiometricUnlock()
+                        } label: {
+                            Label(NSLocalizedString("使用生物识别", comment: ""), systemImage: "faceid")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isBiometricUnlocking)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(isBiometricUnlocking)
-                }
+                #endif
 
                 Button {
                     unlock()
@@ -75,7 +79,9 @@ public struct AppLockOverlayView: View {
         .onAppear {
             password = ""
             errorMessage = nil
+            #if !os(watchOS)
             startBiometricUnlockIfNeeded()
+            #endif
         }
     }
 
@@ -89,6 +95,7 @@ public struct AppLockOverlayView: View {
         }
     }
 
+    #if !os(watchOS)
     private func startBiometricUnlockIfNeeded() {
         guard lockManager.isBiometricEnabled, !hasAttemptedBiometricUnlock else { return }
         hasAttemptedBiometricUnlock = true
@@ -108,6 +115,7 @@ public struct AppLockOverlayView: View {
             }
         }
     }
+    #endif
 }
 
 public struct AppLockSettingsView: View {
@@ -145,14 +153,16 @@ public struct AppLockSettingsView: View {
             }
 
             if lockManager.isEnabled {
-                Section {
-                    Toggle(NSLocalizedString("生物识别解锁", comment: ""), isOn: biometricBinding)
-                        .disabled(!lockManager.canEvaluateBiometrics())
-                } header: {
-                    Text(NSLocalizedString("生物识别", comment: ""))
-                } footer: {
-                    Text(biometricFooterText)
-                }
+                #if !os(watchOS)
+                    Section {
+                        Toggle(NSLocalizedString("生物识别解锁", comment: ""), isOn: biometricBinding)
+                            .disabled(!lockManager.canEvaluateBiometrics())
+                    } header: {
+                        Text(NSLocalizedString("生物识别", comment: ""))
+                    } footer: {
+                        Text(biometricFooterText)
+                    }
+                #endif
 
                 Section {
                     Picker(NSLocalizedString("后台后锁定", comment: ""), selection: timeoutBinding) {
@@ -254,6 +264,7 @@ public struct AppLockSettingsView: View {
         )
     }
 
+    #if !os(watchOS)
     private var biometricBinding: Binding<Bool> {
         Binding(
             get: { lockManager.isBiometricEnabled },
@@ -267,6 +278,7 @@ public struct AppLockSettingsView: View {
         }
         return NSLocalizedString("当前设备未启用或不支持生物识别，请继续使用应用锁密码。", comment: "")
     }
+    #endif
 
     private var timeoutOptions: [(seconds: Int, title: String)] {
         [
