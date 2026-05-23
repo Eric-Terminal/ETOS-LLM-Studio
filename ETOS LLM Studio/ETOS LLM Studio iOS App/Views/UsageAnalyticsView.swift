@@ -82,7 +82,7 @@ struct UsageAnalyticsView: View {
                     HStack(spacing: 10) {
                         overviewMetricCapsule("总 Token", value: "\(card.totalTokens)")
                         overviewMetricCapsule("错误", value: "\(card.errorCount)")
-                        overviewMetricCapsule("常用模型", value: card.topModelName)
+                        overviewMetricCapsule("常用模型", value: card.topModelName, allowsMarquee: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -477,15 +477,22 @@ struct UsageAnalyticsView: View {
     }
 
     private func tokenTrendLegendRow(series: UsageAnalyticsModelTokenSeries, color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             Circle()
                 .fill(color)
                 .frame(width: 9, height: 9)
+                .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(series.title)
-                    .etFont(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                MarqueeText(
+                    content: series.title,
+                    uiFont: .preferredFont(forTextStyle: .subheadline),
+                    speed: 34,
+                    spacing: 32
+                )
+                .etFont(.subheadline.weight(.semibold))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !series.subtitle.isEmpty {
                     Text(series.subtitle)
                         .etFont(.caption)
@@ -493,8 +500,7 @@ struct UsageAnalyticsView: View {
                         .lineLimit(1)
                 }
             }
-
-            Spacer(minLength: 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(percentageText(series.tokenShare))
@@ -535,15 +541,28 @@ struct UsageAnalyticsView: View {
         .buttonStyle(.plain)
     }
 
-    private func overviewMetricCapsule(_ title: String, value: String) -> some View {
+    private func overviewMetricCapsule(_ title: String, value: String, allowsMarquee: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(NSLocalizedString(title, comment: "用量统计概览指标标题"))
                 .etFont(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text(value)
+            if allowsMarquee {
+                MarqueeText(
+                    content: value,
+                    uiFont: .preferredFont(forTextStyle: .subheadline),
+                    speed: 34,
+                    spacing: 32
+                )
                 .etFont(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(value)
+                    .etFont(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)

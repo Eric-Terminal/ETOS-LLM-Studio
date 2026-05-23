@@ -125,10 +125,21 @@ struct UsageAnalyticsView: View {
                         Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), card.totalTokens, card.errorCount))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
-                        Text(String(format: NSLocalizedString("常用模型：%@", comment: ""), card.topModelName))
+                        HStack(spacing: 3) {
+                            Text(String(format: NSLocalizedString("常用模型：%@", comment: ""), ""))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                            MarqueeText(
+                                content: card.topModelName,
+                                uiFont: .preferredFont(forTextStyle: .caption2),
+                                speed: 26,
+                                spacing: 28
+                            )
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
             }
@@ -152,14 +163,20 @@ struct UsageAnalyticsView: View {
                             .foregroundStyle(.secondary)
 
                         ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
-                            HStack(spacing: 6) {
+                            HStack(alignment: .top, spacing: 6) {
                                 Circle()
                                     .fill(trendModelColors[index % trendModelColors.count])
                                     .frame(width: 6, height: 6)
-                                Text(series.title)
-                                    .etFont(.caption2.weight(.semibold))
-                                    .lineLimit(1)
-                                Spacer(minLength: 4)
+                                    .padding(.top, 4)
+                                MarqueeText(
+                                    content: series.title,
+                                    uiFont: .preferredFont(forTextStyle: .caption2),
+                                    speed: 26,
+                                    spacing: 28
+                                )
+                                .etFont(.caption2.weight(.semibold))
+                                .allowsHitTesting(false)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 Text(percentageText(series.tokenShare))
                                     .etFont(.caption2.monospaced())
                                     .foregroundStyle(.secondary)
@@ -207,6 +224,7 @@ struct UsageAnalyticsView: View {
                             rank: index + 1,
                             item: model,
                             showsTokenDetails: true,
+                            titleAllowsMarquee: true,
                             tokenShareText: percentageText(model.tokenShare),
                             cacheHitRateText: cacheHitRateText(model.cacheHitRate)
                         )
@@ -231,6 +249,7 @@ struct UsageAnalyticsView: View {
                             rank: index + 1,
                             item: source,
                             showsTokenDetails: false,
+                            titleAllowsMarquee: false,
                             tokenShareText: percentageText(source.tokenShare),
                             cacheHitRateText: cacheHitRateText(source.cacheHitRate)
                         )
@@ -575,6 +594,7 @@ private struct WatchUsageAnalyticsRankRow: View {
     let rank: Int
     let item: UsageAnalyticsRankItem
     let showsTokenDetails: Bool
+    let titleAllowsMarquee: Bool
     let tokenShareText: String
     let cacheHitRateText: String
 
@@ -590,9 +610,7 @@ private struct WatchUsageAnalyticsRankRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(item.title)
-                .etFont(.footnote.weight(.semibold))
-                .lineLimit(1)
+            rankTitle
 
             if !item.subtitle.isEmpty {
                 Text(item.subtitle)
@@ -633,5 +651,24 @@ private struct WatchUsageAnalyticsRankRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private var rankTitle: some View {
+        if titleAllowsMarquee {
+            MarqueeText(
+                content: item.title,
+                uiFont: .preferredFont(forTextStyle: .footnote),
+                speed: 28,
+                spacing: 28
+            )
+            .etFont(.footnote.weight(.semibold))
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(item.title)
+                .etFont(.footnote.weight(.semibold))
+                .lineLimit(1)
+        }
     }
 }
