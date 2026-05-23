@@ -61,7 +61,12 @@ class ChatViewModel: ObservableObject {
     @Published var preparedReasoningMarkdownByMessageID: [UUID: ETPreparedMarkdownRenderPayload] = [:]
     var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
-    @Published var userInput: String = ""
+    @Published var userInput: String = AppConfigStore.shared.chatComposerDraft {
+        didSet {
+            guard userInput != AppConfigStore.shared.chatComposerDraft else { return }
+            AppConfigStore.shared.chatComposerDraft = userInput
+        }
+    }
     @Published var messageToEdit: ChatMessage?
     @Published var activeSheet: ActiveSheet?
     

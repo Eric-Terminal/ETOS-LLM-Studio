@@ -49,6 +49,7 @@ extension ChatViewModel {
         enableNoBubbleUI = appConfig.enableNoBubbleUI
         sendSpeechAsAudio = appConfig.sendSpeechAsAudio
         enableSpeechInput = appConfig.enableSpeechInput
+        userInput = appConfig.chatComposerDraft
         speechModelIdentifier = appConfig.speechModelIdentifier
         ttsModelIdentifier = appConfig.ttsModelIdentifier
         memoryEmbeddingModelIdentifier = appConfig.memoryEmbeddingModelIdentifier
