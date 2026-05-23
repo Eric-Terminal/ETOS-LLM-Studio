@@ -3323,7 +3323,10 @@
 "模型测试" = "Model Test";
 "测试结果" = "Test Results";
 "模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。" = "Model Test sends a lightweight request to each added chat model to verify that the API key, endpoint, and model ID work.";
+"模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。并发数量默认 1，最高 %d。" = "Model Test sends a lightweight request to each added chat model to verify that the API key, endpoint, and model ID work. Concurrency defaults to 1, up to %d.";
 "模型测试会向每个已添加的聊天模型发送一条轻量请求。" = "Model Test sends a lightweight request to each added chat model.";
+"模型测试会向每个已添加的聊天模型发送一条轻量请求。并发默认 1，最高 %d。" = "Model Test sends a lightweight request to each added chat model. Concurrency defaults to 1, up to %d.";
+"并发数量" = "Concurrency";
 "没有可测试的已添加聊天模型。" = "No added chat models are available to test.";
 "%d / %d 已完成" = "%d / %d complete";
 "%d 可用 / %d 不可用" = "%d available / %d unavailable";

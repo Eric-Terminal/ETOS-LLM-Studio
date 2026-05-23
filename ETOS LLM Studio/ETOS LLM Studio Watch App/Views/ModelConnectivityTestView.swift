@@ -13,6 +13,12 @@ struct ModelConnectivityTestView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ModelConnectivityTestViewModel
     private let providerName: String
+    private let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
 
     init(provider: Provider) {
         self.providerName = provider.name
@@ -33,8 +39,25 @@ struct ModelConnectivityTestView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+
+                HStack {
+                    Text(NSLocalizedString("并发数量", comment: "Model test concurrency limit field"))
+                    Spacer()
+                    TextField("1", value: $viewModel.concurrencyLimit, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 48)
+                        .disabled(viewModel.isRunning)
+                        .onChange(of: viewModel.concurrencyLimit) { _, newValue in
+                            viewModel.concurrencyLimit = ModelConnectivityTestViewModel.clampedConcurrencyLimit(newValue)
+                        }
+                }
             } footer: {
-                Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求。", comment: "Watch model test explanation"))
+                Text(
+                    String(
+                        format: NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求。并发默认 1，最高 %d。", comment: "Watch model test explanation"),
+                        ModelConnectivityTestViewModel.maximumConcurrencyLimit
+                    )
+                )
             }
 
             Section(NSLocalizedString("测试结果", comment: "Model test result section")) {

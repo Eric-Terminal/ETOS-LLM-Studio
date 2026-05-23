@@ -13,6 +13,12 @@ struct ModelConnectivityTestView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ModelConnectivityTestViewModel
     private let providerName: String
+    private let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
 
     init(provider: Provider) {
         self.providerName = provider.name
@@ -23,8 +29,14 @@ struct ModelConnectivityTestView: View {
         List {
             Section {
                 summaryRow
+                concurrencyLimitRow
             } footer: {
-                Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。", comment: "Model test explanation"))
+                Text(
+                    String(
+                        format: NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。并发数量默认 1，最高 %d。", comment: "Model test explanation"),
+                        ModelConnectivityTestViewModel.maximumConcurrencyLimit
+                    )
+                )
             }
 
             Section(NSLocalizedString("测试结果", comment: "Model test result section")) {
@@ -75,6 +87,19 @@ struct ModelConnectivityTestView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var concurrencyLimitRow: some View {
+        LabeledContent(NSLocalizedString("并发数量", comment: "Model test concurrency limit field")) {
+            TextField("1", value: $viewModel.concurrencyLimit, formatter: numberFormatter)
+                .multilineTextAlignment(.trailing)
+                .keyboardType(.numberPad)
+                .frame(width: 80)
+                .disabled(viewModel.isRunning)
+                .onChange(of: viewModel.concurrencyLimit) { _, newValue in
+                    viewModel.concurrencyLimit = ModelConnectivityTestViewModel.clampedConcurrencyLimit(newValue)
+                }
         }
     }
 
