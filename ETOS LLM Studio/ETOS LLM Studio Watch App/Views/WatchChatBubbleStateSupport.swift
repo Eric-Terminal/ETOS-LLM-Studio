@@ -45,7 +45,7 @@ extension ChatBubble {
         ViewThatFits(in: .horizontal) {
             messageActionBarContent
                 .watchMessageActionBarGroupStyle(
-                    showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                    showsBorder: showsMessageActionBarOuterBorder,
                     background: {
                         messageActionBarBackground()
                     }
@@ -55,7 +55,7 @@ extension ChatBubble {
                 messageActionBarContent
             }
             .watchMessageActionBarGroupStyle(
-                showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                showsBorder: showsMessageActionBarOuterBorder,
                 background: {
                     messageActionBarBackground()
                 }
@@ -79,12 +79,10 @@ extension ChatBubble {
 
     @ViewBuilder
     func messageActionBarBackground() -> some View {
-        if messageActionBarConfiguration.showsOuterBorder {
+        if showsMessageActionBarOuterBorder {
             let shape = Capsule()
 
-            if usesNoBubbleStyle {
-                shape.fill(Color.clear)
-            } else if message.role == .user {
+            if message.role == .user {
                 if enableLiquidGlass {
                     if #available(watchOS 26.0, *) {
                         shape
@@ -125,8 +123,12 @@ extension ChatBubble {
         }
     }
 
+    var showsMessageActionBarOuterBorder: Bool {
+        messageActionBarConfiguration.showsOuterBorder && !usesNoBubbleStyle
+    }
+
     var messageActionBarForegroundColor: Color {
-        if messageActionBarConfiguration.showsOuterBorder && !usesNoBubbleStyle {
+        if showsMessageActionBarOuterBorder {
             switch message.role {
             case .user, .error:
                 return resolvedTextColor(default: .white)

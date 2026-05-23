@@ -80,7 +80,7 @@ extension ChatBubble {
         let row = ViewThatFits(in: .horizontal) {
             messageActionBarContent
                 .messageActionBarGroupStyle(
-                    showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                    showsBorder: showsMessageActionBarOuterBorder,
                     background: {
                         messageActionBarBackground()
                     }
@@ -90,7 +90,7 @@ extension ChatBubble {
                 messageActionBarContent
             }
             .messageActionBarGroupStyle(
-                showsBorder: messageActionBarConfiguration.showsOuterBorder,
+                showsBorder: showsMessageActionBarOuterBorder,
                 background: {
                     messageActionBarBackground()
                 }
@@ -110,11 +110,9 @@ extension ChatBubble {
 
     @ViewBuilder
     func messageActionBarBackground() -> some View {
-        if messageActionBarConfiguration.showsOuterBorder {
+        if showsMessageActionBarOuterBorder {
             let shape = Capsule()
-            if usesNoBubbleStyle {
-                shape.fill(Color.clear)
-            } else if enableLiquidGlass {
+            if enableLiquidGlass {
                 if #available(iOS 26.0, *) {
                     shape
                         .fill(bubbleGradient)
@@ -129,8 +127,12 @@ extension ChatBubble {
         }
     }
 
+    var showsMessageActionBarOuterBorder: Bool {
+        messageActionBarConfiguration.showsOuterBorder && !usesNoBubbleStyle
+    }
+
     var messageActionBarForegroundColor: Color {
-        if messageActionBarConfiguration.showsOuterBorder && !usesNoBubbleStyle {
+        if showsMessageActionBarOuterBorder {
             return resolvedTextColor(default: isOutgoing || isError ? .white : .primary)
         }
         return resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.86)
