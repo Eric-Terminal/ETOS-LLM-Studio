@@ -73,7 +73,7 @@ struct DisplaySettingsView: View {
                 if enableMarkdown {
                     Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
                 }
-                Toggle(NSLocalizedString("无气泡UI", comment: ""), isOn: $enableNoBubbleUI)
+                Toggle(NSLocalizedString("关闭助手气泡", comment: ""), isOn: $enableNoBubbleUI)
                 Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
                 NavigationLink {
                     WatchChatAppearanceProfileSettingsView()

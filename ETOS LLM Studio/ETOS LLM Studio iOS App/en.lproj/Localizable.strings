@@ -1657,8 +1657,8 @@
 "底部抽屉" = "Bottom Sheet";
 "设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。" = "Set how the picker menu appears. \"Floating Panel\" offers a centered, visually focused experience; \"Bottom Sheet\" follows the natural thumb gesture so every switch feels silky smooth.";
 "消息操作" = "Message Actions";
-"无气泡UI" = "No Bubble UI";
-"开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。" = "When enabled, chat bubble backgrounds become transparent and message text can use a wider layout.";
+"关闭助手气泡" = "Hide Assistant Bubbles";
+"开启后会隐藏助手消息气泡背景，并自动放宽助手消息文本宽度。" = "When enabled, assistant message backgrounds are hidden and assistant text can use a wider layout.";
 "聊天颜色自定义" = "Chat color customization";
 "默认全部关闭时，聊天配色与当前版本完全一致。" = "When all options stay off, chat colors remain exactly the same as the current version.";
 "自定义用户气泡颜色" = "Customize user bubble color";
@@ -2500,7 +2500,7 @@
 "将导出前 %d 条消息（包含目标消息与其上文）。" = "Will export the first %d messages, including the target message and earlier context.";
 "将导出当前会话全部 %d 条消息。" = "Will export all %d messages in the current chat.";
 "顶部毛玻璃渐隐" = "Top Glass Fade";
-"无气泡UI会透明化聊天气泡并放宽消息文本宽度；顶部毛玻璃渐隐会让聊天页顶部向消息区自然过渡。" = "No Bubble UI makes chat bubbles transparent and widens message text; Top Glass Fade gives the top of the chat page a natural transition into the message area.";
+"关闭助手气泡后会隐藏助手消息气泡背景并放宽消息文本宽度；顶部毛玻璃渐隐会让聊天页顶部向消息区自然过渡。" = "Hiding assistant bubbles removes assistant message backgrounds and widens assistant text; Top Glass Fade gives the top of the chat page a natural transition into the message area.";
 "MCP 连接异常" = "MCP Connection Issue";
 "%d 个 MCP 服务器连接异常：%@。请检查网络或服务器状态后再重试。" = "%d MCP servers have connection issues: %@. Check the network or server status, then try again.";
 "%@ 等" = "%@, etc.";

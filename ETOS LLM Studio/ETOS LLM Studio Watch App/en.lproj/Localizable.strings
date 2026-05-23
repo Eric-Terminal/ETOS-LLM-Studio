@@ -1426,8 +1426,8 @@
 "沉浸视窗" = "Immersive Window";
 "独立页面" = "Standalone Page";
 "「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。" = "\"Immersive Window\" drapes lightly over the current chat so the background stays present; \"Standalone Page\" opens a fresh view with a crisp slide for a cleaner visual experience.";
-"无气泡UI" = "No Bubble UI";
-"开启后聊天气泡背景会透明化，并自动放宽消息文本宽度。" = "When enabled, chat bubble backgrounds become transparent and message text can use a wider layout.";
+"关闭助手气泡" = "Hide Assistant Bubbles";
+"开启后会隐藏助手消息气泡背景，并自动放宽助手消息文本宽度。" = "When enabled, assistant message backgrounds are hidden and assistant text can use a wider layout.";
 "聊天颜色自定义" = "Chat color customization";
 "默认全部关闭时，聊天配色与当前版本完全一致。" = "When all options stay off, chat colors remain exactly the same as the current version.";
 "自定义用户气泡颜色" = "Customize user bubble color";

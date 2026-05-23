@@ -125,7 +125,7 @@ struct ChatBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            // 用户消息靠右；无气泡助手消息用左右 Spacer 居中阅读列。
+            // 用户消息靠右；关闭助手气泡后的助手消息用左右 Spacer 居中阅读列。
             if isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
@@ -167,7 +167,7 @@ struct ChatBubble: View {
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
             .frame(maxWidth: usesNoBubbleStyle ? nil : bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
             
-            // AI 普通气泡靠左；无气泡助手消息保留对称右侧 Spacer。
+            // AI 普通气泡靠左；关闭助手气泡后的助手消息保留对称右侧 Spacer。
             if !isOutgoing || usesNoBubbleStyle {
                 Spacer(minLength: rowSideSpacerMinLength)
             }
