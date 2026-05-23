@@ -89,22 +89,27 @@ struct ModelPricingSettingsView: View {
     }
 
     private func tierSubtitle(_ tier: ModelPricingTierDraft) -> String {
+        guard tier.hasAnyPrice else {
+            return NSLocalizedString("未填写价格，将不会保存", comment: "Empty pricing tier hint")
+        }
         let priceParts = [
-            priceSummary(title: NSLocalizedString("输入", comment: "Cost component input title"), text: tier.inputPrice),
-            priceSummary(title: NSLocalizedString("输出", comment: "Cost component output title"), text: tier.outputPrice),
-            priceSummary(title: NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: tier.cacheWritePrice),
-            priceSummary(title: NSLocalizedString("缓存命中", comment: "Cost component cache read title"), text: tier.cacheReadPrice)
+            priceSummary(title: NSLocalizedString("输入", comment: "Cost component input title"), text: tier.inputPrice, inheritedText: draft.inputPrice),
+            priceSummary(title: NSLocalizedString("输出", comment: "Cost component output title"), text: tier.outputPrice, inheritedText: draft.outputPrice),
+            priceSummary(title: NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: tier.cacheWritePrice, inheritedText: draft.cacheWritePrice),
+            priceSummary(title: NSLocalizedString("缓存命中", comment: "Cost component cache read title"), text: tier.cacheReadPrice, inheritedText: draft.cacheReadPrice)
         ].compactMap { $0 }
         return priceParts.isEmpty
             ? NSLocalizedString("未填写价格，将不会保存", comment: "Empty pricing tier hint")
             : priceParts.joined(separator: " • ")
     }
 
-    private func priceSummary(title: String, text: String) -> String? {
+    private func priceSummary(title: String, text: String, inheritedText: String) -> String? {
         let price = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !price.isEmpty else { return nil }
+        let inheritedPrice = inheritedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectivePrice = price.isEmpty ? inheritedPrice : price
+        guard !effectivePrice.isEmpty else { return nil }
         let currency = draft.currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = "\(currency.isEmpty ? ModelPricing.defaultCurrencySymbol : currency)\(price)"
+        let value = "\(currency.isEmpty ? ModelPricing.defaultCurrencySymbol : currency)\(effectivePrice)"
         return String(format: NSLocalizedString("%@：%@", comment: "Label value pair"), title, value)
     }
 
@@ -229,6 +234,13 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
 
     nonisolated var minimumTokenValue: Int {
         max(0, Int(minimumTokens.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0)
+    }
+
+    nonisolated var hasAnyPrice: Bool {
+        !inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !outputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !cacheWritePrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !cacheReadPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     nonisolated var modelPricingTier: ModelPricingTier? {
