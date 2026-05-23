@@ -155,28 +155,9 @@ struct MessageActionSheet: View {
                     }
                 }
 
-                Section(NSLocalizedString("导出", comment: "")) {
-                    Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
-
-                    ForEach(MessageActionExportScope.allCases) { scope in
-                        Menu {
-                            ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
-                                Button {
-                                    onExport(format, includeReasoning, scope == .upToMessage ? message : nil)
-                                } label: {
-                                    Label(format.displayName, systemImage: iconName(for: format))
-                                }
-                            }
-                        } label: {
-                            Label(
-                                exportScopeTitle(scope),
-                                systemImage: scope == .upToMessage ? "arrow.up.doc" : "square.and.arrow.up"
-                            )
-                        }
-                    }
-                }
-
-                messageInfoSections
+                messageSupplementarySections
+                exportSection
+                messageInfoSection
             }
             .navigationTitle(NSLocalizedString("消息操作", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
@@ -191,7 +172,31 @@ struct MessageActionSheet: View {
     }
 
     @ViewBuilder
-    private var messageInfoSections: some View {
+    private var exportSection: some View {
+        Section(NSLocalizedString("导出", comment: "")) {
+            Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
+
+            ForEach(MessageActionExportScope.allCases) { scope in
+                Menu {
+                    ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
+                        Button {
+                            onExport(format, includeReasoning, scope == .upToMessage ? message : nil)
+                        } label: {
+                            Label(format.displayName, systemImage: iconName(for: format))
+                        }
+                    }
+                } label: {
+                    Label(
+                        exportScopeTitle(scope),
+                        systemImage: scope == .upToMessage ? "arrow.up.doc" : "square.and.arrow.up"
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var messageInfoSection: some View {
         Section(NSLocalizedString("消息信息", comment: "")) {
             LabeledContent(NSLocalizedString("角色", comment: "")) {
                 Text(roleDescription(message.role))
@@ -218,7 +223,10 @@ struct MessageActionSheet: View {
                     .textSelection(.enabled)
             }
         }
+    }
 
+    @ViewBuilder
+    private var messageSupplementarySections: some View {
         if totalMessageCount > 0 {
             Section(NSLocalizedString("快速定位", comment: "Quick message jump section title")) {
                 TextField(

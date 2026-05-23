@@ -183,28 +183,6 @@ struct MessageActionsView: View {
                 }
             }
 
-            Section(NSLocalizedString("导出", comment: "")) {
-                NavigationLink {
-                    ChatExportFormatsView(
-                        session: session,
-                        messages: visibleAllMessages,
-                        upToMessageID: nil
-                    )
-                } label: {
-                    Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
-                }
-
-                NavigationLink {
-                    ChatExportFormatsView(
-                        session: session,
-                        messages: visibleAllMessages,
-                        upToMessageID: message.id
-                    )
-                } label: {
-                    Label(NSLocalizedString("导出到此消息（含上文）", comment: ""), systemImage: "arrow.up.doc")
-                }
-            }
-            
             if hasDisplayVersions {
                 Section(NSLocalizedString("版本管理", comment: "")) {
                     ForEach(0..<displayVersionCount, id: \.self) { index in
@@ -237,43 +215,6 @@ struct MessageActionsView: View {
                 } label: {
                     Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
                 }
-            }
-            
-            Section(header: Text(NSLocalizedString("详细信息", comment: ""))) {
-                if let index = messageIndex {
-                    VStack(alignment: .leading) {
-                        Text(NSLocalizedString("会话位置", comment: ""))
-                            .etFont(.caption)
-                            .foregroundColor(.secondary)
-                        Text(String(format: NSLocalizedString("第 %d / %d 条", comment: ""), index + 1, totalMessages))
-                            .etFont(.caption2)
-                    }
-                }
-                
-                if hasDisplayVersions {
-                    VStack(alignment: .leading) {
-                        Text(NSLocalizedString("版本信息", comment: ""))
-                            .etFont(.caption)
-                            .foregroundColor(.secondary)
-                        Text(
-                            String(
-                                format: NSLocalizedString("当前显示第 %d / %d 版", comment: ""),
-                                displayCurrentVersionIndex + 1,
-                                displayVersionCount
-                            )
-                        )
-                            .etFont(.caption2)
-                    }
-                }
-                
-                VStack(alignment: .leading) {
-                    Text(NSLocalizedString("消息 ID", comment: ""))
-                        .etFont(.caption)
-                        .foregroundColor(.secondary)
-                    Text(message.id.uuidString)
-                        .etFont(.caption2)
-                }
-
             }
 
             Section(header: Text(NSLocalizedString("快速定位", comment: "Quick message jump section title"))) {
@@ -359,6 +300,64 @@ struct MessageActionsView: View {
                !samples.isEmpty {
                 Section(NSLocalizedString("流式速度曲线", comment: "Streaming speed chart title")) {
                     MessageActionsStreamingSpeedChart(metrics: metrics)
+                }
+            }
+
+            Section(NSLocalizedString("导出", comment: "")) {
+                NavigationLink {
+                    ChatExportFormatsView(
+                        session: session,
+                        messages: visibleAllMessages,
+                        upToMessageID: nil
+                    )
+                } label: {
+                    Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
+                }
+
+                NavigationLink {
+                    ChatExportFormatsView(
+                        session: session,
+                        messages: visibleAllMessages,
+                        upToMessageID: message.id
+                    )
+                } label: {
+                    Label(NSLocalizedString("导出到此消息（含上文）", comment: ""), systemImage: "arrow.up.doc")
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("详细信息", comment: ""))) {
+                if let index = messageIndex {
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("会话位置", comment: ""))
+                            .etFont(.caption)
+                            .foregroundColor(.secondary)
+                        Text(String(format: NSLocalizedString("第 %d / %d 条", comment: ""), index + 1, totalMessages))
+                            .etFont(.caption2)
+                    }
+                }
+
+                if hasDisplayVersions {
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("版本信息", comment: ""))
+                            .etFont(.caption)
+                            .foregroundColor(.secondary)
+                        Text(
+                            String(
+                                format: NSLocalizedString("当前显示第 %d / %d 版", comment: ""),
+                                displayCurrentVersionIndex + 1,
+                                displayVersionCount
+                            )
+                        )
+                            .etFont(.caption2)
+                    }
+                }
+
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("消息 ID", comment: ""))
+                        .etFont(.caption)
+                        .foregroundColor(.secondary)
+                    Text(message.id.uuidString)
+                        .etFont(.caption2)
                 }
             }
         }
