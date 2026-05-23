@@ -98,6 +98,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableStreaming = "enableStreaming"
     case enableResponseSpeedMetrics = "enableResponseSpeedMetrics"
     case requestLogPlainMessageEnabled = "logs.request.plainMessageEnabled"
+    case modelConnectivityTestConcurrencyLimit = "modelConnectivityTest.concurrencyLimit"
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
@@ -272,6 +273,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #endif
         case .requestLogPlainMessageEnabled:
             return .bool(false)
+        case .modelConnectivityTestConcurrencyLimit:
+            return .integer(1)
         case .lazyLoadMessageCount:
             #if os(watchOS)
             return .integer(3)

@@ -31,12 +31,7 @@ struct ModelConnectivityTestView: View {
                 summaryRow
                 concurrencyLimitRow
             } footer: {
-                Text(
-                    String(
-                        format: NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。并发数量默认 1，最高 %d。", comment: "Model test explanation"),
-                        ModelConnectivityTestViewModel.maximumConcurrencyLimit
-                    )
-                )
+                Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。并发数量会自动保存。", comment: "Model test explanation"))
             }
 
             Section(NSLocalizedString("测试结果", comment: "Model test result section")) {
@@ -98,7 +93,7 @@ struct ModelConnectivityTestView: View {
                 .frame(width: 80)
                 .disabled(viewModel.isRunning)
                 .onChange(of: viewModel.concurrencyLimit) { _, newValue in
-                    viewModel.concurrencyLimit = ModelConnectivityTestViewModel.clampedConcurrencyLimit(newValue)
+                    viewModel.concurrencyLimit = ModelConnectivityTestViewModel.normalizedConcurrencyLimit(newValue)
                 }
         }
     }

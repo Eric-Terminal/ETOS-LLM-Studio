@@ -48,16 +48,11 @@ struct ModelConnectivityTestView: View {
                         .frame(width: 48)
                         .disabled(viewModel.isRunning)
                         .onChange(of: viewModel.concurrencyLimit) { _, newValue in
-                            viewModel.concurrencyLimit = ModelConnectivityTestViewModel.clampedConcurrencyLimit(newValue)
+                            viewModel.concurrencyLimit = ModelConnectivityTestViewModel.normalizedConcurrencyLimit(newValue)
                         }
                 }
             } footer: {
-                Text(
-                    String(
-                        format: NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求。并发默认 1，最高 %d。", comment: "Watch model test explanation"),
-                        ModelConnectivityTestViewModel.maximumConcurrencyLimit
-                    )
-                )
+                Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求。并发数量会自动保存。", comment: "Watch model test explanation"))
             }
 
             Section(NSLocalizedString("测试结果", comment: "Model test result section")) {

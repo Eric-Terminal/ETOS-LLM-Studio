@@ -154,6 +154,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableStreaming: Bool { didSet { write(.enableStreaming, enableStreaming) } }
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
+    @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
@@ -293,6 +294,7 @@ public final class AppConfigStore: ObservableObject {
         enableStreaming = Self.boolValue(.enableStreaming, userDefaults: userDefaults)
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
+        modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
@@ -543,14 +545,15 @@ public final class AppConfigStore: ObservableObject {
         for key: AppConfigKey,
         quickSync: Bool = true
     ) -> Bool {
-        guard persist(value, for: key) else { return false }
-        snapshotCache.set(value.anyValue, for: key)
+        let normalizedValue = normalizedAppConfigValue(value, for: key)
+        guard persist(normalizedValue, for: key) else { return false }
+        snapshotCache.set(normalizedValue.anyValue, for: key)
         #if canImport(WatchConnectivity)
         if quickSync,
            !shouldSkipQuickSyncForCurrentProcess,
            key.participatesInSync {
             Task { @MainActor in
-                WatchSyncManager.shared.performQuickSync(key: key.rawValue, value: value.anyValue)
+                WatchSyncManager.shared.performQuickSync(key: key.rawValue, value: normalizedValue.anyValue)
             }
         }
         #endif
@@ -690,6 +693,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableStreaming: return .bool(enableStreaming)
         case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
+        case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
         case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
         case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
@@ -861,6 +865,7 @@ public final class AppConfigStore: ObservableObject {
         switch key {
         case .maxChatHistory: maxChatHistory = value
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
+        case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .memoryTopK: memoryTopK = value
         case .conversationMemoryRecentLimit: conversationMemoryRecentLimit = value
         case .conversationMemoryRoundThreshold: conversationMemoryRoundThreshold = value
@@ -950,11 +955,12 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private func write(_ key: AppConfigKey, _ value: AppConfigValue) {
+        let normalizedValue = Self.normalizedAppConfigValue(value, for: key)
         guard !isReloadingFromPersistentStore else { return }
         guard !isApplyingSnapshot || key.participatesInSync else { return }
-        guard Self.cachedValue(for: key) != value else { return }
+        guard Self.cachedValue(for: key) != normalizedValue else { return }
 
-        Self.snapshotCache.set(value.anyValue, for: key)
+        Self.snapshotCache.set(normalizedValue.anyValue, for: key)
         if !didLoadPersistentStore {
             locallyChangedKeysBeforePersistentLoad.insert(key)
         }
@@ -962,7 +968,7 @@ public final class AppConfigStore: ObservableObject {
         let rawKey = key.rawValue
         let writeID = UUID()
         let task = Task(priority: .utility) {
-            await AppConfigPersistenceWorker.shared.write(key: rawKey, value: value)
+            await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
         }
         pendingWriteTasks[writeID] = task
         Task { [weak self] in
@@ -976,7 +982,7 @@ public final class AppConfigStore: ObservableObject {
         if !Self.shouldSkipQuickSyncForCurrentProcess,
            !isApplyingSnapshot,
            key.participatesInSync {
-            WatchSyncManager.shared.performQuickSync(key: rawKey, value: value.anyValue)
+            WatchSyncManager.shared.performQuickSync(key: rawKey, value: normalizedValue.anyValue)
         }
         #endif
     }
@@ -1032,7 +1038,7 @@ public final class AppConfigStore: ObservableObject {
 
     private static func integerValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Int {
         if case .integer(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return value
+            return normalizedIntegerValue(value, for: key)
         }
         return 0
     }
@@ -1064,7 +1070,7 @@ public final class AppConfigStore: ObservableObject {
         case .bool:
             return coerceBool(object).map(AppConfigValue.bool)
         case .integer:
-            return coerceInt(object).map(AppConfigValue.integer)
+            return coerceInt(object).map { .integer(normalizedIntegerValue($0, for: key)) }
         case .real:
             return coerceDouble(object).map(AppConfigValue.real)
         case .text:
@@ -1084,7 +1090,7 @@ public final class AppConfigStore: ObservableObject {
         case .bool(let value):
             return Persistence.writeAppConfig(key: key.rawValue, integer: value ? 1 : 0, typeHint: "bool")
         case .integer(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, integer: value, typeHint: "integer")
+            return Persistence.writeAppConfig(key: key.rawValue, integer: normalizedIntegerValue(value, for: key), typeHint: "integer")
         case .real(let value):
             return Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: "real")
         case .text(let value):
@@ -1098,7 +1104,7 @@ public final class AppConfigStore: ObservableObject {
         case .bool:
             return coerceBool(value).map(AppConfigValue.bool)
         case .integer:
-            return coerceInt(value).map(AppConfigValue.integer)
+            return coerceInt(value).map { .integer(normalizedIntegerValue($0, for: key)) }
         case .real:
             return coerceDouble(value).map(AppConfigValue.real)
         case .text:
@@ -1112,6 +1118,24 @@ public final class AppConfigStore: ObservableObject {
             return "[]"
         }
         return encoded
+    }
+
+    private nonisolated static func normalizedAppConfigValue(_ value: AppConfigValue, for key: AppConfigKey) -> AppConfigValue {
+        switch value {
+        case .integer(let value):
+            return .integer(normalizedIntegerValue(value, for: key))
+        default:
+            return value
+        }
+    }
+
+    private nonisolated static func normalizedIntegerValue(_ value: Int, for key: AppConfigKey) -> Int {
+        switch key {
+        case .modelConnectivityTestConcurrencyLimit:
+            return max(1, value)
+        default:
+            return value
+        }
     }
 
     private nonisolated static func defaultText(for key: AppConfigKey) -> String {

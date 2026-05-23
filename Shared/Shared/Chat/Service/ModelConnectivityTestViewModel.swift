@@ -12,22 +12,41 @@ import Foundation
 @MainActor
 public final class ModelConnectivityTestViewModel: ObservableObject {
     public static let minimumConcurrencyLimit = 1
-    public static let maximumConcurrencyLimit = 16
 
     @Published public private(set) var results: [ModelConnectivityTestResult]
     @Published public private(set) var isRunning = false
     @Published public private(set) var completedCount = 0
-    @Published public var concurrencyLimit: Int
+    @Published public var concurrencyLimit: Int {
+        didSet {
+            guard concurrencyLimit != oldValue else { return }
+            let normalizedLimit = Self.normalizedConcurrencyLimit(concurrencyLimit)
+            if concurrencyLimit != normalizedLimit {
+                concurrencyLimit = normalizedLimit
+            }
+            if appConfig.modelConnectivityTestConcurrencyLimit != normalizedLimit {
+                appConfig.modelConnectivityTestConcurrencyLimit = normalizedLimit
+            }
+        }
+    }
 
     private let service: ChatService
+    private let appConfig: AppConfigStore
     private let candidates: [RunnableModel]
     private var testTask: Task<Void, Never>?
 
-    public init(provider: Provider, service: ChatService = .shared, concurrencyLimit: Int = 1) {
+    public init(
+        provider: Provider,
+        service: ChatService = .shared,
+        appConfig: AppConfigStore = .shared
+    ) {
         self.service = service
+        self.appConfig = appConfig
         self.candidates = service.connectivityTestCandidates(for: provider)
         self.results = candidates.map { ModelConnectivityTestResult(runnableModel: $0) }
-        self.concurrencyLimit = Self.clampedConcurrencyLimit(concurrencyLimit)
+        self.concurrencyLimit = Self.normalizedConcurrencyLimit(appConfig.modelConnectivityTestConcurrencyLimit)
+        if appConfig.modelConnectivityTestConcurrencyLimit != self.concurrencyLimit {
+            appConfig.modelConnectivityTestConcurrencyLimit = self.concurrencyLimit
+        }
     }
 
     deinit {
@@ -50,13 +69,13 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
         String(format: NSLocalizedString("%d / %d 已完成", comment: "Model test progress"), completedCount, totalCount)
     }
 
-    public static func clampedConcurrencyLimit(_ value: Int) -> Int {
-        min(max(value, minimumConcurrencyLimit), maximumConcurrencyLimit)
+    public static func normalizedConcurrencyLimit(_ value: Int) -> Int {
+        max(value, minimumConcurrencyLimit)
     }
 
     public func start() {
         guard !isRunning, !candidates.isEmpty else { return }
-        let concurrencyLimit = Self.clampedConcurrencyLimit(self.concurrencyLimit)
+        let concurrencyLimit = Self.normalizedConcurrencyLimit(self.concurrencyLimit)
         self.concurrencyLimit = concurrencyLimit
         testTask?.cancel()
         results = candidates.map { ModelConnectivityTestResult(runnableModel: $0) }
@@ -80,7 +99,7 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
             isRunning = false
         }
 
-        let maxActiveCount = min(Self.clampedConcurrencyLimit(concurrencyLimit), candidates.count)
+        let maxActiveCount = min(Self.normalizedConcurrencyLimit(concurrencyLimit), candidates.count)
         await withTaskGroup(of: ModelConnectivityTestResult.self) { group in
             var nextCandidateIndex = 0
             var activeTaskCount = 0
