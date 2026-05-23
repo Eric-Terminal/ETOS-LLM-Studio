@@ -29,11 +29,12 @@ struct ModelPricingSettingsView: View {
                 header: Text(NSLocalizedString("阶梯价格", comment: "Tiered model pricing section")),
                 footer: Text(NSLocalizedString("阶梯依据为输入 + 缓存创建 + 缓存命中。阶梯空价格继承基础价格。", comment: "Watch tiered pricing rule hint"))
             ) {
-                ForEach($draft.tiers) { $tier in
+                ForEach(sortedTierBindings, id: \.wrappedValue.id) { tierBinding in
                     NavigationLink {
-                        ModelPricingTierSettingsView(tier: $tier)
+                        ModelPricingTierSettingsView(tier: tierBinding)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
+                            let tier = tierBinding.wrappedValue
                             Text(tierRangeTitle(tier))
                             Text(tierSubtitle(tier))
                                 .etFont(.caption2)
@@ -77,8 +78,28 @@ struct ModelPricingSettingsView: View {
     }
 
     private func deleteTiers(at offsets: IndexSet) {
-        draft.tiers.remove(atOffsets: offsets)
+        let orderedIndices = sortedTierIndices
+        let removingIDs = Set(offsets.compactMap { offset in
+            guard orderedIndices.indices.contains(offset) else { return nil }
+            return draft.tiers[orderedIndices[offset]].id
+        })
+        draft.tiers.removeAll { removingIDs.contains($0.id) }
         persistDraft()
+    }
+
+    private var sortedTierBindings: [Binding<ModelPricingTierDraft>] {
+        sortedTierIndices.map { $draft.tiers[$0] }
+    }
+
+    private var sortedTierIndices: [Int] {
+        draft.tiers.indices.sorted {
+            let lhs = draft.tiers[$0]
+            let rhs = draft.tiers[$1]
+            if lhs.minimumTokenValue == rhs.minimumTokenValue {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.minimumTokenValue < rhs.minimumTokenValue
+        }
     }
 
     private func tierRangeTitle(_ tier: ModelPricingTierDraft) -> String {
