@@ -141,6 +141,7 @@ private extension SnapshotBuilder {
     enum SourceDatabase {
         case chat(PersistenceGRDBStore)
         case auxiliary(Persistence.AuxiliaryStoreKind, PersistenceAuxiliaryGRDBStore)
+        case knowledge(KnowledgeBaseDatabase)
 
         var fileName: String {
             switch self {
@@ -148,6 +149,8 @@ private extension SnapshotBuilder {
                 return "chat-store.sqlite"
             case .auxiliary(let kind, _):
                 return kind.rawValue
+            case .knowledge:
+                return KnowledgeBaseDatabase.databaseFileName
             }
         }
 
@@ -157,15 +160,19 @@ private extension SnapshotBuilder {
                 return NSLocalizedString("聊天数据库", comment: "")
             case .auxiliary(let kind, _):
                 return kind == .config ? NSLocalizedString("配置数据库", comment: "") : NSLocalizedString("记忆数据库", comment: "")
+            case .knowledge:
+                return NSLocalizedString("知识库数据库", comment: "")
             }
         }
 
-        var dbPool: DatabasePool {
+        func exportPlainSnapshot(to destinationURL: URL) throws {
             switch self {
             case .chat(let store):
-                return store.dbPool
+                try Persistence.exportDatabaseForPlainSnapshot(sourcePool: store.dbPool, destinationURL: destinationURL)
             case .auxiliary(_, let store):
-                return store.dbPool
+                try Persistence.exportDatabaseForPlainSnapshot(sourcePool: store.dbPool, destinationURL: destinationURL)
+            case .knowledge(let store):
+                try store.exportPlainSnapshot(to: destinationURL)
             }
         }
     }
@@ -184,7 +191,8 @@ private extension SnapshotBuilder {
         let sources: [SourceDatabase] = [
             .chat(chatStore),
             .auxiliary(.config, configStore),
-            .auxiliary(.memory, memoryStore)
+            .auxiliary(.memory, memoryStore),
+            .knowledge(KnowledgeBaseDatabase.shared)
         ]
 
         var items: [DatabaseItem] = []
@@ -229,6 +237,14 @@ private extension SnapshotBuilder {
         if let vectorItem = try makeFileItem(
             fileURL: vectorStoreURL,
             relativePath: "Memory/\(vectorStoreURL.lastPathComponent)"
+        ) {
+            items.append(vectorItem)
+        }
+
+        let knowledgeVectorStoreURL = KnowledgeBaseDatabase.vectorStoreURL()
+        if let vectorItem = try makeFileItem(
+            fileURL: knowledgeVectorStoreURL,
+            relativePath: "\(KnowledgeBaseDatabase.directoryName)/\(knowledgeVectorStoreURL.lastPathComponent)"
         ) {
             items.append(vectorItem)
         }
@@ -297,6 +313,7 @@ private extension SnapshotBuilder {
         case .database:
             return [
                 "memory_vectors.sqlite",
+                "knowledge_vectors.sqlite",
                 "Backgrounds/",
                 "AudioFiles/",
                 "ImageFiles/",
@@ -318,7 +335,7 @@ private extension SnapshotBuilder {
         try Persistence.removeItemIfExists(at: destinationURL)
         Persistence.removeSQLiteSidecars(at: destinationURL)
 
-        try Persistence.exportDatabaseForPlainSnapshot(sourcePool: source.dbPool, destinationURL: destinationURL)
+        try source.exportPlainSnapshot(to: destinationURL)
 
         guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
             throw NSError(domain: "SnapshotBuilder", code: 1, userInfo: [

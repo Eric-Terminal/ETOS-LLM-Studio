@@ -10,6 +10,7 @@ import SwiftUI
 import Shared
 
 struct ExtendedFeaturesView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var achievementCenter = AchievementCenter.shared
     @State private var isShowingIntroDetails = false
 
@@ -65,6 +66,19 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("在 App 内提交并追踪反馈工单", comment: "反馈助手入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    KnowledgeBaseView()
+                        .environmentObject(viewModel)
+                } label: {
+                    SettingsListIconLabel("知识库", icon: .memoryLibrary)
+                }
+            } footer: {
+                Text(NSLocalizedString("管理文档、网页和笔记资料，为后续知识检索增强做准备。", comment: "知识库入口说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

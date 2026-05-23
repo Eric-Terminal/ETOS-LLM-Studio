@@ -341,6 +341,12 @@ extension Persistence {
                 targetURL: targets.memoryStoreURL,
                 fileName: "memory-store.sqlite",
                 temporaryDirectory: temporaryDirectory
+            ),
+            try makeEncryptedSnapshotRestoreReplacement(
+                sourceURL: sources.knowledgeStoreURL,
+                targetURL: targets.knowledgeStoreURL,
+                fileName: "knowledge-store.sqlite",
+                temporaryDirectory: temporaryDirectory
             )
         ]
     }
@@ -410,11 +416,7 @@ private extension Persistence {
 
     static func protectedRawSQLiteDatabasePaths() -> Set<String> {
         let targets = snapshotRestoreTargetURLs()
-        let databaseURLs = [
-            targets.chatStoreURL,
-            targets.configStoreURL,
-            targets.memoryStoreURL
-        ]
+        let databaseURLs = targets.allDatabaseURLs
         let backupURLs = databaseURLs.map { databaseURL in
             databaseURL.deletingLastPathComponent()
                 .appendingPathComponent(launchBackupDirectoryName, isDirectory: true)
@@ -450,6 +452,12 @@ private extension Persistence {
                 fileName: "memory-store.sqlite",
                 temporaryDirectory: temporaryDirectory,
                 newPassphrase: newPassphrase
+            ),
+            try makeEncryptedReplacement(
+                sourceURL: targets.knowledgeStoreURL,
+                fileName: "knowledge-store.sqlite",
+                temporaryDirectory: temporaryDirectory,
+                newPassphrase: newPassphrase
             )
         ].compactMap { $0 }
     }
@@ -472,6 +480,11 @@ private extension Persistence {
             try makePlainReplacement(
                 sourceURL: targets.memoryStoreURL,
                 fileName: "memory-store.sqlite",
+                temporaryDirectory: temporaryDirectory
+            ),
+            try makePlainReplacement(
+                sourceURL: targets.knowledgeStoreURL,
+                fileName: "knowledge-store.sqlite",
                 temporaryDirectory: temporaryDirectory
             )
         ].compactMap { $0 }

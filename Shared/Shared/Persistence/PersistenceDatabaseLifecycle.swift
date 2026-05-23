@@ -208,6 +208,7 @@ extension Persistence {
         let grdbStore = activeGRDBStore()
         _ = activeAuxiliaryStore(kind: .config)
         _ = activeAuxiliaryStore(kind: .memory)
+        _ = try? KnowledgeBaseDatabase.shared.prepare()
         if launchPreparation.needsChatFTSRebuild {
             grdbStore?.rebuildMessagesFTSIndex()
         }

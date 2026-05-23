@@ -164,6 +164,8 @@ extension Persistence {
             return auxiliaryStoreDatabaseURL(for: .config)
         case .memory:
             return auxiliaryStoreDatabaseURL(for: .memory)
+        case .knowledge:
+            return KnowledgeBaseDatabase.shared.databaseURL
         }
     }
 
@@ -253,7 +255,7 @@ extension Persistence {
         switch kind {
         case .chat:
             try createChatLaunchBackupWithoutFTS(sourceURL: sourceURL, destinationURL: tempBackupURL)
-        case .config, .memory:
+        case .config, .memory, .knowledge:
             try copySQLiteDatabase(sourceURL: sourceURL, destinationURL: tempBackupURL)
         }
 

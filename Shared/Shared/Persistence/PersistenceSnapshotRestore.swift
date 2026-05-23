@@ -14,6 +14,11 @@ struct SnapshotRestoreDatabaseURLs {
     let chatStoreURL: URL
     let configStoreURL: URL
     let memoryStoreURL: URL
+    let knowledgeStoreURL: URL
+
+    var allDatabaseURLs: [URL] {
+        [chatStoreURL, configStoreURL, memoryStoreURL, knowledgeStoreURL]
+    }
 }
 
 extension Persistence {
@@ -50,7 +55,8 @@ extension Persistence {
             replacements = [
                 DatabaseReplacement(sourceURL: sources.chatStoreURL, targetURL: targets.chatStoreURL),
                 DatabaseReplacement(sourceURL: sources.configStoreURL, targetURL: targets.configStoreURL),
-                DatabaseReplacement(sourceURL: sources.memoryStoreURL, targetURL: targets.memoryStoreURL)
+                DatabaseReplacement(sourceURL: sources.memoryStoreURL, targetURL: targets.memoryStoreURL),
+                DatabaseReplacement(sourceURL: sources.knowledgeStoreURL, targetURL: targets.knowledgeStoreURL)
             ]
         }
         let rollbackDirectory = fileManager.temporaryDirectory
@@ -85,7 +91,8 @@ extension Persistence {
         SnapshotRestoreDatabaseURLs(
             chatStoreURL: getChatsDirectory().appendingPathComponent("chat-store.sqlite", isDirectory: false),
             configStoreURL: auxiliaryStoreDatabaseURL(for: .config),
-            memoryStoreURL: auxiliaryStoreDatabaseURL(for: .memory)
+            memoryStoreURL: auxiliaryStoreDatabaseURL(for: .memory),
+            knowledgeStoreURL: KnowledgeBaseDatabase.shared.databaseURL
         )
     }
 }
@@ -117,6 +124,11 @@ extension Persistence {
             } catch {
                 closeError = closeError ?? error
             }
+        }
+        do {
+            try KnowledgeBaseDatabase.shared.resetForTests()
+        } catch {
+            closeError = closeError ?? error
         }
         if let closeError {
             throw closeError

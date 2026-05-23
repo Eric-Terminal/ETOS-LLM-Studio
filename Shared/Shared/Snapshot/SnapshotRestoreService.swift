@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 检查、解密并安装 .elsbackup 三处分库快照。
+// 检查、解密并安装 .elsbackup 分库快照。
 // ============================================================================
 
 import Foundation
@@ -104,10 +104,13 @@ private extension SnapshotRestoreService {
         }
     }
 
-    static let databaseArchivePaths: [(archivePath: String, fileName: String)] = [
+    static let requiredDatabaseArchivePaths: [(archivePath: String, fileName: String)] = [
         ("Databases/chat-store.sqlite", "chat-store.sqlite"),
         ("Databases/config-store.sqlite", "config-store.sqlite"),
         ("Databases/memory-store.sqlite", "memory-store.sqlite")
+    ]
+    static let optionalDatabaseArchivePaths: [(archivePath: String, fileName: String)] = [
+        ("Databases/knowledge-store.sqlite", "knowledge-store.sqlite")
     ]
 
     static func makeReadableSnapshotURL(_ sourceURL: URL, in workingDirectory: URL) throws -> URL {
@@ -168,10 +171,19 @@ private extension SnapshotRestoreService {
         try FileManager.default.createDirectory(at: extractedDirectory, withIntermediateDirectories: true)
 
         var extractedURLs: [String: URL] = [:]
-        for item in databaseArchivePaths {
+        for item in requiredDatabaseArchivePaths {
             guard let entry = archive[item.archivePath] else {
                 throw RestoreError.missingDatabase(item.fileName)
             }
+            let destinationURL = extractedDirectory.appendingPathComponent(item.fileName, isDirectory: false)
+            _ = try archive.extract(entry, to: destinationURL)
+            guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
+                throw RestoreError.invalidDatabase(item.fileName)
+            }
+            extractedURLs[item.fileName] = destinationURL
+        }
+        for item in optionalDatabaseArchivePaths {
+            guard let entry = archive[item.archivePath] else { continue }
             let destinationURL = extractedDirectory.appendingPathComponent(item.fileName, isDirectory: false)
             _ = try archive.extract(entry, to: destinationURL)
             guard Persistence.isDatabaseHealthy(at: destinationURL, encrypted: false) else {
@@ -189,12 +201,23 @@ private extension SnapshotRestoreService {
         guard let memoryStoreURL = extractedURLs["memory-store.sqlite"] else {
             throw RestoreError.missingDatabase("memory-store.sqlite")
         }
+        let knowledgeStoreURL = try extractedURLs["knowledge-store.sqlite"]
+            ?? makeEmptyKnowledgeStore(in: extractedDirectory)
 
         return SnapshotRestoreDatabaseURLs(
             chatStoreURL: chatStoreURL,
             configStoreURL: configStoreURL,
-            memoryStoreURL: memoryStoreURL
+            memoryStoreURL: memoryStoreURL,
+            knowledgeStoreURL: knowledgeStoreURL
         )
+    }
+
+    private static func makeEmptyKnowledgeStore(in directory: URL) throws -> URL {
+        let url = directory.appendingPathComponent("knowledge-store.sqlite", isDirectory: false)
+        let database = KnowledgeBaseDatabase(databaseURL: url)
+        try database.prepare()
+        try database.close()
+        return url
     }
 
     static func validateRestorableFiles(from archive: Archive, manifest: Manifest) throws {
@@ -270,6 +293,11 @@ private extension SnapshotRestoreService {
                 throw RestoreError.unsafeFilePath(relativePath)
             }
             rootURL = MemoryStoragePaths.rootDirectory()
+        case KnowledgeBaseDatabase.directoryName:
+            guard relativePath == "\(KnowledgeBaseDatabase.directoryName)/\(KnowledgeBaseDatabase.vectorStoreFileName)" else {
+                throw RestoreError.unsafeFilePath(relativePath)
+            }
+            rootURL = KnowledgeBaseDatabase.defaultDirectoryURL()
         default:
             throw RestoreError.unsafeFilePath(relativePath)
         }

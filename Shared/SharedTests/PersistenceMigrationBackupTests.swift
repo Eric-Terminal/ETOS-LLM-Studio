@@ -90,7 +90,7 @@ extension PersistenceTests {
         #expect(sqliteCount(chatStoreBackupSQLiteURL, sql: "SELECT COUNT(*) FROM messages") == messages.count)
     }
 
-    @Test("离线快照会打包三处分库并排除 FTS 与向量库")
+    @Test("离线快照会打包分库并排除 FTS 与向量库")
     func testSnapshotBuilderCreatesOfflineArchive() throws {
         cleanup(sessions: [])
 
@@ -116,12 +116,13 @@ extension PersistenceTests {
             content: "偏好离线快照。",
             sourceSessionID: session.id
         )
+        _ = try KnowledgeBaseDatabase.shared.prepare()
 
         let result = try SnapshotBuilder.buildSnapshotResult()
         defer { removeIfExists(result.fileURL) }
 
         #expect(result.backupKind == .database)
-        #expect(Set(result.includedDatabaseNames) == ["chat-store.sqlite", "config-store.sqlite", "memory-store.sqlite"])
+        #expect(Set(result.includedDatabaseNames) == ["chat-store.sqlite", "config-store.sqlite", "memory-store.sqlite", "knowledge-store.sqlite"])
         #expect(result.includedFilePaths.isEmpty)
     }
 
@@ -141,6 +142,7 @@ extension PersistenceTests {
             .appendingPathComponent("FileAttachments", isDirectory: true)
             .appendingPathComponent("full-snapshot-note.txt", isDirectory: false)
         let vectorURL = memoryDirectory.appendingPathComponent("memory_vectors.sqlite", isDirectory: false)
+        let knowledgeVectorURL = knowledgeDirectory.appendingPathComponent("knowledge_vectors.sqlite", isDirectory: false)
 
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
@@ -152,6 +154,7 @@ extension PersistenceTests {
             removeIfExists(imageURL)
             removeIfExists(fileURL)
             removeIfExists(vectorURL)
+            removeIfExists(knowledgeVectorURL)
         }
 
         Persistence.saveChatSessions([session])
@@ -172,10 +175,15 @@ extension PersistenceTests {
             at: vectorURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try FileManager.default.createDirectory(
+            at: knowledgeVectorURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try Data("background-data".utf8).write(to: backgroundURL, options: .atomic)
         try Data("image-data".utf8).write(to: imageURL, options: .atomic)
         try Data("file-data".utf8).write(to: fileURL, options: .atomic)
         try Data("vector-data".utf8).write(to: vectorURL, options: .atomic)
+        try Data("knowledge-vector-data".utf8).write(to: knowledgeVectorURL, options: .atomic)
 
         let result = try SnapshotBuilder.buildSnapshotResult(kind: .full)
         let snapshotURL = result.fileURL
@@ -187,11 +195,13 @@ extension PersistenceTests {
         #expect(filePaths.contains("ImageFiles/full-snapshot-image.png"))
         #expect(filePaths.contains("FileAttachments/full-snapshot-note.txt"))
         #expect(filePaths.contains("Memory/memory_vectors.sqlite"))
+        #expect(filePaths.contains("KnowledgeBase/knowledge_vectors.sqlite"))
 
         try Data("changed".utf8).write(to: backgroundURL, options: .atomic)
         try FileManager.default.removeItem(at: imageURL)
         try FileManager.default.removeItem(at: fileURL)
         try FileManager.default.removeItem(at: vectorURL)
+        try FileManager.default.removeItem(at: knowledgeVectorURL)
 
         try SnapshotRestoreService.restorePlainSnapshot(from: snapshotURL)
 
@@ -199,9 +209,10 @@ extension PersistenceTests {
         #expect(try Data(contentsOf: imageURL) == Data("image-data".utf8))
         #expect(try Data(contentsOf: fileURL) == Data("file-data".utf8))
         #expect(try Data(contentsOf: vectorURL) == Data("vector-data".utf8))
+        #expect(try Data(contentsOf: knowledgeVectorURL) == Data("knowledge-vector-data".utf8))
     }
 
-    @Test("数据库物理加密可在三处分库间启用并关闭")
+    @Test("数据库物理加密可在分库间启用并关闭")
     @MainActor
     func testDatabaseEncryptionMigrationRoundTrip() throws {
         cleanup(sessions: [])
@@ -227,6 +238,7 @@ extension PersistenceTests {
             content: "SQLCipher profile",
             sourceSessionID: session.id
         )
+        _ = try KnowledgeBaseDatabase.shared.prepare()
 
         try Persistence.setDatabaseEncryptionEnabled(
             passphrase: "database-passphrase",
@@ -236,6 +248,7 @@ extension PersistenceTests {
         #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: true))
         #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: true))
         #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: true))
+        #expect(Persistence.isDatabaseHealthy(at: knowledgeStoreSQLiteURL, encrypted: true))
         #expect(!Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
         #expect(Persistence.loadMessages(for: session.id).first?.content == "encrypt me")
         let encryptedTables = try StorageBrowserSupport.listSQLiteTables(at: chatStoreSQLiteURL)
@@ -277,10 +290,11 @@ extension PersistenceTests {
         #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
         #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: false))
         #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: false))
+        #expect(Persistence.isDatabaseHealthy(at: knowledgeStoreSQLiteURL, encrypted: false))
         #expect(Persistence.loadMessages(for: session.id).first?.content == "tool-updated")
     }
 
-    @Test("明文离线快照可以恢复三处分库")
+    @Test("明文离线快照可以恢复分库")
     func testSnapshotRestoreInstallsOfflineArchive() throws {
         cleanup(sessions: [])
 
@@ -303,6 +317,7 @@ extension PersistenceTests {
             content: "恢复源用户画像",
             sourceSessionID: snapshotSession.id
         )
+        _ = try KnowledgeBaseDatabase.shared.prepare()
 
         let snapshotURL = try SnapshotBuilder.buildSnapshot()
         defer { removeIfExists(snapshotURL) }
@@ -330,7 +345,7 @@ extension PersistenceTests {
         #expect(restoredProfile?.sourceSessionID == snapshotSession.id)
     }
 
-    @Test("数据库物理加密开启时恢复快照会保持三处分库加密")
+    @Test("数据库物理加密开启时恢复快照会保持分库加密")
     @MainActor
     func testSnapshotRestoreKeepsEncryptedDatabasesWhenDatabaseEncryptionIsEnabled() throws {
         cleanup(sessions: [])
@@ -362,6 +377,7 @@ extension PersistenceTests {
             content: "加密恢复源用户画像",
             sourceSessionID: snapshotSession.id
         )
+        _ = try KnowledgeBaseDatabase.shared.prepare()
 
         let snapshotURL = try SnapshotBuilder.buildSnapshot()
         defer { removeIfExists(snapshotURL) }
@@ -386,9 +402,11 @@ extension PersistenceTests {
         #expect(Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: true))
         #expect(Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: true))
         #expect(Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: true))
+        #expect(Persistence.isDatabaseHealthy(at: knowledgeStoreSQLiteURL, encrypted: true))
         #expect(!Persistence.isDatabaseHealthy(at: chatStoreSQLiteURL, encrypted: false))
         #expect(!Persistence.isDatabaseHealthy(at: configStoreSQLiteURL, encrypted: false))
         #expect(!Persistence.isDatabaseHealthy(at: memoryStoreSQLiteURL, encrypted: false))
+        #expect(!Persistence.isDatabaseHealthy(at: knowledgeStoreSQLiteURL, encrypted: false))
 
         let restoredSessions = Persistence.loadChatSessions()
         #expect(restoredSessions.contains(where: { $0.id == snapshotSession.id }))
