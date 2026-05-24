@@ -405,9 +405,7 @@ extension ChatService {
             "stream": false
         ]
         var commonPayload = payload
-        if adapter is OpenAIAdapter {
-            commonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] = await openAIReasoningContentEchoModeControlValue()
-        }
+        commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
         guard let request = adapter.buildChatRequest(
             for: targetModel,
             commonPayload: commonPayload,

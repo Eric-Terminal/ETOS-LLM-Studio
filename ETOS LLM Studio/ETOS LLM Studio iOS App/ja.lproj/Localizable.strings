@@ -3562,3 +3562,5 @@
 "仅 Tool Call" = "Tool Call のみ";
 "不回传" = "回伝しない";
 "选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "「回伝しない」を選ぶと、reasoning_content の回伝を要求する一部の API で 400 エラーになる場合があります。";
+"该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。" = "この設定は、OpenAI 互換リクエストの reasoning_content、Gemini のツール呼び出しに含まれる thoughtSignature、Anthropic のツール呼び出し履歴に含まれる thinking/redacted_thinking ブロックの回伝を制御します。Gemini と Anthropic は、ツール呼び出しを継続する際にこれらの署名メタデータを保持することを公式に要求しています。ツール呼び出し以外の完全な元の思考ブロックは現在確実に再構築できないため、追加で擬似的に回伝しません。";
+"选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。" = "「回伝しない」を選ぶと、reasoning_content または思考署名メタデータの回伝を要求する一部の API で 400 エラーになる場合があります。";

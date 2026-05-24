@@ -36,6 +36,31 @@ func shouldSendText(_ text: String) -> Bool {
     return true
 }
 
+public enum ReasoningContentEchoPayload {
+    public static let key = "reasoning_content_echo_mode"
+}
+
+func resolvedReasoningContentEchoMode(from payload: [String: Any], fallbackKey: String? = nil) -> ReasoningContentEchoMode {
+    if let rawValue = payload[ReasoningContentEchoPayload.key] as? String {
+        return .normalized(rawValue)
+    }
+    if let fallbackKey, let rawValue = payload[fallbackKey] as? String {
+        return .normalized(rawValue)
+    }
+    return .defaultMode
+}
+
+func shouldEchoReasoningMetadata(for message: ChatMessage, mode: ReasoningContentEchoMode) -> Bool {
+    switch mode {
+    case .always:
+        return true
+    case .toolCallsOnly:
+        return message.role == .assistant && !(message.toolCalls ?? []).isEmpty
+    case .never:
+        return false
+    }
+}
+
 func resolvedRequestModelName(for model: RunnableModel, overrides: [String: Any]) -> String {
     if let overrideModel = overrides["model"] as? String {
         let trimmed = overrideModel.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -3585,3 +3585,5 @@
 "仅 Tool Call" = "Tool Calls Only";
 "不回传" = "Never";
 "选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "When Never is selected, some APIs that require reasoning_content to be echoed may return a 400 error.";
+"该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。" = "This setting controls echoing reasoning_content in OpenAI-compatible requests, Gemini thoughtSignature values on tool calls, and Anthropic thinking/redacted_thinking blocks in tool-call history. Gemini and Anthropic officially require these signature metadata to be preserved when continuing tool calls; complete original non-tool-call thinking blocks cannot be reliably reconstructed today, so the app will not synthesize extra echoes.";
+"选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。" = "When Never is selected, some APIs that require reasoning_content or reasoning signature metadata to be echoed may return a 400 error.";

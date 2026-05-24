@@ -14,6 +14,7 @@ extension GeminiAdapter {
     // MARK: - 协议方法实现
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
+        let reasoningContentEchoMode = resolvedReasoningContentEchoMode(from: commonPayload)
         guard let baseURL = normalizedGeminiBaseURL(from: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -171,7 +172,8 @@ extension GeminiAdapter {
                         functionCall["id"] = toolCallId
                         functionCallPart["functionCall"] = functionCall
                     }
-                    if let rawThoughtSignature = toolCall.providerSpecificFields?["thought_signature"],
+                    if shouldEchoReasoningMetadata(for: msg, mode: reasoningContentEchoMode),
+                       let rawThoughtSignature = toolCall.providerSpecificFields?["thought_signature"],
                        case let .string(thoughtSignature) = rawThoughtSignature,
                        !thoughtSignature.isEmpty {
                         functionCallPart["thoughtSignature"] = thoughtSignature

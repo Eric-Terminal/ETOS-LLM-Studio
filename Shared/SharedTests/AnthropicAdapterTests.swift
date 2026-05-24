@@ -162,4 +162,58 @@ struct AnthropicAdapterTests {
         #expect(thinking["type"] as? String == "adaptive")
         #expect(payload["effort"] as? String == "medium")
     }
+
+    @Test("Anthropic 请求体在不回传模式下移除 thinking block")
+    func testAnthropicBuildRequestOmitsThinkingBlockWhenDisabled() throws {
+        let message = ChatMessage(
+            role: .assistant,
+            content: "正常回复",
+            reasoningContent: "先判断工具参数。",
+            reasoningProviderSpecificFields: [
+                "anthropic_thinking_blocks": .array([
+                    .dictionary([
+                        "type": .string("thinking"),
+                        "thinking": .string("先判断工具参数。"),
+                        "signature": .string("sig-anthropic")
+                    ])
+                ])
+            ]
+        )
+
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "claude-sonnet-4-5")
+        )
+
+        guard let request = adapter.buildChatRequest(
+            for: model,
+            commonPayload: [ReasoningContentEchoPayload.key: ReasoningContentEchoMode.never.rawValue],
+            messages: [
+                ChatMessage(role: .user, content: "测试"),
+                message
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let payloadMessages = jsonPayload["messages"] as? [[String: Any]],
+        let assistantMessage = payloadMessages.last,
+        let content = assistantMessage["content"] as? [[String: Any]] else {
+            Issue.record("Anthropic 请求体未正确编码。")
+            return
+        }
+
+        #expect(content.contains { $0["type"] as? String == "thinking" } == false)
+        #expect(content.contains { $0["type"] as? String == "text" } == true)
+    }
 }

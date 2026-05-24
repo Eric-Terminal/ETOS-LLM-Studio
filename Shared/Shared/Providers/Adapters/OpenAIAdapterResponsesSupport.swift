@@ -84,21 +84,11 @@ extension OpenAIAdapter {
     }
 
     static func reasoningContentEchoMode(from payload: [String: Any]) -> ReasoningContentEchoMode {
-        guard let rawValue = payload[reasoningContentEchoModeControlKey] as? String else {
-            return .defaultMode
-        }
-        return .normalized(rawValue)
+        resolvedReasoningContentEchoMode(from: payload, fallbackKey: reasoningContentEchoModeControlKey)
     }
 
     static func shouldEchoReasoningContent(for message: ChatMessage, mode: ReasoningContentEchoMode) -> Bool {
-        switch mode {
-        case .always:
-            return true
-        case .toolCallsOnly:
-            return message.role == .assistant && !(message.toolCalls ?? []).isEmpty
-        case .never:
-            return false
-        }
+        shouldEchoReasoningMetadata(for: message, mode: mode)
     }
 
     func buildResponsesReasoningInputItems(from message: ChatMessage, mode: ReasoningContentEchoMode) -> [[String: Any]] {

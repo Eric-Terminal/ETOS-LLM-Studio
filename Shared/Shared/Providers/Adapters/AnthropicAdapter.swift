@@ -140,7 +140,9 @@ public class AnthropicAdapter: APIAdapter {
     private static let anthropicThinkingBlocksKey = "anthropic_thinking_blocks"
     private static let anthropicSignatureKey = "anthropic_signature"
 
-    private func anthropicThinkingContentBlocks(for message: ChatMessage) -> [[String: Any]] {
+    private func anthropicThinkingContentBlocks(for message: ChatMessage, mode: ReasoningContentEchoMode) -> [[String: Any]] {
+        guard shouldEchoReasoningMetadata(for: message, mode: mode) else { return [] }
+
         if let rawBlocks = message.reasoningProviderSpecificFields?[Self.anthropicThinkingBlocksKey],
            case let .array(blockValues) = rawBlocks {
             return blockValues.compactMap { $0.toAny() as? [String: Any] }
@@ -166,6 +168,7 @@ public class AnthropicAdapter: APIAdapter {
     // MARK: - 协议方法实现
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
+        let reasoningContentEchoMode = resolvedReasoningContentEchoMode(from: commonPayload)
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -260,7 +263,7 @@ public class AnthropicAdapter: APIAdapter {
                 }
             } else if msg.role == .assistant, let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
                 var contentBlocks: [[String: Any]] = []
-                contentBlocks.append(contentsOf: anthropicThinkingContentBlocks(for: msg))
+                contentBlocks.append(contentsOf: anthropicThinkingContentBlocks(for: msg, mode: reasoningContentEchoMode))
                 
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -289,7 +292,7 @@ public class AnthropicAdapter: APIAdapter {
                     "content": contentBlocks
                 ])
             } else if msg.role == .assistant {
-                var contentBlocks = anthropicThinkingContentBlocks(for: msg)
+                var contentBlocks = anthropicThinkingContentBlocks(for: msg, mode: reasoningContentEchoMode)
                 let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if shouldSendText(trimmed) {
                     contentBlocks.append([

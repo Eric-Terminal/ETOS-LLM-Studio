@@ -319,10 +319,11 @@ struct ModelAdvancedSettingsView: View {
 
     private var outputReasoningFooterText: String {
         let base = NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: "")
-        guard reasoningContentEchoModeBinding.wrappedValue == .never else {
-            return base
+        let compatibility = NSLocalizedString("该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。", comment: "")
+        if reasoningContentEchoModeBinding.wrappedValue == .never {
+            return "\(base)\n\n\(compatibility)\n\n\(NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。", comment: ""))"
         }
-        return "\(base)\n\n\(NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。", comment: ""))"
+        return "\(base)\n\n\(compatibility)"
     }
 
     private func handleTemperatureChange(_ value: Double) {

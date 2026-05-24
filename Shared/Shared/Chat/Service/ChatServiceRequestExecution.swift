@@ -296,10 +296,10 @@ extension ChatService {
         var commonPayload: [String: Any] = ["stream": enableStreaming]
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
+        commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
         if adapter is OpenAIAdapter {
             let includeUsageInStream = await MainActor.run { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
-            commonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] = await openAIReasoningContentEchoModeControlValue()
         }
         let effectiveTools = runnableModel.model.supportsToolCalling ? tools : nil
         if tools != nil, effectiveTools == nil {

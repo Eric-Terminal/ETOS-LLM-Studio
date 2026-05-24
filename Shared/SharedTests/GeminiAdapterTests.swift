@@ -496,6 +496,44 @@ struct GeminiAdapterTests {
         #expect(functionResponseID == "function-call-456")
     }
 
+    @Test("Gemini 请求体在不回传模式下移除 thoughtSignature")
+    func testGeminiBuildRequestOmitsThoughtSignatureWhenDisabled() throws {
+        let assistantCall = InternalToolCall(
+            id: "function-call-457",
+            toolName: "shortcut_weather",
+            arguments: #"{"city":"上海"}"#,
+            providerSpecificFields: [
+                "thought_signature": .string("sig-457")
+            ]
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "帮我查天气"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [assistantCall])
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [
+                ReasoningContentEchoPayload.key: ReasoningContentEchoMode.never.rawValue
+            ],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let contents = try #require(jsonPayload["contents"] as? [[String: Any]])
+        #expect(contents.count == 2)
+        let assistantPayload = contents[1]
+        let assistantParts = try #require(assistantPayload["parts"] as? [[String: Any]])
+        let firstPart = try #require(assistantParts.first)
+        let functionCall = try #require(firstPart["functionCall"] as? [String: Any])
+
+        #expect(functionCall["thoughtSignature"] == nil)
+    }
+
     @Test("Gemini 请求体会把思考档位放入 thinkingConfig")
     func testGeminiBuildRequestUsesThinkingLevelControl() throws {
         let model = RunnableModel(

@@ -317,9 +317,7 @@ extension ChatService {
             "temperature": 0,
             "stream": isStreaming
         ]
-        if adapter is OpenAIAdapter {
-            payload[OpenAIAdapter.reasoningContentEchoModeControlKey] = await openAIReasoningContentEchoModeControlValue()
-        }
+        payload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
         if tools?.isEmpty == false {
             payload["tool_choice"] = "auto"
         }
