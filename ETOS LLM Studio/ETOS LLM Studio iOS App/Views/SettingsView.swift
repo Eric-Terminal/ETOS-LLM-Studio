@@ -224,7 +224,6 @@ struct SettingsView: View {
 
                 NavigationLink {
                     ExtendedFeaturesView()
-                        .environmentObject(viewModel)
                 } label: {
                     SettingsListIconLabel("拓展功能", icon: .extendedFeatures)
                 }

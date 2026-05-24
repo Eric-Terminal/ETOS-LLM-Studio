@@ -146,7 +146,6 @@ public enum Persistence {
         case chat
         case config
         case memory
-        case knowledge
 
         var displayName: String {
             switch self {
@@ -156,8 +155,6 @@ public enum Persistence {
                 return "配置数据库"
             case .memory:
                 return "记忆数据库"
-            case .knowledge:
-                return "知识库数据库"
             }
         }
     }

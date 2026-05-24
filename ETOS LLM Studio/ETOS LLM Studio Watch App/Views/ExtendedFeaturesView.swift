@@ -182,21 +182,6 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
-                    KnowledgeBaseView()
-                        .environmentObject(viewModel)
-                } label: {
-                    settingsNavigationLabel("知识库", icon: .memoryLibrary)
-                        .etFont(.headline)
-                        .padding(.vertical, 4)
-                }
-            } footer: {
-                Text(NSLocalizedString("管理文档、网页和笔记资料，为后续知识检索增强做准备。", comment: "知识库入口说明"))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
-            }
-
-            Section {
-                NavigationLink {
                     LocalDebugView()
                 } label: {
                     settingsNavigationLabel("远程文件访问", icon: .remoteFiles)

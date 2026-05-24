@@ -205,10 +205,6 @@ struct PersistenceTests {
         documentsDirectory.appendingPathComponent("Memory")
     }
 
-    var knowledgeDirectory: URL {
-        documentsDirectory.appendingPathComponent("KnowledgeBase")
-    }
-
     var memoryRawMemoriesFileURL: URL {
         memoryDirectory.appendingPathComponent("memories.json")
     }
@@ -283,26 +279,6 @@ struct PersistenceTests {
 
     var memoryStoreBackupSQLiteURL: URL {
         memoryStoreBackupDirectory.appendingPathComponent("memory-store.sqlite")
-    }
-
-    var knowledgeStoreSQLiteURL: URL {
-        knowledgeDirectory.appendingPathComponent("knowledge-store.sqlite")
-    }
-
-    var knowledgeStoreSQLiteWALURL: URL {
-        knowledgeDirectory.appendingPathComponent("knowledge-store.sqlite-wal")
-    }
-
-    var knowledgeStoreSQLiteSHMURL: URL {
-        knowledgeDirectory.appendingPathComponent("knowledge-store.sqlite-shm")
-    }
-
-    var knowledgeStoreBackupDirectory: URL {
-        knowledgeDirectory.appendingPathComponent("StartupBackups")
-    }
-
-    var knowledgeStoreBackupSQLiteURL: URL {
-        knowledgeStoreBackupDirectory.appendingPathComponent("knowledge-store.sqlite")
     }
 
     var legacyMemoryStoreSQLiteURL: URL {
@@ -450,9 +426,6 @@ struct PersistenceTests {
         removeIfExists(memoryStoreSQLiteURL)
         removeIfExists(memoryStoreSQLiteWALURL)
         removeIfExists(memoryStoreSQLiteSHMURL)
-        removeIfExists(knowledgeStoreSQLiteURL)
-        removeIfExists(knowledgeStoreSQLiteWALURL)
-        removeIfExists(knowledgeStoreSQLiteSHMURL)
         removeIfExists(memoryRawMemoriesFileURL)
         removeIfExists(memoryUserProfileFileURL)
         removeIfExists(shortcutToolsFileURL)
@@ -466,14 +439,9 @@ struct PersistenceTests {
         removeIfExists(memoryStoreBackupSQLiteURL)
         removeIfExists(URL(fileURLWithPath: memoryStoreBackupSQLiteURL.path + "-wal"))
         removeIfExists(URL(fileURLWithPath: memoryStoreBackupSQLiteURL.path + "-shm"))
-        removeIfExists(knowledgeStoreBackupSQLiteURL)
-        removeIfExists(URL(fileURLWithPath: knowledgeStoreBackupSQLiteURL.path + "-wal"))
-        removeIfExists(URL(fileURLWithPath: knowledgeStoreBackupSQLiteURL.path + "-shm"))
         removeIfExists(chatStoreBackupDirectory)
         removeIfExists(configStoreBackupDirectory)
         removeIfExists(memoryStoreBackupDirectory)
-        removeIfExists(knowledgeStoreBackupDirectory)
-        removeIfExists(knowledgeDirectory)
         removeIfExists(legacyMemoryStoreSQLiteURL)
         removeIfExists(legacyMemoryStoreSQLiteWALURL)
         removeIfExists(legacyMemoryStoreSQLiteSHMURL)
