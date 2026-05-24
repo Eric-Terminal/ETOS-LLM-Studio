@@ -110,6 +110,34 @@ struct AppLogCenterTests {
         #expect(output?.contains("已截断") == false)
     }
 
+    @Test("日志长文本会按四千字符分页")
+    func testAppLogTextPaginatorSplitsByFourThousandCharacters() {
+        let text = String(repeating: "a", count: 8_001)
+
+        let pages = AppLogTextPaginator.paginate(text)
+
+        #expect(pages.count == 3)
+        #expect(pages[0].content.count == 4_000)
+        #expect(pages[0].startCharacterNumber == 1)
+        #expect(pages[0].endCharacterNumber == 4_000)
+        #expect(pages[1].startCharacterNumber == 4_001)
+        #expect(pages[1].endCharacterNumber == 8_000)
+        #expect(pages[2].content.count == 1)
+        #expect(pages[2].startCharacterNumber == 8_001)
+        #expect(pages[2].endCharacterNumber == 8_001)
+    }
+
+    @Test("日志长文本分页不会切坏组合字符")
+    func testAppLogTextPaginatorKeepsCharacterBoundaries() {
+        let text = String(repeating: "👩‍💻", count: 4_001)
+
+        let pages = AppLogTextPaginator.paginate(text)
+
+        #expect(pages.count == 2)
+        #expect(pages[0].content.count == 4_000)
+        #expect(pages[1].content == "👩‍💻")
+    }
+
     @Test("请求 URL 日志会隐藏敏感查询参数")
     func testRequestURLSanitizationForLogs() {
         let url = URL(string: "https://api.example.com/v1/chat?key=abc123&mode=debug")

@@ -138,6 +138,72 @@ public struct AppLogDayFolder: Identifiable, Hashable, Sendable {
     }
 }
 
+public struct AppLogTextPage: Identifiable, Hashable, Sendable {
+    public let index: Int
+    public let totalCount: Int
+    public let startCharacterNumber: Int
+    public let endCharacterNumber: Int
+    public let content: String
+
+    public init(
+        index: Int,
+        totalCount: Int,
+        startCharacterNumber: Int,
+        endCharacterNumber: Int,
+        content: String
+    ) {
+        self.index = index
+        self.totalCount = totalCount
+        self.startCharacterNumber = startCharacterNumber
+        self.endCharacterNumber = endCharacterNumber
+        self.content = content
+    }
+
+    public var id: Int { index }
+}
+
+public enum AppLogTextPaginator {
+    public static let defaultPageSize = 4_000
+
+    public static func paginate(_ text: String, pageSize: Int = defaultPageSize) -> [AppLogTextPage] {
+        let sanitizedPageSize = max(1, pageSize)
+        guard !text.isEmpty else {
+            return [
+                AppLogTextPage(
+                    index: 0,
+                    totalCount: 1,
+                    startCharacterNumber: 0,
+                    endCharacterNumber: 0,
+                    content: ""
+                )
+            ]
+        }
+
+        var chunks: [String] = []
+        var cursor = text.startIndex
+        let endIndex = text.endIndex
+
+        while cursor < endIndex {
+            let chunkEnd = text.index(cursor, offsetBy: sanitizedPageSize, limitedBy: endIndex) ?? endIndex
+            chunks.append(String(text[cursor..<chunkEnd]))
+            cursor = chunkEnd
+        }
+
+        let totalCount = chunks.count
+        return chunks.enumerated().map { offset, content in
+            let start = offset * sanitizedPageSize + 1
+            let end = start + content.count - 1
+            return AppLogTextPage(
+                index: offset,
+                totalCount: totalCount,
+                startCharacterNumber: start,
+                endCharacterNumber: end,
+                content: content
+            )
+        }
+    }
+}
+
 /// 应用日志筛选条件。
 public struct AppLogFilter: Sendable, Equatable {
     public var level: AppLogLevel?

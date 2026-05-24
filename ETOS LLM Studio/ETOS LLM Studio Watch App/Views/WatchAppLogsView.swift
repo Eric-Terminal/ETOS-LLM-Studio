@@ -272,14 +272,13 @@ private struct WatchAppLogEventDetailView: View {
 private struct WatchAppLogPayloadValueDetailView: View {
     let key: String
     let value: String
-    @State private var showsFullValue = false
 
     var body: some View {
         List {
             Section(key) {
                 WatchExpandableLogTextView(
-                    text: prettyPayloadValue(value),
-                    isExpanded: $showsFullValue
+                    title: key,
+                    text: prettyPayloadValue(value)
                 )
             }
         }
@@ -288,18 +287,22 @@ private struct WatchAppLogPayloadValueDetailView: View {
 }
 
 private struct WatchExpandableLogTextView: View {
+    let title: String
     let text: String
-    @Binding var isExpanded: Bool
+    let displayedText: String
+    let textCharacterCount: Int
+    let needsExpansion: Bool
 
-    private let previewLimit = 2_000
+    private static let previewLimit = AppLogTextPaginator.defaultPageSize
 
-    private var needsExpansion: Bool {
-        text.count > previewLimit
-    }
-
-    private var displayedText: String {
-        guard needsExpansion, !isExpanded else { return text }
-        return String(text.prefix(previewLimit))
+    init(title: String, text: String) {
+        self.title = title
+        self.text = text
+        let characterCount = text.count
+        let expands = characterCount > Self.previewLimit
+        self.textCharacterCount = characterCount
+        self.needsExpansion = expands
+        self.displayedText = expands ? String(text.prefix(Self.previewLimit)) : text
     }
 
     var body: some View {
@@ -307,17 +310,138 @@ private struct WatchExpandableLogTextView: View {
             Text(displayedText)
                 .etFont(.system(size: 9, design: .monospaced))
 
-            if needsExpansion && !isExpanded {
-                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), previewLimit, text.count))
+            if needsExpansion {
+                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), Self.previewLimit, textCharacterCount))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
 
-                Button(NSLocalizedString("显示完整内容", comment: "")) {
-                    isExpanded = true
+                NavigationLink {
+                    WatchAppLogPagedTextView(title: title, text: text)
+                } label: {
+                    Text(NSLocalizedString("显示完整内容", comment: ""))
                 }
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+private struct WatchAppLogPagedTextView: View {
+    let title: String
+    let pages: [AppLogTextPage]
+    let textCharacterCount: Int
+
+    @State private var selectedPageIndex = 0
+
+    init(title: String, text: String) {
+        self.title = title
+        self.pages = AppLogTextPaginator.paginate(text)
+        self.textCharacterCount = text.count
+    }
+
+    private var currentPage: AppLogTextPage {
+        let clampedIndex = min(max(selectedPageIndex, 0), pages.count - 1)
+        return pages[clampedIndex]
+    }
+
+    private var hasMultiplePages: Bool {
+        pages.count > 1
+    }
+
+    private var canGoToPreviousPage: Bool {
+        selectedPageIndex > 0
+    }
+
+    private var canGoToNextPage: Bool {
+        selectedPageIndex + 1 < pages.count
+    }
+
+    private var paginationSummaryText: String {
+        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentPage.startCharacterNumber, currentPage.endCharacterNumber, textCharacterCount)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(format: NSLocalizedString("第 %d / %d 页", comment: ""), currentPage.index + 1, currentPage.totalCount))
+                        .etFont(.caption.weight(.semibold))
+                    Text(paginationSummaryText)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.orange.opacity(0.12))
+                )
+
+                Text(currentPage.content)
+                    .etFont(.system(size: 9, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                    )
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+        }
+        .navigationTitle(title)
+        .toolbar {
+            if hasMultiplePages {
+                ToolbarItem(placement: .bottomBar) {
+                    paginationBottomBar
+                }
+            }
+        }
+    }
+
+    private var paginationBottomBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                goToPreviousPage()
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .disabled(!canGoToPreviousPage)
+            .accessibilityLabel(NSLocalizedString("上一页", comment: ""))
+
+            Spacer(minLength: 4)
+
+            MarqueeText(
+                content: paginationSummaryText,
+                uiFont: .preferredFont(forTextStyle: .footnote),
+                speed: 28,
+                delay: 0.8,
+                spacing: 24
+            )
+            .multilineTextAlignment(.center)
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 4)
+
+            Button {
+                goToNextPage()
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(!canGoToNextPage)
+            .accessibilityLabel(NSLocalizedString("下一页", comment: ""))
+        }
+    }
+
+    private func goToPreviousPage() {
+        guard canGoToPreviousPage else { return }
+        selectedPageIndex -= 1
+    }
+
+    private func goToNextPage() {
+        guard canGoToNextPage else { return }
+        selectedPageIndex += 1
     }
 }
 

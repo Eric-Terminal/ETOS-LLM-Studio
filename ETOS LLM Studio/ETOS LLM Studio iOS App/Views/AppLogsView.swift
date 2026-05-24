@@ -397,7 +397,6 @@ private struct AppLogDetailRow: View {
 
 private struct AppLogEventDetailView: View {
     let entry: AppLogEvent
-    @State private var showsFullPayloadDetail = false
 
     var body: some View {
         List {
@@ -437,8 +436,8 @@ private struct AppLogEventDetailView: View {
 
                 Section(NSLocalizedString("详情", comment: "")) {
                     ExpandableLogTextView(
-                        text: formatLogPayload(payload),
-                        isExpanded: $showsFullPayloadDetail
+                        title: NSLocalizedString("详情", comment: ""),
+                        text: formatLogPayload(payload)
                     )
                 }
             }
@@ -471,14 +470,13 @@ private struct AppLogEventDetailView: View {
 private struct AppLogPayloadValueDetailView: View {
     let key: String
     let value: String
-    @State private var showsFullValue = false
 
     var body: some View {
         List {
             Section(key) {
                 ExpandableLogTextView(
-                    text: prettyPayloadValue(value),
-                    isExpanded: $showsFullValue
+                    title: key,
+                    text: prettyPayloadValue(value)
                 )
             }
         }
@@ -495,18 +493,22 @@ private struct AppLogPayloadValueDetailView: View {
 }
 
 private struct ExpandableLogTextView: View {
+    let title: String
     let text: String
-    @Binding var isExpanded: Bool
+    let displayedText: String
+    let textCharacterCount: Int
+    let needsExpansion: Bool
 
-    private let previewLimit = 4_000
+    private static let previewLimit = AppLogTextPaginator.defaultPageSize
 
-    private var needsExpansion: Bool {
-        text.count > previewLimit
-    }
-
-    private var displayedText: String {
-        guard needsExpansion, !isExpanded else { return text }
-        return String(text.prefix(previewLimit))
+    init(title: String, text: String) {
+        self.title = title
+        self.text = text
+        let characterCount = text.count
+        let expands = characterCount > Self.previewLimit
+        self.textCharacterCount = characterCount
+        self.needsExpansion = expands
+        self.displayedText = expands ? String(text.prefix(Self.previewLimit)) : text
     }
 
     var body: some View {
@@ -515,16 +517,129 @@ private struct ExpandableLogTextView: View {
                 .etFont(.footnote.monospaced())
                 .textSelection(.enabled)
 
-            if needsExpansion && !isExpanded {
-                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), previewLimit, text.count))
+            if needsExpansion {
+                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), Self.previewLimit, textCharacterCount))
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
 
-                Button(NSLocalizedString("显示完整内容", comment: "")) {
-                    isExpanded = true
+                NavigationLink {
+                    AppLogPagedTextView(title: title, text: text)
+                } label: {
+                    Text(NSLocalizedString("显示完整内容", comment: ""))
                 }
             }
         }
+    }
+}
+
+private struct AppLogPagedTextView: View {
+    let title: String
+    let pages: [AppLogTextPage]
+    let textCharacterCount: Int
+
+    @State private var selectedPageIndex = 0
+
+    private let paginationButtonColor = Color(red: 0.33, green: 0.47, blue: 0.65)
+
+    init(title: String, text: String) {
+        self.title = title
+        self.pages = AppLogTextPaginator.paginate(text)
+        self.textCharacterCount = text.count
+    }
+
+    private var currentPage: AppLogTextPage {
+        let clampedIndex = min(max(selectedPageIndex, 0), pages.count - 1)
+        return pages[clampedIndex]
+    }
+
+    private var hasMultiplePages: Bool {
+        pages.count > 1
+    }
+
+    private var canGoToPreviousPage: Bool {
+        selectedPageIndex > 0
+    }
+
+    private var canGoToNextPage: Bool {
+        selectedPageIndex + 1 < pages.count
+    }
+
+    private var paginationSummaryText: String {
+        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentPage.startCharacterNumber, currentPage.endCharacterNumber, textCharacterCount)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Text(currentPage.content)
+                    .etFont(.footnote.monospaced())
+                    .textSelection(.enabled)
+            } header: {
+                Text(String(format: NSLocalizedString("第 %d / %d 页", comment: ""), currentPage.index + 1, currentPage.totalCount))
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if hasMultiplePages {
+                paginationBar
+            }
+        }
+    }
+
+    private var paginationBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                goToPreviousPage()
+            } label: {
+                Text("<")
+                    .etFont(.system(size: 18, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle().fill(Color(uiColor: .systemBackground))
+                    )
+            }
+            .foregroundStyle(paginationButtonColor)
+            .disabled(!canGoToPreviousPage)
+            .accessibilityLabel(NSLocalizedString("上一页", comment: ""))
+
+            TextField("", text: .constant(paginationSummaryText))
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.center)
+                .disabled(true)
+                .allowsHitTesting(false)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(Color.clear)
+
+            Button {
+                goToNextPage()
+            } label: {
+                Text(">")
+                    .etFont(.system(size: 18, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle().fill(Color(uiColor: .systemBackground))
+                    )
+            }
+            .foregroundStyle(paginationButtonColor)
+            .disabled(!canGoToNextPage)
+            .accessibilityLabel(NSLocalizedString("下一页", comment: ""))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private func goToPreviousPage() {
+        guard canGoToPreviousPage else { return }
+        selectedPageIndex -= 1
+    }
+
+    private func goToNextPage() {
+        guard canGoToNextPage else { return }
+        selectedPageIndex += 1
     }
 }
 
