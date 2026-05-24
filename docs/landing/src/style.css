@@ -152,13 +152,14 @@ img {
 
 .loader-waves path {
   fill: none;
-  stroke: var(--fg);
+  stroke: var(--color-primary);
   stroke-width: 0.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  opacity: 0.85;
+  opacity: 0.7;
 }
+.dark .loader-waves path { stroke: var(--color-primary-on-dark); }
 
 /* 加载结束后，波浪作为页面常驻背景在两侧渐显（与正文不冲突） */
 @property --wave-reveal {
@@ -201,9 +202,10 @@ img {
 }
 
 .persistent-waves path {
-  stroke: var(--fg-muted);
-  opacity: 0.45;
+  stroke: var(--color-primary);
+  opacity: 0.55;
 }
+.dark .persistent-waves path { stroke: var(--color-primary-on-dark); opacity: 0.5; }
 
 @media (max-width: 768px) {
   .persistent-waves.is-visible {
@@ -216,11 +218,14 @@ img {
   width: min(520px, 100%);
   border: 1px solid var(--hairline);
   background: var(--bg);
-  box-shadow: 8px 8px 0 var(--fg);
+  box-shadow: 0 24px 64px rgba(0, 102, 204, 0.18), 0 8px 20px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   position: relative;
   z-index: 1;
   animation: loaderFrameIn 0.75s cubic-bezier(0.8, 0, 0.2, 1) both;
+}
+.dark .loader-frame {
+  box-shadow: 0 24px 64px rgba(41, 151, 255, 0.22), 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
 .loader-mark {
@@ -231,11 +236,12 @@ img {
 }
 .loader-mark span {
   display: block;
-  background: var(--fg);
+  background: var(--color-primary);
   transform: scaleY(0);
   transform-origin: bottom;
   animation: loaderPillar 0.75s cubic-bezier(0.8, 0, 0.2, 1) forwards;
 }
+.dark .loader-mark span { background: var(--color-primary-on-dark); }
 .loader-mark span:nth-child(2) { animation-delay: 0.12s; }
 .loader-mark span:nth-child(3) { animation-delay: 0.24s; }
 .loader-mark span:nth-child(4) { animation-delay: 0.36s; }
@@ -308,9 +314,10 @@ img {
 }
 .site-frame-side {
   position: absolute;
-  background: var(--fg);
+  background: var(--color-primary);
   transition: background 0.25s ease;
 }
+.dark .site-frame-side { background: var(--color-primary-on-dark); }
 .site-frame-top {
   top: 0; left: 0; right: 0; height: 4px;
   transform-origin: left;
