@@ -39,6 +39,16 @@ struct ModelSettingsView: View {
                 TextField(NSLocalizedString("模型ID", comment: ""), text: $model.modelName.watchKeyboardNewlineBinding())
             }
 
+            Section {
+                NavigationLink {
+                    SingleModelConnectivityTestView(provider: provider, model: model)
+                } label: {
+                    Label(NSLocalizedString("模型测试", comment: "Model connectivity test title"), systemImage: "checkmark.seal")
+                }
+            } footer: {
+                Text(NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer"))
+            }
+
             Section(
                 header: Text(NSLocalizedString("用途", comment: "模型用途区块标题")),
                 footer: Text(kindFooterText)

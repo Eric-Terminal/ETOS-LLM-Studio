@@ -3570,3 +3570,13 @@
 "%d tokens / 1M tokens × %@" = "%d tokens / 1M tokens × %@";
 "缓存创建" = "Cache Write";
 "缓存命中" = "Cache Read";
+"非流式" = "Non-streaming";
+"流式" = "Streaming";
+"测试该模型的非流式、流式和工具调用能力。" = "Test this model's non-streaming, streaming, and tool-calling behavior.";
+"会依次测试非流式、流式和工具调用请求。测试请求不会写入聊天历史。" = "Runs non-streaming, streaming, and tool-calling requests in sequence. Test requests are not saved to chat history.";
+"当前模型未开启“可调用工具”能力。" = "Tool calling is not enabled for this model.";
+"当前模型不是聊天模型，无法执行模型测试。" = "This model is not a chat model, so model testing cannot run.";
+"模型没有返回工具调用。" = "The model did not return a tool call.";
+"模型没有返回工具调用。响应：%@" = "The model did not return a tool call. Response: %@";
+"调用：%@，参数：%@" = "Call: %@, arguments: %@";
+"请调用 app_get_system_time 工具获取当前设备时间，不要直接回答。" = "Use the app_get_system_time tool to get the current device time. Do not answer directly.";

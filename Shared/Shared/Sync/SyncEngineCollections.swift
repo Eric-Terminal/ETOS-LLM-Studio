@@ -261,6 +261,83 @@ extension SyncEngine {
         return (imported, skipped)
     }
 
+    static func remapSessionMediaReferences(
+        _ sessions: [SyncedSession],
+        audioFiles: [SyncedAudio],
+        imageFiles: [SyncedImage]
+    ) -> [SyncedSession] {
+        guard !sessions.isEmpty else { return sessions }
+        let audioMapping = existingAudioFileNameByIncomingName(audioFiles)
+        let imageMapping = existingImageFileNameByIncomingName(imageFiles)
+        guard !audioMapping.isEmpty || !imageMapping.isEmpty else { return sessions }
+
+        return sessions.map { payload in
+            var messages = payload.messages
+            for index in messages.indices {
+                if let audioFileName = messages[index].audioFileName,
+                   let mappedAudioFileName = audioMapping[audioFileName] {
+                    messages[index].audioFileName = mappedAudioFileName
+                }
+                if let imageFileNames = messages[index].imageFileNames {
+                    let mappedImageFileNames = imageFileNames.map { imageMapping[$0] ?? $0 }
+                    messages[index].imageFileNames = mappedImageFileNames
+                }
+            }
+            return SyncedSession(session: payload.session, messages: messages)
+        }
+    }
+
+    static func existingAudioFileNameByIncomingName(_ incoming: [SyncedAudio]) -> [String: String] {
+        guard !incoming.isEmpty else { return [:] }
+        let existingByChecksum = existingMediaFileNameByChecksum(
+            fileNames: Persistence.getAllAudioFileNames(),
+            loader: { Persistence.loadAudio(fileName: $0) }
+        )
+        return mediaFileNameMapping(
+            incoming.map { (fileName: $0.filename, checksum: $0.checksum) },
+            existingByChecksum: existingByChecksum
+        )
+    }
+
+    static func existingImageFileNameByIncomingName(_ incoming: [SyncedImage]) -> [String: String] {
+        guard !incoming.isEmpty else { return [:] }
+        let existingByChecksum = existingMediaFileNameByChecksum(
+            fileNames: Persistence.getAllImageFileNames(),
+            loader: { Persistence.loadImage(fileName: $0) }
+        )
+        return mediaFileNameMapping(
+            incoming.map { (fileName: $0.filename, checksum: $0.checksum) },
+            existingByChecksum: existingByChecksum
+        )
+    }
+
+    static func existingMediaFileNameByChecksum(
+        fileNames: [String],
+        loader: (String) -> Data?
+    ) -> [String: String] {
+        var result: [String: String] = [:]
+        for fileName in fileNames {
+            guard let data = loader(fileName) else { continue }
+            result[data.sha256Hex] = fileName
+        }
+        return result
+    }
+
+    static func mediaFileNameMapping(
+        _ incoming: [(fileName: String, checksum: String)],
+        existingByChecksum: [String: String]
+    ) -> [String: String] {
+        var mapping: [String: String] = [:]
+        for item in incoming {
+            guard let existingFileName = existingByChecksum[item.checksum],
+                  existingFileName != item.fileName else {
+                continue
+            }
+            mapping[item.fileName] = existingFileName
+        }
+        return mapping
+    }
+
     // MARK: - Font Files
 
     static func mergeFontFiles(_ incoming: [SyncedFontFile]) -> (imported: Int, skipped: Int, idMapping: [UUID: UUID]) {

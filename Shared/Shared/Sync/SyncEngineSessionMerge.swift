@@ -210,28 +210,11 @@ extension SyncEngine {
         ) else {
             return nil
         }
-        guard let audioFileName = mergeOptionalStringField(
+        guard let audioFileName = mergeAttachmentReference(
             local.audioFileName,
             incoming.audioFileName,
-            allowPrefixExtension: false
-        ) else {
-            return nil
-        }
-        guard let responseGroupID = mergeOptionalScalarField(
-            local.responseGroupID,
-            incoming.responseGroupID
-        ) else {
-            return nil
-        }
-        guard let responseAttemptID = mergeOptionalScalarField(
-            local.responseAttemptID,
-            incoming.responseAttemptID
-        ) else {
-            return nil
-        }
-        guard let responseAttemptIndex = mergeOptionalScalarField(
-            local.responseAttemptIndex,
-            incoming.responseAttemptIndex
+            type: "audio",
+            loader: { Persistence.loadAudio(fileName: $0) }
         ) else {
             return nil
         }
@@ -242,9 +225,16 @@ extension SyncEngine {
         ) else {
             return nil
         }
+        guard let mergedImageFiles = mergeAttachmentReferences(
+            local.imageFileNames,
+            incoming.imageFileNames,
+            type: "image",
+            loader: { Persistence.loadImage(fileName: $0) }
+        ) else {
+            return nil
+        }
+        let mergedFileFiles = mergeUnsyncedFileReferences(local.fileFileNames, incoming.fileFileNames)
 
-        let mergedImageFiles = mergeOrderedStrings(local.imageFileNames, incoming.imageFileNames)
-        let mergedFileFiles = mergeOrderedStrings(local.fileFileNames, incoming.fileFileNames)
         let mergedTokenUsage = mergeTokenUsage(local.tokenUsage, incoming.tokenUsage)
         let mergedResponseMetrics = mergeResponseMetrics(local.responseMetrics, incoming.responseMetrics)
         let mergedModelReference = incoming.modelReference ?? local.modelReference
@@ -261,17 +251,17 @@ extension SyncEngine {
             toolCallsPlacement: toolCallsPlacement.value,
             tokenUsage: mergedTokenUsage,
             audioFileName: audioFileName.value,
-            imageFileNames: mergedImageFiles,
-            fileFileNames: mergedFileFiles,
+            imageFileNames: mergedImageFiles.value,
+            fileFileNames: mergedFileFiles.value,
             fullErrorContent: fullErrorContent.value,
             responseMetrics: mergedResponseMetrics,
             modelReference: mergedModelReference,
             costEstimate: mergedCostEstimate
         )
-        merged.responseGroupID = responseGroupID.value
-        merged.responseAttemptID = responseAttemptID.value
-        merged.responseAttemptIndex = responseAttemptIndex.value
-        merged.selectedResponseAttemptID = incoming.selectedResponseAttemptID ?? local.selectedResponseAttemptID
+        merged.responseGroupID = local.responseGroupID ?? incoming.responseGroupID
+        merged.responseAttemptID = local.responseAttemptID ?? incoming.responseAttemptID
+        merged.responseAttemptIndex = local.responseAttemptIndex ?? incoming.responseAttemptIndex
+        merged.selectedResponseAttemptID = local.selectedResponseAttemptID ?? incoming.selectedResponseAttemptID
 
         if local.id != incoming.id, local.content == incoming.content {
             merged.id = local.id
@@ -284,10 +274,16 @@ extension SyncEngine {
             return false
         }
 
+        guard messagesShareContentIdentity(local, incoming) else {
+            return false
+        }
+        return messagesShareAttachmentIdentity(local, incoming)
+    }
+
+    static func messagesShareContentIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
         if stringsAreCompatible(local.content, incoming.content) {
             return true
         }
-
         let localVersions = local.getAllVersions()
         let incomingVersions = incoming.getAllVersions()
         for localVersion in localVersions {
@@ -296,6 +292,21 @@ extension SyncEngine {
             }
         }
         return false
+    }
+
+    static func messagesShareAttachmentIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
+        attachmentReferenceIsCompatible(
+            local.audioFileName,
+            incoming.audioFileName,
+            type: "audio",
+            loader: { Persistence.loadAudio(fileName: $0) }
+        )
+            && attachmentReferencesAreCompatible(
+                local.imageFileNames,
+                incoming.imageFileNames,
+                type: "image",
+                loader: { Persistence.loadImage(fileName: $0) }
+            )
     }
 
     static func buildMessage(

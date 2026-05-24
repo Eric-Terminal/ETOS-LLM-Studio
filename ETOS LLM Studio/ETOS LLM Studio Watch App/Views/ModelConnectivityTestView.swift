@@ -141,3 +141,115 @@ struct ModelConnectivityTestView: View {
         }
     }
 }
+
+struct SingleModelConnectivityTestView: View {
+    @StateObject private var viewModel: SingleModelConnectivityTestViewModel
+    private let providerName: String
+    private let modelDisplayName: String
+    private let modelName: String
+
+    init(provider: Provider, model: Model) {
+        self.providerName = provider.name
+        self.modelDisplayName = model.displayName
+        self.modelName = model.modelName
+        _viewModel = StateObject(wrappedValue: SingleModelConnectivityTestViewModel(provider: provider, model: model))
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(modelDisplayName)
+                        .lineLimit(1)
+                    Text(modelName)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Text(providerName)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Text(viewModel.progressText)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            } footer: {
+                Text(NSLocalizedString("会依次测试非流式、流式和工具调用请求。测试请求不会写入聊天历史。", comment: "Single model connectivity test explanation"))
+            }
+
+            Section(NSLocalizedString("测试结果", comment: "Model test result section")) {
+                ForEach(viewModel.results) { result in
+                    resultRow(result)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("模型测试", comment: "Model connectivity test title"))
+        .toolbar {
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    viewModel.start()
+                } label: {
+                    if viewModel.isRunning {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .disabled(viewModel.isRunning)
+                .accessibilityLabel(viewModel.completedCount > 0 ? NSLocalizedString("重新测试", comment: "Retest models") : NSLocalizedString("开始测试", comment: "Start model test"))
+            }
+        }
+        .task {
+            guard viewModel.completedCount == 0 else { return }
+            viewModel.start()
+        }
+        .onDisappear {
+            viewModel.cancel()
+        }
+    }
+
+    private func resultRow(_ result: SingleModelConnectivityTestResult) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            statusIcon(for: result.status)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(result.kind.localizedName)
+                    .lineLimit(1)
+                if let latency = result.latencyMilliseconds {
+                    Text(String(format: NSLocalizedString("耗时 %d ms", comment: "Model test latency"), latency))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                if let responsePreview = result.responsePreview, !responsePreview.isEmpty {
+                    Text(responsePreview)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+                if let errorMessage = result.errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .lineLimit(3)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusIcon(for status: ModelConnectivityTestResult.Status) -> some View {
+        switch status {
+        case .pending:
+            Image(systemName: "circle")
+                .foregroundColor(.secondary)
+        case .testing:
+            ProgressView()
+        case .succeeded:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+        case .failed:
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.red)
+        }
+    }
+}

@@ -326,10 +326,6 @@ extension SyncEngine {
             hasher.combine(version)
         }
         hasher.combine(message.getCurrentVersionIndex())
-        hasher.combine(message.responseGroupID?.uuidString ?? "")
-        hasher.combine(message.responseAttemptID?.uuidString ?? "")
-        hasher.combine(message.responseAttemptIndex ?? -1)
-        hasher.combine(message.selectedResponseAttemptID?.uuidString ?? "")
         hasher.combine(message.reasoningContent ?? "")
         for toolCall in message.toolCalls ?? [] {
             hasher.combine(toolCall.id)
@@ -342,12 +338,19 @@ extension SyncEngine {
             }
         }
         hasher.combine(message.toolCallsPlacement?.rawValue ?? "")
-        hasher.combine(message.audioFileName ?? "")
-        for imageFileName in message.imageFileNames ?? [] {
-            hasher.combine(imageFileName)
+        if let audioFingerprint = attachmentReferenceFingerprint(
+            for: message.audioFileName,
+            type: "audio",
+            loader: { Persistence.loadAudio(fileName: $0) }
+        ) {
+            hasher.combine(audioFingerprint)
         }
-        for fileName in message.fileFileNames ?? [] {
-            hasher.combine(fileName)
+        for imageFingerprint in attachmentReferenceFingerprints(
+            for: message.imageFileNames,
+            type: "image",
+            loader: { Persistence.loadImage(fileName: $0) }
+        ) {
+            hasher.combine(imageFingerprint)
         }
         hasher.combine(message.requestedAt?.timeIntervalSince1970 ?? -1)
         hasher.combine(message.fullErrorContent ?? "")
@@ -357,9 +360,7 @@ extension SyncEngine {
         hasher.combine(message.tokenUsage?.thinkingTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheWriteTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheReadTokens ?? -1)
-        hasher.combine(message.modelReference?.providerID?.uuidString ?? "")
         hasher.combine(message.modelReference?.providerName ?? "")
-        hasher.combine(message.modelReference?.modelUUID?.uuidString ?? "")
         hasher.combine(message.modelReference?.modelName ?? "")
         hasher.combine(message.modelReference?.modelDisplayName ?? "")
         hasher.combine(message.costEstimate?.currencySymbol ?? "")
@@ -385,6 +386,176 @@ extension SyncEngine {
         hasher.combine(message.responseMetrics?.isTokenPerSecondEstimated ?? false)
         hasher.combine(message.responseMetrics?.reasoningSummary ?? "")
         return String(hasher.finalize())
+    }
+
+    static func attachmentReferenceFingerprint(
+        for fileName: String?,
+        type: String,
+        loader: (String) -> Data?
+    ) -> String? {
+        guard let fileName = normalizedAttachmentFileName(fileName) else {
+            return nil
+        }
+        return attachmentReferenceFingerprint(for: fileName, type: type, loader: loader)
+    }
+
+    static func attachmentReferenceFingerprint(
+        for fileName: String,
+        type: String,
+        loader: (String) -> Data?
+    ) -> String {
+        if let data = loader(fileName) {
+            return "\(type):\(data.sha256Hex)"
+        }
+        return "\(type):name:\(fileName)"
+    }
+
+    static func attachmentReferenceFingerprints(
+        for fileNames: [String]?,
+        type: String,
+        loader: (String) -> Data?
+    ) -> [String] {
+        guard let fileNames else { return [] }
+        return fileNames.compactMap { fileName in
+            guard let normalizedFileName = normalizedAttachmentFileName(fileName) else {
+                return nil
+            }
+            return attachmentReferenceFingerprint(
+                for: normalizedFileName,
+                type: type,
+                loader: loader
+            )
+        }
+    }
+
+    static func mergeAttachmentReference(
+        _ local: String?,
+        _ incoming: String?,
+        type: String,
+        loader: (String) -> Data?
+    ) -> (value: String?, changed: Bool)? {
+        let normalizedLocal = normalizedAttachmentFileName(local)
+        let normalizedIncoming = normalizedAttachmentFileName(incoming)
+
+        switch (normalizedLocal, normalizedIncoming) {
+        case (nil, nil):
+            return (nil, false)
+        case let (lhs?, nil):
+            return (lhs, false)
+        case let (nil, rhs?):
+            return (rhs, true)
+        case let (lhs?, rhs?):
+            if lhs == rhs {
+                return (lhs, false)
+            }
+            if attachmentReferenceFingerprint(for: lhs, type: type, loader: loader)
+                == attachmentReferenceFingerprint(for: rhs, type: type, loader: loader) {
+                return (lhs, false)
+            }
+            return nil
+        }
+    }
+
+    static func mergeAttachmentReferences(
+        _ local: [String]?,
+        _ incoming: [String]?,
+        type: String,
+        loader: (String) -> Data?
+    ) -> (value: [String]?, changed: Bool)? {
+        switch (local, incoming) {
+        case (nil, nil):
+            return (nil, false)
+        case let (lhs?, nil):
+            return (lhs, false)
+        case let (nil, rhs?):
+            return (rhs, true)
+        case let (lhs?, rhs?):
+            var merged = lhs
+            var mergedFingerprints = Set(
+                lhs.compactMap {
+                    guard let normalizedFileName = normalizedAttachmentFileName($0) else {
+                        return nil
+                    }
+                    return attachmentReferenceFingerprint(
+                        for: normalizedFileName,
+                        type: type,
+                        loader: loader
+                    )
+                }
+            )
+            var changed = false
+
+            for fileName in rhs {
+                guard let normalizedFileName = normalizedAttachmentFileName(fileName) else {
+                    continue
+                }
+                let fingerprint = attachmentReferenceFingerprint(
+                    for: normalizedFileName,
+                    type: type,
+                    loader: loader
+                )
+                if mergedFingerprints.insert(fingerprint).inserted {
+                    merged.append(fileName)
+                    changed = true
+                }
+            }
+
+            return (merged, changed)
+        }
+    }
+
+    static func attachmentReferenceIsCompatible(
+        _ local: String?,
+        _ incoming: String?,
+        type: String,
+        loader: (String) -> Data?
+    ) -> Bool {
+        let normalizedLocal = normalizedAttachmentFileName(local)
+        let normalizedIncoming = normalizedAttachmentFileName(incoming)
+        guard let normalizedLocal, let normalizedIncoming else {
+            return true
+        }
+        return attachmentReferenceFingerprint(for: normalizedLocal, type: type, loader: loader)
+            == attachmentReferenceFingerprint(for: normalizedIncoming, type: type, loader: loader)
+    }
+
+    static func attachmentReferencesAreCompatible(
+        _ local: [String]?,
+        _ incoming: [String]?,
+        type: String,
+        loader: (String) -> Data?
+    ) -> Bool {
+        let localFingerprints = Set(attachmentReferenceFingerprints(for: local, type: type, loader: loader))
+        let incomingFingerprints = Set(attachmentReferenceFingerprints(for: incoming, type: type, loader: loader))
+        guard !localFingerprints.isEmpty, !incomingFingerprints.isEmpty else {
+            return true
+        }
+        return localFingerprints.isSubset(of: incomingFingerprints)
+            || incomingFingerprints.isSubset(of: localFingerprints)
+    }
+
+    static func mergeUnsyncedFileReferences(
+        _ local: [String]?,
+        _ incoming: [String]?
+    ) -> (value: [String]?, changed: Bool) {
+        switch (local, incoming) {
+        case (nil, nil):
+            return (nil, false)
+        case let (lhs?, nil):
+            return (lhs, false)
+        case (nil, _?):
+            return (nil, false)
+        case let (lhs?, rhs?):
+            return (lhs, lhs.isEmpty && !rhs.isEmpty)
+        }
+    }
+
+    static func normalizedAttachmentFileName(_ value: String?) -> String? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return value
     }
 
     static func providerMergeIdentity(_ provider: Provider) -> String {

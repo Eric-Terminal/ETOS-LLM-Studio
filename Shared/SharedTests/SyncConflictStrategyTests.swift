@@ -168,6 +168,115 @@ struct SyncConflictStrategyTests {
         #expect(sessionsAfterRepeat.count == 2)
     }
 
+    @Test("已分叉会话带附件和重试元数据时重复同步不会再次分叉")
+    func testForkedSessionWithClonedAttachmentsAndAttemptMetadataSkipsRepeatImport() async {
+        let originalSessions = Persistence.loadChatSessions()
+        let originalSnapshots = originalSessions.map { session in
+            SyncedSession(session: session, messages: Persistence.loadMessages(for: session.id))
+        }
+        let remoteAudioName = "sync-remote-audio-\(UUID().uuidString).m4a"
+        let localAudioName = "sync-local-audio-\(UUID().uuidString).m4a"
+        let remoteImageName = "sync-remote-image-\(UUID().uuidString).png"
+        let localImageName = "sync-local-image-\(UUID().uuidString).png"
+        defer {
+            resetSessions(to: originalSnapshots)
+            Persistence.deleteAudio(fileName: remoteAudioName)
+            Persistence.deleteAudio(fileName: localAudioName)
+            Persistence.deleteImage(fileName: remoteImageName)
+            Persistence.deleteImage(fileName: localImageName)
+        }
+
+        resetSessions(to: [])
+        _ = Persistence.saveAudio(Data([0x01, 0x02, 0x03]), fileName: localAudioName)
+        _ = Persistence.saveImage(Data([0x89, 0x50, 0x4E, 0x47]), fileName: localImageName)
+        let remoteAudio = SyncedAudio(
+            filename: remoteAudioName,
+            data: Data([0x01, 0x02, 0x03])
+        )
+        let remoteImage = SyncedImage(
+            filename: remoteImageName,
+            data: Data([0x89, 0x50, 0x4E, 0x47])
+        )
+
+        let chatService = ChatService()
+        let rootSession = ChatSession(id: UUID(), name: "附件分歧会话", isTemporary: false)
+        let forkedSession = ChatSession(id: UUID(), name: "附件分歧会话 [watchOS 分支]", isTemporary: false)
+
+        let rootUser = ChatMessage(id: UUID(), role: .user, content: "本地问题")
+        let rootAssistant = ChatMessage(id: UUID(), role: .assistant, content: "本地回答")
+        let incomingUserID = UUID()
+        let incomingAttemptID = UUID()
+        let incomingUser = ChatMessage(
+            id: incomingUserID,
+            role: .user,
+            content: "远端带附件的问题",
+            audioFileName: remoteAudioName,
+            imageFileNames: [remoteImageName],
+            selectedResponseAttemptID: incomingAttemptID
+        )
+        let incomingAssistant = ChatMessage(
+            id: UUID(),
+            role: .assistant,
+            content: "远端回答",
+            responseGroupID: incomingUserID,
+            responseAttemptID: incomingAttemptID,
+            responseAttemptIndex: 0,
+            selectedResponseAttemptID: incomingAttemptID
+        )
+
+        let localUserID = UUID()
+        let localAttemptID = UUID()
+        let localForkedMessages = [
+            ChatMessage(
+                id: localUserID,
+                role: .user,
+                content: "远端带附件的问题",
+                audioFileName: localAudioName,
+                imageFileNames: [localImageName],
+                selectedResponseAttemptID: localAttemptID
+            ),
+            ChatMessage(
+                id: UUID(),
+                role: .assistant,
+                content: "远端回答",
+                responseGroupID: localUserID,
+                responseAttemptID: localAttemptID,
+                responseAttemptIndex: 1,
+                selectedResponseAttemptID: localAttemptID
+            )
+        ]
+
+        Persistence.saveChatSessions([forkedSession, rootSession])
+        Persistence.saveMessages(localForkedMessages, for: forkedSession.id)
+        Persistence.saveMessages([rootUser, rootAssistant], for: rootSession.id)
+        chatService.chatSessionsSubject.send([forkedSession, rootSession])
+        chatService.currentSessionSubject.send(rootSession)
+
+        let package = SyncPackage(
+            options: [.sessions, .audioFiles, .imageFiles],
+            sourcePlatform: "watchOS",
+            sessions: [
+                SyncedSession(
+                    session: rootSession,
+                    messages: [incomingUser, incomingAssistant]
+                )
+            ],
+            audioFiles: [remoteAudio],
+            imageFiles: [remoteImage]
+        )
+
+        let summary = await SyncEngine.apply(package: package, chatService: chatService)
+        let sessionsAfterRepeat = chatService.chatSessionsSubject.value.filter { !$0.isTemporary }
+        let forkedMessagesAfterRepeat = Persistence.loadMessages(for: forkedSession.id)
+
+        #expect(summary.skippedSessions == 1)
+        #expect(summary.skippedAudioFiles == 1)
+        #expect(summary.skippedImageFiles == 1)
+        #expect(sessionsAfterRepeat.count == 2)
+        #expect(forkedMessagesAfterRepeat.first?.audioFileName == localAudioName)
+        #expect(forkedMessagesAfterRepeat.first?.imageFileNames == [localImageName])
+    }
+
     @Test("远端尾部追加不会误判为离线分支")
     func testRemoteTailAppendStillMergesOriginalSession() async {
         let originalSessions = Persistence.loadChatSessions()

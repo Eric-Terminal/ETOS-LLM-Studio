@@ -212,6 +212,12 @@ extension SyncEngine {
         userDefaults: UserDefaults = .standard
     ) async -> SyncMergeSummary {
         var summary = SyncMergeSummary.empty
+        var didMergeAudioFilesBeforeSessions = false
+        var didMergeImageFilesBeforeSessions = false
+        let shouldMergeSessionAudioFiles = package.options.contains(.sessions) && !package.audioFiles.isEmpty
+        let shouldMergeSessionImageFiles = package.options.contains(.sessions) && !package.imageFiles.isEmpty
+        let shouldMergeAudioFiles = package.options.contains(.audioFiles) || shouldMergeSessionAudioFiles
+        let shouldMergeImageFiles = package.options.contains(.imageFiles) || shouldMergeSessionImageFiles
 
         if package.options.contains(.providers) {
             let result = mergeProviders(package.providers, chatService: chatService)
@@ -219,9 +225,28 @@ extension SyncEngine {
             summary.skippedProviders = result.skipped
         }
 
+        if shouldMergeSessionAudioFiles {
+            let result = mergeAudioFiles(package.audioFiles)
+            summary.importedAudioFiles = result.imported
+            summary.skippedAudioFiles = result.skipped
+            didMergeAudioFilesBeforeSessions = true
+        }
+
+        if shouldMergeSessionImageFiles {
+            let result = mergeImageFiles(package.imageFiles)
+            summary.importedImageFiles = result.imported
+            summary.skippedImageFiles = result.skipped
+            didMergeImageFilesBeforeSessions = true
+        }
+
         if package.options.contains(.sessions) {
-            let result = mergeSessions(
+            let sessionPayloads = remapSessionMediaReferences(
                 package.sessions,
+                audioFiles: didMergeAudioFilesBeforeSessions ? package.audioFiles : [],
+                imageFiles: didMergeImageFilesBeforeSessions ? package.imageFiles : []
+            )
+            let result = mergeSessions(
+                sessionPayloads,
                 chatService: chatService,
                 sourcePlatform: package.sourcePlatform
             )
@@ -303,13 +328,13 @@ extension SyncEngine {
             }
         }
 
-        if package.options.contains(.audioFiles) {
+        if shouldMergeAudioFiles, !didMergeAudioFilesBeforeSessions {
             let result = mergeAudioFiles(package.audioFiles)
             summary.importedAudioFiles = result.imported
             summary.skippedAudioFiles = result.skipped
         }
 
-        if package.options.contains(.imageFiles) {
+        if shouldMergeImageFiles, !didMergeImageFilesBeforeSessions {
             let result = mergeImageFiles(package.imageFiles)
             summary.importedImageFiles = result.imported
             summary.skippedImageFiles = result.skipped

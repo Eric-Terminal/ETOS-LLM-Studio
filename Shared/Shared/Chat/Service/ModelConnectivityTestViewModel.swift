@@ -159,3 +159,106 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
         mutate(&results[index])
     }
 }
+
+@MainActor
+public final class SingleModelConnectivityTestViewModel: ObservableObject {
+    @Published public private(set) var results: [SingleModelConnectivityTestResult]
+    @Published public private(set) var isRunning = false
+    @Published public private(set) var completedCount = 0
+
+    public let runnableModel: RunnableModel
+
+    private let service: ChatService
+    private var testTask: Task<Void, Never>?
+
+    public init(
+        provider: Provider,
+        model: Model,
+        service: ChatService = .shared
+    ) {
+        self.runnableModel = RunnableModel(provider: provider, model: model)
+        self.service = service
+        self.results = Self.makeInitialResults()
+    }
+
+    deinit {
+        testTask?.cancel()
+    }
+
+    public var totalCount: Int {
+        results.count
+    }
+
+    public var progressText: String {
+        String(format: NSLocalizedString("%d / %d 已完成", comment: "Model test progress"), completedCount, totalCount)
+    }
+
+    public func start() {
+        guard !isRunning else { return }
+        testTask?.cancel()
+        results = Self.makeInitialResults()
+        completedCount = 0
+        isRunning = true
+
+        testTask = Task { [weak self] in
+            guard let self else { return }
+            await runTests()
+        }
+    }
+
+    public func cancel() {
+        testTask?.cancel()
+        testTask = nil
+        isRunning = false
+    }
+
+    private static func makeInitialResults() -> [SingleModelConnectivityTestResult] {
+        SingleModelConnectivityTestResult.Kind.allCases.map {
+            SingleModelConnectivityTestResult(kind: $0)
+        }
+    }
+
+    private func runTests() async {
+        defer {
+            isRunning = false
+        }
+
+        await runTest(.nonStreaming)
+        guard !Task.isCancelled else { return }
+        await runTest(.streaming)
+        guard !Task.isCancelled else { return }
+        await runTest(.toolCalling)
+    }
+
+    private func runTest(_ kind: SingleModelConnectivityTestResult.Kind) async {
+        updateResult(kind) { result in
+            result.status = .testing
+            result.latencyMilliseconds = nil
+            result.responsePreview = nil
+            result.errorMessage = nil
+        }
+
+        let testResult: SingleModelConnectivityTestResult
+        switch kind {
+        case .nonStreaming:
+            testResult = await service.testSingleModelNonStreamingConnectivity(for: runnableModel)
+        case .streaming:
+            testResult = await service.testSingleModelStreamingConnectivity(for: runnableModel)
+        case .toolCalling:
+            testResult = await service.testSingleModelToolCallingConnectivity(for: runnableModel)
+        }
+
+        updateResult(kind) { result in
+            result = testResult
+        }
+        completedCount += 1
+    }
+
+    private func updateResult(
+        _ kind: SingleModelConnectivityTestResult.Kind,
+        mutate: (inout SingleModelConnectivityTestResult) -> Void
+    ) {
+        guard let index = results.firstIndex(where: { $0.kind == kind }) else { return }
+        mutate(&results[index])
+    }
+}
