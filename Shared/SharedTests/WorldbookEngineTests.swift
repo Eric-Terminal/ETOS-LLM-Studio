@@ -51,6 +51,51 @@ struct WorldbookEngineTests {
         #expect(result.after.count == 80)
     }
 
+    @Test("常驻激活条目每轮注入且不受触发规则阻挡")
+    func testConstantEntriesInjectEveryTurnWithoutTriggerRules() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-constant-every-turn-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 1 })
+        let entry = WorldbookEntry(
+            content: "常驻设定",
+            keys: [],
+            constant: true,
+            position: .after,
+            useProbability: true,
+            probability: 0,
+            cooldown: 99,
+            delay: 99,
+            preventRecursion: true,
+            delayUntilRecursion: true
+        )
+        let book = Worldbook(name: "常驻书", entries: [entry])
+        let sessionID = UUID()
+
+        let first = engine.evaluate(
+            .init(
+                sessionID: sessionID,
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "没有关键词")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+        let second = engine.evaluate(
+            .init(
+                sessionID: sessionID,
+                worldbooks: [book],
+                messages: [ChatMessage(role: .user, content: "依旧没有关键词")],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(first.after.contains(where: { $0.content == "常驻设定" }))
+        #expect(second.after.contains(where: { $0.content == "常驻设定" }))
+    }
+
     @Test("engine handles secondary logic, probability and sticky")
     func testEngineCoreRules() {
         let tempURL = FileManager.default.temporaryDirectory

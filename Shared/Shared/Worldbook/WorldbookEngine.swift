@@ -291,6 +291,30 @@ public struct WorldbookEngine {
                 let entryKey = WorldbookEntryRuntimeKey(worldbookID: item.book.id, entryID: entry.id)
                 if triggeredIDs.contains(entryKey) { continue }
                 if !entry.isEnabled { continue }
+                if entry.constant {
+                    var updatedState = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
+                    updatedState.lastTriggeredTurn = turn
+                    updatedState.delayUntilTurn = nil
+                    runtimeStore.updateState(updatedState, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
+
+                    let injection = WorldbookInjection(
+                        worldbookID: item.book.id,
+                        worldbookName: item.book.name,
+                        entryID: entry.id,
+                        entryComment: entry.comment,
+                        content: entry.content,
+                        position: entry.position,
+                        outletName: entry.outletName,
+                        order: entry.order,
+                        depth: entry.depth,
+                        role: entry.role,
+                        triggerScore: 1
+                    )
+                    triggered.append(injection)
+                    triggeredIDs.insert(entryKey)
+                    newlyTriggeredContents.append(entry.content)
+                    continue
+                }
                 if recursionLevel > 0 && entry.preventRecursion { continue }
                 if recursionLevel == 0 && entry.delayUntilRecursion { continue }
 
