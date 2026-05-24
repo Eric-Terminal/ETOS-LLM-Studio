@@ -41,6 +41,31 @@ public enum AppConfigValue: Equatable, Sendable {
     }
 }
 
+public enum ReasoningContentEchoMode: String, CaseIterable, Identifiable, Sendable {
+    case always
+    case toolCallsOnly = "tool_calls_only"
+    case never
+
+    public static let defaultMode: ReasoningContentEchoMode = .always
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .always:
+            return NSLocalizedString("常驻", comment: "Reasoning content echo mode always")
+        case .toolCallsOnly:
+            return NSLocalizedString("仅 Tool Call", comment: "Reasoning content echo mode tool calls only")
+        case .never:
+            return NSLocalizedString("不回传", comment: "Reasoning content echo mode never")
+        }
+    }
+
+    public static func normalized(_ rawValue: String) -> ReasoningContentEchoMode {
+        ReasoningContentEchoMode(rawValue: rawValue) ?? defaultMode
+    }
+}
+
 public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncProviders = "sync.options.providers"
     case syncSessions = "sync.options.sessions"
@@ -100,6 +125,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case requestLogPlainMessageEnabled = "logs.request.plainMessageEnabled"
     case modelConnectivityTestConcurrencyLimit = "modelConnectivityTest.concurrencyLimit"
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
+    case reasoningContentEchoMode = "chat.reasoningContentEchoMode"
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
     case messageRegexRules = "chat.messageRegexRules"
@@ -273,6 +299,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #endif
         case .requestLogPlainMessageEnabled:
             return .bool(false)
+        case .reasoningContentEchoMode:
+            return .text(ReasoningContentEchoMode.defaultMode.rawValue)
         case .modelConnectivityTestConcurrencyLimit:
             return .integer(1)
         case .lazyLoadMessageCount:

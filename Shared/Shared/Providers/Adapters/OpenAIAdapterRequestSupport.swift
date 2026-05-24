@@ -51,6 +51,7 @@ extension OpenAIAdapter {
         imageAttachments: [UUID: [ImageAttachment]],
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
+        let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -125,7 +126,8 @@ extension OpenAIAdapter {
 
             if msg.role == .assistant,
                let reasoningContent = msg.reasoningContent,
-               !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+               !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               Self.shouldEchoReasoningContent(for: msg, mode: reasoningContentEchoMode) {
                 dict["reasoning_content"] = reasoningContent
             }
 
@@ -165,6 +167,7 @@ extension OpenAIAdapter {
         var finalPayload = commonPayload
         finalPayload.merge(overrides) { _, new in new }
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
+        finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["messages"] = apiMessages
 
@@ -231,6 +234,7 @@ extension OpenAIAdapter {
         imageAttachments: [UUID: [ImageAttachment]],
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
+        let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
         if !audioAttachments.isEmpty {
             logger.error("构建 Responses 请求失败: OpenAI Responses API 暂不支持音频附件。")
             return nil
@@ -256,6 +260,7 @@ extension OpenAIAdapter {
 
         let inputItems = buildResponsesInputItems(
             from: messages,
+            reasoningContentEchoMode: reasoningContentEchoMode,
             audioAttachments: audioAttachments,
             imageAttachments: imageAttachments,
             fileAttachments: fileAttachments
@@ -264,6 +269,7 @@ extension OpenAIAdapter {
         var finalPayload = commonPayload
         finalPayload.merge(overrides) { _, new in new }
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
+        finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["input"] = inputItems
 

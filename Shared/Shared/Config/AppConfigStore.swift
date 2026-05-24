@@ -158,6 +158,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
     @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
+    @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
 
@@ -298,6 +299,9 @@ public final class AppConfigStore: ObservableObject {
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
         modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
+        reasoningContentEchoMode = ReasoningContentEchoMode.normalized(
+            Self.textValue(.reasoningContentEchoMode, userDefaults: userDefaults)
+        ).rawValue
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
 
@@ -391,7 +395,12 @@ public final class AppConfigStore: ObservableObject {
             case .real(let defaultValue):
                 result[key.rawValue] = Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
             case .text(let defaultValue):
-                result[key.rawValue] = Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
+                let stored = Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
+                if key == .reasoningContentEchoMode {
+                    result[key.rawValue] = ReasoningContentEchoMode.normalized(stored).rawValue
+                } else {
+                    result[key.rawValue] = stored
+                }
             }
         }
         return result
@@ -411,8 +420,11 @@ public final class AppConfigStore: ObservableObject {
             AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         }
         if let stored = Persistence.readAppConfigText(key: key.rawValue) {
-            snapshotCache.set(stored, for: key)
-            return stored
+            let normalized = key == .reasoningContentEchoMode
+                ? ReasoningContentEchoMode.normalized(stored).rawValue
+                : stored
+            snapshotCache.set(normalized, for: key)
+            return normalized
         }
 
         guard userDefaults !== UserDefaults.standard else {
@@ -710,6 +722,7 @@ public final class AppConfigStore: ObservableObject {
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
         case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
+        case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
         case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
         case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
 
@@ -923,6 +936,8 @@ public final class AppConfigStore: ObservableObject {
              .shortcutOfficialImportShortcutName:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)
         case .systemPrompt: systemPrompt = value
+        case .reasoningContentEchoMode:
+            reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
         case .memoryEmbeddingModelIdentifier: memoryEmbeddingModelIdentifier = value
@@ -1149,6 +1164,9 @@ public final class AppConfigStore: ObservableObject {
         case .real:
             return coerceDouble(value).map(AppConfigValue.real)
         case .text:
+            if key == .reasoningContentEchoMode {
+                return coerceString(value).map { .text(ReasoningContentEchoMode.normalized($0).rawValue) }
+            }
             return coerceString(value).map(AppConfigValue.text)
         }
     }
@@ -1165,6 +1183,8 @@ public final class AppConfigStore: ObservableObject {
         switch value {
         case .integer(let value):
             return .integer(normalizedIntegerValue(value, for: key))
+        case .text(let value) where key == .reasoningContentEchoMode:
+            return .text(ReasoningContentEchoMode.normalized(value).rawValue)
         default:
             return value
         }

@@ -3612,3 +3612,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "模型没有返回工具调用。响应：%@" = "El modelo no devolvió una llamada de herramienta. Respuesta: %@";
 "调用：%@，参数：%@" = "Llamada: %@, argumentos: %@";
 "请调用 app_get_system_time 工具获取当前设备时间，不要直接回答。" = "Usa la herramienta app_get_system_time para obtener la hora actual del dispositivo. No respondas directamente.";
+"思维链回传" = "Reenviar razonamiento";
+"常驻" = "Siempre";
+"仅 Tool Call" = "Solo Tool Call";
+"不回传" = "No reenviar";
+"选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "Al elegir No reenviar, algunas API que requieren reenviar reasoning_content pueden devolver un error 400.";

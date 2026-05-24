@@ -560,6 +560,84 @@ struct OpenAIAdapterCoreTests {
         #expect(toolCallID == "call_reasoning_1")
     }
 
+    @Test("OpenAI 请求仅在 Tool Call 模式下回传工具调用消息的 reasoning_content")
+    func testBuildRequestEchoesReasoningContentOnlyForToolCalls() throws {
+        let toolCall = InternalToolCall(
+            id: "call_reasoning_tool_only",
+            toolName: "save_memory",
+            arguments: #"{"content":"test"}"#
+        )
+        let messages = [
+            ChatMessage(
+                role: .assistant,
+                content: "普通回复",
+                reasoningContent: "普通思考。"
+            ),
+            ChatMessage(
+                role: .assistant,
+                content: "",
+                reasoningContent: "工具调用思考。",
+                toolCalls: [toolCall]
+            )
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [
+                OpenAIAdapter.reasoningContentEchoModeControlKey: ReasoningContentEchoMode.toolCallsOnly.rawValue
+            ],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let payloadMessages = try #require(jsonPayload["messages"] as? [[String: Any]])
+
+        #expect(payloadMessages[0]["reasoning_content"] == nil)
+        #expect(payloadMessages[1]["reasoning_content"] as? String == "工具调用思考。")
+        #expect(jsonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] == nil)
+    }
+
+    @Test("OpenAI 请求不回传模式会移除 assistant reasoning_content")
+    func testBuildRequestOmitsAssistantReasoningContentWhenDisabled() throws {
+        let toolCall = InternalToolCall(
+            id: "call_reasoning_disabled",
+            toolName: "save_memory",
+            arguments: #"{"content":"test"}"#
+        )
+        let messages = [
+            ChatMessage(
+                role: .assistant,
+                content: "",
+                reasoningContent: "不应回传。",
+                toolCalls: [toolCall]
+            )
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [
+                OpenAIAdapter.reasoningContentEchoModeControlKey: ReasoningContentEchoMode.never.rawValue
+            ],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let payloadMessages = try #require(jsonPayload["messages"] as? [[String: Any]])
+        let firstMessage = try #require(payloadMessages.first)
+
+        #expect(firstMessage["reasoning_content"] == nil)
+        #expect(firstMessage["tool_calls"] != nil)
+        #expect(jsonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] == nil)
+    }
+
     @Test("OpenAI 解析 Gemini extra_content 中的 thought_signature")
     func testParseResponsePreservesGeminiExtraContentThoughtSignature() throws {
         let json = """

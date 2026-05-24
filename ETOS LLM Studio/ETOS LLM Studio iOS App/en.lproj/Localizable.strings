@@ -3580,3 +3580,8 @@
 "模型没有返回工具调用。响应：%@" = "The model did not return a tool call. Response: %@";
 "调用：%@，参数：%@" = "Call: %@, arguments: %@";
 "请调用 app_get_system_time 工具获取当前设备时间，不要直接回答。" = "Use the app_get_system_time tool to get the current device time. Do not answer directly.";
+"思维链回传" = "Reasoning Echo";
+"常驻" = "Always";
+"仅 Tool Call" = "Tool Calls Only";
+"不回传" = "Never";
+"选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "When Never is selected, some APIs that require reasoning_content to be echoed may return a 400 error.";

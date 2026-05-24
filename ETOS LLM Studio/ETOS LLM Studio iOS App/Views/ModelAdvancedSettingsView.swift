@@ -247,10 +247,15 @@ struct ModelAdvancedSettingsView: View {
                 Section {
                     Toggle(NSLocalizedString("启用流式输出", comment: ""), isOn: $enableStreaming)
                     Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
+                    Picker(NSLocalizedString("思维链回传", comment: ""), selection: reasoningContentEchoModeBinding) {
+                        ForEach(ReasoningContentEchoMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
                 } header: {
                     Text(NSLocalizedString("输出与思考", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
+                    Text(outputReasoningFooterText)
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -303,6 +308,21 @@ struct ModelAdvancedSettingsView: View {
             get: { normalizedSamplingValue(aiTopP, in: topPRange) },
             set: { handleTopPChange($0) }
         )
+    }
+
+    private var reasoningContentEchoModeBinding: Binding<ReasoningContentEchoMode> {
+        Binding(
+            get: { ReasoningContentEchoMode.normalized(appConfig.reasoningContentEchoMode) },
+            set: { appConfig.reasoningContentEchoMode = $0.rawValue }
+        )
+    }
+
+    private var outputReasoningFooterText: String {
+        let base = NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: "")
+        guard reasoningContentEchoModeBinding.wrappedValue == .never else {
+            return base
+        }
+        return "\(base)\n\n\(NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。", comment: ""))"
     }
 
     private func handleTemperatureChange(_ value: Double) {

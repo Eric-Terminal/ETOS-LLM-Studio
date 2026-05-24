@@ -485,6 +485,62 @@ struct OpenAIAdapterAdvancedTests {
         #expect(inputItems[2]["call_id"] as? String == "call_resp_2")
     }
 
+    @Test("OpenAI Responses 不回传模式会移除 reasoning item")
+    func testBuildResponsesAPIRequestOmitsReasoningItemsWhenDisabled() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses")
+                ]
+            )
+        )
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            reasoningContent: "不应回传。",
+            reasoningProviderSpecificFields: [
+                "openai_responses_reasoning_items": .array([
+                    .dictionary([
+                        "type": .string("reasoning"),
+                        "id": .string("rs_disabled"),
+                        "encrypted_content": .string("enc_disabled")
+                    ])
+                ])
+            ],
+            toolCalls: [
+                InternalToolCall(
+                    id: "call_resp_disabled",
+                    toolName: "save_memory",
+                    arguments: "{\"content\":\"继续\"}"
+                )
+            ]
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: [
+                OpenAIAdapter.reasoningContentEchoModeControlKey: ReasoningContentEchoMode.never.rawValue
+            ],
+            messages: [
+                ChatMessage(role: .user, content: "继续"),
+                assistantMessage
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let inputItems = try #require(jsonPayload["input"] as? [[String: Any]])
+
+        #expect(inputItems.contains { $0["type"] as? String == "reasoning" } == false)
+        #expect(inputItems.contains { $0["type"] as? String == "function_call" } == true)
+        #expect(jsonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] == nil)
+    }
+
     @Test("OpenAI Responses 流式事件可解析文本、工具参数与用量")
     func testParseResponsesStreamingEvents() throws {
         let reasoningStart = """

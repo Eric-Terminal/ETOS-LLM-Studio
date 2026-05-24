@@ -84,6 +84,7 @@ struct ChatServiceTests {
         Persistence.deleteAppConfig(key: AppConfigKey.dailyPulseModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.conversationSummaryModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.reasoningSummaryModelIdentifier.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.reasoningContentEchoMode.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.imageGenerationModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.imageGenerationParameterExpressionsByModel.rawValue)

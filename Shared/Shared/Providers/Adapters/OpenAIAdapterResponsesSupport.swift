@@ -83,7 +83,26 @@ extension OpenAIAdapter {
         ]
     }
 
-    func buildResponsesReasoningInputItems(from message: ChatMessage) -> [[String: Any]] {
+    static func reasoningContentEchoMode(from payload: [String: Any]) -> ReasoningContentEchoMode {
+        guard let rawValue = payload[reasoningContentEchoModeControlKey] as? String else {
+            return .defaultMode
+        }
+        return .normalized(rawValue)
+    }
+
+    static func shouldEchoReasoningContent(for message: ChatMessage, mode: ReasoningContentEchoMode) -> Bool {
+        switch mode {
+        case .always:
+            return true
+        case .toolCallsOnly:
+            return message.role == .assistant && !(message.toolCalls ?? []).isEmpty
+        case .never:
+            return false
+        }
+    }
+
+    func buildResponsesReasoningInputItems(from message: ChatMessage, mode: ReasoningContentEchoMode) -> [[String: Any]] {
+        guard Self.shouldEchoReasoningContent(for: message, mode: mode) else { return [] }
         guard let rawItems = message.reasoningProviderSpecificFields?[Self.responsesReasoningItemsKey],
               case let .array(items) = rawItems else {
             return []
@@ -126,6 +145,7 @@ extension OpenAIAdapter {
 
     func buildResponsesInputItems(
         from messages: [ChatMessage],
+        reasoningContentEchoMode: ReasoningContentEchoMode,
         audioAttachments: [UUID: AudioAttachment],
         imageAttachments: [UUID: [ImageAttachment]],
         fileAttachments: [UUID: [FileAttachment]]
@@ -135,7 +155,7 @@ extension OpenAIAdapter {
 
         for message in messages {
             if message.role == .assistant {
-                items.append(contentsOf: buildResponsesReasoningInputItems(from: message))
+                items.append(contentsOf: buildResponsesReasoningInputItems(from: message, mode: reasoningContentEchoMode))
             }
 
             if let messageItem = buildResponsesMessageInput(

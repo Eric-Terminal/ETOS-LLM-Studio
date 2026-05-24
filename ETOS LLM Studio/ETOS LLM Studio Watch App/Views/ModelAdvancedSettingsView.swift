@@ -188,9 +188,17 @@ struct ModelAdvancedSettingsView: View {
             }
 
             // MARK: Section 4：生成与输出
-            Section(header: Text(NSLocalizedString("生成与输出", comment: ""))) {
+            Section(
+                header: Text(NSLocalizedString("生成与输出", comment: "")),
+                footer: reasoningContentEchoFooter
+            ) {
                 Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $enableStreaming)
                 Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
+                Picker(NSLocalizedString("思维链回传", comment: ""), selection: reasoningContentEchoModeBinding) {
+                    ForEach(ReasoningContentEchoMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
                 Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
 
                 Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
@@ -246,6 +254,24 @@ struct ModelAdvancedSettingsView: View {
             get: { normalizedSamplingValue(aiTopP, in: topPRange) },
             set: { handleTopPChange($0) }
         )
+    }
+
+    private var reasoningContentEchoModeBinding: Binding<ReasoningContentEchoMode> {
+        Binding(
+            get: { ReasoningContentEchoMode.normalized(appConfig.reasoningContentEchoMode) },
+            set: { appConfig.reasoningContentEchoMode = $0.rawValue }
+        )
+    }
+
+    private var reasoningContentEchoFooter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
+            if reasoningContentEchoModeBinding.wrappedValue == .never {
+                Text(NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。", comment: ""))
+            }
+        }
+        .etFont(.footnote)
+        .foregroundStyle(.secondary)
     }
 
     private func handleTemperatureChange(_ value: Double) {

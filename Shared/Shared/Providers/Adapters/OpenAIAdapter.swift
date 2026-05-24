@@ -17,7 +17,8 @@ public class OpenAIAdapter: APIAdapter {
     public init() {}
 
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
-    static let streamIncludeUsageControlKey = "openai_stream_include_usage"
+    public static let streamIncludeUsageControlKey = "openai_stream_include_usage"
+    public static let reasoningContentEchoModeControlKey = "openai_reasoning_content_echo_mode"
     static let responsesReasoningItemsKey = "openai_responses_reasoning_items"
     static let responsesModeSignalKeys: Set<String> = [
         "background",
@@ -35,7 +36,8 @@ public class OpenAIAdapter: APIAdapter {
         "openai_api",
         "openai_api_mode",
         "use_responses_api",
-        streamIncludeUsageControlKey
+        streamIncludeUsageControlKey,
+        reasoningContentEchoModeControlKey
     ]
     static let chatCompletionsOnlyKeys: Set<String> = [
         "functions",

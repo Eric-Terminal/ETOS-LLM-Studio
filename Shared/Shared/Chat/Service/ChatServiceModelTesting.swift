@@ -217,7 +217,7 @@ extension ChatService {
             let adapter = try connectivityTestAdapter(for: runnableModel)
             try validateConnectivityTestProvider(runnableModel.provider)
 
-            let request = try connectivityTestRequest(
+            let request = try await connectivityTestRequest(
                 for: runnableModel,
                 adapter: adapter,
                 isStreaming: isStreaming,
@@ -309,7 +309,7 @@ extension ChatService {
         isStreaming: Bool,
         tools: [InternalToolDefinition]?,
         prompt: String
-    ) throws -> URLRequest {
+    ) async throws -> URLRequest {
         let messages = [
             ChatMessage(role: .user, content: prompt)
         ]
@@ -317,6 +317,9 @@ extension ChatService {
             "temperature": 0,
             "stream": isStreaming
         ]
+        if adapter is OpenAIAdapter {
+            payload[OpenAIAdapter.reasoningContentEchoModeControlKey] = await openAIReasoningContentEchoModeControlValue()
+        }
         if tools?.isEmpty == false {
             payload["tool_choice"] = "auto"
         }

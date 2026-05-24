@@ -404,9 +404,13 @@ extension ChatService {
             "temperature": temperature,
             "stream": false
         ]
+        var commonPayload = payload
+        if adapter is OpenAIAdapter {
+            commonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] = await openAIReasoningContentEchoModeControlValue()
+        }
         guard let request = adapter.buildChatRequest(
             for: targetModel,
-            commonPayload: payload,
+            commonPayload: commonPayload,
             messages: requestMessages,
             tools: nil,
             audioAttachments: [:],

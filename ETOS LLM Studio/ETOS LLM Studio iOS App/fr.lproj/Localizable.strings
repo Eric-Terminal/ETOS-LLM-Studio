@@ -3636,3 +3636,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "模型没有返回工具调用。响应：%@" = "Le modèle n'a pas renvoyé d'appel d'outil. Réponse : %@";
 "调用：%@，参数：%@" = "Appel : %@, arguments : %@";
 "请调用 app_get_system_time 工具获取当前设备时间，不要直接回答。" = "Utilisez l'outil app_get_system_time pour obtenir l'heure actuelle de l'appareil. Ne répondez pas directement.";
+"思维链回传" = "Renvoi du raisonnement";
+"常驻" = "Toujours";
+"仅 Tool Call" = "Tool Call uniquement";
+"不回传" = "Ne pas renvoyer";
+"选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "Si Ne pas renvoyer est sélectionné, certaines API exigeant reasoning_content peuvent renvoyer une erreur 400.";

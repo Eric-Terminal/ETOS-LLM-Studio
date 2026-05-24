@@ -14,6 +14,12 @@ import UniformTypeIdentifiers
 #endif
 
 extension ChatService {
+    func openAIReasoningContentEchoModeControlValue() async -> String {
+        await MainActor.run {
+            ReasoningContentEchoMode.normalized(AppConfigStore.shared.reasoningContentEchoMode).rawValue
+        }
+    }
+
     func executeMessageRequest(
         messages: [ChatMessage],
         loadingMessageID: UUID,
@@ -293,6 +299,7 @@ extension ChatService {
         if adapter is OpenAIAdapter {
             let includeUsageInStream = await MainActor.run { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
+            commonPayload[OpenAIAdapter.reasoningContentEchoModeControlKey] = await openAIReasoningContentEchoModeControlValue()
         }
         let effectiveTools = runnableModel.model.supportsToolCalling ? tools : nil
         if tools != nil, effectiveTools == nil {
