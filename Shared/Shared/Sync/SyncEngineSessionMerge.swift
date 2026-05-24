@@ -274,10 +274,7 @@ extension SyncEngine {
             return false
         }
 
-        guard messagesShareContentIdentity(local, incoming) else {
-            return false
-        }
-        return messagesShareAttachmentIdentity(local, incoming)
+        return messagesShareContentIdentity(local, incoming)
     }
 
     static func messagesShareContentIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
@@ -292,21 +289,6 @@ extension SyncEngine {
             }
         }
         return false
-    }
-
-    static func messagesShareAttachmentIdentity(_ local: ChatMessage, _ incoming: ChatMessage) -> Bool {
-        attachmentReferenceIsCompatible(
-            local.audioFileName,
-            incoming.audioFileName,
-            type: "audio",
-            loader: { Persistence.loadAudio(fileName: $0) }
-        )
-            && attachmentReferencesAreCompatible(
-                local.imageFileNames,
-                incoming.imageFileNames,
-                type: "image",
-                loader: { Persistence.loadImage(fileName: $0) }
-            )
     }
 
     static func buildMessage(

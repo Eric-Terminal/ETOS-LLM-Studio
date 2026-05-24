@@ -504,36 +504,6 @@ extension SyncEngine {
         }
     }
 
-    static func attachmentReferenceIsCompatible(
-        _ local: String?,
-        _ incoming: String?,
-        type: String,
-        loader: (String) -> Data?
-    ) -> Bool {
-        let normalizedLocal = normalizedAttachmentFileName(local)
-        let normalizedIncoming = normalizedAttachmentFileName(incoming)
-        guard let normalizedLocal, let normalizedIncoming else {
-            return true
-        }
-        return attachmentReferenceFingerprint(for: normalizedLocal, type: type, loader: loader)
-            == attachmentReferenceFingerprint(for: normalizedIncoming, type: type, loader: loader)
-    }
-
-    static func attachmentReferencesAreCompatible(
-        _ local: [String]?,
-        _ incoming: [String]?,
-        type: String,
-        loader: (String) -> Data?
-    ) -> Bool {
-        let localFingerprints = Set(attachmentReferenceFingerprints(for: local, type: type, loader: loader))
-        let incomingFingerprints = Set(attachmentReferenceFingerprints(for: incoming, type: type, loader: loader))
-        guard !localFingerprints.isEmpty, !incomingFingerprints.isEmpty else {
-            return true
-        }
-        return localFingerprints.isSubset(of: incomingFingerprints)
-            || incomingFingerprints.isSubset(of: localFingerprints)
-    }
-
     static func mergeUnsyncedFileReferences(
         _ local: [String]?,
         _ incoming: [String]?
