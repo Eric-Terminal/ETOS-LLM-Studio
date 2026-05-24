@@ -40,14 +40,16 @@ struct ModelSettingsView: View {
                     .autocorrectionDisabled()
             }
 
-            Section {
-                NavigationLink {
-                    SingleModelConnectivityTestView(provider: provider, model: model)
-                } label: {
-                    Label(NSLocalizedString("模型测试", comment: "Model connectivity test title"), systemImage: "checkmark.seal")
+            if model.isChatModel {
+                Section {
+                    NavigationLink {
+                        SingleModelConnectivityTestView(provider: provider, model: model)
+                    } label: {
+                        Label(NSLocalizedString("模型测试", comment: "Model connectivity test title"), systemImage: "checkmark.seal")
+                    }
+                } footer: {
+                    Text(NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer"))
                 }
-            } footer: {
-                Text(NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer"))
             }
 
             Section(
