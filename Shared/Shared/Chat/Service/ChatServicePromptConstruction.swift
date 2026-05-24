@@ -24,6 +24,22 @@ extension ChatService {
     ) -> String {
         var parts: [String] = []
 
+        if !worldbookBefore.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_before", entries: worldbookBefore))
+        }
+        if !worldbookAfter.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_after", entries: worldbookAfter))
+        }
+        if !worldbookANTop.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_top", entries: worldbookANTop))
+        }
+        if !worldbookANBottom.isEmpty {
+            parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_bottom", entries: worldbookANBottom))
+        }
+        if !worldbookOutlet.isEmpty {
+            parts.append(contentsOf: makeWorldbookOutletBlocks(entries: worldbookOutlet))
+        }
+
         if let global, !global.isEmpty {
             parts.append("<system_prompt>\n\(global)\n</system_prompt>")
         }
@@ -79,22 +95,6 @@ extension ChatService {
 \(conversationProfile.content)
 </user_profile_memory>
 """)
-        }
-
-        if !worldbookBefore.isEmpty {
-            parts.append(makeWorldbookPromptBlock(tag: "worldbook_before", entries: worldbookBefore))
-        }
-        if !worldbookAfter.isEmpty {
-            parts.append(makeWorldbookPromptBlock(tag: "worldbook_after", entries: worldbookAfter))
-        }
-        if !worldbookANTop.isEmpty {
-            parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_top", entries: worldbookANTop))
-        }
-        if !worldbookANBottom.isEmpty {
-            parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_bottom", entries: worldbookANBottom))
-        }
-        if !worldbookOutlet.isEmpty {
-            parts.append(contentsOf: makeWorldbookOutletBlocks(entries: worldbookOutlet))
         }
 
         return parts.joined(separator: "\n\n")

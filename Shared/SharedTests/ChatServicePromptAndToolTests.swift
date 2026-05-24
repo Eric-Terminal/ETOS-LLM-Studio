@@ -522,6 +522,60 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("系统层前置提示词会放在世界书后、对话前")
+    func testSystemPromptBlocksFollowWorldbookBlocks() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        let store = WorldbookStore.shared
+        let originalBooks = store.loadWorldbooks()
+        defer { store.saveWorldbooks(originalBooks) }
+
+        await memoryManager.addMemory(content: "memory-order-hit")
+        Persistence.writeAppConfig(key: AppConfigKey.memoryTopK.rawValue, integer: 0, typeHint: AppConfigKey.memoryTopK.typeHint)
+        let book = Worldbook(
+            name: "顺序测试书",
+            entries: [WorldbookEntry(content: "worldbook-order-hit", keys: ["hero"], position: .after)]
+        )
+        store.saveWorldbooks([book])
+
+        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "顺序测试会话")
+        session.lorebookIDs = [book.id]
+        session.topicPrompt = "topic-order-hit"
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hero",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "global-order-hit",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            includeSystemTime: true
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        let systemPrompt = sentMessages.first(where: { $0.role == .system })?.content ?? ""
+        let systemMessageIndex = try #require(sentMessages.firstIndex(where: { $0.role == .system && $0.content.contains("<system_prompt>") }))
+        let userMessageIndex = try #require(sentMessages.firstIndex(where: { $0.role == .user }))
+        let worldbookRange = try #require(systemPrompt.range(of: "<worldbook_after>"))
+        let systemRange = try #require(systemPrompt.range(of: "<system_prompt>"))
+        let topicRange = try #require(systemPrompt.range(of: "<topic_prompt>"))
+        let timeRange = try #require(systemPrompt.range(of: "<time>"))
+        let memoryRange = try #require(systemPrompt.range(of: "<memory>"))
+
+        #expect(systemMessageIndex < userMessageIndex)
+        #expect(worldbookRange.lowerBound < systemRange.lowerBound)
+        #expect(worldbookRange.lowerBound < topicRange.lowerBound)
+        #expect(worldbookRange.lowerBound < timeRange.lowerBound)
+        #expect(worldbookRange.lowerBound < memoryRange.lowerBound)
+
+        await cleanup()
+    }
+
     @Test("Worldbook coexists with memory block")
     func testWorldbookAndMemoryCoexist() async throws {
         await cleanup()
