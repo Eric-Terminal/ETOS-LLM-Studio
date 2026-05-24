@@ -3565,3 +3565,4 @@
 "选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "選擇「不回傳」後，某些要求回傳 reasoning_content 的 API 可能會返回 400 錯誤。";
 "该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。" = "此設定會控制 OpenAI 兼容請求中的 reasoning_content、Gemini 工具調用的 thoughtSignature，以及 Anthropic 工具調用歷史中的 thinking/redacted_thinking 區塊回傳。Gemini 與 Anthropic 官方要求工具調用延續時保留這些簽名元資料；非工具調用的完整原始思考區塊目前無法可靠重建，因此不會額外偽造回傳。";
 "选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。" = "選擇「不回傳」後，某些要求回傳 reasoning_content 或思考簽名元資料的 API 可能會返回 400 錯誤。";
+"全屏编辑" = "全螢幕編輯";

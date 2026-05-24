@@ -38,11 +38,15 @@ struct WorldbookDetailView: View {
                         .onSubmit {
                             saveName()
                         }
-                    TextField(NSLocalizedString("世界书描述", comment: "Worldbook description field"), text: $descriptionDraft, axis: .vertical)
-                        .lineLimit(2...6)
-                        .onSubmit {
-                            saveDescription()
-                        }
+                    FullscreenMultilineTextInput(
+                        identity: worldbookID,
+                        placeholder: NSLocalizedString("世界书描述", comment: "Worldbook description field"),
+                        fullScreenTitle: NSLocalizedString("世界书描述", comment: "Worldbook description title"),
+                        text: $descriptionDraft,
+                        lineLimit: 2...6,
+                        isEnabled: worldbook != nil,
+                        onDebouncedSave: saveDescription
+                    )
                     Text(String(format: NSLocalizedString("条目数量：%d", comment: "Entry count"), worldbook.entries.count))
                         .foregroundStyle(.secondary)
                 }
@@ -208,8 +212,8 @@ struct WorldbookDetailView: View {
         updateWorldbook { $0.name = trimmed }
     }
 
-    private func saveDescription() {
-        let trimmed = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
+    private func saveDescription(_ rawDescription: String) {
+        let trimmed = rawDescription.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         updateWorldbook { $0.description = trimmed }
     }
 

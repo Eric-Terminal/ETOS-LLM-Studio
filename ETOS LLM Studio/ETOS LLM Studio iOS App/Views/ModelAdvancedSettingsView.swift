@@ -20,6 +20,9 @@ struct ModelAdvancedSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var selectedTab: ModelAdvancedSettingsTab = .promptInjection
     @State private var editingMessageRegexRule: MessageRegexRule?
+    @State private var selectedGlobalPromptDraft: String = ""
+    @State private var topicPromptDraft: String = ""
+    @State private var enhancedPromptDraft: String = ""
 
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
@@ -64,8 +67,8 @@ struct ModelAdvancedSettingsView: View {
 
     private var selectedGlobalPromptContentBinding: Binding<String> {
         Binding(
-            get: { selectedGlobalPromptEntry?.content ?? "" },
-            set: { updateSelectedGlobalSystemPromptContent($0) }
+            get: { selectedGlobalPromptDraft },
+            set: { selectedGlobalPromptDraft = $0 }
         )
     }
 
@@ -74,9 +77,17 @@ struct ModelAdvancedSettingsView: View {
             // MARK: - Tab 1：提示与注入
             Form {
                 Section {
-                    TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding, axis: .vertical)
-                        .lineLimit(3...8)
-                        .disabled(selectedGlobalPromptEntry == nil)
+                    FullscreenMultilineTextInput(
+                        identity: selectedGlobalPromptEntry?.id.uuidString ?? "global-system-prompt-none",
+                        placeholder: NSLocalizedString("自定义全局系统提示词", comment: ""),
+                        fullScreenTitle: NSLocalizedString("编辑提示词", comment: ""),
+                        text: selectedGlobalPromptContentBinding,
+                        lineLimit: 3...8,
+                        isEnabled: selectedGlobalPromptEntry != nil,
+                        onDebouncedSave: { newValue in
+                            updateSelectedGlobalSystemPromptContent(newValue)
+                        }
+                    )
 
                     NavigationLink {
                         GlobalSystemPromptPickerView(
@@ -102,17 +113,23 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Section {
-                    TextField(NSLocalizedString("自定义话题提示词", comment: ""), text: Binding(
-                        get: { currentSession?.topicPrompt ?? "" },
-                        set: { newValue in
-                            if var session = currentSession {
-                                session.topicPrompt = newValue
-                                currentSession = session
-                                ChatService.shared.updateSession(session)
-                            }
+                    FullscreenMultilineTextInput(
+                        identity: currentSession?.id.uuidString ?? "topic-prompt-none",
+                        placeholder: NSLocalizedString("自定义话题提示词", comment: ""),
+                        fullScreenTitle: NSLocalizedString("编辑提示词", comment: ""),
+                        text: Binding(
+                            get: { topicPromptDraft },
+                            set: { topicPromptDraft = $0 }
+                        ),
+                        lineLimit: 2...6,
+                        isEnabled: currentSession != nil,
+                        onDebouncedSave: { newValue in
+                            guard var session = currentSession else { return }
+                            session.topicPrompt = newValue
+                            currentSession = session
+                            ChatService.shared.updateSession(session)
                         }
-                    ), axis: .vertical)
-                    .lineLimit(2...6)
+                    )
                 } header: {
                     Text(NSLocalizedString("当前话题提示词", comment: ""))
                 } footer: {
@@ -122,17 +139,23 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Section {
-                    TextField(NSLocalizedString("自定义增强提示词", comment: ""), text: Binding(
-                        get: { currentSession?.enhancedPrompt ?? "" },
-                        set: { newValue in
-                            if var session = currentSession {
-                                session.enhancedPrompt = newValue
-                                currentSession = session
-                                ChatService.shared.updateSession(session)
-                            }
+                    FullscreenMultilineTextInput(
+                        identity: currentSession?.id.uuidString ?? "enhanced-prompt-none",
+                        placeholder: NSLocalizedString("自定义增强提示词", comment: ""),
+                        fullScreenTitle: NSLocalizedString("编辑提示词", comment: ""),
+                        text: Binding(
+                            get: { enhancedPromptDraft },
+                            set: { enhancedPromptDraft = $0 }
+                        ),
+                        lineLimit: 2...6,
+                        isEnabled: currentSession != nil,
+                        onDebouncedSave: { newValue in
+                            guard var session = currentSession else { return }
+                            session.enhancedPrompt = newValue
+                            currentSession = session
+                            ChatService.shared.updateSession(session)
                         }
-                    ), axis: .vertical)
-                    .lineLimit(2...6)
+                    )
                 } header: {
                     Text(NSLocalizedString("增强提示词", comment: ""))
                 } footer: {
@@ -292,8 +315,29 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .onAppear {
+            syncPromptDrafts()
             normalizeSamplingParametersIfNeeded()
         }
+        .onChange(of: selectedGlobalSystemPromptEntryID) { _, _ in
+            syncSelectedGlobalPromptDraft()
+        }
+        .onChange(of: selectedGlobalPromptEntry?.content ?? "") { _, _ in
+            syncSelectedGlobalPromptDraft()
+        }
+        .onChange(of: currentSession?.id) { _, _ in
+            syncSessionPromptDrafts()
+        }
+        .onChange(of: currentSession?.topicPrompt ?? "") { _, newValue in
+            if topicPromptDraft != newValue {
+                topicPromptDraft = newValue
+            }
+        }
+        .onChange(of: currentSession?.enhancedPrompt ?? "") { _, newValue in
+            if enhancedPromptDraft != newValue {
+                enhancedPromptDraft = newValue
+            }
+        }
+        .onDisappear(perform: persistPromptDrafts)
     }
 
     private var temperatureBinding: Binding<Double> {
@@ -374,6 +418,32 @@ struct ModelAdvancedSettingsView: View {
         guard let entry else { return NSLocalizedString("未选择", comment: "") }
         let trimmedTitle = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
+    }
+
+    private func syncPromptDrafts() {
+        syncSelectedGlobalPromptDraft()
+        syncSessionPromptDrafts()
+    }
+
+    private func syncSelectedGlobalPromptDraft() {
+        selectedGlobalPromptDraft = selectedGlobalPromptEntry?.content ?? ""
+    }
+
+    private func syncSessionPromptDrafts() {
+        topicPromptDraft = currentSession?.topicPrompt ?? ""
+        enhancedPromptDraft = currentSession?.enhancedPrompt ?? ""
+    }
+
+    private func persistPromptDrafts() {
+        if selectedGlobalSystemPromptEntryID != nil {
+            updateSelectedGlobalSystemPromptContent(selectedGlobalPromptDraft)
+        }
+        if var session = currentSession {
+            session.topicPrompt = topicPromptDraft
+            session.enhancedPrompt = enhancedPromptDraft
+            currentSession = session
+            ChatService.shared.updateSession(session)
+        }
     }
 }
 
@@ -481,21 +551,33 @@ private struct GlobalSystemPromptEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
-    @State private var content: String
+    @State private var contentDraft: String
 
     init(entry: GlobalSystemPromptEntry, onSave: @escaping (String, String) -> Void) {
         self.entry = entry
         self.onSave = onSave
         _title = State(initialValue: entry.title)
-        _content = State(initialValue: entry.content)
+        _contentDraft = State(initialValue: entry.content)
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField(NSLocalizedString("提示词名称", comment: ""), text: $title)
-                TextField(NSLocalizedString("提示词内容", comment: ""), text: $content, axis: .vertical)
-                    .lineLimit(4...10)
+                FullscreenMultilineTextInput(
+                    identity: entry.id.uuidString,
+                    placeholder: NSLocalizedString("提示词内容", comment: ""),
+                    fullScreenTitle: NSLocalizedString("编辑提示词", comment: ""),
+                    text: Binding(
+                        get: { contentDraft },
+                        set: { contentDraft = $0 }
+                    ),
+                    lineLimit: 4...10,
+                    isEnabled: true,
+                    onDebouncedSave: { newValue in
+                        onSave(title, newValue)
+                    }
+                )
             }
             .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
             .toolbar {
@@ -506,7 +588,7 @@ private struct GlobalSystemPromptEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("保存", comment: "")) {
-                        onSave(title, content)
+                        onSave(title, contentDraft)
                         dismiss()
                     }
                 }

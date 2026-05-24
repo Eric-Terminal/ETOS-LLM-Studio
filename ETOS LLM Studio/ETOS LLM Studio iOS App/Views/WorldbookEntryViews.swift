@@ -192,16 +192,43 @@ struct WorldbookEntryEditView: View {
         Form {
             Section(NSLocalizedString("基础", comment: "Base section")) {
                 TextField(NSLocalizedString("注释", comment: "Comment field"), text: $draft.comment)
-                TextField(NSLocalizedString("内容", comment: "Content field"), text: $draft.content, axis: .vertical)
-                    .lineLimit(6...16)
+                FullscreenMultilineTextInput(
+                    identity: "worldbook-entry-content-\(draft.entryID.uuidString)",
+                    placeholder: NSLocalizedString("内容", comment: "Content field"),
+                    fullScreenTitle: NSLocalizedString("内容", comment: "Content field"),
+                    text: $draft.content,
+                    lineLimit: 6...16,
+                    isEnabled: true,
+                    onDebouncedSave: { _ in
+                        saveDraftIfEditingExistingEntry()
+                    }
+                )
                 Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: $draft.isEnabled)
             }
 
             Section(NSLocalizedString("关键词", comment: "Keyword section")) {
-                TextField(NSLocalizedString("主关键词（逗号/换行分隔）", comment: "Primary keywords field"), text: $draft.keysText, axis: .vertical)
-                    .lineLimit(2...6)
-                TextField(NSLocalizedString("次级关键词（逗号/换行分隔）", comment: "Secondary keywords field"), text: $draft.secondaryKeysText, axis: .vertical)
-                    .lineLimit(2...6)
+                FullscreenMultilineTextInput(
+                    identity: "worldbook-entry-primary-keys-\(draft.entryID.uuidString)",
+                    placeholder: NSLocalizedString("主关键词（逗号/换行分隔）", comment: "Primary keywords field"),
+                    fullScreenTitle: NSLocalizedString("主关键词（逗号/换行分隔）", comment: "Primary keywords field"),
+                    text: $draft.keysText,
+                    lineLimit: 2...6,
+                    isEnabled: true,
+                    onDebouncedSave: { _ in
+                        saveDraftIfEditingExistingEntry()
+                    }
+                )
+                FullscreenMultilineTextInput(
+                    identity: "worldbook-entry-secondary-keys-\(draft.entryID.uuidString)",
+                    placeholder: NSLocalizedString("次级关键词（逗号/换行分隔）", comment: "Secondary keywords field"),
+                    fullScreenTitle: NSLocalizedString("次级关键词（逗号/换行分隔）", comment: "Secondary keywords field"),
+                    text: $draft.secondaryKeysText,
+                    lineLimit: 2...6,
+                    isEnabled: true,
+                    onDebouncedSave: { _ in
+                        saveDraftIfEditingExistingEntry()
+                    }
+                )
                 Toggle(NSLocalizedString("启用次级关键词", comment: "Enable secondary keywords"), isOn: $draft.secondaryKeysEnabled)
                 if draft.secondaryKeysEnabled {
                     Picker(NSLocalizedString("次级逻辑", comment: "Secondary selective logic"), selection: $draft.selectiveLogic) {
@@ -360,5 +387,10 @@ struct WorldbookEntryEditView: View {
                 Text(NSLocalizedString("删除后不可恢复。", comment: "Delete entry irreversible"))
             }
         )
+    }
+
+    private func saveDraftIfEditingExistingEntry() {
+        guard !isNew, canSave else { return }
+        onSave(draft.toEntry())
     }
 }
