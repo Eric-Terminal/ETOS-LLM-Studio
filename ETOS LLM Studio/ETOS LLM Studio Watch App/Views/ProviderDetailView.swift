@@ -20,7 +20,6 @@ struct ProviderDetailView: View {
     let allowsRemoteModelFetch: Bool
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
-    @State private var isShowingModelTest = false
     @State private var isFetchingModels = false
     @State private var isShowingFetchProgress = false
     @State private var fetchError: String?
@@ -96,6 +95,22 @@ struct ProviderDetailView: View {
                         .foregroundColor(.secondary)
                 }
             }
+
+            Section {
+                NavigationLink {
+                    ModelConnectivityTestView(provider: provider)
+                } label: {
+                    Label(
+                        NSLocalizedString("模型测试", comment: "Model connectivity test entry"),
+                        systemImage: "checkmark.seal"
+                    )
+                }
+            } footer: {
+                Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。", comment: "Watch model test explanation"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
             if groupByFamilySection {
                 let activeSections = sections(forActive: true)
                 let inactiveSections = sections(forActive: false)
@@ -149,7 +164,7 @@ struct ProviderDetailView: View {
                     Image(systemName: "plus")
                 }
             }
-            
+
             ToolbarItem(placement: .bottomBar) {
                 HStack {
                     if allowsRemoteModelFetch {
@@ -158,11 +173,6 @@ struct ProviderDetailView: View {
                         }
                         .disabled(isFetchingModels)
                     }
-                    Spacer()
-                    Button(action: { isShowingModelTest = true }) {
-                        Image(systemName: "checkmark.seal")
-                    }
-                    .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
                     Spacer()
                     Button(action: { toggleSearch() }) {
                         Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
@@ -173,11 +183,6 @@ struct ProviderDetailView: View {
         }
         .sheet(isPresented: $isAddingModel) {
             ModelAddView(provider: $provider)
-        }
-        .sheet(isPresented: $isShowingModelTest) {
-            NavigationStack {
-                ModelConnectivityTestView(provider: provider)
-            }
         }
         .onChange(of: provider) {
             guard !isApplyingProviderUpdateFromParent else { return }
