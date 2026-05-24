@@ -99,6 +99,7 @@ public final class AppConfigStore: ObservableObject {
     public nonisolated static let persistentStoreDidLoadNotification = Notification.Name("com.ETOS.appConfig.persistentStoreDidLoad")
 
     private nonisolated static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
+    private nonisolated static let chatComposerDraftWriteDebounceNanoseconds: UInt64 = 350_000_000
     private nonisolated static let snapshotCache = AppConfigSnapshotCache(
         values: Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.map { key in
             (key.rawValue, key.defaultValue.anyValue)
@@ -107,6 +108,7 @@ public final class AppConfigStore: ObservableObject {
     private var isApplyingSnapshot = false
     private var isReloadingFromPersistentStore = false
     private var pendingWriteTasks: [UUID: Task<Void, Never>] = [:]
+    private var pendingChatComposerDraftWriteID: UUID?
     @Published public private(set) var didLoadPersistentStore = false
     private var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
     private nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
@@ -561,10 +563,23 @@ public final class AppConfigStore: ObservableObject {
     }
 
     public func flushPendingWrites() async {
+        await flushPendingChatComposerDraftWriteIfNeeded()
         let tasks = Array(pendingWriteTasks.values)
         for task in tasks {
             await task.value
         }
+    }
+
+    private func flushPendingChatComposerDraftWriteIfNeeded() async {
+        guard let writeID = pendingChatComposerDraftWriteID else { return }
+        let task = pendingWriteTasks[writeID]
+        task?.cancel()
+        pendingWriteTasks[writeID] = nil
+        pendingChatComposerDraftWriteID = nil
+        await task?.value
+
+        let normalizedValue = Self.normalizedAppConfigValue(.text(chatComposerDraft), for: .chatComposerDraft)
+        await AppConfigPersistenceWorker.shared.write(key: AppConfigKey.chatComposerDraft.rawValue, value: normalizedValue)
     }
 
     public func reloadFromPersistentStore() {
@@ -967,14 +982,40 @@ public final class AppConfigStore: ObservableObject {
 
         let rawKey = key.rawValue
         let writeID = UUID()
-        let task = Task(priority: .utility) {
-            await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+        let task: Task<Void, Never>
+        if key == .chatComposerDraft {
+            if let pendingChatComposerDraftWriteID {
+                pendingWriteTasks[pendingChatComposerDraftWriteID]?.cancel()
+                pendingWriteTasks[pendingChatComposerDraftWriteID] = nil
+            }
+            pendingChatComposerDraftWriteID = writeID
+            task = Task(priority: .utility) {
+                do {
+                    try await Task.sleep(nanoseconds: Self.chatComposerDraftWriteDebounceNanoseconds)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                let shouldWrite = await MainActor.run { [weak self] in
+                    self?.pendingChatComposerDraftWriteID == writeID
+                }
+                guard shouldWrite else { return }
+                await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+            }
+        } else {
+            task = Task(priority: .utility) {
+                await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+            }
         }
         pendingWriteTasks[writeID] = task
         Task { [weak self] in
             await task.value
             await MainActor.run {
-                self?.pendingWriteTasks[writeID] = nil
+                guard let self else { return }
+                self.pendingWriteTasks[writeID] = nil
+                if self.pendingChatComposerDraftWriteID == writeID {
+                    self.pendingChatComposerDraftWriteID = nil
+                }
             }
         }
 
