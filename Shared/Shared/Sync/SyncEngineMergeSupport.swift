@@ -338,11 +338,12 @@ extension SyncEngine {
             }
         }
         hasher.combine(message.toolCallsPlacement?.rawValue ?? "")
-        if let audioFingerprint = attachmentReferenceFingerprint(
-            for: message.audioFileName,
-            type: "audio",
-            loader: { Persistence.loadAudio(fileName: $0) }
-        ) {
+        if let audioFileName = normalizedAttachmentFileName(message.audioFileName) {
+            let audioFingerprint = attachmentReferenceFingerprint(
+                for: audioFileName,
+                type: "audio",
+                loader: { Persistence.loadAudio(fileName: $0) }
+            )
             hasher.combine(audioFingerprint)
         }
         for imageFingerprint in attachmentReferenceFingerprints(
@@ -386,17 +387,6 @@ extension SyncEngine {
         hasher.combine(message.responseMetrics?.isTokenPerSecondEstimated ?? false)
         hasher.combine(message.responseMetrics?.reasoningSummary ?? "")
         return String(hasher.finalize())
-    }
-
-    static func attachmentReferenceFingerprint(
-        for fileName: String?,
-        type: String,
-        loader: (String) -> Data?
-    ) -> String? {
-        guard let fileName = normalizedAttachmentFileName(fileName) else {
-            return nil
-        }
-        return attachmentReferenceFingerprint(for: fileName, type: type, loader: loader)
     }
 
     static func attachmentReferenceFingerprint(
@@ -471,9 +461,9 @@ extension SyncEngine {
             return (rhs, true)
         case let (lhs?, rhs?):
             var merged = lhs
-            var mergedFingerprints = Set(
-                lhs.compactMap {
-                    guard let normalizedFileName = normalizedAttachmentFileName($0) else {
+            var mergedFingerprints = Set<String>(
+                lhs.compactMap { fileName -> String? in
+                    guard let normalizedFileName = normalizedAttachmentFileName(fileName) else {
                         return nil
                     }
                     return attachmentReferenceFingerprint(
