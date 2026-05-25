@@ -37,15 +37,16 @@ public final class ModelConnectivityTestViewModel: ObservableObject {
     public init(
         provider: Provider,
         service: ChatService = .shared,
-        appConfig: AppConfigStore = .shared
+        appConfig: AppConfigStore? = nil
     ) {
+        let resolvedAppConfig = appConfig ?? AppConfigStore.shared
         self.service = service
-        self.appConfig = appConfig
+        self.appConfig = resolvedAppConfig
         self.candidates = service.connectivityTestCandidates(for: provider)
         self.results = candidates.map { ModelConnectivityTestResult(runnableModel: $0) }
-        self.concurrencyLimit = Self.normalizedConcurrencyLimit(appConfig.modelConnectivityTestConcurrencyLimit)
-        if appConfig.modelConnectivityTestConcurrencyLimit != self.concurrencyLimit {
-            appConfig.modelConnectivityTestConcurrencyLimit = self.concurrencyLimit
+        self.concurrencyLimit = Self.normalizedConcurrencyLimit(resolvedAppConfig.modelConnectivityTestConcurrencyLimit)
+        if resolvedAppConfig.modelConnectivityTestConcurrencyLimit != self.concurrencyLimit {
+            resolvedAppConfig.modelConnectivityTestConcurrencyLimit = self.concurrencyLimit
         }
     }
 
