@@ -44,7 +44,7 @@ struct WorldbookDetailView: View {
                         fullScreenTitle: NSLocalizedString("世界书描述", comment: "Worldbook description title"),
                         text: $descriptionDraft,
                         lineLimit: 2...6,
-                        isEnabled: worldbook != nil,
+                        isEnabled: true,
                         onDebouncedSave: saveDescription
                     )
                     Text(String(format: NSLocalizedString("条目数量：%d", comment: "Entry count"), worldbook.entries.count))
