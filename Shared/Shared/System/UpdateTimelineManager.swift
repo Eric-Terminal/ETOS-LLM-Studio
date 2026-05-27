@@ -145,7 +145,11 @@ public struct UpdateTimelineState: Codable, Hashable, Sendable {
         cachedCommits: []
     )
 
-    public var rangeCommits: [UpdateTimelineCommit] {
+    public var timelineCommits: [UpdateTimelineCommit] {
+        cachedCommits
+    }
+
+    public var summaryCommits: [UpdateTimelineCommit] {
         guard let current = storedCurrentSHA?.lowercased(), !current.isEmpty else {
             return cachedCommits
         }
@@ -167,6 +171,10 @@ public struct UpdateTimelineState: Codable, Hashable, Sendable {
         case .unknown:
             return Array(cachedCommits.prefix(30))
         }
+    }
+
+    public var rangeCommits: [UpdateTimelineCommit] {
+        summaryCommits
     }
 
     public var allowsSummary: Bool {
@@ -191,13 +199,27 @@ public enum UpdateTimelineError: LocalizedError {
             return NSLocalizedString("还没有可展示的提交记录。", comment: "Update timeline error")
         case .noModelSelected:
             return NSLocalizedString("当前没有可用的聊天模型，无法生成摘要。", comment: "Update timeline error")
-        case .httpStatus(let code, let responseBody, _):
+        case .httpStatus(let code, let responseBody, let resetAt):
             let bodyText = responseBody.flatMap { String(data: $0, encoding: .utf8) }?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            let resetText = (code == 403 || code == 429) ? resetAt.map {
+                String(
+                    format: NSLocalizedString("GitHub 限流可能会在 %@ 后恢复。", comment: "Update timeline rate limit footer"),
+                    $0.formatted(date: .omitted, time: .shortened)
+                )
+            } : nil
             if let bodyText, !bodyText.isEmpty {
-                return String(format: NSLocalizedString("GitHub 响应错误，状态码: %d\n%@", comment: "Update timeline HTTP error"), code, bodyText)
+                let message = String(format: NSLocalizedString("GitHub 响应错误，状态码: %d\n%@", comment: "Update timeline HTTP error"), code, bodyText)
+                if let resetText {
+                    return "\(message)\n\(resetText)"
+                }
+                return message
             }
-            return String(format: NSLocalizedString("GitHub 响应错误，状态码: %d", comment: "Update timeline HTTP error"), code)
+            let message = String(format: NSLocalizedString("GitHub 响应错误，状态码: %d", comment: "Update timeline HTTP error"), code)
+            if let resetText {
+                return "\(message)\n\(resetText)"
+            }
+            return message
         }
     }
 }
@@ -208,7 +230,7 @@ public final class UpdateTimelineManager: ObservableObject {
 
     @Published public private(set) var state: UpdateTimelineState {
         didSet {
-            displayedCommits = state.rangeCommits
+            displayedCommits = state.timelineCommits
         }
     }
     @Published public private(set) var displayedCommits: [UpdateTimelineCommit]
@@ -262,7 +284,7 @@ public final class UpdateTimelineManager: ObservableObject {
         encoder.dateEncodingStrategy = .iso8601
         let loadedState = Self.loadPersistedState(decoder: decoder)
         state = loadedState
-        displayedCommits = loadedState.rangeCommits
+        displayedCommits = loadedState.timelineCommits
         applyStartupProbeIfNeeded()
         reindexCachedTimelineIfNeeded()
     }
@@ -345,7 +367,7 @@ public final class UpdateTimelineManager: ObservableObject {
             var updated = state
             updated.lastCheckedAt = Date()
             updated.lastErrorMessage = localizedDescription(for: error)
-            if case UpdateTimelineError.httpStatus(let code, _, let resetAt) = error, code == 403 {
+            if case UpdateTimelineError.httpStatus(let code, _, let resetAt) = error, code == 403 || code == 429 {
                 updated.rateLimitResetAt = resetAt ?? Date().addingTimeInterval(3_600)
             }
             state = updated
@@ -364,7 +386,7 @@ public final class UpdateTimelineManager: ObservableObject {
     public func generateSummary() async {
         applyStartupProbeIfNeeded()
         if isSummarizing { return }
-        let commits = displayedCommits
+        let commits = state.summaryCommits
         guard !commits.isEmpty else {
             setError(UpdateTimelineError.emptyTimeline)
             return
@@ -404,6 +426,30 @@ public final class UpdateTimelineManager: ObservableObject {
 
     public func resetNotificationMarker() {
         state.notifiedRemoteSHA = nil
+        persistState()
+    }
+
+    public func clearPersistentCache() {
+        guard !isRefreshing, !isSummarizing else { return }
+        applyStartupProbeIfNeeded()
+        refreshTask?.cancel()
+        refreshTask = nil
+
+        var updated = state
+        updated.latestRemoteSHA = nil
+        updated.latestRemoteBuildNumber = nil
+        updated.appStoreVersion = nil
+        updated.appStoreURL = nil
+        updated.status = status(for: updated)
+        updated.lastCheckedAt = nil
+        updated.lastErrorMessage = nil
+        updated.rateLimitResetAt = nil
+        updated.notifiedRemoteSHA = nil
+        updated.summaryKey = nil
+        updated.summaryText = nil
+        updated.summaryGeneratedAt = nil
+        updated.cachedCommits = []
+        state = updated
         persistState()
     }
 

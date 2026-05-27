@@ -3374,6 +3374,9 @@
 /* Update timeline */
 "检查更新" = "Check for Updates";
 "刷新检查更新" = "Refresh Update Check";
+"清空更新缓存" = "Clear Update Cache";
+"清空更新缓存？" = "Clear update cache?";
+"这会删除检查更新页面保存的 GitHub 时间线、限流状态和 AI 摘要缓存，下次刷新会重新请求。" = "This will delete the saved GitHub timeline, rate-limit state, and AI summary cache for the update check page. The next refresh will request them again.";
 "通道" = "Channel";
 "当前 Build" = "Current Build";
 "推算最新 Build" = "Estimated Latest Build";

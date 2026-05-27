@@ -17,6 +17,7 @@ struct WatchUpdateTimelineView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var webAuthLauncher = UpdateTimelineWatchWebAuthLauncher()
     @State private var preparedSummaryMarkdown: ETPreparedMarkdownRenderPayload?
+    @State private var showClearCacheConfirmation = false
 
     let highlightedCommit: UpdateTimelineCommit?
 
@@ -97,7 +98,7 @@ struct WatchUpdateTimelineView: View {
                     } label: {
                         Label(NSLocalizedString("请求 AI 总结", comment: "Update timeline request summary button"), systemImage: "sparkles")
                     }
-                    .disabled(manager.isSummarizing || commits.isEmpty)
+                    .disabled(manager.isSummarizing || manager.state.summaryCommits.isEmpty)
                 } else if let appStoreURL = manager.state.appStoreURL {
                     Button {
                         webAuthLauncher.open(url: appStoreURL)
@@ -129,9 +130,28 @@ struct WatchUpdateTimelineView: View {
                     Label(NSLocalizedString("刷新", comment: "Update timeline refresh button"), systemImage: "arrow.clockwise")
                 }
                 .disabled(manager.isRefreshing)
+                Button(role: .destructive) {
+                    showClearCacheConfirmation = true
+                } label: {
+                    Label(NSLocalizedString("清空更新缓存", comment: "Clear update timeline cache"), systemImage: "trash")
+                }
+                .disabled(manager.isRefreshing || manager.isSummarizing)
             }
         }
         .navigationTitle(NSLocalizedString("检查更新", comment: "Update check navigation title"))
+        .confirmationDialog(
+            NSLocalizedString("清空更新缓存？", comment: "Clear update timeline cache confirmation title"),
+            isPresented: $showClearCacheConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("清空更新缓存", comment: "Clear update timeline cache"), role: .destructive) {
+                manager.clearPersistentCache()
+                preparedSummaryMarkdown = nil
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("这会删除检查更新页面保存的 GitHub 时间线、限流状态和 AI 摘要缓存，下次刷新会重新请求。", comment: "Clear update timeline cache confirmation message"))
+        }
         .task {
             await manager.refreshIfNeeded()
         }
