@@ -151,6 +151,18 @@ struct ProviderEditView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if showsInlineSaveButton {
+                Section {
+                    Button {
+                        saveProvider()
+                    } label: {
+                        Label(NSLocalizedString("保存", comment: ""), systemImage: "checkmark")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .disabled(isSaveDisabled)
+                }
+            }
         }
         .navigationTitle(navigationTitle)
         .toolbar {
@@ -185,6 +197,10 @@ struct ProviderEditView: View {
 
     private var navigationTitle: String {
         navigationTitleOverride ?? (isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
+    }
+
+    private var showsInlineSaveButton: Bool {
+        !dismissAfterSave || !showsCancelButton
     }
 
     private var apiBaseURLHint: String {
