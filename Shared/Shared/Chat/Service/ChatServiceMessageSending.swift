@@ -108,17 +108,13 @@ extension ChatService {
         // 保存文件附件
         for fileAttachment in fileAttachments {
             let originalName = (fileAttachment.fileName as NSString).lastPathComponent
-            let fallbackName = originalName.isEmpty ? "file-\(UUID().uuidString)" : originalName
-            var targetName = fallbackName
-            if Persistence.fileExists(fileName: targetName) {
-                let ext = (fallbackName as NSString).pathExtension
-                let name = (fallbackName as NSString).deletingPathExtension
-                let suffix = UUID().uuidString.prefix(8)
-                targetName = ext.isEmpty ? "\(name)_\(suffix)" : "\(name)_\(suffix).\(ext)"
-            }
-            if Persistence.saveFile(fileAttachment.data, fileName: targetName) != nil {
+            let targetName = Persistence.saveFileDeduplicatingByName(
+                fileAttachment.data,
+                preferredFileName: originalName
+            )
+            if let targetName {
                 savedFileNames.append(targetName)
-                logger.info("文件附件已保存: \(targetName)")
+                logger.info("文件附件已保存或复用: \(targetName)")
             }
         }
 

@@ -103,6 +103,30 @@ extension ChatServiceTests {
         #expect(finalCurrentSession?.id == session1.id)
     }
 
+    @Test("删除会话不会移除其他会话仍在引用的附件实体文件")
+    func testDeleteSessionKeepsFileAttachmentReferencedByOtherSession() async {
+        let fileName = "shared-delete-check-\(UUID().uuidString).txt"
+        defer { Persistence.deleteFile(fileName: fileName) }
+
+        _ = Persistence.saveFile(Data("共享附件".utf8), fileName: fileName)
+        let session1 = chatService.createSavedSession(name: "引用会话一")
+        let session2 = chatService.createSavedSession(name: "引用会话二")
+        Persistence.saveMessages([
+            ChatMessage(role: .user, content: "[文件]", fileFileNames: [fileName])
+        ], for: session1.id)
+        Persistence.saveMessages([
+            ChatMessage(role: .user, content: "[文件]", fileFileNames: [fileName])
+        ], for: session2.id)
+
+        chatService.deleteSessions([session1])
+
+        #expect(Persistence.fileExists(fileName: fileName))
+
+        chatService.deleteSessions([session2])
+
+        #expect(await waitUntilFileAttachmentIsDeleted(fileName))
+    }
+
     @Test("Delete last session creates a new temporary one")
     func testDeleteLastSession_CreatesNewTemporarySession() {
         let initialSessions = chatService.chatSessionsSubject.value
@@ -138,6 +162,39 @@ extension ChatServiceTests {
         #expect(newCurrentSession?.name.contains("分支:") == true)
         #expect(newSessionMessages.count == 1)
         #expect(newSessionMessages.first?.content == message.content)
+    }
+
+    @Test("复制历史创建分支会复用文件附件引用")
+    func testBranchSessionReusesFileAttachmentReference() async {
+        let fileName = "branch-shared-\(UUID().uuidString).txt"
+        defer { Persistence.deleteFile(fileName: fileName) }
+
+        _ = Persistence.saveFile(Data("分支共享附件".utf8), fileName: fileName)
+        let sourceSession = chatService.currentSessionSubject.value!
+        let message = ChatMessage(role: .user, content: "[文件]", fileFileNames: [fileName])
+        Persistence.saveMessages([message], for: sourceSession.id)
+
+        let branch = chatService.branchSession(from: sourceSession, copyMessages: true)
+        let branchFileName = Persistence.loadMessages(for: branch.id).first?.fileFileNames?.first
+
+        #expect(branchFileName == fileName)
+        #expect(Persistence.getAllFileNames().filter { $0 == fileName }.count == 1)
+
+        chatService.deleteSessions([sourceSession])
+        #expect(Persistence.fileExists(fileName: fileName))
+
+        chatService.deleteSessions([branch])
+        #expect(await waitUntilFileAttachmentIsDeleted(fileName))
+    }
+
+    private func waitUntilFileAttachmentIsDeleted(_ fileName: String) async -> Bool {
+        for _ in 0..<20 {
+            if !Persistence.fileExists(fileName: fileName) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return !Persistence.fileExists(fileName: fileName)
     }
 
     @Test("删除文件夹时会递归删除子文件夹并将会话回到未分类")

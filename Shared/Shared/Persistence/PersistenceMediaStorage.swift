@@ -236,6 +236,35 @@ extension Persistence {
         }
     }
 
+    /// 保存文件附件；若同名文件内容完全一致，则复用现有实体文件并返回原文件名。
+    /// 同名但内容不同的文件仍会另存为带短后缀的新文件，避免覆盖已有附件。
+    public static func saveFileDeduplicatingByName(_ data: Data, preferredFileName: String) -> String? {
+        let fileDirectory = getFileDirectory()
+        let fallbackName = preferredFileName.isEmpty ? "file-\(UUID().uuidString)" : preferredFileName
+        let baseFileName = (fallbackName as NSString).lastPathComponent
+        let normalizedFileName = baseFileName.isEmpty ? "file-\(UUID().uuidString)" : baseFileName
+        let targetURL = fileDirectory.appendingPathComponent(normalizedFileName)
+
+        if FileManager.default.fileExists(atPath: targetURL.path) {
+            if file(at: targetURL, hasSameContentAs: data) {
+                mediaStorageLogger.info("复用同名同内容的文件附件: \(normalizedFileName)")
+                return normalizedFileName
+            }
+
+            let ext = (normalizedFileName as NSString).pathExtension
+            let name = (normalizedFileName as NSString).deletingPathExtension
+            var candidate: String
+            repeat {
+                let suffix = UUID().uuidString.prefix(8)
+                candidate = ext.isEmpty ? "\(name)_\(suffix)" : "\(name)_\(suffix).\(ext)"
+            } while FileManager.default.fileExists(atPath: fileDirectory.appendingPathComponent(candidate).path)
+
+            return saveFile(data, fileName: candidate) == nil ? nil : candidate
+        }
+
+        return saveFile(data, fileName: normalizedFileName) == nil ? nil : normalizedFileName
+    }
+
     /// 加载文件数据
     /// - Parameter fileName: 文件名（包含扩展名）
     /// - Returns: 文件数据，如果文件不存在则返回nil
@@ -275,6 +304,31 @@ extension Persistence {
         }
     }
 
+    public static func deleteStoredAttachmentsIfUnreferenced(
+        for messages: [ChatMessage],
+        excludingSessionIDs: Set<UUID> = [],
+        retainedMessages: [ChatMessage] = []
+    ) {
+        let audioFileNames = Set(messages.compactMap(\.audioFileName))
+        let imageFileNames = Set(messages.flatMap { $0.imageFileNames ?? [] })
+        let fileNames = Set(messages.flatMap { $0.fileFileNames ?? [] })
+
+        guard !audioFileNames.isEmpty || !imageFileNames.isEmpty || !fileNames.isEmpty else { return }
+        let remainingMessages = retainedMessages + loadMessagesReferencingStoredAttachments(excludingSessionIDs: excludingSessionIDs)
+
+        for fileName in audioFileNames where !remainingMessages.contains(where: { $0.audioFileName == fileName }) {
+            deleteAudio(fileName: fileName)
+        }
+
+        for fileName in imageFileNames where !remainingMessages.contains(where: { $0.imageFileNames?.contains(fileName) == true }) {
+            deleteImage(fileName: fileName)
+        }
+
+        for fileName in fileNames where !remainingMessages.contains(where: { $0.fileFileNames?.contains(fileName) == true }) {
+            deleteFile(fileName: fileName)
+        }
+    }
+
     /// 删除会话相关的所有文件附件
     /// - Parameters:
     ///   - messages: 会话中的消息列表
@@ -299,6 +353,26 @@ extension Persistence {
             mediaStorageLogger.warning("Failed to list file attachments: \(error.localizedDescription)")
             return []
         }
+    }
+
+    private static func file(at url: URL, hasSameContentAs data: Data) -> Bool {
+        if let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+           let fileSize = values.fileSize,
+           fileSize != data.count {
+            return false
+        }
+        return (try? Data(contentsOf: url)) == data
+    }
+
+    private static func loadMessagesReferencingStoredAttachments(excludingSessionIDs: Set<UUID>) -> [ChatMessage] {
+        loadChatSessions()
+            .filter { !excludingSessionIDs.contains($0.id) }
+            .flatMap { loadMessages(for: $0.id) }
+            .filter {
+                $0.audioFileName != nil
+                    || ($0.imageFileNames?.isEmpty == false)
+                    || ($0.fileFileNames?.isEmpty == false)
+            }
     }
 
     /// 获取用于存储字体文件的目录URL

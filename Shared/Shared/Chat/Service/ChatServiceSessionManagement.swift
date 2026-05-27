@@ -123,16 +123,19 @@ extension ChatService {
         let deletingSessionIDs = Set(sessionsToDelete.map(\.id))
         let isClearingAllConversationRecords = !existingPermanentSessionIDs.isEmpty
             && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
+        var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
             let messages = Persistence.loadMessages(for: session.id)
-            Persistence.deleteAudioFiles(for: messages)
-            Persistence.deleteImageFiles(for: messages)
-            Persistence.deleteFileFiles(for: messages)
+            deletedSessionMessages.append(contentsOf: messages)
 
             Persistence.deleteSessionArtifacts(sessionID: session.id)
             periodicTimeLandmarkLastInjectedAtBySessionID.removeValue(forKey: session.id)
             logger.info("删除了会话的数据文件: \(session.name)")
         }
+        scheduleStoredAttachmentCleanup(
+            for: deletedSessionMessages,
+            excludingSessionIDs: deletingSessionIDs
+        )
         currentSessions.removeAll { session in sessionsToDelete.contains { $0.id == session.id } }
         var newCurrentSession = currentSessionSubject.value
         if let current = newCurrentSession, sessionsToDelete.contains(where: { $0.id == current.id }) {
@@ -187,20 +190,8 @@ extension ChatService {
                         }
                     }
                     if let originalFileNames = sourceMessages[i].fileFileNames, !originalFileNames.isEmpty {
-                        var newFileNames: [String] = []
-                        for originalFileName in originalFileNames {
-                            if let fileData = Persistence.loadFile(fileName: originalFileName) {
-                                let ext = (originalFileName as NSString).pathExtension
-                                let newFileName = ext.isEmpty ? "\(UUID().uuidString)" : "\(UUID().uuidString).\(ext)"
-                                if Persistence.saveFile(fileData, fileName: newFileName) != nil {
-                                    newFileNames.append(newFileName)
-                                    logger.info("  - 复制了文件附件: \(originalFileName) -> \(newFileName)")
-                                }
-                            }
-                        }
-                        if !newFileNames.isEmpty {
-                            sourceMessages[i].fileFileNames = newFileNames
-                        }
+                        sourceMessages[i].fileFileNames = originalFileNames
+                        logger.info("  - 复用了 \(originalFileNames.count) 个文件附件引用。")
                     }
                 }
                 persistMessages(sourceMessages, for: newSession.id)
@@ -269,20 +260,8 @@ extension ChatService {
                 }
 
                 if let originalFileNames = messagesToCopy[i].fileFileNames, !originalFileNames.isEmpty {
-                    var newFileNames: [String] = []
-                    for originalFileName in originalFileNames {
-                        if let fileData = Persistence.loadFile(fileName: originalFileName) {
-                            let ext = (originalFileName as NSString).pathExtension
-                            let newFileName = ext.isEmpty ? "\(UUID().uuidString)" : "\(UUID().uuidString).\(ext)"
-                            if Persistence.saveFile(fileData, fileName: newFileName) != nil {
-                                newFileNames.append(newFileName)
-                                logger.info("  - 复制了文件附件: \(originalFileName) -> \(newFileName)")
-                            }
-                        }
-                    }
-                    if !newFileNames.isEmpty {
-                        messagesToCopy[i].fileFileNames = newFileNames
-                    }
+                    messagesToCopy[i].fileFileNames = originalFileNames
+                    logger.info("  - 复用了 \(originalFileNames.count) 个文件附件引用。")
                 }
             }
 
@@ -306,8 +285,12 @@ extension ChatService {
         if !messages.isEmpty {
             let lastMessage = messages.removeLast()
             invalidateAttachmentCache(for: lastMessage)
-            deleteStoredAttachments(for: lastMessage)
             persistMessages(messages, for: session.id)
+            scheduleStoredAttachmentCleanup(
+                for: [lastMessage],
+                excludingSessionIDs: [session.id],
+                retainedMessages: messages
+            )
             logger.info("删除了会话的最后一条消息: \(session.name)")
             if session.id == currentSessionSubject.value?.id {
                 publishMessages(messages)
@@ -324,13 +307,18 @@ extension ChatService {
         let deletedMessageIDs = Set([targetMessage.id]).union(relatedToolMessageIDs)
         let deletedMessages = messages.filter { deletedMessageIDs.contains($0.id) }
         for deletedMessage in deletedMessages {
-            deleteStoredAttachments(for: deletedMessage)
+            invalidateAttachmentCache(for: deletedMessage)
         }
         messages.removeAll { deletedMessageIDs.contains($0.id) }
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
         publishMessages(messages)
         persistMessages(messages, for: currentSession.id)
+        scheduleStoredAttachmentCleanup(
+            for: deletedMessages,
+            excludingSessionIDs: [currentSession.id],
+            retainedMessages: messages
+        )
         logger.info("已删除消息: \(targetMessage.id.uuidString)")
     }
 
@@ -346,7 +334,7 @@ extension ChatService {
             let deletedMessages = messages.filter { $0.responseGroupID == groupID }
             guard !deletedMessages.isEmpty else { return }
             for deletedMessage in deletedMessages {
-                deleteStoredAttachments(for: deletedMessage)
+                invalidateAttachmentCache(for: deletedMessage)
             }
             messages.removeAll { $0.responseGroupID == groupID }
             if let anchorIndex = messages.firstIndex(where: { $0.id == groupID && $0.role == .user }) {
@@ -355,6 +343,11 @@ extension ChatService {
 
             publishMessages(messages)
             persistMessages(messages, for: currentSession.id)
+            scheduleStoredAttachmentCleanup(
+                for: deletedMessages,
+                excludingSessionIDs: [currentSession.id],
+                retainedMessages: messages
+            )
             logger.info("已删除回复组的所有版本: \(groupID.uuidString)")
             return
         }
@@ -448,20 +441,17 @@ extension ChatService {
         }
     }
 
-    private func deleteStoredAttachments(for message: ChatMessage) {
-        invalidateAttachmentCache(for: message)
-        if let audioFileName = message.audioFileName {
-            Persistence.deleteAudio(fileName: audioFileName)
-        }
-        if let imageFileNames = message.imageFileNames {
-            for fileName in imageFileNames {
-                Persistence.deleteImage(fileName: fileName)
-            }
-        }
-        if let fileFileNames = message.fileFileNames {
-            for fileName in fileFileNames {
-                Persistence.deleteFile(fileName: fileName)
-            }
+    private func scheduleStoredAttachmentCleanup(
+        for messages: [ChatMessage],
+        excludingSessionIDs: Set<UUID> = [],
+        retainedMessages: [ChatMessage] = []
+    ) {
+        Task.detached(priority: .utility) {
+            Persistence.deleteStoredAttachmentsIfUnreferenced(
+                for: messages,
+                excludingSessionIDs: excludingSessionIDs,
+                retainedMessages: retainedMessages
+            )
         }
     }
 

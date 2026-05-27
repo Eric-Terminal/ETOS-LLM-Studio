@@ -130,6 +130,61 @@ extension ChatServiceTests {
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
+    @Test("同名同内容文件附件会复用实体文件名")
+    func testSameNamedIdenticalFileAttachmentReusesStoredFile() async throws {
+        await cleanup()
+        let firstSession = createPermanentTestSession(name: "附件复用一")
+        defer { chatService.deleteSessions([firstSession]) }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "已收到")
+        let fileName = "shared-note-\(UUID().uuidString).txt"
+        let attachment = FileAttachment(
+            data: Data("同一份附件".utf8),
+            mimeType: "text/plain",
+            fileName: fileName
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "第一轮",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            fileAttachments: [attachment],
+            includeSystemTime: false
+        )
+
+        let secondSession = createPermanentTestSession(name: "附件复用二")
+        defer { chatService.deleteSessions([secondSession]) }
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "已收到")
+
+        await chatService.sendAndProcessMessage(
+            content: "第二轮",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            fileAttachments: [attachment],
+            includeSystemTime: false
+        )
+
+        let firstFileName = try #require(Persistence.loadMessages(for: firstSession.id).first { $0.fileFileNames?.isEmpty == false }?.fileFileNames?.first)
+        let secondFileName = try #require(Persistence.loadMessages(for: secondSession.id).first { $0.fileFileNames?.isEmpty == false }?.fileFileNames?.first)
+        #expect(firstFileName == fileName)
+        #expect(secondFileName == fileName)
+        #expect(Persistence.getAllFileNames().filter { $0 == fileName }.count == 1)
+    }
+
     @Test("混合发送时文本与附件会拆成独立用户消息")
     func testMixedContentCreatesIndependentUserMessages() async throws {
         await cleanup()
