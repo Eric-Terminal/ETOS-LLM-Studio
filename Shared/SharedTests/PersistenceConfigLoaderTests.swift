@@ -202,6 +202,33 @@ extension PersistenceTests {
         #expect(loadedProvider?.models.map(\.modelName) == ["chat-model"])
     }
 
+    @Test("Provider SQLite 保存失败时不会写入旧版 JSON")
+    func testSaveProviderDoesNotFallbackToLegacyJSONWhenSQLiteFails() throws {
+        let duplicateModelID = UUID()
+        let provider = Provider(
+            id: UUID(),
+            name: "Invalid Duplicate Model Provider",
+            baseURL: "https://invalid.example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(id: duplicateModelID, modelName: "duplicate-a", isActivated: true),
+                Model(id: duplicateModelID, modelName: "duplicate-b", isActivated: true)
+            ]
+        )
+        let fileURL = providerFileURL(for: provider.id)
+        try? FileManager.default.removeItem(at: fileURL)
+        defer {
+            ConfigLoader.deleteProvider(provider)
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        ConfigLoader.saveProvider(provider)
+
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        #expect(ConfigLoader.loadProviders().first { $0.id == provider.id } == nil)
+    }
+
     @Test("旧 SQLite 模型没有能力记录时保留默认聊天能力")
     func testLegacySQLiteModelWithoutCapabilityRowsKeepsChatDefaults() throws {
         let providerID = UUID()

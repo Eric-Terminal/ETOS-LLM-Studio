@@ -308,15 +308,12 @@ extension ConfigLoader {
             providers.append(persistedProvider)
         }
 
-        if saveProvidersToSQLite(providers) {
-            cleanupLegacyProviderFiles()
-            logger.info("已保存提供商 \(persistedProvider.name) 到 SQLite。")
-        } else {
-            let fileURL = providersDirectory.appendingPathComponent("\(persistedProvider.id.uuidString).json")
-            logger.info("正在回退保存提供商 \(persistedProvider.name) 到 \(fileURL.path)")
-            persistProviderToFileOnly(persistedProvider)
-            logger.info("  - 回退保存成功。")
+        guard saveProvidersToSQLite(providers) else {
+            logger.error("保存提供商 \(persistedProvider.name) 到 SQLite 失败，已取消旧版 JSON 回退。")
+            return
         }
+        cleanupLegacyProviderFiles()
+        logger.info("已保存提供商 \(persistedProvider.name) 到 SQLite。")
 
         let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
         let action = previousProvider == nil
@@ -354,14 +351,12 @@ extension ConfigLoader {
         var providers = loadProviders()
         providers.removeAll { $0.id == provider.id }
 
-        if saveProvidersToSQLite(providers) {
-            cleanupLegacyProviderFiles()
-            logger.info("已从 SQLite 删除提供商 \(provider.name)。")
-        } else {
-            let fileURL = providersDirectory.appendingPathComponent("\(provider.id.uuidString).json")
-            logger.info("正在删除提供商 \(provider.name) 的配置文件: \(fileURL.path)")
-            removeFileIfExists(at: fileURL)
+        guard saveProvidersToSQLite(providers) else {
+            logger.error("从 SQLite 删除提供商 \(provider.name) 失败，已取消旧版 JSON 回退。")
+            return
         }
+        cleanupLegacyProviderFiles()
+        logger.info("已从 SQLite 删除提供商 \(provider.name)。")
         _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
         logger.info("  - 删除成功。")
         let payload: [String: String] = [
