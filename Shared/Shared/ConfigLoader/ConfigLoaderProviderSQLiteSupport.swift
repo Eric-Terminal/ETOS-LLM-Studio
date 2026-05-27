@@ -32,7 +32,7 @@ extension ConfigLoader {
     @discardableResult
     static func saveProvidersToSQLite(_ providers: [Provider]) -> Bool {
         let didSave = Persistence.withConfigDatabaseWrite { db in
-            try RelationalProviderRecord.deleteAll(db)
+            try clearProviderRelationalTables(db)
 
             let now = Date().timeIntervalSince1970
             for provider in providers {
@@ -124,6 +124,15 @@ extension ConfigLoader {
             removeLegacyProviderBlobs()
         }
         return didSave
+    }
+
+    static func clearProviderRelationalTables(_ db: Database) throws {
+        try db.execute(sql: "DELETE FROM provider_model_override_parameters")
+        try db.execute(sql: "DELETE FROM provider_model_capabilities")
+        try db.execute(sql: "DELETE FROM provider_models")
+        try db.execute(sql: "DELETE FROM provider_header_overrides")
+        try db.execute(sql: "DELETE FROM provider_api_keys")
+        try db.execute(sql: "DELETE FROM providers")
     }
 
     static func loadLegacyProvidersFromBlob() -> [Provider]? {

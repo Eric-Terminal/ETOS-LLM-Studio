@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import GRDB
 @testable import Shared
 
 extension PersistenceTests {
@@ -164,6 +165,41 @@ extension PersistenceTests {
         #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
         #expect(!Persistence.auxiliaryBlobExists(forKey: "providers"))
+    }
+
+    @Test("更新提供商 API 地址时会覆盖 SQLite 旧快照")
+    func testSaveProviderUpdatesBaseURLWithStaleChildRows() throws {
+        var provider = Provider(
+            id: UUID(),
+            name: "URL Update Provider",
+            baseURL: "https://old.example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "chat-model", isActivated: true)]
+        )
+
+        ConfigLoader.saveProvider(provider)
+        defer { ConfigLoader.deleteProvider(provider) }
+
+        let configDatabaseURL = Persistence.auxiliaryStoreDatabaseURL(for: .config)
+        let queue = try DatabaseQueue(
+            path: configDatabaseURL.path,
+            configuration: Persistence.makeDatabaseConfiguration(qos: .userInitiated, mmapSize: 67_108_864)
+        )
+        let preparedStaleRows = try queue.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA foreign_keys=OFF")
+            try db.execute(sql: "DELETE FROM providers WHERE id = ?", arguments: [provider.id.uuidString])
+            try db.execute(sql: "PRAGMA foreign_keys=ON")
+            return true
+        }
+        #expect(preparedStaleRows)
+
+        provider.baseURL = "https://new.example.com/v1"
+        ConfigLoader.saveProvider(provider)
+
+        let loadedProvider = ConfigLoader.loadProviders().first { $0.id == provider.id }
+        #expect(loadedProvider?.baseURL == "https://new.example.com/v1")
+        #expect(loadedProvider?.models.map(\.modelName) == ["chat-model"])
     }
 
     @Test("旧 SQLite 模型没有能力记录时保留默认聊天能力")
