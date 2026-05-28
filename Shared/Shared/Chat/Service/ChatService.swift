@@ -489,6 +489,7 @@ public class ChatService {
             launchState?.initialMessages ?? []
         )
         self.reconcileStoredModelOrder()
+        self.reconcileStoredProviderOrder()
         self.currentSessionSubject
             .sink { [weak self] session in
                 self?.persistLastActiveSessionIDIfNeeded(session)

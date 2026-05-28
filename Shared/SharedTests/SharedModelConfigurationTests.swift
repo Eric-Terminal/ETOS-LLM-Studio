@@ -233,6 +233,53 @@ struct ModelOrderIndexTests {
     }
 }
 
+@Suite("Provider Order Tests")
+struct ProviderOrderTests {
+    @Test("提供商排序会保留用户顺序并追加新增提供商")
+    func providerOrderKeepsStoredThenAppendsNew() {
+        let rows = [
+            makeProviderRow(id: "provider-b", name: "Beta"),
+            makeProviderRow(id: "provider-a", name: "Alpha"),
+            makeProviderRow(id: "provider-c", name: "Gamma")
+        ]
+
+        let orderedRows = ConfigLoader.applyStoredProviderOrder(
+            to: rows,
+            storedIDs: ["provider-c", "removed", "provider-a", "provider-c"]
+        )
+
+        #expect(orderedRows.map(\.id) == ["provider-c", "provider-a", "provider-b"])
+    }
+
+    @Test("没有用户顺序时提供商按名称稳定排序")
+    func providerOrderFallsBackToNameSort() {
+        let rows = [
+            makeProviderRow(id: "provider-b", name: "Beta"),
+            makeProviderRow(id: "provider-a", name: "Alpha")
+        ]
+
+        let orderedRows = ConfigLoader.applyStoredProviderOrder(to: rows, storedIDs: [])
+
+        #expect(orderedRows.map(\.id) == ["provider-a", "provider-b"])
+    }
+
+    private func makeProviderRow(id: String, name: String) -> ConfigLoader.RelationalProviderRecord {
+        ConfigLoader.RelationalProviderRecord(
+            id: id,
+            name: name,
+            baseURL: "https://example.com",
+            apiFormat: "openai-compatible",
+            proxyIsEnabled: nil,
+            proxyType: nil,
+            proxyHost: nil,
+            proxyPort: nil,
+            proxyUsername: nil,
+            proxyPassword: nil,
+            updatedAt: 0
+        )
+    }
+}
+
 @Suite("Request Body Override Mode Tests")
 struct RequestBodyOverrideModeTests {
     @Test("原始 JSON 对象可解析为覆盖参数")

@@ -53,7 +53,7 @@ private struct WatchProviderManagementContentView: View {
 
     var body: some View {
         List {
-            ForEach(viewModel.providers) { provider in
+            ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
                 NavigationLink {
                     ProviderActionsView(provider: provider)
                         .environmentObject(viewModel)
@@ -96,6 +96,14 @@ private struct WatchProviderManagementContentView: View {
 
     private func deleteProvider(_ provider: Provider) {
         ChatService.shared.deleteProvider(provider)
+    }
+
+    private var providersBinding: Binding<[Provider]> {
+        Binding {
+            viewModel.providers
+        } set: { orderedProviders in
+            ChatService.shared.setProviderOrder(orderedProviders.map(\.id))
+        }
     }
 }
 

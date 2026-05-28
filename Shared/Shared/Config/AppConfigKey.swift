@@ -95,6 +95,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncBackupS3SessionToken = "sync.backup.s3.sessionToken"
     case syncBackupCreateOnLaunch = "sync.backup.createOnLaunch"
     case modelOrderRunnableModels = "modelOrder.runnableModels"
+    case providerOrderIDs = "providerOrder.ids"
     case selectedRunnableModelID = "selectedRunnableModelID"
     case lastActiveSessionID = "launch.lastActiveSessionID"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
@@ -237,7 +238,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("")
         case .syncBackupS3Region:
             return .text("auto")
-        case .modelOrderRunnableModels:
+        case .modelOrderRunnableModels,
+             .providerOrderIDs:
             return .text("[]")
         case .selectedRunnableModelID,
              .lastActiveSessionID:

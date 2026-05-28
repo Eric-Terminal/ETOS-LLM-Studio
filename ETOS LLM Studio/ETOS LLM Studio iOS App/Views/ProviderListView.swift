@@ -136,7 +136,7 @@ private struct ProviderManagementContentView: View {
     var body: some View {
         List {
             Section {
-                ForEach(viewModel.providers) { provider in
+                ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
                     NavigationLink {
                         ProviderConfigurationTabsView(provider: provider)
                             .environmentObject(viewModel)
@@ -175,6 +175,14 @@ private struct ProviderManagementContentView: View {
             } else {
                 Text(NSLocalizedString("此操作无法撤销。", comment: ""))
             }
+        }
+    }
+
+    private var providersBinding: Binding<[Provider]> {
+        Binding {
+            viewModel.providers
+        } set: { orderedProviders in
+            ChatService.shared.setProviderOrder(orderedProviders.map(\.id))
         }
     }
 }

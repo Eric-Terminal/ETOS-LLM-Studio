@@ -21,6 +21,7 @@ extension ConfigLoader {
                     if saveProvidersToSQLite(legacyResult.providers) {
                         cleanupLegacyProviderFiles()
                     }
+                    reconcileStoredProviderOrder(currentIDs: legacyResult.providers.map { $0.id.uuidString })
                     logger.info("从旧版 JSON 导入 \(legacyResult.providers.count) 个提供商到 SQLite。")
                     return legacyResult.providers
                 }
@@ -54,6 +55,7 @@ extension ConfigLoader {
             cleanupLegacyProviderFiles()
             logger.info("提供商配置已迁移到 SQLite。")
         }
+        reconcileStoredProviderOrder(currentIDs: legacyResult.providers.map { $0.id.uuidString })
 
         logger.info("总共加载了 \(legacyResult.providers.count) 个提供商。")
         return legacyResult.providers

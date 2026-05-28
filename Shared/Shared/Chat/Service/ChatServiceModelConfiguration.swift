@@ -103,12 +103,43 @@ extension ChatService {
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
     }
 
+    func reconcileStoredProviderOrder() {
+        let currentIDs = providers.map { $0.id.uuidString }
+        let storedIDs = AppConfigStore.stringArrayValue(
+            for: .providerOrderIDs,
+            defaultValue: []
+        ) ?? []
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
+        guard mergedIDs != storedIDs else { return }
+        AppConfigStore.persistStringArray(mergedIDs, for: .providerOrderIDs)
+    }
+
     public func setConfiguredModelOrder(_ orderedModelIDs: [String], notifyChange: Bool = true) {
         let currentIDs = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
         let mergedIDs = ModelOrderIndex.merge(storedIDs: orderedModelIDs, currentIDs: currentIDs)
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
+        if notifyChange {
+            providersSubject.send(providers)
+        }
+    }
+
+    public func setProviderOrder(_ orderedProviderIDs: [UUID], notifyChange: Bool = true) {
+        let currentIDs = providers.map { $0.id.uuidString }
+        let requestedIDs = orderedProviderIDs.map(\.uuidString)
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: requestedIDs, currentIDs: currentIDs)
+        AppConfigStore.persistStringArray(mergedIDs, for: .providerOrderIDs)
+
+        let rankByID = Dictionary(uniqueKeysWithValues: mergedIDs.enumerated().map { ($1, $0) })
+        providers.sort { lhs, rhs in
+            let lhsRank = rankByID[lhs.id.uuidString] ?? Int.max
+            let rhsRank = rankByID[rhs.id.uuidString] ?? Int.max
+            if lhsRank == rhsRank {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhsRank < rhsRank
+        }
         if notifyChange {
             providersSubject.send(providers)
         }
@@ -122,6 +153,8 @@ extension ChatService {
     }
 
     public func reloadAppConfigBackedModelState() {
+        providers = ConfigLoader.loadProviders()
+        reconcileStoredProviderOrder()
         reconcileStoredModelOrder()
         providersSubject.send(providers)
         let selectedID = AppConfigStore.textValue(
@@ -141,6 +174,7 @@ extension ChatService {
         let currentSelectedID = selectedModelSubject.value?.id
 
         self.providers = ConfigLoader.loadProviders()
+        self.reconcileStoredProviderOrder()
         self.reconcileStoredModelOrder()
 
         let allRunnable = activatedConversationModels

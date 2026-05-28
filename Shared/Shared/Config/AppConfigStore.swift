@@ -695,6 +695,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncBackupS3SessionToken: return .text(syncBackupS3SessionToken)
         case .syncBackupCreateOnLaunch: return .bool(syncBackupCreateOnLaunch)
         case .modelOrderRunnableModels,
+             .providerOrderIDs,
              .selectedRunnableModelID,
              .lastActiveSessionID,
              .appToolsChatToolsEnabled,
@@ -931,6 +932,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncBackupS3SecretAccessKey: syncBackupS3SecretAccessKey = value
         case .syncBackupS3SessionToken: syncBackupS3SessionToken = value
         case .modelOrderRunnableModels,
+             .providerOrderIDs,
              .selectedRunnableModelID,
              .lastActiveSessionID,
              .appToolsEnabledToolIDs,

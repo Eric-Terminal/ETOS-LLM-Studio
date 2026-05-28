@@ -238,6 +238,7 @@ extension SyncEngine {
             ShortcutToolManager.shared.reloadAppConfigBackedState()
         }
         if changedKeys.contains(AppConfigKey.modelOrderRunnableModels.rawValue)
+            || changedKeys.contains(AppConfigKey.providerOrderIDs.rawValue)
             || changedKeys.contains(AppConfigKey.selectedRunnableModelID.rawValue) {
             ChatService.shared.reloadAppConfigBackedModelState()
         }

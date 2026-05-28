@@ -11,8 +11,9 @@ import GRDB
 
 extension ConfigLoader {
     static func loadProvidersFromSQLite() -> [Provider]? {
+        let storedProviderOrderIDs = AppConfigStore.stringArrayValue(for: .providerOrderIDs, defaultValue: []) ?? []
         guard let providers = Persistence.withConfigDatabaseRead({ db in
-            try loadProvidersFromRelationalStore(db)
+            try loadProvidersFromRelationalStore(db, storedProviderOrderIDs: storedProviderOrderIDs)
         }) else {
             return nil
         }
@@ -23,9 +24,11 @@ extension ConfigLoader {
             if saveProvidersToSQLite(legacyProviders) {
                 removeLegacyProviderBlobs()
             }
+            reconcileStoredProviderOrder(currentIDs: legacyProviders.map { $0.id.uuidString })
             return legacyProviders
         }
 
+        reconcileStoredProviderOrder(currentIDs: providers.map { $0.id.uuidString })
         return providers
     }
 
@@ -151,16 +154,14 @@ extension ConfigLoader {
         }
     }
 
-    static func loadProvidersFromRelationalStore(_ db: Database) throws -> [Provider] {
-        let providerRows = try RelationalProviderRecord.fetchAll(db)
-            .sorted { lhs, rhs in
-                let lhsName = lhs.name.lowercased()
-                let rhsName = rhs.name.lowercased()
-                if lhsName == rhsName {
-                    return lhs.id < rhs.id
-                }
-                return lhsName < rhsName
-            }
+    static func loadProvidersFromRelationalStore(
+        _ db: Database,
+        storedProviderOrderIDs: [String] = []
+    ) throws -> [Provider] {
+        let providerRows = applyStoredProviderOrder(
+            to: try RelationalProviderRecord.fetchAll(db),
+            storedIDs: storedProviderOrderIDs
+        )
 
         var providers: [Provider] = []
         providers.reserveCapacity(providerRows.count)
@@ -283,5 +284,39 @@ extension ConfigLoader {
         }
 
         return providers
+    }
+
+    static func applyStoredProviderOrder(
+        to rows: [RelationalProviderRecord],
+        storedIDs: [String]
+    ) -> [RelationalProviderRecord] {
+        guard !rows.isEmpty else { return [] }
+        let fallbackRows = rows.sorted { lhs, rhs in
+            let lhsName = lhs.name.lowercased()
+            let rhsName = rhs.name.lowercased()
+            if lhsName == rhsName {
+                return lhs.id < rhs.id
+            }
+            return lhsName < rhsName
+        }
+        let currentIDs = fallbackRows.map(\.id)
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
+        let rankByID = Dictionary(uniqueKeysWithValues: mergedIDs.enumerated().map { ($1, $0) })
+
+        return fallbackRows.sorted { lhs, rhs in
+            let lhsRank = rankByID[lhs.id] ?? Int.max
+            let rhsRank = rankByID[rhs.id] ?? Int.max
+            if lhsRank == rhsRank {
+                return lhs.id < rhs.id
+            }
+            return lhsRank < rhsRank
+        }
+    }
+
+    static func reconcileStoredProviderOrder(currentIDs: [String]) {
+        let storedIDs = AppConfigStore.stringArrayValue(for: .providerOrderIDs, defaultValue: []) ?? []
+        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
+        guard mergedIDs != storedIDs else { return }
+        AppConfigStore.persistStringArray(mergedIDs, for: .providerOrderIDs)
     }
 }
