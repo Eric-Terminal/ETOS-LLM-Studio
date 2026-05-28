@@ -24,6 +24,9 @@ struct ProviderEditView: View {
     let dismissAfterSave: Bool
     let showsCancelButton: Bool
     let navigationTitleOverride: String?
+    let saveRequest: Int
+    let showsToolbarSaveButton: Bool
+    let onSaveAvailabilityChange: (Bool) -> Void
     let onSave: (Provider) -> Void
     
     init(
@@ -32,6 +35,9 @@ struct ProviderEditView: View {
         dismissAfterSave: Bool = true,
         showsCancelButton: Bool = true,
         navigationTitleOverride: String? = nil,
+        saveRequest: Int = 0,
+        showsToolbarSaveButton: Bool = true,
+        onSaveAvailabilityChange: @escaping (Bool) -> Void = { _ in },
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         _provider = State(initialValue: provider)
@@ -46,6 +52,9 @@ struct ProviderEditView: View {
         self.dismissAfterSave = dismissAfterSave
         self.showsCancelButton = showsCancelButton
         self.navigationTitleOverride = navigationTitleOverride
+        self.saveRequest = saveRequest
+        self.showsToolbarSaveButton = showsToolbarSaveButton
+        self.onSaveAvailabilityChange = onSaveAvailabilityChange
         self.onSave = onSave
     }
     
@@ -152,17 +161,6 @@ struct ProviderEditView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if showsInlineSaveButton {
-                Section {
-                    Button {
-                        saveProvider()
-                    } label: {
-                        Label(NSLocalizedString("保存", comment: ""), systemImage: "checkmark")
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
-                    .disabled(isSaveDisabled)
-                }
-            }
         }
         .navigationTitle(navigationTitle)
         .toolbar {
@@ -171,12 +169,25 @@ struct ProviderEditView: View {
                     Button(NSLocalizedString("取消", comment: "")) { dismiss() }
                 }
             }
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("保存", comment: "")) {
-                    saveProvider()
+            if showsToolbarSaveButton {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(NSLocalizedString("保存", comment: "")) {
+                        saveProvider()
+                    }
+                    .disabled(isSaveDisabled)
                 }
-                .disabled(isSaveDisabled)
             }
+        }
+        .onAppear(perform: notifySaveAvailability)
+        .onChange(of: saveRequest) { _, _ in
+            guard !isSaveDisabled else {
+                notifySaveAvailability()
+                return
+            }
+            saveProvider()
+        }
+        .onChange(of: isSaveDisabled) { _, _ in
+            notifySaveAvailability()
         }
     }
     
@@ -190,6 +201,7 @@ struct ProviderEditView: View {
         ChatService.shared.reloadProviders()
         provider = updated
         onSave(updated)
+        notifySaveAvailability()
         if dismissAfterSave {
             dismiss()
         }
@@ -197,10 +209,6 @@ struct ProviderEditView: View {
 
     private var navigationTitle: String {
         navigationTitleOverride ?? (isNew ? NSLocalizedString("添加提供商", comment: "") : NSLocalizedString("编辑提供商", comment: ""))
-    }
-
-    private var showsInlineSaveButton: Bool {
-        !dismissAfterSave || !showsCancelButton
     }
 
     private var apiBaseURLHint: String {
@@ -266,6 +274,10 @@ struct ProviderEditView: View {
         parsedApiKeys.isEmpty ||
         providerProxyValidationError != nil ||
         headerOverrideEntries.contains { $0.error != nil }
+    }
+
+    private func notifySaveAvailability() {
+        onSaveAvailabilityChange(!isSaveDisabled)
     }
 
     private func normalizedProxyConfiguration(_ configuration: NetworkProxyConfiguration) -> NetworkProxyConfiguration {

@@ -186,6 +186,8 @@ private struct ProviderConfigurationTabsView: View {
     @State private var providerRevision = 0
     @State private var addModelRequest = 0
     @State private var fetchModelsRequest = 0
+    @State private var saveProviderRequest = 0
+    @State private var canSaveProviderConfiguration = false
     @State private var isShowingModelTest = false
 
     init(provider: Provider) {
@@ -214,7 +216,10 @@ private struct ProviderConfigurationTabsView: View {
                 isNew: false,
                 dismissAfterSave: false,
                 showsCancelButton: false,
-                navigationTitleOverride: NSLocalizedString("提供商配置", comment: "")
+                navigationTitleOverride: NSLocalizedString("提供商配置", comment: ""),
+                saveRequest: saveProviderRequest,
+                showsToolbarSaveButton: false,
+                onSaveAvailabilityChange: { canSaveProviderConfiguration = $0 }
             ) { updatedProvider in
                 updateProvider(updatedProvider)
             }
@@ -251,6 +256,13 @@ private struct ProviderConfigurationTabsView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
+                }
+            } else {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(NSLocalizedString("保存", comment: "")) {
+                        saveProviderRequest += 1
+                    }
+                    .disabled(!canSaveProviderConfiguration)
                 }
             }
         }
