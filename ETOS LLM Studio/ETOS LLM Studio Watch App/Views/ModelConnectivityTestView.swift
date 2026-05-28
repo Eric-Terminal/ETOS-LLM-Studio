@@ -10,7 +10,6 @@ import SwiftUI
 import Shared
 
 struct ModelConnectivityTestView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ModelConnectivityTestViewModel
     private let providerName: String
     private let numberFormatter: NumberFormatter = {
@@ -70,16 +69,6 @@ struct ModelConnectivityTestView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    viewModel.cancel()
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .accessibilityLabel(NSLocalizedString("关闭", comment: "Close button"))
-            }
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
                     viewModel.start()
                 } label: {
                     if viewModel.isRunning {
@@ -95,6 +84,9 @@ struct ModelConnectivityTestView: View {
         .task {
             guard viewModel.completedCount == 0 else { return }
             viewModel.start()
+        }
+        .onDisappear {
+            viewModel.cancel()
         }
     }
 
@@ -185,7 +177,7 @@ struct SingleModelConnectivityTestView: View {
         }
         .navigationTitle(NSLocalizedString("模型测试", comment: "Model connectivity test title"))
         .toolbar {
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     viewModel.start()
                 } label: {
