@@ -65,6 +65,7 @@ playground.xcworkspace
 *.log
 logs/
 node_modules/
+.vite/
 
 # Runtime data
 pids
