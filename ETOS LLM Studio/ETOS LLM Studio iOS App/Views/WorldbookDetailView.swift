@@ -218,7 +218,6 @@ struct WorldbookDetailView: View {
     }
 
     private func persistPendingBasicInfo() {
-        guard worldbook != nil else { return }
         let trimmedName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         let trimmedDescription = descriptionDraft.trimmingCharacters(in: .whitespacesAndNewlines).normalizedPlainQuotes()
         updateWorldbook { book in
