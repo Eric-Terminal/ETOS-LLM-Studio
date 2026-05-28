@@ -25,6 +25,11 @@ extension ContentView {
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
         }
+        .sheet(isPresented: $isSessionListPresented) {
+            NavigationStack {
+                sessionListView
+            }
+        }
         .sheet(item: $viewModel.activeSheet) { item in
             sheetView(for: item)
         }

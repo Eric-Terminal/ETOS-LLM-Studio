@@ -71,9 +71,6 @@ struct ContentView: View {
 
             NavigationStack {
                 legacyChatRootView
-                    .navigationDestination(isPresented: $isSessionListPresented) {
-                        sessionListView
-                    }
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
