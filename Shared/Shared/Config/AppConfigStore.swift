@@ -79,16 +79,17 @@ private actor AppConfigPersistenceWorker {
         AppConfigStore.loadPersistentSnapshotFromDatabase(includeLocalOnly: includeLocalOnly)
     }
 
-    func write(key rawKey: String, value: AppConfigValue) {
+    @discardableResult
+    func write(key rawKey: String, value: AppConfigValue) -> Bool {
         switch value {
         case .bool(let value):
-            Persistence.writeAppConfig(key: rawKey, integer: value ? 1 : 0, typeHint: "bool")
+            return Persistence.writeAppConfig(key: rawKey, integer: value ? 1 : 0, typeHint: "bool")
         case .integer(let value):
-            Persistence.writeAppConfig(key: rawKey, integer: value, typeHint: "integer")
+            return Persistence.writeAppConfig(key: rawKey, integer: value, typeHint: "integer")
         case .real(let value):
-            Persistence.writeAppConfig(key: rawKey, real: value, typeHint: "real")
+            return Persistence.writeAppConfig(key: rawKey, real: value, typeHint: "real")
         case .text(let value):
-            Persistence.writeAppConfig(key: rawKey, text: value, typeHint: "text")
+            return Persistence.writeAppConfig(key: rawKey, text: value, typeHint: "text")
         }
     }
 }
@@ -99,7 +100,7 @@ public final class AppConfigStore: ObservableObject {
     public nonisolated static let persistentStoreDidLoadNotification = Notification.Name("com.ETOS.appConfig.persistentStoreDidLoad")
 
     private nonisolated static let migrationFlagKey = "appConfig.migratedFromUserDefaults.v1"
-    private nonisolated static let chatComposerDraftWriteDebounceNanoseconds: UInt64 = 350_000_000
+    private nonisolated static let chatComposerDraftWriteDebounceNanoseconds: UInt64 = 1_000_000_000
     private nonisolated static let snapshotCache = AppConfigSnapshotCache(
         values: Dictionary(uniqueKeysWithValues: AppConfigKey.allCases.map { key in
             (key.rawValue, key.defaultValue.anyValue)
@@ -109,6 +110,7 @@ public final class AppConfigStore: ObservableObject {
     private var isReloadingFromPersistentStore = false
     private var pendingWriteTasks: [UUID: Task<Void, Never>] = [:]
     private var pendingChatComposerDraftWriteID: UUID?
+    private var persistedChatComposerDraftValue: AppConfigValue = .text("")
     @Published public private(set) var didLoadPersistentStore = false
     private var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
     private nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
@@ -355,7 +357,9 @@ public final class AppConfigStore: ObservableObject {
         watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
         chatPickerPresentationStyle = Self.textValue(.chatPickerPresentationStyle, userDefaults: userDefaults)
-        chatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
+        let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
+        chatComposerDraft = initialChatComposerDraft
+        persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
         restoreLastSessionOnLaunch = Self.boolValue(.restoreLastSessionOnLaunch, userDefaults: userDefaults)
         providerDetailGroupByMainstream = Self.boolValue(.providerDetailGroupByMainstream, userDefaults: userDefaults)
         backgroundCropTarget = Self.textValue(.backgroundCropTarget, userDefaults: userDefaults)
@@ -583,15 +587,15 @@ public final class AppConfigStore: ObservableObject {
     }
 
     private func flushPendingChatComposerDraftWriteIfNeeded() async {
-        guard let writeID = pendingChatComposerDraftWriteID else { return }
-        let task = pendingWriteTasks[writeID]
-        task?.cancel()
-        pendingWriteTasks[writeID] = nil
-        pendingChatComposerDraftWriteID = nil
+        let task = cancelPendingChatComposerDraftWrite()
         await task?.value
 
         let normalizedValue = Self.normalizedAppConfigValue(.text(chatComposerDraft), for: .chatComposerDraft)
-        await AppConfigPersistenceWorker.shared.write(key: AppConfigKey.chatComposerDraft.rawValue, value: normalizedValue)
+        guard shouldPersistChatComposerDraft(normalizedValue) else { return }
+        let didWrite = await AppConfigPersistenceWorker.shared.write(key: AppConfigKey.chatComposerDraft.rawValue, value: normalizedValue)
+        if didWrite {
+            markChatComposerDraftPersisted(normalizedValue)
+        }
     }
 
     public func reloadFromPersistentStore() {
@@ -632,6 +636,7 @@ public final class AppConfigStore: ObservableObject {
         }
 
         Self.snapshotCache.merge(acceptedSnapshot)
+        markChatComposerDraftPersisted(from: acceptedSnapshot)
         isReloadingFromPersistentStore = true
         defer {
             isReloadingFromPersistentStore = false
@@ -995,27 +1000,38 @@ public final class AppConfigStore: ObservableObject {
             locallyChangedKeysBeforePersistentLoad.insert(key)
         }
 
+        if key == .chatComposerDraft {
+            cancelPendingChatComposerDraftWrite()
+            guard shouldPersistChatComposerDraft(normalizedValue) else { return }
+        }
+
         let rawKey = key.rawValue
         let writeID = UUID()
         let task: Task<Void, Never>
         if key == .chatComposerDraft {
-            if let pendingChatComposerDraftWriteID {
-                pendingWriteTasks[pendingChatComposerDraftWriteID]?.cancel()
-                pendingWriteTasks[pendingChatComposerDraftWriteID] = nil
-            }
             pendingChatComposerDraftWriteID = writeID
-            task = Task(priority: .utility) {
+            task = Task(priority: .utility) { [weak self] in
                 do {
                     try await Task.sleep(nanoseconds: Self.chatComposerDraftWriteDebounceNanoseconds)
                 } catch {
                     return
                 }
                 guard !Task.isCancelled else { return }
-                let shouldWrite = await MainActor.run { [weak self] in
-                    self?.pendingChatComposerDraftWriteID == writeID
+                let shouldWrite = await MainActor.run {
+                    guard let self,
+                          self.pendingChatComposerDraftWriteID == writeID,
+                          self.shouldPersistChatComposerDraft(normalizedValue) else {
+                        return false
+                    }
+                    return true
                 }
                 guard shouldWrite else { return }
-                await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+                let didWrite = await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+                if didWrite {
+                    await MainActor.run {
+                        self?.markChatComposerDraftPersisted(normalizedValue)
+                    }
+                }
             }
         } else {
             task = Task(priority: .utility) {
@@ -1041,6 +1057,32 @@ public final class AppConfigStore: ObservableObject {
             WatchSyncManager.shared.performQuickSync(key: rawKey, value: normalizedValue.anyValue)
         }
         #endif
+    }
+
+    @discardableResult
+    private func cancelPendingChatComposerDraftWrite() -> Task<Void, Never>? {
+        guard let writeID = pendingChatComposerDraftWriteID else { return nil }
+        let task = pendingWriteTasks[writeID]
+        task?.cancel()
+        pendingWriteTasks[writeID] = nil
+        pendingChatComposerDraftWriteID = nil
+        return task
+    }
+
+    private func shouldPersistChatComposerDraft(_ value: AppConfigValue) -> Bool {
+        persistedChatComposerDraftValue != value
+    }
+
+    private func markChatComposerDraftPersisted(_ value: AppConfigValue) {
+        persistedChatComposerDraftValue = value
+    }
+
+    private func markChatComposerDraftPersisted(from snapshot: [String: Any]) {
+        guard let value = snapshot[AppConfigKey.chatComposerDraft.rawValue],
+              let configValue = Self.appConfigValue(from: value, for: .chatComposerDraft) else {
+            return
+        }
+        persistedChatComposerDraftValue = configValue
     }
 
     private static func initialValues(userDefaults: UserDefaults) -> [AppConfigKey: AppConfigValue] {

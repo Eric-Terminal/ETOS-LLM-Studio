@@ -36,7 +36,9 @@ extension Binding where Value == String {
             get: { wrappedValue.watchKeyboardEscapedNewlines() },
             set: { newValue in
                 let unescaped = newValue.watchKeyboardUnescapedNewlines()
-                wrappedValue = normalizeSmartQuotes ? unescaped.normalizedPlainQuotes() : unescaped
+                let normalized = normalizeSmartQuotes ? unescaped.normalizedPlainQuotes() : unescaped
+                guard normalized != wrappedValue else { return }
+                wrappedValue = normalized
             }
         )
     }
