@@ -347,6 +347,7 @@ extension ConfigLoader {
             message: String(format: NSLocalizedString("提供商配置已保存：%@", comment: "App log message"), persistedProvider.name),
             payload: payload
         )
+        NotificationCenter.default.post(name: .providerConfigurationDidChange, object: nil)
     }
 
     public static func deleteProvider(_ provider: Provider) {
@@ -379,6 +380,7 @@ extension ConfigLoader {
             message: String(format: NSLocalizedString("提供商配置已删除：%@", comment: "App log message"), provider.name),
             payload: payload
         )
+        NotificationCenter.default.post(name: .providerConfigurationDidChange, object: nil)
     }
 
     static func changedFieldsForProviderUpdate(old: Provider?, new: Provider) -> [String] {

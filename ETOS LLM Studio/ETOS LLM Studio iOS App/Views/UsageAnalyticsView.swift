@@ -81,6 +81,7 @@ struct UsageAnalyticsView: View {
 
                     HStack(spacing: 10) {
                         overviewMetricCapsule("总 Token", value: "\(card.totalTokens)")
+                        overviewMetricCapsule("费用", value: costSummaryText(card.costSummary))
                         overviewMetricCapsule("错误", value: "\(card.errorCount)")
                         overviewMetricCapsule("常用模型", value: card.topModelName, allowsMarquee: true)
                     }
@@ -337,6 +338,7 @@ struct UsageAnalyticsView: View {
                     detailMetric("错误", value: "\(viewModel.state.detail.failedCount)")
                     detailMetric("取消", value: "\(viewModel.state.detail.cancelledCount)")
                     detailMetric("总 Token", value: "\(viewModel.state.detail.tokenTotals.totalTokens)")
+                    detailMetric("费用", value: costSummaryText(viewModel.state.detail.costSummary))
                     detailMetric("输入", value: "\(viewModel.state.detail.tokenTotals.sentTokens)")
                     detailMetric("输出", value: "\(viewModel.state.detail.tokenTotals.receivedTokens)")
                     detailMetric(NSLocalizedString("思考", comment: "Thinking tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.thinkingTokens)")
@@ -423,6 +425,9 @@ struct UsageAnalyticsView: View {
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
                             if showsTokenDetails {
+                                Text(String(format: NSLocalizedString("费用 %@", comment: "Usage rank estimated cost"), costSummaryText(item.costSummary)))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
                                 Text(
                                     String(
                                         format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
@@ -506,6 +511,9 @@ struct UsageAnalyticsView: View {
                 Text(percentageText(series.tokenShare))
                     .etFont(.subheadline.monospaced().weight(.semibold))
                 Text(String(format: NSLocalizedString("%@ Token", comment: "Usage analytics token count"), formattedNumber(series.totalTokens)))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(costSummaryText(series.costSummary))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -704,6 +712,15 @@ struct UsageAnalyticsView: View {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    private func costSummaryText(_ summary: UsageAnalyticsCostSummary) -> String {
+        guard !summary.totals.isEmpty else {
+            return NSLocalizedString("暂无", comment: "No usage analytics metric value")
+        }
+        return summary.totals
+            .map { MessageCostFormatter.formatTotal($0.totalCost, currencySymbol: $0.currencySymbol) }
+            .joined(separator: " + ")
     }
 
     private func legendHeatColor(level: Int) -> Color {

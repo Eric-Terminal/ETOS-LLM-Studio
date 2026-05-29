@@ -3510,8 +3510,6 @@
 "已填写 %d 项" = "%d items filled";
 "已填写 %d 项，%d 个阶梯" = "%d items filled, %d tiers";
 "基础价格" = "Base Prices";
-"价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。" = "Prices are per 1M tokens. Leave blank to exclude that token type from cost estimates.";
-"单位为每 1M tokens，留空表示不参与估算。" = "Per 1M tokens. Leave blank to exclude from estimates.";
 "货币符号" = "Currency Symbol";
 "输入价格" = "Input Price";
 "输出价格" = "Output Price";
@@ -3535,6 +3533,8 @@
 "起始 Tokens" = "Starting Tokens";
 "留空时继承基础价格。" = "Leave blank to inherit base prices.";
 "费用" = "Cost";
+"费用 %@" = "Cost %@";
+"Token %@ · 费用 %@" = "%@ tokens · Cost %@";
 "%@%@ / 1M tokens" = "%@%@ / 1M tokens";
 "估算费用" = "Estimated Cost";
 "阶梯依据" = "Tier Basis";

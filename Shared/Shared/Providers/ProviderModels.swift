@@ -25,6 +25,10 @@ public struct ModelListResponse: Decodable {
     public let data: [ModelData]
 }
 
+public extension Notification.Name {
+    static let providerConfigurationDidChange = Notification.Name("com.ETOS.providerConfiguration.didChange")
+}
+
 public enum NetworkProxyType: String, Codable, Hashable, CaseIterable, Sendable {
     case http
     case socks5

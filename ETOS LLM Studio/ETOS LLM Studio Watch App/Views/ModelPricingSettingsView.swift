@@ -14,10 +14,7 @@ struct ModelPricingSettingsView: View {
 
     var body: some View {
         List {
-            Section(
-                header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section")),
-                footer: Text(NSLocalizedString("单位为每 1M tokens，留空表示不参与估算。", comment: "Watch model pricing unit hint"))
-            ) {
+            Section(header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section"))) {
                 TextField(NSLocalizedString("货币符号", comment: "Currency symbol field"), text: $draft.currencySymbol.watchKeyboardNewlineBinding())
                 ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $draft.inputPrice)
                 ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $draft.outputPrice)

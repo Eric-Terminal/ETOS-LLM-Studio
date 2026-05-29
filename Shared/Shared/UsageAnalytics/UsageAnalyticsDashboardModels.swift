@@ -34,6 +34,7 @@ public struct UsageAnalyticsOverviewCard: Identifiable, Hashable, Sendable {
     public var title: String
     public var requestCount: Int
     public var totalTokens: Int
+    public var costSummary: UsageAnalyticsCostSummary
     public var errorCount: Int
     public var topModelName: String
 
@@ -42,6 +43,7 @@ public struct UsageAnalyticsOverviewCard: Identifiable, Hashable, Sendable {
         title: String,
         requestCount: Int,
         totalTokens: Int,
+        costSummary: UsageAnalyticsCostSummary = .init(),
         errorCount: Int,
         topModelName: String
     ) {
@@ -49,8 +51,49 @@ public struct UsageAnalyticsOverviewCard: Identifiable, Hashable, Sendable {
         self.title = title
         self.requestCount = requestCount
         self.totalTokens = totalTokens
+        self.costSummary = costSummary
         self.errorCount = errorCount
         self.topModelName = topModelName
+    }
+}
+
+public struct UsageAnalyticsCurrencyCost: Identifiable, Hashable, Sendable {
+    public var id: String { currencySymbol }
+    public var currencySymbol: String
+    public var totalCost: Double
+
+    public init(currencySymbol: String, totalCost: Double) {
+        let trimmedCurrency = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.currencySymbol = trimmedCurrency.isEmpty ? ModelPricing.defaultCurrencySymbol : trimmedCurrency
+        self.totalCost = max(0, totalCost)
+    }
+}
+
+public struct UsageAnalyticsCostSummary: Hashable, Sendable {
+    public var totals: [UsageAnalyticsCurrencyCost]
+
+    public init(totals: [UsageAnalyticsCurrencyCost] = []) {
+        let grouped = totals.reduce(into: [String: Double]()) { partial, item in
+            guard item.totalCost > 0 else { return }
+            let currency = item.currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
+            partial[currency.isEmpty ? ModelPricing.defaultCurrencySymbol : currency, default: 0] += item.totalCost
+        }
+        self.totals = grouped
+            .map { UsageAnalyticsCurrencyCost(currencySymbol: $0.key, totalCost: $0.value) }
+            .sorted { lhs, rhs in
+                if lhs.totalCost == rhs.totalCost {
+                    return lhs.currencySymbol < rhs.currencySymbol
+                }
+                return lhs.totalCost > rhs.totalCost
+            }
+    }
+
+    public var isEmpty: Bool {
+        totals.isEmpty
+    }
+
+    public func merging(_ other: UsageAnalyticsCostSummary) -> UsageAnalyticsCostSummary {
+        UsageAnalyticsCostSummary(totals: totals + other.totals)
     }
 }
 
@@ -102,6 +145,7 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
     public var subtitle: String
     public var requestCount: Int
     public var totalTokens: Int
+    public var costSummary: UsageAnalyticsCostSummary
     public var errorCount: Int
     public var tokenTotals: RequestLogTokenTotals
     public var cacheHitRate: Double?
@@ -113,6 +157,7 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
         subtitle: String = "",
         requestCount: Int,
         totalTokens: Int,
+        costSummary: UsageAnalyticsCostSummary = .init(),
         errorCount: Int,
         tokenTotals: RequestLogTokenTotals? = nil,
         cacheHitRate: Double? = nil,
@@ -129,6 +174,7 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
         self.subtitle = subtitle
         self.requestCount = requestCount
         self.totalTokens = max(resolvedTokenTotals.totalTokens, totalTokens, inferredTotalTokens)
+        self.costSummary = costSummary
         self.errorCount = errorCount
         self.tokenTotals = resolvedTokenTotals
         self.cacheHitRate = cacheHitRate ?? UsageAnalyticsCacheMetrics.hitRate(for: resolvedTokenTotals)
@@ -190,6 +236,7 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
     public var failedCount: Int
     public var cancelledCount: Int
     public var tokenTotals: RequestLogTokenTotals
+    public var costSummary: UsageAnalyticsCostSummary
     public var topModels: [UsageAnalyticsRankItem]
     public var sourceBreakdown: [UsageAnalyticsRankItem]
     public var cacheHitRate: Double?
@@ -203,6 +250,7 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         failedCount: Int = 0,
         cancelledCount: Int = 0,
         tokenTotals: RequestLogTokenTotals = .init(),
+        costSummary: UsageAnalyticsCostSummary = .init(),
         topModels: [UsageAnalyticsRankItem] = [],
         sourceBreakdown: [UsageAnalyticsRankItem] = [],
         cacheHitRate: Double? = nil,
@@ -215,6 +263,7 @@ public struct UsageAnalyticsDetailSnapshot: Hashable, Sendable {
         self.failedCount = failedCount
         self.cancelledCount = cancelledCount
         self.tokenTotals = tokenTotals
+        self.costSummary = costSummary
         self.topModels = topModels
         self.sourceBreakdown = sourceBreakdown
         self.cacheHitRate = cacheHitRate
@@ -263,6 +312,7 @@ public struct UsageAnalyticsModelTokenSeries: Identifiable, Hashable, Sendable {
     public var title: String
     public var subtitle: String
     public var totalTokens: Int
+    public var costSummary: UsageAnalyticsCostSummary
     public var tokenShare: Double
     public var points: [UsageAnalyticsModelTokenTrendPoint]
 
@@ -271,6 +321,7 @@ public struct UsageAnalyticsModelTokenSeries: Identifiable, Hashable, Sendable {
         title: String,
         subtitle: String,
         totalTokens: Int,
+        costSummary: UsageAnalyticsCostSummary = .init(),
         tokenShare: Double,
         points: [UsageAnalyticsModelTokenTrendPoint]
     ) {
@@ -278,6 +329,7 @@ public struct UsageAnalyticsModelTokenSeries: Identifiable, Hashable, Sendable {
         self.title = title
         self.subtitle = subtitle
         self.totalTokens = totalTokens
+        self.costSummary = costSummary
         self.tokenShare = max(0, min(tokenShare, 1))
         self.points = points
     }

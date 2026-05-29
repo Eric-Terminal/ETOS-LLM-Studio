@@ -125,6 +125,9 @@ struct UsageAnalyticsView: View {
                         Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), card.totalTokens, card.errorCount))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
+                        Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costSummaryText(card.costSummary)))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
                         HStack(spacing: 3) {
                             Text(String(format: NSLocalizedString("常用模型：%@", comment: ""), ""))
                                 .etFont(.caption2)
@@ -181,6 +184,9 @@ struct UsageAnalyticsView: View {
                                     .etFont(.caption2.monospaced())
                                     .foregroundStyle(.secondary)
                             }
+                            Text(String(format: NSLocalizedString("Token %@ · 费用 %@", comment: "Watch model token and cost"), formattedNumber(series.totalTokens), costSummaryText(series.costSummary)))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     } else {
                         Text(NSLocalizedString("当前范围内还没有 Token 趋势数据。", comment: "Usage analytics empty token trend"))
@@ -200,6 +206,9 @@ struct UsageAnalyticsView: View {
                     Text(String(format: NSLocalizedString("请求 %d · 成功 %d · 错误 %d", comment: ""), viewModel.state.detail.requestCount, viewModel.state.detail.successCount, viewModel.state.detail.failedCount))
                         .etFont(.caption2)
                     Text(String(format: NSLocalizedString("Token %d · 取消 %d", comment: ""), viewModel.state.detail.tokenTotals.totalTokens, viewModel.state.detail.cancelledCount))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costSummaryText(viewModel.state.detail.costSummary)))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     Text(String(
@@ -226,6 +235,7 @@ struct UsageAnalyticsView: View {
                             showsTokenDetails: true,
                             titleAllowsMarquee: true,
                             tokenShareText: percentageText(model.tokenShare),
+                            costSummaryText: costSummaryText(model.costSummary),
                             cacheHitRateText: cacheHitRateText(model.cacheHitRate)
                         )
                     }
@@ -426,6 +436,15 @@ struct UsageAnalyticsView: View {
         return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
+    private func costSummaryText(_ summary: UsageAnalyticsCostSummary) -> String {
+        guard !summary.totals.isEmpty else {
+            return NSLocalizedString("暂无", comment: "No usage analytics metric value")
+        }
+        return summary.totals
+            .map { MessageCostFormatter.formatTotal($0.totalCost, currencySymbol: $0.currencySymbol) }
+            .joined(separator: " + ")
+    }
+
     private var trendModelColors: [Color] {
         [.accentColor, .green, .orange]
     }
@@ -596,6 +615,7 @@ private struct WatchUsageAnalyticsRankRow: View {
     let showsTokenDetails: Bool
     let titleAllowsMarquee: Bool
     let tokenShareText: String
+    var costSummaryText: String? = nil
     let cacheHitRateText: String
 
     var body: some View {
@@ -628,6 +648,12 @@ private struct WatchUsageAnalyticsRankRow: View {
                 .foregroundStyle(.secondary)
 
             if showsTokenDetails {
+                if let costSummaryText {
+                    Text(String(format: NSLocalizedString("费用 %@", comment: "Usage rank estimated cost"), costSummaryText))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
                 Text(
                     String(
                         format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),

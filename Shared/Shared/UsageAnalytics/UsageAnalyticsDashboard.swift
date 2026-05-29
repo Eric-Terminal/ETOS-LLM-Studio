@@ -80,6 +80,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     private func bindNotifications() {
         notificationCenter.publisher(for: .usageAnalyticsStoreDidChange)
             .merge(with: notificationCenter.publisher(for: .syncUsageStatsUpdated))
+            .merge(with: notificationCenter.publisher(for: .providerConfigurationDidChange))
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.refresh()
@@ -119,6 +120,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         await Task.detached(priority: .userInitiated) {
             let dailyTotals = Persistence.loadUsageDailyTotals()
             let dailyModelTotals = Persistence.loadUsageDailyModelTotals()
+            let providers = ConfigLoader.loadProviders()
             let effectiveSelectedDayKey = resolvedSelectedDayKey(
                 selectedDayKey,
                 dailyTotals: dailyTotals,
@@ -134,6 +136,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 selectedScope: selectedScope,
                 selectedDayKey: selectedDayKey,
                 displayedMonthAnchor: displayedMonthAnchor,
+                providers: providers,
                 calendar: calendar
             )
         }.value
@@ -146,10 +149,12 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         selectedScope: UsageAnalyticsDetailScope,
         selectedDayKey: String,
         displayedMonthAnchor: Date,
+        providers: [Provider],
         calendar: Calendar
     ) -> UsageAnalyticsDashboardState {
         let totalsByDayKey = Dictionary(uniqueKeysWithValues: dailyTotals.map { ($0.dayKey, $0) })
         let modelTotalsByDayKey = Dictionary(grouping: dailyModelTotals, by: \.dayKey)
+        let pricingByModelKey = makePricingLookup(from: providers)
         let today = Date()
         let effectiveSelectedDayKey = resolvedSelectedDayKey(
             selectedDayKey,
@@ -163,6 +168,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             referenceDate: today,
             dailyTotals: dailyTotals,
             dailyModelTotals: dailyModelTotals,
+            pricingByModelKey: pricingByModelKey,
             calendar: calendar
         )
         let heatmapWeeks = makeHeatmapWeeks(
@@ -183,6 +189,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             dailyTotals: dailyTotals,
             selectedDayEvents: selectedDayEvents,
             modelTotalsByDayKey: modelTotalsByDayKey,
+            pricingByModelKey: pricingByModelKey,
             calendar: calendar
         )
 
@@ -204,6 +211,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         referenceDate: Date,
         dailyTotals: [UsageDailyTotal],
         dailyModelTotals: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing],
         calendar: Calendar
     ) -> [UsageAnalyticsOverviewCard] {
         let todayStart = calendar.startOfDay(for: referenceDate)
@@ -213,10 +221,10 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         let monthKeys = Set(rollingDayKeys(endingAt: referenceDate, dayCount: 30, calendar: calendar))
 
         return [
-            makeOverviewCard(scope: .day, title: NSLocalizedString("今日", comment: "Usage overview card title"), dayKeys: dayKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
-            makeOverviewCard(scope: .week, title: NSLocalizedString("近 7 天", comment: "Usage overview card title"), dayKeys: weekKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
-            makeOverviewCard(scope: .month, title: NSLocalizedString("近 30 天", comment: "Usage overview card title"), dayKeys: monthKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals),
-            makeOverviewCard(scope: .allTime, title: NSLocalizedString("全部", comment: "Usage overview card title"), dayKeys: nil, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals)
+            makeOverviewCard(scope: .day, title: NSLocalizedString("今日", comment: "Usage overview card title"), dayKeys: dayKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, pricingByModelKey: pricingByModelKey),
+            makeOverviewCard(scope: .week, title: NSLocalizedString("近 7 天", comment: "Usage overview card title"), dayKeys: weekKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, pricingByModelKey: pricingByModelKey),
+            makeOverviewCard(scope: .month, title: NSLocalizedString("近 30 天", comment: "Usage overview card title"), dayKeys: monthKeys, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, pricingByModelKey: pricingByModelKey),
+            makeOverviewCard(scope: .allTime, title: NSLocalizedString("全部", comment: "Usage overview card title"), dayKeys: nil, dailyTotals: dailyTotals, dailyModelTotals: dailyModelTotals, pricingByModelKey: pricingByModelKey)
         ]
     }
 
@@ -225,20 +233,23 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         title: String,
         dayKeys: Set<String>?,
         dailyTotals: [UsageDailyTotal],
-        dailyModelTotals: [UsageDailyModelTotal]
+        dailyModelTotals: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing]
     ) -> UsageAnalyticsOverviewCard {
         let scopedTotals = dayKeys.map { keys in dailyTotals.filter { keys.contains($0.dayKey) } } ?? dailyTotals
         let scopedModels = dayKeys.map { keys in dailyModelTotals.filter { keys.contains($0.dayKey) } } ?? dailyModelTotals
         let requestCount = scopedTotals.reduce(0) { $0 + $1.requestCount }
         let totalTokens = scopedTotals.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
+        let costSummary = costSummary(for: scopedModels, pricingByModelKey: pricingByModelKey)
         let errorCount = scopedTotals.reduce(0) { $0 + $1.failedCount }
-        let topModelName = aggregateModels(scopedModels).first?.title ?? NSLocalizedString("暂无", comment: "Usage analytics no top model")
+        let topModelName = aggregateModels(scopedModels, pricingByModelKey: pricingByModelKey).first?.title ?? NSLocalizedString("暂无", comment: "Usage analytics no top model")
 
         return UsageAnalyticsOverviewCard(
             scope: scope,
             title: title,
             requestCount: requestCount,
             totalTokens: totalTokens,
+            costSummary: costSummary,
             errorCount: errorCount,
             topModelName: topModelName
         )
@@ -339,6 +350,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         dailyTotals: [UsageDailyTotal],
         selectedDayEvents: [UsageAnalyticsEvent],
         modelTotalsByDayKey: [String: [UsageDailyModelTotal]],
+        pricingByModelKey: [String: ModelPricing],
         calendar: Calendar
     ) -> UsageAnalyticsDetailSnapshot {
         let anchorDate = UsageAnalyticsRuntimeContext.date(for: selectedDayKey, calendar: calendar) ?? Date()
@@ -389,15 +401,17 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             failedCount: failedCount,
             cancelledCount: cancelledCount,
             tokenTotals: tokenTotals,
-            topModels: aggregateModels(scopedModels),
-            sourceBreakdown: aggregateSources(scopedModels),
+            costSummary: costSummary(for: scopedModels, pricingByModelKey: pricingByModelKey),
+            topModels: aggregateModels(scopedModels, pricingByModelKey: pricingByModelKey),
+            sourceBreakdown: aggregateSources(scopedModels, pricingByModelKey: pricingByModelKey),
             cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: scopedModels) ?? UsageAnalyticsCacheMetrics.hitRate(for: tokenTotals),
             tokenTrend: selectedScope == .day
-                ? makeHourlyTokenTrend(events: selectedDayEvents, anchorDate: anchorDate, calendar: calendar)
+                ? makeHourlyTokenTrend(events: selectedDayEvents, anchorDate: anchorDate, pricingByModelKey: pricingByModelKey, calendar: calendar)
                 : makeDailyTokenTrend(
                     orderedDayKeys: orderedDayKeys,
                     totalsByDayKey: totalsByDayKey,
                     scopedModels: scopedModels,
+                    pricingByModelKey: pricingByModelKey,
                     calendar: calendar
                 )
         )
@@ -451,6 +465,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         orderedDayKeys: [String],
         totalsByDayKey: [String: UsageDailyTotal],
         scopedModels: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing],
         calendar: Calendar
     ) -> UsageAnalyticsTokenTrendSnapshot {
         let dailyPoints = orderedDayKeys.compactMap { dayKey -> UsageAnalyticsTokenTrendPoint? in
@@ -472,6 +487,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             var providerName: String
             var modelID: String
             var totalTokens: Int
+            var costSummary: UsageAnalyticsCostSummary
             var tokensByDayKey: [String: Int]
         }
 
@@ -482,10 +498,12 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 providerName: item.providerName,
                 modelID: item.modelID,
                 totalTokens: 0,
+                costSummary: .init(),
                 tokensByDayKey: [:]
             )
             let itemTokens = inferredTotalTokens(item.tokenTotals)
             bucket.totalTokens += itemTokens
+            bucket.costSummary = bucket.costSummary.merging(costSummary(for: item, pricingByModelKey: pricingByModelKey))
             bucket.tokensByDayKey[item.dayKey, default: 0] += itemTokens
             buckets[key] = bucket
         }
@@ -505,6 +523,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     title: bucket.modelID,
                     subtitle: bucket.providerName,
                     totalTokens: bucket.totalTokens,
+                    costSummary: bucket.costSummary,
                     tokenShare: share,
                     points: points
                 )
@@ -531,6 +550,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     private nonisolated static func makeHourlyTokenTrend(
         events: [UsageAnalyticsEvent],
         anchorDate: Date,
+        pricingByModelKey: [String: ModelPricing],
         calendar: Calendar
     ) -> UsageAnalyticsTokenTrendSnapshot {
         let dayStart = calendar.startOfDay(for: anchorDate)
@@ -544,6 +564,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             var providerName: String
             var modelID: String
             var totalTokens: Int
+            var costSummary: UsageAnalyticsCostSummary
             var tokensByHourKey: [String: Int]
         }
 
@@ -563,9 +584,11 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 providerName: event.providerName,
                 modelID: event.modelID,
                 totalTokens: 0,
+                costSummary: .init(),
                 tokensByHourKey: [:]
             )
             bucket.totalTokens += eventTokens
+            bucket.costSummary = bucket.costSummary.merging(costSummary(for: event, pricingByModelKey: pricingByModelKey))
             bucket.tokensByHourKey[hourKey, default: 0] += eventTokens
             buckets[modelKey] = bucket
         }
@@ -597,6 +620,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     title: bucket.modelID,
                     subtitle: bucket.providerName,
                     totalTokens: bucket.totalTokens,
+                    costSummary: bucket.costSummary,
                     tokenShare: share,
                     points: points
                 )
@@ -620,13 +644,17 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         )
     }
 
-    private nonisolated static func aggregateModels(_ items: [UsageDailyModelTotal]) -> [UsageAnalyticsRankItem] {
+    private nonisolated static func aggregateModels(
+        _ items: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing]
+    ) -> [UsageAnalyticsRankItem] {
         struct Bucket {
             var providerName: String
             var modelID: String
             var requestCount: Int
             var errorCount: Int
             var tokenTotals: RequestLogTokenTotals
+            var costSummary: UsageAnalyticsCostSummary
             var items: [UsageDailyModelTotal]
         }
 
@@ -639,11 +667,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 requestCount: 0,
                 errorCount: 0,
                 tokenTotals: .init(),
+                costSummary: .init(),
                 items: []
             )
             bucket.requestCount += item.requestCount
             bucket.errorCount += item.failedCount
             mergeTokenTotals(item.tokenTotals, into: &bucket.tokenTotals)
+            bucket.costSummary = bucket.costSummary.merging(costSummary(for: item, pricingByModelKey: pricingByModelKey))
             bucket.items.append(item)
             buckets[key] = bucket
         }
@@ -660,6 +690,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     subtitle: value.providerName,
                     requestCount: value.requestCount,
                     totalTokens: bucketTotalTokens,
+                    costSummary: value.costSummary,
                     errorCount: value.errorCount,
                     tokenTotals: value.tokenTotals,
                     cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(
@@ -673,12 +704,16 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             .sorted(by: rankComparator)
     }
 
-    private nonisolated static func aggregateSources(_ items: [UsageDailyModelTotal]) -> [UsageAnalyticsRankItem] {
+    private nonisolated static func aggregateSources(
+        _ items: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing]
+    ) -> [UsageAnalyticsRankItem] {
         struct Bucket {
             var source: UsageRequestSource
             var requestCount: Int
             var errorCount: Int
             var tokenTotals: RequestLogTokenTotals
+            var costSummary: UsageAnalyticsCostSummary
             var items: [UsageDailyModelTotal]
         }
 
@@ -689,11 +724,13 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 requestCount: 0,
                 errorCount: 0,
                 tokenTotals: .init(),
+                costSummary: .init(),
                 items: []
             )
             bucket.requestCount += item.requestCount
             bucket.errorCount += item.failedCount
             mergeTokenTotals(item.tokenTotals, into: &bucket.tokenTotals)
+            bucket.costSummary = bucket.costSummary.merging(costSummary(for: item, pricingByModelKey: pricingByModelKey))
             bucket.items.append(item)
             buckets[item.requestSource] = bucket
         }
@@ -710,6 +747,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                     subtitle: "",
                     requestCount: $0.requestCount,
                     totalTokens: bucketTotalTokens,
+                    costSummary: $0.costSummary,
                     errorCount: $0.errorCount,
                     tokenTotals: $0.tokenTotals,
                     cacheHitRate: UsageAnalyticsCacheMetrics.hitRate(for: $0.items),
@@ -728,6 +766,72 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         target.totalTokens += source.totalTokens
     }
 
+    private nonisolated static func makePricingLookup(from providers: [Provider]) -> [String: ModelPricing] {
+        var lookup: [String: ModelPricing] = [:]
+        for provider in providers {
+            for model in provider.models {
+                guard let pricing = model.pricing?.normalized, !pricing.isEffectivelyEmpty else { continue }
+                lookup[modelKey(providerName: provider.name, modelID: model.modelName)] = pricing
+            }
+        }
+        return lookup
+    }
+
+    private nonisolated static func costSummary(
+        for items: [UsageDailyModelTotal],
+        pricingByModelKey: [String: ModelPricing]
+    ) -> UsageAnalyticsCostSummary {
+        UsageAnalyticsCostSummary(totals: items.flatMap {
+            costSummary(for: $0, pricingByModelKey: pricingByModelKey).totals
+        })
+    }
+
+    private nonisolated static func costSummary(
+        for item: UsageDailyModelTotal,
+        pricingByModelKey: [String: ModelPricing]
+    ) -> UsageAnalyticsCostSummary {
+        costSummary(
+            providerName: item.providerName,
+            modelID: item.modelID,
+            tokenTotals: item.tokenTotals,
+            pricingByModelKey: pricingByModelKey
+        )
+    }
+
+    private nonisolated static func costSummary(
+        for event: UsageAnalyticsEvent,
+        pricingByModelKey: [String: ModelPricing]
+    ) -> UsageAnalyticsCostSummary {
+        costSummary(
+            providerName: event.providerName,
+            modelID: event.modelID,
+            tokenTotals: tokenTotals(for: event.tokenUsage),
+            pricingByModelKey: pricingByModelKey
+        )
+    }
+
+    private nonisolated static func costSummary(
+        providerName: String,
+        modelID: String,
+        tokenTotals: RequestLogTokenTotals,
+        pricingByModelKey: [String: ModelPricing]
+    ) -> UsageAnalyticsCostSummary {
+        guard let pricing = pricingByModelKey[modelKey(providerName: providerName, modelID: modelID)],
+              let estimate = ModelCostCalculator.estimateCost(
+                usage: tokenUsage(for: tokenTotals),
+                pricing: pricing,
+                isEstimatedFromCurrentPricing: true
+              ) else {
+            return .init()
+        }
+        return UsageAnalyticsCostSummary(totals: [
+            UsageAnalyticsCurrencyCost(
+                currencySymbol: estimate.currencySymbol,
+                totalCost: estimate.totalCost
+            )
+        ])
+    }
+
     private nonisolated static func tokenTotals(for usage: MessageTokenUsage?) -> RequestLogTokenTotals {
         guard let usage else { return .init() }
         return RequestLogTokenTotals(
@@ -738,6 +842,22 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             cacheReadTokens: usage.cacheReadTokens ?? 0,
             totalTokens: usage.totalTokens ?? 0
         )
+    }
+
+    private nonisolated static func tokenUsage(for totals: RequestLogTokenTotals) -> MessageTokenUsage? {
+        let usage = MessageTokenUsage(
+            promptTokens: totals.sentTokens > 0 ? totals.sentTokens : nil,
+            completionTokens: totals.receivedTokens > 0 ? totals.receivedTokens : nil,
+            totalTokens: totals.totalTokens > 0 ? totals.totalTokens : nil,
+            thinkingTokens: totals.thinkingTokens > 0 ? totals.thinkingTokens : nil,
+            cacheWriteTokens: totals.cacheWriteTokens > 0 ? totals.cacheWriteTokens : nil,
+            cacheReadTokens: totals.cacheReadTokens > 0 ? totals.cacheReadTokens : nil
+        )
+        return usage.hasAnyData ? usage : nil
+    }
+
+    private nonisolated static func modelKey(providerName: String, modelID: String) -> String {
+        "\(providerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(modelID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 
     private nonisolated static func inferredTotalTokens(_ totals: RequestLogTokenTotals) -> Int {

@@ -16,10 +16,7 @@ struct ModelPricingSettingsView: View {
 
     var body: some View {
         Form {
-            Section(
-                header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section")),
-                footer: Text(NSLocalizedString("价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。", comment: "Model pricing unit hint"))
-            ) {
+            Section(header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section"))) {
                 TextField(NSLocalizedString("货币符号", comment: "Currency symbol field"), text: $draft.currencySymbol)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

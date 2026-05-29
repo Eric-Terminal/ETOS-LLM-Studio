@@ -181,6 +181,81 @@ struct UsageAnalyticsSyncTests {
         #expect(totals.first?.tokenTotals.totalTokens == 32)
     }
 
+    @Test("用量统计仪表盘会按模型价格汇总费用")
+    @MainActor
+    func dashboardSummarizesModelCosts() async throws {
+        let originalBundles = Persistence.loadUsageStatsDayBundles()
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            Persistence.clearUsageAnalyticsData()
+            _ = Persistence.mergeUsageStatsDayBundles(originalBundles)
+            resetProviders(to: originalProviders)
+        }
+
+        Persistence.clearUsageAnalyticsData()
+        resetProviders(to: [])
+
+        let providerID = UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
+        let providerName = "Cost Provider"
+        let modelID = "priced-model"
+        ConfigLoader.saveProvider(
+            Provider(
+                id: providerID,
+                name: providerName,
+                baseURL: "https://cost.example.com",
+                apiKeys: [],
+                apiFormat: "openai-compatible",
+                models: [
+                    Model(
+                        modelName: modelID,
+                        pricing: ModelPricing(
+                            currencySymbol: "¥",
+                            inputPerMillionTokens: 1,
+                            outputPerMillionTokens: 2,
+                            cacheWritePerMillionTokens: 3,
+                            cacheReadPerMillionTokens: 0.5
+                        )
+                    )
+                ]
+            )
+        )
+
+        let now = Date()
+        Persistence.appendUsageAnalyticsEvent(
+            makeEvent(
+                eventID: UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff")!,
+                requestSource: .chat,
+                sessionID: nil,
+                providerID: providerID,
+                providerName: providerName,
+                modelID: modelID,
+                requestedAt: now,
+                status: .success,
+                tokenUsage: .init(
+                    promptTokens: 1_000,
+                    completionTokens: 2_000,
+                    totalTokens: 3_500,
+                    cacheWriteTokens: 300,
+                    cacheReadTokens: 200
+                )
+            )
+        )
+
+        let viewModel = UsageAnalyticsDashboardViewModel(calendar: UsageAnalyticsRuntimeContext.calendar())
+        try await waitForDashboard(viewModel) { !$0.state.isLoading }
+
+        let expectedCost = 0.001 + 0.004 + 0.0009 + 0.0001
+        let overviewCost = try #require(viewModel.state.activeOverviewCard?.costSummary.totals.first)
+        #expect(overviewCost.currencySymbol == "¥")
+        #expect(abs(overviewCost.totalCost - expectedCost) < 0.000001)
+
+        let detailCost = try #require(viewModel.state.detail.costSummary.totals.first)
+        #expect(abs(detailCost.totalCost - expectedCost) < 0.000001)
+
+        let modelCost = try #require(viewModel.state.detail.topModels.first?.costSummary.totals.first)
+        #expect(abs(modelCost.totalCost - expectedCost) < 0.000001)
+    }
+
     private func makeEvent(
         eventID: UUID,
         requestSource: UsageRequestSource,
@@ -207,5 +282,30 @@ struct UsageAnalyticsSyncTests {
             originDeviceID: "tests",
             originPlatform: "unit"
         )
+    }
+
+    private func resetProviders(to providers: [Provider]) {
+        for provider in ConfigLoader.loadProviders() {
+            ConfigLoader.deleteProvider(provider)
+        }
+        for provider in providers {
+            ConfigLoader.saveProvider(provider)
+        }
+    }
+
+    @MainActor
+    private func waitForDashboard(
+        _ viewModel: UsageAnalyticsDashboardViewModel,
+        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        condition: @escaping @MainActor @Sendable (UsageAnalyticsDashboardViewModel) -> Bool
+    ) async throws {
+        let start = DispatchTime.now().uptimeNanoseconds
+        while !condition(viewModel) {
+            if DispatchTime.now().uptimeNanoseconds - start > timeoutNanoseconds {
+                Issue.record("等待用量统计仪表盘刷新超时")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
     }
 }
