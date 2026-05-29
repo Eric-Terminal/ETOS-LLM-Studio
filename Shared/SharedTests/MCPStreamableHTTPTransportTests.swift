@@ -86,6 +86,70 @@ struct MCPStreamableHTTPTransportTests {
         }
     }
 
+    @Test("首次请求优先使用 POST，不会先探测 GET SSE")
+    func testInitialRequestStartsWithPost() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["Content-Type": "application/json", "MCP-Session-Id": "session-initial-post-1"],
+            body: Data(#"{"jsonrpc":"2.0","id":"init-post-1","result":{"ok":true}}"#.utf8),
+            expectedMethod: "POST"
+        )
+
+        let transport = makeTransport()
+        _ = try await transport.sendMessage(
+            makeRequestPayload(id: "init-post-1", method: "initialize", paramsJSON: #"{}"#)
+        )
+
+        let requests = StreamableTransportURLProtocol.requests()
+        #expect(requests.first?.httpMethod == "POST")
+        #expect(!requests.contains { $0.httpMethod == "GET" })
+        transport.disconnect()
+    }
+
+    @Test("初始化通知后再建立 GET SSE，并携带已获得的 session")
+    func testInitializedNotificationStartsSSEAfterSession() async throws {
+        StreamableTransportURLProtocol.reset()
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 200,
+            headers: ["Content-Type": "application/json", "MCP-Session-Id": "session-after-init-1"],
+            body: Data(#"{"jsonrpc":"2.0","id":"init-session-1","result":{"ok":true}}"#.utf8),
+            expectedMethod: "POST"
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 202,
+            headers: [:],
+            body: Data(),
+            expectedMethod: "POST"
+        )
+        StreamableTransportURLProtocol.enqueue(
+            statusCode: 405,
+            headers: [:],
+            body: Data("method not allowed".utf8),
+            expectedMethod: "GET"
+        )
+
+        let transport = makeTransport()
+        _ = try await transport.sendMessage(
+            makeRequestPayload(id: "init-session-1", method: "initialize", paramsJSON: #"{}"#)
+        )
+        try await transport.sendNotification(makeNotificationPayload(method: "notifications/initialized"))
+
+        let didSendGet = await waitUntil {
+            StreamableTransportURLProtocol.requests().contains { $0.httpMethod == "GET" }
+        }
+        #expect(didSendGet)
+
+        let requests = StreamableTransportURLProtocol.requests()
+        #expect(requests.first?.httpMethod == "POST")
+        if let getRequest = requests.first(where: { $0.httpMethod == "GET" }) {
+            #expect(getRequest.value(forHTTPHeaderField: "MCP-Session-Id") == "session-after-init-1")
+        } else {
+            Issue.record("初始化通知后未捕获到 GET 请求。")
+        }
+        transport.disconnect()
+    }
+
     @Test("updateResumptionToken 后 GET SSE 请求会携带 Last-Event-ID")
     func testUpdateResumptionTokenAppliedToSSEProbe() async throws {
         StreamableTransportURLProtocol.reset()
@@ -331,16 +395,18 @@ struct MCPStreamableHTTPTransportTests {
     func testDynamicHeadersProviderAppliesAuthorization() async throws {
         StreamableTransportURLProtocol.reset()
         StreamableTransportURLProtocol.enqueue(
-            statusCode: 405,
+            statusCode: 202,
             headers: [:],
-            body: Data("method not allowed".utf8),
-            expectedMethod: "GET"
+            body: Data(),
+            expectedMethod: "POST"
         )
         StreamableTransportURLProtocol.enqueue(
             statusCode: 200,
-            headers: [:],
-            body: Data(#"{"jsonrpc":"2.0","id":"auth-1","result":{"status":"ok"}}"#.utf8),
-            expectedMethod: "POST"
+            headers: ["Content-Type": "text/event-stream"],
+            body: makeInlineSSEData(
+                json: #"{"jsonrpc":"2.0","id":"auth-1","result":{"status":"ok"}}"#
+            ),
+            expectedMethod: "GET"
         )
 
         let tokenProvider = TokenHeaderProvider()

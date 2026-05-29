@@ -218,7 +218,7 @@ public extension MCPServerConfiguration {
             let sdkTransport = HTTPClientTransport(
                 endpoint: endpoint,
                 configuration: configuration,
-                streaming: true,
+                streaming: false,
                 protocolVersion: MCPProtocolVersion.current,
                 requestModifier: modifier
             )
@@ -266,7 +266,7 @@ public extension MCPServerConfiguration {
             let sdkTransport = HTTPClientTransport(
                 endpoint: endpoint,
                 configuration: configuration,
-                streaming: true,
+                streaming: false,
                 protocolVersion: MCPProtocolVersion.current,
                 authorizer: authorizer,
                 requestModifier: modifier

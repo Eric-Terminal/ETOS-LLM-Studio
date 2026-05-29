@@ -84,9 +84,6 @@ public final class MCPStreamableHTTPTransport: MCPTransport, MCPStreamingTranspo
 
     public func sendMessage(_ payload: Data) async throws -> Data {
         let requestId = try extractRequestId(from: payload)
-        if sseTask == nil {
-            connectStream()
-        }
 
         return try await withCheckedThrowingContinuation { continuation in
             Task {
