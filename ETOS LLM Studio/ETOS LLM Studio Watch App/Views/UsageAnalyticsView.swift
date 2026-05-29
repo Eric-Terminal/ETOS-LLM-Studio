@@ -440,9 +440,7 @@ struct UsageAnalyticsView: View {
         guard !summary.totals.isEmpty else {
             return NSLocalizedString("暂无", comment: "No usage analytics metric value")
         }
-        return summary.totals
-            .map { MessageCostFormatter.formatTotal($0.totalCost, currencySymbol: $0.currencySymbol) }
-            .joined(separator: " + ")
+        return MessageCostFormatter.formatTotal(summary.totals.reduce(0) { $0 + $1.totalCost })
     }
 
     private var trendModelColors: [Color] {

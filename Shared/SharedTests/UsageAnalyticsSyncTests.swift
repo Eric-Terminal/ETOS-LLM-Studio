@@ -209,7 +209,6 @@ struct UsageAnalyticsSyncTests {
                     Model(
                         modelName: modelID,
                         pricing: ModelPricing(
-                            currencySymbol: "¥",
                             inputPerMillionTokens: 1,
                             outputPerMillionTokens: 2,
                             cacheWritePerMillionTokens: 3,
@@ -246,7 +245,6 @@ struct UsageAnalyticsSyncTests {
 
         let expectedCost = 0.001 + 0.004 + 0.0009 + 0.0001
         let overviewCost = try #require(viewModel.state.activeOverviewCard?.costSummary.totals.first)
-        #expect(overviewCost.currencySymbol == "¥")
         #expect(abs(overviewCost.totalCost - expectedCost) < 0.000001)
 
         let detailCost = try #require(viewModel.state.detail.costSummary.totals.first)

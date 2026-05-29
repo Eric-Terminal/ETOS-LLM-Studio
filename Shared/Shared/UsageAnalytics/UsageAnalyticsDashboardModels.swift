@@ -57,35 +57,25 @@ public struct UsageAnalyticsOverviewCard: Identifiable, Hashable, Sendable {
     }
 }
 
-public struct UsageAnalyticsCurrencyCost: Identifiable, Hashable, Sendable {
-    public var id: String { currencySymbol }
-    public var currencySymbol: String
+public struct UsageAnalyticsCostTotal: Identifiable, Hashable, Sendable {
+    public var id: String { "total" }
     public var totalCost: Double
 
-    public init(currencySymbol: String, totalCost: Double) {
-        let trimmedCurrency = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.currencySymbol = trimmedCurrency.isEmpty ? ModelPricing.defaultCurrencySymbol : trimmedCurrency
+    public init(totalCost: Double) {
         self.totalCost = max(0, totalCost)
     }
 }
 
 public struct UsageAnalyticsCostSummary: Hashable, Sendable {
-    public var totals: [UsageAnalyticsCurrencyCost]
+    public var totals: [UsageAnalyticsCostTotal]
 
-    public init(totals: [UsageAnalyticsCurrencyCost] = []) {
-        let grouped = totals.reduce(into: [String: Double]()) { partial, item in
-            guard item.totalCost > 0 else { return }
-            let currency = item.currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-            partial[currency.isEmpty ? ModelPricing.defaultCurrencySymbol : currency, default: 0] += item.totalCost
+    public init(totals: [UsageAnalyticsCostTotal] = []) {
+        let totalCost = totals.reduce(0) { partial, item in
+            partial + max(0, item.totalCost)
         }
-        self.totals = grouped
-            .map { UsageAnalyticsCurrencyCost(currencySymbol: $0.key, totalCost: $0.value) }
-            .sorted { lhs, rhs in
-                if lhs.totalCost == rhs.totalCost {
-                    return lhs.currencySymbol < rhs.currencySymbol
-                }
-                return lhs.totalCost > rhs.totalCost
-            }
+        self.totals = totalCost > 0
+            ? [UsageAnalyticsCostTotal(totalCost: totalCost)]
+            : []
     }
 
     public var isEmpty: Bool {

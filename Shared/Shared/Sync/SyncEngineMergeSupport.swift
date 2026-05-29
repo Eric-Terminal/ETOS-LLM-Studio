@@ -260,7 +260,6 @@ extension SyncEngine {
             hasher.combine("pricing:nil")
             return
         }
-        hasher.combine(pricing.currencySymbol)
         hasher.combine(pricing.inputPerMillionTokens ?? -1)
         hasher.combine(pricing.outputPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheWritePerMillionTokens ?? -1)
@@ -364,7 +363,6 @@ extension SyncEngine {
         hasher.combine(message.modelReference?.providerName ?? "")
         hasher.combine(message.modelReference?.modelName ?? "")
         hasher.combine(message.modelReference?.modelDisplayName ?? "")
-        hasher.combine(message.costEstimate?.currencySymbol ?? "")
         hasher.combine(message.costEstimate?.totalCost ?? -1)
         hasher.combine(message.costEstimate?.tierBasisTokens ?? -1)
         hasher.combine(message.costEstimate?.tierMinimumTokens ?? -1)

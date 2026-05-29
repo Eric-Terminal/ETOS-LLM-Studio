@@ -15,7 +15,6 @@ struct ModelPricingSettingsView: View {
     var body: some View {
         List {
             Section(header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section"))) {
-                TextField(NSLocalizedString("货币符号", comment: "Currency symbol field"), text: $draft.currencySymbol.watchKeyboardNewlineBinding())
                 ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $draft.inputPrice)
                 ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $draft.outputPrice)
                 ModelPricingTextField(title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $draft.cacheWritePrice)
@@ -126,9 +125,7 @@ struct ModelPricingSettingsView: View {
         let inheritedPrice = inheritedText.trimmingCharacters(in: .whitespacesAndNewlines)
         let effectivePrice = price.isEmpty ? inheritedPrice : price
         guard !effectivePrice.isEmpty else { return nil }
-        let currency = draft.currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = "\(currency.isEmpty ? ModelPricing.defaultCurrencySymbol : currency)\(effectivePrice)"
-        return String(format: NSLocalizedString("%@：%@", comment: "Label value pair"), title, value)
+        return String(format: NSLocalizedString("%@：%@", comment: "Label value pair"), title, effectivePrice)
     }
 
     private func nextTierMinimum(after tier: ModelPricingTierDraft) -> Int? {
@@ -184,7 +181,6 @@ private struct ModelPricingTierSettingsView: View {
 }
 
 struct ModelPricingDraft: Equatable {
-    var currencySymbol: String = ModelPricing.defaultCurrencySymbol
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
@@ -195,7 +191,6 @@ struct ModelPricingDraft: Equatable {
 
     nonisolated init(pricing: ModelPricing?) {
         let pricing = pricing?.normalized
-        currencySymbol = pricing?.currencySymbol ?? ModelPricing.defaultCurrencySymbol
         inputPrice = Self.string(from: pricing?.inputPerMillionTokens)
         outputPrice = Self.string(from: pricing?.outputPerMillionTokens)
         cacheWritePrice = Self.string(from: pricing?.cacheWritePerMillionTokens)
@@ -209,7 +204,6 @@ struct ModelPricingDraft: Equatable {
 
     nonisolated var modelPricing: ModelPricing? {
         let normalized = ModelPricing(
-            currencySymbol: currencySymbol,
             inputPerMillionTokens: Self.double(from: inputPrice),
             outputPerMillionTokens: Self.double(from: outputPrice),
             cacheWritePerMillionTokens: Self.double(from: cacheWritePrice),

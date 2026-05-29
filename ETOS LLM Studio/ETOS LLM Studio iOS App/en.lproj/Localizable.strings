@@ -3537,7 +3537,6 @@
 "已填写 %d 项" = "%d items filled";
 "已填写 %d 项，%d 个阶梯" = "%d items filled, %d tiers";
 "基础价格" = "Base Prices";
-"货币符号" = "Currency Symbol";
 "输入价格" = "Input Price";
 "输出价格" = "Output Price";
 "缓存创建价格" = "Cache Write Price";
@@ -3562,7 +3561,6 @@
 "费用" = "Cost";
 "费用 %@" = "Cost %@";
 "Token %@ · 费用 %@" = "%@ tokens · Cost %@";
-"%@%@ / 1M tokens" = "%@%@ / 1M tokens";
 "估算费用" = "Estimated Cost";
 "阶梯依据" = "Tier Basis";
 "%d tokens" = "%d tokens";

@@ -31,7 +31,6 @@ struct ModelPricingTests {
             cacheReadTokens: 300
         )
         let pricing = ModelPricing(
-            currencySymbol: "¥",
             inputPerMillionTokens: 0.5,
             outputPerMillionTokens: 3,
             cacheWritePerMillionTokens: 1,
@@ -40,7 +39,6 @@ struct ModelPricingTests {
 
         let estimate = try #require(ModelCostCalculator.estimateCost(usage: usage, pricing: pricing))
 
-        #expect(estimate.currencySymbol == "¥")
         #expect(estimate.tierBasisTokens == 5_700)
         #expect(estimate.tierMinimumTokens == nil)
         #expect(estimate.components.count == 4)
@@ -107,7 +105,6 @@ struct ModelPricingTests {
             modelName: "priced-model",
             displayName: "Priced Model",
             pricing: ModelPricing(
-                currencySymbol: "$",
                 inputPerMillionTokens: 0.5,
                 outputPerMillionTokens: 3,
                 tiers: [

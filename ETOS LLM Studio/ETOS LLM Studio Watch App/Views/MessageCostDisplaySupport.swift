@@ -9,36 +9,19 @@ import Foundation
 import Shared
 
 enum MessageCostFormatter {
-    static func formatTotal(_ value: Double, currencySymbol: String) -> String {
-        let symbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? ModelPricing.defaultCurrencySymbol
-            : currencySymbol
+    static func formatTotal(_ value: Double) -> String {
         if value > 0, value < 0.000001 {
-            return "<\(symbol)0.000001"
+            return "<0.000001"
         }
-        return "\(symbol)\(formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6))"
+        return formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6)
     }
 
-    static func formatPricePerMillion(_ value: Double, currencySymbol: String) -> String {
-        let symbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? ModelPricing.defaultCurrencySymbol
-            : currencySymbol
-        return String(
-            format: NSLocalizedString("%@%@ / 1M tokens", comment: "Price per million tokens text"),
-            symbol,
-            formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6)
-        )
-    }
-
-    static func formatPriceValue(_ value: Double, currencySymbol: String) -> String {
-        let symbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? ModelPricing.defaultCurrencySymbol
-            : currencySymbol
-        return "\(symbol)\(formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6))"
+    static func formatPriceValue(_ value: Double) -> String {
+        formatNumber(value, minimumFractionDigits: 2, maximumFractionDigits: 6)
     }
 
     static func formatCompact(_ estimate: MessageCostEstimate) -> String {
-        formatTotal(estimate.totalCost, currencySymbol: estimate.currencySymbol)
+        formatTotal(estimate.totalCost)
     }
 
     private static func formatNumber(
@@ -70,7 +53,7 @@ struct MessageCostDetailRows: View {
 
     var body: some View {
         LabeledContent(NSLocalizedString("估算费用", comment: "Estimated cost label")) {
-            Text(MessageCostFormatter.formatTotal(estimate.totalCost, currencySymbol: estimate.currencySymbol))
+            Text(MessageCostFormatter.formatTotal(estimate.totalCost))
                 .monospacedDigit()
         }
 
@@ -87,7 +70,7 @@ struct MessageCostDetailRows: View {
         ForEach(estimate.components) { component in
             VStack(alignment: .leading, spacing: 3) {
                 LabeledContent(component.kind.localizedTitle) {
-                    Text(MessageCostFormatter.formatTotal(component.subtotal, currencySymbol: estimate.currencySymbol))
+                    Text(MessageCostFormatter.formatTotal(component.subtotal))
                         .monospacedDigit()
                 }
                 Text(componentFormula(component))
@@ -107,7 +90,7 @@ struct MessageCostDetailRows: View {
         String(
             format: NSLocalizedString("%d tokens / 1M tokens × %@", comment: "Cost component calculation formula"),
             component.tokens,
-            MessageCostFormatter.formatPriceValue(component.pricePerMillionTokens, currencySymbol: estimate.currencySymbol)
+            MessageCostFormatter.formatPriceValue(component.pricePerMillionTokens)
         )
     }
 

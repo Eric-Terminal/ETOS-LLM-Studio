@@ -825,10 +825,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             return .init()
         }
         return UsageAnalyticsCostSummary(totals: [
-            UsageAnalyticsCurrencyCost(
-                currencySymbol: estimate.currencySymbol,
-                totalCost: estimate.totalCost
-            )
+            UsageAnalyticsCostTotal(totalCost: estimate.totalCost)
         ])
     }
 

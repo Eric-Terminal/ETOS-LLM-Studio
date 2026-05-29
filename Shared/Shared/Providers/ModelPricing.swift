@@ -9,9 +9,6 @@
 import Foundation
 
 public struct ModelPricing: Codable, Hashable, Sendable {
-    public static let defaultCurrencySymbol = "$"
-
-    public var currencySymbol: String
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
@@ -19,15 +16,12 @@ public struct ModelPricing: Codable, Hashable, Sendable {
     public var tiers: [ModelPricingTier]
 
     public init(
-        currencySymbol: String = ModelPricing.defaultCurrencySymbol,
         inputPerMillionTokens: Double? = nil,
         outputPerMillionTokens: Double? = nil,
         cacheWritePerMillionTokens: Double? = nil,
         cacheReadPerMillionTokens: Double? = nil,
         tiers: [ModelPricingTier] = []
     ) {
-        let trimmedCurrency = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.currencySymbol = trimmedCurrency.isEmpty ? ModelPricing.defaultCurrencySymbol : trimmedCurrency
         self.inputPerMillionTokens = Self.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = Self.normalizedPrice(outputPerMillionTokens)
         self.cacheWritePerMillionTokens = Self.normalizedPrice(cacheWritePerMillionTokens)
@@ -45,7 +39,6 @@ public struct ModelPricing: Codable, Hashable, Sendable {
 
     public var normalized: ModelPricing {
         ModelPricing(
-            currencySymbol: currencySymbol,
             inputPerMillionTokens: inputPerMillionTokens,
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
@@ -66,7 +59,6 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             }
 
         return ModelPricingEffectivePrices(
-            currencySymbol: currencySymbol,
             tierBasisTokens: basisTokens,
             tierMinimumTokens: selectedTier?.minimumTokens,
             inputPerMillionTokens: selectedTier?.inputPerMillionTokens ?? inputPerMillionTokens,
@@ -138,7 +130,6 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
 }
 
 public struct ModelPricingEffectivePrices: Hashable, Sendable {
-    public var currencySymbol: String
     public var tierBasisTokens: Int
     public var tierMinimumTokens: Int?
     public var inputPerMillionTokens: Double?
@@ -261,7 +252,6 @@ public struct MessageCostComponent: Codable, Identifiable, Hashable, Sendable {
 }
 
 public struct MessageCostEstimate: Codable, Hashable, Sendable {
-    public var currencySymbol: String
     public var totalCost: Double
     public var tierBasisTokens: Int
     public var tierMinimumTokens: Int?
@@ -269,15 +259,12 @@ public struct MessageCostEstimate: Codable, Hashable, Sendable {
     public var isEstimatedFromCurrentPricing: Bool
 
     public init(
-        currencySymbol: String,
         totalCost: Double,
         tierBasisTokens: Int,
         tierMinimumTokens: Int?,
         components: [MessageCostComponent],
         isEstimatedFromCurrentPricing: Bool = false
     ) {
-        let trimmedCurrency = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.currencySymbol = trimmedCurrency.isEmpty ? ModelPricing.defaultCurrencySymbol : trimmedCurrency
         self.totalCost = max(0, totalCost)
         self.tierBasisTokens = max(0, tierBasisTokens)
         self.tierMinimumTokens = tierMinimumTokens.map { max(0, $0) }
@@ -337,7 +324,6 @@ public enum ModelCostCalculator {
         guard !components.isEmpty else { return nil }
         let total = components.reduce(0) { $0 + $1.subtotal }
         return MessageCostEstimate(
-            currencySymbol: effective.currencySymbol,
             totalCost: total,
             tierBasisTokens: effective.tierBasisTokens,
             tierMinimumTokens: effective.tierMinimumTokens,
