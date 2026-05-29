@@ -3593,6 +3593,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "已填写 %d 项" = "%d elementos completados";
 "已填写 %d 项，%d 个阶梯" = "%d elementos completados, %d tramos";
 "基础价格" = "Precios base";
+"价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。" = "Los precios son por 1M tokens. Déjalo vacío para excluir ese tipo de token de la estimación.";
+"单位为每 1M tokens，留空表示不参与估算。" = "Por 1M tokens. Déjalo vacío para excluirlo de la estimación.";
 "输入价格" = "Precio de entrada";
 "输出价格" = "Precio de salida";
 "缓存创建价格" = "Precio de creación de caché";

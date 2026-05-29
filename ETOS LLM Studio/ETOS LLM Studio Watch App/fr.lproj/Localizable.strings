@@ -3569,6 +3569,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "已填写 %d 项" = "%d éléments renseignés";
 "已填写 %d 项，%d 个阶梯" = "%d éléments renseignés, %d paliers";
 "基础价格" = "Prix de base";
+"价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。" = "Les prix sont indiqués par 1M tokens. Laissez vide pour exclure ce type de token de l’estimation.";
+"单位为每 1M tokens，留空表示不参与估算。" = "Par 1M tokens. Laissez vide pour exclure de l’estimation.";
 "输入价格" = "Prix d’entrée";
 "输出价格" = "Prix de sortie";
 "缓存创建价格" = "Prix de création du cache";

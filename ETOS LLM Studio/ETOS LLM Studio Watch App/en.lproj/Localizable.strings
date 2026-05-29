@@ -3510,6 +3510,8 @@
 "已填写 %d 项" = "%d items filled";
 "已填写 %d 项，%d 个阶梯" = "%d items filled, %d tiers";
 "基础价格" = "Base Prices";
+"价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。" = "Prices are per 1M tokens. Leave blank to exclude that token type from cost estimates.";
+"单位为每 1M tokens，留空表示不参与估算。" = "Per 1M tokens. Leave blank to exclude from estimates.";
 "输入价格" = "Input Price";
 "输出价格" = "Output Price";
 "缓存创建价格" = "Cache Write Price";
