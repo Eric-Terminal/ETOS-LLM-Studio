@@ -40,6 +40,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
     case skills = "Skills"
     case shortcutTools = "ShortcutTools"
     case worldbooks = "Worldbooks"
+    case localModels = "LocalModels"
     
     public var id: String { rawValue }
     
@@ -55,6 +56,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .skills: return NSLocalizedString("Agent Skills", comment: "")
         case .shortcutTools: return NSLocalizedString("快捷指令工具", comment: "")
         case .worldbooks: return NSLocalizedString("世界书", comment: "")
+        case .localModels: return NSLocalizedString("本地模型", comment: "")
         }
     }
     
@@ -70,6 +72,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .skills: return "sparkles.square.filled.on.square"
         case .shortcutTools: return "bolt.horizontal.circle"
         case .worldbooks: return "book.pages"
+        case .localModels: return "cpu"
         }
     }
     
@@ -85,6 +88,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .skills: return .cyan
         case .shortcutTools: return .mint
         case .worldbooks: return .brown
+        case .localModels: return .blue
         }
     }
 }

@@ -182,6 +182,14 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    LocalModelManagementView()
+                } label: {
+                    settingsNavigationLabel("本地模型", icon: .localModels)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+
+                NavigationLink {
                     LocalDebugView()
                 } label: {
                     settingsNavigationLabel("远程文件访问", icon: .remoteFiles)

@@ -95,15 +95,6 @@ extension ChatService {
             return
         }
 
-        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
-            addErrorMessage(String(
-                format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
-                runnableModel.provider.apiFormat
-            ), sessionID: currentSessionID)
-            emitSessionRequestStatus(.error, sessionID: currentSessionID)
-            return
-        }
-
         let requestStartedAt = Date()
         let modelReference = MessageModelReference(
             providerID: runnableModel.provider.id,
@@ -124,22 +115,6 @@ extension ChatService {
             modelReference: modelReference,
             modelPricing: runnableModel.model.pricing
         )
-
-        if let configurationError = providerConfigurationValidationErrorMessage(
-            for: runnableModel.provider,
-            action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
-        ) {
-            addErrorMessage(configurationError, sessionID: currentSessionID)
-            emitSessionRequestStatus(.error, sessionID: currentSessionID)
-            persistRequestLog(
-                context: requestLogContext,
-                status: .failed,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                recordUsageEvent: false
-            )
-            return
-        }
 
         let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.lorebookIDs ?? [])
         let worldbookResult = worldbookEngine.evaluate(
@@ -290,6 +265,65 @@ extension ChatService {
         }
         messagesToSend = filePreprocessing.messages
         fileAttachments = filePreprocessing.fileAttachments
+
+        if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
+            await handleLocalLLMResponse(
+                runnableModel: runnableModel,
+                messagesToSend: messagesToSend,
+                loadingMessageID: loadingMessageID,
+                currentSessionID: currentSessionID,
+                userMessage: userMessage,
+                wasTemporarySession: wasTemporarySession,
+                aiTemperature: aiTemperature,
+                aiTopP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                requestStartedAt: requestStartedAt,
+                requestLogContext: requestLogContext
+            )
+            return
+        }
+
+        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+            addErrorMessage(String(
+                format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
+                runnableModel.provider.apiFormat
+            ), sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "missing_adapter"
+            )
+            return
+        }
+
+        if let configurationError = providerConfigurationValidationErrorMessage(
+            for: runnableModel.provider,
+            action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
+        ) {
+            addErrorMessage(configurationError, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false
+            )
+            return
+        }
 
         let temperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
         let topPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }

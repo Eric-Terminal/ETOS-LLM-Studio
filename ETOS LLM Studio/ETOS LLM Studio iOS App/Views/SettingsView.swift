@@ -443,6 +443,7 @@ extension SettingsListIcon {
     static let worldbook = SettingsListIcon(systemName: "book", backgroundColor: .brown)
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo)
+    static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green)
     static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)

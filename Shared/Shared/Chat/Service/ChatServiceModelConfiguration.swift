@@ -12,14 +12,20 @@ import os.log
 
 extension ChatService {
     public var configuredRunnableModels: [RunnableModel] {
-        let allModels = providers.flatMap { provider in
+        let remoteModels = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0) }
         }
+        let localModels = LocalModelProviderBridge.runnableModels(from: localModelStore.models)
+        let allModels = remoteModels + localModels
         return orderedRunnableModels(from: allModels)
     }
 
     public var activatedRunnableModels: [RunnableModel] {
-        configuredRunnableModels.filter { $0.model.isActivated }
+        configuredRunnableModels.filter { runnable in
+            guard runnable.model.isActivated else { return false }
+            guard LocalModelProviderBridge.isLocalRunnableModel(runnable) else { return true }
+            return localModelRecord(for: runnable)?.isActivated == true
+        }
     }
 
     public var activatedConversationModels: [RunnableModel] {
@@ -90,9 +96,11 @@ extension ChatService {
     }
 
     func reconcileStoredModelOrder() {
-        let currentIDs = providers.flatMap { provider in
+        let remoteIDs = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
+        let localIDs = LocalModelProviderBridge.runnableModels(from: localModelStore.models).map(\.id)
+        let currentIDs = remoteIDs + localIDs
         let storedIDs = AppConfigStore.stringArrayValue(
             for: .modelOrderRunnableModels,
             legacyUserDefaultsKey: Self.modelOrderStorageKey,
@@ -101,6 +109,14 @@ extension ChatService {
         let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
         guard mergedIDs != storedIDs else { return }
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
+    }
+
+    func localModelRecord(for runnableModel: RunnableModel) -> LocalModelRecord? {
+        guard LocalModelProviderBridge.isLocalRunnableModel(runnableModel),
+              let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id) else {
+            return nil
+        }
+        return localModelStore.models.first { $0.id == recordID && localModelStore.fileExists(for: $0) }
     }
 
     func reconcileStoredProviderOrder() {
@@ -115,9 +131,11 @@ extension ChatService {
     }
 
     public func setConfiguredModelOrder(_ orderedModelIDs: [String], notifyChange: Bool = true) {
-        let currentIDs = providers.flatMap { provider in
+        let remoteIDs = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
+        let localIDs = LocalModelProviderBridge.runnableModels(from: localModelStore.models).map(\.id)
+        let currentIDs = remoteIDs + localIDs
         let mergedIDs = ModelOrderIndex.merge(storedIDs: orderedModelIDs, currentIDs: currentIDs)
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
         if notifyChange {
