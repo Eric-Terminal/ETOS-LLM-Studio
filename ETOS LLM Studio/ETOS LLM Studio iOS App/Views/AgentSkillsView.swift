@@ -763,7 +763,7 @@ private struct EditSkillSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(NSLocalizedString("基本信息", comment: "")) {
+                Section {
                     if parsedName.isEmpty {
                         TextField(NSLocalizedString("名称", comment: ""), text: $fallbackName)
                             .textInputAutocapitalization(.never)
@@ -774,6 +774,8 @@ private struct EditSkillSheet: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                } header: {
+                    Text(NSLocalizedString("基本信息", comment: ""))
                 } footer: {
                     Text(NSLocalizedString("保存后会更新 SKILL.md，并保留资源文件与启用状态。", comment: "Skill edit footer"))
                 }

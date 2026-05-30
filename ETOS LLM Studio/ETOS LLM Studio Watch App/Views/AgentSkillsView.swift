@@ -617,7 +617,7 @@ private struct WatchEditSkillView: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("基本信息", comment: "")) {
+            Section {
                 if parsedName.isEmpty {
                     TextField(NSLocalizedString("名称", comment: ""), text: $fallbackName.watchKeyboardNewlineBinding())
                         .textInputAutocapitalization(.never)
@@ -630,6 +630,8 @@ private struct WatchEditSkillView: View {
                 Text(NSLocalizedString("保存后会更新 SKILL.md，并保留资源文件与启用状态。", comment: "Skill edit footer"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
+            } header: {
+                Text(NSLocalizedString("基本信息", comment: ""))
             }
 
             Section(NSLocalizedString("SKILL.md 内容", comment: "")) {
