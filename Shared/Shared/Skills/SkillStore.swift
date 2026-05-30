@@ -281,6 +281,7 @@ public enum SkillStore {
                     return false
                 }
                 backupDir = backup
+                try fm.removeItem(at: backup)
                 try fm.moveItem(at: targetDir, to: backup)
             }
 
@@ -301,6 +302,86 @@ public enum SkillStore {
             skillStoreLogger.error("原子保存技能失败 \(skillName, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    public static func replaceSkillDataFilesAtomically(
+        oldSkillName: String,
+        newSkillName: String,
+        files: [String: Data]
+    ) -> Bool {
+        let oldName = oldSkillName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newName = newSkillName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard oldName != newName else {
+            return saveSkillDataFilesAtomically(skillName: newName, files: files)
+        }
+
+        let root = setupDirectoryIfNeeded()
+        guard let oldDir = SkillPaths.resolveSkillDir(skillsRoot: root, skillName: oldName),
+              let newDir = SkillPaths.resolveSkillDir(skillsRoot: root, skillName: newName),
+              files.keys.contains(defaultSkillFileName),
+              let skillFileData = files[defaultSkillFileName],
+              String(data: skillFileData, encoding: .utf8) != nil else {
+            return false
+        }
+
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: oldDir.path), !fm.fileExists(atPath: newDir.path) else {
+            return false
+        }
+        guard let stagingDir = createTempSkillDir(root: root, skillName: newName, suffix: "staging") else {
+            return false
+        }
+        var backupDir: URL?
+
+        defer {
+            if fm.fileExists(atPath: stagingDir.path) {
+                try? fm.removeItem(at: stagingDir)
+            }
+            if let backupDir, fm.fileExists(atPath: backupDir.path), fm.fileExists(atPath: newDir.path) {
+                try? fm.removeItem(at: backupDir)
+            }
+        }
+
+        do {
+            for (relativePath, data) in files {
+                guard let target = SkillPaths.resolveSkillFile(skillDir: stagingDir, relativePath: relativePath) else {
+                    return false
+                }
+                try target.deletingLastPathComponent().createDirectoryIfNeeded()
+                try data.write(to: target, options: .atomic)
+            }
+
+            let stagingSkillFile = stagingDir.appendingPathComponent(defaultSkillFileName, isDirectory: false)
+            guard fm.fileExists(atPath: stagingSkillFile.path) else { return false }
+
+            guard let backup = createTempSkillDir(root: root, skillName: oldName, suffix: "backup") else {
+                return false
+            }
+            backupDir = backup
+            try fm.removeItem(at: backup)
+            try fm.moveItem(at: oldDir, to: backup)
+            do {
+                try fm.moveItem(at: stagingDir, to: newDir)
+            } catch {
+                if !fm.fileExists(atPath: oldDir.path) {
+                    try? fm.moveItem(at: backup, to: oldDir)
+                }
+                throw error
+            }
+
+            if fm.fileExists(atPath: backup.path) {
+                try? fm.removeItem(at: backup)
+            }
+            return true
+        } catch {
+            skillStoreLogger.error("替换技能目录失败 \(oldName, privacy: .public) -> \(newName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    public static func skillExists(_ skillName: String) -> Bool {
+        guard let skillDir = resolveSkillDir(skillName: skillName) else { return false }
+        return FileManager.default.fileExists(atPath: skillDir.path)
     }
 
     public static func resolveSkillDir(skillName: String) -> URL? {

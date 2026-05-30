@@ -107,7 +107,7 @@ struct AgentSkillsView: View {
                 } else {
                     ForEach(manager.skills) { skill in
                         NavigationLink {
-                            SkillDetailView(skillName: skill.name, manager: manager)
+                            SkillDetailView(initialSkillName: skill.name, manager: manager)
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(alignment: .firstTextBaseline) {
@@ -489,66 +489,135 @@ private struct ImportSkillFromURLSheet: View {
 }
 
 private struct SkillDetailView: View {
-    let skillName: String
+    let initialSkillName: String
     @ObservedObject var manager: SkillManager
+    @State private var skillName: String
+    @State private var skill: SkillMetadata?
+    @State private var skillBody: String = ""
     @State private var files: [SkillFileReference] = []
+    @State private var showEditSkillSheet = false
     @State private var showCreateFileSheet = false
     @State private var editingFile: SkillFileReference?
     @State private var deleteTarget: SkillFileReference?
 
+    init(initialSkillName: String, manager: SkillManager) {
+        self.initialSkillName = initialSkillName
+        _manager = ObservedObject(wrappedValue: manager)
+        _skillName = State(initialValue: initialSkillName)
+    }
+
     var body: some View {
         List {
-            Section {
-                Toggle(NSLocalizedString("在聊天中启用该技能", comment: ""),
-                    isOn: Binding(
-                        get: { manager.isSkillEnabled(skillName) },
-                        set: { manager.setSkillEnabled(name: skillName, isEnabled: $0) }
+            if let skill {
+                Section(NSLocalizedString("启用状态", comment: "")) {
+                    Toggle(NSLocalizedString("在聊天中启用该技能", comment: ""),
+                        isOn: Binding(
+                            get: { manager.isSkillEnabled(skill.name) },
+                            set: { manager.setSkillEnabled(name: skill.name, isEnabled: $0) }
+                        )
                     )
-                )
-            }
+                }
 
-            Section(String(format: NSLocalizedString("文件 (%d)", comment: ""), files.count)) {
-                if files.isEmpty {
-                    Text(NSLocalizedString("技能目录为空。", comment: ""))
+                Section(NSLocalizedString("编辑", comment: "")) {
+                    Button {
+                        showEditSkillSheet = true
+                    } label: {
+                        Label(NSLocalizedString("编辑技能", comment: "Edit skill"), systemImage: "square.and.pencil")
+                    }
+                }
+
+                Section(NSLocalizedString("基本信息", comment: "")) {
+                    Text(skill.name)
+                        .etFont(.headline)
+                        .textSelection(.enabled)
+                    Text(skill.description)
+                        .etFont(.subheadline)
                         .foregroundStyle(.secondary)
-                } else {
-                    ForEach(files) { file in
-                        Group {
-                            if file.isReadableText {
-                                Button {
-                                    editingFile = file
-                                } label: {
+                        .textSelection(.enabled)
+                    if let compatibility = skill.compatibility, !compatibility.isEmpty {
+                        LabeledContent(NSLocalizedString("兼容性", comment: "Skill compatibility label")) {
+                            Text(compatibility)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if !skill.allowedTools.isEmpty {
+                        LabeledContent(NSLocalizedString("允许工具", comment: "Skill allowed tools label")) {
+                            Text(skill.allowedTools.joined(separator: ", "))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section(NSLocalizedString("正文预览", comment: "Skill body preview")) {
+                    if skillBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(NSLocalizedString("无正文内容。", comment: "Empty skill body"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(skillBody)
+                            .etFont(.body)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+
+                Section(String(format: NSLocalizedString("文件 (%d)", comment: ""), files.count)) {
+                    Button {
+                        showCreateFileSheet = true
+                    } label: {
+                        Label(NSLocalizedString("新建文件", comment: ""), systemImage: "doc.badge.plus")
+                    }
+
+                    if files.isEmpty {
+                        Text(NSLocalizedString("技能目录为空。", comment: ""))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(files) { file in
+                            Group {
+                                if file.relativePath == "SKILL.md" {
+                                    Button {
+                                        showEditSkillSheet = true
+                                    } label: {
+                                        fileRow(file)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else if file.isReadableText {
+                                    Button {
+                                        editingFile = file
+                                    } label: {
+                                        fileRow(file)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
                                     fileRow(file)
                                 }
-                                .buttonStyle(.plain)
-                            } else {
-                                fileRow(file)
                             }
-                        }
-                        .swipeActions(edge: .trailing) {
-                            if file.relativePath != "SKILL.md" {
-                                Button(role: .destructive) {
-                                    deleteTarget = file
-                                } label: {
-                                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                            .swipeActions(edge: .trailing) {
+                                if file.relativePath != "SKILL.md" {
+                                    Button(role: .destructive) {
+                                        deleteTarget = file
+                                    } label: {
+                                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-        .navigationTitle(skillName)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showCreateFileSheet = true
-                } label: {
-                    Image(systemName: "doc.badge.plus")
+            } else {
+                Section {
+                    Text(NSLocalizedString("技能不存在或已被删除。", comment: "Skill missing"))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
+        .navigationTitle(skillName)
         .onAppear(perform: reload)
+        .sheet(isPresented: $showEditSkillSheet) {
+            EditSkillSheet(skillName: skillName, manager: manager) { updatedName in
+                skillName = updatedName
+                reload()
+            }
+        }
         .sheet(isPresented: $showCreateFileSheet) {
             CreateSkillFileSheet(skillName: skillName, manager: manager) {
                 reload()
@@ -577,6 +646,14 @@ private struct SkillDetailView: View {
     }
 
     private func reload() {
+        skill = manager.skills.first(where: { $0.name == skillName })
+        if skill == nil, skillName == initialSkillName {
+            skill = manager.skills.first(where: { $0.name == initialSkillName })
+        }
+        if let skill {
+            skillName = skill.name
+        }
+        skillBody = manager.readSkillBody(skillName: skillName) ?? ""
         files = manager.listFiles(skillName: skillName)
     }
 
@@ -655,6 +732,91 @@ private struct EditSkillFileSheet: View {
             }
             .onAppear {
                 content = manager.readSkillFile(skillName: skillName, relativePath: file.relativePath) ?? ""
+            }
+        }
+    }
+}
+
+private struct EditSkillSheet: View {
+    let skillName: String
+    @ObservedObject var manager: SkillManager
+    let onSaved: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var content = ""
+    @State private var fallbackName = ""
+    @State private var localError: String?
+
+    private var parsedName: String {
+        SkillFrontmatterParser.parse(content)["name"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var resolvedName: String {
+        parsedName.isEmpty ? fallbackName.trimmingCharacters(in: .whitespacesAndNewlines) : parsedName
+    }
+
+    private var canSave: Bool {
+        !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !resolvedName.isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(NSLocalizedString("基本信息", comment: "")) {
+                    if parsedName.isEmpty {
+                        TextField(NSLocalizedString("名称", comment: ""), text: $fallbackName)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } else {
+                        LabeledContent(NSLocalizedString("名称", comment: "")) {
+                            Text(parsedName)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text(NSLocalizedString("保存后会更新 SKILL.md，并保留资源文件与启用状态。", comment: "Skill edit footer"))
+                }
+
+                Section(NSLocalizedString("SKILL.md 内容", comment: "")) {
+                    TextEditor(text: $content)
+                        .etFont(.system(.footnote, design: .monospaced))
+                        .frame(minHeight: 320)
+                }
+
+                if let localError {
+                    Section(NSLocalizedString("错误", comment: "")) {
+                        Text(localError)
+                            .foregroundStyle(.red)
+                            .etFont(.footnote)
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("编辑技能", comment: "Edit skill"))
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(NSLocalizedString("保存", comment: "")) {
+                        let success = manager.updateSkillContent(
+                            oldName: skillName,
+                            content: content,
+                            fallbackName: fallbackName
+                        )
+                        if success {
+                            onSaved(resolvedName)
+                            dismiss()
+                        } else {
+                            localError = manager.lastErrorMessage ?? NSLocalizedString("更新技能失败。", comment: "Update skill failed")
+                        }
+                    }
+                    .disabled(!canSave)
+                }
+            }
+            .onAppear {
+                content = manager.readSkillContent(skillName: skillName) ?? ""
+                fallbackName = skillName
             }
         }
     }

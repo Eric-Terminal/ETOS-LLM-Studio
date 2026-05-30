@@ -721,6 +721,105 @@ description: "demo"
     }
 
     @MainActor
+    @Test("编辑 SKILL.md 可重命名技能并保留资源与启用状态")
+    func testUpdateSkillContentRenamesSkillAndPreservesResources() throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let oldName = "editable-old-\(UUID().uuidString.lowercased())"
+        let newName = "editable-new-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(oldName)
+            _ = manager.deleteSkill(newName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        #expect(manager.saveSkillDataFilesAtomically(skillName: oldName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(oldName)
+            description: "旧描述"
+            ---
+
+            旧正文
+            """.utf8),
+            "references/guide.md": Data("参考资料".utf8)
+        ]))
+        manager.setSkillEnabled(name: oldName, isEnabled: true)
+
+        #expect(manager.updateSkillContent(oldName: oldName, content: """
+        ---
+        name: \(newName)
+        description: "新描述"
+        ---
+
+        新正文
+        """))
+
+        #expect(!manager.skills.contains(where: { $0.name == oldName }))
+        let saved = try #require(manager.skills.first(where: { $0.name == newName }))
+        #expect(saved.description == "新描述")
+        #expect(manager.isSkillEnabled(newName))
+        #expect(!manager.isSkillEnabled(oldName))
+        #expect(manager.readSkillBody(skillName: newName) == "新正文")
+        #expect(manager.readSkillFile(skillName: newName, relativePath: "references/guide.md") == "参考资料")
+    }
+
+    @MainActor
+    @Test("编辑技能重命名时拒绝覆盖同名技能")
+    func testUpdateSkillContentRejectsDuplicateName() throws {
+        let manager = SkillManager.shared
+        let originalEnabled = manager.enabledSkillNames
+        let originalSwitch = manager.chatToolsEnabled
+        let sourceName = "editable-source-\(UUID().uuidString.lowercased())"
+        let targetName = "editable-target-\(UUID().uuidString.lowercased())"
+        defer {
+            _ = manager.deleteSkill(sourceName)
+            _ = manager.deleteSkill(targetName)
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalSwitch,
+                enabledSkillNames: originalEnabled
+            )
+        }
+
+        #expect(manager.saveSkillDataFilesAtomically(skillName: sourceName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(sourceName)
+            description: "源技能"
+            ---
+
+            源正文
+            """.utf8)
+        ]))
+        #expect(manager.saveSkillDataFilesAtomically(skillName: targetName, files: [
+            "SKILL.md": Data("""
+            ---
+            name: \(targetName)
+            description: "目标技能"
+            ---
+
+            目标正文
+            """.utf8)
+        ]))
+
+        #expect(!manager.updateSkillContent(oldName: sourceName, content: """
+        ---
+        name: \(targetName)
+        description: "覆盖目标"
+        ---
+
+        新正文
+        """))
+        #expect(manager.lastErrorMessage == NSLocalizedString("已有同名技能。", comment: "Duplicate skill name error"))
+        #expect(manager.readSkillBody(skillName: sourceName) == "源正文")
+        #expect(manager.readSkillBody(skillName: targetName) == "目标正文")
+    }
+
+    @MainActor
     @Test("链接导入会拒绝非法 URL")
     func testImportSkillFromURLRejectsInvalidURL() async {
         let manager = SkillManager.shared

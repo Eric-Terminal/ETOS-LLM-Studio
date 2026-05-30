@@ -353,6 +353,56 @@ public final class SkillManager: ObservableObject {
         SkillStore.readSkillContent(skillName: skillName)
     }
 
+    @discardableResult
+    public func updateSkillContent(oldName: String, content: String, fallbackName: String? = nil) -> Bool {
+        let sourceName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sourceName.isEmpty else {
+            lastErrorMessage = NSLocalizedString("技能名称不能为空。", comment: "Skill name empty error")
+            return false
+        }
+        guard let manifest = try? SkillManifestResolver.resolve(content: content, fallbackName: fallbackName ?? sourceName) else {
+            lastErrorMessage = NSLocalizedString("SKILL.md 格式错误：name 字段无效。", comment: "Skill manifest invalid error")
+            return false
+        }
+        let targetName = manifest.name
+        guard SkillPaths.isValidSkillName(targetName) else {
+            lastErrorMessage = NSLocalizedString("技能名称不合法。仅支持字母、数字、点、下划线、中划线。", comment: "Invalid skill name detail")
+            return false
+        }
+        guard let files = SkillStore.readAllSkillFileData(skillName: sourceName) else {
+            lastErrorMessage = NSLocalizedString("无法读取原技能文件。", comment: "Read original skill files failed")
+            return false
+        }
+        if sourceName != targetName, SkillStore.skillExists(targetName) {
+            lastErrorMessage = NSLocalizedString("已有同名技能。", comment: "Duplicate skill name error")
+            return false
+        }
+
+        var updatedFiles = files
+        updatedFiles[SkillStore.defaultSkillFileName] = Data(content.utf8)
+        let wasEnabled = enabledSkillNames.contains(sourceName)
+        let saved = SkillStore.replaceSkillDataFilesAtomically(
+            oldSkillName: sourceName,
+            newSkillName: targetName,
+            files: updatedFiles
+        )
+        guard saved else {
+            lastErrorMessage = NSLocalizedString("更新技能失败。", comment: "Update skill failed")
+            return false
+        }
+
+        if sourceName != targetName {
+            enabledSkillNames.remove(sourceName)
+        }
+        if wasEnabled {
+            enabledSkillNames.insert(targetName)
+        }
+        persistEnabledSkillNames()
+        reloadFromDisk()
+        lastErrorMessage = nil
+        return true
+    }
+
     func restoreStateForTests(
         chatToolsEnabled: Bool,
         enabledSkillNames: Set<String>
