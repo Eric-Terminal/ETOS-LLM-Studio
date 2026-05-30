@@ -208,7 +208,6 @@ extension ChatService {
     public func deleteProvider(_ provider: Provider) {
         if LocalModelProviderBridge.isLocalProvider(provider) {
             localModelStore.setProviderEnabled(false)
-            ConfigLoader.deleteProvider(provider)
             reloadProviders()
             return
         }

@@ -30,7 +30,13 @@ extension MemoryManager {
             return false
         }
 
-        let providers = ConfigLoader.loadProviders()
+        let localModelStore = LocalModelStore.shared
+        let providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: ConfigLoader.loadProviders(),
+            records: localModelStore.models,
+            isEnabled: localModelStore.isProviderEnabled,
+            preferRecordBasics: true
+        )
         for provider in providers {
             for model in provider.models {
                 let runnable = RunnableModel(provider: provider, model: model)

@@ -31,6 +31,19 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     }
 }
 
+public struct LocalLLMEmbeddingOptions: Hashable, Sendable {
+    public var contextSize: Int
+    public var gpuLayers: Int
+
+    public init(
+        contextSize: Int,
+        gpuLayers: Int = LocalModelRecord.defaultGPULayers
+    ) {
+        self.contextSize = max(1, contextSize)
+        self.gpuLayers = gpuLayers
+    }
+}
+
 public enum LocalLLMEngineError: LocalizedError {
     case backendUnavailable
     case modelFileMissing(String)
@@ -93,6 +106,25 @@ public final class LocalLLMEngine: @unchecked Sendable {
             topP: options.topP,
             gpuLayers: options.gpuLayers
         )
+    }
+
+    public func embed(
+        texts: [String],
+        modelURL: URL,
+        options: LocalLLMEmbeddingOptions
+    ) async throws -> [[Float]] {
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
+        }
+
+        return try await Task.detached(priority: .userInitiated) {
+            try LocalLLMBridge.embed(
+                texts: texts,
+                modelPath: modelURL.path,
+                contextSize: options.contextSize,
+                gpuLayers: options.gpuLayers
+            )
+        }.value
     }
 }
 
@@ -203,6 +235,70 @@ private enum LocalLLMBridge {
                 }
                 continuation.finish()
             }
+        }
+    }
+
+    static func embed(
+        texts: [String],
+        modelPath: String,
+        contextSize: Int,
+        gpuLayers: Int
+    ) throws -> [[Float]] {
+        let normalizedTexts = texts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard !normalizedTexts.isEmpty, normalizedTexts.allSatisfy({ !$0.isEmpty }) else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本为空。", comment: "Local LLM empty embedding texts"))
+        }
+
+        let textPointers = normalizedTexts.compactMap { strdup($0) }
+        defer {
+            textPointers.forEach { free($0) }
+        }
+        guard textPointers.count == normalizedTexts.count else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本内存分配失败。", comment: "Local LLM embedding text allocation failed"))
+        }
+        let bridgedTextPointers: [UnsafePointer<CChar>?] = textPointers.map { UnsafePointer($0) }
+
+        var outputPointer: UnsafeMutablePointer<Float>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        var embeddingCount: Int32 = 0
+        var embeddingDimension: Int32 = 0
+        let status = modelPath.withCString { modelPathCString in
+            bridgedTextPointers.withUnsafeBufferPointer { textsPointer in
+                etos_local_llm_embed(
+                    modelPathCString,
+                    textsPointer.baseAddress,
+                    Int32(textsPointer.count),
+                    Int32(max(1, contextSize)),
+                    Int32(gpuLayers),
+                    &outputPointer,
+                    &embeddingCount,
+                    &embeddingDimension,
+                    &errorPointer
+                )
+            }
+        }
+        defer {
+            if let outputPointer {
+                etos_local_llm_free_float(outputPointer)
+            }
+            if let errorPointer {
+                etos_local_llm_free(errorPointer)
+            }
+        }
+
+        guard status == 0,
+              let outputPointer,
+              embeddingCount == normalizedTexts.count,
+              embeddingDimension > 0 else {
+            let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+            throw LocalLLMEngineError.generationFailed(message)
+        }
+
+        let dimension = Int(embeddingDimension)
+        let buffer = UnsafeBufferPointer(start: outputPointer, count: Int(embeddingCount) * dimension)
+        return (0..<Int(embeddingCount)).map { index in
+            let start = index * dimension
+            return Array(buffer[start..<(start + dimension)])
         }
     }
 }
@@ -346,5 +442,21 @@ private func etos_local_llm_generate_chat_stream(
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 
+@_silgen_name("etos_local_llm_embed")
+private func etos_local_llm_embed(
+    _ modelPath: UnsafePointer<CChar>,
+    _ texts: UnsafePointer<UnsafePointer<CChar>?>?,
+    _ textCount: Int32,
+    _ contextSize: Int32,
+    _ gpuLayers: Int32,
+    _ output: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>,
+    _ embeddingCount: UnsafeMutablePointer<Int32>,
+    _ embeddingDimension: UnsafeMutablePointer<Int32>,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32
+
 @_silgen_name("etos_local_llm_free")
 private func etos_local_llm_free(_ pointer: UnsafeMutablePointer<CChar>)
+
+@_silgen_name("etos_local_llm_free_float")
+private func etos_local_llm_free_float(_ pointer: UnsafeMutablePointer<Float>)

@@ -94,6 +94,37 @@ struct LocalModelStoreTests {
         #expect(enabledProviders.first(where: LocalModelProviderBridge.isLocalProvider)?.models.count == 1)
     }
 
+    @Test("本地模型提供商会保留管理页模型设置")
+    func localProviderBridgePreservesManagedModelConfiguration() {
+        let record = LocalModelRecord(
+            displayName: "TinyLlama",
+            fileName: "tiny.gguf",
+            relativePath: "tiny.gguf",
+            fileSize: 8
+        )
+        var provider = LocalModelProviderBridge.provider(records: [record])
+        provider.models[0].kind = .embedding
+        provider.models[0].overrideParameters["temperature"] = .double(0.2)
+        provider.models[0].requestBodyControls = [
+            ModelRequestBodyControl(
+                title: "归一化",
+                kind: .toggle,
+                defaultIsActive: true,
+                payload: ["normalize": .bool(true)]
+            )
+        ]
+
+        let restored = LocalModelProviderBridge.provider(
+            records: [record],
+            preserving: provider,
+            preferRecordBasics: true
+        )
+
+        #expect(restored.models.first?.kind == .embedding)
+        #expect(restored.models.first?.overrideParameters["temperature"] == .double(0.2))
+        #expect(restored.models.first?.requestBodyControls.count == 1)
+    }
+
     @Test("提供商模型设置会回写本地权重记录")
     func localProviderModelChangesPersistToRecord() throws {
         let root = try temporaryDirectory()

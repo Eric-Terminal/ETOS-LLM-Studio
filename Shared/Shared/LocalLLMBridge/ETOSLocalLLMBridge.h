@@ -74,7 +74,20 @@ int32_t etos_local_llm_generate_chat_stream(
     char ** error_message
 );
 
+int32_t etos_local_llm_embed(
+    const char * model_path,
+    const char * const * texts,
+    int32_t text_count,
+    int32_t context_size,
+    int32_t n_gpu_layers,
+    float ** output,
+    int32_t * embedding_count,
+    int32_t * embedding_dimension,
+    char ** error_message
+);
+
 void etos_local_llm_free(char * pointer);
+void etos_local_llm_free_float(float * pointer);
 
 #ifdef __cplusplus
 }
