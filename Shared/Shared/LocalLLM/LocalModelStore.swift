@@ -49,6 +49,20 @@ public final class LocalModelStore: ObservableObject {
         models = loadModels()
     }
 
+    public var isProviderEnabled: Bool {
+        AppConfigStore.boolValue(for: .localModelsEnabled)
+    }
+
+    public func setProviderEnabled(_ isEnabled: Bool) {
+        AppConfigStore.persistSynchronously(.bool(isEnabled), for: .localModelsEnabled)
+        Task { @MainActor in
+            if AppConfigStore.shared.localModelsEnabled != isEnabled {
+                AppConfigStore.shared.localModelsEnabled = isEnabled
+            }
+        }
+        NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
+    }
+
     public func fileURL(for record: LocalModelRecord) -> URL {
         directoryURL.appendingPathComponent(record.relativePath)
     }
@@ -101,6 +115,27 @@ public final class LocalModelStore: ObservableObject {
         NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
     }
 
+    public func updateFromProviderModel(_ model: Model) {
+        guard let index = models.firstIndex(where: { $0.id == LocalModelProviderBridge.localRecordID(from: model) }) else {
+            return
+        }
+
+        var record = models[index]
+        record.displayName = model.displayName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? record.sanitizedDisplayName
+        record.isActivated = model.isActivated
+        if let contextSize = model.overrideParameters.localIntValue(for: "context_size") {
+            record.contextSize = max(1, contextSize)
+        }
+        if let maxOutputTokens = model.overrideParameters.localIntValue(for: "max_output_tokens") ?? model.overrideParameters.localIntValue(for: "max_tokens") {
+            record.maxOutputTokens = max(1, maxOutputTokens)
+        }
+        if let gpuLayers = model.overrideParameters.localIntValue(for: "n_gpu_layers") {
+            record.gpuLayers = gpuLayers
+        }
+        update(record)
+    }
+
     public func delete(_ record: LocalModelRecord, deleteFile: Bool = true) {
         models.removeAll { $0.id == record.id }
         if deleteFile {
@@ -130,6 +165,9 @@ public final class LocalModelStore: ObservableObject {
         )
         models.append(record)
         persistModels()
+        if !isProviderEnabled {
+            setProviderEnabled(true)
+        }
         NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
         return record
     }
@@ -210,5 +248,21 @@ private extension JSONEncoder {
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+}
+
+private extension Dictionary where Key == String, Value == JSONValue {
+    func localIntValue(for key: String) -> Int? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            return rawValue
+        case .double(let rawValue):
+            return Int(rawValue)
+        case .string(let rawValue):
+            return Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
     }
 }

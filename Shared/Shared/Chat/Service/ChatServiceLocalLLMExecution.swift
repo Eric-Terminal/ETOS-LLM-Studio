@@ -48,14 +48,16 @@ extension ChatService {
         }
 
         do {
+            let overrides = runnableModel.effectiveOverrideParameters
             let stream = try LocalLLMEngine.shared.stream(
                 messages: LocalLLMChatMessageBuilder.messages(from: messagesToSend),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
-                    contextSize: record.contextSize,
-                    maxOutputTokens: record.maxOutputTokens,
-                    temperature: aiTemperature,
-                    topP: aiTopP
+                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
+                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
+                    temperature: overrides.localDoubleValue(for: "temperature") ?? aiTemperature,
+                    topP: overrides.localDoubleValue(for: "top_p") ?? aiTopP,
+                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers
                 )
             )
 
@@ -195,6 +197,36 @@ extension ChatService {
                 finishedAt: Date(),
                 errorKind: "local_generation_failed"
             )
+        }
+    }
+}
+
+private extension Dictionary where Key == String, Value == JSONValue {
+    func localIntValue(for key: String) -> Int? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            return rawValue
+        case .double(let rawValue):
+            return Int(rawValue)
+        case .string(let rawValue):
+            return Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    func localDoubleValue(for key: String) -> Double? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .double(let rawValue):
+            return rawValue
+        case .int(let rawValue):
+            return Double(rawValue)
+        case .string(let rawValue):
+            return Double(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
         }
     }
 }

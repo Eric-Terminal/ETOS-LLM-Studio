@@ -147,6 +147,7 @@ int32_t generate(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
     void * user_data,
@@ -168,7 +169,7 @@ int32_t generate(
 #if TARGET_OS_WATCH || TARGET_OS_SIMULATOR
     model_params.n_gpu_layers = 0;
 #else
-    model_params.n_gpu_layers = 999;
+    model_params.n_gpu_layers = n_gpu_layers < 0 ? 999 : n_gpu_layers;
 #endif
 
     llama_model * model = llama_model_load_from_file(model_path, model_params);
@@ -272,6 +273,7 @@ int32_t etos_local_llm_generate(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     char ** output,
     char ** error_message
 ) {
@@ -295,6 +297,7 @@ int32_t etos_local_llm_generate(
         max_output_tokens,
         temperature,
         top_p,
+        n_gpu_layers,
         &response,
         nullptr,
         nullptr,
@@ -316,6 +319,7 @@ int32_t etos_local_llm_generate_chat(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     char ** output,
     char ** error_message
 ) {
@@ -339,6 +343,7 @@ int32_t etos_local_llm_generate_chat(
         max_output_tokens,
         temperature,
         top_p,
+        n_gpu_layers,
         &response,
         nullptr,
         nullptr,
@@ -359,6 +364,7 @@ int32_t etos_local_llm_generate_stream(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
@@ -375,6 +381,7 @@ int32_t etos_local_llm_generate_stream(
         max_output_tokens,
         temperature,
         top_p,
+        n_gpu_layers,
         nullptr,
         token_callback,
         user_data,
@@ -390,6 +397,7 @@ int32_t etos_local_llm_generate_chat_stream(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
@@ -406,6 +414,7 @@ int32_t etos_local_llm_generate_chat_stream(
         max_output_tokens,
         temperature,
         top_p,
+        n_gpu_layers,
         nullptr,
         token_callback,
         user_data,

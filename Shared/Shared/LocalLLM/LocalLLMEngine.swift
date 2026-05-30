@@ -14,17 +14,20 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var maxOutputTokens: Int
     public var temperature: Double?
     public var topP: Double?
+    public var gpuLayers: Int
 
     public init(
         contextSize: Int,
         maxOutputTokens: Int,
         temperature: Double? = nil,
-        topP: Double? = nil
+        topP: Double? = nil,
+        gpuLayers: Int = LocalModelRecord.defaultGPULayers
     ) {
         self.contextSize = max(1, contextSize)
         self.maxOutputTokens = max(1, maxOutputTokens)
         self.temperature = temperature
         self.topP = topP
+        self.gpuLayers = gpuLayers
     }
 }
 
@@ -66,7 +69,8 @@ public final class LocalLLMEngine: @unchecked Sendable {
                 contextSize: options.contextSize,
                 maxOutputTokens: options.maxOutputTokens,
                 temperature: options.temperature,
-                topP: options.topP
+                topP: options.topP,
+                gpuLayers: options.gpuLayers
             )
         }.value
     }
@@ -86,7 +90,8 @@ public final class LocalLLMEngine: @unchecked Sendable {
             contextSize: options.contextSize,
             maxOutputTokens: options.maxOutputTokens,
             temperature: options.temperature,
-            topP: options.topP
+            topP: options.topP,
+            gpuLayers: options.gpuLayers
         )
     }
 }
@@ -98,7 +103,8 @@ private enum LocalLLMBridge {
         contextSize: Int,
         maxOutputTokens: Int,
         temperature: Double?,
-        topP: Double?
+        topP: Double?,
+        gpuLayers: Int
     ) throws -> String {
         guard !messages.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
@@ -117,6 +123,7 @@ private enum LocalLLMBridge {
                     Int32(max(1, maxOutputTokens)),
                     Float(temperature ?? 0.8),
                     Float(topP ?? 0.95),
+                    Int32(gpuLayers),
                     &outputPointer,
                     &errorPointer
                 )
@@ -144,7 +151,8 @@ private enum LocalLLMBridge {
         contextSize: Int,
         maxOutputTokens: Int,
         temperature: Double?,
-        topP: Double?
+        topP: Double?,
+        gpuLayers: Int
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             guard !messages.isEmpty else {
@@ -175,6 +183,7 @@ private enum LocalLLMBridge {
                             Int32(max(1, maxOutputTokens)),
                             Float(temperature ?? 0.8),
                             Float(topP ?? 0.95),
+                            Int32(gpuLayers),
                             localLLMStreamCallback,
                             statePointer,
                             &errorPointer
@@ -289,6 +298,7 @@ private func etos_local_llm_generate(
     _ maxOutputTokens: Int32,
     _ temperature: Float,
     _ topP: Float,
+    _ gpuLayers: Int32,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -302,6 +312,7 @@ private func etos_local_llm_generate_chat(
     _ maxOutputTokens: Int32,
     _ temperature: Float,
     _ topP: Float,
+    _ gpuLayers: Int32,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -314,6 +325,7 @@ private func etos_local_llm_generate_stream(
     _ maxOutputTokens: Int32,
     _ temperature: Float,
     _ topP: Float,
+    _ gpuLayers: Int32,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
@@ -328,6 +340,7 @@ private func etos_local_llm_generate_chat_stream(
     _ maxOutputTokens: Int32,
     _ temperature: Float,
     _ topP: Float,
+    _ gpuLayers: Int32,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>

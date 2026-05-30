@@ -15,9 +15,7 @@ extension ChatService {
         let remoteModels = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0) }
         }
-        let localModels = LocalModelProviderBridge.runnableModels(from: localModelStore.models)
-        let allModels = remoteModels + localModels
-        return orderedRunnableModels(from: allModels)
+        return orderedRunnableModels(from: remoteModels)
     }
 
     public var activatedRunnableModels: [RunnableModel] {
@@ -96,11 +94,9 @@ extension ChatService {
     }
 
     func reconcileStoredModelOrder() {
-        let remoteIDs = providers.flatMap { provider in
+        let currentIDs = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
-        let localIDs = LocalModelProviderBridge.runnableModels(from: localModelStore.models).map(\.id)
-        let currentIDs = remoteIDs + localIDs
         let storedIDs = AppConfigStore.stringArrayValue(
             for: .modelOrderRunnableModels,
             legacyUserDefaultsKey: Self.modelOrderStorageKey,
@@ -131,11 +127,9 @@ extension ChatService {
     }
 
     public func setConfiguredModelOrder(_ orderedModelIDs: [String], notifyChange: Bool = true) {
-        let remoteIDs = providers.flatMap { provider in
+        let currentIDs = providers.flatMap { provider in
             provider.models.map { RunnableModel(provider: provider, model: $0).id }
         }
-        let localIDs = LocalModelProviderBridge.runnableModels(from: localModelStore.models).map(\.id)
-        let currentIDs = remoteIDs + localIDs
         let mergedIDs = ModelOrderIndex.merge(storedIDs: orderedModelIDs, currentIDs: currentIDs)
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
         if notifyChange {
@@ -171,7 +165,7 @@ extension ChatService {
     }
 
     public func reloadAppConfigBackedModelState() {
-        providers = ConfigLoader.loadProviders()
+        providers = synchronizedProviders(preferRecordBasics: true)
         reconcileStoredProviderOrder()
         reconcileStoredModelOrder()
         providersSubject.send(providers)
@@ -191,7 +185,7 @@ extension ChatService {
         logger.info("正在重新加载提供商配置...")
         let currentSelectedID = selectedModelSubject.value?.id
 
-        self.providers = ConfigLoader.loadProviders()
+        self.providers = synchronizedProviders(preferRecordBasics: true)
         self.reconcileStoredProviderOrder()
         self.reconcileStoredModelOrder()
 
@@ -212,7 +206,18 @@ extension ChatService {
     }
 
     public func deleteProvider(_ provider: Provider) {
+        if LocalModelProviderBridge.isLocalProvider(provider) {
+            localModelStore.setProviderEnabled(false)
+            ConfigLoader.deleteProvider(provider)
+            reloadProviders()
+            return
+        }
         ConfigLoader.deleteProvider(provider)
+        reloadProviders()
+    }
+
+    public func setLocalModelsEnabled(_ isEnabled: Bool) {
+        localModelStore.setProviderEnabled(isEnabled)
         reloadProviders()
     }
 
@@ -239,6 +244,42 @@ extension ChatService {
             ConfigLoader.saveProvider(provider)
         }
         self.reloadProviders()
+    }
+
+    func synchronizedProviders(preferRecordBasics: Bool) -> [Provider] {
+        let storedProviders = ConfigLoader.loadProviders()
+        return LocalModelProviderBridge.applyingLocalProvider(
+            to: storedProviders,
+            records: localModelStore.models,
+            isEnabled: localModelStore.isProviderEnabled,
+            preferRecordBasics: preferRecordBasics
+        )
+    }
+
+    func persistLocalProviderModelChanges(_ provider: Provider) {
+        guard LocalModelProviderBridge.isLocalProvider(provider) else { return }
+        for model in provider.models {
+            localModelStore.updateFromProviderModel(model)
+        }
+    }
+
+    public func saveProviderFromManagement(_ provider: Provider) {
+        if LocalModelProviderBridge.isLocalProvider(provider) {
+            if !localModelStore.isProviderEnabled {
+                localModelStore.setProviderEnabled(true)
+            }
+            persistLocalProviderModelChanges(provider)
+            let normalizedProvider = LocalModelProviderBridge.provider(
+                records: localModelStore.models,
+                preserving: provider,
+                preferRecordBasics: false
+            )
+            ConfigLoader.saveProvider(normalizedProvider)
+            reloadProviders()
+            return
+        }
+        ConfigLoader.saveProvider(provider)
+        reloadProviders()
     }
 
     public func moveConfiguredModel(fromPosition source: Int, toPosition destination: Int) {

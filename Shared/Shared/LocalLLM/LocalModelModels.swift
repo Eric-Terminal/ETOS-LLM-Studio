@@ -11,6 +11,7 @@ import Foundation
 public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public static let defaultContextSize = 2048
     public static let defaultMaxOutputTokens = 512
+    public static let defaultGPULayers = -1
 
     public var id: UUID
     public var displayName: String
@@ -22,6 +23,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public var isActivated: Bool
     public var contextSize: Int
     public var maxOutputTokens: Int
+    public var gpuLayers: Int
     public var note: String?
 
     public init(
@@ -35,6 +37,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         isActivated: Bool = true,
         contextSize: Int = LocalModelRecord.defaultContextSize,
         maxOutputTokens: Int = LocalModelRecord.defaultMaxOutputTokens,
+        gpuLayers: Int = LocalModelRecord.defaultGPULayers,
         note: String? = nil
     ) {
         self.id = id
@@ -47,6 +50,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.isActivated = isActivated
         self.contextSize = max(1, contextSize)
         self.maxOutputTokens = max(1, maxOutputTokens)
+        self.gpuLayers = gpuLayers
         self.note = note?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
@@ -57,6 +61,39 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
 
     public var modelName: String {
         "local-gguf-\(id.uuidString.lowercased())"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case fileName
+        case relativePath
+        case fileSize
+        case createdAt
+        case updatedAt
+        case isActivated
+        case contextSize
+        case maxOutputTokens
+        case gpuLayers
+        case note
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            displayName: try container.decode(String.self, forKey: .displayName),
+            fileName: try container.decode(String.self, forKey: .fileName),
+            relativePath: try container.decode(String.self, forKey: .relativePath),
+            fileSize: try container.decode(Int64.self, forKey: .fileSize),
+            createdAt: try container.decode(Date.self, forKey: .createdAt),
+            updatedAt: try container.decode(Date.self, forKey: .updatedAt),
+            isActivated: try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? true,
+            contextSize: try container.decodeIfPresent(Int.self, forKey: .contextSize) ?? Self.defaultContextSize,
+            maxOutputTokens: try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens) ?? Self.defaultMaxOutputTokens,
+            gpuLayers: try container.decodeIfPresent(Int.self, forKey: .gpuLayers) ?? Self.defaultGPULayers,
+            note: try container.decodeIfPresent(String.self, forKey: .note)
+        )
     }
 }
 

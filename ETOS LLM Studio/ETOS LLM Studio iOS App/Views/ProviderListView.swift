@@ -171,7 +171,11 @@ private struct ProviderManagementContentView: View {
             }
         } message: {
             if let target = providerToDelete {
-                Text(String(format: NSLocalizedString("删除“%@”后无法恢复。", comment: ""), target.name))
+                if LocalModelProviderBridge.isLocalProvider(target) {
+                    Text(NSLocalizedString("本地权重文件会保留；稍后重新开启本地模型时会自动恢复这个提供商。", comment: "Local provider delete disables feature message"))
+                } else {
+                    Text(String(format: NSLocalizedString("删除“%@”后无法恢复。", comment: ""), target.name))
+                }
             } else {
                 Text(NSLocalizedString("此操作无法撤销。", comment: ""))
             }
@@ -204,15 +208,17 @@ private struct ProviderConfigurationTabsView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ProviderDetailView(
-                provider: provider,
-                showsToolbar: false,
-                addModelRequest: addModelRequest,
-                fetchModelsRequest: fetchModelsRequest,
-                allowsRemoteModelFetch: allowsRemoteModelFetch
-            ) { updatedProvider in
-                updateProvider(updatedProvider)
-            }
+                ProviderDetailView(
+                    provider: provider,
+                    showsToolbar: false,
+                    addModelRequest: addModelRequest,
+                    fetchModelsRequest: fetchModelsRequest,
+                    allowsRemoteModelFetch: allowsRemoteModelFetch,
+                    allowsModelTesting: allowsModelTesting,
+                    allowsManualModelAdd: allowsManualModelAdd
+                ) { updatedProvider in
+                    updateProvider(updatedProvider)
+                }
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderConfigurationTab.models.title, systemImage: ProviderConfigurationTab.models.iconName)
@@ -248,6 +254,7 @@ private struct ProviderConfigurationTabsView: View {
                         Image(systemName: "checkmark.seal")
                     }
                     .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
+                    .disabled(!allowsModelTesting)
 
                     if allowsRemoteModelFetch {
                         Button {
@@ -264,6 +271,7 @@ private struct ProviderConfigurationTabsView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
+                    .disabled(!allowsManualModelAdd)
                 }
             } else {
                 ToolbarItem(placement: .confirmationAction) {
@@ -282,7 +290,15 @@ private struct ProviderConfigurationTabsView: View {
     }
 
     private var allowsRemoteModelFetch: Bool {
-        provider.apiFormat.lowercased() != "anthropic"
+        !LocalModelProviderBridge.isLocalProvider(provider) && provider.apiFormat.lowercased() != "anthropic"
+    }
+
+    private var allowsModelTesting: Bool {
+        !LocalModelProviderBridge.isLocalProvider(provider)
+    }
+
+    private var allowsManualModelAdd: Bool {
+        !LocalModelProviderBridge.isLocalProvider(provider)
     }
 
     private func updateProvider(_ updatedProvider: Provider) {

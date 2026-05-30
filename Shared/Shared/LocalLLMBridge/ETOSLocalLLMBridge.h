@@ -29,6 +29,7 @@ int32_t etos_local_llm_generate(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     char ** output,
     char ** error_message
 );
@@ -41,6 +42,7 @@ int32_t etos_local_llm_generate_chat(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     char ** output,
     char ** error_message
 );
@@ -52,6 +54,7 @@ int32_t etos_local_llm_generate_stream(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
@@ -65,6 +68,7 @@ int32_t etos_local_llm_generate_chat_stream(
     int32_t max_output_tokens,
     float temperature,
     float top_p,
+    int32_t n_gpu_layers,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message

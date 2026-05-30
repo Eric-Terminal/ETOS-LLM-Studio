@@ -11,12 +11,13 @@ import Foundation
 public enum LocalModelProviderBridge {
     public static let providerID = UUID(uuidString: "A129B884-B23B-4D9A-A536-3D141D64F6A8")!
     public static let apiFormat = "local-llama-cpp"
+    public static let defaultBaseURL = "local://llama-cpp"
 
     public static var provider: Provider {
         Provider(
             id: providerID,
             name: NSLocalizedString("本地模型", comment: "Local model provider name"),
-            baseURL: "local://llama-cpp",
+            baseURL: defaultBaseURL,
             apiKeys: [],
             apiFormat: apiFormat
         )
@@ -32,17 +33,7 @@ public enum LocalModelProviderBridge {
     }
 
     public static func runnableModel(for record: LocalModelRecord) -> RunnableModel {
-        let model = Model(
-            id: record.id,
-            modelName: record.modelName,
-            displayName: record.sanitizedDisplayName,
-            isActivated: record.isActivated,
-            kind: .chat,
-            inputModalities: [.text],
-            outputModalities: [.text],
-            capabilities: [.streaming]
-        )
-        return RunnableModel(provider: provider, model: model)
+        RunnableModel(provider: provider, model: model(for: record))
     }
 
     public static func runnableModels(from records: [LocalModelRecord]) -> [RunnableModel] {
@@ -53,5 +44,84 @@ public enum LocalModelProviderBridge {
         let prefix = "\(providerID.uuidString)-"
         guard runnableModelID.hasPrefix(prefix) else { return nil }
         return UUID(uuidString: String(runnableModelID.dropFirst(prefix.count)))
+    }
+
+    public static func model(for record: LocalModelRecord, preserving existingModel: Model? = nil, preferRecordBasics: Bool = true) -> Model {
+        var overrideParameters = existingModel?.overrideParameters ?? [:]
+        if preferRecordBasics || overrideParameters["context_size"] == nil {
+            overrideParameters["context_size"] = .int(record.contextSize)
+        }
+        if preferRecordBasics || overrideParameters["max_output_tokens"] == nil {
+            overrideParameters["max_output_tokens"] = .int(record.maxOutputTokens)
+        }
+        if preferRecordBasics || overrideParameters["n_gpu_layers"] == nil {
+            overrideParameters["n_gpu_layers"] = .int(record.gpuLayers)
+        }
+
+        return Model(
+            id: record.id,
+            modelName: sanitized(existingModel?.modelName).nilIfEmpty ?? record.modelName,
+            displayName: preferRecordBasics
+                ? record.sanitizedDisplayName
+                : (sanitized(existingModel?.displayName).nilIfEmpty ?? record.sanitizedDisplayName),
+            isActivated: preferRecordBasics ? record.isActivated : (existingModel?.isActivated ?? record.isActivated),
+            overrideParameters: overrideParameters,
+            kind: existingModel?.kind ?? .chat,
+            inputModalities: existingModel?.inputModalities ?? [.text],
+            outputModalities: existingModel?.outputModalities ?? [.text],
+            capabilities: existingModel?.capabilities ?? [.streaming],
+            requestBodyOverrideMode: existingModel?.requestBodyOverrideMode ?? .keyValue,
+            rawRequestBodyJSON: existingModel?.rawRequestBodyJSON,
+            requestBodyControls: existingModel?.requestBodyControls ?? [],
+            pricing: existingModel?.pricing
+        )
+    }
+
+    public static func provider(records: [LocalModelRecord], preserving existingProvider: Provider? = nil, preferRecordBasics: Bool = true) -> Provider {
+        let existingModelsByID = Dictionary(uniqueKeysWithValues: (existingProvider?.models ?? []).map { ($0.id, $0) })
+        return Provider(
+            id: providerID,
+            name: sanitized(existingProvider?.name).nilIfEmpty
+                ?? NSLocalizedString("本地模型", comment: "Local model provider name"),
+            baseURL: sanitized(existingProvider?.baseURL).nilIfEmpty ?? defaultBaseURL,
+            apiKeys: existingProvider?.apiKeys ?? [],
+            apiFormat: apiFormat,
+            models: records.map { record in
+                model(
+                    for: record,
+                    preserving: existingModelsByID[record.id],
+                    preferRecordBasics: preferRecordBasics
+                )
+            },
+            headerOverrides: existingProvider?.headerOverrides ?? [:],
+            proxyConfiguration: existingProvider?.proxyConfiguration
+        )
+    }
+
+    public static func applyingLocalProvider(
+        to providers: [Provider],
+        records: [LocalModelRecord],
+        isEnabled: Bool,
+        preferRecordBasics: Bool
+    ) -> [Provider] {
+        let existingProvider = providers.first(where: isLocalProvider)
+        var result = providers.filter { !isLocalProvider($0) }
+        guard isEnabled else { return result }
+        result.append(provider(records: records, preserving: existingProvider, preferRecordBasics: preferRecordBasics))
+        return result
+    }
+
+    public static func localRecordID(from model: Model) -> UUID {
+        model.id
+    }
+
+    private static func sanitized(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

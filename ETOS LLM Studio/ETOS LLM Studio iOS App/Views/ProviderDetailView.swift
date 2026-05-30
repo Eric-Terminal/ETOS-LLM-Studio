@@ -17,6 +17,8 @@ struct ProviderDetailView: View {
     let addModelRequest: Int
     let fetchModelsRequest: Int
     let allowsRemoteModelFetch: Bool
+    let allowsModelTesting: Bool
+    let allowsManualModelAdd: Bool
     let onSave: (Provider) -> Void
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isApplyingProviderUpdateFromParent = false
@@ -45,6 +47,8 @@ struct ProviderDetailView: View {
         addModelRequest: Int = 0,
         fetchModelsRequest: Int = 0,
         allowsRemoteModelFetch: Bool = true,
+        allowsModelTesting: Bool = true,
+        allowsManualModelAdd: Bool = true,
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self.sourceProvider = provider
@@ -52,6 +56,8 @@ struct ProviderDetailView: View {
         self.addModelRequest = addModelRequest
         self.fetchModelsRequest = fetchModelsRequest
         self.allowsRemoteModelFetch = allowsRemoteModelFetch
+        self.allowsModelTesting = allowsModelTesting
+        self.allowsManualModelAdd = allowsManualModelAdd
         _provider = State(initialValue: provider)
         self.onSave = onSave
     }
@@ -129,12 +135,14 @@ struct ProviderDetailView: View {
         .toolbar {
             if showsToolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        isShowingModelTest = true
-                    } label: {
-                        Image(systemName: "checkmark.seal")
+                    if allowsModelTesting {
+                        Button {
+                            isShowingModelTest = true
+                        } label: {
+                            Image(systemName: "checkmark.seal")
+                        }
+                        .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
                     }
-                    .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
 
                     if allowsRemoteModelFetch {
                         Button {
@@ -146,12 +154,14 @@ struct ProviderDetailView: View {
                         .accessibilityLabel(NSLocalizedString("从云端获取", comment: ""))
                     }
 
-                    Button {
-                        isAddingModel = true
-                    } label: {
-                        Image(systemName: "plus")
+                    if allowsManualModelAdd {
+                        Button {
+                            isAddingModel = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
                     }
-                    .accessibilityLabel(NSLocalizedString("添加模型", comment: ""))
                 }
             }
         }
@@ -207,9 +217,10 @@ struct ProviderDetailView: View {
 
     private func saveChanges() {
         var providerToSave = provider
-        providerToSave.models = provider.models.filter { $0.isActivated }
-        ConfigLoader.saveProvider(providerToSave)
-        ChatService.shared.reloadProviders()
+        if !LocalModelProviderBridge.isLocalProvider(providerToSave) {
+            providerToSave.models = provider.models.filter { $0.isActivated }
+        }
+        ChatService.shared.saveProviderFromManagement(providerToSave)
         onSave(providerToSave)
     }
 

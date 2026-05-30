@@ -98,6 +98,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case providerOrderIDs = "providerOrder.ids"
     case selectedRunnableModelID = "selectedRunnableModelID"
     case lastActiveSessionID = "launch.lastActiveSessionID"
+    case localModelsEnabled = "localModels.enabled"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
     case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
@@ -244,6 +245,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .selectedRunnableModelID,
              .lastActiveSessionID:
             return .text("")
+        case .localModelsEnabled:
+            return .bool(false)
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,
@@ -460,6 +463,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .appLockTimeoutSeconds,
              .appLockBiometricEnabled,
              .databaseEncryptionEnabled:
+            return false
+        case .localModelsEnabled:
             return false
         default:
             return true

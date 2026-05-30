@@ -29,12 +29,14 @@ struct LocalModelStoreTests {
         record.displayName = "新名字"
         record.contextSize = 0
         record.maxOutputTokens = 0
+        record.gpuLayers = 7
         store.update(record)
 
         let reloaded = LocalModelStore(directoryURL: store.directoryURL)
         #expect(reloaded.models.first?.sanitizedDisplayName == "新名字")
         #expect(reloaded.models.first?.contextSize == 1)
         #expect(reloaded.models.first?.maxOutputTokens == 1)
+        #expect(reloaded.models.first?.gpuLayers == 7)
 
         if let saved = reloaded.models.first {
             reloaded.delete(saved)
@@ -59,7 +61,62 @@ struct LocalModelStoreTests {
         #expect(runnable.provider.id == LocalModelProviderBridge.providerID)
         #expect(runnable.provider.apiFormat == LocalModelProviderBridge.apiFormat)
         #expect(runnable.model.id == id)
+        #expect(runnable.model.overrideParameters["context_size"] == .int(LocalModelRecord.defaultContextSize))
+        #expect(runnable.model.overrideParameters["max_output_tokens"] == .int(LocalModelRecord.defaultMaxOutputTokens))
+        #expect(runnable.model.overrideParameters["n_gpu_layers"] == .int(LocalModelRecord.defaultGPULayers))
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
+    }
+
+    @Test("本地模型开关决定虚拟提供商是否出现")
+    func localProviderBridgeHonorsEnabledSwitch() {
+        let record = LocalModelRecord(
+            displayName: "TinyLlama",
+            fileName: "tiny.gguf",
+            relativePath: "tiny.gguf",
+            fileSize: 8
+        )
+
+        let disabledProviders = LocalModelProviderBridge.applyingLocalProvider(
+            to: [],
+            records: [record],
+            isEnabled: false,
+            preferRecordBasics: true
+        )
+        let enabledProviders = LocalModelProviderBridge.applyingLocalProvider(
+            to: [],
+            records: [record],
+            isEnabled: true,
+            preferRecordBasics: true
+        )
+
+        #expect(!disabledProviders.contains(where: LocalModelProviderBridge.isLocalProvider))
+        #expect(enabledProviders.contains(where: LocalModelProviderBridge.isLocalProvider))
+        #expect(enabledProviders.first(where: LocalModelProviderBridge.isLocalProvider)?.models.count == 1)
+    }
+
+    @Test("提供商模型设置会回写本地权重记录")
+    func localProviderModelChangesPersistToRecord() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appendingPathComponent("source.gguf")
+        try Data([1, 2, 3, 4]).write(to: source)
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let record = try store.importModel(from: source, displayName: "原名")
+        var model = LocalModelProviderBridge.model(for: record)
+        model.displayName = "模型别名"
+        model.isActivated = false
+        model.overrideParameters["context_size"] = .string("4096")
+        model.overrideParameters["max_output_tokens"] = .int(1024)
+        model.overrideParameters["n_gpu_layers"] = .int(0)
+
+        store.updateFromProviderModel(model)
+
+        #expect(store.models.first?.sanitizedDisplayName == "模型别名")
+        #expect(store.models.first?.isActivated == false)
+        #expect(store.models.first?.contextSize == 4096)
+        #expect(store.models.first?.maxOutputTokens == 1024)
+        #expect(store.models.first?.gpuLayers == 0)
     }
 
     @Test("本地对话会转换为结构化 role/content 消息")
@@ -80,6 +137,12 @@ struct LocalModelStoreTests {
     @Test("缺失文件的本地模型不会进入可用候选")
     func missingLocalModelIsNotActivatedCandidate() {
         let store = LocalModelStore(directoryURL: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString))
+        let originalSwitch = AppConfigStore.boolValue(for: .localModelsEnabled)
+        AppConfigStore.persistSynchronously(.bool(true), for: .localModelsEnabled)
+        defer {
+            AppConfigStore.persistSynchronously(.bool(originalSwitch), for: .localModelsEnabled)
+        }
+
         store.update(LocalModelRecord(
             displayName: "Missing",
             fileName: "missing.gguf",

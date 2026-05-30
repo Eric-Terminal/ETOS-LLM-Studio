@@ -12,6 +12,7 @@ import Shared
 
 struct LocalModelManagementView: View {
     @ObservedObject private var store = LocalModelStore.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isImportingModel = false
     @State private var errorMessage: String?
 
@@ -19,6 +20,14 @@ struct LocalModelManagementView: View {
 
     var body: some View {
         List {
+            Section {
+                Toggle(NSLocalizedString("启用本地模型提供商", comment: "Enable local model provider"), isOn: localModelsEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("关闭后不会删除权重；重新开启时会自动把“本地模型”提供商加回模型管理。", comment: "Local provider toggle footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Button {
                     isImportingModel = true
@@ -77,6 +86,15 @@ struct LocalModelManagementView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    private var localModelsEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelsEnabled
+        } set: { isEnabled in
+            appConfig.localModelsEnabled = isEnabled
+            ChatService.shared.setLocalModelsEnabled(isEnabled)
+        }
+    }
 }
 
 private struct LocalModelRow: View {
@@ -124,9 +142,15 @@ private struct LocalModelDetailView: View {
     @ObservedObject private var store = LocalModelStore.shared
     @State private var draft: LocalModelRecord
     @State private var showDeleteAlert = false
+    @State private var contextSizeText: String
+    @State private var maxOutputTokensText: String
+    @State private var gpuLayersText: String
 
     init(record: LocalModelRecord) {
         _draft = State(initialValue: record)
+        _contextSizeText = State(initialValue: "\(record.contextSize)")
+        _maxOutputTokensText = State(initialValue: "\(record.maxOutputTokens)")
+        _gpuLayersText = State(initialValue: "\(record.gpuLayers)")
     }
 
     var body: some View {
@@ -137,25 +161,21 @@ private struct LocalModelDetailView: View {
             }
 
             Section {
-                Stepper(value: $draft.contextSize, in: 1...262_144, step: 256) {
-                    HStack {
-                        Text(NSLocalizedString("上下文", comment: "Local model context size"))
-                        Spacer()
-                        Text("\(draft.contextSize)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Stepper(value: $draft.maxOutputTokens, in: 1...65_536, step: 128) {
-                    HStack {
-                        Text(NSLocalizedString("输出上限", comment: "Local model max output tokens"))
-                        Spacer()
-                        Text("\(draft.maxOutputTokens)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                LocalModelIntegerField(
+                    title: NSLocalizedString("上下文", comment: "Local model context size"),
+                    text: $contextSizeText
+                )
+                LocalModelIntegerField(
+                    title: NSLocalizedString("输出上限", comment: "Local model max output tokens"),
+                    text: $maxOutputTokensText
+                )
+                LocalModelIntegerField(
+                    title: NSLocalizedString("GPU 层数", comment: "Local model GPU layers"),
+                    text: $gpuLayersText,
+                    keyboardType: .numbersAndPunctuation
+                )
             } footer: {
-                Text(NSLocalizedString("上下文和输出上限不做额外限制，过大的设置可能触发系统内存回收。", comment: "Local model parameter footer"))
+                Text(NSLocalizedString("-1 表示 iOS 真机尽量使用 Metal；0 表示强制 CPU。模拟器和 watchOS 会自动走 CPU。", comment: "Local model parameter footer"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -184,6 +204,7 @@ private struct LocalModelDetailView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(NSLocalizedString("保存", comment: "Save")) {
+                    applyDraftNumbers()
                     store.update(draft)
                     dismiss()
                 }
@@ -197,6 +218,35 @@ private struct LocalModelDetailView: View {
             }
         } message: {
             Text(NSLocalizedString("会同时删除本机保存的权重文件。", comment: "Delete local model alert message"))
+        }
+    }
+
+    private func applyDraftNumbers() {
+        if let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.contextSize = max(1, contextSize)
+        }
+        if let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.maxOutputTokens = max(1, maxOutputTokens)
+        }
+        if let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.gpuLayers = gpuLayers
+        }
+    }
+}
+
+private struct LocalModelIntegerField: View {
+    let title: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .numberPad
+
+    var body: some View {
+        HStack {
+            Text(title)
+            TextField(title, text: $text)
+                .keyboardType(keyboardType)
+                .multilineTextAlignment(.trailing)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
         }
     }
 }

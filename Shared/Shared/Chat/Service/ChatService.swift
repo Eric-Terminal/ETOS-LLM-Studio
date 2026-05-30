@@ -463,7 +463,12 @@ public class ChatService {
         self.urlSession = urlSession
         ConfigLoader.setupInitialProviderConfigs()
         ConfigLoader.setupBackgroundsDirectory()
-        self.providers = ConfigLoader.loadProviders()
+        self.providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: ConfigLoader.loadProviders(),
+            records: localModelStore.models,
+            isEnabled: localModelStore.isProviderEnabled,
+            preferRecordBasics: true
+        )
         let startupTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
         self.startupTemporarySession = startupTemporarySession
         self.adapters = adapters ?? [

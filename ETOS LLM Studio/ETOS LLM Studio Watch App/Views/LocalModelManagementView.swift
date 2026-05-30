@@ -11,6 +11,7 @@ import Shared
 
 struct LocalModelManagementView: View {
     @ObservedObject private var store = LocalModelStore.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var downloadURLText = ""
     @State private var displayName = ""
     @State private var isDownloading = false
@@ -18,6 +19,14 @@ struct LocalModelManagementView: View {
 
     var body: some View {
         List {
+            Section {
+                Toggle(NSLocalizedString("启用本地模型提供商", comment: "Enable local model provider"), isOn: localModelsEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("关闭后不会删除权重；重新开启时会自动恢复到模型管理。", comment: "Watch local provider toggle footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 TextField(NSLocalizedString("模型文件链接", comment: "Local model download URL"), text: $downloadURLText.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
@@ -65,6 +74,15 @@ struct LocalModelManagementView: View {
             }
         }
         .navigationTitle(NSLocalizedString("本地模型", comment: "Local models title"))
+    }
+
+    private var localModelsEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelsEnabled
+        } set: { isEnabled in
+            appConfig.localModelsEnabled = isEnabled
+            ChatService.shared.setLocalModelsEnabled(isEnabled)
+        }
     }
 
     private var normalizedURL: URL? {
@@ -135,9 +153,15 @@ private struct LocalModelDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = LocalModelStore.shared
     @State private var draft: LocalModelRecord
+    @State private var contextSizeText: String
+    @State private var maxOutputTokensText: String
+    @State private var gpuLayersText: String
 
     init(record: LocalModelRecord) {
         _draft = State(initialValue: record)
+        _contextSizeText = State(initialValue: "\(record.contextSize)")
+        _maxOutputTokensText = State(initialValue: "\(record.maxOutputTokens)")
+        _gpuLayersText = State(initialValue: "\(record.gpuLayers)")
     }
 
     var body: some View {
@@ -148,12 +172,22 @@ private struct LocalModelDetailView: View {
             }
 
             Section {
-                Stepper(value: $draft.contextSize, in: 1...262_144, step: 256) {
-                    Text("\(NSLocalizedString("上下文", comment: "Local model context size")) \(draft.contextSize)")
-                }
-                Stepper(value: $draft.maxOutputTokens, in: 1...65_536, step: 128) {
-                    Text("\(NSLocalizedString("输出", comment: "Local model output tokens")) \(draft.maxOutputTokens)")
-                }
+                LocalModelIntegerField(
+                    title: NSLocalizedString("上下文", comment: "Local model context size"),
+                    text: $contextSizeText
+                )
+                LocalModelIntegerField(
+                    title: NSLocalizedString("输出上限", comment: "Local model max output tokens"),
+                    text: $maxOutputTokensText
+                )
+                LocalModelIntegerField(
+                    title: NSLocalizedString("GPU 层数", comment: "Local model GPU layers"),
+                    text: $gpuLayersText
+                )
+            } footer: {
+                Text(NSLocalizedString("watchOS 推理会自动走 CPU；参数只按填写值保存。", comment: "Watch local model parameter footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -172,6 +206,7 @@ private struct LocalModelDetailView: View {
 
             Section {
                 Button {
+                    applyDraftNumbers()
                     store.update(draft)
                     dismiss()
                 } label: {
@@ -187,5 +222,31 @@ private struct LocalModelDetailView: View {
             }
         }
         .navigationTitle(draft.sanitizedDisplayName)
+    }
+
+    private func applyDraftNumbers() {
+        if let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.contextSize = max(1, contextSize)
+        }
+        if let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.maxOutputTokens = max(1, maxOutputTokens)
+        }
+        if let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.gpuLayers = gpuLayers
+        }
+    }
+}
+
+private struct LocalModelIntegerField: View {
+    let title: String
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            TextField(title, text: $text.watchKeyboardNewlineBinding())
+        }
     }
 }
