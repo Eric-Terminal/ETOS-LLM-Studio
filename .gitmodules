@@ -1,0 +1,3 @@
+[submodule "Dependencies/llama.cpp"]
+	path = Dependencies/llama.cpp
+	url = https://github.com/Eric-Terminal/llama.cpp.git
