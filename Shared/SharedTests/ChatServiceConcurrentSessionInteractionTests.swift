@@ -187,6 +187,84 @@ struct ChatServiceConcurrentSessionInteractionTests {
     }
 
     @MainActor
+    @Test("流式输出期间编辑历史用户消息不会被后续分片覆盖")
+    func testEditingUserMessageDuringStreamingIsPreserved() async throws {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            replaceProviders(with: originalProviders)
+        }
+
+        let provider = Provider(
+            name: "Streaming Edit Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+            ]
+        )
+        replaceProviders(with: [provider])
+
+        ControlledStreamingURLProtocol.reset()
+        ControlledStreamingURLProtocol.register(marker: "edit-me", chunks: ["第一段\n", "第二段\n"])
+
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ControlledStreamingURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+
+        let service = ChatService(
+            adapters: ["openai-compatible": StreamingFailureMockAdapter()],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+        service.setSelectedModel(service.activatedRunnableModels.first)
+
+        let testSession = service.createSavedSession(name: "流式编辑保留")
+        defer {
+            service.deleteSessions([testSession])
+            ControlledStreamingURLProtocol.reset()
+        }
+        service.setCurrentSession(testSession)
+
+        let task = Task {
+            await service.sendAndProcessMessage(
+                content: "edit-me",
+                aiTemperature: 0,
+                aiTopP: 1,
+                systemPrompt: "",
+                maxChatHistory: 5,
+                enableStreaming: true,
+                enhancedPrompt: nil,
+                enableMemory: false,
+                enableMemoryWrite: false,
+                includeSystemTime: false
+            )
+        }
+
+        try await waitUntil("流式第一段已发布") {
+            service.messagesForSessionSubject.value.contains { message in
+                message.role == .assistant && message.content == "第一段"
+            }
+        }
+
+        let userMessage = try #require(service.messagesForSessionSubject.value.first(where: { $0.role == .user }))
+        var editedUserMessage = userMessage
+        editedUserMessage.content = "已编辑的用户消息"
+        service.updateMessage(editedUserMessage)
+
+        ControlledStreamingURLProtocol.releaseNext(marker: "edit-me")
+        await task.value
+
+        let runtimeMessages = service.messagesForSessionSubject.value
+        #expect(runtimeMessages.first(where: { $0.id == userMessage.id })?.content == "已编辑的用户消息")
+        #expect(runtimeMessages.last(where: { $0.role == .assistant })?.content == "第一段第二段")
+
+        let storedMessages = Persistence.loadMessages(for: testSession.id)
+        #expect(storedMessages.first(where: { $0.id == userMessage.id })?.content == "已编辑的用户消息")
+        #expect(storedMessages.last(where: { $0.role == .assistant })?.content == "第一段第二段")
+    }
+
+    @MainActor
     private func replaceProviders(with providers: [Provider]) {
         for provider in ConfigLoader.loadProviders() {
             ConfigLoader.deleteProvider(provider)
@@ -196,11 +274,12 @@ struct ChatServiceConcurrentSessionInteractionTests {
         }
     }
 
+    @MainActor
     private func waitUntil(
         _ description: String,
         timeout: TimeInterval = 2.0,
         pollIntervalNanoseconds: UInt64 = 10_000_000,
-        condition: @escaping @Sendable () -> Bool
+        condition: @escaping () -> Bool
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -278,6 +357,127 @@ private final class StreamingFailureMockAdapter: APIAdapter {
 
     func parseStreamingResponse(line: String) -> ChatMessagePart? {
         ChatMessagePart(content: line)
+    }
+}
+
+private final class ControlledStreamingURLProtocol: URLProtocol {
+    private struct RegisteredScenario {
+        let gates: [DispatchSemaphore]
+        let chunks: [Data]
+        var started: Bool
+    }
+
+    private static let lock = NSLock()
+    private static var registeredScenarios: [String: RegisteredScenario] = [:]
+
+    private var activeMarker: String?
+    private let stateLock = NSLock()
+    private var isStopped = false
+
+    static func reset() {
+        lock.lock()
+        let scenarios = Array(registeredScenarios.values)
+        registeredScenarios.removeAll()
+        lock.unlock()
+        for scenario in scenarios {
+            for gate in scenario.gates {
+                gate.signal()
+            }
+        }
+    }
+
+    static func register(marker: String, chunks: [String]) {
+        lock.lock()
+        registeredScenarios[marker] = RegisteredScenario(
+            gates: chunks.dropFirst().map { _ in DispatchSemaphore(value: 0) },
+            chunks: chunks.map { Data($0.utf8) },
+            started: false
+        )
+        lock.unlock()
+    }
+
+    static func releaseNext(marker: String) {
+        lock.lock()
+        let gate = registeredScenarios[marker]?.gates.first
+        lock.unlock()
+        gate?.signal()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let requestURL = request.url,
+              let components = URLComponents(url: requestURL, resolvingAgainstBaseURL: false),
+              let marker = components.queryItems?.first(where: { $0.name == "marker" })?.value else {
+            failWithError(message: "缺少 marker 参数")
+            return
+        }
+        activeMarker = marker
+
+        Self.lock.lock()
+        if var scenario = Self.registeredScenarios[marker] {
+            scenario.started = true
+            Self.registeredScenarios[marker] = scenario
+        }
+        let scenario = Self.registeredScenarios[marker]
+        Self.lock.unlock()
+
+        guard let scenario else {
+            failWithError(message: "未注册 marker: \(marker)")
+            return
+        }
+
+        DispatchQueue.global().async {
+            let response = HTTPURLResponse(
+                url: requestURL,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+            )!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+
+            for chunkIndex in scenario.chunks.indices {
+                if chunkIndex > 0 {
+                    scenario.gates[chunkIndex - 1].wait()
+                }
+                self.stateLock.lock()
+                let stopped = self.isStopped
+                self.stateLock.unlock()
+                if stopped { return }
+                self.client?.urlProtocol(self, didLoad: scenario.chunks[chunkIndex])
+            }
+
+            self.stateLock.lock()
+            let stopped = self.isStopped
+            self.stateLock.unlock()
+            if stopped { return }
+
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {
+        stateLock.lock()
+        isStopped = true
+        stateLock.unlock()
+        if let marker = activeMarker {
+            Self.releaseNext(marker: marker)
+        }
+    }
+
+    private func failWithError(message: String) {
+        let error = NSError(
+            domain: "ControlledStreamingURLProtocol",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
+        client?.urlProtocol(self, didFailWithError: error)
     }
 }
 

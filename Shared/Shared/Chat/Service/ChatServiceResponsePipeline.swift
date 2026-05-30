@@ -215,7 +215,11 @@ extension ChatService {
                             speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                         )
                     }
-                    publishMessagesIfCurrentSession(messages, for: currentSessionID, keepingSpeedSamplesFor: loadingMessageID)
+                    messages = publishStreamingMessages(
+                        messages,
+                        loadingMessageID: loadingMessageID,
+                        sessionID: currentSessionID
+                    )
                 }
             }
 
@@ -305,7 +309,11 @@ extension ChatService {
                 }
                 attachCostEstimateIfPossible(to: &messages[index], using: requestLogContext)
                 finalAssistantMessage = messages[index]
-                persistAndPublishMessages(messages, for: currentSessionID, keepingSpeedSamplesFor: loadingMessageID)
+                messages = persistAndPublishStreamingMessages(
+                    messages,
+                    loadingMessageID: loadingMessageID,
+                    sessionID: currentSessionID
+                )
             }
 
             if let finalAssistantMessage = finalAssistantMessage {

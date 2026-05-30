@@ -54,6 +54,50 @@ extension ChatService {
         messagesForSessionSubject.send(normalized)
     }
 
+    func messagesByMergingStreamingUpdate(
+        _ streamingMessages: [ChatMessage],
+        loadingMessageID: UUID,
+        sessionID: UUID
+    ) -> [ChatMessage] {
+        guard let streamingIndex = streamingMessages.firstIndex(where: { $0.id == loadingMessageID }) else {
+            return streamingMessages
+        }
+        var latestMessages = messagesSnapshot(for: sessionID)
+        guard let latestIndex = latestMessages.firstIndex(where: { $0.id == loadingMessageID }) else {
+            return latestMessages
+        }
+        latestMessages[latestIndex] = streamingMessages[streamingIndex]
+        return latestMessages
+    }
+
+    func publishStreamingMessages(
+        _ messages: [ChatMessage],
+        loadingMessageID: UUID,
+        sessionID: UUID
+    ) -> [ChatMessage] {
+        let merged = messagesByMergingStreamingUpdate(
+            messages,
+            loadingMessageID: loadingMessageID,
+            sessionID: sessionID
+        )
+        publishMessagesIfCurrentSession(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
+        return merged
+    }
+
+    func persistAndPublishStreamingMessages(
+        _ messages: [ChatMessage],
+        loadingMessageID: UUID,
+        sessionID: UUID
+    ) -> [ChatMessage] {
+        let merged = messagesByMergingStreamingUpdate(
+            messages,
+            loadingMessageID: loadingMessageID,
+            sessionID: sessionID
+        )
+        persistAndPublishMessages(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
+        return merged
+    }
+
     func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         let persisted = normalizedMessagesForPersistence(messages)
         Persistence.saveMessages(persisted, for: sessionID)
