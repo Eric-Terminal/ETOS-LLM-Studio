@@ -58,6 +58,10 @@ public enum LocalModelProviderBridge {
             overrideParameters["n_gpu_layers"] = .int(record.gpuLayers)
         }
 
+        let capabilities = Model.orderedCapabilities(
+            (existingModel?.capabilities ?? []) + [.toolCalling, .streaming]
+        )
+
         return Model(
             id: record.id,
             modelName: sanitized(existingModel?.modelName).nilIfEmpty ?? record.modelName,
@@ -69,7 +73,7 @@ public enum LocalModelProviderBridge {
             kind: existingModel?.kind ?? .chat,
             inputModalities: existingModel?.inputModalities ?? [.text],
             outputModalities: existingModel?.outputModalities ?? [.text],
-            capabilities: existingModel?.capabilities ?? [.streaming],
+            capabilities: capabilities,
             requestBodyOverrideMode: existingModel?.requestBodyOverrideMode ?? .keyValue,
             rawRequestBodyJSON: existingModel?.rawRequestBodyJSON,
             requestBodyControls: existingModel?.requestBodyControls ?? [],

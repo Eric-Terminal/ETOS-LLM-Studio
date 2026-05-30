@@ -30,7 +30,8 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
-        requestLogContext: RequestLogContext
+        requestLogContext: RequestLogContext,
+        availableTools: [InternalToolDefinition]?
     ) async {
         guard let record = localModelRecord(for: runnableModel) else {
             let message = NSLocalizedString("本地模型文件不存在，请重新导入权重或停用该模型。", comment: "Local model missing error")
@@ -49,8 +50,12 @@ extension ChatService {
 
         do {
             let overrides = runnableModel.effectiveOverrideParameters
+            let localMessagesToSend = LocalLLMToolCallCodec.messagesByInjectingToolProtocol(
+                into: messagesToSend,
+                tools: availableTools
+            )
             let stream = try LocalLLMEngine.shared.stream(
-                messages: LocalLLMChatMessageBuilder.messages(from: messagesToSend),
+                messages: LocalLLMChatMessageBuilder.messages(from: localMessagesToSend),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
@@ -128,10 +133,12 @@ extension ChatService {
                     speed: finalSpeed
                 )
             }
+            let parsedOutput = LocalLLMToolCallCodec.parseToolCalls(from: output)
             var responseMessage = ChatMessage(
                 role: .assistant,
-                content: output,
+                content: parsedOutput.content,
                 requestedAt: requestStartedAt,
+                toolCalls: parsedOutput.toolCalls.isEmpty ? nil : parsedOutput.toolCalls,
                 modelReference: requestLogContext.modelReference
             )
             if enableResponseSpeedMetrics {
@@ -159,7 +166,7 @@ extension ChatService {
                 currentSessionID: currentSessionID,
                 userMessage: userMessage,
                 wasTemporarySession: wasTemporarySession,
-                availableTools: nil,
+                availableTools: availableTools,
                 aiTemperature: aiTemperature,
                 aiTopP: aiTopP,
                 systemPrompt: systemPrompt,

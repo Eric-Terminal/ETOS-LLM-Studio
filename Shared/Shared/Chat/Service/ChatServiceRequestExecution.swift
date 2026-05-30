@@ -287,7 +287,8 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
-                requestLogContext: requestLogContext
+                requestLogContext: requestLogContext,
+                availableTools: runnableModel.model.supportsToolCalling ? tools : nil
             )
             return
         }

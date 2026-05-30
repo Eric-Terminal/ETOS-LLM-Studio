@@ -64,6 +64,7 @@ struct LocalModelStoreTests {
         #expect(runnable.model.overrideParameters["context_size"] == .int(LocalModelRecord.defaultContextSize))
         #expect(runnable.model.overrideParameters["max_output_tokens"] == .int(LocalModelRecord.defaultMaxOutputTokens))
         #expect(runnable.model.overrideParameters["n_gpu_layers"] == .int(LocalModelRecord.defaultGPULayers))
+        #expect(runnable.model.supportsToolCalling)
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
     }
 
@@ -161,8 +162,41 @@ struct LocalModelStoreTests {
             ChatMessage(role: .user, content: "   ")
         ])
 
-        #expect(messages.map(\.role) == ["system", "user", "assistant", "tool"])
-        #expect(messages.map(\.content) == ["你是助手", "你好", "收到", "工具结果"])
+        #expect(messages.map(\.role) == ["system", "user", "assistant", "user"])
+        #expect(messages[3].content.contains("<local_tool_result>"))
+        #expect(messages[3].content.contains("工具结果"))
+    }
+
+    @Test("本地工具协议会注入系统消息并解析工具调用")
+    func localToolCallCodecInjectsProtocolAndParsesToolCalls() throws {
+        let tool = InternalToolDefinition(
+            name: "app_get_system_time",
+            description: "获取当前设备时间",
+            parameters: .dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([:])
+            ])
+        )
+        let injected = LocalLLMToolCallCodec.messagesByInjectingToolProtocol(
+            into: [ChatMessage(role: .user, content: "现在几点")],
+            tools: [tool]
+        )
+
+        #expect(injected.first?.role == .system)
+        #expect(injected.first?.content.contains("<local_tools>") == true)
+        #expect(injected.first?.content.contains("app_get_system_time") == true)
+
+        let parsed = LocalLLMToolCallCodec.parseToolCalls(from: """
+        我需要调用工具。
+        ```etos_tool_calls
+        {"tool_calls":[{"name":"app_get_system_time","arguments":{}}]}
+        ```
+        """)
+
+        let call = try #require(parsed.toolCalls.first)
+        #expect(parsed.content == "我需要调用工具。")
+        #expect(call.toolName == "app_get_system_time")
+        #expect(call.arguments == "{}")
     }
 
     @Test("缺失文件的本地模型不会进入可用候选")
