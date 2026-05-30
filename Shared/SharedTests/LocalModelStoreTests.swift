@@ -62,6 +62,21 @@ struct LocalModelStoreTests {
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
     }
 
+    @Test("本地对话会转换为结构化 role/content 消息")
+    func localChatMessagesKeepRolesAndTrimContent() {
+        let messages = LocalLLMChatMessageBuilder.messages(from: [
+            ChatMessage(role: .system, content: "  你是助手  "),
+            ChatMessage(role: .user, content: "\n你好\n"),
+            ChatMessage(role: .assistant, content: "收到"),
+            ChatMessage(role: .tool, content: "工具结果"),
+            ChatMessage(role: .error, content: "错误不应进入模型"),
+            ChatMessage(role: .user, content: "   ")
+        ])
+
+        #expect(messages.map(\.role) == ["system", "user", "assistant", "tool"])
+        #expect(messages.map(\.content) == ["你是助手", "你好", "收到", "工具结果"])
+    }
+
     @Test("缺失文件的本地模型不会进入可用候选")
     func missingLocalModelIsNotActivatedCandidate() {
         let store = LocalModelStore(directoryURL: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString))

@@ -48,8 +48,8 @@ extension ChatService {
         }
 
         do {
-            let output = try await LocalLLMEngine.shared.generate(
-                prompt: LocalLLMPromptBuilder.prompt(from: messagesToSend),
+            let stream = try LocalLLMEngine.shared.stream(
+                messages: LocalLLMChatMessageBuilder.messages(from: messagesToSend),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
                     contextSize: record.contextSize,
@@ -58,9 +58,74 @@ extension ChatService {
                     topP: aiTopP
                 )
             )
+
+            var output = ""
+            var firstTokenAt: Date?
+            var lastTokenAt: Date?
+            var speedSamples: [MessageResponseMetrics.SpeedSample] = []
+            var messages = messagesSnapshot(for: currentSessionID)
+
+            for try await tokenText in stream {
+                guard !tokenText.isEmpty else { continue }
+                let receivedAt = Date()
+                if firstTokenAt == nil {
+                    firstTokenAt = receivedAt
+                }
+                lastTokenAt = receivedAt
+                output += tokenText
+
+                if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    messages[index].role = .assistant
+                    messages[index].content += tokenText
+                    messages[index].modelReference = requestLogContext.modelReference
+                    if enableResponseSpeedMetrics {
+                        let estimatedTokens = estimatedCompletionTokens(from: output)
+                        let speed = streamingTokenPerSecond(
+                            tokens: estimatedTokens,
+                            requestStartedAt: requestStartedAt,
+                            firstTokenAt: firstTokenAt,
+                            snapshotAt: receivedAt
+                        )
+                        appendSpeedSample(
+                            to: &speedSamples,
+                            elapsed: max(0, receivedAt.timeIntervalSince(requestStartedAt)),
+                            speed: speed
+                        )
+                        messages[index].responseMetrics = makeResponseMetrics(
+                            requestStartedAt: requestStartedAt,
+                            responseCompletedAt: nil,
+                            totalResponseDuration: nil,
+                            timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
+                            completionTokensForSpeed: estimatedTokens,
+                            tokenPerSecond: speed,
+                            isEstimated: true,
+                            speedSamples: speedSamples.isEmpty ? nil : speedSamples
+                        )
+                    }
+                    messages = publishStreamingMessages(
+                        messages,
+                        loadingMessageID: loadingMessageID,
+                        sessionID: currentSessionID
+                    )
+                }
+            }
+
             let responseCompletedAt = Date()
             let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
             let estimatedCompletionTokens = estimatedCompletionTokens(from: output)
+            let finalSpeed = enableResponseSpeedMetrics ? streamingTokenPerSecond(
+                tokens: estimatedCompletionTokens,
+                requestStartedAt: requestStartedAt,
+                firstTokenAt: firstTokenAt,
+                snapshotAt: lastTokenAt ?? responseCompletedAt
+            ) : nil
+            if enableResponseSpeedMetrics {
+                appendSpeedSample(
+                    to: &speedSamples,
+                    elapsed: totalDuration,
+                    speed: finalSpeed
+                )
+            }
             var responseMessage = ChatMessage(
                 role: .assistant,
                 content: output,
@@ -72,10 +137,11 @@ extension ChatService {
                     requestStartedAt: requestStartedAt,
                     responseCompletedAt: responseCompletedAt,
                     totalResponseDuration: totalDuration,
-                    timeToFirstToken: nil,
+                    timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
                     completionTokensForSpeed: estimatedCompletionTokens,
-                    tokenPerSecond: tokenPerSecond(tokens: estimatedCompletionTokens, elapsed: totalDuration),
-                    isEstimated: true
+                    tokenPerSecond: finalSpeed ?? tokenPerSecond(tokens: estimatedCompletionTokens, elapsed: totalDuration),
+                    isEstimated: true,
+                    speedSamples: speedSamples.isEmpty ? nil : speedSamples
                 )
             }
             attachCostEstimateIfPossible(to: &responseMessage, using: requestLogContext)
