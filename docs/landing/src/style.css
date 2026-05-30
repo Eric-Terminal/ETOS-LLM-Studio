@@ -40,8 +40,8 @@
   --fg-secondary: var(--ink-muted-80);
 
   --font-display:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Inter',
-    'PingFang SC', 'PingFang TC', 'Hiragino Sans', 'Microsoft YaHei', sans-serif;
+    'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    system-ui, 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
 }
 
