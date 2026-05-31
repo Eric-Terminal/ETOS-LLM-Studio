@@ -57,6 +57,9 @@ public enum LocalModelProviderBridge {
         if preferRecordBasics || overrideParameters["n_gpu_layers"] == nil {
             overrideParameters["n_gpu_layers"] = .int(record.gpuLayers)
         }
+        if preferRecordBasics || overrideParameters["llama_cli_args"] == nil {
+            overrideParameters["llama_cli_args"] = .string(record.advancedArguments)
+        }
 
         let capabilities = Model.orderedCapabilities(
             (existingModel?.capabilities ?? []) + [.toolCalling, .streaming, .embedding]

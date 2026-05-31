@@ -12,6 +12,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public static let defaultContextSize = 2048
     public static let defaultMaxOutputTokens = 512
     public static let defaultGPULayers = -1
+    public static let defaultAdvancedArguments = ""
 
     public var id: UUID
     public var displayName: String
@@ -24,6 +25,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public var contextSize: Int
     public var maxOutputTokens: Int
     public var gpuLayers: Int
+    public var advancedArguments: String
     public var note: String?
 
     public init(
@@ -38,6 +40,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         contextSize: Int = LocalModelRecord.defaultContextSize,
         maxOutputTokens: Int = LocalModelRecord.defaultMaxOutputTokens,
         gpuLayers: Int = LocalModelRecord.defaultGPULayers,
+        advancedArguments: String = LocalModelRecord.defaultAdvancedArguments,
         note: String? = nil
     ) {
         self.id = id
@@ -51,6 +54,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.contextSize = max(1, contextSize)
         self.maxOutputTokens = max(1, maxOutputTokens)
         self.gpuLayers = gpuLayers
+        self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
         self.note = note?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
@@ -75,6 +79,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         case contextSize
         case maxOutputTokens
         case gpuLayers
+        case advancedArguments
         case note
     }
 
@@ -92,6 +97,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
             contextSize: try container.decodeIfPresent(Int.self, forKey: .contextSize) ?? Self.defaultContextSize,
             maxOutputTokens: try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens) ?? Self.defaultMaxOutputTokens,
             gpuLayers: try container.decodeIfPresent(Int.self, forKey: .gpuLayers) ?? Self.defaultGPULayers,
+            advancedArguments: try container.decodeIfPresent(String.self, forKey: .advancedArguments) ?? Self.defaultAdvancedArguments,
             note: try container.decodeIfPresent(String.self, forKey: .note)
         )
     }

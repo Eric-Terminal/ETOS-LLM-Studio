@@ -18,6 +18,7 @@ struct TelegramMessageComposer: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
     @Binding var text: String
     let isSending: Bool
     let sendAction: () -> Void
@@ -35,6 +36,7 @@ struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
+    @State private var resourceUsageTask: Task<Void, Never>?
 
     private let controlSize: CGFloat = 40
     private let expandedControlSize: CGFloat = 34
@@ -160,6 +162,15 @@ struct TelegramMessageComposer: View {
                     isExpandedComposer = false
                 }
             }
+        }
+        .onAppear {
+            updateResourceUsageSampling()
+        }
+        .onChange(of: viewModel.selectedModel?.id) { _, _ in
+            updateResourceUsageSampling()
+        }
+        .onDisappear {
+            stopResourceUsageSampling()
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraImagePicker(isPresented: $showCamera) { image in
@@ -297,7 +308,7 @@ struct TelegramMessageComposer: View {
                 .padding(.horizontal, textHorizontalPadding)
 
             if text.isEmpty {
-                Text(NSLocalizedString("Message", comment: "聊天输入框占位文本"))
+                Text(inputPlaceholderText)
                     .etFont(.system(size: inputBasePointSize))
                     .foregroundColor(.secondary)
                     .padding(.top, verticalPadding + textContainerInset)
@@ -306,6 +317,13 @@ struct TelegramMessageComposer: View {
         }
         .frame(minHeight: targetHeight, maxHeight: targetHeight)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+    }
+
+    private var inputPlaceholderText: String {
+        if LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) {
+            return resourceUsageMonitor.snapshot.displayText
+        }
+        return NSLocalizedString("Message", comment: "聊天输入框占位文本")
     }
 
     private var recorderMode: AudioRecorderSheet.Mode {
@@ -369,6 +387,29 @@ struct TelegramMessageComposer: View {
                 isExpandedComposer = false
             }
         }
+    }
+
+    private func updateResourceUsageSampling() {
+        guard LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) else {
+            stopResourceUsageSampling()
+            return
+        }
+        guard resourceUsageTask == nil else { return }
+        resourceUsageTask = Task { @MainActor in
+            while !Task.isCancelled {
+                resourceUsageMonitor.refresh()
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopResourceUsageSampling() {
+        resourceUsageTask?.cancel()
+        resourceUsageTask = nil
     }
 
     private struct InputWidthKey: PreferenceKey {

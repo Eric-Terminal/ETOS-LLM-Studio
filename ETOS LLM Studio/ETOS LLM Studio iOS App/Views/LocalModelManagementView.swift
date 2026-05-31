@@ -145,12 +145,14 @@ private struct LocalModelDetailView: View {
     @State private var contextSizeText: String
     @State private var maxOutputTokensText: String
     @State private var gpuLayersText: String
+    @State private var advancedArgumentsText: String
 
     init(record: LocalModelRecord) {
         _draft = State(initialValue: record)
         _contextSizeText = State(initialValue: "\(record.contextSize)")
         _maxOutputTokensText = State(initialValue: "\(record.maxOutputTokens)")
         _gpuLayersText = State(initialValue: "\(record.gpuLayers)")
+        _advancedArgumentsText = State(initialValue: record.advancedArguments)
     }
 
     var body: some View {
@@ -176,6 +178,20 @@ private struct LocalModelDetailView: View {
                 )
             } footer: {
                 Text(NSLocalizedString("-1 表示 iOS 真机尽量使用 Metal；0 表示强制 CPU。模拟器和 watchOS 会自动走 CPU。", comment: "Local model parameter footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                TextEditor(text: $advancedArgumentsText)
+                    .frame(minHeight: 96)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(.footnote, design: .monospaced))
+            } header: {
+                Text(NSLocalizedString("llama.cpp CLI 参数", comment: "Local llama CLI arguments section"))
+            } footer: {
+                Text(NSLocalizedString("例如 --temp 0.7 --top-p 0.9 --top-k 40 --repeat-penalty 1.1 --samplers penalties;top_k;top_p;temperature。这里直接影响本地推理采样链和上下文；乱写可能导致请求失败、内存暴涨或软件崩溃。", comment: "Local llama CLI arguments warning footer"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -231,6 +247,7 @@ private struct LocalModelDetailView: View {
         if let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.gpuLayers = gpuLayers
         }
+        draft.advancedArguments = advancedArgumentsText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

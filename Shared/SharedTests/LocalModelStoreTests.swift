@@ -64,6 +64,7 @@ struct LocalModelStoreTests {
         #expect(runnable.model.overrideParameters["context_size"] == .int(LocalModelRecord.defaultContextSize))
         #expect(runnable.model.overrideParameters["max_output_tokens"] == .int(LocalModelRecord.defaultMaxOutputTokens))
         #expect(runnable.model.overrideParameters["n_gpu_layers"] == .int(LocalModelRecord.defaultGPULayers))
+        #expect(runnable.model.overrideParameters["llama_cli_args"] == .string(LocalModelRecord.defaultAdvancedArguments))
         #expect(runnable.model.supportsToolCalling)
         #expect(runnable.model.supportsEmbedding)
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
@@ -142,6 +143,7 @@ struct LocalModelStoreTests {
         model.overrideParameters["context_size"] = .string("4096")
         model.overrideParameters["max_output_tokens"] = .int(1024)
         model.overrideParameters["n_gpu_layers"] = .int(0)
+        model.overrideParameters["llama_cli_args"] = .string(" --temp 0.7 --top-p 0.9 ")
 
         store.updateFromProviderModel(model)
 
@@ -150,6 +152,7 @@ struct LocalModelStoreTests {
         #expect(store.models.first?.contextSize == 4096)
         #expect(store.models.first?.maxOutputTokens == 1024)
         #expect(store.models.first?.gpuLayers == 0)
+        #expect(store.models.first?.advancedArguments == "--temp 0.7 --top-p 0.9")
     }
 
     @Test("本地对话会转换为结构化 role/content 消息")

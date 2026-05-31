@@ -15,19 +15,22 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var temperature: Double?
     public var topP: Double?
     public var gpuLayers: Int
+    public var advancedArguments: String
 
     public init(
         contextSize: Int,
         maxOutputTokens: Int,
         temperature: Double? = nil,
         topP: Double? = nil,
-        gpuLayers: Int = LocalModelRecord.defaultGPULayers
+        gpuLayers: Int = LocalModelRecord.defaultGPULayers,
+        advancedArguments: String = LocalModelRecord.defaultAdvancedArguments
     ) {
         self.contextSize = max(1, contextSize)
         self.maxOutputTokens = max(1, maxOutputTokens)
         self.temperature = temperature
         self.topP = topP
         self.gpuLayers = gpuLayers
+        self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -95,7 +98,8 @@ public final class LocalLLMEngine: @unchecked Sendable {
                 maxOutputTokens: options.maxOutputTokens,
                 temperature: options.temperature,
                 topP: options.topP,
-                gpuLayers: options.gpuLayers
+                gpuLayers: options.gpuLayers,
+                advancedArguments: options.advancedArguments
             )
         }.value
     }
@@ -118,7 +122,8 @@ public final class LocalLLMEngine: @unchecked Sendable {
             maxOutputTokens: options.maxOutputTokens,
             temperature: options.temperature,
             topP: options.topP,
-            gpuLayers: options.gpuLayers
+            gpuLayers: options.gpuLayers,
+            advancedArguments: options.advancedArguments
         )
     }
 
@@ -171,7 +176,8 @@ private enum LocalLLMBridge {
         maxOutputTokens: Int,
         temperature: Double?,
         topP: Double?,
-        gpuLayers: Int
+        gpuLayers: Int,
+        advancedArguments: String
     ) throws -> String {
         guard !messages.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
@@ -182,22 +188,25 @@ private enum LocalLLMBridge {
         let preparedMessages = PreparedLocalLLMChatMessages(messages)
         let preparedTools = PreparedLocalLLMTools(tools)
         let status = modelPath.withCString { modelPathCString in
-            preparedMessages.withUnsafeBufferPointer { messagesPointer in
-                preparedTools.withUnsafeBufferPointer { toolsPointer in
-                    etos_local_llm_generate_chat(
-                        modelPathCString,
-                        messagesPointer.baseAddress,
-                        Int32(messagesPointer.count),
-                        toolsPointer.baseAddress,
-                        Int32(toolsPointer.count),
-                        Int32(max(1, contextSize)),
-                        Int32(max(1, maxOutputTokens)),
-                        Float(temperature ?? 0.8),
-                        Float(topP ?? 0.95),
-                        Int32(gpuLayers),
-                        &outputPointer,
-                        &errorPointer
-                    )
+            advancedArguments.withCString { advancedArgumentsCString in
+                preparedMessages.withUnsafeBufferPointer { messagesPointer in
+                    preparedTools.withUnsafeBufferPointer { toolsPointer in
+                        etos_local_llm_generate_chat(
+                            modelPathCString,
+                            messagesPointer.baseAddress,
+                            Int32(messagesPointer.count),
+                            toolsPointer.baseAddress,
+                            Int32(toolsPointer.count),
+                            Int32(max(1, contextSize)),
+                            Int32(max(1, maxOutputTokens)),
+                            Float(temperature ?? 0.8),
+                            Float(topP ?? 0.95),
+                            Int32(gpuLayers),
+                            advancedArgumentsCString,
+                            &outputPointer,
+                            &errorPointer
+                        )
+                    }
                 }
             }
         }
@@ -225,7 +234,8 @@ private enum LocalLLMBridge {
         maxOutputTokens: Int,
         temperature: Double?,
         topP: Double?,
-        gpuLayers: Int
+        gpuLayers: Int,
+        advancedArguments: String
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             guard !messages.isEmpty else {
@@ -248,23 +258,26 @@ private enum LocalLLMBridge {
                 let preparedMessages = PreparedLocalLLMChatMessages(messages)
                 let preparedTools = PreparedLocalLLMTools(tools)
                 let status = modelPath.withCString { modelPathCString in
-                    preparedMessages.withUnsafeBufferPointer { messagesPointer in
-                        preparedTools.withUnsafeBufferPointer { toolsPointer in
-                            etos_local_llm_generate_chat_stream(
-                                modelPathCString,
-                                messagesPointer.baseAddress,
-                                Int32(messagesPointer.count),
-                                toolsPointer.baseAddress,
-                                Int32(toolsPointer.count),
-                                Int32(max(1, contextSize)),
-                                Int32(max(1, maxOutputTokens)),
-                                Float(temperature ?? 0.8),
-                                Float(topP ?? 0.95),
-                                Int32(gpuLayers),
-                                localLLMStreamCallback,
-                                statePointer,
-                                &errorPointer
-                            )
+                    advancedArguments.withCString { advancedArgumentsCString in
+                        preparedMessages.withUnsafeBufferPointer { messagesPointer in
+                            preparedTools.withUnsafeBufferPointer { toolsPointer in
+                                etos_local_llm_generate_chat_stream(
+                                    modelPathCString,
+                                    messagesPointer.baseAddress,
+                                    Int32(messagesPointer.count),
+                                    toolsPointer.baseAddress,
+                                    Int32(toolsPointer.count),
+                                    Int32(max(1, contextSize)),
+                                    Int32(max(1, maxOutputTokens)),
+                                    Float(temperature ?? 0.8),
+                                    Float(topP ?? 0.95),
+                                    Int32(gpuLayers),
+                                    advancedArgumentsCString,
+                                    localLLMStreamCallback,
+                                    statePointer,
+                                    &errorPointer
+                                )
+                            }
                         }
                     }
                 }
@@ -607,6 +620,7 @@ private func etos_local_llm_generate(
     _ temperature: Float,
     _ topP: Float,
     _ gpuLayers: Int32,
+    _ advancedArguments: UnsafePointer<CChar>,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -623,6 +637,7 @@ private func etos_local_llm_generate_chat(
     _ temperature: Float,
     _ topP: Float,
     _ gpuLayers: Int32,
+    _ advancedArguments: UnsafePointer<CChar>,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -636,6 +651,7 @@ private func etos_local_llm_generate_stream(
     _ temperature: Float,
     _ topP: Float,
     _ gpuLayers: Int32,
+    _ advancedArguments: UnsafePointer<CChar>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
@@ -653,6 +669,7 @@ private func etos_local_llm_generate_chat_stream(
     _ temperature: Float,
     _ topP: Float,
     _ gpuLayers: Int32,
+    _ advancedArguments: UnsafePointer<CChar>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>

@@ -61,7 +61,8 @@ extension ChatService {
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
                     temperature: overrides.localDoubleValue(for: "temperature") ?? aiTemperature,
                     topP: overrides.localDoubleValue(for: "top_p") ?? aiTopP,
-                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers
+                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers,
+                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )
 
@@ -241,6 +242,22 @@ private extension Dictionary where Key == String, Value == JSONValue {
             return Double(rawValue)
         case .string(let rawValue):
             return Double(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    func localStringValue(for key: String) -> String? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .string(let rawValue):
+            return rawValue
+        case .int(let rawValue):
+            return String(rawValue)
+        case .double(let rawValue):
+            return String(rawValue)
+        case .bool(let rawValue):
+            return rawValue ? "true" : "false"
         default:
             return nil
         }

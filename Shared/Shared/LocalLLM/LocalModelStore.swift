@@ -104,6 +104,7 @@ public final class LocalModelStore: ObservableObject {
         updated.displayName = updated.sanitizedDisplayName
         updated.contextSize = max(1, updated.contextSize)
         updated.maxOutputTokens = max(1, updated.maxOutputTokens)
+        updated.advancedArguments = updated.advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.updatedAt = Date()
 
         if let index = models.firstIndex(where: { $0.id == updated.id }) {
@@ -132,6 +133,9 @@ public final class LocalModelStore: ObservableObject {
         }
         if let gpuLayers = model.overrideParameters.localIntValue(for: "n_gpu_layers") {
             record.gpuLayers = gpuLayers
+        }
+        if let advancedArguments = model.overrideParameters.localStringValue(for: "llama_cli_args") {
+            record.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         update(record)
     }
@@ -261,6 +265,22 @@ private extension Dictionary where Key == String, Value == JSONValue {
             return Int(rawValue)
         case .string(let rawValue):
             return Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    func localStringValue(for key: String) -> String? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .string(let rawValue):
+            return rawValue
+        case .int(let rawValue):
+            return String(rawValue)
+        case .double(let rawValue):
+            return String(rawValue)
+        case .bool(let rawValue):
+            return rawValue ? "true" : "false"
         default:
             return nil
         }

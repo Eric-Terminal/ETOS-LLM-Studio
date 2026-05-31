@@ -156,12 +156,14 @@ private struct LocalModelDetailView: View {
     @State private var contextSizeText: String
     @State private var maxOutputTokensText: String
     @State private var gpuLayersText: String
+    @State private var advancedArgumentsText: String
 
     init(record: LocalModelRecord) {
         _draft = State(initialValue: record)
         _contextSizeText = State(initialValue: "\(record.contextSize)")
         _maxOutputTokensText = State(initialValue: "\(record.maxOutputTokens)")
         _gpuLayersText = State(initialValue: "\(record.gpuLayers)")
+        _advancedArgumentsText = State(initialValue: record.advancedArguments)
     }
 
     var body: some View {
@@ -186,6 +188,18 @@ private struct LocalModelDetailView: View {
                 )
             } footer: {
                 Text(NSLocalizedString("watchOS 推理会自动走 CPU；参数只按填写值保存。", comment: "Watch local model parameter footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                TextField(NSLocalizedString("例如 --temp 0.7 --top-p 0.9", comment: "Watch local llama CLI arguments placeholder"), text: $advancedArgumentsText.watchKeyboardNewlineBinding(), axis: .vertical)
+                    .lineLimit(3...6)
+                    .textInputAutocapitalization(.never)
+            } header: {
+                Text(NSLocalizedString("llama.cpp CLI 参数", comment: "Local llama CLI arguments section"))
+            } footer: {
+                Text(NSLocalizedString("这些参数会直接影响采样链和上下文；乱写可能导致请求失败、内存暴涨或软件崩溃。", comment: "Watch local llama CLI arguments warning footer"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -234,6 +248,7 @@ private struct LocalModelDetailView: View {
         if let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.gpuLayers = gpuLayers
         }
+        draft.advancedArguments = advancedArgumentsText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
