@@ -179,7 +179,6 @@ public struct ExtendedFeaturesView: View {
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }
-
             Section {
                 NavigationLink {
                     LocalModelManagementView()
@@ -188,7 +187,9 @@ public struct ExtendedFeaturesView: View {
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
+            }
 
+            Section {
                 NavigationLink {
                     LocalDebugView()
                 } label: {

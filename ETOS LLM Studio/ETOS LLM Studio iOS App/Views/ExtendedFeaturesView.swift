@@ -23,13 +23,13 @@ struct ExtendedFeaturesView: View {
                     这个页面适合做什么
                     • 集中管理非核心聊天流程的进阶能力。
                     • 快速进入维护、导入、调试等工具入口。
-
+                    
                     各入口怎么选
                     • 反馈助手：提交问题和追踪处理进度。
                     • 远程文件访问：在局域网内访问 Documents 做排查或批量处理。
                     • 存储管理：清理模型、文件、缓存，回收空间。
                     • 导入数据：导入 ETOS 导出包或第三方应用迁移数据。
-
+                    
                     使用建议
                     • 不常用的功能可按需开启，避免主流程过载。
                     • 涉及导入与清理时，建议先备份关键数据再执行。
@@ -37,7 +37,7 @@ struct ExtendedFeaturesView: View {
                     isExpanded: $isShowingIntroDetails
                 )
             }
-
+            
             if achievementCenter.hasUnlockedAchievements {
                 Section {
                     // 彩蛋入口只在已有记录后出现，避免提前暴露隐藏日记。
@@ -48,7 +48,7 @@ struct ExtendedFeaturesView: View {
                     }
                 }
             }
-
+            
             Section(NSLocalizedString("安全", comment: "设置安全分组")) {
                 NavigationLink {
                     AppLockSettingsView()
@@ -56,7 +56,7 @@ struct ExtendedFeaturesView: View {
                     SettingsListIconLabel("应用锁", icon: .security)
                 }
             }
-
+            
             Section {
                 NavigationLink {
                     FeedbackCenterView()
@@ -68,14 +68,16 @@ struct ExtendedFeaturesView: View {
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
-
+            
             Section {
                 NavigationLink {
                     LocalModelManagementView()
                 } label: {
                     SettingsListIconLabel("本地模型", icon: .localModels)
                 }
+            }
 
+            Section {
                 NavigationLink {
                     LocalDebugView()
                 } label: {
