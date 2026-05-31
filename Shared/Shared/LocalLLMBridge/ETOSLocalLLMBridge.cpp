@@ -8,18 +8,193 @@
 
 #include "ETOSLocalLLMBridge.h"
 
+#include "chat.h"
 #include "ggml-backend.h"
 #include "llama.h"
+#include "nlohmann/json.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <exception>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <TargetConditionals.h>
 #include <thread>
 #include <vector>
+
+using json = nlohmann::ordered_json;
+
+void string_replace_all(std::string & value, const std::string & search, const std::string & replacement) {
+    if (search.empty()) {
+        return;
+    }
+    size_t position = 0;
+    while ((position = value.find(search, position)) != std::string::npos) {
+        value.replace(position, search.length(), replacement);
+        position += replacement.length();
+    }
+}
+
+std::string common_token_to_piece(const llama_vocab * vocab, llama_token token, bool special) {
+    char buffer[512];
+    const int32_t written = llama_token_to_piece(vocab, token, buffer, sizeof(buffer), 0, special);
+    if (written >= 0) {
+        return std::string(buffer, static_cast<size_t>(written));
+    }
+
+    const size_t required_size = static_cast<size_t>(-written);
+    std::vector<char> dynamic_buffer(required_size);
+    const int32_t dynamic_written = llama_token_to_piece(
+        vocab,
+        token,
+        dynamic_buffer.data(),
+        static_cast<int32_t>(dynamic_buffer.size()),
+        0,
+        special
+    );
+    GGML_ASSERT(dynamic_written >= 0);
+    return std::string(dynamic_buffer.data(), static_cast<size_t>(dynamic_written));
+}
+
+std::string common_token_to_piece(const llama_context * ctx, llama_token token, bool special) {
+    return common_token_to_piece(llama_model_get_vocab(llama_get_model(ctx)), token, special);
+}
+
+std::vector<llama_token> common_tokenize(
+    const llama_vocab * vocab,
+    const std::string & text,
+    bool add_special,
+    bool parse_special
+) {
+    const int32_t token_count = -llama_tokenize(
+        vocab,
+        text.c_str(),
+        static_cast<int32_t>(text.size()),
+        nullptr,
+        0,
+        add_special,
+        parse_special
+    );
+    if (token_count <= 0) {
+        return {};
+    }
+    std::vector<llama_token> tokens(static_cast<size_t>(token_count));
+    const int32_t written = llama_tokenize(
+        vocab,
+        text.c_str(),
+        static_cast<int32_t>(text.size()),
+        tokens.data(),
+        static_cast<int32_t>(tokens.size()),
+        add_special,
+        parse_special
+    );
+    if (written < 0) {
+        return {};
+    }
+    tokens.resize(static_cast<size_t>(written));
+    return tokens;
+}
+
+std::vector<llama_token> common_tokenize(
+    const llama_context * ctx,
+    const std::string & text,
+    bool add_special,
+    bool parse_special
+) {
+    return common_tokenize(llama_model_get_vocab(llama_get_model(ctx)), text, add_special, parse_special);
+}
+
+std::string common_detokenize(
+    const llama_vocab * vocab,
+    const std::vector<llama_token> & tokens,
+    bool special
+) {
+    if (tokens.empty()) {
+        return {};
+    }
+    std::string text;
+    text.resize(tokens.size());
+    int32_t written = llama_detokenize(
+        vocab,
+        tokens.data(),
+        static_cast<int32_t>(tokens.size()),
+        text.data(),
+        static_cast<int32_t>(text.size()),
+        false,
+        special
+    );
+    if (written < 0) {
+        text.resize(static_cast<size_t>(-written));
+        written = llama_detokenize(
+            vocab,
+            tokens.data(),
+            static_cast<int32_t>(tokens.size()),
+            text.data(),
+            static_cast<int32_t>(text.size()),
+            false,
+            special
+        );
+    }
+    if (written < 0) {
+        return {};
+    }
+    text.resize(static_cast<size_t>(written));
+    return text;
+}
+
+std::string common_detokenize(
+    const llama_context * ctx,
+    const std::vector<llama_token> & tokens,
+    bool special
+) {
+    return common_detokenize(llama_model_get_vocab(llama_get_model(ctx)), tokens, special);
+}
+
+std::string string_join(const std::vector<std::string> & values, const std::string & separator) {
+    std::ostringstream result;
+    for (size_t index = 0; index < values.size(); ++index) {
+        if (index > 0) {
+            result << separator;
+        }
+        result << values[index];
+    }
+    return result.str();
+}
+
+std::vector<std::string> string_split(const std::string & value, const std::string & delimiter) {
+    std::vector<std::string> parts;
+    if (delimiter.empty()) {
+        parts.push_back(value);
+        return parts;
+    }
+
+    size_t start = 0;
+    size_t end = value.find(delimiter);
+    while (end != std::string::npos) {
+        parts.push_back(value.substr(start, end - start));
+        start = end + delimiter.length();
+        end = value.find(delimiter, start);
+    }
+    parts.push_back(value.substr(start));
+    return parts;
+}
+
+std::string string_repeat(const std::string & value, size_t count) {
+    std::string result;
+    result.reserve(value.length() * count);
+    for (size_t index = 0; index < count; ++index) {
+        result += value;
+    }
+    return result;
+}
+
+bool tty_can_use_colors() {
+    return false;
+}
 
 namespace {
 
@@ -68,6 +243,29 @@ std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string &
     return tokens;
 }
 
+std::string token_to_piece(const llama_vocab * vocab, llama_token token) {
+    char buffer[512];
+    const int32_t written = llama_token_to_piece(vocab, token, buffer, sizeof(buffer), 0, true);
+    if (written >= 0) {
+        return std::string(buffer, static_cast<size_t>(written));
+    }
+
+    const size_t required_size = static_cast<size_t>(-written);
+    std::vector<char> dynamic_buffer(required_size);
+    const int32_t dynamic_written = llama_token_to_piece(
+        vocab,
+        token,
+        dynamic_buffer.data(),
+        static_cast<int32_t>(dynamic_buffer.size()),
+        0,
+        true
+    );
+    if (dynamic_written < 0) {
+        return {};
+    }
+    return std::string(dynamic_buffer.data(), static_cast<size_t>(dynamic_written));
+}
+
 void batch_add(llama_batch & batch, llama_token token, llama_pos position, llama_seq_id sequence_id, bool output) {
     batch.token[batch.n_tokens] = token;
     batch.pos[batch.n_tokens] = position;
@@ -92,6 +290,9 @@ std::string apply_chat_template(
     const llama_model * model,
     const etos_local_llm_chat_message * messages,
     int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    common_chat_parser_params * parser_params,
     char ** error_message
 ) {
     if (!messages || message_count <= 0) {
@@ -99,15 +300,35 @@ std::string apply_chat_template(
         return {};
     }
 
-    std::vector<llama_chat_message> chat_messages;
-    chat_messages.reserve(static_cast<size_t>(message_count));
+    json chat_messages = json::array();
     for (int32_t index = 0; index < message_count; ++index) {
         const char * role = messages[index].role;
         const char * content = messages[index].content;
-        if (!role || !content || content[0] == '\0') {
+        if (!role) {
             continue;
         }
-        chat_messages.push_back({ role, content });
+
+        json message = {
+            { "role", role },
+        };
+        if (content) {
+            message["content"] = content;
+        }
+        if (messages[index].name && messages[index].name[0] != '\0') {
+            message["name"] = messages[index].name;
+        }
+        if (messages[index].tool_call_id && messages[index].tool_call_id[0] != '\0') {
+            message["tool_call_id"] = messages[index].tool_call_id;
+        }
+        if (messages[index].tool_calls_json && messages[index].tool_calls_json[0] != '\0') {
+            try {
+                message["tool_calls"] = json::parse(messages[index].tool_calls_json);
+            } catch (const std::exception & e) {
+                fail(std::string("本地工具调用历史 JSON 无效：") + e.what(), error_message);
+                return {};
+            }
+        }
+        chat_messages.push_back(std::move(message));
     }
 
     if (chat_messages.empty()) {
@@ -115,48 +336,53 @@ std::string apply_chat_template(
         return {};
     }
 
-    const char * tmpl = llama_model_chat_template(model, nullptr);
-    if (!tmpl) {
-        fail("本地模型缺少 GGUF tokenizer.chat_template。", error_message);
-        return {};
+    json tool_definitions = json::array();
+    for (int32_t index = 0; tools && index < tool_count; ++index) {
+        const char * name = tools[index].name;
+        if (!name || name[0] == '\0') {
+            continue;
+        }
+        json parameters = json::object();
+        if (tools[index].parameters_json && tools[index].parameters_json[0] != '\0') {
+            try {
+                parameters = json::parse(tools[index].parameters_json);
+            } catch (const std::exception & e) {
+                fail(std::string("本地工具参数 JSON Schema 无效：") + e.what(), error_message);
+                return {};
+            }
+        }
+        tool_definitions.push_back({
+            { "type", "function" },
+            { "function", {
+                { "name", name },
+                { "description", tools[index].description ? tools[index].description : "" },
+                { "parameters", parameters },
+            } },
+        });
     }
 
-    int32_t formatted_size = llama_chat_apply_template(tmpl, chat_messages.data(), chat_messages.size(), true, nullptr, 0);
-    if (formatted_size < 0) {
-        fail("本地模型的聊天模板暂不受 llama.cpp 当前模板 API 支持。", error_message);
+    try {
+        auto templates = common_chat_templates_init(model, "");
+        common_chat_templates_inputs inputs;
+        inputs.messages = common_chat_msgs_parse_oaicompat(chat_messages);
+        if (!tool_definitions.empty()) {
+            inputs.tools = common_chat_tools_parse_oaicompat(tool_definitions);
+            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
+            inputs.parallel_tool_calls = true;
+        }
+        common_chat_params params = common_chat_templates_apply(templates.get(), inputs);
+        if (parser_params) {
+            *parser_params = common_chat_parser_params(params);
+            common_peg_arena parser;
+            parser.load(params.parser);
+            parser_params->parser = std::move(parser);
+            parser_params->reasoning_format = COMMON_REASONING_FORMAT_NONE;
+        }
+        return params.prompt;
+    } catch (const std::exception & e) {
+        fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
         return {};
     }
-
-    std::vector<char> formatted(static_cast<size_t>(formatted_size));
-    formatted_size = llama_chat_apply_template(
-        tmpl,
-        chat_messages.data(),
-        chat_messages.size(),
-        true,
-        formatted.data(),
-        static_cast<int32_t>(formatted.size())
-    );
-    if (formatted_size < 0) {
-        fail("本地模型应用聊天模板失败。", error_message);
-        return {};
-    }
-    if (static_cast<size_t>(formatted_size) > formatted.size()) {
-        formatted.resize(static_cast<size_t>(formatted_size));
-        formatted_size = llama_chat_apply_template(
-            tmpl,
-            chat_messages.data(),
-            chat_messages.size(),
-            true,
-            formatted.data(),
-            static_cast<int32_t>(formatted.size())
-        );
-    }
-    if (formatted_size < 0 || static_cast<size_t>(formatted_size) > formatted.size()) {
-        fail("本地模型应用聊天模板失败。", error_message);
-        return {};
-    }
-
-    return std::string(formatted.data(), static_cast<size_t>(formatted_size));
 }
 
 int32_t generate(
@@ -164,6 +390,8 @@ int32_t generate(
     const char * prompt,
     const etos_local_llm_chat_message * messages,
     int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
     int32_t context_size,
     int32_t max_output_tokens,
     float temperature,
@@ -201,7 +429,15 @@ int32_t generate(
     const llama_vocab * vocab = llama_model_get_vocab(model);
     std::string templated_prompt;
     if (!prompt) {
-        templated_prompt = apply_chat_template(model, messages, message_count, error_message);
+        templated_prompt = apply_chat_template(
+            model,
+            messages,
+            message_count,
+            tools,
+            tool_count,
+            nullptr,
+            error_message
+        );
         if (templated_prompt.empty()) {
             llama_model_free(model);
             return -1;
@@ -258,16 +494,14 @@ int32_t generate(
             break;
         }
 
-        char buffer[512];
-        const int32_t written = llama_token_to_piece(vocab, token, buffer, sizeof(buffer), 0, true);
-        if (written < 0) {
+        std::string piece = token_to_piece(vocab, token);
+        if (piece.empty()) {
             llama_sampler_free(sampler);
             llama_free(ctx);
             llama_model_free(model);
             return fail("本地模型输出转换失败。", error_message);
         }
 
-        std::string piece(buffer, static_cast<size_t>(written));
         if (output_text) {
             output_text->append(piece);
         }
@@ -421,6 +655,61 @@ int32_t embed(
     return 0;
 }
 
+int32_t parse_tool_calls(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    std::string * content,
+    std::vector<common_chat_tool_call> * tool_calls,
+    char ** error_message
+) {
+    if (!model_path || !messages || message_count <= 0 || !generated_text || !content || !tool_calls) {
+        return fail("本地工具调用解析参数无效。", error_message);
+    }
+
+    std::call_once(backend_init_once, [] {
+        llama_backend_init();
+        ggml_backend_load_all();
+    });
+
+    llama_model_params model_params = llama_model_default_params();
+    model_params.n_gpu_layers = 0;
+
+    llama_model * model = llama_model_load_from_file(model_path, model_params);
+    if (!model) {
+        return fail("无法加载本地模型权重以解析工具调用。", error_message);
+    }
+
+    common_chat_parser_params parser_params;
+    std::string prompt = apply_chat_template(
+        model,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        &parser_params,
+        error_message
+    );
+    llama_model_free(model);
+    if (prompt.empty()) {
+        return -1;
+    }
+
+    try {
+        common_chat_msg parsed = common_chat_parse(generated_text, false, parser_params);
+        *content = parsed.content;
+        *tool_calls = parsed.tool_calls;
+        return 0;
+    } catch (const std::exception &) {
+        content->assign(generated_text);
+        tool_calls->clear();
+        return 0;
+    }
+}
+
 } // namespace
 
 int32_t etos_local_llm_generate(
@@ -450,6 +739,8 @@ int32_t etos_local_llm_generate(
         prompt,
         nullptr,
         0,
+        nullptr,
+        0,
         context_size,
         max_output_tokens,
         temperature,
@@ -472,6 +763,8 @@ int32_t etos_local_llm_generate_chat(
     const char * model_path,
     const etos_local_llm_chat_message * messages,
     int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
     int32_t context_size,
     int32_t max_output_tokens,
     float temperature,
@@ -496,6 +789,8 @@ int32_t etos_local_llm_generate_chat(
         nullptr,
         messages,
         message_count,
+        tools,
+        tool_count,
         context_size,
         max_output_tokens,
         temperature,
@@ -534,6 +829,8 @@ int32_t etos_local_llm_generate_stream(
         prompt,
         nullptr,
         0,
+        nullptr,
+        0,
         context_size,
         max_output_tokens,
         temperature,
@@ -550,6 +847,8 @@ int32_t etos_local_llm_generate_chat_stream(
     const char * model_path,
     const etos_local_llm_chat_message * messages,
     int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
     int32_t context_size,
     int32_t max_output_tokens,
     float temperature,
@@ -567,6 +866,8 @@ int32_t etos_local_llm_generate_chat_stream(
         nullptr,
         messages,
         message_count,
+        tools,
+        tool_count,
         context_size,
         max_output_tokens,
         temperature,
@@ -632,10 +933,98 @@ int32_t etos_local_llm_embed(
     return 0;
 }
 
+int32_t etos_local_llm_parse_tool_calls(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    char ** content,
+    etos_local_llm_tool_call ** tool_calls,
+    int32_t * tool_call_count,
+    char ** error_message
+) {
+    if (content) {
+        *content = nullptr;
+    }
+    if (tool_calls) {
+        *tool_calls = nullptr;
+    }
+    if (tool_call_count) {
+        *tool_call_count = 0;
+    }
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    if (!content || !tool_calls || !tool_call_count) {
+        return fail("本地工具调用解析参数无效。", error_message);
+    }
+
+    std::string parsed_content;
+    std::vector<common_chat_tool_call> parsed_tool_calls;
+    const int32_t status = parse_tool_calls(
+        model_path,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        generated_text,
+        &parsed_content,
+        &parsed_tool_calls,
+        error_message
+    );
+    if (status != 0) {
+        return status;
+    }
+
+    *content = copy_string(parsed_content);
+    if (!*content) {
+        return fail("本地工具调用正文内存分配失败。", error_message);
+    }
+
+    if (parsed_tool_calls.empty()) {
+        return 0;
+    }
+
+    etos_local_llm_tool_call * copied_calls = static_cast<etos_local_llm_tool_call *>(
+        std::calloc(parsed_tool_calls.size(), sizeof(etos_local_llm_tool_call))
+    );
+    if (!copied_calls) {
+        return fail("本地工具调用内存分配失败。", error_message);
+    }
+
+    for (size_t index = 0; index < parsed_tool_calls.size(); ++index) {
+        copied_calls[index].id = copy_string(parsed_tool_calls[index].id);
+        copied_calls[index].name = copy_string(parsed_tool_calls[index].name);
+        copied_calls[index].arguments = copy_string(parsed_tool_calls[index].arguments);
+        if (!copied_calls[index].id || !copied_calls[index].name || !copied_calls[index].arguments) {
+            etos_local_llm_free_tool_calls(copied_calls, static_cast<int32_t>(parsed_tool_calls.size()));
+            return fail("本地工具调用内存分配失败。", error_message);
+        }
+    }
+
+    *tool_calls = copied_calls;
+    *tool_call_count = static_cast<int32_t>(parsed_tool_calls.size());
+    return 0;
+}
+
 void etos_local_llm_free(char * pointer) {
     std::free(pointer);
 }
 
 void etos_local_llm_free_float(float * pointer) {
+    std::free(pointer);
+}
+
+void etos_local_llm_free_tool_calls(etos_local_llm_tool_call * pointer, int32_t count) {
+    if (!pointer) {
+        return;
+    }
+    for (int32_t index = 0; index < count; ++index) {
+        std::free(pointer[index].id);
+        std::free(pointer[index].name);
+        std::free(pointer[index].arguments);
+    }
     std::free(pointer);
 }

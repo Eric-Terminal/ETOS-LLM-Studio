@@ -50,12 +50,11 @@ extension ChatService {
 
         do {
             let overrides = runnableModel.effectiveOverrideParameters
-            let localMessagesToSend = LocalLLMToolCallCodec.messagesByInjectingToolProtocol(
-                into: messagesToSend,
-                tools: availableTools
-            )
+            let localMessagesToSend = LocalLLMChatMessageBuilder.messages(from: messagesToSend)
+            let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
             let stream = try LocalLLMEngine.shared.stream(
-                messages: LocalLLMChatMessageBuilder.messages(from: localMessagesToSend),
+                messages: localMessagesToSend,
+                tools: localTools,
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
@@ -133,7 +132,17 @@ extension ChatService {
                     speed: finalSpeed
                 )
             }
-            let parsedOutput = LocalLLMToolCallCodec.parseToolCalls(from: output)
+            let parsedOutput: LocalLLMToolCallParseResult
+            if localTools.isEmpty {
+                parsedOutput = LocalLLMToolCallParseResult(content: output, toolCalls: [])
+            } else {
+                parsedOutput = try await LocalLLMEngine.shared.parseToolCalls(
+                    from: output,
+                    messages: localMessagesToSend,
+                    tools: localTools,
+                    modelURL: localModelStore.fileURL(for: record)
+                )
+            }
             var responseMessage = ChatMessage(
                 role: .assistant,
                 content: parsedOutput.content,

@@ -152,23 +152,29 @@ struct LocalModelStoreTests {
     }
 
     @Test("本地对话会转换为结构化 role/content 消息")
-    func localChatMessagesKeepRolesAndTrimContent() {
+    func localChatMessagesKeepRolesAndTrimContent() throws {
+        let toolCall = InternalToolCall(id: "call_1", toolName: "app_get_system_time", arguments: "{}")
         let messages = LocalLLMChatMessageBuilder.messages(from: [
             ChatMessage(role: .system, content: "  你是助手  "),
             ChatMessage(role: .user, content: "\n你好\n"),
-            ChatMessage(role: .assistant, content: "收到"),
-            ChatMessage(role: .tool, content: "工具结果"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [toolCall]),
+            ChatMessage(role: .tool, content: "工具结果", toolCalls: [toolCall]),
             ChatMessage(role: .error, content: "错误不应进入模型"),
             ChatMessage(role: .user, content: "   ")
         ])
 
-        #expect(messages.map(\.role) == ["system", "user", "assistant", "user"])
-        #expect(messages[3].content.contains("<local_tool_result>"))
-        #expect(messages[3].content.contains("工具结果"))
+        #expect(messages.map(\.role) == ["system", "user", "assistant", "tool"])
+        #expect(messages[0].content == "你是助手")
+        #expect(messages[1].content == "你好")
+        let toolCallsJSON = try #require(messages[2].toolCallsJSON)
+        #expect(toolCallsJSON.contains("app_get_system_time"))
+        #expect(messages[3].name == "app_get_system_time")
+        #expect(messages[3].toolCallID == "call_1")
+        #expect(messages[3].content == "工具结果")
     }
 
-    @Test("本地工具协议会注入系统消息并解析工具调用")
-    func localToolCallCodecInjectsProtocolAndParsesToolCalls() throws {
+    @Test("本地工具定义会转换为 OpenAI 兼容函数结构")
+    func localToolDefinitionsKeepFunctionSchema() throws {
         let tool = InternalToolDefinition(
             name: "app_get_system_time",
             description: "获取当前设备时间",
@@ -177,26 +183,11 @@ struct LocalModelStoreTests {
                 "properties": .dictionary([:])
             ])
         )
-        let injected = LocalLLMToolCallCodec.messagesByInjectingToolProtocol(
-            into: [ChatMessage(role: .user, content: "现在几点")],
-            tools: [tool]
-        )
+        let definition = try #require(LocalLLMChatMessageBuilder.toolDefinitions(from: [tool]).first)
 
-        #expect(injected.first?.role == .system)
-        #expect(injected.first?.content.contains("<local_tools>") == true)
-        #expect(injected.first?.content.contains("app_get_system_time") == true)
-
-        let parsed = LocalLLMToolCallCodec.parseToolCalls(from: """
-        我需要调用工具。
-        ```etos_tool_calls
-        {"tool_calls":[{"name":"app_get_system_time","arguments":{}}]}
-        ```
-        """)
-
-        let call = try #require(parsed.toolCalls.first)
-        #expect(parsed.content == "我需要调用工具。")
-        #expect(call.toolName == "app_get_system_time")
-        #expect(call.arguments == "{}")
+        #expect(definition.name == "app_get_system_time")
+        #expect(definition.description == "获取当前设备时间")
+        #expect(definition.parametersJSON.contains("\"type\":\"object\""))
     }
 
     @Test("缺失文件的本地模型不会进入可用候选")

@@ -193,6 +193,21 @@
 		ETOSLLAMAB00000000000000B8 /* talkie.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B8 /* talkie.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
 		ETOSLLAMAB00000000000000B9 /* wavtokenizer-dec.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B9 /* wavtokenizer-dec.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
 		ETOSLLAMAB00000000000000BA /* xverse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000BA /* xverse.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C1 /* common-chat.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C1 /* common-chat.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C2 /* common-chat-diff-analyzer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C2 /* common-chat-diff-analyzer.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C3 /* common-chat-auto-parser-generator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C3 /* common-chat-auto-parser-generator.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C4 /* common-chat-auto-parser-helpers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C4 /* common-chat-auto-parser-helpers.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C5 /* common-chat-peg-parser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C5 /* common-chat-peg-parser.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C6 /* common-json-schema-to-grammar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C6 /* common-json-schema-to-grammar.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C7 /* common-peg-parser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C7 /* common-peg-parser.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C8 /* common-unicode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C8 /* common-unicode.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000C9 /* common-log.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C9 /* common-log.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000CA /* jinja-lexer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CA /* jinja-lexer.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000CB /* jinja-parser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CB /* jinja-parser.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000CC /* jinja-runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CC /* jinja-runtime.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000CD /* jinja-value.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CD /* jinja-value.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000CE /* jinja-string.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CE /* jinja-string.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
+		ETOSLLAMAB00000000000000CF /* jinja-caps.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CF /* jinja-caps.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32"; }; };
 		0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 0704B98D2FA542E60059A02A /* ZIPFoundation */; };
 		072CF2442E92C1B400A8E9D0 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* Shared.framework */; };
 		078573792FB0579500B35DB4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 078573782FB0579500B35DB4 /* GRDB */; };
@@ -397,6 +412,21 @@
 		ETOSLLAMAF00000000000000B8 /* talkie.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = talkie.cpp; path = "../Dependencies/llama.cpp/src/models/talkie.cpp"; sourceTree = "<group>"; };
 		ETOSLLAMAF00000000000000B9 /* wavtokenizer-dec.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = wavtokenizer-dec.cpp; path = "../Dependencies/llama.cpp/src/models/wavtokenizer-dec.cpp"; sourceTree = "<group>"; };
 		ETOSLLAMAF00000000000000BA /* xverse.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = xverse.cpp; path = "../Dependencies/llama.cpp/src/models/xverse.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C1 /* common-chat.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat.cpp"; path = "../Dependencies/llama.cpp/common/chat.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C2 /* common-chat-diff-analyzer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-diff-analyzer.cpp"; path = "../Dependencies/llama.cpp/common/chat-diff-analyzer.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C3 /* common-chat-auto-parser-generator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-auto-parser-generator.cpp"; path = "../Dependencies/llama.cpp/common/chat-auto-parser-generator.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C4 /* common-chat-auto-parser-helpers.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-auto-parser-helpers.cpp"; path = "../Dependencies/llama.cpp/common/chat-auto-parser-helpers.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C5 /* common-chat-peg-parser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-peg-parser.cpp"; path = "../Dependencies/llama.cpp/common/chat-peg-parser.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C6 /* common-json-schema-to-grammar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-json-schema-to-grammar.cpp"; path = "../Dependencies/llama.cpp/common/json-schema-to-grammar.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C7 /* common-peg-parser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-peg-parser.cpp"; path = "../Dependencies/llama.cpp/common/peg-parser.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C8 /* common-unicode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-unicode.cpp"; path = "../Dependencies/llama.cpp/common/unicode.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000C9 /* common-log.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-log.cpp"; path = "../Dependencies/llama.cpp/common/log.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000CA /* jinja-lexer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-lexer.cpp"; path = "../Dependencies/llama.cpp/common/jinja/lexer.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000CB /* jinja-parser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-parser.cpp"; path = "../Dependencies/llama.cpp/common/jinja/parser.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000CC /* jinja-runtime.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-runtime.cpp"; path = "../Dependencies/llama.cpp/common/jinja/runtime.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000CD /* jinja-value.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-value.cpp"; path = "../Dependencies/llama.cpp/common/jinja/value.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000CE /* jinja-string.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-string.cpp"; path = "../Dependencies/llama.cpp/common/jinja/string.cpp"; sourceTree = "<group>"; };
+		ETOSLLAMAF00000000000000CF /* jinja-caps.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-caps.cpp"; path = "../Dependencies/llama.cpp/common/jinja/caps.cpp"; sourceTree = "<group>"; };
 		072CF2402E92C1B400A8E9D0 /* SharedTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		073CA6A52E8CFCF3004516A0 /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
@@ -627,6 +657,21 @@
 				ETOSLLAMAF00000000000000B8 /* talkie.cpp */,
 				ETOSLLAMAF00000000000000B9 /* wavtokenizer-dec.cpp */,
 				ETOSLLAMAF00000000000000BA /* xverse.cpp */,
+				ETOSLLAMAF00000000000000C1 /* common-chat.cpp */,
+				ETOSLLAMAF00000000000000C2 /* common-chat-diff-analyzer.cpp */,
+				ETOSLLAMAF00000000000000C3 /* common-chat-auto-parser-generator.cpp */,
+				ETOSLLAMAF00000000000000C4 /* common-chat-auto-parser-helpers.cpp */,
+				ETOSLLAMAF00000000000000C5 /* common-chat-peg-parser.cpp */,
+				ETOSLLAMAF00000000000000C6 /* common-json-schema-to-grammar.cpp */,
+				ETOSLLAMAF00000000000000C7 /* common-peg-parser.cpp */,
+				ETOSLLAMAF00000000000000C8 /* common-unicode.cpp */,
+				ETOSLLAMAF00000000000000C9 /* common-log.cpp */,
+				ETOSLLAMAF00000000000000CA /* jinja-lexer.cpp */,
+				ETOSLLAMAF00000000000000CB /* jinja-parser.cpp */,
+				ETOSLLAMAF00000000000000CC /* jinja-runtime.cpp */,
+				ETOSLLAMAF00000000000000CD /* jinja-value.cpp */,
+				ETOSLLAMAF00000000000000CE /* jinja-string.cpp */,
+				ETOSLLAMAF00000000000000CF /* jinja-caps.cpp */,
 			);
 			name = "llama.cpp Sources";
 			sourceTree = "<group>";
@@ -974,6 +1019,21 @@
 				ETOSLLAMAB00000000000000B8 /* talkie.cpp in Sources */,
 				ETOSLLAMAB00000000000000B9 /* wavtokenizer-dec.cpp in Sources */,
 				ETOSLLAMAB00000000000000BA /* xverse.cpp in Sources */,
+				ETOSLLAMAB00000000000000C1 /* common-chat.cpp in Sources */,
+				ETOSLLAMAB00000000000000C2 /* common-chat-diff-analyzer.cpp in Sources */,
+				ETOSLLAMAB00000000000000C3 /* common-chat-auto-parser-generator.cpp in Sources */,
+				ETOSLLAMAB00000000000000C4 /* common-chat-auto-parser-helpers.cpp in Sources */,
+				ETOSLLAMAB00000000000000C5 /* common-chat-peg-parser.cpp in Sources */,
+				ETOSLLAMAB00000000000000C6 /* common-json-schema-to-grammar.cpp in Sources */,
+				ETOSLLAMAB00000000000000C7 /* common-peg-parser.cpp in Sources */,
+				ETOSLLAMAB00000000000000C8 /* common-unicode.cpp in Sources */,
+				ETOSLLAMAB00000000000000C9 /* common-log.cpp in Sources */,
+				ETOSLLAMAB00000000000000CA /* jinja-lexer.cpp in Sources */,
+				ETOSLLAMAB00000000000000CB /* jinja-parser.cpp in Sources */,
+				ETOSLLAMAB00000000000000CC /* jinja-runtime.cpp in Sources */,
+				ETOSLLAMAB00000000000000CD /* jinja-value.cpp in Sources */,
+				ETOSLLAMAB00000000000000CE /* jinja-string.cpp in Sources */,
+				ETOSLLAMAB00000000000000CF /* jinja-caps.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1206,6 +1266,8 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../Dependencies/llama.cpp/include",
+					"$(SRCROOT)/../Dependencies/llama.cpp/common",
+					"$(SRCROOT)/../Dependencies/llama.cpp/vendor",
 					"$(SRCROOT)/../Dependencies/llama.cpp/src",
 					"$(SRCROOT)/../Dependencies/llama.cpp/src/models",
 					"$(SRCROOT)/../Dependencies/llama.cpp/ggml/include",
@@ -1361,6 +1423,8 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../Dependencies/llama.cpp/include",
+					"$(SRCROOT)/../Dependencies/llama.cpp/common",
+					"$(SRCROOT)/../Dependencies/llama.cpp/vendor",
 					"$(SRCROOT)/../Dependencies/llama.cpp/src",
 					"$(SRCROOT)/../Dependencies/llama.cpp/src/models",
 					"$(SRCROOT)/../Dependencies/llama.cpp/ggml/include",
