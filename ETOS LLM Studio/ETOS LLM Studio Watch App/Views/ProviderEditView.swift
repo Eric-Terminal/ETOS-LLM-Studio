@@ -30,6 +30,9 @@ struct ProviderEditView: View {
     let showsCancelButton: Bool
     let navigationTitleOverride: String?
     let onSave: (Provider) -> Void
+    private var isLocalProvider: Bool {
+        LocalModelProviderBridge.isLocalProvider(provider)
+    }
     
     init(
         provider: Provider,
@@ -68,6 +71,7 @@ struct ProviderEditView: View {
                     Text("Gemini").tag("gemini")
                     Text("Anthropic").tag("anthropic")
                 }
+                .disabled(isLocalProvider)
             }
             
             Section(header: Text(NSLocalizedString("认证", comment: "")), footer: Text(apiKeysHint)) {
@@ -167,17 +171,14 @@ struct ProviderEditView: View {
     
     private func saveProvider() {
         guard let headerOverrides = buildHeaderOverrides() else { return }
-        // 保存前更新 apiKeys 数组
-        provider.apiKeys = parsedApiKeys
-        provider.headerOverrides = headerOverrides
-        provider.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
+        var updated = provider
+        updated.apiKeys = parsedApiKeys
+        updated.headerOverrides = headerOverrides
+        updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
         
-        // 持久化更改
-        ConfigLoader.saveProvider(provider)
-        
-        // 重新加载服务以更新整个应用的 UI
-        ChatService.shared.reloadProviders()
-        onSave(provider)
+        ChatService.shared.saveProviderFromManagement(updated)
+        provider = updated
+        onSave(updated)
         
         if dismissAfterSave {
             dismiss()
@@ -189,6 +190,9 @@ struct ProviderEditView: View {
     }
 
     private var apiBaseURLHint: String {
+        if isLocalProvider {
+            return NSLocalizedString("本地提供商只用于模型管理和排序；API 地址、认证、请求头和代理会被保留但不会参与本地推理。", comment: "Local provider base URL hint")
+        }
         switch provider.apiFormat {
         case "gemini":
             return NSLocalizedString("API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta", comment: "")
@@ -202,7 +206,10 @@ struct ProviderEditView: View {
     }
 
     private var apiKeysHint: String {
-        NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
+        if isLocalProvider {
+            return NSLocalizedString("本地推理不会读取 API Key。这里保留字段只是为了沿用提供商配置界面。", comment: "Local provider API key hint")
+        }
+        return NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
     }
 
     private var numberFormatter: NumberFormatter {
@@ -248,7 +255,7 @@ struct ProviderEditView: View {
     private var isSaveDisabled: Bool {
         provider.name.isEmpty ||
         provider.baseURL.isEmpty ||
-        parsedApiKeys.isEmpty ||
+        (!isLocalProvider && parsedApiKeys.isEmpty) ||
         providerProxyValidationError != nil ||
         headerOverrideEntries.contains { $0.error != nil }
     }

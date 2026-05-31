@@ -17,6 +17,9 @@ struct ProviderActionsView: View {
     
     @State private var provider: Provider
     @State private var providerRevision = 0
+    private var isLocalProvider: Bool {
+        LocalModelProviderBridge.isLocalProvider(provider)
+    }
 
     init(provider: Provider) {
         _provider = State(initialValue: provider)
@@ -28,7 +31,9 @@ struct ProviderActionsView: View {
                 NavigationLink {
                     ProviderDetailView(
                         provider: provider,
-                        allowsRemoteModelFetch: provider.apiFormat.lowercased() != "anthropic"
+                        allowsRemoteModelFetch: !isLocalProvider && provider.apiFormat.lowercased() != "anthropic",
+                        allowsModelTesting: !isLocalProvider,
+                        allowsManualModelAdd: !isLocalProvider
                     ) { updatedProvider in
                         updateProvider(updatedProvider)
                     }

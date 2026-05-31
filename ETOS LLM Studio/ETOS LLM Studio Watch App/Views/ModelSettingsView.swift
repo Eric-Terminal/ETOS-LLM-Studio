@@ -39,7 +39,7 @@ struct ModelSettingsView: View {
                 TextField(NSLocalizedString("模型ID", comment: ""), text: $model.modelName.watchKeyboardNewlineBinding())
             }
 
-            if model.isChatModel {
+            if model.isChatModel && !LocalModelProviderBridge.isLocalProvider(provider) {
                 Section {
                     NavigationLink {
                         SingleModelConnectivityTestView(provider: provider, model: model)

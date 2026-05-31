@@ -18,6 +18,8 @@ struct ProviderDetailView: View {
     @State private var provider: Provider
     let onSave: (Provider) -> Void
     let allowsRemoteModelFetch: Bool
+    let allowsModelTesting: Bool
+    let allowsManualModelAdd: Bool
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
     @State private var isFetchingModels = false
@@ -43,11 +45,15 @@ struct ProviderDetailView: View {
     init(
         provider: Provider,
         allowsRemoteModelFetch: Bool = true,
+        allowsModelTesting: Bool = true,
+        allowsManualModelAdd: Bool = true,
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self.sourceProvider = provider
         _provider = State(initialValue: provider)
         self.allowsRemoteModelFetch = allowsRemoteModelFetch
+        self.allowsModelTesting = allowsModelTesting
+        self.allowsManualModelAdd = allowsManualModelAdd
         self.onSave = onSave
     }
     
@@ -96,19 +102,21 @@ struct ProviderDetailView: View {
                 }
             }
 
-            Section {
-                NavigationLink {
-                    ModelConnectivityTestView(provider: provider)
-                } label: {
-                    Label(
-                        NSLocalizedString("模型测试", comment: "Model connectivity test entry"),
-                        systemImage: "checkmark.seal"
-                    )
+            if allowsModelTesting {
+                Section {
+                    NavigationLink {
+                        ModelConnectivityTestView(provider: provider)
+                    } label: {
+                        Label(
+                            NSLocalizedString("模型测试", comment: "Model connectivity test entry"),
+                            systemImage: "checkmark.seal"
+                        )
+                    }
+                } footer: {
+                    Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。", comment: "Watch model test explanation"))
+                        .etFont(.footnote)
+                        .foregroundColor(.secondary)
                 }
-            } footer: {
-                Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。", comment: "Watch model test explanation"))
-                    .etFont(.footnote)
-                    .foregroundColor(.secondary)
             }
 
             if groupByFamilySection {
@@ -160,8 +168,10 @@ struct ProviderDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(action: { isAddingModel = true }) {
-                    Image(systemName: "plus")
+                if allowsManualModelAdd {
+                    Button(action: { isAddingModel = true }) {
+                        Image(systemName: "plus")
+                    }
                 }
             }
 
@@ -227,10 +237,11 @@ struct ProviderDetailView: View {
     
     private func saveChanges() {
         var providerToSave = provider
-        providerToSave.models = provider.models.filter { $0.isActivated }
+        if !LocalModelProviderBridge.isLocalProvider(providerToSave) {
+            providerToSave.models = provider.models.filter { $0.isActivated }
+        }
         
-        ConfigLoader.saveProvider(providerToSave)
-        ChatService.shared.reloadProviders()
+        ChatService.shared.saveProviderFromManagement(providerToSave)
         onSave(providerToSave)
     }
 

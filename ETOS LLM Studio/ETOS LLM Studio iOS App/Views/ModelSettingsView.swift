@@ -40,7 +40,7 @@ struct ModelSettingsView: View {
                     .autocorrectionDisabled()
             }
 
-            if model.isChatModel {
+            if model.isChatModel && !LocalModelProviderBridge.isLocalProvider(provider) {
                 Section {
                     NavigationLink {
                         SingleModelConnectivityTestView(provider: provider, model: model)
