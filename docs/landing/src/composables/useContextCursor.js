@@ -47,6 +47,7 @@ html.cc-enabled, html.cc-enabled * { cursor: none !important; }
 
 export function initContextCursor(options = {}) {
   if (typeof window === 'undefined' || !window.matchMedia) return;
+  if (document.querySelector('.cc-cursor')) return;
   const fine = window.matchMedia('(pointer: fine)').matches;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (!fine || reduced) return;
@@ -111,9 +112,7 @@ export function initContextCursor(options = {}) {
     curX += (destX - curX) * EASE;
     curY += (destY - curY) * EASE;
 
-    const w = blob.offsetWidth || BASE;
-    const h = blob.offsetHeight || BASE;
-    blob.style.transform = `translate3d(${curX - w / 2}px, ${curY - h / 2}px, 0)`;
+    blob.style.transform = `translate3d(${curX - curW / 2}px, ${curY - curH / 2}px, 0)`;
     requestAnimationFrame(tick);
   }
 
