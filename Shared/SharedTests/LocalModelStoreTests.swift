@@ -65,6 +65,7 @@ struct LocalModelStoreTests {
         #expect(runnable.model.overrideParameters["max_output_tokens"] == .int(LocalModelRecord.defaultMaxOutputTokens))
         #expect(runnable.model.overrideParameters["n_gpu_layers"] == .int(LocalModelRecord.defaultGPULayers))
         #expect(runnable.model.supportsToolCalling)
+        #expect(runnable.model.supportsEmbedding)
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
     }
 
@@ -191,13 +192,10 @@ struct LocalModelStoreTests {
     }
 
     @Test("缺失文件的本地模型不会进入可用候选")
-    func missingLocalModelIsNotActivatedCandidate() {
-        let store = LocalModelStore(directoryURL: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString))
-        let originalSwitch = AppConfigStore.boolValue(for: .localModelsEnabled)
-        AppConfigStore.persistSynchronously(.bool(true), for: .localModelsEnabled)
-        defer {
-            AppConfigStore.persistSynchronously(.bool(originalSwitch), for: .localModelsEnabled)
-        }
+    func missingLocalModelIsNotActivatedCandidate() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
 
         store.update(LocalModelRecord(
             displayName: "Missing",
@@ -208,6 +206,12 @@ struct LocalModelStoreTests {
         ))
 
         let service = ChatService(localModelStore: store)
+        service.providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: [],
+            records: store.models,
+            isEnabled: true,
+            preferRecordBasics: true
+        )
 
         #expect(service.configuredRunnableModels.contains(where: { LocalModelProviderBridge.isLocalRunnableModel($0) }))
         #expect(!service.activatedConversationModels.contains(where: { LocalModelProviderBridge.isLocalRunnableModel($0) }))

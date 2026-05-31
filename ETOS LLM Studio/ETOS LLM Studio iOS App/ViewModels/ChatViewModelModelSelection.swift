@@ -12,7 +12,7 @@ import Shared
 
 extension ChatViewModel {
     var embeddingModelOptions: [RunnableModel] {
-        configuredModels.filter { $0.model.kind == .embedding }
+        configuredModels.filter { $0.model.supportsEmbedding }
     }
 
     var titleGenerationModelOptions: [RunnableModel] {

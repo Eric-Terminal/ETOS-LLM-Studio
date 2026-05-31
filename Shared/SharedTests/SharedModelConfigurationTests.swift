@@ -385,6 +385,19 @@ struct RequestBodyOverrideModeTests {
         #expect(model.supportsToolCalling)
         #expect(model.supportsReasoning == false)
         #expect(model.supportsStreaming == false)
+        #expect(model.supportsEmbedding == false)
+    }
+
+    @Test("聊天模型可单独声明嵌入能力")
+    func testChatModelCanDeclareEmbeddingCapability() throws {
+        let model = Model(
+            modelName: "chat-with-embedding",
+            capabilities: [.toolCalling, .embedding]
+        )
+
+        #expect(model.kind == .chat)
+        #expect(model.isConversationModel)
+        #expect(model.supportsEmbedding)
     }
 
     @Test("旧模型能力解码会迁移到新能力结构")

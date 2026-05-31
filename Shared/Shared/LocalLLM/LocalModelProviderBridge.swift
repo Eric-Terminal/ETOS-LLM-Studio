@@ -59,7 +59,7 @@ public enum LocalModelProviderBridge {
         }
 
         let capabilities = Model.orderedCapabilities(
-            (existingModel?.capabilities ?? []) + [.toolCalling, .streaming]
+            (existingModel?.capabilities ?? []) + [.toolCalling, .streaming, .embedding]
         )
 
         return Model(

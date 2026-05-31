@@ -275,6 +275,7 @@ extension ModelSettingsView {
             Toggle(NSLocalizedString("可处理文件", comment: "聊天模型能力：文件输入"), isOn: modalityBinding(.file, keyPath: \.inputModalities))
             Toggle(NSLocalizedString("可生成图片", comment: "聊天模型能力：图片输出"), isOn: modalityBinding(.image, keyPath: \.outputModalities))
             Toggle(NSLocalizedString("可调用工具", comment: "聊天模型能力：工具调用"), isOn: capabilityBinding(.toolCalling))
+            Toggle(NSLocalizedString("可用于嵌入", comment: "聊天模型能力：嵌入"), isOn: capabilityBinding(.embedding))
         case .image:
             Toggle(NSLocalizedString("支持参考图片", comment: "图片生成模型能力：参考图片输入"), isOn: modalityBinding(.image, keyPath: \.inputModalities))
         case .embedding:

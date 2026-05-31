@@ -404,7 +404,7 @@ public extension Model {
     }
 
     var supportsEmbedding: Bool {
-        kind == .embedding
+        kind == .embedding || capabilities.contains(.embedding)
     }
 
     var supportsRerank: Bool {
