@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
           <span>{{ text.loader.kicker }}</span>
           <span>{{ text.loader.year }}</span>
         </div>
-        <div class="loader-title">HETOS!</div>
+        <div class="loader-title">ETOS!</div>
         <div class="loader-line">
           <span>{{ text.loader.line }}</span>
           <span>· · · · ·</span>
