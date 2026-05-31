@@ -108,3 +108,6 @@ docs/site/.vitepress/dist/
 
 # Landing（Vite）本地构建产物
 docs/landing/dist/
+
+# Node JS Package Lock
+*/**/package-lock.json
