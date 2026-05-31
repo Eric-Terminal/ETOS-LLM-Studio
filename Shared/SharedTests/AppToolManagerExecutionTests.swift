@@ -253,6 +253,7 @@ struct AppToolManagerExecutionTests {
         #expect(mutateParameterSchema["items"] as? [String: Any] != nil)
     }
 
+    @MainActor
     @Test("当前会话文件路径命中时应触发会话刷新判断")
     func testShouldRefreshCurrentSessionMessagesWhenCurrentSessionFileMutated() {
         let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
@@ -266,6 +267,7 @@ struct AppToolManagerExecutionTests {
         #expect(shouldRefresh)
     }
 
+    @MainActor
     @Test("旧版会话文件路径命中时也应触发会话刷新判断")
     func testShouldRefreshCurrentSessionMessagesWhenLegacySessionFileMutated() {
         let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
@@ -278,6 +280,7 @@ struct AppToolManagerExecutionTests {
         #expect(shouldRefresh)
     }
 
+    @MainActor
     @Test("非当前会话文件变更不应触发会话刷新判断")
     func testShouldNotRefreshCurrentSessionMessagesForUnrelatedMutation() {
         let sessionID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!

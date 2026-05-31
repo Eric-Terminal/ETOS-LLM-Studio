@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import Combine
 @testable import Shared
 
 extension ChatServiceTests {

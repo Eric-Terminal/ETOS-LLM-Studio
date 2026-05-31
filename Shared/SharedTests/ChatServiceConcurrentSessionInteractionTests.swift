@@ -292,7 +292,7 @@ struct ChatServiceConcurrentSessionInteractionTests {
     }
 }
 
-private final class ConcurrentSessionMockAdapter: APIAdapter {
+final class ConcurrentSessionMockAdapter: APIAdapter {
     func buildChatRequest(
         for model: RunnableModel,
         commonPayload: [String : Any],
@@ -481,7 +481,7 @@ private final class ControlledStreamingURLProtocol: URLProtocol {
     }
 }
 
-private final class ControlledSessionURLProtocol: URLProtocol {
+final class ControlledSessionURLProtocol: URLProtocol {
     private struct RegisteredResponse {
         let gate: DispatchSemaphore
         let responseBody: Data

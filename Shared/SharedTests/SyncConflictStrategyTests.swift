@@ -580,12 +580,14 @@ struct SyncConflictStrategyTests {
             )
         )
         let merged = ConversationMemoryManager.loadUserProfile()
+        let mergedProfile = try #require(merged)
+        let mergedLines = mergedProfile.content.split(separator: "\n")
 
         #expect(summary.importedMemories == 1)
-        #expect(merged?.content.split(separator: "\n").contains("用户偏好 SwiftUI 原生体验。"))
-        #expect(merged?.content.split(separator: "\n").contains("用户关注 watchOS 续航和同步稳定性。"))
-        #expect(merged?.updatedAt == incomingDate)
-        #expect(merged?.needsLLMDedup == true)
+        #expect(mergedLines.contains("用户偏好 SwiftUI 原生体验。"))
+        #expect(mergedLines.contains("用户关注 watchOS 续航和同步稳定性。"))
+        #expect(mergedProfile.updatedAt == incomingDate)
+        #expect(mergedProfile.needsLLMDedup == true)
     }
 
     @MainActor
