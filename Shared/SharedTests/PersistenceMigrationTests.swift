@@ -279,7 +279,7 @@ extension PersistenceTests {
         let migratedFileURL = currentSessionFileURL(sessionId)
         #expect(FileManager.default.fileExists(atPath: migratedFileURL.path))
         let migratedData = try Data(contentsOf: migratedFileURL)
-        let record = try JSONDecoder().decode(LegacySessionRecord.self, from: migratedData)
+        let record = try JSONDecoder().decode(SessionRecordFilePayload.self, from: migratedData)
         #expect(record.schemaVersion == 3)
         #expect(record.session.id == sessionId)
         #expect(record.session.name == "Legacy Session")
