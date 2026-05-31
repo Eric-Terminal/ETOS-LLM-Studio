@@ -6,7 +6,7 @@
 // 3. 任何 UI 字符串都从这里读，禁止把语言串硬编码进组件。
 
 export const LANG_LIST = [
-  { code: 'zh', name: '中文' },
+  { code: 'zh', name: '简体中文' },
   { code: 'en', name: 'English' },
   { code: 'ja', name: '日本語' },
   { code: 'ru', name: 'Русский' },
@@ -20,6 +20,7 @@ const zh = {
   },
   nav: {
     features: '功能',
+    personalize: '个性化',
     privacy: '隐私',
     tech: '技术',
     docs: '文档',
@@ -27,32 +28,29 @@ const zh = {
     download: '获取 App'
   },
   hero: {
-    eyebrow: 'NATIVE · iOS 18 · watchOS 11',
-    title: '把 AI 装进口袋，也装进手腕。',
+    title: '你的 AI，揣在手里，戴在腕上。',
     lead:
-      '一个运行在 iPhone 与 Apple Watch 上的原生 LLM 客户端。你的 Key、你的数据，从设备直接发往模型，没有中间服务器。',
-    actionsPrimary: '阅读上手教程',
+      '运行在 iPhone 与 Apple Watch 上的原生 LLM 客户端。你的 Key、你的数据，从设备直接发往模型，没有中间服务器。',
+    actionsPrimary: '轻松上手',
     actionsSecondary: '查看功能模块',
     statusOnline: '正在维护中',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
-  marquee: [
-    'OpenAI',
-    'Anthropic Claude',
-    'Google Gemini',
-    'OpenAI 兼容',
-    'MCP',
-    'Agent Skills',
-    'Shortcuts',
-    '本地 RAG',
-    '世界书',
-    'Daily Pulse'
-  ],
-  sectionLabel: {
-    features: '功能矩阵',
-    privacy: '隐私与本地优先',
-    tech: '技术栈',
-    cta: '准备好开始了吗'
+  personalize: {
+    title: '一眼认得出，是你的 Studio。',
+    lead: '上传一张壁纸、挑一个对话框颜色、要不要 AI 气泡——右边这台实时跟着变。',
+    pickerHint: '调下面三项，右侧实时预览',
+    wallpaperLabel: '背景图层',
+    wallpaperAction: '选择背景图',
+    colorLabel: '颜色配置',
+    hideBubbleLabel: '关闭助手气泡',
+    reset: '恢复默认',
+    chat: {
+      title: '问候与帮助',
+      user: '你好',
+      bot: '你好！👋\n很高兴见到你，有什么想聊的或者需要帮忙的吗？无论是图片处理、海报设计、提示词编写、角色设定，还是其他问题，都可以直接告诉我。',
+      placeholder: '输入消息…'
+    }
   },
   features: {
     title: '不是套壳。是把模型当 Apple 平台公民来设计。',
@@ -111,7 +109,7 @@ const zh = {
   privacy: {
     title: '你的 Key，你的数据，你的设备。',
     lead:
-      'ETOS LLM Studio 不运营任何中间服务器。模型请求从你的设备直接发出，对话存在本机 SQLite（SQLCipher 加密），同步通过 iPhone 与 Watch 在局域网内完成。要不要上 CloudKit、要不要交给第三方，全是你的选择。',
+      '没有任何中间服务器。模型请求从你的设备直接发出，对话存在本机 SQLite（SQLCipher 加密），同步通过 iPhone 与 Watch 在局域网内完成。要不要上 CloudKit、要不要交给第三方，全是你的选择。',
     bullets: [
       { kicker: 'BYOK', title: '你提供 Key，App 直发模型', body: '我们不代付、不转发、不缓存你的请求。' },
       { kicker: 'LOCAL FIRST', title: '会话与记忆存在本机', body: 'SQLCipher 全盘加密，可应用锁 + Face ID 双重门。' },
@@ -121,7 +119,7 @@ const zh = {
   },
   tech: {
     title: '用原生工具，做原生体验。',
-    lead: '没有 Electron，没有 React Native，没有 WebView 套壳。',
+    lead: '没有 Electron，没有 React Native，没有 WebView 套壳。快速，性能超强。',
     items: [
       { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11 原生 UI，遵循 Apple HIG。' },
       { name: 'GRDB · SQLCipher', desc: '加密 SQLite + ValueObservation 响应式查询。' },
@@ -164,6 +162,7 @@ const en = {
   },
   nav: {
     features: 'Features',
+    personalize: 'Personalize',
     privacy: 'Privacy',
     tech: 'Stack',
     docs: 'Docs',
@@ -171,7 +170,6 @@ const en = {
     download: 'Get the App'
   },
   hero: {
-    eyebrow: 'NATIVE · iOS 18 · watchOS 11',
     title: 'AI in your pocket. And on your wrist.',
     lead:
       'A native LLM client that runs on iPhone and Apple Watch. Your key, your data — straight from device to model. No middle server.',
@@ -180,23 +178,21 @@ const en = {
     statusOnline: 'In active development',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
-  marquee: [
-    'OpenAI',
-    'Anthropic Claude',
-    'Google Gemini',
-    'OpenAI-compatible',
-    'MCP',
-    'Agent Skills',
-    'Shortcuts',
-    'Local RAG',
-    'Worldbook',
-    'Daily Pulse'
-  ],
-  sectionLabel: {
-    features: 'What it does',
-    privacy: 'Privacy & local-first',
-    tech: 'Tech stack',
-    cta: 'Ready to start?'
+  personalize: {
+    title: 'Unmistakably yours.',
+    lead: 'Upload a wallpaper, pick a bubble color, keep or drop the AI bubble — the phone on the right updates live.',
+    pickerHint: 'Tweak these three; preview on the right',
+    wallpaperLabel: 'Background Layer',
+    wallpaperAction: 'Select background image',
+    colorLabel: 'Color profiles',
+    hideBubbleLabel: 'Hide Assistant Bubbles',
+    reset: 'Reset to default',
+    chat: {
+      title: 'Greetings & Help',
+      user: 'Hi',
+      bot: "Hi! 👋\nGreat to meet you — anything you'd like to chat about or need a hand with? Image editing, poster design, prompt writing, character setup, or anything else, just tell me.",
+      placeholder: 'Message'
+    }
   },
   features: {
     title: "Not a wrapper. A native Apple-platform citizen.",
@@ -308,6 +304,7 @@ const ja = {
   },
   nav: {
     features: '機能',
+    personalize: 'カスタマイズ',
     privacy: 'プライバシー',
     tech: '技術',
     docs: 'ドキュメント',
@@ -315,7 +312,6 @@ const ja = {
     download: 'App を入手'
   },
   hero: {
-    eyebrow: 'NATIVE · iOS 18 · watchOS 11',
     title: 'AI をポケットに、そして手首に。',
     lead:
       'iPhone と Apple Watch 上で動くネイティブ LLM クライアント。あなたの Key、あなたのデータが、デバイスから直接モデルへ。中継サーバーはありません。',
@@ -324,23 +320,21 @@ const ja = {
     statusOnline: '開発中',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
-  marquee: [
-    'OpenAI',
-    'Anthropic Claude',
-    'Google Gemini',
-    'OpenAI 互換',
-    'MCP',
-    'Agent Skills',
-    'Shortcuts',
-    'ローカル RAG',
-    'ワールドブック',
-    'Daily Pulse'
-  ],
-  sectionLabel: {
-    features: '機能マトリクス',
-    privacy: 'プライバシー & ローカル優先',
-    tech: '技術スタック',
-    cta: '始める準備はできましたか'
+  personalize: {
+    title: 'ひと目で分かる、あなたの Studio。',
+    lead: '壁紙をアップロード、バブルの色を選ぶ、AI バブルの有無——右のスマホがリアルタイムで反映します。',
+    pickerHint: '下の3項目を調整、右でプレビュー',
+    wallpaperLabel: '背景レイヤー',
+    wallpaperAction: '背景画像を選択',
+    colorLabel: 'カラープロファイル',
+    hideBubbleLabel: 'アシスタントの吹き出しを非表示',
+    reset: 'デフォルトに戻す',
+    chat: {
+      title: 'あいさつとヘルプ',
+      user: 'こんにちは',
+      bot: 'こんにちは！👋\nお会いできてうれしいです。話したいことや、お手伝いできることはありますか？画像処理、ポスターデザイン、プロンプト作成、キャラクター設定、その他なんでも、気軽にどうぞ。',
+      placeholder: 'メッセージ'
+    }
   },
   features: {
     title: 'ガワだけではない。Apple プラットフォームの一員として設計。',
@@ -452,6 +446,7 @@ const ru = {
   },
   nav: {
     features: 'Возможности',
+    personalize: 'Оформление',
     privacy: 'Приватность',
     tech: 'Стек',
     docs: 'Документация',
@@ -459,7 +454,6 @@ const ru = {
     download: 'Получить'
   },
   hero: {
-    eyebrow: 'NATIVE · iOS 18 · watchOS 11',
     title: 'AI в кармане. И на запястье.',
     lead:
       'Нативный LLM-клиент для iPhone и Apple Watch. Ваш ключ, ваши данные — с устройства напрямую в модель. Никакого посредника.',
@@ -468,23 +462,21 @@ const ru = {
     statusOnline: 'В активной разработке',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
-  marquee: [
-    'OpenAI',
-    'Anthropic Claude',
-    'Google Gemini',
-    'OpenAI-совместимые',
-    'MCP',
-    'Agent Skills',
-    'Shortcuts',
-    'Локальный RAG',
-    'Worldbook',
-    'Daily Pulse'
-  ],
-  sectionLabel: {
-    features: 'Что умеет',
-    privacy: 'Приватность и local-first',
-    tech: 'Технологии',
-    cta: 'Готовы начать?'
+  personalize: {
+    title: 'Безошибочно ваша Studio.',
+    lead: 'Загрузите обои, выберите цвет пузыря, оставьте или уберите пузырь ИИ — телефон справа меняется вживую.',
+    pickerHint: 'Настройте три пункта, превью справа',
+    wallpaperLabel: 'Слой фона',
+    wallpaperAction: 'Выбрать фоновое изображение',
+    colorLabel: 'Цветовые профили',
+    hideBubbleLabel: 'Скрыть пузыри ассистента',
+    reset: 'Сбросить',
+    chat: {
+      title: 'Приветствие и помощь',
+      user: 'Привет',
+      bot: 'Привет! 👋\nРад знакомству! О чём хотите поговорить или с чем помочь? Обработка изображений, дизайн постеров, написание промптов, создание персонажей или что-то ещё — просто скажите.',
+      placeholder: 'Сообщение'
+    }
   },
   features: {
     title: 'Не обёртка. Гражданин платформы Apple.',
@@ -596,6 +588,7 @@ const zhHant = {
   },
   nav: {
     features: '功能',
+    personalize: '個人化',
     privacy: '隱私',
     tech: '技術',
     docs: '文件',
@@ -603,7 +596,6 @@ const zhHant = {
     download: '取得 App'
   },
   hero: {
-    eyebrow: 'NATIVE · iOS 18 · watchOS 11',
     title: '把 AI 放進口袋，也放上手腕。',
     lead:
       '一個跑在 iPhone 與 Apple Watch 上的原生 LLM 客戶端。你的 Key、你的資料，從裝置直接送往模型，沒有中介伺服器。',
@@ -612,23 +604,21 @@ const zhHant = {
     statusOnline: '持續開發中',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
-  marquee: [
-    'OpenAI',
-    'Anthropic Claude',
-    'Google Gemini',
-    'OpenAI 相容',
-    'MCP',
-    'Agent Skills',
-    'Shortcuts',
-    '本地 RAG',
-    '世界書',
-    'Daily Pulse'
-  ],
-  sectionLabel: {
-    features: '功能總覽',
-    privacy: '隱私與本地優先',
-    tech: '技術棧',
-    cta: '準備好開始了嗎'
+  personalize: {
+    title: '一眼認得出，是你的 Studio。',
+    lead: '上傳一張壁紙、挑一個對話框顏色、要不要 AI 氣泡——右邊這台即時跟著變。',
+    pickerHint: '調下面三項，右側即時預覽',
+    wallpaperLabel: '背景圖層',
+    wallpaperAction: '選擇背景圖',
+    colorLabel: '顏色配置',
+    hideBubbleLabel: '關閉助手氣泡',
+    reset: '恢復預設',
+    chat: {
+      title: '問候與幫助',
+      user: '你好',
+      bot: '你好！👋\n很高興見到你，有什麼想聊的或者需要幫忙的嗎？無論是圖片處理、海報設計、提示詞編寫、角色設定，還是其他問題，都可以直接告訴我。',
+      placeholder: '輸入訊息…'
+    }
   },
   features: {
     title: '不是套殼。是把模型當 Apple 平台公民來設計。',
