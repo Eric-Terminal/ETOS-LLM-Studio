@@ -1222,6 +1222,7 @@
 			buildSettings = {
 				ALLOW_TARGET_PLATFORM_SPECIALIZATION = YES;
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1233,6 +1234,8 @@
 				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INTERMEDIATE_TEXT_BASED_STUBS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				GCC_WARN_UNUSED_FUNCTION = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"GGML_USE_CPU=1",
@@ -1295,6 +1298,12 @@
 					"$(inherited)",
 					"$(SRCROOT)/../Dependencies/llama.cpp/ggml/src",
 					"$(SRCROOT)/../Dependencies/llama.cpp/ggml/src/ggml-metal",
+				);
+				MTL_COMPILER_FLAGS = (
+					"$(inherited)",
+					"-Wno-unknown-warning-option",
+					"-Wno-duplicate-decl-specifier",
+					"-Wno-unused-function",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -1370,6 +1379,17 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,4,7";
+				WARNING_CFLAGS = (
+					"$(inherited)",
+					"-Wno-ambiguous-macro",
+					"-Wno-deprecated-declarations",
+					"-Wno-documentation",
+					"-Wno-shorten-64-to-32",
+					"-Wno-unreachable-code",
+					"-Wno-unused-function",
+					"-Wpointer-to-int-cast",
+					"-Wint-to-pointer-cast",
+				);
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
@@ -1380,6 +1400,7 @@
 			buildSettings = {
 				ALLOW_TARGET_PLATFORM_SPECIALIZATION = YES;
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1391,6 +1412,8 @@
 				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INTERMEDIATE_TEXT_BASED_STUBS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				GCC_WARN_UNUSED_FUNCTION = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"GGML_USE_CPU=1",
@@ -1453,6 +1476,12 @@
 					"$(inherited)",
 					"$(SRCROOT)/../Dependencies/llama.cpp/ggml/src",
 					"$(SRCROOT)/../Dependencies/llama.cpp/ggml/src/ggml-metal",
+				);
+				MTL_COMPILER_FLAGS = (
+					"$(inherited)",
+					"-Wno-unknown-warning-option",
+					"-Wno-duplicate-decl-specifier",
+					"-Wno-unused-function",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -1528,6 +1557,17 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,4,7";
+				WARNING_CFLAGS = (
+					"$(inherited)",
+					"-Wno-ambiguous-macro",
+					"-Wno-deprecated-declarations",
+					"-Wno-documentation",
+					"-Wno-shorten-64-to-32",
+					"-Wno-unreachable-code",
+					"-Wno-unused-function",
+					"-Wpointer-to-int-cast",
+					"-Wint-to-pointer-cast",
+				);
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
