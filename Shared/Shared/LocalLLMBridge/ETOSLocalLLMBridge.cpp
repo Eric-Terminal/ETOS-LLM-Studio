@@ -21,10 +21,7 @@
 #include <cstring>
 #include <cmath>
 #include <exception>
-#include <fstream>
-#include <limits>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <TargetConditionals.h>
 #include <thread>
@@ -86,113 +83,6 @@ std::string normalize_option_name(std::string value) {
     return lowercase_copy(value);
 }
 
-std::vector<std::string> split_arguments(const std::string & raw) {
-    std::vector<std::string> result;
-    std::string current;
-    char quote = '\0';
-    bool escaping = false;
-
-    for (char character : raw) {
-        if (escaping) {
-            current.push_back(character);
-            escaping = false;
-            continue;
-        }
-        if (character == '\\') {
-            escaping = true;
-            continue;
-        }
-        if (quote != '\0') {
-            if (character == quote) {
-                quote = '\0';
-            } else {
-                current.push_back(character);
-            }
-            continue;
-        }
-        if (character == '\'' || character == '"') {
-            quote = character;
-            continue;
-        }
-        if (std::isspace(static_cast<unsigned char>(character))) {
-            if (!current.empty()) {
-                result.push_back(current);
-                current.clear();
-            }
-            continue;
-        }
-        current.push_back(character);
-    }
-
-    if (escaping) {
-        current.push_back('\\');
-    }
-    if (!current.empty()) {
-        result.push_back(current);
-    }
-    return result;
-}
-
-bool parse_i32(const std::string & value, int32_t * output) {
-    if (!output) {
-        return false;
-    }
-    try {
-        size_t index = 0;
-        const long raw = std::stol(value, &index, 10);
-        if (index != value.size()) {
-            return false;
-        }
-        if (raw < std::numeric_limits<int32_t>::min() || raw > std::numeric_limits<int32_t>::max()) {
-            return false;
-        }
-        *output = static_cast<int32_t>(raw);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-bool parse_u32(const std::string & value, uint32_t * output) {
-    int32_t signed_value = 0;
-    if (!parse_i32(value, &signed_value) || signed_value < 0 || !output) {
-        return false;
-    }
-    *output = static_cast<uint32_t>(signed_value);
-    return true;
-}
-
-bool parse_float(const std::string & value, float * output) {
-    if (!output) {
-        return false;
-    }
-    try {
-        size_t index = 0;
-        const float raw = std::stof(value, &index);
-        if (index != value.size()) {
-            return false;
-        }
-        *output = raw;
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-bool read_file_text(const std::string & path, std::string * output) {
-    if (!output) {
-        return false;
-    }
-    std::ifstream stream(path);
-    if (!stream) {
-        return false;
-    }
-    std::ostringstream buffer;
-    buffer << stream.rdbuf();
-    *output = buffer.str();
-    return true;
-}
-
 struct local_generation_params {
     int32_t context_size = 2048;
     int32_t max_output_tokens = 512;
@@ -228,196 +118,47 @@ struct local_generation_params {
     bool ignore_eos = false;
 };
 
-bool parse_advanced_arguments(
-    const char * raw_arguments,
-    local_generation_params * params,
-    std::string * error
-) {
-    if (!params) {
-        return false;
-    }
-    const std::string raw = raw_arguments ? trim_copy(raw_arguments) : "";
-    if (raw.empty()) {
-        return true;
-    }
-
-    const std::vector<std::string> arguments = split_arguments(raw);
-    for (size_t index = 0; index < arguments.size(); ++index) {
-        std::string token = arguments[index];
-        if (token.empty()) {
-            continue;
-        }
-        if (token.rfind("-", 0) != 0) {
-            if (error) {
-                *error = "本地高级参数必须使用 llama.cpp CLI 风格选项：" + token;
-            }
-            return false;
-        }
-
-        std::string raw_name = token;
-        std::string value;
-        const size_t equals = token.find('=');
-        if (equals != std::string::npos) {
-            raw_name = token.substr(0, equals);
-            value = token.substr(equals + 1);
-        }
-        const std::string name = normalize_option_name(raw_name);
-
-        auto next_value = [&]() -> std::string {
-            if (!value.empty() || equals != std::string::npos) {
-                return value;
-            }
-            if (index + 1 >= arguments.size()) {
-                if (error) {
-                    *error = "本地高级参数缺少取值：" + raw_name;
-                }
-                return {};
-            }
-            return arguments[++index];
-        };
-
-        auto set_i32 = [&](int32_t & target) -> bool {
-            const std::string raw_value = next_value();
-            if (raw_value.empty() && error && !error->empty()) {
-                return false;
-            }
-            if (!parse_i32(raw_value, &target)) {
-                if (error) {
-                    *error = "本地高级参数整数无效：" + raw_name + " " + raw_value;
-                }
-                return false;
-            }
-            return true;
-        };
-
-        auto set_u32 = [&](uint32_t & target) -> bool {
-            const std::string raw_value = next_value();
-            if (raw_value.empty() && error && !error->empty()) {
-                return false;
-            }
-            if (!parse_u32(raw_value, &target)) {
-                if (error) {
-                    *error = "本地高级参数整数无效：" + raw_name + " " + raw_value;
-                }
-                return false;
-            }
-            return true;
-        };
-
-        auto set_float = [&](float & target) -> bool {
-            const std::string raw_value = next_value();
-            if (raw_value.empty() && error && !error->empty()) {
-                return false;
-            }
-            if (!parse_float(raw_value, &target)) {
-                if (error) {
-                    *error = "本地高级参数数字无效：" + raw_name + " " + raw_value;
-                }
-                return false;
-            }
-            return true;
-        };
-
-        auto set_string = [&](std::string & target) -> bool {
-            target = next_value();
-            return !(target.empty() && error && !error->empty());
-        };
-
-        if (name == "ctx-size" || name == "n-ctx" || name == "c") {
-            if (!set_i32(params->context_size)) { return false; }
-        } else if (name == "predict" || name == "n-predict" || name == "max-tokens" || name == "max-output-tokens" || name == "n") {
-            if (!set_i32(params->max_output_tokens)) { return false; }
-        } else if (name == "gpu-layers" || name == "n-gpu-layers" || name == "ngl") {
-            if (!set_i32(params->gpu_layers)) { return false; }
-        } else if (name == "seed" || name == "s") {
-            if (!set_u32(params->seed)) { return false; }
-        } else if (name == "temp" || name == "temperature") {
-            if (!set_float(params->temperature)) { return false; }
-        } else if (name == "top-k" || name == "top-k-sampling") {
-            if (!set_i32(params->top_k)) { return false; }
-        } else if (name == "top-p" || name == "top-p-sampling") {
-            if (!set_float(params->top_p)) { return false; }
-        } else if (name == "min-p") {
-            if (!set_float(params->min_p)) { return false; }
-        } else if (name == "min-keep") {
-            if (!set_i32(params->min_keep)) { return false; }
-        } else if (name == "typical" || name == "typical-p" || name == "typ-p") {
-            if (!set_float(params->typical_p)) { return false; }
-        } else if (name == "dynatemp-range") {
-            if (!set_float(params->dynatemp_range)) { return false; }
-        } else if (name == "dynatemp-exp") {
-            if (!set_float(params->dynatemp_exponent)) { return false; }
-        } else if (name == "xtc-probability") {
-            if (!set_float(params->xtc_probability)) { return false; }
-        } else if (name == "xtc-threshold") {
-            if (!set_float(params->xtc_threshold)) { return false; }
-        } else if (name == "top-n-sigma") {
-            if (!set_float(params->top_n_sigma)) { return false; }
-        } else if (name == "repeat-last-n") {
-            if (!set_i32(params->repeat_last_n)) { return false; }
-        } else if (name == "repeat-penalty") {
-            if (!set_float(params->repeat_penalty)) { return false; }
-        } else if (name == "frequency-penalty") {
-            if (!set_float(params->frequency_penalty)) { return false; }
-        } else if (name == "presence-penalty") {
-            if (!set_float(params->presence_penalty)) { return false; }
-        } else if (name == "dry-multiplier") {
-            if (!set_float(params->dry_multiplier)) { return false; }
-        } else if (name == "dry-base") {
-            if (!set_float(params->dry_base)) { return false; }
-        } else if (name == "dry-allowed-length") {
-            if (!set_i32(params->dry_allowed_length)) { return false; }
-        } else if (name == "dry-penalty-last-n") {
-            if (!set_i32(params->dry_penalty_last_n)) { return false; }
-        } else if (name == "dry-sequence-breaker") {
-            const std::string breaker = next_value();
-            if (breaker.empty() && error && !error->empty()) {
-                return false;
-            }
-            if (params->dry_sequence_breakers == std::vector<std::string>({"\n", ":", "\"", "*"})) {
-                params->dry_sequence_breakers.clear();
-            }
-            if (breaker != "none") {
-                params->dry_sequence_breakers.push_back(breaker);
-            }
-        } else if (name == "mirostat") {
-            if (!set_i32(params->mirostat)) { return false; }
-        } else if (name == "mirostat-lr") {
-            if (!set_float(params->mirostat_eta)) { return false; }
-        } else if (name == "mirostat-ent") {
-            if (!set_float(params->mirostat_tau)) { return false; }
-        } else if (name == "samplers") {
-            if (!set_string(params->samplers)) { return false; }
-        } else if (name == "sampler-seq" || name == "sampling-seq") {
-            if (!set_string(params->samplers)) { return false; }
-        } else if (name == "adaptive-target") {
-            if (!set_float(params->adaptive_target)) { return false; }
-        } else if (name == "adaptive-decay") {
-            if (!set_float(params->adaptive_decay)) { return false; }
-        } else if (name == "grammar") {
-            if (!set_string(params->grammar)) { return false; }
-        } else if (name == "grammar-file") {
-            const std::string path = next_value();
-            if (path.empty() && error && !error->empty()) {
-                return false;
-            }
-            if (!read_file_text(path, &params->grammar)) {
-                if (error) {
-                    *error = "无法读取本地高级参数 grammar 文件：" + path;
-                }
-                return false;
-            }
-        } else if (name == "ignore-eos") {
-            params->ignore_eos = true;
-        } else {
-            if (error) {
-                *error = "暂不支持的本地 llama.cpp CLI 参数：" + raw_name;
-            }
-            return false;
+local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config) {
+    local_generation_params params;
+    params.context_size = std::max<int32_t>(1, config.context_size);
+    params.max_output_tokens = std::max<int32_t>(1, config.max_output_tokens);
+    params.gpu_layers = config.gpu_layers;
+    params.seed = config.seed;
+    params.min_keep = config.min_keep;
+    params.top_k = config.top_k;
+    params.top_p = config.top_p;
+    params.min_p = config.min_p;
+    params.typical_p = config.typical_p;
+    params.temperature = config.temperature;
+    params.dynatemp_range = config.dynatemp_range;
+    params.dynatemp_exponent = config.dynatemp_exponent;
+    params.xtc_probability = config.xtc_probability;
+    params.xtc_threshold = config.xtc_threshold;
+    params.top_n_sigma = config.top_n_sigma;
+    params.repeat_last_n = config.repeat_last_n;
+    params.repeat_penalty = config.repeat_penalty;
+    params.frequency_penalty = config.frequency_penalty;
+    params.presence_penalty = config.presence_penalty;
+    params.dry_multiplier = config.dry_multiplier;
+    params.dry_base = config.dry_base;
+    params.dry_allowed_length = config.dry_allowed_length;
+    params.dry_penalty_last_n = config.dry_penalty_last_n;
+    params.dry_sequence_breakers.clear();
+    for (int32_t index = 0; config.dry_sequence_breakers && index < config.dry_sequence_breaker_count; ++index) {
+        const char * breaker = config.dry_sequence_breakers[index];
+        if (breaker) {
+            params.dry_sequence_breakers.emplace_back(breaker);
         }
     }
-
-    return true;
+    params.mirostat = config.mirostat;
+    params.mirostat_tau = config.mirostat_tau;
+    params.mirostat_eta = config.mirostat_eta;
+    params.adaptive_target = config.adaptive_target;
+    params.adaptive_decay = config.adaptive_decay;
+    params.samplers = config.samplers ? config.samplers : "";
+    params.grammar = config.grammar ? config.grammar : "";
+    params.ignore_eos = config.ignore_eos != 0;
+    return params;
 }
 
 llama_sampler * create_sampler(
@@ -691,12 +432,7 @@ int32_t generate(
     int32_t message_count,
     const etos_local_llm_tool * tools,
     int32_t tool_count,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
     void * user_data,
@@ -708,17 +444,11 @@ int32_t generate(
     if (!output_text && !token_callback) {
         return fail("本地推理输出参数无效。", error_message);
     }
-
-    local_generation_params generation_params;
-    generation_params.context_size = std::max<int32_t>(1, context_size);
-    generation_params.max_output_tokens = std::max<int32_t>(1, max_output_tokens);
-    generation_params.temperature = temperature;
-    generation_params.top_p = top_p;
-    generation_params.gpu_layers = n_gpu_layers;
-    std::string arguments_error;
-    if (!parse_advanced_arguments(advanced_arguments, &generation_params, &arguments_error)) {
-        return fail(arguments_error, error_message);
+    if (!config) {
+        return fail("本地推理配置无效。", error_message);
     }
+
+    const local_generation_params generation_params = generation_params_from_config(*config);
 
     std::call_once(backend_init_once, [] {
         llama_backend_init();
@@ -1022,12 +752,7 @@ int32_t parse_tool_calls(
 int32_t etos_local_llm_generate(
     const char * model_path,
     const char * prompt,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     char ** output,
     char ** error_message
 ) {
@@ -1049,12 +774,7 @@ int32_t etos_local_llm_generate(
         0,
         nullptr,
         0,
-        context_size,
-        max_output_tokens,
-        temperature,
-        top_p,
-        n_gpu_layers,
-        advanced_arguments,
+        config,
         &response,
         nullptr,
         nullptr,
@@ -1074,12 +794,7 @@ int32_t etos_local_llm_generate_chat(
     int32_t message_count,
     const etos_local_llm_tool * tools,
     int32_t tool_count,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     char ** output,
     char ** error_message
 ) {
@@ -1101,12 +816,7 @@ int32_t etos_local_llm_generate_chat(
         message_count,
         tools,
         tool_count,
-        context_size,
-        max_output_tokens,
-        temperature,
-        top_p,
-        n_gpu_layers,
-        advanced_arguments,
+        config,
         &response,
         nullptr,
         nullptr,
@@ -1123,12 +833,7 @@ int32_t etos_local_llm_generate_chat(
 int32_t etos_local_llm_generate_stream(
     const char * model_path,
     const char * prompt,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
@@ -1143,12 +848,7 @@ int32_t etos_local_llm_generate_stream(
         0,
         nullptr,
         0,
-        context_size,
-        max_output_tokens,
-        temperature,
-        top_p,
-        n_gpu_layers,
-        advanced_arguments,
+        config,
         nullptr,
         token_callback,
         user_data,
@@ -1162,12 +862,7 @@ int32_t etos_local_llm_generate_chat_stream(
     int32_t message_count,
     const etos_local_llm_tool * tools,
     int32_t tool_count,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
@@ -1182,12 +877,7 @@ int32_t etos_local_llm_generate_chat_stream(
         message_count,
         tools,
         tool_count,
-        context_size,
-        max_output_tokens,
-        temperature,
-        top_p,
-        n_gpu_layers,
-        advanced_arguments,
+        config,
         nullptr,
         token_callback,
         user_data,

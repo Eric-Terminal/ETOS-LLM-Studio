@@ -94,12 +94,7 @@ public final class LocalLLMEngine: @unchecked Sendable {
                 messages: messages,
                 tools: tools,
                 modelPath: modelURL.path,
-                contextSize: options.contextSize,
-                maxOutputTokens: options.maxOutputTokens,
-                temperature: options.temperature,
-                topP: options.topP,
-                gpuLayers: options.gpuLayers,
-                advancedArguments: options.advancedArguments
+                options: options
             )
         }.value
     }
@@ -114,16 +109,11 @@ public final class LocalLLMEngine: @unchecked Sendable {
             throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
         }
 
-        return LocalLLMBridge.streamChat(
+        return try LocalLLMBridge.streamChat(
             messages: messages,
             tools: tools,
             modelPath: modelURL.path,
-            contextSize: options.contextSize,
-            maxOutputTokens: options.maxOutputTokens,
-            temperature: options.temperature,
-            topP: options.topP,
-            gpuLayers: options.gpuLayers,
-            advancedArguments: options.advancedArguments
+            options: options
         )
     }
 
@@ -172,12 +162,7 @@ private enum LocalLLMBridge {
         messages: [LocalLLMChatMessage],
         tools: [LocalLLMToolDefinition],
         modelPath: String,
-        contextSize: Int,
-        maxOutputTokens: Int,
-        temperature: Double?,
-        topP: Double?,
-        gpuLayers: Int,
-        advancedArguments: String
+        options: LocalLLMGenerationOptions
     ) throws -> String {
         guard !messages.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
@@ -185,24 +170,21 @@ private enum LocalLLMBridge {
 
         var outputPointer: UnsafeMutablePointer<CChar>?
         var errorPointer: UnsafeMutablePointer<CChar>?
+        let generationConfig = try LocalLLMGenerationConfig(options: options)
+        let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
         let preparedMessages = PreparedLocalLLMChatMessages(messages)
         let preparedTools = PreparedLocalLLMTools(tools)
         let status = modelPath.withCString { modelPathCString in
-            advancedArguments.withCString { advancedArgumentsCString in
-                preparedMessages.withUnsafeBufferPointer { messagesPointer in
-                    preparedTools.withUnsafeBufferPointer { toolsPointer in
+            preparedMessages.withUnsafeBufferPointer { messagesPointer in
+                preparedTools.withUnsafeBufferPointer { toolsPointer in
+                    preparedConfig.withUnsafePointer { configPointer in
                         etos_local_llm_generate_chat(
                             modelPathCString,
                             messagesPointer.baseAddress,
                             Int32(messagesPointer.count),
                             toolsPointer.baseAddress,
                             Int32(toolsPointer.count),
-                            Int32(max(1, contextSize)),
-                            Int32(max(1, maxOutputTokens)),
-                            Float(temperature ?? 0.8),
-                            Float(topP ?? 0.95),
-                            Int32(gpuLayers),
-                            advancedArgumentsCString,
+                            configPointer,
                             &outputPointer,
                             &errorPointer
                         )
@@ -230,14 +212,10 @@ private enum LocalLLMBridge {
         messages: [LocalLLMChatMessage],
         tools: [LocalLLMToolDefinition],
         modelPath: String,
-        contextSize: Int,
-        maxOutputTokens: Int,
-        temperature: Double?,
-        topP: Double?,
-        gpuLayers: Int,
-        advancedArguments: String
-    ) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
+        options: LocalLLMGenerationOptions
+    ) throws -> AsyncThrowingStream<String, Error> {
+        let generationConfig = try LocalLLMGenerationConfig(options: options)
+        return AsyncThrowingStream<String, Error> { continuation in
             guard !messages.isEmpty else {
                 continuation.finish(throwing: LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages")))
                 return
@@ -255,44 +233,44 @@ private enum LocalLLMBridge {
                 }
 
                 var errorPointer: UnsafeMutablePointer<CChar>?
-                let preparedMessages = PreparedLocalLLMChatMessages(messages)
-                let preparedTools = PreparedLocalLLMTools(tools)
-                let status = modelPath.withCString { modelPathCString in
-                    advancedArguments.withCString { advancedArgumentsCString in
+                do {
+                    let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
+                    let preparedMessages = PreparedLocalLLMChatMessages(messages)
+                    let preparedTools = PreparedLocalLLMTools(tools)
+                    let status = modelPath.withCString { modelPathCString in
                         preparedMessages.withUnsafeBufferPointer { messagesPointer in
                             preparedTools.withUnsafeBufferPointer { toolsPointer in
-                                etos_local_llm_generate_chat_stream(
-                                    modelPathCString,
-                                    messagesPointer.baseAddress,
-                                    Int32(messagesPointer.count),
-                                    toolsPointer.baseAddress,
-                                    Int32(toolsPointer.count),
-                                    Int32(max(1, contextSize)),
-                                    Int32(max(1, maxOutputTokens)),
-                                    Float(temperature ?? 0.8),
-                                    Float(topP ?? 0.95),
-                                    Int32(gpuLayers),
-                                    advancedArgumentsCString,
-                                    localLLMStreamCallback,
-                                    statePointer,
-                                    &errorPointer
-                                )
+                                preparedConfig.withUnsafePointer { configPointer in
+                                    etos_local_llm_generate_chat_stream(
+                                        modelPathCString,
+                                        messagesPointer.baseAddress,
+                                        Int32(messagesPointer.count),
+                                        toolsPointer.baseAddress,
+                                        Int32(toolsPointer.count),
+                                        configPointer,
+                                        localLLMStreamCallback,
+                                        statePointer,
+                                        &errorPointer
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                defer {
-                    if let errorPointer {
-                        etos_local_llm_free(errorPointer)
+                    defer {
+                        if let errorPointer {
+                            etos_local_llm_free(errorPointer)
+                        }
                     }
-                }
 
-                guard status == 0 else {
-                    let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
-                    continuation.finish(throwing: LocalLLMEngineError.generationFailed(message))
-                    return
+                    guard status == 0 else {
+                        let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+                        continuation.finish(throwing: LocalLLMEngineError.generationFailed(message))
+                        return
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
                 }
-                continuation.finish()
             }
         }
     }
@@ -449,6 +427,119 @@ private struct ETOSLocalLLMToolCall {
     var id: UnsafeMutablePointer<CChar>?
     var name: UnsafeMutablePointer<CChar>?
     var arguments: UnsafeMutablePointer<CChar>?
+}
+
+private struct ETOSLocalLLMGenerationConfig {
+    var contextSize: Int32
+    var maxOutputTokens: Int32
+    var gpuLayers: Int32
+    var seed: UInt32
+    var minKeep: Int32
+    var topK: Int32
+    var topP: Float
+    var minP: Float
+    var typicalP: Float
+    var temperature: Float
+    var dynatempRange: Float
+    var dynatempExponent: Float
+    var xtcProbability: Float
+    var xtcThreshold: Float
+    var topNSigma: Float
+    var repeatLastN: Int32
+    var repeatPenalty: Float
+    var frequencyPenalty: Float
+    var presencePenalty: Float
+    var dryMultiplier: Float
+    var dryBase: Float
+    var dryAllowedLength: Int32
+    var dryPenaltyLastN: Int32
+    var drySequenceBreakers: UnsafePointer<UnsafePointer<CChar>?>?
+    var drySequenceBreakerCount: Int32
+    var mirostat: Int32
+    var mirostatTau: Float
+    var mirostatEta: Float
+    var adaptiveTarget: Float
+    var adaptiveDecay: Float
+    var samplers: UnsafePointer<CChar>?
+    var grammar: UnsafePointer<CChar>?
+    var ignoreEOS: Int32
+}
+
+private final class PreparedLocalLLMGenerationConfig {
+    private let drySequenceBreakerPointers: [UnsafeMutablePointer<CChar>]
+    private let bridgedDrySequenceBreakers: [UnsafePointer<CChar>?]
+    private let samplersPointer: UnsafeMutablePointer<CChar>
+    private let grammarPointer: UnsafeMutablePointer<CChar>
+    private var bridgedConfig: ETOSLocalLLMGenerationConfig
+
+    init(_ config: LocalLLMGenerationConfig) throws {
+        let drySequenceBreakerPointers = try config.drySequenceBreakers.map(Self.duplicate)
+        let samplersPointer = try Self.duplicate(config.samplers)
+        let grammarPointer = try Self.duplicate(config.grammar)
+
+        self.drySequenceBreakerPointers = drySequenceBreakerPointers
+        self.bridgedDrySequenceBreakers = drySequenceBreakerPointers.map { UnsafePointer($0) }
+        self.samplersPointer = samplersPointer
+        self.grammarPointer = grammarPointer
+        self.bridgedConfig = ETOSLocalLLMGenerationConfig(
+            contextSize: config.contextSize,
+            maxOutputTokens: config.maxOutputTokens,
+            gpuLayers: config.gpuLayers,
+            seed: config.seed,
+            minKeep: config.minKeep,
+            topK: config.topK,
+            topP: config.topP,
+            minP: config.minP,
+            typicalP: config.typicalP,
+            temperature: config.temperature,
+            dynatempRange: config.dynatempRange,
+            dynatempExponent: config.dynatempExponent,
+            xtcProbability: config.xtcProbability,
+            xtcThreshold: config.xtcThreshold,
+            topNSigma: config.topNSigma,
+            repeatLastN: config.repeatLastN,
+            repeatPenalty: config.repeatPenalty,
+            frequencyPenalty: config.frequencyPenalty,
+            presencePenalty: config.presencePenalty,
+            dryMultiplier: config.dryMultiplier,
+            dryBase: config.dryBase,
+            dryAllowedLength: config.dryAllowedLength,
+            dryPenaltyLastN: config.dryPenaltyLastN,
+            drySequenceBreakers: nil,
+            drySequenceBreakerCount: Int32(drySequenceBreakerPointers.count),
+            mirostat: config.mirostat,
+            mirostatTau: config.mirostatTau,
+            mirostatEta: config.mirostatEta,
+            adaptiveTarget: config.adaptiveTarget,
+            adaptiveDecay: config.adaptiveDecay,
+            samplers: UnsafePointer(samplersPointer),
+            grammar: UnsafePointer(grammarPointer),
+            ignoreEOS: config.ignoreEOS ? 1 : 0
+        )
+    }
+
+    deinit {
+        drySequenceBreakerPointers.forEach { free($0) }
+        free(samplersPointer)
+        free(grammarPointer)
+    }
+
+    func withUnsafePointer<Result>(
+        _ body: (UnsafePointer<ETOSLocalLLMGenerationConfig>) throws -> Result
+    ) rethrows -> Result {
+        try bridgedDrySequenceBreakers.withUnsafeBufferPointer { breakersPointer in
+            bridgedConfig.drySequenceBreakers = breakersPointer.baseAddress
+            bridgedConfig.drySequenceBreakerCount = Int32(breakersPointer.count)
+            return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+        }
+    }
+
+    private static func duplicate(_ value: String) throws -> UnsafeMutablePointer<CChar> {
+        guard let pointer = strdup(value) else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地推理配置内存分配失败。", comment: "Local LLM config allocation failed"))
+        }
+        return pointer
+    }
 }
 
 private final class PreparedLocalLLMChatMessages {
@@ -615,12 +706,7 @@ private let localLLMStreamCallback: @convention(c) (UnsafePointer<CChar>?, Unsaf
 private func etos_local_llm_generate(
     _ modelPath: UnsafePointer<CChar>,
     _ prompt: UnsafePointer<CChar>,
-    _ contextSize: Int32,
-    _ maxOutputTokens: Int32,
-    _ temperature: Float,
-    _ topP: Float,
-    _ gpuLayers: Int32,
-    _ advancedArguments: UnsafePointer<CChar>,
+    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -632,12 +718,7 @@ private func etos_local_llm_generate_chat(
     _ messageCount: Int32,
     _ tools: UnsafePointer<ETOSLocalLLMTool>?,
     _ toolCount: Int32,
-    _ contextSize: Int32,
-    _ maxOutputTokens: Int32,
-    _ temperature: Float,
-    _ topP: Float,
-    _ gpuLayers: Int32,
-    _ advancedArguments: UnsafePointer<CChar>,
+    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -646,12 +727,7 @@ private func etos_local_llm_generate_chat(
 private func etos_local_llm_generate_stream(
     _ modelPath: UnsafePointer<CChar>,
     _ prompt: UnsafePointer<CChar>,
-    _ contextSize: Int32,
-    _ maxOutputTokens: Int32,
-    _ temperature: Float,
-    _ topP: Float,
-    _ gpuLayers: Int32,
-    _ advancedArguments: UnsafePointer<CChar>,
+    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
@@ -664,12 +740,7 @@ private func etos_local_llm_generate_chat_stream(
     _ messageCount: Int32,
     _ tools: UnsafePointer<ETOSLocalLLMTool>?,
     _ toolCount: Int32,
-    _ contextSize: Int32,
-    _ maxOutputTokens: Int32,
-    _ temperature: Float,
-    _ topP: Float,
-    _ gpuLayers: Int32,
-    _ advancedArguments: UnsafePointer<CChar>,
+    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>

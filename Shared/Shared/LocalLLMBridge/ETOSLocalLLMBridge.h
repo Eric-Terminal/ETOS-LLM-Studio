@@ -37,15 +37,46 @@ typedef struct etos_local_llm_tool_call {
     char * arguments;
 } etos_local_llm_tool_call;
 
+typedef struct etos_local_llm_generation_config {
+    int32_t context_size;
+    int32_t max_output_tokens;
+    int32_t gpu_layers;
+    uint32_t seed;
+    int32_t min_keep;
+    int32_t top_k;
+    float top_p;
+    float min_p;
+    float typical_p;
+    float temperature;
+    float dynatemp_range;
+    float dynatemp_exponent;
+    float xtc_probability;
+    float xtc_threshold;
+    float top_n_sigma;
+    int32_t repeat_last_n;
+    float repeat_penalty;
+    float frequency_penalty;
+    float presence_penalty;
+    float dry_multiplier;
+    float dry_base;
+    int32_t dry_allowed_length;
+    int32_t dry_penalty_last_n;
+    const char * const * dry_sequence_breakers;
+    int32_t dry_sequence_breaker_count;
+    int32_t mirostat;
+    float mirostat_tau;
+    float mirostat_eta;
+    float adaptive_target;
+    float adaptive_decay;
+    const char * samplers;
+    const char * grammar;
+    int32_t ignore_eos;
+} etos_local_llm_generation_config;
+
 int32_t etos_local_llm_generate(
     const char * model_path,
     const char * prompt,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     char ** output,
     char ** error_message
 );
@@ -56,12 +87,7 @@ int32_t etos_local_llm_generate_chat(
     int32_t message_count,
     const etos_local_llm_tool * tools,
     int32_t tool_count,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     char ** output,
     char ** error_message
 );
@@ -69,12 +95,7 @@ int32_t etos_local_llm_generate_chat(
 int32_t etos_local_llm_generate_stream(
     const char * model_path,
     const char * prompt,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
@@ -86,12 +107,7 @@ int32_t etos_local_llm_generate_chat_stream(
     int32_t message_count,
     const etos_local_llm_tool * tools,
     int32_t tool_count,
-    int32_t context_size,
-    int32_t max_output_tokens,
-    float temperature,
-    float top_p,
-    int32_t n_gpu_layers,
-    const char * advanced_arguments,
+    const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
