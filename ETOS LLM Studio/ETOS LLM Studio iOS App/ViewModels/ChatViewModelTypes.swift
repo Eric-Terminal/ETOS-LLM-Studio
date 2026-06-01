@@ -51,4 +51,9 @@ extension ChatViewModel {
         let baselineMarker: AssistantReplyMarker?
         let sessionName: String?
     }
+
+    struct MessageRewritePayload: Identifiable {
+        let id = UUID()
+        let message: ChatMessage
+    }
 }

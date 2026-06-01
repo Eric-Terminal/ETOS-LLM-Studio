@@ -367,16 +367,13 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        appendOutputLanguageInstruction: Bool = true
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
-        let promptLanguage = ModelPromptLanguage.current
 
-        let fallbackModel = selectedModelSubject.value?.model.isChatModel == true
-            ? selectedModelSubject.value
-            : activatedChatModels.first
-        guard let targetModel = runnableModel ?? fallbackModel else {
+        guard let targetModel = runnableModel ?? detachedChatCompletionFallbackModel() else {
             throw DetachedCompletionError.noAvailableModel
         }
         guard let adapter = adapters[targetModel.provider.apiFormat] else {
@@ -388,16 +385,19 @@ extension ChatService {
         if let systemPrompt {
             let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedSystemPrompt.isEmpty {
+                let systemContent = appendOutputLanguageInstruction
+                    ? ModelPromptLanguage.appendingOutputInstruction(to: trimmedSystemPrompt)
+                    : trimmedSystemPrompt
                 requestMessages.append(ChatMessage(
                     role: .system,
-                    content: ModelPromptLanguage.appendingOutputInstruction(to: trimmedSystemPrompt, language: promptLanguage)
+                    content: systemContent
                 ))
-                didAttachLanguageInstruction = true
+                didAttachLanguageInstruction = appendOutputLanguageInstruction
             }
         }
-        let finalUserPrompt = didAttachLanguageInstruction
+        let finalUserPrompt = didAttachLanguageInstruction || !appendOutputLanguageInstruction
             ? trimmedUserPrompt
-            : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt, language: promptLanguage)
+            : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt)
         requestMessages.append(ChatMessage(role: .user, content: finalUserPrompt))
 
         let payload: [String: Any] = [
@@ -481,6 +481,12 @@ extension ChatService {
             )
             throw error
         }
+    }
+
+    func detachedChatCompletionFallbackModel() -> RunnableModel? {
+        selectedModelSubject.value?.model.isChatModel == true
+            ? selectedModelSubject.value
+            : activatedChatModels.first
     }
 
     func buildMemoryQueryContext(from messages: [ChatMessage], fallbackUserMessage: ChatMessage?) -> String? {

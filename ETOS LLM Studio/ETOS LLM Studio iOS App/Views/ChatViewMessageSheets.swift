@@ -17,10 +17,12 @@ struct MessageActionSheet: View {
     let displayVersionCount: Int
     let displayCurrentVersionIndex: Int
     let canRetry: Bool
+    let canRewrite: Bool
     let allMessages: [ChatMessage]
     let providers: [Provider]
     @ObservedObject var ttsManager: TTSManager
     let onEdit: (ChatMessage) -> Void
+    let onRewrite: (ChatMessage) -> Void
     let onRetry: (ChatMessage) -> Void
     let onShowFullError: (String) -> Void
     let onBranch: (ChatMessage) -> Void
@@ -94,6 +96,14 @@ struct MessageActionSheet: View {
                             onEdit(message)
                         } label: {
                             Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
+                        }
+                    }
+
+                    if canRewrite {
+                        Button {
+                            onRewrite(message)
+                        } label: {
+                            Label(NSLocalizedString("重写", comment: "Rewrite message action"), systemImage: "wand.and.stars")
                         }
                     }
 

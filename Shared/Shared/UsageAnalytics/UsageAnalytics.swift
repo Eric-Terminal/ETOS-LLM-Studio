@@ -8,6 +8,7 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
     case conversationSummary
     case conversationProfile
     case shortcutDescription
+    case messageRewrite
     case updateTimelineSummary
     case imageOCR
     case modelTest
@@ -28,6 +29,8 @@ public enum UsageRequestSource: String, Codable, Hashable, CaseIterable, Sendabl
             return NSLocalizedString("用户画像", comment: "Usage analytics request source")
         case .shortcutDescription:
             return NSLocalizedString("快捷指令描述", comment: "Usage analytics request source")
+        case .messageRewrite:
+            return NSLocalizedString("消息重写", comment: "Usage analytics request source")
         case .updateTimelineSummary:
             return NSLocalizedString("检查更新摘要", comment: "Usage analytics request source")
         case .imageOCR:

@@ -53,6 +53,9 @@ extension ContentView {
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
         }
+        .navigationDestination(item: $messageRewriteTarget) { target in
+            rewriteMessageView(for: target.id)
+        }
         .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: Binding(
             get: { launchRecoveryNoticeMessage != nil },
             set: { if !$0 { launchRecoveryNoticeMessage = nil } }
@@ -60,6 +63,16 @@ extension ContentView {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
         } message: {
             Text(launchRecoveryNoticeMessage ?? "")
+        }
+        .alert(NSLocalizedString("重写失败", comment: "Message rewrite failure alert title"), isPresented: Binding(
+            get: { viewModel.messageRewriteErrorMessage != nil },
+            set: { if !$0 { viewModel.messageRewriteErrorMessage = nil } }
+        )) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
+                viewModel.messageRewriteErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.messageRewriteErrorMessage ?? "")
         }
         .sheet(isPresented: $announcementManager.shouldShowAlert) {
             if let announcement = announcementManager.currentAnnouncement {
@@ -298,6 +311,7 @@ extension ContentView {
             MessageActionsView(
                 message: message,
                 canRetry: viewModel.canRetry(message: message),
+                canRewrite: viewModel.canRewrite(message: message),
                 onCopy: {
                     viewModel.applyToolInputDraftRequest(
                         AppToolInputDraftRequest(text: message.content, mode: .replace)
@@ -306,6 +320,9 @@ extension ContentView {
                 onEdit: {
                     viewModel.messageToEdit = message
                     viewModel.activeSheet = .editMessage
+                },
+                onRewrite: {
+                    messageRewriteTarget = WatchMessageRewriteNavigationTarget(id: message.id)
                 },
                 onRetry: { message in
                     viewModel.retryMessage(message)
@@ -345,6 +362,17 @@ extension ContentView {
                 messageIndex: viewModel.allMessagesForSession.firstIndex { $0.id == message.id },
                 totalMessages: viewModel.allMessagesForSession.count
             )
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    func rewriteMessageView(for messageID: UUID) -> some View {
+        if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
+            RewriteMessageView(message: message) { instruction in
+                viewModel.rewriteMessage(message, instruction: instruction)
+            }
         } else {
             EmptyView()
         }

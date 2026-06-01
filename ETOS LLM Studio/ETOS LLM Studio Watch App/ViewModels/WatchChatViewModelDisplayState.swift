@@ -129,6 +129,12 @@ extension ChatViewModel {
         return message.role == .user || message.role == .assistant || message.role == .error
     }
 
+    func canRewrite(message: ChatMessage) -> Bool {
+        guard !isSendingMessage else { return false }
+        guard message.role == .assistant else { return false }
+        return !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func updateDisplayedStatesIfNeeded(_ newMessages: [ChatMessage]) {
         let currentIDs = messages.map(\.id)
         let newIDs = newMessages.map(\.id)

@@ -186,6 +186,25 @@ extension ChatViewModel {
         }
     }
 
+    func rewriteMessage(_ message: ChatMessage, instruction: String) {
+        let sessionID = currentSession?.id
+        Task {
+            do {
+                try await chatService.rewriteMessage(
+                    message,
+                    instruction: instruction,
+                    aiTemperature: aiTemperature,
+                    sessionID: sessionID
+                )
+            } catch is CancellationError {
+            } catch {
+                await MainActor.run {
+                    messageRewriteErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     func canRetry(message: ChatMessage) -> Bool {
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }
@@ -195,6 +214,12 @@ extension ChatViewModel {
         }
 
         return message.role == .user || message.role == .assistant || message.role == .error
+    }
+
+    func canRewrite(message: ChatMessage) -> Bool {
+        guard !isSendingMessage else { return false }
+        guard message.role == .assistant else { return false }
+        return !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func saveCurrentSessionDetails() {

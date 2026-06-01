@@ -17,8 +17,10 @@ struct MessageActionsView: View {
     
     let message: ChatMessage
     let canRetry: Bool
+    let canRewrite: Bool
     let onCopy: () -> Void
     let onEdit: () -> Void
+    let onRewrite: () -> Void
     let onRetry: (ChatMessage) -> Void
     let onSpeak: (ChatMessage) -> Void
     let onStopSpeaking: () -> Void
@@ -41,8 +43,10 @@ struct MessageActionsView: View {
     init(
         message: ChatMessage,
         canRetry: Bool,
+        canRewrite: Bool,
         onCopy: @escaping () -> Void,
         onEdit: @escaping () -> Void,
+        onRewrite: @escaping () -> Void,
         onRetry: @escaping (ChatMessage) -> Void,
         onSpeak: @escaping (ChatMessage) -> Void,
         onStopSpeaking: @escaping () -> Void,
@@ -63,8 +67,10 @@ struct MessageActionsView: View {
     ) {
         self.message = message
         self.canRetry = canRetry
+        self.canRewrite = canRewrite
         self.onCopy = onCopy
         self.onEdit = onEdit
+        self.onRewrite = onRewrite
         self.onRetry = onRetry
         self.onSpeak = onSpeak
         self.onStopSpeaking = onStopSpeaking
@@ -135,6 +141,15 @@ struct MessageActionsView: View {
                         dismiss()
                     } label: {
                         Label(NSLocalizedString("编辑消息", comment: ""), systemImage: "pencil")
+                    }
+                }
+
+                if canRewrite {
+                    Button {
+                        onRewrite()
+                        dismiss()
+                    } label: {
+                        Label(NSLocalizedString("重写", comment: "Rewrite message action"), systemImage: "wand.and.stars")
                     }
                 }
 

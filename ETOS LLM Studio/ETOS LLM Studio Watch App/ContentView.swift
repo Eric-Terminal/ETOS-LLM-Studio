@@ -26,6 +26,7 @@ struct ContentView: View {
     @State var settingsDestination: WatchSettingsNavigationDestination?
     @State var isSessionListPresented = false
     @State var messageActionsTarget: WatchMessageActionsNavigationTarget?
+    @State var messageRewriteTarget: WatchMessageRewriteNavigationTarget?
     @State var dailyPulsePreparationTask: Task<Void, Never>?
     @State var shouldForceScrollToBottom = false
     @State var shouldKeepBottomPinned = true

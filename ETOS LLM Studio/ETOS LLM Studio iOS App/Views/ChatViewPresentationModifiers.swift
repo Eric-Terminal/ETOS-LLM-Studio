@@ -27,6 +27,14 @@ extension ChatView {
                 }
                 .presentationDetents([.medium, .large])
             }
+            .sheet(item: $viewModel.messageRewritePayload) { payload in
+                NavigationStack {
+                    RewriteMessageView(message: payload.message) { instruction in
+                        viewModel.rewriteMessage(payload.message, instruction: instruction)
+                    }
+                }
+                .presentationDetents([.medium, .large])
+            }
             .sheet(item: $messageActionSheetPayload) { payload in
                 MessageActionSheet(
                     payload: payload,
@@ -34,12 +42,18 @@ extension ChatView {
                     displayVersionCount: viewModel.displayVersionCount(for: payload.message),
                     displayCurrentVersionIndex: viewModel.displayCurrentVersionIndex(for: payload.message),
                     canRetry: viewModel.canRetry(message: payload.message),
+                    canRewrite: viewModel.canRewrite(message: payload.message),
                     allMessages: viewModel.allMessagesForSession,
                     providers: viewModel.providers,
                     ttsManager: ttsManager,
                     onEdit: { message in
                         dismissMessageActionSheet {
                             editingMessage = message
+                        }
+                    },
+                    onRewrite: { message in
+                        dismissMessageActionSheet {
+                            viewModel.messageRewritePayload = ChatViewModel.MessageRewritePayload(message: message)
                         }
                     },
                     onRetry: { message in
@@ -195,6 +209,16 @@ extension ChatView {
                 }
             } message: {
                 Text(exportErrorMessage ?? "")
+            }
+            .alert(NSLocalizedString("重写失败", comment: "Message rewrite failure alert title"), isPresented: Binding(
+                get: { viewModel.messageRewriteErrorMessage != nil },
+                set: { if !$0 { viewModel.messageRewriteErrorMessage = nil } }
+            )) {
+                Button(NSLocalizedString("确定", comment: ""), role: .cancel) {
+                    viewModel.messageRewriteErrorMessage = nil
+                }
+            } message: {
+                Text(viewModel.messageRewriteErrorMessage ?? "")
             }
             .alert(
                 Text(NSLocalizedString("提示", comment: "Notice")),

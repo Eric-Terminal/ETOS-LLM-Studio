@@ -48,6 +48,8 @@ final class ChatViewModel: ObservableObject {
     @Published var isHistoryFullyLoaded: Bool = false
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
+    @Published var messageRewritePayload: MessageRewritePayload?
+    @Published var messageRewriteErrorMessage: String?
     @Published var activeSheet: ActiveSheet?
     @Published var chatSessions: [ChatSession] = []
     @Published var sessionFolders: [SessionFolder] = []
