@@ -7,207 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		ETOSLLAMAB0000000000000001 /* ggml.c in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000001 /* ggml.c */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000002 /* ggml.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000002 /* ggml.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000003 /* ggml-alloc.c in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000003 /* ggml-alloc.c */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000004 /* ggml-backend.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000004 /* ggml-backend.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000005 /* ggml-backend-dl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000005 /* ggml-backend-dl.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000006 /* ggml-backend-meta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000006 /* ggml-backend-meta.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000007 /* ggml-backend-reg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000007 /* ggml-backend-reg.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000008 /* ggml-opt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000008 /* ggml-opt.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000009 /* ggml-quants.c in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000009 /* ggml-quants.c */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000000A /* ggml-threading.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000000A /* ggml-threading.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000000B /* gguf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000000B /* gguf.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000000C /* binary-ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000000C /* binary-ops.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000000D /* ggml-cpu.c in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000000D /* ggml-cpu.c */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000000E /* ggml-cpu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000000E /* ggml-cpu.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000000F /* hbm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000000F /* hbm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000010 /* ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000010 /* ops.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000011 /* quants.c in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000011 /* quants.c */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000012 /* repack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000012 /* repack.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000013 /* traits.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000013 /* traits.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000014 /* unary-ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000014 /* unary-ops.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000015 /* vec.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000015 /* vec.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000016 /* ggml-metal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000016 /* ggml-metal.cpp */; platformFilters = (ios, macos, xros, ); settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000017 /* ggml-metal-common.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000017 /* ggml-metal-common.cpp */; platformFilters = (ios, macos, xros, ); settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000018 /* ggml-metal-context.m in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000018 /* ggml-metal-context.m */; platformFilters = (ios, macos, xros, ); settings = {COMPILER_FLAGS = "-fno-objc-arc -Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000019 /* ggml-metal-device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000019 /* ggml-metal-device.cpp */; platformFilters = (ios, macos, xros, ); settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000001A /* ggml-metal-device.m in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000001A /* ggml-metal-device.m */; platformFilters = (ios, macos, xros, ); settings = {COMPILER_FLAGS = "-fno-objc-arc -Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000001B /* ggml-metal-ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000001B /* ggml-metal-ops.cpp */; platformFilters = (ios, macos, xros, ); settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000001C /* ggml-metal.metal in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000001C /* ggml-metal.metal */; platformFilters = (ios, macos, xros, ); };
-		ETOSLLAMAB000000000000001D /* llama.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000001D /* llama.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000001E /* llama-adapter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000001E /* llama-adapter.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000001F /* llama-arch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000001F /* llama-arch.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000020 /* llama-batch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000020 /* llama-batch.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000021 /* llama-chat.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000021 /* llama-chat.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000022 /* llama-context.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000022 /* llama-context.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000023 /* llama-cparams.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000023 /* llama-cparams.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000024 /* llama-grammar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000024 /* llama-grammar.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000025 /* llama-graph.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000025 /* llama-graph.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000026 /* llama-hparams.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000026 /* llama-hparams.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000027 /* llama-impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000027 /* llama-impl.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000028 /* llama-io.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000028 /* llama-io.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000029 /* llama-kv-cache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000029 /* llama-kv-cache.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000002A /* llama-kv-cache-dsa.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000002A /* llama-kv-cache-dsa.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000002B /* llama-kv-cache-iswa.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000002B /* llama-kv-cache-iswa.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000002C /* llama-memory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000002C /* llama-memory.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000002D /* llama-memory-hybrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000002D /* llama-memory-hybrid.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000002E /* llama-memory-hybrid-iswa.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000002E /* llama-memory-hybrid-iswa.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000002F /* llama-memory-recurrent.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000002F /* llama-memory-recurrent.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000030 /* llama-mmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000030 /* llama-mmap.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000031 /* llama-model.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000031 /* llama-model.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000032 /* llama-model-loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000032 /* llama-model-loader.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000033 /* llama-model-saver.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000033 /* llama-model-saver.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000034 /* llama-quant.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000034 /* llama-quant.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000035 /* llama-sampler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000035 /* llama-sampler.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000036 /* llama-vocab.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000036 /* llama-vocab.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000037 /* unicode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000037 /* unicode.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000038 /* unicode-data.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000038 /* unicode-data.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000039 /* afmoe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000039 /* afmoe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000003A /* apertus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000003A /* apertus.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000003B /* arcee.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000003B /* arcee.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000003C /* arctic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000003C /* arctic.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000003D /* arwkv7.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000003D /* arwkv7.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000003E /* baichuan.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000003E /* baichuan.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000003F /* bailingmoe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000003F /* bailingmoe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000040 /* bailingmoe2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000040 /* bailingmoe2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000041 /* bert.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000041 /* bert.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000042 /* bitnet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000042 /* bitnet.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000043 /* bloom.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000043 /* bloom.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000044 /* chameleon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000044 /* chameleon.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000045 /* chatglm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000045 /* chatglm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000046 /* codeshell.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000046 /* codeshell.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000047 /* cogvlm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000047 /* cogvlm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000048 /* cohere2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000048 /* cohere2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000049 /* command-r.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000049 /* command-r.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000004A /* dbrx.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000004A /* dbrx.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000004B /* deci.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000004B /* deci.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000004C /* deepseek.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000004C /* deepseek.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000004D /* deepseek2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000004D /* deepseek2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000004E /* deepseek2ocr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000004E /* deepseek2ocr.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000004F /* deepseek32.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000004F /* deepseek32.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000050 /* delta-net-base.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000050 /* delta-net-base.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000051 /* dots1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000051 /* dots1.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000052 /* dream.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000052 /* dream.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000053 /* ernie4-5-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000053 /* ernie4-5-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000054 /* ernie4-5.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000054 /* ernie4-5.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000055 /* eurobert.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000055 /* eurobert.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000056 /* exaone-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000056 /* exaone-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000057 /* exaone.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000057 /* exaone.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000058 /* exaone4.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000058 /* exaone4.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000059 /* falcon-h1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000059 /* falcon-h1.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000005A /* falcon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000005A /* falcon.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000005B /* gemma-embedding.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000005B /* gemma-embedding.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000005C /* gemma.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000005C /* gemma.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000005D /* gemma2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000005D /* gemma2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000005E /* gemma3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000005E /* gemma3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000005F /* gemma3n.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000005F /* gemma3n.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000060 /* gemma4.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000060 /* gemma4.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000061 /* glm-dsa.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000061 /* glm-dsa.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000062 /* glm4-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000062 /* glm4-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000063 /* glm4.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000063 /* glm4.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000064 /* gpt2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000064 /* gpt2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000065 /* gptneox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000065 /* gptneox.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000066 /* granite-hybrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000066 /* granite-hybrid.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000067 /* granite-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000067 /* granite-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000068 /* granite.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000068 /* granite.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000069 /* grok.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000069 /* grok.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000006A /* grovemoe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000006A /* grovemoe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000006B /* hunyuan-dense.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000006B /* hunyuan-dense.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000006C /* hunyuan-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000006C /* hunyuan-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000006D /* hunyuan-vl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000006D /* hunyuan-vl.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000006E /* internlm2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000006E /* internlm2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000006F /* jais.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000006F /* jais.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000070 /* jais2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000070 /* jais2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000071 /* jamba.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000071 /* jamba.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000072 /* jina-bert-v2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000072 /* jina-bert-v2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000073 /* jina-bert-v3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000073 /* jina-bert-v3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000074 /* kimi-linear.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000074 /* kimi-linear.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000075 /* lfm2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000075 /* lfm2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000076 /* lfm2moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000076 /* lfm2moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000077 /* llada-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000077 /* llada-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000078 /* llada.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000078 /* llada.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000079 /* llama-embed.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000079 /* llama-embed.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000007A /* llama.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000007A /* llama.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000007B /* llama4.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000007B /* llama4.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000007C /* maincoder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000007C /* maincoder.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000007D /* mamba-base.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000007D /* mamba-base.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000007E /* mamba.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000007E /* mamba.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000007F /* mamba2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000007F /* mamba2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000080 /* mimo2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000080 /* mimo2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000081 /* minicpm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000081 /* minicpm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000082 /* minicpm3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000082 /* minicpm3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000083 /* minimax-m2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000083 /* minimax-m2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000084 /* mistral3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000084 /* mistral3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000085 /* mistral4.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000085 /* mistral4.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000086 /* modern-bert.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000086 /* modern-bert.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000087 /* mpt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000087 /* mpt.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000088 /* nemotron-h-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000088 /* nemotron-h-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000089 /* nemotron-h.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000089 /* nemotron-h.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000008A /* nemotron.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000008A /* nemotron.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000008B /* neo-bert.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000008B /* neo-bert.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000008C /* nomic-bert-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000008C /* nomic-bert-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000008D /* nomic-bert.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000008D /* nomic-bert.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000008E /* olmo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000008E /* olmo.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000008F /* olmo2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000008F /* olmo2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000090 /* olmoe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000090 /* olmoe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000091 /* openai-moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000091 /* openai-moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000092 /* openelm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000092 /* openelm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000093 /* orion.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000093 /* orion.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000094 /* paddleocr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000094 /* paddleocr.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000095 /* pangu-embed.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000095 /* pangu-embed.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000096 /* phi2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000096 /* phi2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000097 /* phi3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000097 /* phi3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000098 /* phimoe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000098 /* phimoe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB0000000000000099 /* plamo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF0000000000000099 /* plamo.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000009A /* plamo2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000009A /* plamo2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000009B /* plamo3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000009B /* plamo3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000009C /* plm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000009C /* plm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000009D /* qwen.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000009D /* qwen.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000009E /* qwen2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000009E /* qwen2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB000000000000009F /* qwen2moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF000000000000009F /* qwen2moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A0 /* qwen2vl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A0 /* qwen2vl.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A1 /* qwen3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A1 /* qwen3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A2 /* qwen35.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A2 /* qwen35.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A3 /* qwen35moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A3 /* qwen35moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A4 /* qwen3moe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A4 /* qwen3moe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A5 /* qwen3next.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A5 /* qwen3next.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A6 /* qwen3vl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A6 /* qwen3vl.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A7 /* qwen3vlmoe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A7 /* qwen3vlmoe.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A8 /* refact.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A8 /* refact.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000A9 /* rnd1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000A9 /* rnd1.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000AA /* rwkv6-base.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000AA /* rwkv6-base.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000AB /* rwkv6.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000AB /* rwkv6.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000AC /* rwkv6qwen2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000AC /* rwkv6qwen2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000AD /* rwkv7-base.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000AD /* rwkv7-base.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000AE /* rwkv7.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000AE /* rwkv7.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000AF /* seed-oss.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000AF /* seed-oss.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B0 /* smallthinker.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B0 /* smallthinker.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B1 /* smollm3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B1 /* smollm3.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B2 /* stablelm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B2 /* stablelm.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B3 /* starcoder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B3 /* starcoder.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B4 /* starcoder2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B4 /* starcoder2.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B5 /* step35.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B5 /* step35.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B6 /* t5.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B6 /* t5.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B7 /* t5encoder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B7 /* t5encoder.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B8 /* talkie.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B8 /* talkie.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000B9 /* wavtokenizer-dec.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000B9 /* wavtokenizer-dec.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000BA /* xverse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000BA /* xverse.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C1 /* common-chat.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C1 /* common-chat.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C2 /* common-chat-diff-analyzer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C2 /* common-chat-diff-analyzer.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C3 /* common-chat-auto-parser-generator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C3 /* common-chat-auto-parser-generator.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C4 /* common-chat-auto-parser-helpers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C4 /* common-chat-auto-parser-helpers.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C5 /* common-chat-peg-parser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C5 /* common-chat-peg-parser.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C6 /* common-json-schema-to-grammar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C6 /* common-json-schema-to-grammar.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C7 /* common-peg-parser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C7 /* common-peg-parser.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C8 /* common-unicode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C8 /* common-unicode.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000C9 /* common-log.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000C9 /* common-log.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000CA /* jinja-lexer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CA /* jinja-lexer.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000CB /* jinja-parser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CB /* jinja-parser.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000CC /* jinja-runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CC /* jinja-runtime.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000CD /* jinja-value.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CD /* jinja-value.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000CE /* jinja-string.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CE /* jinja-string.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
-		ETOSLLAMAB00000000000000CF /* jinja-caps.cpp in Sources */ = {isa = PBXBuildFile; fileRef = ETOSLLAMAF00000000000000CF /* jinja-caps.cpp */; settings = {COMPILER_FLAGS = "-Wno-shorten-64-to-32 -Wno-unused-function -Wno-deprecated-declarations -Wno-ambiguous-macro -Wno-unreachable-code"; }; };
 		0704B98E2FA542E60059A02A /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 0704B98D2FA542E60059A02A /* ZIPFoundation */; };
 		072CF2442E92C1B400A8E9D0 /* Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 073CA6A52E8CFCF3004516A0 /* Shared.framework */; };
 		078573792FB0579500B35DB4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 078573782FB0579500B35DB4 /* GRDB */; };
@@ -226,207 +25,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		ETOSLLAMAF0000000000000001 /* ggml.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = ggml.c; path = "../Dependencies/llama.cpp/ggml/src/ggml.c"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000002 /* ggml.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000003 /* ggml-alloc.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = ggml-alloc.c; path = "../Dependencies/llama.cpp/ggml/src/ggml-alloc.c"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000004 /* ggml-backend.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-backend.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-backend.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000005 /* ggml-backend-dl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-backend-dl.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-backend-dl.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000006 /* ggml-backend-meta.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-backend-meta.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-backend-meta.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000007 /* ggml-backend-reg.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-backend-reg.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-backend-reg.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000008 /* ggml-opt.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-opt.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-opt.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000009 /* ggml-quants.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = ggml-quants.c; path = "../Dependencies/llama.cpp/ggml/src/ggml-quants.c"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000000A /* ggml-threading.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-threading.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-threading.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000000B /* gguf.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gguf.cpp; path = "../Dependencies/llama.cpp/ggml/src/gguf.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000000C /* binary-ops.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = binary-ops.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/binary-ops.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000000D /* ggml-cpu.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = ggml-cpu.c; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000000E /* ggml-cpu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-cpu.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000000F /* hbm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = hbm.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/hbm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000010 /* ops.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ops.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/ops.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000011 /* quants.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = quants.c; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/quants.c"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000012 /* repack.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = repack.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/repack.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000013 /* traits.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = traits.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/traits.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000014 /* unary-ops.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = unary-ops.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/unary-ops.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000015 /* vec.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = vec.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-cpu/vec.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000016 /* ggml-metal.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-metal.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000017 /* ggml-metal-common.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-metal-common.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal-common.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000018 /* ggml-metal-context.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ggml-metal-context.m; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal-context.m"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000019 /* ggml-metal-device.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-metal-device.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000001A /* ggml-metal-device.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ggml-metal-device.m; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.m"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000001B /* ggml-metal-ops.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ggml-metal-ops.cpp; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000001C /* ggml-metal.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = ggml-metal.metal; path = "../Dependencies/llama.cpp/ggml/src/ggml-metal/ggml-metal.metal"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000001D /* llama.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama.cpp; path = "../Dependencies/llama.cpp/src/llama.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000001E /* llama-adapter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-adapter.cpp; path = "../Dependencies/llama.cpp/src/llama-adapter.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000001F /* llama-arch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-arch.cpp; path = "../Dependencies/llama.cpp/src/llama-arch.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000020 /* llama-batch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-batch.cpp; path = "../Dependencies/llama.cpp/src/llama-batch.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000021 /* llama-chat.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-chat.cpp; path = "../Dependencies/llama.cpp/src/llama-chat.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000022 /* llama-context.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-context.cpp; path = "../Dependencies/llama.cpp/src/llama-context.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000023 /* llama-cparams.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-cparams.cpp; path = "../Dependencies/llama.cpp/src/llama-cparams.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000024 /* llama-grammar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-grammar.cpp; path = "../Dependencies/llama.cpp/src/llama-grammar.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000025 /* llama-graph.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-graph.cpp; path = "../Dependencies/llama.cpp/src/llama-graph.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000026 /* llama-hparams.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-hparams.cpp; path = "../Dependencies/llama.cpp/src/llama-hparams.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000027 /* llama-impl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-impl.cpp; path = "../Dependencies/llama.cpp/src/llama-impl.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000028 /* llama-io.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-io.cpp; path = "../Dependencies/llama.cpp/src/llama-io.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000029 /* llama-kv-cache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-kv-cache.cpp; path = "../Dependencies/llama.cpp/src/llama-kv-cache.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000002A /* llama-kv-cache-dsa.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-kv-cache-dsa.cpp; path = "../Dependencies/llama.cpp/src/llama-kv-cache-dsa.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000002B /* llama-kv-cache-iswa.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-kv-cache-iswa.cpp; path = "../Dependencies/llama.cpp/src/llama-kv-cache-iswa.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000002C /* llama-memory.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-memory.cpp; path = "../Dependencies/llama.cpp/src/llama-memory.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000002D /* llama-memory-hybrid.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-memory-hybrid.cpp; path = "../Dependencies/llama.cpp/src/llama-memory-hybrid.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000002E /* llama-memory-hybrid-iswa.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-memory-hybrid-iswa.cpp; path = "../Dependencies/llama.cpp/src/llama-memory-hybrid-iswa.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000002F /* llama-memory-recurrent.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-memory-recurrent.cpp; path = "../Dependencies/llama.cpp/src/llama-memory-recurrent.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000030 /* llama-mmap.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-mmap.cpp; path = "../Dependencies/llama.cpp/src/llama-mmap.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000031 /* llama-model.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-model.cpp; path = "../Dependencies/llama.cpp/src/llama-model.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000032 /* llama-model-loader.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-model-loader.cpp; path = "../Dependencies/llama.cpp/src/llama-model-loader.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000033 /* llama-model-saver.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-model-saver.cpp; path = "../Dependencies/llama.cpp/src/llama-model-saver.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000034 /* llama-quant.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-quant.cpp; path = "../Dependencies/llama.cpp/src/llama-quant.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000035 /* llama-sampler.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-sampler.cpp; path = "../Dependencies/llama.cpp/src/llama-sampler.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000036 /* llama-vocab.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-vocab.cpp; path = "../Dependencies/llama.cpp/src/llama-vocab.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000037 /* unicode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = unicode.cpp; path = "../Dependencies/llama.cpp/src/unicode.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000038 /* unicode-data.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = unicode-data.cpp; path = "../Dependencies/llama.cpp/src/unicode-data.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000039 /* afmoe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = afmoe.cpp; path = "../Dependencies/llama.cpp/src/models/afmoe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000003A /* apertus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = apertus.cpp; path = "../Dependencies/llama.cpp/src/models/apertus.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000003B /* arcee.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = arcee.cpp; path = "../Dependencies/llama.cpp/src/models/arcee.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000003C /* arctic.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = arctic.cpp; path = "../Dependencies/llama.cpp/src/models/arctic.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000003D /* arwkv7.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = arwkv7.cpp; path = "../Dependencies/llama.cpp/src/models/arwkv7.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000003E /* baichuan.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = baichuan.cpp; path = "../Dependencies/llama.cpp/src/models/baichuan.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000003F /* bailingmoe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = bailingmoe.cpp; path = "../Dependencies/llama.cpp/src/models/bailingmoe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000040 /* bailingmoe2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = bailingmoe2.cpp; path = "../Dependencies/llama.cpp/src/models/bailingmoe2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000041 /* bert.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = bert.cpp; path = "../Dependencies/llama.cpp/src/models/bert.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000042 /* bitnet.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = bitnet.cpp; path = "../Dependencies/llama.cpp/src/models/bitnet.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000043 /* bloom.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = bloom.cpp; path = "../Dependencies/llama.cpp/src/models/bloom.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000044 /* chameleon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = chameleon.cpp; path = "../Dependencies/llama.cpp/src/models/chameleon.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000045 /* chatglm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = chatglm.cpp; path = "../Dependencies/llama.cpp/src/models/chatglm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000046 /* codeshell.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = codeshell.cpp; path = "../Dependencies/llama.cpp/src/models/codeshell.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000047 /* cogvlm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = cogvlm.cpp; path = "../Dependencies/llama.cpp/src/models/cogvlm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000048 /* cohere2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = cohere2.cpp; path = "../Dependencies/llama.cpp/src/models/cohere2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000049 /* command-r.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = command-r.cpp; path = "../Dependencies/llama.cpp/src/models/command-r.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000004A /* dbrx.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = dbrx.cpp; path = "../Dependencies/llama.cpp/src/models/dbrx.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000004B /* deci.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = deci.cpp; path = "../Dependencies/llama.cpp/src/models/deci.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000004C /* deepseek.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = deepseek.cpp; path = "../Dependencies/llama.cpp/src/models/deepseek.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000004D /* deepseek2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = deepseek2.cpp; path = "../Dependencies/llama.cpp/src/models/deepseek2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000004E /* deepseek2ocr.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = deepseek2ocr.cpp; path = "../Dependencies/llama.cpp/src/models/deepseek2ocr.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000004F /* deepseek32.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = deepseek32.cpp; path = "../Dependencies/llama.cpp/src/models/deepseek32.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000050 /* delta-net-base.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = delta-net-base.cpp; path = "../Dependencies/llama.cpp/src/models/delta-net-base.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000051 /* dots1.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = dots1.cpp; path = "../Dependencies/llama.cpp/src/models/dots1.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000052 /* dream.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = dream.cpp; path = "../Dependencies/llama.cpp/src/models/dream.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000053 /* ernie4-5-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ernie4-5-moe.cpp; path = "../Dependencies/llama.cpp/src/models/ernie4-5-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000054 /* ernie4-5.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ernie4-5.cpp; path = "../Dependencies/llama.cpp/src/models/ernie4-5.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000055 /* eurobert.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = eurobert.cpp; path = "../Dependencies/llama.cpp/src/models/eurobert.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000056 /* exaone-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = exaone-moe.cpp; path = "../Dependencies/llama.cpp/src/models/exaone-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000057 /* exaone.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = exaone.cpp; path = "../Dependencies/llama.cpp/src/models/exaone.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000058 /* exaone4.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = exaone4.cpp; path = "../Dependencies/llama.cpp/src/models/exaone4.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000059 /* falcon-h1.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = falcon-h1.cpp; path = "../Dependencies/llama.cpp/src/models/falcon-h1.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000005A /* falcon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = falcon.cpp; path = "../Dependencies/llama.cpp/src/models/falcon.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000005B /* gemma-embedding.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gemma-embedding.cpp; path = "../Dependencies/llama.cpp/src/models/gemma-embedding.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000005C /* gemma.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gemma.cpp; path = "../Dependencies/llama.cpp/src/models/gemma.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000005D /* gemma2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gemma2.cpp; path = "../Dependencies/llama.cpp/src/models/gemma2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000005E /* gemma3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gemma3.cpp; path = "../Dependencies/llama.cpp/src/models/gemma3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000005F /* gemma3n.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gemma3n.cpp; path = "../Dependencies/llama.cpp/src/models/gemma3n.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000060 /* gemma4.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gemma4.cpp; path = "../Dependencies/llama.cpp/src/models/gemma4.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000061 /* glm-dsa.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = glm-dsa.cpp; path = "../Dependencies/llama.cpp/src/models/glm-dsa.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000062 /* glm4-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = glm4-moe.cpp; path = "../Dependencies/llama.cpp/src/models/glm4-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000063 /* glm4.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = glm4.cpp; path = "../Dependencies/llama.cpp/src/models/glm4.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000064 /* gpt2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gpt2.cpp; path = "../Dependencies/llama.cpp/src/models/gpt2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000065 /* gptneox.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = gptneox.cpp; path = "../Dependencies/llama.cpp/src/models/gptneox.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000066 /* granite-hybrid.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = granite-hybrid.cpp; path = "../Dependencies/llama.cpp/src/models/granite-hybrid.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000067 /* granite-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = granite-moe.cpp; path = "../Dependencies/llama.cpp/src/models/granite-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000068 /* granite.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = granite.cpp; path = "../Dependencies/llama.cpp/src/models/granite.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000069 /* grok.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = grok.cpp; path = "../Dependencies/llama.cpp/src/models/grok.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000006A /* grovemoe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = grovemoe.cpp; path = "../Dependencies/llama.cpp/src/models/grovemoe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000006B /* hunyuan-dense.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = hunyuan-dense.cpp; path = "../Dependencies/llama.cpp/src/models/hunyuan-dense.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000006C /* hunyuan-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = hunyuan-moe.cpp; path = "../Dependencies/llama.cpp/src/models/hunyuan-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000006D /* hunyuan-vl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = hunyuan-vl.cpp; path = "../Dependencies/llama.cpp/src/models/hunyuan-vl.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000006E /* internlm2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = internlm2.cpp; path = "../Dependencies/llama.cpp/src/models/internlm2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000006F /* jais.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = jais.cpp; path = "../Dependencies/llama.cpp/src/models/jais.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000070 /* jais2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = jais2.cpp; path = "../Dependencies/llama.cpp/src/models/jais2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000071 /* jamba.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = jamba.cpp; path = "../Dependencies/llama.cpp/src/models/jamba.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000072 /* jina-bert-v2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = jina-bert-v2.cpp; path = "../Dependencies/llama.cpp/src/models/jina-bert-v2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000073 /* jina-bert-v3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = jina-bert-v3.cpp; path = "../Dependencies/llama.cpp/src/models/jina-bert-v3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000074 /* kimi-linear.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = kimi-linear.cpp; path = "../Dependencies/llama.cpp/src/models/kimi-linear.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000075 /* lfm2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = lfm2.cpp; path = "../Dependencies/llama.cpp/src/models/lfm2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000076 /* lfm2moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = lfm2moe.cpp; path = "../Dependencies/llama.cpp/src/models/lfm2moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000077 /* llada-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llada-moe.cpp; path = "../Dependencies/llama.cpp/src/models/llada-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000078 /* llada.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llada.cpp; path = "../Dependencies/llama.cpp/src/models/llada.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000079 /* llama-embed.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama-embed.cpp; path = "../Dependencies/llama.cpp/src/models/llama-embed.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000007A /* llama.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama.cpp; path = "../Dependencies/llama.cpp/src/models/llama.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000007B /* llama4.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = llama4.cpp; path = "../Dependencies/llama.cpp/src/models/llama4.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000007C /* maincoder.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = maincoder.cpp; path = "../Dependencies/llama.cpp/src/models/maincoder.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000007D /* mamba-base.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mamba-base.cpp; path = "../Dependencies/llama.cpp/src/models/mamba-base.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000007E /* mamba.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mamba.cpp; path = "../Dependencies/llama.cpp/src/models/mamba.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000007F /* mamba2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mamba2.cpp; path = "../Dependencies/llama.cpp/src/models/mamba2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000080 /* mimo2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mimo2.cpp; path = "../Dependencies/llama.cpp/src/models/mimo2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000081 /* minicpm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = minicpm.cpp; path = "../Dependencies/llama.cpp/src/models/minicpm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000082 /* minicpm3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = minicpm3.cpp; path = "../Dependencies/llama.cpp/src/models/minicpm3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000083 /* minimax-m2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = minimax-m2.cpp; path = "../Dependencies/llama.cpp/src/models/minimax-m2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000084 /* mistral3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mistral3.cpp; path = "../Dependencies/llama.cpp/src/models/mistral3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000085 /* mistral4.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mistral4.cpp; path = "../Dependencies/llama.cpp/src/models/mistral4.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000086 /* modern-bert.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = modern-bert.cpp; path = "../Dependencies/llama.cpp/src/models/modern-bert.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000087 /* mpt.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = mpt.cpp; path = "../Dependencies/llama.cpp/src/models/mpt.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000088 /* nemotron-h-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = nemotron-h-moe.cpp; path = "../Dependencies/llama.cpp/src/models/nemotron-h-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000089 /* nemotron-h.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = nemotron-h.cpp; path = "../Dependencies/llama.cpp/src/models/nemotron-h.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000008A /* nemotron.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = nemotron.cpp; path = "../Dependencies/llama.cpp/src/models/nemotron.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000008B /* neo-bert.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = neo-bert.cpp; path = "../Dependencies/llama.cpp/src/models/neo-bert.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000008C /* nomic-bert-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = nomic-bert-moe.cpp; path = "../Dependencies/llama.cpp/src/models/nomic-bert-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000008D /* nomic-bert.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = nomic-bert.cpp; path = "../Dependencies/llama.cpp/src/models/nomic-bert.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000008E /* olmo.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = olmo.cpp; path = "../Dependencies/llama.cpp/src/models/olmo.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000008F /* olmo2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = olmo2.cpp; path = "../Dependencies/llama.cpp/src/models/olmo2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000090 /* olmoe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = olmoe.cpp; path = "../Dependencies/llama.cpp/src/models/olmoe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000091 /* openai-moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = openai-moe.cpp; path = "../Dependencies/llama.cpp/src/models/openai-moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000092 /* openelm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = openelm.cpp; path = "../Dependencies/llama.cpp/src/models/openelm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000093 /* orion.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = orion.cpp; path = "../Dependencies/llama.cpp/src/models/orion.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000094 /* paddleocr.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = paddleocr.cpp; path = "../Dependencies/llama.cpp/src/models/paddleocr.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000095 /* pangu-embed.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = pangu-embed.cpp; path = "../Dependencies/llama.cpp/src/models/pangu-embed.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000096 /* phi2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = phi2.cpp; path = "../Dependencies/llama.cpp/src/models/phi2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000097 /* phi3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = phi3.cpp; path = "../Dependencies/llama.cpp/src/models/phi3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000098 /* phimoe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = phimoe.cpp; path = "../Dependencies/llama.cpp/src/models/phimoe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF0000000000000099 /* plamo.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = plamo.cpp; path = "../Dependencies/llama.cpp/src/models/plamo.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000009A /* plamo2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = plamo2.cpp; path = "../Dependencies/llama.cpp/src/models/plamo2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000009B /* plamo3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = plamo3.cpp; path = "../Dependencies/llama.cpp/src/models/plamo3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000009C /* plm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = plm.cpp; path = "../Dependencies/llama.cpp/src/models/plm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000009D /* qwen.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen.cpp; path = "../Dependencies/llama.cpp/src/models/qwen.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000009E /* qwen2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen2.cpp; path = "../Dependencies/llama.cpp/src/models/qwen2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF000000000000009F /* qwen2moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen2moe.cpp; path = "../Dependencies/llama.cpp/src/models/qwen2moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A0 /* qwen2vl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen2vl.cpp; path = "../Dependencies/llama.cpp/src/models/qwen2vl.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A1 /* qwen3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen3.cpp; path = "../Dependencies/llama.cpp/src/models/qwen3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A2 /* qwen35.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen35.cpp; path = "../Dependencies/llama.cpp/src/models/qwen35.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A3 /* qwen35moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen35moe.cpp; path = "../Dependencies/llama.cpp/src/models/qwen35moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A4 /* qwen3moe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen3moe.cpp; path = "../Dependencies/llama.cpp/src/models/qwen3moe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A5 /* qwen3next.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen3next.cpp; path = "../Dependencies/llama.cpp/src/models/qwen3next.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A6 /* qwen3vl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen3vl.cpp; path = "../Dependencies/llama.cpp/src/models/qwen3vl.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A7 /* qwen3vlmoe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = qwen3vlmoe.cpp; path = "../Dependencies/llama.cpp/src/models/qwen3vlmoe.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A8 /* refact.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = refact.cpp; path = "../Dependencies/llama.cpp/src/models/refact.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000A9 /* rnd1.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = rnd1.cpp; path = "../Dependencies/llama.cpp/src/models/rnd1.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000AA /* rwkv6-base.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = rwkv6-base.cpp; path = "../Dependencies/llama.cpp/src/models/rwkv6-base.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000AB /* rwkv6.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = rwkv6.cpp; path = "../Dependencies/llama.cpp/src/models/rwkv6.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000AC /* rwkv6qwen2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = rwkv6qwen2.cpp; path = "../Dependencies/llama.cpp/src/models/rwkv6qwen2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000AD /* rwkv7-base.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = rwkv7-base.cpp; path = "../Dependencies/llama.cpp/src/models/rwkv7-base.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000AE /* rwkv7.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = rwkv7.cpp; path = "../Dependencies/llama.cpp/src/models/rwkv7.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000AF /* seed-oss.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = seed-oss.cpp; path = "../Dependencies/llama.cpp/src/models/seed-oss.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B0 /* smallthinker.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = smallthinker.cpp; path = "../Dependencies/llama.cpp/src/models/smallthinker.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B1 /* smollm3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = smollm3.cpp; path = "../Dependencies/llama.cpp/src/models/smollm3.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B2 /* stablelm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = stablelm.cpp; path = "../Dependencies/llama.cpp/src/models/stablelm.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B3 /* starcoder.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = starcoder.cpp; path = "../Dependencies/llama.cpp/src/models/starcoder.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B4 /* starcoder2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = starcoder2.cpp; path = "../Dependencies/llama.cpp/src/models/starcoder2.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B5 /* step35.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = step35.cpp; path = "../Dependencies/llama.cpp/src/models/step35.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B6 /* t5.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = t5.cpp; path = "../Dependencies/llama.cpp/src/models/t5.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B7 /* t5encoder.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = t5encoder.cpp; path = "../Dependencies/llama.cpp/src/models/t5encoder.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B8 /* talkie.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = talkie.cpp; path = "../Dependencies/llama.cpp/src/models/talkie.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000B9 /* wavtokenizer-dec.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = wavtokenizer-dec.cpp; path = "../Dependencies/llama.cpp/src/models/wavtokenizer-dec.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000BA /* xverse.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = xverse.cpp; path = "../Dependencies/llama.cpp/src/models/xverse.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C1 /* common-chat.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat.cpp"; path = "../Dependencies/llama.cpp/common/chat.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C2 /* common-chat-diff-analyzer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-diff-analyzer.cpp"; path = "../Dependencies/llama.cpp/common/chat-diff-analyzer.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C3 /* common-chat-auto-parser-generator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-auto-parser-generator.cpp"; path = "../Dependencies/llama.cpp/common/chat-auto-parser-generator.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C4 /* common-chat-auto-parser-helpers.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-auto-parser-helpers.cpp"; path = "../Dependencies/llama.cpp/common/chat-auto-parser-helpers.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C5 /* common-chat-peg-parser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-chat-peg-parser.cpp"; path = "../Dependencies/llama.cpp/common/chat-peg-parser.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C6 /* common-json-schema-to-grammar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-json-schema-to-grammar.cpp"; path = "../Dependencies/llama.cpp/common/json-schema-to-grammar.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C7 /* common-peg-parser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-peg-parser.cpp"; path = "../Dependencies/llama.cpp/common/peg-parser.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C8 /* common-unicode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-unicode.cpp"; path = "../Dependencies/llama.cpp/common/unicode.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000C9 /* common-log.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "common-log.cpp"; path = "../Dependencies/llama.cpp/common/log.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000CA /* jinja-lexer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-lexer.cpp"; path = "../Dependencies/llama.cpp/common/jinja/lexer.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000CB /* jinja-parser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-parser.cpp"; path = "../Dependencies/llama.cpp/common/jinja/parser.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000CC /* jinja-runtime.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-runtime.cpp"; path = "../Dependencies/llama.cpp/common/jinja/runtime.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000CD /* jinja-value.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-value.cpp"; path = "../Dependencies/llama.cpp/common/jinja/value.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000CE /* jinja-string.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-string.cpp"; path = "../Dependencies/llama.cpp/common/jinja/string.cpp"; sourceTree = "<group>"; };
-		ETOSLLAMAF00000000000000CF /* jinja-caps.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "jinja-caps.cpp"; path = "../Dependencies/llama.cpp/common/jinja/caps.cpp"; sourceTree = "<group>"; };
 		072CF2402E92C1B400A8E9D0 /* SharedTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		073CA6A52E8CFCF3004516A0 /* Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
@@ -440,6 +38,9 @@
 		};
 		073CA6A72E8CFCF3004516A0 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				ETOSLLAMAEXC000000000001 /* Exceptions for "Shared" folder in "Shared" target */,
+			);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -467,223 +68,21 @@
 		};
 /* End PBXFrameworksBuildPhase section */
 
-/* Begin ETOSLlamaSourcesGroup section */
-		ETOSLLAMA000000000000000001 /* llama.cpp Sources */ = {
-			isa = PBXGroup;
-			children = (
-				ETOSLLAMAF0000000000000001 /* ggml.c */,
-				ETOSLLAMAF0000000000000002 /* ggml.cpp */,
-				ETOSLLAMAF0000000000000003 /* ggml-alloc.c */,
-				ETOSLLAMAF0000000000000004 /* ggml-backend.cpp */,
-				ETOSLLAMAF0000000000000005 /* ggml-backend-dl.cpp */,
-				ETOSLLAMAF0000000000000006 /* ggml-backend-meta.cpp */,
-				ETOSLLAMAF0000000000000007 /* ggml-backend-reg.cpp */,
-				ETOSLLAMAF0000000000000008 /* ggml-opt.cpp */,
-				ETOSLLAMAF0000000000000009 /* ggml-quants.c */,
-				ETOSLLAMAF000000000000000A /* ggml-threading.cpp */,
-				ETOSLLAMAF000000000000000B /* gguf.cpp */,
-				ETOSLLAMAF000000000000000C /* binary-ops.cpp */,
-				ETOSLLAMAF000000000000000D /* ggml-cpu.c */,
-				ETOSLLAMAF000000000000000E /* ggml-cpu.cpp */,
-				ETOSLLAMAF000000000000000F /* hbm.cpp */,
-				ETOSLLAMAF0000000000000010 /* ops.cpp */,
-				ETOSLLAMAF0000000000000011 /* quants.c */,
-				ETOSLLAMAF0000000000000012 /* repack.cpp */,
-				ETOSLLAMAF0000000000000013 /* traits.cpp */,
-				ETOSLLAMAF0000000000000014 /* unary-ops.cpp */,
-				ETOSLLAMAF0000000000000015 /* vec.cpp */,
-				ETOSLLAMAF0000000000000016 /* ggml-metal.cpp */,
-				ETOSLLAMAF0000000000000017 /* ggml-metal-common.cpp */,
-				ETOSLLAMAF0000000000000018 /* ggml-metal-context.m */,
-				ETOSLLAMAF0000000000000019 /* ggml-metal-device.cpp */,
-				ETOSLLAMAF000000000000001A /* ggml-metal-device.m */,
-				ETOSLLAMAF000000000000001B /* ggml-metal-ops.cpp */,
-				ETOSLLAMAF000000000000001C /* ggml-metal.metal */,
-				ETOSLLAMAF000000000000001D /* llama.cpp */,
-				ETOSLLAMAF000000000000001E /* llama-adapter.cpp */,
-				ETOSLLAMAF000000000000001F /* llama-arch.cpp */,
-				ETOSLLAMAF0000000000000020 /* llama-batch.cpp */,
-				ETOSLLAMAF0000000000000021 /* llama-chat.cpp */,
-				ETOSLLAMAF0000000000000022 /* llama-context.cpp */,
-				ETOSLLAMAF0000000000000023 /* llama-cparams.cpp */,
-				ETOSLLAMAF0000000000000024 /* llama-grammar.cpp */,
-				ETOSLLAMAF0000000000000025 /* llama-graph.cpp */,
-				ETOSLLAMAF0000000000000026 /* llama-hparams.cpp */,
-				ETOSLLAMAF0000000000000027 /* llama-impl.cpp */,
-				ETOSLLAMAF0000000000000028 /* llama-io.cpp */,
-				ETOSLLAMAF0000000000000029 /* llama-kv-cache.cpp */,
-				ETOSLLAMAF000000000000002A /* llama-kv-cache-dsa.cpp */,
-				ETOSLLAMAF000000000000002B /* llama-kv-cache-iswa.cpp */,
-				ETOSLLAMAF000000000000002C /* llama-memory.cpp */,
-				ETOSLLAMAF000000000000002D /* llama-memory-hybrid.cpp */,
-				ETOSLLAMAF000000000000002E /* llama-memory-hybrid-iswa.cpp */,
-				ETOSLLAMAF000000000000002F /* llama-memory-recurrent.cpp */,
-				ETOSLLAMAF0000000000000030 /* llama-mmap.cpp */,
-				ETOSLLAMAF0000000000000031 /* llama-model.cpp */,
-				ETOSLLAMAF0000000000000032 /* llama-model-loader.cpp */,
-				ETOSLLAMAF0000000000000033 /* llama-model-saver.cpp */,
-				ETOSLLAMAF0000000000000034 /* llama-quant.cpp */,
-				ETOSLLAMAF0000000000000035 /* llama-sampler.cpp */,
-				ETOSLLAMAF0000000000000036 /* llama-vocab.cpp */,
-				ETOSLLAMAF0000000000000037 /* unicode.cpp */,
-				ETOSLLAMAF0000000000000038 /* unicode-data.cpp */,
-				ETOSLLAMAF0000000000000039 /* afmoe.cpp */,
-				ETOSLLAMAF000000000000003A /* apertus.cpp */,
-				ETOSLLAMAF000000000000003B /* arcee.cpp */,
-				ETOSLLAMAF000000000000003C /* arctic.cpp */,
-				ETOSLLAMAF000000000000003D /* arwkv7.cpp */,
-				ETOSLLAMAF000000000000003E /* baichuan.cpp */,
-				ETOSLLAMAF000000000000003F /* bailingmoe.cpp */,
-				ETOSLLAMAF0000000000000040 /* bailingmoe2.cpp */,
-				ETOSLLAMAF0000000000000041 /* bert.cpp */,
-				ETOSLLAMAF0000000000000042 /* bitnet.cpp */,
-				ETOSLLAMAF0000000000000043 /* bloom.cpp */,
-				ETOSLLAMAF0000000000000044 /* chameleon.cpp */,
-				ETOSLLAMAF0000000000000045 /* chatglm.cpp */,
-				ETOSLLAMAF0000000000000046 /* codeshell.cpp */,
-				ETOSLLAMAF0000000000000047 /* cogvlm.cpp */,
-				ETOSLLAMAF0000000000000048 /* cohere2.cpp */,
-				ETOSLLAMAF0000000000000049 /* command-r.cpp */,
-				ETOSLLAMAF000000000000004A /* dbrx.cpp */,
-				ETOSLLAMAF000000000000004B /* deci.cpp */,
-				ETOSLLAMAF000000000000004C /* deepseek.cpp */,
-				ETOSLLAMAF000000000000004D /* deepseek2.cpp */,
-				ETOSLLAMAF000000000000004E /* deepseek2ocr.cpp */,
-				ETOSLLAMAF000000000000004F /* deepseek32.cpp */,
-				ETOSLLAMAF0000000000000050 /* delta-net-base.cpp */,
-				ETOSLLAMAF0000000000000051 /* dots1.cpp */,
-				ETOSLLAMAF0000000000000052 /* dream.cpp */,
-				ETOSLLAMAF0000000000000053 /* ernie4-5-moe.cpp */,
-				ETOSLLAMAF0000000000000054 /* ernie4-5.cpp */,
-				ETOSLLAMAF0000000000000055 /* eurobert.cpp */,
-				ETOSLLAMAF0000000000000056 /* exaone-moe.cpp */,
-				ETOSLLAMAF0000000000000057 /* exaone.cpp */,
-				ETOSLLAMAF0000000000000058 /* exaone4.cpp */,
-				ETOSLLAMAF0000000000000059 /* falcon-h1.cpp */,
-				ETOSLLAMAF000000000000005A /* falcon.cpp */,
-				ETOSLLAMAF000000000000005B /* gemma-embedding.cpp */,
-				ETOSLLAMAF000000000000005C /* gemma.cpp */,
-				ETOSLLAMAF000000000000005D /* gemma2.cpp */,
-				ETOSLLAMAF000000000000005E /* gemma3.cpp */,
-				ETOSLLAMAF000000000000005F /* gemma3n.cpp */,
-				ETOSLLAMAF0000000000000060 /* gemma4.cpp */,
-				ETOSLLAMAF0000000000000061 /* glm-dsa.cpp */,
-				ETOSLLAMAF0000000000000062 /* glm4-moe.cpp */,
-				ETOSLLAMAF0000000000000063 /* glm4.cpp */,
-				ETOSLLAMAF0000000000000064 /* gpt2.cpp */,
-				ETOSLLAMAF0000000000000065 /* gptneox.cpp */,
-				ETOSLLAMAF0000000000000066 /* granite-hybrid.cpp */,
-				ETOSLLAMAF0000000000000067 /* granite-moe.cpp */,
-				ETOSLLAMAF0000000000000068 /* granite.cpp */,
-				ETOSLLAMAF0000000000000069 /* grok.cpp */,
-				ETOSLLAMAF000000000000006A /* grovemoe.cpp */,
-				ETOSLLAMAF000000000000006B /* hunyuan-dense.cpp */,
-				ETOSLLAMAF000000000000006C /* hunyuan-moe.cpp */,
-				ETOSLLAMAF000000000000006D /* hunyuan-vl.cpp */,
-				ETOSLLAMAF000000000000006E /* internlm2.cpp */,
-				ETOSLLAMAF000000000000006F /* jais.cpp */,
-				ETOSLLAMAF0000000000000070 /* jais2.cpp */,
-				ETOSLLAMAF0000000000000071 /* jamba.cpp */,
-				ETOSLLAMAF0000000000000072 /* jina-bert-v2.cpp */,
-				ETOSLLAMAF0000000000000073 /* jina-bert-v3.cpp */,
-				ETOSLLAMAF0000000000000074 /* kimi-linear.cpp */,
-				ETOSLLAMAF0000000000000075 /* lfm2.cpp */,
-				ETOSLLAMAF0000000000000076 /* lfm2moe.cpp */,
-				ETOSLLAMAF0000000000000077 /* llada-moe.cpp */,
-				ETOSLLAMAF0000000000000078 /* llada.cpp */,
-				ETOSLLAMAF0000000000000079 /* llama-embed.cpp */,
-				ETOSLLAMAF000000000000007A /* llama.cpp */,
-				ETOSLLAMAF000000000000007B /* llama4.cpp */,
-				ETOSLLAMAF000000000000007C /* maincoder.cpp */,
-				ETOSLLAMAF000000000000007D /* mamba-base.cpp */,
-				ETOSLLAMAF000000000000007E /* mamba.cpp */,
-				ETOSLLAMAF000000000000007F /* mamba2.cpp */,
-				ETOSLLAMAF0000000000000080 /* mimo2.cpp */,
-				ETOSLLAMAF0000000000000081 /* minicpm.cpp */,
-				ETOSLLAMAF0000000000000082 /* minicpm3.cpp */,
-				ETOSLLAMAF0000000000000083 /* minimax-m2.cpp */,
-				ETOSLLAMAF0000000000000084 /* mistral3.cpp */,
-				ETOSLLAMAF0000000000000085 /* mistral4.cpp */,
-				ETOSLLAMAF0000000000000086 /* modern-bert.cpp */,
-				ETOSLLAMAF0000000000000087 /* mpt.cpp */,
-				ETOSLLAMAF0000000000000088 /* nemotron-h-moe.cpp */,
-				ETOSLLAMAF0000000000000089 /* nemotron-h.cpp */,
-				ETOSLLAMAF000000000000008A /* nemotron.cpp */,
-				ETOSLLAMAF000000000000008B /* neo-bert.cpp */,
-				ETOSLLAMAF000000000000008C /* nomic-bert-moe.cpp */,
-				ETOSLLAMAF000000000000008D /* nomic-bert.cpp */,
-				ETOSLLAMAF000000000000008E /* olmo.cpp */,
-				ETOSLLAMAF000000000000008F /* olmo2.cpp */,
-				ETOSLLAMAF0000000000000090 /* olmoe.cpp */,
-				ETOSLLAMAF0000000000000091 /* openai-moe.cpp */,
-				ETOSLLAMAF0000000000000092 /* openelm.cpp */,
-				ETOSLLAMAF0000000000000093 /* orion.cpp */,
-				ETOSLLAMAF0000000000000094 /* paddleocr.cpp */,
-				ETOSLLAMAF0000000000000095 /* pangu-embed.cpp */,
-				ETOSLLAMAF0000000000000096 /* phi2.cpp */,
-				ETOSLLAMAF0000000000000097 /* phi3.cpp */,
-				ETOSLLAMAF0000000000000098 /* phimoe.cpp */,
-				ETOSLLAMAF0000000000000099 /* plamo.cpp */,
-				ETOSLLAMAF000000000000009A /* plamo2.cpp */,
-				ETOSLLAMAF000000000000009B /* plamo3.cpp */,
-				ETOSLLAMAF000000000000009C /* plm.cpp */,
-				ETOSLLAMAF000000000000009D /* qwen.cpp */,
-				ETOSLLAMAF000000000000009E /* qwen2.cpp */,
-				ETOSLLAMAF000000000000009F /* qwen2moe.cpp */,
-				ETOSLLAMAF00000000000000A0 /* qwen2vl.cpp */,
-				ETOSLLAMAF00000000000000A1 /* qwen3.cpp */,
-				ETOSLLAMAF00000000000000A2 /* qwen35.cpp */,
-				ETOSLLAMAF00000000000000A3 /* qwen35moe.cpp */,
-				ETOSLLAMAF00000000000000A4 /* qwen3moe.cpp */,
-				ETOSLLAMAF00000000000000A5 /* qwen3next.cpp */,
-				ETOSLLAMAF00000000000000A6 /* qwen3vl.cpp */,
-				ETOSLLAMAF00000000000000A7 /* qwen3vlmoe.cpp */,
-				ETOSLLAMAF00000000000000A8 /* refact.cpp */,
-				ETOSLLAMAF00000000000000A9 /* rnd1.cpp */,
-				ETOSLLAMAF00000000000000AA /* rwkv6-base.cpp */,
-				ETOSLLAMAF00000000000000AB /* rwkv6.cpp */,
-				ETOSLLAMAF00000000000000AC /* rwkv6qwen2.cpp */,
-				ETOSLLAMAF00000000000000AD /* rwkv7-base.cpp */,
-				ETOSLLAMAF00000000000000AE /* rwkv7.cpp */,
-				ETOSLLAMAF00000000000000AF /* seed-oss.cpp */,
-				ETOSLLAMAF00000000000000B0 /* smallthinker.cpp */,
-				ETOSLLAMAF00000000000000B1 /* smollm3.cpp */,
-				ETOSLLAMAF00000000000000B2 /* stablelm.cpp */,
-				ETOSLLAMAF00000000000000B3 /* starcoder.cpp */,
-				ETOSLLAMAF00000000000000B4 /* starcoder2.cpp */,
-				ETOSLLAMAF00000000000000B5 /* step35.cpp */,
-				ETOSLLAMAF00000000000000B6 /* t5.cpp */,
-				ETOSLLAMAF00000000000000B7 /* t5encoder.cpp */,
-				ETOSLLAMAF00000000000000B8 /* talkie.cpp */,
-				ETOSLLAMAF00000000000000B9 /* wavtokenizer-dec.cpp */,
-				ETOSLLAMAF00000000000000BA /* xverse.cpp */,
-				ETOSLLAMAF00000000000000C1 /* common-chat.cpp */,
-				ETOSLLAMAF00000000000000C2 /* common-chat-diff-analyzer.cpp */,
-				ETOSLLAMAF00000000000000C3 /* common-chat-auto-parser-generator.cpp */,
-				ETOSLLAMAF00000000000000C4 /* common-chat-auto-parser-helpers.cpp */,
-				ETOSLLAMAF00000000000000C5 /* common-chat-peg-parser.cpp */,
-				ETOSLLAMAF00000000000000C6 /* common-json-schema-to-grammar.cpp */,
-				ETOSLLAMAF00000000000000C7 /* common-peg-parser.cpp */,
-				ETOSLLAMAF00000000000000C8 /* common-unicode.cpp */,
-				ETOSLLAMAF00000000000000C9 /* common-log.cpp */,
-				ETOSLLAMAF00000000000000CA /* jinja-lexer.cpp */,
-				ETOSLLAMAF00000000000000CB /* jinja-parser.cpp */,
-				ETOSLLAMAF00000000000000CC /* jinja-runtime.cpp */,
-				ETOSLLAMAF00000000000000CD /* jinja-value.cpp */,
-				ETOSLLAMAF00000000000000CE /* jinja-string.cpp */,
-				ETOSLLAMAF00000000000000CF /* jinja-caps.cpp */,
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		ETOSLLAMAEXC000000000001 /* Exceptions for "Shared" folder in "Shared" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"LocalLLMBridge/ETOSGGMLCPUArchRepack.cpp",
 			);
-			name = "llama.cpp Sources";
-			sourceTree = "<group>";
+			target = 073CA6A42E8CFCF3004516A0 /* Shared */;
 		};
-/* End ETOSLlamaSourcesGroup section */
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXGroup section */
 		073CA69B2E8CFCF3004516A0 = {
 			isa = PBXGroup;
 			children = (
 				073CA6A72E8CFCF3004516A0 /* Shared */,
-				ETOSLLAMA000000000000000001 /* llama.cpp Sources */,
 				072CF2412E92C1B400A8E9D0 /* SharedTests */,
 				07B5C2B12F6D3B3000A11AA1 /* AppIntents.framework */,
 				073CA6A62E8CFCF3004516A0 /* Products */,
@@ -740,6 +139,7 @@
 			buildConfigurationList = 073CA6AE2E8CFCF3004516A0 /* Build configuration list for PBXNativeTarget "Shared" */;
 			buildPhases = (
 				073CA6A02E8CFCF3004516A0 /* Headers */,
+				ETOSLLAMASCRIPT00000001 /* 准备 llama.cpp 静态库 */,
 				073CA6A12E8CFCF3004516A0 /* Sources */,
 				073CA6A22E8CFCF3004516A0 /* Frameworks */,
 				073CA6A32E8CFCF3004516A0 /* Resources */,
@@ -821,6 +221,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		ETOSLLAMASCRIPT00000001 /* 准备 llama.cpp 静态库 */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "准备 llama.cpp 静态库";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/../Dependencies/llama-build/products/$(PLATFORM_NAME)-$(CONFIGURATION)/libetos-llama.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/../scripts/build-llama-static-library.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		072CF23C2E92C1B400A8E9D0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -833,207 +256,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				ETOSLLAMAB0000000000000001 /* ggml.c in Sources */,
-				ETOSLLAMAB0000000000000002 /* ggml.cpp in Sources */,
-				ETOSLLAMAB0000000000000003 /* ggml-alloc.c in Sources */,
-				ETOSLLAMAB0000000000000004 /* ggml-backend.cpp in Sources */,
-				ETOSLLAMAB0000000000000005 /* ggml-backend-dl.cpp in Sources */,
-				ETOSLLAMAB0000000000000006 /* ggml-backend-meta.cpp in Sources */,
-				ETOSLLAMAB0000000000000007 /* ggml-backend-reg.cpp in Sources */,
-				ETOSLLAMAB0000000000000008 /* ggml-opt.cpp in Sources */,
-				ETOSLLAMAB0000000000000009 /* ggml-quants.c in Sources */,
-				ETOSLLAMAB000000000000000A /* ggml-threading.cpp in Sources */,
-				ETOSLLAMAB000000000000000B /* gguf.cpp in Sources */,
-				ETOSLLAMAB000000000000000C /* binary-ops.cpp in Sources */,
-				ETOSLLAMAB000000000000000D /* ggml-cpu.c in Sources */,
-				ETOSLLAMAB000000000000000E /* ggml-cpu.cpp in Sources */,
-				ETOSLLAMAB000000000000000F /* hbm.cpp in Sources */,
-				ETOSLLAMAB0000000000000010 /* ops.cpp in Sources */,
-				ETOSLLAMAB0000000000000011 /* quants.c in Sources */,
-				ETOSLLAMAB0000000000000012 /* repack.cpp in Sources */,
-				ETOSLLAMAB0000000000000013 /* traits.cpp in Sources */,
-				ETOSLLAMAB0000000000000014 /* unary-ops.cpp in Sources */,
-				ETOSLLAMAB0000000000000015 /* vec.cpp in Sources */,
-				ETOSLLAMAB0000000000000016 /* ggml-metal.cpp in Sources */,
-				ETOSLLAMAB0000000000000017 /* ggml-metal-common.cpp in Sources */,
-				ETOSLLAMAB0000000000000018 /* ggml-metal-context.m in Sources */,
-				ETOSLLAMAB0000000000000019 /* ggml-metal-device.cpp in Sources */,
-				ETOSLLAMAB000000000000001A /* ggml-metal-device.m in Sources */,
-				ETOSLLAMAB000000000000001B /* ggml-metal-ops.cpp in Sources */,
-				ETOSLLAMAB000000000000001C /* ggml-metal.metal in Sources */,
-				ETOSLLAMAB000000000000001D /* llama.cpp in Sources */,
-				ETOSLLAMAB000000000000001E /* llama-adapter.cpp in Sources */,
-				ETOSLLAMAB000000000000001F /* llama-arch.cpp in Sources */,
-				ETOSLLAMAB0000000000000020 /* llama-batch.cpp in Sources */,
-				ETOSLLAMAB0000000000000021 /* llama-chat.cpp in Sources */,
-				ETOSLLAMAB0000000000000022 /* llama-context.cpp in Sources */,
-				ETOSLLAMAB0000000000000023 /* llama-cparams.cpp in Sources */,
-				ETOSLLAMAB0000000000000024 /* llama-grammar.cpp in Sources */,
-				ETOSLLAMAB0000000000000025 /* llama-graph.cpp in Sources */,
-				ETOSLLAMAB0000000000000026 /* llama-hparams.cpp in Sources */,
-				ETOSLLAMAB0000000000000027 /* llama-impl.cpp in Sources */,
-				ETOSLLAMAB0000000000000028 /* llama-io.cpp in Sources */,
-				ETOSLLAMAB0000000000000029 /* llama-kv-cache.cpp in Sources */,
-				ETOSLLAMAB000000000000002A /* llama-kv-cache-dsa.cpp in Sources */,
-				ETOSLLAMAB000000000000002B /* llama-kv-cache-iswa.cpp in Sources */,
-				ETOSLLAMAB000000000000002C /* llama-memory.cpp in Sources */,
-				ETOSLLAMAB000000000000002D /* llama-memory-hybrid.cpp in Sources */,
-				ETOSLLAMAB000000000000002E /* llama-memory-hybrid-iswa.cpp in Sources */,
-				ETOSLLAMAB000000000000002F /* llama-memory-recurrent.cpp in Sources */,
-				ETOSLLAMAB0000000000000030 /* llama-mmap.cpp in Sources */,
-				ETOSLLAMAB0000000000000031 /* llama-model.cpp in Sources */,
-				ETOSLLAMAB0000000000000032 /* llama-model-loader.cpp in Sources */,
-				ETOSLLAMAB0000000000000033 /* llama-model-saver.cpp in Sources */,
-				ETOSLLAMAB0000000000000034 /* llama-quant.cpp in Sources */,
-				ETOSLLAMAB0000000000000035 /* llama-sampler.cpp in Sources */,
-				ETOSLLAMAB0000000000000036 /* llama-vocab.cpp in Sources */,
-				ETOSLLAMAB0000000000000037 /* unicode.cpp in Sources */,
-				ETOSLLAMAB0000000000000038 /* unicode-data.cpp in Sources */,
-				ETOSLLAMAB0000000000000039 /* afmoe.cpp in Sources */,
-				ETOSLLAMAB000000000000003A /* apertus.cpp in Sources */,
-				ETOSLLAMAB000000000000003B /* arcee.cpp in Sources */,
-				ETOSLLAMAB000000000000003C /* arctic.cpp in Sources */,
-				ETOSLLAMAB000000000000003D /* arwkv7.cpp in Sources */,
-				ETOSLLAMAB000000000000003E /* baichuan.cpp in Sources */,
-				ETOSLLAMAB000000000000003F /* bailingmoe.cpp in Sources */,
-				ETOSLLAMAB0000000000000040 /* bailingmoe2.cpp in Sources */,
-				ETOSLLAMAB0000000000000041 /* bert.cpp in Sources */,
-				ETOSLLAMAB0000000000000042 /* bitnet.cpp in Sources */,
-				ETOSLLAMAB0000000000000043 /* bloom.cpp in Sources */,
-				ETOSLLAMAB0000000000000044 /* chameleon.cpp in Sources */,
-				ETOSLLAMAB0000000000000045 /* chatglm.cpp in Sources */,
-				ETOSLLAMAB0000000000000046 /* codeshell.cpp in Sources */,
-				ETOSLLAMAB0000000000000047 /* cogvlm.cpp in Sources */,
-				ETOSLLAMAB0000000000000048 /* cohere2.cpp in Sources */,
-				ETOSLLAMAB0000000000000049 /* command-r.cpp in Sources */,
-				ETOSLLAMAB000000000000004A /* dbrx.cpp in Sources */,
-				ETOSLLAMAB000000000000004B /* deci.cpp in Sources */,
-				ETOSLLAMAB000000000000004C /* deepseek.cpp in Sources */,
-				ETOSLLAMAB000000000000004D /* deepseek2.cpp in Sources */,
-				ETOSLLAMAB000000000000004E /* deepseek2ocr.cpp in Sources */,
-				ETOSLLAMAB000000000000004F /* deepseek32.cpp in Sources */,
-				ETOSLLAMAB0000000000000050 /* delta-net-base.cpp in Sources */,
-				ETOSLLAMAB0000000000000051 /* dots1.cpp in Sources */,
-				ETOSLLAMAB0000000000000052 /* dream.cpp in Sources */,
-				ETOSLLAMAB0000000000000053 /* ernie4-5-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000054 /* ernie4-5.cpp in Sources */,
-				ETOSLLAMAB0000000000000055 /* eurobert.cpp in Sources */,
-				ETOSLLAMAB0000000000000056 /* exaone-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000057 /* exaone.cpp in Sources */,
-				ETOSLLAMAB0000000000000058 /* exaone4.cpp in Sources */,
-				ETOSLLAMAB0000000000000059 /* falcon-h1.cpp in Sources */,
-				ETOSLLAMAB000000000000005A /* falcon.cpp in Sources */,
-				ETOSLLAMAB000000000000005B /* gemma-embedding.cpp in Sources */,
-				ETOSLLAMAB000000000000005C /* gemma.cpp in Sources */,
-				ETOSLLAMAB000000000000005D /* gemma2.cpp in Sources */,
-				ETOSLLAMAB000000000000005E /* gemma3.cpp in Sources */,
-				ETOSLLAMAB000000000000005F /* gemma3n.cpp in Sources */,
-				ETOSLLAMAB0000000000000060 /* gemma4.cpp in Sources */,
-				ETOSLLAMAB0000000000000061 /* glm-dsa.cpp in Sources */,
-				ETOSLLAMAB0000000000000062 /* glm4-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000063 /* glm4.cpp in Sources */,
-				ETOSLLAMAB0000000000000064 /* gpt2.cpp in Sources */,
-				ETOSLLAMAB0000000000000065 /* gptneox.cpp in Sources */,
-				ETOSLLAMAB0000000000000066 /* granite-hybrid.cpp in Sources */,
-				ETOSLLAMAB0000000000000067 /* granite-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000068 /* granite.cpp in Sources */,
-				ETOSLLAMAB0000000000000069 /* grok.cpp in Sources */,
-				ETOSLLAMAB000000000000006A /* grovemoe.cpp in Sources */,
-				ETOSLLAMAB000000000000006B /* hunyuan-dense.cpp in Sources */,
-				ETOSLLAMAB000000000000006C /* hunyuan-moe.cpp in Sources */,
-				ETOSLLAMAB000000000000006D /* hunyuan-vl.cpp in Sources */,
-				ETOSLLAMAB000000000000006E /* internlm2.cpp in Sources */,
-				ETOSLLAMAB000000000000006F /* jais.cpp in Sources */,
-				ETOSLLAMAB0000000000000070 /* jais2.cpp in Sources */,
-				ETOSLLAMAB0000000000000071 /* jamba.cpp in Sources */,
-				ETOSLLAMAB0000000000000072 /* jina-bert-v2.cpp in Sources */,
-				ETOSLLAMAB0000000000000073 /* jina-bert-v3.cpp in Sources */,
-				ETOSLLAMAB0000000000000074 /* kimi-linear.cpp in Sources */,
-				ETOSLLAMAB0000000000000075 /* lfm2.cpp in Sources */,
-				ETOSLLAMAB0000000000000076 /* lfm2moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000077 /* llada-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000078 /* llada.cpp in Sources */,
-				ETOSLLAMAB0000000000000079 /* llama-embed.cpp in Sources */,
-				ETOSLLAMAB000000000000007A /* llama.cpp in Sources */,
-				ETOSLLAMAB000000000000007B /* llama4.cpp in Sources */,
-				ETOSLLAMAB000000000000007C /* maincoder.cpp in Sources */,
-				ETOSLLAMAB000000000000007D /* mamba-base.cpp in Sources */,
-				ETOSLLAMAB000000000000007E /* mamba.cpp in Sources */,
-				ETOSLLAMAB000000000000007F /* mamba2.cpp in Sources */,
-				ETOSLLAMAB0000000000000080 /* mimo2.cpp in Sources */,
-				ETOSLLAMAB0000000000000081 /* minicpm.cpp in Sources */,
-				ETOSLLAMAB0000000000000082 /* minicpm3.cpp in Sources */,
-				ETOSLLAMAB0000000000000083 /* minimax-m2.cpp in Sources */,
-				ETOSLLAMAB0000000000000084 /* mistral3.cpp in Sources */,
-				ETOSLLAMAB0000000000000085 /* mistral4.cpp in Sources */,
-				ETOSLLAMAB0000000000000086 /* modern-bert.cpp in Sources */,
-				ETOSLLAMAB0000000000000087 /* mpt.cpp in Sources */,
-				ETOSLLAMAB0000000000000088 /* nemotron-h-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000089 /* nemotron-h.cpp in Sources */,
-				ETOSLLAMAB000000000000008A /* nemotron.cpp in Sources */,
-				ETOSLLAMAB000000000000008B /* neo-bert.cpp in Sources */,
-				ETOSLLAMAB000000000000008C /* nomic-bert-moe.cpp in Sources */,
-				ETOSLLAMAB000000000000008D /* nomic-bert.cpp in Sources */,
-				ETOSLLAMAB000000000000008E /* olmo.cpp in Sources */,
-				ETOSLLAMAB000000000000008F /* olmo2.cpp in Sources */,
-				ETOSLLAMAB0000000000000090 /* olmoe.cpp in Sources */,
-				ETOSLLAMAB0000000000000091 /* openai-moe.cpp in Sources */,
-				ETOSLLAMAB0000000000000092 /* openelm.cpp in Sources */,
-				ETOSLLAMAB0000000000000093 /* orion.cpp in Sources */,
-				ETOSLLAMAB0000000000000094 /* paddleocr.cpp in Sources */,
-				ETOSLLAMAB0000000000000095 /* pangu-embed.cpp in Sources */,
-				ETOSLLAMAB0000000000000096 /* phi2.cpp in Sources */,
-				ETOSLLAMAB0000000000000097 /* phi3.cpp in Sources */,
-				ETOSLLAMAB0000000000000098 /* phimoe.cpp in Sources */,
-				ETOSLLAMAB0000000000000099 /* plamo.cpp in Sources */,
-				ETOSLLAMAB000000000000009A /* plamo2.cpp in Sources */,
-				ETOSLLAMAB000000000000009B /* plamo3.cpp in Sources */,
-				ETOSLLAMAB000000000000009C /* plm.cpp in Sources */,
-				ETOSLLAMAB000000000000009D /* qwen.cpp in Sources */,
-				ETOSLLAMAB000000000000009E /* qwen2.cpp in Sources */,
-				ETOSLLAMAB000000000000009F /* qwen2moe.cpp in Sources */,
-				ETOSLLAMAB00000000000000A0 /* qwen2vl.cpp in Sources */,
-				ETOSLLAMAB00000000000000A1 /* qwen3.cpp in Sources */,
-				ETOSLLAMAB00000000000000A2 /* qwen35.cpp in Sources */,
-				ETOSLLAMAB00000000000000A3 /* qwen35moe.cpp in Sources */,
-				ETOSLLAMAB00000000000000A4 /* qwen3moe.cpp in Sources */,
-				ETOSLLAMAB00000000000000A5 /* qwen3next.cpp in Sources */,
-				ETOSLLAMAB00000000000000A6 /* qwen3vl.cpp in Sources */,
-				ETOSLLAMAB00000000000000A7 /* qwen3vlmoe.cpp in Sources */,
-				ETOSLLAMAB00000000000000A8 /* refact.cpp in Sources */,
-				ETOSLLAMAB00000000000000A9 /* rnd1.cpp in Sources */,
-				ETOSLLAMAB00000000000000AA /* rwkv6-base.cpp in Sources */,
-				ETOSLLAMAB00000000000000AB /* rwkv6.cpp in Sources */,
-				ETOSLLAMAB00000000000000AC /* rwkv6qwen2.cpp in Sources */,
-				ETOSLLAMAB00000000000000AD /* rwkv7-base.cpp in Sources */,
-				ETOSLLAMAB00000000000000AE /* rwkv7.cpp in Sources */,
-				ETOSLLAMAB00000000000000AF /* seed-oss.cpp in Sources */,
-				ETOSLLAMAB00000000000000B0 /* smallthinker.cpp in Sources */,
-				ETOSLLAMAB00000000000000B1 /* smollm3.cpp in Sources */,
-				ETOSLLAMAB00000000000000B2 /* stablelm.cpp in Sources */,
-				ETOSLLAMAB00000000000000B3 /* starcoder.cpp in Sources */,
-				ETOSLLAMAB00000000000000B4 /* starcoder2.cpp in Sources */,
-				ETOSLLAMAB00000000000000B5 /* step35.cpp in Sources */,
-				ETOSLLAMAB00000000000000B6 /* t5.cpp in Sources */,
-				ETOSLLAMAB00000000000000B7 /* t5encoder.cpp in Sources */,
-				ETOSLLAMAB00000000000000B8 /* talkie.cpp in Sources */,
-				ETOSLLAMAB00000000000000B9 /* wavtokenizer-dec.cpp in Sources */,
-				ETOSLLAMAB00000000000000BA /* xverse.cpp in Sources */,
-				ETOSLLAMAB00000000000000C1 /* common-chat.cpp in Sources */,
-				ETOSLLAMAB00000000000000C2 /* common-chat-diff-analyzer.cpp in Sources */,
-				ETOSLLAMAB00000000000000C3 /* common-chat-auto-parser-generator.cpp in Sources */,
-				ETOSLLAMAB00000000000000C4 /* common-chat-auto-parser-helpers.cpp in Sources */,
-				ETOSLLAMAB00000000000000C5 /* common-chat-peg-parser.cpp in Sources */,
-				ETOSLLAMAB00000000000000C6 /* common-json-schema-to-grammar.cpp in Sources */,
-				ETOSLLAMAB00000000000000C7 /* common-peg-parser.cpp in Sources */,
-				ETOSLLAMAB00000000000000C8 /* common-unicode.cpp in Sources */,
-				ETOSLLAMAB00000000000000C9 /* common-log.cpp in Sources */,
-				ETOSLLAMAB00000000000000CA /* jinja-lexer.cpp in Sources */,
-				ETOSLLAMAB00000000000000CB /* jinja-parser.cpp in Sources */,
-				ETOSLLAMAB00000000000000CC /* jinja-runtime.cpp in Sources */,
-				ETOSLLAMAB00000000000000CD /* jinja-value.cpp in Sources */,
-				ETOSLLAMAB00000000000000CE /* jinja-string.cpp in Sources */,
-				ETOSLLAMAB00000000000000CF /* jinja-caps.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1233,6 +455,7 @@
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
 				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INTERMEDIATE_TEXT_BASED_STUBS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
 				GCC_WARN_UNUSED_FUNCTION = NO;
@@ -1290,6 +513,10 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../Dependencies/llama-build/products/$(PLATFORM_NAME)-$(CONFIGURATION)",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
@@ -1307,6 +534,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
+					"-letos-llama",
 					"-framework",
 					Accelerate,
 				);
@@ -1411,6 +639,7 @@
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
 				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INTERMEDIATE_TEXT_BASED_STUBS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
 				GCC_WARN_UNUSED_FUNCTION = NO;
@@ -1468,6 +697,10 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../Dependencies/llama-build/products/$(PLATFORM_NAME)-$(CONFIGURATION)",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
@@ -1485,6 +718,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
+					"-letos-llama",
 					"-framework",
 					Accelerate,
 				);

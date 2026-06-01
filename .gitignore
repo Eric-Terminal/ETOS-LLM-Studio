@@ -9,6 +9,7 @@ ETOS LLM Studio/ETOS LLM Studio.xcodeproj/project.xcworkspace/
 # Build products
 build/
 DerivedData/
+Dependencies/llama-build/
 *.pbxuser
 !default.pbxuser
 *.mode1v3

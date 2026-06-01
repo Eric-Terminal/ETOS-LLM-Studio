@@ -32,3 +32,18 @@ write_commit_hash() {
 
 write_commit_hash "$IOS_PLIST_PATH"
 write_commit_hash "$WATCH_PLIST_PATH"
+
+export CONFIGURATION="${CONFIGURATION:-Release}"
+
+build_llama_static_library() {
+    sdk_name="$1"
+    archs="$2"
+
+    echo "预构建 llama.cpp 静态库：$sdk_name / $archs / $CONFIGURATION"
+    SDK_NAME="$sdk_name" ARCHS="$archs" "$ROOT_PATH/scripts/build-llama-static-library.sh"
+}
+
+build_llama_static_library iphoneos arm64
+build_llama_static_library iphonesimulator "arm64 x86_64"
+build_llama_static_library watchos "arm64 arm64_32"
+build_llama_static_library watchsimulator arm64
