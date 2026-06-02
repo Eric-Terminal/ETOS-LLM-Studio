@@ -105,4 +105,16 @@ struct MessageRegexRuleTransformerTests {
 
         #expect(output == "ok")
     }
+
+    @Test("空规则会直接返回原文")
+    func testEmptyRulesReturnOriginalContent() {
+        let output = MessageRegexRuleTransformer.apply(
+            "unchanged",
+            rules: [],
+            scope: .user,
+            mode: .persist
+        )
+
+        #expect(output == "unchanged")
+    }
 }

@@ -300,7 +300,10 @@ extension ChatService {
         loadingMessageID: UUID,
         sessionID: UUID
     ) {
-        let rewrittenMessage = applyMessageRegexRules(to: rewrittenMessage, mode: .persist)
+        let messageRegexRules = MessageRegexRuleStore.currentRules()
+        let rewrittenMessage = messageRegexRules.isEmpty
+            ? rewrittenMessage
+            : applyMessageRegexRules(to: rewrittenMessage, rules: messageRegexRules, mode: .persist)
         var messages = messagesSnapshot(for: sessionID)
         guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         messages[index] = ChatMessage(

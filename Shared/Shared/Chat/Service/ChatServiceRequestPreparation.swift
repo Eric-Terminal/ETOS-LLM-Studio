@@ -112,7 +112,12 @@ extension ChatService {
         let baseMessages = visibleMessages.filter { $0.role != .error && $0.id != loadingMessageID }
         let normalizedMessages = normalizedMessagesForToolCallChain(baseMessages)
         let messageRegexRules = MessageRegexRuleStore.currentRules()
-        guard session?.isWorldbookContextIsolationActive == true else {
+        let isWorldbookIsolationActive = session?.isWorldbookContextIsolationActive == true
+
+        if !isWorldbookIsolationActive {
+            guard !messageRegexRules.isEmpty else {
+                return normalizedMessages
+            }
             return normalizedMessages.map { applyMessageRegexRules(to: $0, rules: messageRegexRules, mode: .sendOnly) }
         }
 
@@ -125,6 +130,9 @@ extension ChatService {
             if sanitized.role == .assistant,
                sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return nil
+            }
+            if messageRegexRules.isEmpty {
+                return sanitized
             }
             return applyMessageRegexRules(to: sanitized, rules: messageRegexRules, mode: .sendOnly)
         }

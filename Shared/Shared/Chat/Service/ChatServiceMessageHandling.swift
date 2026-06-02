@@ -337,7 +337,10 @@ extension ChatService {
 
     /// 将最终确定的消息更新到消息列表中
     func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
-        let newMessage = applyMessageRegexRules(to: newMessage, mode: .persist)
+        let messageRegexRules = MessageRegexRuleStore.currentRules()
+        let newMessage = messageRegexRules.isEmpty
+            ? newMessage
+            : applyMessageRegexRules(to: newMessage, rules: messageRegexRules, mode: .persist)
         var messages = messagesSnapshot(for: sessionID)
 
         // 检查是否是重试场景，需要添加新版本

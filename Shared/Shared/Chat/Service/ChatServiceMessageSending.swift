@@ -72,11 +72,16 @@ extension ChatService {
         let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
         let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
         let filePlaceholder = NSLocalizedString("[文件]", comment: "File message placeholder")
-        let messageContent = applyMessageRegexRules(
-            to: content.trimmingCharacters(in: .whitespacesAndNewlines),
-            scope: .user,
-            mode: .persist
-        )
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageRegexRules = MessageRegexRuleStore.currentRules()
+        let messageContent = messageRegexRules.isEmpty
+            ? trimmedContent
+            : applyMessageRegexRules(
+                to: trimmedContent,
+                rules: messageRegexRules,
+                scope: .user,
+                mode: .persist
+            )
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
         var savedFileNames: [String] = []
