@@ -326,6 +326,8 @@ final class ChatViewModel: ObservableObject {
     var additionalHistoryLoaded: Int = 0
     var lastSessionID: UUID?
     let incrementalHistoryBatchSize = 5
+    var visibleMessagesCache: [ChatMessage] = []
+    var visibleMessagesWeightedCount: Int = 0
     var cancellables = Set<AnyCancellable>()
     var displayMessageIDs: [UUID] = []
     var activatedModelIDs: [String] = []

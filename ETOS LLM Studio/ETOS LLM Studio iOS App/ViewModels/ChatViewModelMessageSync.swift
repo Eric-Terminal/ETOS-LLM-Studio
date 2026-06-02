@@ -11,7 +11,7 @@ import Shared
 
 extension ChatViewModel {
     func updateDisplayedMessages() {
-        let filtered = visibleMessages(from: allMessagesForSession)
+        ensureVisibleMessagesCachePrepared()
 
         if lastSessionID != currentSession?.id {
             lastSessionID = currentSession?.id
@@ -19,7 +19,8 @@ extension ChatViewModel {
         }
 
         let lazyCount = lazyLoadMessageCount
-        let weightedCount = Self.lazyLoadWeightedMessageCount(in: filtered)
+        let filtered = visibleMessagesCache
+        let weightedCount = visibleMessagesWeightedCount
         if lazyCount > 0 && weightedCount > lazyCount {
             let limit = lazyCount + additionalHistoryLoaded
             if weightedCount > limit {
@@ -39,9 +40,8 @@ extension ChatViewModel {
     }
 
     func loadEntireHistory() {
-        let filtered = visibleMessages(from: allMessagesForSession)
-        additionalHistoryLoaded = max(0, Self.lazyLoadWeightedMessageCount(in: filtered) - lazyLoadMessageCount)
-        updateDisplayedStatesIfNeeded(filtered)
+        additionalHistoryLoaded = max(0, visibleMessagesWeightedCount - lazyLoadMessageCount)
+        updateDisplayedStatesIfNeeded(visibleMessagesCache)
         updateHistoryFullyLoadedIfNeeded(true)
     }
 
@@ -79,6 +79,7 @@ extension ChatViewModel {
     func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
         let previousMessages = allMessagesForSession
         allMessagesForSession = incomingMessages
+        refreshVisibleMessagesCache()
         let hasSameMessageIdentity = hasMatchingMessageIdentity(previousMessages, incomingMessages)
         if !hasSameMessageIdentity {
             allMessageIdentityVersion &+= 1
@@ -408,6 +409,17 @@ extension ChatViewModel {
 
     func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {
         ChatResponseAttemptSupport.visibleMessages(from: source)
+    }
+
+    func refreshVisibleMessagesCache() {
+        visibleMessagesCache = visibleMessages(from: allMessagesForSession)
+        visibleMessagesWeightedCount = Self.lazyLoadWeightedMessageCount(in: visibleMessagesCache)
+    }
+
+    func ensureVisibleMessagesCachePrepared() {
+        if visibleMessagesCache.isEmpty, !allMessagesForSession.isEmpty {
+            refreshVisibleMessagesCache()
+        }
     }
 
     func refreshVisualMessagesAfterRegexRulesChange() {
