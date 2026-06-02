@@ -35,12 +35,12 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
     var dryAllowedLength: Int32
     var dryPenaltyLastN: Int32
     var drySequenceBreakers: [String]
+    var samplerKinds: [LocalLLMSamplerKind]
     var mirostat: Int32
     var mirostatTau: Float
     var mirostatEta: Float
     var adaptiveTarget: Float
     var adaptiveDecay: Float
-    var samplers: String
     var grammar: String
     var ignoreEOS: Bool
 
@@ -69,12 +69,12 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
         self.dryAllowedLength = 2
         self.dryPenaltyLastN = -1
         self.drySequenceBreakers = ["\n", ":", "\"", "*"]
+        self.samplerKinds = LocalLLMSamplerKind.parse("edskypmxt")
         self.mirostat = 0
         self.mirostatTau = 5.0
         self.mirostatEta = 0.1
         self.adaptiveTarget = -1.0
         self.adaptiveDecay = 0.9
-        self.samplers = "edskypmxt"
         self.grammar = ""
         self.ignoreEOS = false
 
@@ -171,7 +171,7 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
             case "mirostat-ent":
                 mirostatTau = try parseFloat(nextValue(), option: rawName)
             case "samplers", "sampler-seq", "sampling-seq":
-                samplers = try nextValue()
+                samplerKinds = LocalLLMSamplerKind.parse(try nextValue())
             case "adaptive-target":
                 adaptiveTarget = try parseFloat(nextValue(), option: rawName)
             case "adaptive-decay":
@@ -190,6 +190,58 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
             default:
                 throw LocalLLMEngineError.generationFailed("暂不支持的本地 llama.cpp CLI 参数：\(rawName)")
             }
+        }
+    }
+}
+
+enum LocalLLMSamplerKind: Int32, Hashable, Sendable {
+    case penalties = 1
+    case dry = 2
+    case topNSigma = 3
+    case topK = 4
+    case typical = 5
+    case topP = 6
+    case minP = 7
+    case xtc = 8
+    case temperature = 9
+    case adaptive = 10
+
+    static func parse(_ rawValue: String) -> [LocalLLMSamplerKind] {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        if trimmed.contains(";") || trimmed.contains("_") || trimmed.contains("-") {
+            return trimmed
+                .split(separator: ";")
+                .compactMap { kind(named: String($0)) }
+        }
+        return trimmed.compactMap { kind(named: String($0)) }
+    }
+
+    private static func kind(named rawName: String) -> LocalLLMSamplerKind? {
+        switch normalizeOptionName(rawName.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        case "e", "penalties":
+            return .penalties
+        case "d", "dry":
+            return .dry
+        case "s", "top-n-sigma":
+            return .topNSigma
+        case "k", "top-k":
+            return .topK
+        case "y", "typ-p", "typical", "typical-p":
+            return .typical
+        case "p", "top-p", "nucleus":
+            return .topP
+        case "m", "min-p":
+            return .minP
+        case "x", "xtc":
+            return .xtc
+        case "t", "temp", "temperature":
+            return .temperature
+        case "a", "adaptive-p":
+            return .adaptive
+        default:
+            return nil
         }
     }
 }

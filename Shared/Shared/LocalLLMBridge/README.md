@@ -5,7 +5,8 @@
 ## 边界
 
 - `ETOSLocalLLMBridge.h` 是 Swift 可见的稳定 C ABI，只放 POD 结构体、函数指针和 `extern "C"` 函数声明。
-- `ETOSLocalLLMBridge.cpp` 是底层执行器，负责模型加载、聊天模板应用、采样器创建、token/embedding 运行循环和内存释放。
+- `ETOSLocalLLMBridge.cpp` 是底层执行器，只负责模型加载、采样器创建、token/embedding 运行循环和内存释放。
+- `../LocalLLM/LocalLLMChatMessageBuilder.swift` 负责 Prompt 渲染、工具定义 JSON 组装和工具调用解析。
 - `../LocalLLM/LocalLLMGenerationConfig.swift` 负责解析用户输入的高级参数，并映射为 `etos_local_llm_generation_config`。不要把 CLI 字符串解析和大段参数 if-else 塞回 C++。
 - `ETOSGGMLCPUArchQuants.c` 与 `ETOSGGMLCPUArchRepack.cpp` 只用于补齐预编译静态库没有直接产出的 CPU arch 源文件。
 

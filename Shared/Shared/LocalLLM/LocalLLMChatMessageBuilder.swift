@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 将 ELS 聊天消息转换为 llama.cpp chat template API 所需的结构化消息。
+// 将 ELS 聊天消息转换为本地推理 Prompt，并在 Swift 侧解析工具调用。
 // ============================================================================
 
 import Foundation
@@ -72,6 +72,57 @@ public enum LocalLLMChatMessageBuilder {
         }
     }
 
+    public static func prompt(messages: [LocalLLMChatMessage], tools: [LocalLLMToolDefinition]) throws -> String {
+        guard !messages.isEmpty else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
+        }
+
+        var rendered: [String] = []
+        if !tools.isEmpty {
+            rendered.append("<|im_start|>system\n\(toolInstruction(for: tools))<|im_end|>")
+        }
+        for message in messages {
+            let role = message.role.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !role.isEmpty else { continue }
+            var content = message.content
+            if let toolCallsJSON = message.toolCallsJSON, !toolCallsJSON.isEmpty {
+                content = [content, toolCallsJSON]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n")
+            }
+            if role == "tool", let name = message.name {
+                content = "工具 \(name) 返回：\n\(content)"
+            }
+            rendered.append("<|im_start|>\(role)\n\(content)<|im_end|>")
+        }
+        rendered.append("<|im_start|>assistant\n")
+        return rendered.joined(separator: "\n")
+    }
+
+    public static func parseToolCalls(from generatedText: String, tools: [LocalLLMToolDefinition]) -> LocalLLMToolCallParseResult {
+        let trimmed = generatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tools.isEmpty else {
+            return LocalLLMToolCallParseResult(content: generatedText, toolCalls: [])
+        }
+
+        let toolNames = Set(tools.map(\.name))
+        let candidates = jsonCandidates(from: trimmed)
+        for candidate in candidates {
+            guard let data = candidate.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) else {
+                continue
+            }
+            let calls = parseToolCallObjects(from: object, validToolNames: toolNames)
+            if !calls.isEmpty {
+                let content = trimmed.replacingOccurrences(of: candidate, with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return LocalLLMToolCallParseResult(content: content, toolCalls: calls)
+            }
+        }
+        return LocalLLMToolCallParseResult(content: generatedText, toolCalls: [])
+    }
+
     private static func roleName(for role: MessageRole) -> String {
         switch role {
         case .system:
@@ -135,5 +186,112 @@ public enum LocalLLMChatMessageBuilder {
               let data = try? JSONSerialization.data(withJSONObject: objects, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return nil }
         return json
+    }
+
+    private static func toolInstruction(for tools: [LocalLLMToolDefinition]) -> String {
+        let functions = tools.compactMap { tool -> [String: Any]? in
+            let parameters: Any
+            if let data = tool.parametersJSON.data(using: .utf8),
+               let decoded = try? JSONSerialization.jsonObject(with: data) {
+                parameters = decoded
+            } else {
+                parameters = [:]
+            }
+            return [
+                "type": "function",
+                "function": [
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": parameters
+                ]
+            ]
+        }
+
+        let toolsJSON: String
+        if JSONSerialization.isValidJSONObject(functions),
+           let data = try? JSONSerialization.data(withJSONObject: functions, options: [.sortedKeys]),
+           let json = String(data: data, encoding: .utf8) {
+            toolsJSON = json
+        } else {
+            toolsJSON = "[]"
+        }
+        return """
+你可以调用这些工具。需要调用工具时，只输出 JSON：{"tool_calls":[{"name":"工具名","arguments":{}}]}。
+可用工具：
+\(toolsJSON)
+"""
+    }
+
+    private static func jsonCandidates(from text: String) -> [String] {
+        var result: [String] = []
+        let scalars = Array(text.unicodeScalars)
+        for start in scalars.indices where scalars[start] == "{" || scalars[start] == "[" {
+            var depth = 0
+            var inString = false
+            var escaping = false
+            for index in start..<scalars.endIndex {
+                let scalar = scalars[index]
+                if escaping {
+                    escaping = false
+                    continue
+                }
+                if scalar == "\\" {
+                    escaping = true
+                    continue
+                }
+                if scalar == "\"" {
+                    inString.toggle()
+                    continue
+                }
+                guard !inString else { continue }
+                if scalar == "{" || scalar == "[" {
+                    depth += 1
+                } else if scalar == "}" || scalar == "]" {
+                    depth -= 1
+                    if depth == 0 {
+                        result.append(String(String.UnicodeScalarView(scalars[start...index])))
+                        break
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    private static func parseToolCallObjects(from object: Any, validToolNames: Set<String>) -> [InternalToolCall] {
+        let rawCalls: [Any]
+        if let dictionary = object as? [String: Any], let toolCalls = dictionary["tool_calls"] as? [Any] {
+            rawCalls = toolCalls
+        } else if let array = object as? [Any] {
+            rawCalls = array
+        } else {
+            rawCalls = [object]
+        }
+
+        return rawCalls.enumerated().compactMap { index, rawCall in
+            guard let dictionary = rawCall as? [String: Any] else { return nil }
+            let function = dictionary["function"] as? [String: Any]
+            let name = (dictionary["name"] as? String) ?? (function?["name"] as? String) ?? ""
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard validToolNames.contains(trimmedName) else { return nil }
+
+            let rawArguments = dictionary["arguments"] ?? function?["arguments"] ?? [:]
+            let arguments: String
+            if let string = rawArguments as? String {
+                arguments = string
+            } else if JSONSerialization.isValidJSONObject(rawArguments),
+                      let data = try? JSONSerialization.data(withJSONObject: rawArguments, options: [.sortedKeys]),
+                      let json = String(data: data, encoding: .utf8) {
+                arguments = json
+            } else {
+                arguments = "{}"
+            }
+            let id = (dictionary["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return InternalToolCall(
+                id: id?.isEmpty == false ? id! : "local_tool_\(index + 1)",
+                toolName: trimmedName,
+                arguments: arguments
+            )
+        }
     }
 }

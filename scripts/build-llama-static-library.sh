@@ -45,6 +45,7 @@ METAL_ENABLED=ON
 case "$SDK_NAME" in
     watchos*|watchsimulator*) METAL_ENABLED=OFF ;;
 esac
+LLAMA_WARNING_FLAGS="-Wno-ambiguous-macro -Wno-deprecated-declarations -Wno-documentation -Wno-shorten-64-to-32 -Wno-unreachable-code -Wno-unused-function -Wpointer-to-int-cast -Wint-to-pointer-cast"
 
 PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$CMAKE_BUILD_TYPE"
 PRODUCT_LIBRARY="$PRODUCT_DIR/libetos-llama.a"
@@ -66,7 +67,7 @@ case "$SDK_FAMILY" in
         ;;
 esac
 
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY config=$CMAKE_BUILD_TYPE archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY config=$CMAKE_BUILD_TYPE archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
 
 product_matches_archs() {
     [ -f "$PRODUCT_LIBRARY" ] || return 1
@@ -116,7 +117,7 @@ for arch in $REQUESTED_ARCHS; do
     ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY config=$CMAKE_BUILD_TYPE arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY config=$CMAKE_BUILD_TYPE arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] || [ ! -f "$ARCH_PRODUCT_STAMP" ] || [ "$(cat "$ARCH_PRODUCT_STAMP")" != "$ARCH_SIGNATURE" ]; then
         mkdir -p "$BUILD_DIR" "$ARCH_PRODUCT_DIR"
@@ -129,8 +130,8 @@ for arch in $REQUESTED_ARCHS; do
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
             -DCMAKE_C_COMPILER="$CC_PATH" \
             -DCMAKE_CXX_COMPILER="$CXX_PATH" \
-            -DCMAKE_C_FLAGS="-D_DARWIN_C_SOURCE=1" \
-            -DCMAKE_CXX_FLAGS="-D_DARWIN_C_SOURCE=1" \
+            -DCMAKE_C_FLAGS="-D_DARWIN_C_SOURCE=1 $LLAMA_WARNING_FLAGS" \
+            -DCMAKE_CXX_FLAGS="-D_DARWIN_C_SOURCE=1 $LLAMA_WARNING_FLAGS" \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_COMMON=ON \

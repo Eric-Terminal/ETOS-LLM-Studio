@@ -8,14 +8,10 @@
 
 #include "ETOSLocalLLMBridge.h"
 
-#include "chat.h"
-#include "common.h"
 #include "ggml-backend.h"
 #include "llama.h"
-#include "nlohmann/json.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -27,8 +23,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-using json = nlohmann::ordered_json;
 
 namespace {
 
@@ -53,34 +47,6 @@ int32_t fail(const std::string & message, char ** error_message) {
 int32_t thread_count() {
     const int processors = static_cast<int>(std::thread::hardware_concurrency());
     return static_cast<int32_t>(std::max(1, std::min(8, processors > 2 ? processors - 2 : processors)));
-}
-
-std::string trim_copy(const std::string & value) {
-    const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char character) {
-        return std::isspace(character);
-    });
-    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char character) {
-        return std::isspace(character);
-    }).base();
-    if (first >= last) {
-        return {};
-    }
-    return std::string(first, last);
-}
-
-std::string lowercase_copy(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
-        return static_cast<char>(std::tolower(character));
-    });
-    return value;
-}
-
-std::string normalize_option_name(std::string value) {
-    while (!value.empty() && value.front() == '-') {
-        value.erase(value.begin());
-    }
-    std::replace(value.begin(), value.end(), '_', '-');
-    return lowercase_copy(value);
 }
 
 struct local_generation_params {
@@ -113,7 +79,17 @@ struct local_generation_params {
     float mirostat_eta = 0.1f;
     float adaptive_target = -1.0f;
     float adaptive_decay = 0.9f;
-    std::string samplers = "edskypmxt";
+    std::vector<int32_t> sampler_kinds = {
+        ETOS_LOCAL_LLM_SAMPLER_PENALTIES,
+        ETOS_LOCAL_LLM_SAMPLER_DRY,
+        ETOS_LOCAL_LLM_SAMPLER_TOP_N_SIGMA,
+        ETOS_LOCAL_LLM_SAMPLER_TOP_K,
+        ETOS_LOCAL_LLM_SAMPLER_TYPICAL,
+        ETOS_LOCAL_LLM_SAMPLER_TOP_P,
+        ETOS_LOCAL_LLM_SAMPLER_MIN_P,
+        ETOS_LOCAL_LLM_SAMPLER_XTC,
+        ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE,
+    };
     std::string grammar;
     bool ignore_eos = false;
 };
@@ -155,7 +131,10 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
     params.mirostat_eta = config.mirostat_eta;
     params.adaptive_target = config.adaptive_target;
     params.adaptive_decay = config.adaptive_decay;
-    params.samplers = config.samplers ? config.samplers : "";
+    params.sampler_kinds.clear();
+    for (int32_t index = 0; config.sampler_kinds && index < config.sampler_kind_count; ++index) {
+        params.sampler_kinds.push_back(config.sampler_kinds[index]);
+    }
     params.grammar = config.grammar ? config.grammar : "";
     params.ignore_eos = config.ignore_eos != 0;
     return params;
@@ -188,32 +167,18 @@ llama_sampler * create_sampler(
         return sampler;
     }
 
-    const bool looks_like_names = params.samplers.find(';') != std::string::npos
-        || params.samplers.find('_') != std::string::npos
-        || params.samplers.find('-') != std::string::npos;
-    std::vector<std::string> samplers = looks_like_names
-        ? string_split(params.samplers, ";")
-        : std::vector<std::string>();
-    if (!looks_like_names) {
-        for (char sampler_name : params.samplers) {
-            samplers.push_back(std::string(1, sampler_name));
-        }
-    }
-
     bool uses_terminal_sampler = false;
-    for (std::string sampler_name : samplers) {
-        sampler_name = normalize_option_name(trim_copy(sampler_name));
-        if (sampler_name.empty()) {
-            continue;
-        }
-        if (sampler_name == "e" || sampler_name == "penalties") {
+    for (const int32_t sampler_kind : params.sampler_kinds) {
+        switch (sampler_kind) {
+        case ETOS_LOCAL_LLM_SAMPLER_PENALTIES:
             llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
                 params.repeat_last_n,
                 params.repeat_penalty,
                 params.frequency_penalty,
                 params.presence_penalty
             ));
-        } else if (sampler_name == "d" || sampler_name == "dry") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_DRY: {
             std::vector<const char *> breakers;
             breakers.reserve(params.dry_sequence_breakers.size());
             for (const std::string & breaker : params.dry_sequence_breakers) {
@@ -229,22 +194,34 @@ llama_sampler * create_sampler(
                 breakers.data(),
                 breakers.size()
             ));
-        } else if (sampler_name == "s" || sampler_name == "top-n-sigma") {
+            break;
+        }
+        case ETOS_LOCAL_LLM_SAMPLER_TOP_N_SIGMA:
             llama_sampler_chain_add(sampler, llama_sampler_init_top_n_sigma(params.top_n_sigma));
-        } else if (sampler_name == "k" || sampler_name == "top-k") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_TOP_K:
             llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.top_k));
-        } else if (sampler_name == "y" || sampler_name == "typ-p" || sampler_name == "typical" || sampler_name == "typical-p") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_TYPICAL:
             llama_sampler_chain_add(sampler, llama_sampler_init_typical(params.typical_p, min_keep));
-        } else if (sampler_name == "p" || sampler_name == "top-p" || sampler_name == "nucleus") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_TOP_P:
             llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.top_p, min_keep));
-        } else if (sampler_name == "m" || sampler_name == "min-p") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_MIN_P:
             llama_sampler_chain_add(sampler, llama_sampler_init_min_p(params.min_p, min_keep));
-        } else if (sampler_name == "x" || sampler_name == "xtc") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_XTC:
             llama_sampler_chain_add(sampler, llama_sampler_init_xtc(params.xtc_probability, params.xtc_threshold, min_keep, params.seed));
-        } else if (sampler_name == "t" || sampler_name == "temp" || sampler_name == "temperature") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE:
             llama_sampler_chain_add(sampler, llama_sampler_init_temp_ext(params.temperature, params.dynatemp_range, params.dynatemp_exponent));
-        } else if (sampler_name == "a" || sampler_name == "adaptive-p") {
+            break;
+        case ETOS_LOCAL_LLM_SAMPLER_ADAPTIVE:
             uses_terminal_sampler = true;
+            break;
+        default:
+            break;
         }
     }
 
@@ -326,119 +303,16 @@ void normalize_embedding(const float * input, float * output, int32_t dimension)
     }
 }
 
-std::string apply_chat_template(
-    const llama_model * model,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
-    common_chat_parser_params * parser_params,
-    char ** error_message
-) {
-    if (!messages || message_count <= 0) {
-        fail("本地对话消息为空。", error_message);
-        return {};
-    }
-
-    json chat_messages = json::array();
-    for (int32_t index = 0; index < message_count; ++index) {
-        const char * role = messages[index].role;
-        const char * content = messages[index].content;
-        if (!role) {
-            continue;
-        }
-
-        json message = {
-            { "role", role },
-        };
-        if (content) {
-            message["content"] = content;
-        }
-        if (messages[index].name && messages[index].name[0] != '\0') {
-            message["name"] = messages[index].name;
-        }
-        if (messages[index].tool_call_id && messages[index].tool_call_id[0] != '\0') {
-            message["tool_call_id"] = messages[index].tool_call_id;
-        }
-        if (messages[index].tool_calls_json && messages[index].tool_calls_json[0] != '\0') {
-            try {
-                message["tool_calls"] = json::parse(messages[index].tool_calls_json);
-            } catch (const std::exception & e) {
-                fail(std::string("本地工具调用历史 JSON 无效：") + e.what(), error_message);
-                return {};
-            }
-        }
-        chat_messages.push_back(std::move(message));
-    }
-
-    if (chat_messages.empty()) {
-        fail("本地对话消息为空。", error_message);
-        return {};
-    }
-
-    json tool_definitions = json::array();
-    for (int32_t index = 0; tools && index < tool_count; ++index) {
-        const char * name = tools[index].name;
-        if (!name || name[0] == '\0') {
-            continue;
-        }
-        json parameters = json::object();
-        if (tools[index].parameters_json && tools[index].parameters_json[0] != '\0') {
-            try {
-                parameters = json::parse(tools[index].parameters_json);
-            } catch (const std::exception & e) {
-                fail(std::string("本地工具参数 JSON Schema 无效：") + e.what(), error_message);
-                return {};
-            }
-        }
-        tool_definitions.push_back({
-            { "type", "function" },
-            { "function", {
-                { "name", name },
-                { "description", tools[index].description ? tools[index].description : "" },
-                { "parameters", parameters },
-            } },
-        });
-    }
-
-    try {
-        auto templates = common_chat_templates_init(model, "");
-        common_chat_templates_inputs inputs;
-        inputs.messages = common_chat_msgs_parse_oaicompat(chat_messages);
-        if (!tool_definitions.empty()) {
-            inputs.tools = common_chat_tools_parse_oaicompat(tool_definitions);
-            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
-            inputs.parallel_tool_calls = true;
-        }
-        common_chat_params params = common_chat_templates_apply(templates.get(), inputs);
-        if (parser_params) {
-            *parser_params = common_chat_parser_params(params);
-            common_peg_arena parser;
-            parser.load(params.parser);
-            parser_params->parser = std::move(parser);
-            parser_params->reasoning_format = COMMON_REASONING_FORMAT_NONE;
-        }
-        return params.prompt;
-    } catch (const std::exception & e) {
-        fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
-        return {};
-    }
-}
-
 int32_t generate(
     const char * model_path,
     const char * prompt,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
     const etos_local_llm_generation_config * config,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
 ) {
-    if (!model_path || (!prompt && (!messages || message_count <= 0))) {
+    if (!model_path || !prompt || prompt[0] == '\0') {
         return fail("本地推理参数无效。", error_message);
     }
     if (!output_text && !token_callback) {
@@ -468,24 +342,6 @@ int32_t generate(
     }
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
-    std::string templated_prompt;
-    if (!prompt) {
-        templated_prompt = apply_chat_template(
-            model,
-            messages,
-            message_count,
-            tools,
-            tool_count,
-            nullptr,
-            error_message
-        );
-        if (templated_prompt.empty()) {
-            llama_model_free(model);
-            return -1;
-        }
-        prompt = templated_prompt.c_str();
-    }
-
     std::vector<llama_token> prompt_tokens = tokenize(vocab, prompt);
     if (prompt_tokens.empty()) {
         llama_model_free(model);
@@ -692,61 +548,6 @@ int32_t embed(
     return 0;
 }
 
-int32_t parse_tool_calls(
-    const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
-    const char * generated_text,
-    std::string * content,
-    std::vector<common_chat_tool_call> * tool_calls,
-    char ** error_message
-) {
-    if (!model_path || !messages || message_count <= 0 || !generated_text || !content || !tool_calls) {
-        return fail("本地工具调用解析参数无效。", error_message);
-    }
-
-    std::call_once(backend_init_once, [] {
-        llama_backend_init();
-        ggml_backend_load_all();
-    });
-
-    llama_model_params model_params = llama_model_default_params();
-    model_params.n_gpu_layers = 0;
-
-    llama_model * model = llama_model_load_from_file(model_path, model_params);
-    if (!model) {
-        return fail("无法加载本地模型权重以解析工具调用。", error_message);
-    }
-
-    common_chat_parser_params parser_params;
-    std::string prompt = apply_chat_template(
-        model,
-        messages,
-        message_count,
-        tools,
-        tool_count,
-        &parser_params,
-        error_message
-    );
-    llama_model_free(model);
-    if (prompt.empty()) {
-        return -1;
-    }
-
-    try {
-        common_chat_msg parsed = common_chat_parse(generated_text, false, parser_params);
-        *content = parsed.content;
-        *tool_calls = parsed.tool_calls;
-        return 0;
-    } catch (const std::exception &) {
-        content->assign(generated_text);
-        tool_calls->clear();
-        return 0;
-    }
-}
-
 } // namespace
 
 int32_t etos_local_llm_generate(
@@ -770,52 +571,6 @@ int32_t etos_local_llm_generate(
     const int32_t status = generate(
         model_path,
         prompt,
-        nullptr,
-        0,
-        nullptr,
-        0,
-        config,
-        &response,
-        nullptr,
-        nullptr,
-        error_message
-    );
-    if (status != 0) {
-        return status;
-    }
-
-    *output = copy_string(response);
-    return *output ? 0 : fail("本地模型输出内存分配失败。", error_message);
-}
-
-int32_t etos_local_llm_generate_chat(
-    const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
-    const etos_local_llm_generation_config * config,
-    char ** output,
-    char ** error_message
-) {
-    if (output) {
-        *output = nullptr;
-    }
-    if (error_message) {
-        *error_message = nullptr;
-    }
-    if (!output) {
-        return fail("本地推理参数无效。", error_message);
-    }
-
-    std::string response;
-    const int32_t status = generate(
-        model_path,
-        nullptr,
-        messages,
-        message_count,
-        tools,
-        tool_count,
         config,
         &response,
         nullptr,
@@ -844,39 +599,6 @@ int32_t etos_local_llm_generate_stream(
     return generate(
         model_path,
         prompt,
-        nullptr,
-        0,
-        nullptr,
-        0,
-        config,
-        nullptr,
-        token_callback,
-        user_data,
-        error_message
-    );
-}
-
-int32_t etos_local_llm_generate_chat_stream(
-    const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
-    const etos_local_llm_generation_config * config,
-    etos_local_llm_token_callback token_callback,
-    void * user_data,
-    char ** error_message
-) {
-    if (error_message) {
-        *error_message = nullptr;
-    }
-    return generate(
-        model_path,
-        nullptr,
-        messages,
-        message_count,
-        tools,
-        tool_count,
         config,
         nullptr,
         token_callback,
@@ -938,98 +660,10 @@ int32_t etos_local_llm_embed(
     return 0;
 }
 
-int32_t etos_local_llm_parse_tool_calls(
-    const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
-    const char * generated_text,
-    char ** content,
-    etos_local_llm_tool_call ** tool_calls,
-    int32_t * tool_call_count,
-    char ** error_message
-) {
-    if (content) {
-        *content = nullptr;
-    }
-    if (tool_calls) {
-        *tool_calls = nullptr;
-    }
-    if (tool_call_count) {
-        *tool_call_count = 0;
-    }
-    if (error_message) {
-        *error_message = nullptr;
-    }
-    if (!content || !tool_calls || !tool_call_count) {
-        return fail("本地工具调用解析参数无效。", error_message);
-    }
-
-    std::string parsed_content;
-    std::vector<common_chat_tool_call> parsed_tool_calls;
-    const int32_t status = parse_tool_calls(
-        model_path,
-        messages,
-        message_count,
-        tools,
-        tool_count,
-        generated_text,
-        &parsed_content,
-        &parsed_tool_calls,
-        error_message
-    );
-    if (status != 0) {
-        return status;
-    }
-
-    *content = copy_string(parsed_content);
-    if (!*content) {
-        return fail("本地工具调用正文内存分配失败。", error_message);
-    }
-
-    if (parsed_tool_calls.empty()) {
-        return 0;
-    }
-
-    etos_local_llm_tool_call * copied_calls = static_cast<etos_local_llm_tool_call *>(
-        std::calloc(parsed_tool_calls.size(), sizeof(etos_local_llm_tool_call))
-    );
-    if (!copied_calls) {
-        return fail("本地工具调用内存分配失败。", error_message);
-    }
-
-    for (size_t index = 0; index < parsed_tool_calls.size(); ++index) {
-        copied_calls[index].id = copy_string(parsed_tool_calls[index].id);
-        copied_calls[index].name = copy_string(parsed_tool_calls[index].name);
-        copied_calls[index].arguments = copy_string(parsed_tool_calls[index].arguments);
-        if (!copied_calls[index].id || !copied_calls[index].name || !copied_calls[index].arguments) {
-            etos_local_llm_free_tool_calls(copied_calls, static_cast<int32_t>(parsed_tool_calls.size()));
-            return fail("本地工具调用内存分配失败。", error_message);
-        }
-    }
-
-    *tool_calls = copied_calls;
-    *tool_call_count = static_cast<int32_t>(parsed_tool_calls.size());
-    return 0;
-}
-
 void etos_local_llm_free(char * pointer) {
     std::free(pointer);
 }
 
 void etos_local_llm_free_float(float * pointer) {
-    std::free(pointer);
-}
-
-void etos_local_llm_free_tool_calls(etos_local_llm_tool_call * pointer, int32_t count) {
-    if (!pointer) {
-        return;
-    }
-    for (int32_t index = 0; index < count; ++index) {
-        std::free(pointer[index].id);
-        std::free(pointer[index].name);
-        std::free(pointer[index].arguments);
-    }
     std::free(pointer);
 }

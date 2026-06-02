@@ -127,12 +127,10 @@ public final class LocalLLMEngine: @unchecked Sendable {
             throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
         }
 
-        return try await Task.detached(priority: .userInitiated) {
-            try LocalLLMBridge.parseToolCalls(
+        return await Task.detached(priority: .userInitiated) {
+            LocalLLMBridge.parseToolCalls(
                 from: generatedText,
-                messages: messages,
-                tools: tools,
-                modelPath: modelURL.path
+                tools: tools
             )
         }.value
     }
@@ -168,27 +166,21 @@ private enum LocalLLMBridge {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
         }
 
+        let prompt = try LocalLLMChatMessageBuilder.prompt(messages: messages, tools: tools)
         var outputPointer: UnsafeMutablePointer<CChar>?
         var errorPointer: UnsafeMutablePointer<CChar>?
         let generationConfig = try LocalLLMGenerationConfig(options: options)
         let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
-        let preparedMessages = PreparedLocalLLMChatMessages(messages)
-        let preparedTools = PreparedLocalLLMTools(tools)
         let status = modelPath.withCString { modelPathCString in
-            preparedMessages.withUnsafeBufferPointer { messagesPointer in
-                preparedTools.withUnsafeBufferPointer { toolsPointer in
-                    preparedConfig.withUnsafePointer { configPointer in
-                        etos_local_llm_generate_chat(
-                            modelPathCString,
-                            messagesPointer.baseAddress,
-                            Int32(messagesPointer.count),
-                            toolsPointer.baseAddress,
-                            Int32(toolsPointer.count),
-                            configPointer,
-                            &outputPointer,
-                            &errorPointer
-                        )
-                    }
+            prompt.withCString { promptCString in
+                preparedConfig.withUnsafePointer { configPointer in
+                    etos_local_llm_generate(
+                        modelPathCString,
+                        promptCString,
+                        configPointer,
+                        &outputPointer,
+                        &errorPointer
+                    )
                 }
             }
         }
@@ -215,6 +207,7 @@ private enum LocalLLMBridge {
         options: LocalLLMGenerationOptions
     ) throws -> AsyncThrowingStream<String, Error> {
         let generationConfig = try LocalLLMGenerationConfig(options: options)
+        let prompt = try LocalLLMChatMessageBuilder.prompt(messages: messages, tools: tools)
         return AsyncThrowingStream<String, Error> { continuation in
             guard !messages.isEmpty else {
                 continuation.finish(throwing: LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages")))
@@ -235,24 +228,17 @@ private enum LocalLLMBridge {
                 var errorPointer: UnsafeMutablePointer<CChar>?
                 do {
                     let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
-                    let preparedMessages = PreparedLocalLLMChatMessages(messages)
-                    let preparedTools = PreparedLocalLLMTools(tools)
                     let status = modelPath.withCString { modelPathCString in
-                        preparedMessages.withUnsafeBufferPointer { messagesPointer in
-                            preparedTools.withUnsafeBufferPointer { toolsPointer in
-                                preparedConfig.withUnsafePointer { configPointer in
-                                    etos_local_llm_generate_chat_stream(
-                                        modelPathCString,
-                                        messagesPointer.baseAddress,
-                                        Int32(messagesPointer.count),
-                                        toolsPointer.baseAddress,
-                                        Int32(toolsPointer.count),
-                                        configPointer,
-                                        localLLMStreamCallback,
-                                        statePointer,
-                                        &errorPointer
-                                    )
-                                }
+                        prompt.withCString { promptCString in
+                            preparedConfig.withUnsafePointer { configPointer in
+                                etos_local_llm_generate_stream(
+                                    modelPathCString,
+                                    promptCString,
+                                    configPointer,
+                                    localLLMStreamCallback,
+                                    statePointer,
+                                    &errorPointer
+                                )
                             }
                         }
                     }
@@ -277,71 +263,9 @@ private enum LocalLLMBridge {
 
     static func parseToolCalls(
         from generatedText: String,
-        messages: [LocalLLMChatMessage],
-        tools: [LocalLLMToolDefinition],
-        modelPath: String
-    ) throws -> LocalLLMToolCallParseResult {
-        guard !messages.isEmpty else {
-            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
-        }
-
-        var contentPointer: UnsafeMutablePointer<CChar>?
-        var callsPointer: UnsafeMutablePointer<ETOSLocalLLMToolCall>?
-        var callCount: Int32 = 0
-        var errorPointer: UnsafeMutablePointer<CChar>?
-        let preparedMessages = PreparedLocalLLMChatMessages(messages)
-        let preparedTools = PreparedLocalLLMTools(tools)
-        let status = modelPath.withCString { modelPathCString in
-            generatedText.withCString { generatedTextCString in
-                preparedMessages.withUnsafeBufferPointer { messagesPointer in
-                    preparedTools.withUnsafeBufferPointer { toolsPointer in
-                        etos_local_llm_parse_tool_calls(
-                            modelPathCString,
-                            messagesPointer.baseAddress,
-                            Int32(messagesPointer.count),
-                            toolsPointer.baseAddress,
-                            Int32(toolsPointer.count),
-                            generatedTextCString,
-                            &contentPointer,
-                            &callsPointer,
-                            &callCount,
-                            &errorPointer
-                        )
-                    }
-                }
-            }
-        }
-        defer {
-            if let contentPointer {
-                etos_local_llm_free(contentPointer)
-            }
-            if let callsPointer {
-                etos_local_llm_free_tool_calls(callsPointer, callCount)
-            }
-            if let errorPointer {
-                etos_local_llm_free(errorPointer)
-            }
-        }
-
-        guard status == 0 else {
-            let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
-            throw LocalLLMEngineError.generationFailed(message)
-        }
-
-        let content = contentPointer.map { String(cString: $0) } ?? generatedText
-        let callsBuffer = UnsafeBufferPointer(start: callsPointer, count: Int(callCount))
-        let calls = callsBuffer.enumerated().compactMap { index, call -> InternalToolCall? in
-            guard let namePointer = call.name else { return nil }
-            let name = String(cString: namePointer).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return nil }
-            let id = call.id.map { String(cString: $0) }.flatMap { value in
-                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : trimmed
-            } ?? "local_tool_\(index + 1)"
-            let arguments = call.arguments.map { String(cString: $0) } ?? "{}"
-            return InternalToolCall(id: id, toolName: name, arguments: arguments)
-        }
-        return LocalLLMToolCallParseResult(content: content, toolCalls: calls)
+        tools: [LocalLLMToolDefinition]
+    ) -> LocalLLMToolCallParseResult {
+        LocalLLMChatMessageBuilder.parseToolCalls(from: generatedText, tools: tools)
     }
 
     static func embed(
@@ -409,26 +333,6 @@ private enum LocalLLMBridge {
     }
 }
 
-private struct ETOSLocalLLMChatMessage {
-    var role: UnsafePointer<CChar>?
-    var content: UnsafePointer<CChar>?
-    var name: UnsafePointer<CChar>?
-    var toolCallID: UnsafePointer<CChar>?
-    var toolCallsJSON: UnsafePointer<CChar>?
-}
-
-private struct ETOSLocalLLMTool {
-    var name: UnsafePointer<CChar>?
-    var description: UnsafePointer<CChar>?
-    var parametersJSON: UnsafePointer<CChar>?
-}
-
-private struct ETOSLocalLLMToolCall {
-    var id: UnsafeMutablePointer<CChar>?
-    var name: UnsafeMutablePointer<CChar>?
-    var arguments: UnsafeMutablePointer<CChar>?
-}
-
 private struct ETOSLocalLLMGenerationConfig {
     var contextSize: Int32
     var maxOutputTokens: Int32
@@ -455,12 +359,13 @@ private struct ETOSLocalLLMGenerationConfig {
     var dryPenaltyLastN: Int32
     var drySequenceBreakers: UnsafePointer<UnsafePointer<CChar>?>?
     var drySequenceBreakerCount: Int32
+    var samplerKinds: UnsafePointer<Int32>?
+    var samplerKindCount: Int32
     var mirostat: Int32
     var mirostatTau: Float
     var mirostatEta: Float
     var adaptiveTarget: Float
     var adaptiveDecay: Float
-    var samplers: UnsafePointer<CChar>?
     var grammar: UnsafePointer<CChar>?
     var ignoreEOS: Int32
 }
@@ -468,18 +373,17 @@ private struct ETOSLocalLLMGenerationConfig {
 private final class PreparedLocalLLMGenerationConfig {
     private let drySequenceBreakerPointers: [UnsafeMutablePointer<CChar>]
     private let bridgedDrySequenceBreakers: [UnsafePointer<CChar>?]
-    private let samplersPointer: UnsafeMutablePointer<CChar>
+    private let bridgedSamplerKinds: [Int32]
     private let grammarPointer: UnsafeMutablePointer<CChar>
     private var bridgedConfig: ETOSLocalLLMGenerationConfig
 
     init(_ config: LocalLLMGenerationConfig) throws {
         let drySequenceBreakerPointers = try config.drySequenceBreakers.map(Self.duplicate)
-        let samplersPointer = try Self.duplicate(config.samplers)
         let grammarPointer = try Self.duplicate(config.grammar)
 
         self.drySequenceBreakerPointers = drySequenceBreakerPointers
         self.bridgedDrySequenceBreakers = drySequenceBreakerPointers.map { UnsafePointer($0) }
-        self.samplersPointer = samplersPointer
+        self.bridgedSamplerKinds = config.samplerKinds.map(\.rawValue)
         self.grammarPointer = grammarPointer
         self.bridgedConfig = ETOSLocalLLMGenerationConfig(
             contextSize: config.contextSize,
@@ -507,12 +411,13 @@ private final class PreparedLocalLLMGenerationConfig {
             dryPenaltyLastN: config.dryPenaltyLastN,
             drySequenceBreakers: nil,
             drySequenceBreakerCount: Int32(drySequenceBreakerPointers.count),
+            samplerKinds: nil,
+            samplerKindCount: Int32(config.samplerKinds.count),
             mirostat: config.mirostat,
             mirostatTau: config.mirostatTau,
             mirostatEta: config.mirostatEta,
             adaptiveTarget: config.adaptiveTarget,
             adaptiveDecay: config.adaptiveDecay,
-            samplers: UnsafePointer(samplersPointer),
             grammar: UnsafePointer(grammarPointer),
             ignoreEOS: config.ignoreEOS ? 1 : 0
         )
@@ -520,7 +425,6 @@ private final class PreparedLocalLLMGenerationConfig {
 
     deinit {
         drySequenceBreakerPointers.forEach { free($0) }
-        free(samplersPointer)
         free(grammarPointer)
     }
 
@@ -528,9 +432,13 @@ private final class PreparedLocalLLMGenerationConfig {
         _ body: (UnsafePointer<ETOSLocalLLMGenerationConfig>) throws -> Result
     ) rethrows -> Result {
         try bridgedDrySequenceBreakers.withUnsafeBufferPointer { breakersPointer in
-            bridgedConfig.drySequenceBreakers = breakersPointer.baseAddress
-            bridgedConfig.drySequenceBreakerCount = Int32(breakersPointer.count)
-            return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+            try bridgedSamplerKinds.withUnsafeBufferPointer { samplerPointer in
+                bridgedConfig.drySequenceBreakers = breakersPointer.baseAddress
+                bridgedConfig.drySequenceBreakerCount = Int32(breakersPointer.count)
+                bridgedConfig.samplerKinds = samplerPointer.baseAddress
+                bridgedConfig.samplerKindCount = Int32(samplerPointer.count)
+                return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+            }
         }
     }
 
@@ -539,126 +447,6 @@ private final class PreparedLocalLLMGenerationConfig {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地推理配置内存分配失败。", comment: "Local LLM config allocation failed"))
         }
         return pointer
-    }
-}
-
-private final class PreparedLocalLLMChatMessages {
-    private let rolePointers: [UnsafeMutablePointer<CChar>]
-    private let contentPointers: [UnsafeMutablePointer<CChar>]
-    private let namePointers: [UnsafeMutablePointer<CChar>]
-    private let toolCallIDPointers: [UnsafeMutablePointer<CChar>]
-    private let toolCallsJSONPointers: [UnsafeMutablePointer<CChar>]
-    private let bridgedMessages: [ETOSLocalLLMChatMessage]
-
-    init(_ messages: [LocalLLMChatMessage]) {
-        var rolePointers: [UnsafeMutablePointer<CChar>] = []
-        var contentPointers: [UnsafeMutablePointer<CChar>] = []
-        var namePointers: [UnsafeMutablePointer<CChar>] = []
-        var toolCallIDPointers: [UnsafeMutablePointer<CChar>] = []
-        var toolCallsJSONPointers: [UnsafeMutablePointer<CChar>] = []
-        var bridgedMessages: [ETOSLocalLLMChatMessage] = []
-
-        for message in messages {
-            guard let role = strdup(message.role) else { continue }
-            guard let content = strdup(message.content) else {
-                free(role)
-                continue
-            }
-            let name = message.name.flatMap { strdup($0) }
-            let toolCallID = message.toolCallID.flatMap { strdup($0) }
-            let toolCallsJSON = message.toolCallsJSON.flatMap { strdup($0) }
-            rolePointers.append(role)
-            contentPointers.append(content)
-            if let name {
-                namePointers.append(name)
-            }
-            if let toolCallID {
-                toolCallIDPointers.append(toolCallID)
-            }
-            if let toolCallsJSON {
-                toolCallsJSONPointers.append(toolCallsJSON)
-            }
-            bridgedMessages.append(ETOSLocalLLMChatMessage(
-                role: UnsafePointer(role),
-                content: UnsafePointer(content),
-                name: name.map { UnsafePointer($0) },
-                toolCallID: toolCallID.map { UnsafePointer($0) },
-                toolCallsJSON: toolCallsJSON.map { UnsafePointer($0) }
-            ))
-        }
-
-        self.rolePointers = rolePointers
-        self.contentPointers = contentPointers
-        self.namePointers = namePointers
-        self.toolCallIDPointers = toolCallIDPointers
-        self.toolCallsJSONPointers = toolCallsJSONPointers
-        self.bridgedMessages = bridgedMessages
-    }
-
-    deinit {
-        rolePointers.forEach { free($0) }
-        contentPointers.forEach { free($0) }
-        namePointers.forEach { free($0) }
-        toolCallIDPointers.forEach { free($0) }
-        toolCallsJSONPointers.forEach { free($0) }
-    }
-
-    func withUnsafeBufferPointer<Result>(
-        _ body: (UnsafeBufferPointer<ETOSLocalLLMChatMessage>) throws -> Result
-    ) rethrows -> Result {
-        try bridgedMessages.withUnsafeBufferPointer(body)
-    }
-}
-
-private final class PreparedLocalLLMTools {
-    private let namePointers: [UnsafeMutablePointer<CChar>]
-    private let descriptionPointers: [UnsafeMutablePointer<CChar>]
-    private let parametersJSONPointers: [UnsafeMutablePointer<CChar>]
-    private let bridgedTools: [ETOSLocalLLMTool]
-
-    init(_ tools: [LocalLLMToolDefinition]) {
-        var namePointers: [UnsafeMutablePointer<CChar>] = []
-        var descriptionPointers: [UnsafeMutablePointer<CChar>] = []
-        var parametersJSONPointers: [UnsafeMutablePointer<CChar>] = []
-        var bridgedTools: [ETOSLocalLLMTool] = []
-
-        for tool in tools {
-            guard let name = strdup(tool.name) else { continue }
-            guard let description = strdup(tool.description) else {
-                free(name)
-                continue
-            }
-            guard let parametersJSON = strdup(tool.parametersJSON) else {
-                free(name)
-                free(description)
-                continue
-            }
-            namePointers.append(name)
-            descriptionPointers.append(description)
-            parametersJSONPointers.append(parametersJSON)
-            bridgedTools.append(ETOSLocalLLMTool(
-                name: UnsafePointer(name),
-                description: UnsafePointer(description),
-                parametersJSON: UnsafePointer(parametersJSON)
-            ))
-        }
-
-        self.namePointers = namePointers
-        self.descriptionPointers = descriptionPointers
-        self.parametersJSONPointers = parametersJSONPointers
-        self.bridgedTools = bridgedTools
-    }
-
-    deinit {
-        namePointers.forEach { free($0) }
-        descriptionPointers.forEach { free($0) }
-        parametersJSONPointers.forEach { free($0) }
-    }
-
-    func withUnsafeBufferPointer<Result>(
-        _ body: (UnsafeBufferPointer<ETOSLocalLLMTool>) throws -> Result
-    ) rethrows -> Result {
-        try bridgedTools.withUnsafeBufferPointer(body)
     }
 }
 
@@ -711,35 +499,10 @@ private func etos_local_llm_generate(
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 
-@_silgen_name("etos_local_llm_generate_chat")
-private func etos_local_llm_generate_chat(
-    _ modelPath: UnsafePointer<CChar>,
-    _ messages: UnsafePointer<ETOSLocalLLMChatMessage>?,
-    _ messageCount: Int32,
-    _ tools: UnsafePointer<ETOSLocalLLMTool>?,
-    _ toolCount: Int32,
-    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
-    _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32
-
 @_silgen_name("etos_local_llm_generate_stream")
 private func etos_local_llm_generate_stream(
     _ modelPath: UnsafePointer<CChar>,
     _ prompt: UnsafePointer<CChar>,
-    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
-    _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
-    _ userData: UnsafeMutableRawPointer?,
-    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32
-
-@_silgen_name("etos_local_llm_generate_chat_stream")
-private func etos_local_llm_generate_chat_stream(
-    _ modelPath: UnsafePointer<CChar>,
-    _ messages: UnsafePointer<ETOSLocalLLMChatMessage>?,
-    _ messageCount: Int32,
-    _ tools: UnsafePointer<ETOSLocalLLMTool>?,
-    _ toolCount: Int32,
     _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
@@ -759,25 +522,8 @@ private func etos_local_llm_embed(
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 
-@_silgen_name("etos_local_llm_parse_tool_calls")
-private func etos_local_llm_parse_tool_calls(
-    _ modelPath: UnsafePointer<CChar>,
-    _ messages: UnsafePointer<ETOSLocalLLMChatMessage>?,
-    _ messageCount: Int32,
-    _ tools: UnsafePointer<ETOSLocalLLMTool>?,
-    _ toolCount: Int32,
-    _ generatedText: UnsafePointer<CChar>,
-    _ content: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-    _ toolCalls: UnsafeMutablePointer<UnsafeMutablePointer<ETOSLocalLLMToolCall>?>,
-    _ toolCallCount: UnsafeMutablePointer<Int32>,
-    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32
-
 @_silgen_name("etos_local_llm_free")
 private func etos_local_llm_free(_ pointer: UnsafeMutablePointer<CChar>)
 
 @_silgen_name("etos_local_llm_free_float")
 private func etos_local_llm_free_float(_ pointer: UnsafeMutablePointer<Float>)
-
-@_silgen_name("etos_local_llm_free_tool_calls")
-private func etos_local_llm_free_tool_calls(_ pointer: UnsafeMutablePointer<ETOSLocalLLMToolCall>, _ count: Int32)

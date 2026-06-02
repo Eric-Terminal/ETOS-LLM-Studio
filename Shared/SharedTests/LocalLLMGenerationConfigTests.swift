@@ -39,7 +39,7 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.frequencyPenalty == 0.3)
         #expect(config.presencePenalty == 0.4)
         #expect(config.drySequenceBreakers == ["<stop>"])
-        #expect(config.samplers == "kpt")
+        #expect(config.samplerKinds == [.topK, .topP, .temperature])
         #expect(config.ignoreEOS)
     }
 
