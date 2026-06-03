@@ -20,21 +20,25 @@ struct RewriteMessageView: View {
 
     var body: some View {
         Form {
-            Section(NSLocalizedString("重写要求", comment: "Message rewrite instruction section")) {
+            Section {
                 TextField(
                     NSLocalizedString("输入重写要求", comment: "Message rewrite input placeholder"),
                     text: $instruction.watchKeyboardNewlineBinding(),
                     axis: .vertical
                 )
                 .lineLimit(4...10)
+            } header: {
+                Text(NSLocalizedString("重写要求", comment: "Message rewrite instruction section"))
             } footer: {
                 Text(NSLocalizedString("只会发送当前回复和重写要求。", comment: "Watch message rewrite footer"))
             }
 
-            Section(NSLocalizedString("原文预览", comment: "Message rewrite original preview section")) {
+            Section {
                 Text(message.content)
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
+            } header: {
+                Text(NSLocalizedString("原文预览", comment: "Message rewrite original preview section"))
             }
 
             Button(NSLocalizedString("重写", comment: "Submit message rewrite")) {

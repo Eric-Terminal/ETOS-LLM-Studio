@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import Shared
 
 extension ChatViewModel {
     enum ImageGenerationFeedbackPhase {
