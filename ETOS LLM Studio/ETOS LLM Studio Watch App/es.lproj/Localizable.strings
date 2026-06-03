@@ -3595,6 +3595,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "费用" = "Coste";
 "费用 %@" = "Coste %@";
 "Token %@ · 费用 %@" = "Tokens %@ · coste %@";
+"Token %@" = "Tokens %@";
 "估算费用" = "Coste estimado";
 "阶梯依据" = "Base del tramo";
 "%d tokens" = "%d tokens";

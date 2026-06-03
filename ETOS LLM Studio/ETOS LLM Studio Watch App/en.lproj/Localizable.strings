@@ -3536,6 +3536,7 @@
 "费用" = "Cost";
 "费用 %@" = "Cost %@";
 "Token %@ · 费用 %@" = "%@ tokens · Cost %@";
+"Token %@" = "%@ tokens";
 "估算费用" = "Estimated Cost";
 "阶梯依据" = "Tier Basis";
 "%d tokens" = "%d tokens";

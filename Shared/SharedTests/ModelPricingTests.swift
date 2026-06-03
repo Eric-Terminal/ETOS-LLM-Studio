@@ -21,7 +21,7 @@ struct ModelPricingTests {
         #expect(estimate == nil)
     }
 
-    @Test("基础价格会累计输入输出和缓存费用")
+    @Test("基础价格会按未命中输入输出和缓存费用累计")
     func basePricingAddsAllConfiguredComponents() throws {
         let usage = MessageTokenUsage(
             promptTokens: 5_000,
@@ -39,18 +39,19 @@ struct ModelPricingTests {
 
         let estimate = try #require(ModelCostCalculator.estimateCost(usage: usage, pricing: pricing))
 
-        #expect(estimate.tierBasisTokens == 5_700)
+        #expect(estimate.tierBasisTokens == 5_400)
         #expect(estimate.tierMinimumTokens == nil)
         #expect(estimate.components.count == 4)
-        #expect(abs(estimate.totalCost - 0.00893) < 0.000001)
+        #expect(estimate.components.first(where: { $0.kind == .input })?.tokens == 4_700)
+        #expect(abs(estimate.totalCost - 0.00878) < 0.000001)
     }
 
     @Test("阶梯按输入和缓存 Token 命中并整条请求使用档位价格")
     func tierPricingUsesWholeRequestPrice() throws {
         let usage = MessageTokenUsage(
-            promptTokens: 5_000,
+            promptTokens: 5_500,
             completionTokens: 1_000,
-            totalTokens: 6_200,
+            totalTokens: 6_700,
             cacheWriteTokens: 700,
             cacheReadTokens: 500
         )
@@ -69,6 +70,7 @@ struct ModelPricingTests {
 
         #expect(estimate.tierBasisTokens == 6_200)
         #expect(estimate.tierMinimumTokens == 6_000)
+        #expect(estimate.components.first(where: { $0.kind == .input })?.tokens == 5_000)
         #expect(estimate.components.first(where: { $0.kind == .input })?.pricePerMillionTokens == 0.25)
         #expect(estimate.components.first(where: { $0.kind == .output })?.pricePerMillionTokens == 10)
         #expect(estimate.components.first(where: { $0.kind == .cacheWrite })?.pricePerMillionTokens == 2)

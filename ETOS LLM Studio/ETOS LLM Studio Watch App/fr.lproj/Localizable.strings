@@ -3595,6 +3595,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "费用" = "Coût";
 "费用 %@" = "Coût %@";
 "Token %@ · 费用 %@" = "Tokens %@ · coût %@";
+"Token %@" = "Tokens %@";
 "估算费用" = "Coût estimé";
 "阶梯依据" = "Base du palier";
 "%d tokens" = "%d tokens";
