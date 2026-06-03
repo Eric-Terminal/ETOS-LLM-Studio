@@ -43,7 +43,7 @@ extension ChatService {
     ) -> String {
         guard !rules.isEmpty else { return content }
 
-        MessageRegexRuleTransformer.apply(
+        return MessageRegexRuleTransformer.apply(
             content,
             rules: rules,
             scope: scope,
