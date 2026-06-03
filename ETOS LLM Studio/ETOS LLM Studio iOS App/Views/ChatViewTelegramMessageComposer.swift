@@ -308,21 +308,42 @@ struct TelegramMessageComposer: View {
                 .padding(.horizontal, textHorizontalPadding)
 
             if text.isEmpty {
-                Text(inputPlaceholderText)
-                    .etFont(.system(size: inputBasePointSize))
-                    .foregroundColor(.secondary)
+                inputPlaceholder
                     .padding(.top, verticalPadding + textContainerInset)
                     .padding(.leading, textHorizontalPadding + textContainerInset)
+                    .padding(.trailing, textHorizontalPadding + textContainerInset)
             }
         }
         .frame(minHeight: targetHeight, maxHeight: targetHeight)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
     }
 
-    private var inputPlaceholderText: String {
+    @ViewBuilder
+    private var inputPlaceholder: some View {
         if LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) {
-            return resourceUsageMonitor.snapshot.displayText
+            MarqueeText(
+                content: resourceUsageMonitor.snapshot.displayText,
+                uiFont: inputUIFont,
+                speed: 32,
+                delay: 0.8,
+                spacing: 28
+            )
+            .etFont(.system(size: inputBasePointSize), sampleText: resourceUsageMonitor.snapshot.displayText)
+            .foregroundColor(.secondary)
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(inputPlaceholderText)
+                .etFont(.system(size: inputBasePointSize))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var inputPlaceholderText: String {
         return NSLocalizedString("Message", comment: "聊天输入框占位文本")
     }
 
