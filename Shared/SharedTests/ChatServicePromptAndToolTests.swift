@@ -350,6 +350,29 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("快捷指令描述生成使用 XML 包裹上下文")
+    func testShortcutDescriptionPromptUsesXMLContext() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "打开灯光并播放音乐")
+
+        let description = await chatService.generateShortcutToolDescription(
+            toolName: "打开 <灯> & 音乐",
+            metadata: ["note": .string("A < B & C")],
+            source: "if x < 1 && y > 0"
+        )
+
+        let prompt = mockAdapter.receivedMessages?.last(where: { $0.role == .user })?.content ?? ""
+        #expect(description == "打开灯光并播放音乐")
+        #expect(prompt.contains("<shortcut>"))
+        #expect(prompt.contains("<shortcut_name>打开 &lt;灯&gt; &amp; 音乐</shortcut_name>"))
+        #expect(prompt.contains("<metadata>{\"note\":\"A &lt; B &amp; C\"}</metadata>"))
+        #expect(prompt.contains("<source_summary>if x &lt; 1 &amp;&amp; y &gt; 0</source_summary>"))
+        #expect(!prompt.contains("快捷指令名称："))
+
+        await cleanup()
+    }
+
     @Test("记忆总开关关闭时不注入跨对话摘要和用户画像")
     func testMemoryMasterSwitchSuppressesConversationMemoryPrompt() async throws {
         await cleanup()

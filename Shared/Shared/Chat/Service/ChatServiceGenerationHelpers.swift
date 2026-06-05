@@ -322,6 +322,13 @@ extension ChatService {
         return String(normalized[..<cutIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func escapeXMLText(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
     public func generateShortcutToolDescription(
         toolName: String,
         metadata: [String: JSONValue],
@@ -349,11 +356,18 @@ extension ChatService {
         - 避免空话，不要出现免责声明；
         - 只返回描述正文。
 
-        快捷指令名称：%@
-        元数据：%@
-        源码/流程摘要：%@
+        <shortcut>
+          <shortcut_name>%@</shortcut_name>
+          <metadata>%@</metadata>
+          <source_summary>%@</source_summary>
+        </shortcut>
         """, comment: "Prompt for generating shortcut tool description.")
-        let prompt = String(format: promptTemplate, toolName, metadataText, sourceText)
+        let prompt = String(
+            format: promptTemplate,
+            escapeXMLText(toolName),
+            escapeXMLText(metadataText),
+            escapeXMLText(sourceText)
+        )
 
         do {
             let rawDescription = try await generateDetachedChatCompletion(
