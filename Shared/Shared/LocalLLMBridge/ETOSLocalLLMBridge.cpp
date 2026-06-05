@@ -406,6 +406,97 @@ size_t first_stop_position(const std::string & text, const std::vector<std::stri
     return position;
 }
 
+bool is_utf8_continuation_byte(unsigned char byte) {
+    return (byte & 0xC0) == 0x80;
+}
+
+bool valid_utf8_codepoint_at(const std::string & text, size_t index, size_t limit, size_t & length) {
+    const unsigned char first = static_cast<unsigned char>(text[index]);
+    if (first <= 0x7F) {
+        length = 1;
+        return true;
+    }
+
+    if (first >= 0xC2 && first <= 0xDF) {
+        length = 2;
+        return index + length <= limit && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 1]));
+    }
+
+    if (first == 0xE0) {
+        length = 3;
+        if (index + length > limit) {
+            return false;
+        }
+        const unsigned char second = static_cast<unsigned char>(text[index + 1]);
+        return second >= 0xA0 && second <= 0xBF
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 2]));
+    }
+
+    if ((first >= 0xE1 && first <= 0xEC) || (first >= 0xEE && first <= 0xEF)) {
+        length = 3;
+        return index + length <= limit
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 1]))
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 2]));
+    }
+
+    if (first == 0xED) {
+        length = 3;
+        if (index + length > limit) {
+            return false;
+        }
+        const unsigned char second = static_cast<unsigned char>(text[index + 1]);
+        return second >= 0x80 && second <= 0x9F
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 2]));
+    }
+
+    if (first == 0xF0) {
+        length = 4;
+        if (index + length > limit) {
+            return false;
+        }
+        const unsigned char second = static_cast<unsigned char>(text[index + 1]);
+        return second >= 0x90 && second <= 0xBF
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 2]))
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 3]));
+    }
+
+    if (first >= 0xF1 && first <= 0xF3) {
+        length = 4;
+        return index + length <= limit
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 1]))
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 2]))
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 3]));
+    }
+
+    if (first == 0xF4) {
+        length = 4;
+        if (index + length > limit) {
+            return false;
+        }
+        const unsigned char second = static_cast<unsigned char>(text[index + 1]);
+        return second >= 0x80 && second <= 0x8F
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 2]))
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[index + 3]));
+    }
+
+    length = 0;
+    return false;
+}
+
+size_t valid_utf8_prefix_length(const std::string & text, size_t limit) {
+    limit = std::min(limit, text.size());
+
+    size_t index = 0;
+    while (index < limit) {
+        size_t codepoint_length = 0;
+        if (!valid_utf8_codepoint_at(text, index, limit, codepoint_length)) {
+            break;
+        }
+        index += codepoint_length;
+    }
+    return index;
+}
+
 bool emit_text_chunk(
     const std::string & chunk,
     std::string * output_text,
@@ -436,9 +527,29 @@ bool flush_pending_text(
     if (pending_text.size() <= retained_length) {
         return true;
     }
-    std::string chunk = pending_text.substr(0, pending_text.size() - retained_length);
-    pending_text.erase(0, chunk.size());
-    return emit_text_chunk(chunk, output_text, token_callback, user_data);
+
+    const size_t candidate_length = pending_text.size() - retained_length;
+    const size_t chunk_length = valid_utf8_prefix_length(pending_text, candidate_length);
+    if (chunk_length == 0) {
+        if (final_flush) {
+            if (output_text) {
+                output_text->append(pending_text);
+            }
+            pending_text.clear();
+        }
+        return true;
+    }
+
+    std::string chunk = pending_text.substr(0, chunk_length);
+    pending_text.erase(0, chunk_length);
+    const bool should_continue = emit_text_chunk(chunk, output_text, token_callback, user_data);
+    if (final_flush && !pending_text.empty()) {
+        if (output_text) {
+            output_text->append(pending_text);
+        }
+        pending_text.clear();
+    }
+    return should_continue;
 }
 
 local_chat_template_result apply_chat_template(
@@ -684,13 +795,15 @@ int32_t generate(
         pending_text.append(piece);
         const size_t stop_position = first_stop_position(pending_text, generation_params.additional_stops);
         if (stop_position != std::string::npos) {
-            should_flush_pending = emit_text_chunk(
-                pending_text.substr(0, stop_position),
+            pending_text.erase(stop_position);
+            should_flush_pending = flush_pending_text(
+                pending_text,
+                0,
+                true,
                 output_text,
                 token_callback,
                 user_data
             );
-            pending_text.clear();
             break;
         }
         if (!flush_pending_text(
