@@ -53,8 +53,10 @@ extension ContentView {
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
         }
-        .navigationDestination(item: $messageRewriteTarget) { target in
-            rewriteMessageView(for: target.id)
+        .sheet(item: $messageRewriteTarget) { target in
+            NavigationStack {
+                rewriteMessageView(for: target.id)
+            }
         }
         .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: Binding(
             get: { launchRecoveryNoticeMessage != nil },
