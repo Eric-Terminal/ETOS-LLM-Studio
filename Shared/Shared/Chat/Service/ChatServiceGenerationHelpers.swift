@@ -66,7 +66,9 @@ extension ChatService {
         let summaryUserPrompt = String(
             format: NSLocalizedString("""
             思考内容：
+            ```
             %@
+            ```
             """, comment: "Reasoning summary user prompt"),
             reasoning
         )

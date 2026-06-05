@@ -556,12 +556,13 @@ extension ChatServiceTests {
         )
         Persistence.writeAppConfig(key: AppConfigKey.reasoningSummaryModelIdentifier.rawValue, text: dedicatedSummaryModel.id)
         setupMockReasoningSummaryResponse(summary: "比较成本后选稳妥方案")
+        let reasoningContent = "先比较各个方案的成本，再收敛到风险最低、维护成本更低的实现路径。"
 
         await chatService.processResponseMessage(
             responseMessage: ChatMessage(
                 role: .assistant,
                 content: "最终答案",
-                reasoningContent: "先比较各个方案的成本，再收敛到风险最低、维护成本更低的实现路径。"
+                reasoningContent: reasoningContent
             ),
             loadingMessageID: loadingMessage.id,
             currentSessionID: sessionID,
@@ -579,9 +580,12 @@ extension ChatServiceTests {
         try await Task.sleep(for: .milliseconds(200))
 
         let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
+        let reasoningSummaryUserPrompt = mockAdapter.receivedReasoningSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
         #expect(mockAdapter.receivedReasoningSummaryModel?.id == dedicatedSummaryModel.id)
         #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("中文输出 6~18 字") == true)
         #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains(ModelPromptLanguage.current.outputInstruction) == true)
+        #expect(reasoningSummaryUserPrompt.contains("```\n\(reasoningContent)"))
+        #expect(reasoningSummaryUserPrompt.hasSuffix("```"))
         #expect(storedMessage?.responseMetrics?.reasoningSummary == "比较成本后选稳妥方案")
 
         await cleanup()
