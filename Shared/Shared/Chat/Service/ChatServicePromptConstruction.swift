@@ -108,6 +108,9 @@ extension ChatService {
         let content = """
 <enhanced_prompt>
 \(metaInstruction)
+
+---
+
 \(trimmed)
 </enhanced_prompt>
 """

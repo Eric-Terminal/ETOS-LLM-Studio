@@ -106,6 +106,7 @@ extension ChatServiceTests {
         #expect(lastMessage?.role == .system)
         #expect(systemContent.contains("<enhanced_prompt>"))
         #expect(systemContent.contains(enhancedPrompt))
+        #expect(systemContent.contains("\n\n---\n\n\(enhancedPrompt)"))
         #expect(!systemMessages.contains(where: { $0.content.contains("<app_language>") }))
         #expect(systemMessages.count == 1)
         #expect(userContent == userText)
