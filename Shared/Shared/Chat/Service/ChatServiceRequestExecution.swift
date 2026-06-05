@@ -490,8 +490,8 @@ extension ChatService {
 
         for (messageID, attachments) in sortedPairs {
             guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else { continue }
-            var ocrBlocks: [String] = []
-            for (index, attachment) in attachments.enumerated() {
+            var ocrBlocks: [(fileName: String, text: String)] = []
+            for attachment in attachments {
                 do {
                     let text = try await recognizeImageText(
                         attachment,
@@ -500,25 +500,14 @@ extension ChatService {
                     )
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { continue }
-                    let title = String(
-                        format: NSLocalizedString("图片 %d（%@）", comment: "OCR extracted image block title"),
-                        index + 1,
-                        attachment.fileName
-                    )
-                    ocrBlocks.append("\(title)：\n\(trimmed)")
+                    ocrBlocks.append((fileName: attachment.fileName, text: trimmed))
                 } catch {
                     logger.error("图片 OCR 失败: \(error.localizedDescription)")
-                    let title = String(
-                        format: NSLocalizedString("图片 %d（%@）", comment: "OCR failed image block title"),
-                        index + 1,
-                        attachment.fileName
-                    )
                     let fallback = String(
-                        format: NSLocalizedString("%@：\nOCR 失败：%@", comment: "OCR failed block"),
-                        title,
+                        format: NSLocalizedString("OCR 失败：%@", comment: "OCR failed image block content"),
                         error.localizedDescription
                     )
-                    ocrBlocks.append(fallback)
+                    ocrBlocks.append((fileName: attachment.fileName, text: fallback))
                 }
             }
 
@@ -535,12 +524,21 @@ extension ChatService {
         return ImageOCRPreprocessingResult(messages: updatedMessages, imageAttachments: [:], errorMessage: nil)
     }
 
-    private func makeOCRAppendixText(_ blocks: [String]) -> String {
-        let joinedBlocks = blocks.joined(separator: "\n\n")
-        return String(
-            format: NSLocalizedString("以下内容来自图片 OCR 提取：\n\n%@", comment: "OCR appendix sent to chat model"),
-            joinedBlocks
-        )
+    private func makeOCRAppendixText(_ blocks: [(fileName: String, text: String)]) -> String {
+        let header = NSLocalizedString("以下内容来自用户上传图片的 OCR 文本提取，仅作为本轮请求的图片附件上下文。", comment: "OCR appendix header sent to chat model")
+        let joinedBlocks = blocks.map { block in
+            """
+            <image name="\(xmlEscapedAttribute(block.fileName))">
+            \(block.text)
+            </image>
+            """
+        }.joined(separator: "\n\n")
+        return """
+        <image_ocr_attachments>
+        \(header)
+        \(joinedBlocks)
+        </image_ocr_attachments>
+        """
     }
 
     func resolveSelectedOCRModel() -> RunnableModel? {

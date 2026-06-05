@@ -2501,7 +2501,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "当前平台不支持系统 OCR。" = "OCR النظام غير مدعوم على هذه المنصة.";
 "系统 OCR 识别失败：%@" = "فشل OCR النظام في التعرف على النص: %@";
 "系统 OCR 未识别到有效文字。" = "لم يعثر OCR النظام على نص قابل للقراءة.";
-"以下内容来自图片 OCR 提取：\n\n%@" = "استُخرج المحتوى التالي من الصورة عبر OCR:\n\n%@";
+"以下内容来自用户上传图片的 OCR 文本提取，仅作为本轮请求的图片附件上下文。" = "تم استخراج المحتوى التالي عبر OCR من الصور التي رفعها المستخدم، ويُستخدم فقط كسياق مرفقات صور لهذا الطلب.";
 "执行图片 OCR" = "تشغيل OCR للصور";
 "图片 OCR" = "OCR الصور";
 "系统 OCR" = "OCR النظام";
@@ -2660,7 +2660,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 /* Localization gap fixes: existing NSLocalizedString keys */
 "%@ · %d 个日志文件" = "%@ · %d log files";
 "%@，请求 %d 次" = "%@, %d requests";
-"%@：\nOCR 失败：%@" = "%@:\nOCR failed: %@";
+"OCR 失败：%@" = "فشل OCR: %@";
 "%d 个字段" = "%d fields";
 "%d 个日志文件 · %d 条记录" = "%d log files · %d records";
 "%d 次" = "%d times";
@@ -2779,7 +2779,6 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "响应测速与统计" = "Response Speed & Statistics";
 "回复完成后自动朗读" = "Auto-read after response completes";
 "图像" = "Image";
-"图片 %d（%@）" = "Image %d (%@)";
 "在沙盒内创建目录结构。" = "Create a directory structure inside the sandbox.";
 "在沙盒内复制文件或目录。" = "Copy files or directories inside the sandbox.";
 "在沙盒内移动或重命名文件与目录。" = "Move or rename files and directories inside the sandbox.";

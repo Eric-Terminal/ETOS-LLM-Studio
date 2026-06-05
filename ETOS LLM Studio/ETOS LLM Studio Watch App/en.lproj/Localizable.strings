@@ -1604,7 +1604,7 @@
 "当前平台不支持系统 OCR。" = "System OCR is not supported on this platform.";
 "系统 OCR 识别失败：%@" = "System OCR failed to recognize text: %@";
 "系统 OCR 未识别到有效文字。" = "System OCR did not find any readable text.";
-"以下内容来自图片 OCR 提取：\n\n%@" = "The following content was extracted from the image by OCR:\n\n%@";
+"以下内容来自用户上传图片的 OCR 文本提取，仅作为本轮请求的图片附件上下文。" = "The following content was extracted by OCR from user-uploaded images and is only image attachment context for this request.";
 "执行图片 OCR" = "Run image OCR";
 "图片 OCR" = "Image OCR";
 "系统 OCR" = "System OCR";
@@ -2831,7 +2831,7 @@
 "%@ 调用已取消。" = "%@ call was cancelled.";
 
 /* Localization gap fixes: existing NSLocalizedString keys */
-"%@：\nOCR 失败：%@" = "%@:\nOCR failed: %@";
+"OCR 失败：%@" = "OCR failed: %@";
 "%d 个字段" = "%d fields";
 "0 表示关闭检索" = "0 disables retrieval";
 "API 代理设置" = "API Proxy Settings";
@@ -2905,7 +2905,6 @@
 "响应测速与统计" = "Response Speed & Statistics";
 "回复完成后自动朗读" = "Auto-read after response completes";
 "图像" = "Image";
-"图片 %d（%@）" = "Image %d (%@)";
 "在沙盒内创建目录结构。" = "Create a directory structure inside the sandbox.";
 "在沙盒内复制文件或目录。" = "Copy files or directories inside the sandbox.";
 "在沙盒内移动或重命名文件与目录。" = "Move or rename files and directories inside the sandbox.";

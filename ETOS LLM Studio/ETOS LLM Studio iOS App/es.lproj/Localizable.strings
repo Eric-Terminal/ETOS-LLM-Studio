@@ -2630,7 +2630,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "当前平台不支持系统 OCR。" = "OCR del sistema no es compatible con esta plataforma.";
 "系统 OCR 识别失败：%@" = "OCR del sistema no pudo reconocer texto: %@";
 "系统 OCR 未识别到有效文字。" = "OCR del sistema no encontró texto legible.";
-"以下内容来自图片 OCR 提取：\n\n%@" = "El siguiente contenido se extrajo de la imagen mediante OCR:\n\n%@";
+"以下内容来自用户上传图片的 OCR 文本提取，仅作为本轮请求的图片附件上下文。" = "El siguiente contenido se extrajo mediante OCR de imágenes subidas por el usuario y solo sirve como contexto de imagen adjunta para esta solicitud.";
 "执行图片 OCR" = "Ejecutar OCR de imagen";
 "图片 OCR" = "OCR de imagen";
 "系统 OCR" = "OCR del sistema";
@@ -2783,7 +2783,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 /* Localization gap fixes: existing NSLocalizedString keys */
 "%@ · %d 条" = "%@ · %d entries";
-"%@：\nOCR 失败：%@" = "%@:\nOCR failed: %@";
+"OCR 失败：%@" = "OCR falló: %@";
 "%d 个字段" = "%d fields";
 "%d 个文件 · %d 条" = "%d files · %d entries";
 "%d 次 · Token %d" = "%d times · Token %d";
@@ -2876,7 +2876,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "启用获取系统时间工具" = "Enable system time tool";
 "响应测速与统计" = "Response Speed & Statistics";
 "图像" = "Image";
-"图片 %d（%@）" = "Image %d (%@)";
 "图片、音频和文件的 Base64 仍会隐藏。" = "Base64 for images, audio, and files remains hidden.";
 "图片载入失败" = "Image Load Failed";
 "在 GitHub Release 下载最新调试工具（Go 版）" = "Download the latest debug tool (Go version) from GitHub Releases";

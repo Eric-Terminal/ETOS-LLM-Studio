@@ -141,6 +141,75 @@ extension ChatServiceTests {
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
+    @Test("图片 OCR 文本会以结构化上下文附加")
+    func testImageOCRAttachmentsAreStructuredBeforeSending() async throws {
+        await cleanup()
+        let session = createPermanentTestSession(name: "图片 OCR 结构化测试")
+        defer { chatService.deleteSessions([session]) }
+
+        let ocrModel = Model(
+            modelName: "ocr-vision-model",
+            displayName: "OCR Vision Model",
+            isActivated: true,
+            kind: .chat,
+            inputModalities: [.text, .image]
+        )
+        let ocrProvider = Provider(
+            name: "OCR Attachment Test Provider",
+            baseURL: "https://fake.url",
+            apiKeys: ["key-ocr"],
+            apiFormat: "openai-compatible",
+            models: [ocrModel]
+        )
+        ConfigLoader.saveProvider(ocrProvider)
+        defer {
+            Persistence.deleteAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue)
+            ConfigLoader.deleteProvider(ocrProvider)
+        }
+        let ocrRunnable = RunnableModel(provider: ocrProvider, model: ocrModel)
+        Persistence.writeAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue, text: ocrRunnable.id)
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "图片识别文字")
+
+        let firstImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "receipt.png"
+        )
+        let secondImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "menu.png"
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请读取图片文字",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            imageAttachments: [firstImage, secondImage],
+            includeSystemTime: false
+        )
+
+        let sentMessages = try #require(mockAdapter.receivedMessages)
+        let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
+        #expect(userMessage.content.contains("请读取图片文字"))
+        #expect(userMessage.content.components(separatedBy: "<image_ocr_attachments>").count - 1 == 1)
+        #expect(userMessage.content.contains("<image name=\"receipt.png\">"))
+        #expect(userMessage.content.contains("<image name=\"menu.png\">"))
+        #expect(userMessage.content.contains("图片识别文字"))
+        #expect(userMessage.content.contains("</image_ocr_attachments>"))
+        #expect(!userMessage.content.contains("以下内容来自图片 OCR 提取："))
+        #expect(!userMessage.content.contains("图片 1（"))
+        #expect(mockAdapter.receivedImageAttachments?.isEmpty == true)
+    }
+
     @Test("同名同内容文件附件会复用实体文件名")
     func testSameNamedIdenticalFileAttachmentReusesStoredFile() async throws {
         await cleanup()
