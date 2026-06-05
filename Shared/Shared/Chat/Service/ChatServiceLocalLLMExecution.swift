@@ -47,9 +47,19 @@ extension ChatService {
                 options: LocalLLMGenerationOptions(
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
-                    temperature: overrides.localDoubleValue(for: "temperature") ?? temperature,
-                    topP: overrides.localDoubleValue(for: "top_p"),
+                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature,
+                    topP: overrides.localDoubleValue(for: "top_p") ?? record.topP,
                     gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers,
+                    seed: overrides.localUInt32Value(for: "seed") ?? record.seed,
+                    topK: overrides.localIntValue(for: "top_k") ?? record.topK,
+                    minP: overrides.localDoubleValue(for: "min_p") ?? record.minP,
+                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.repeatLastN,
+                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.repeatPenalty,
+                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.frequencyPenalty,
+                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.presencePenalty,
+                    grammar: overrides.localStringValue(for: "grammar") ?? record.grammar,
+                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.ignoreEOS,
+                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.samplerKinds,
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )
@@ -132,9 +142,19 @@ extension ChatService {
                 options: LocalLLMGenerationOptions(
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
-                    temperature: overrides.localDoubleValue(for: "temperature") ?? aiTemperature,
-                    topP: overrides.localDoubleValue(for: "top_p") ?? aiTopP,
+                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature,
+                    topP: overrides.localDoubleValue(for: "top_p") ?? record.topP,
                     gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers,
+                    seed: overrides.localUInt32Value(for: "seed") ?? record.seed,
+                    topK: overrides.localIntValue(for: "top_k") ?? record.topK,
+                    minP: overrides.localDoubleValue(for: "min_p") ?? record.minP,
+                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.repeatLastN,
+                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.repeatPenalty,
+                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.frequencyPenalty,
+                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.presencePenalty,
+                    grammar: overrides.localStringValue(for: "grammar") ?? record.grammar,
+                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.ignoreEOS,
+                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.samplerKinds,
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )
@@ -306,6 +326,30 @@ private extension Dictionary where Key == String, Value == JSONValue {
         }
     }
 
+    func localUInt32Value(for key: String) -> UInt32? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            if rawValue == -1 {
+                return LocalModelRecord.defaultSeed
+            }
+            return UInt32(exactly: rawValue)
+        case .double(let rawValue):
+            if rawValue == -1 {
+                return LocalModelRecord.defaultSeed
+            }
+            return UInt32(exactly: rawValue)
+        case .string(let rawValue):
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == "-1" {
+                return LocalModelRecord.defaultSeed
+            }
+            return UInt32(trimmed)
+        default:
+            return nil
+        }
+    }
+
     func localDoubleValue(for key: String) -> Double? {
         guard let value = self[key] else { return nil }
         switch value {
@@ -318,6 +362,35 @@ private extension Dictionary where Key == String, Value == JSONValue {
         default:
             return nil
         }
+    }
+
+    func localBoolValue(for key: String) -> Bool? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .bool(let rawValue):
+            return rawValue
+        case .int(let rawValue):
+            return rawValue != 0
+        case .double(let rawValue):
+            return rawValue != 0
+        case .string(let rawValue):
+            switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "yes", "1", "on":
+                return true
+            case "false", "no", "0", "off":
+                return false
+            default:
+                return nil
+            }
+        default:
+            return nil
+        }
+    }
+
+    func localSamplerKindsValue(for key: String) -> [LocalLLMSamplerKind]? {
+        guard let sequence = localStringValue(for: key) else { return nil }
+        let samplerKinds = LocalLLMSamplerKind.parse(sequence)
+        return samplerKinds.isEmpty ? nil : samplerKinds
     }
 
     func localStringValue(for key: String) -> String? {

@@ -87,6 +87,18 @@ struct LocalModelStoreTests {
         #expect(runnable.model.overrideParameters["context_size"] == .int(LocalModelRecord.defaultContextSize))
         #expect(runnable.model.overrideParameters["max_output_tokens"] == .int(LocalModelRecord.defaultMaxOutputTokens))
         #expect(runnable.model.overrideParameters["n_gpu_layers"] == .int(LocalModelRecord.defaultGPULayers))
+        #expect(runnable.model.overrideParameters["seed"] == .string(String(LocalModelRecord.defaultSeed)))
+        #expect(runnable.model.overrideParameters["temperature"] == .double(LocalModelRecord.defaultTemperature))
+        #expect(runnable.model.overrideParameters["top_k"] == .int(LocalModelRecord.defaultTopK))
+        #expect(runnable.model.overrideParameters["top_p"] == .double(LocalModelRecord.defaultTopP))
+        #expect(runnable.model.overrideParameters["min_p"] == .double(LocalModelRecord.defaultMinP))
+        #expect(runnable.model.overrideParameters["repeat_last_n"] == .int(LocalModelRecord.defaultRepeatLastN))
+        #expect(runnable.model.overrideParameters["repeat_penalty"] == .double(LocalModelRecord.defaultRepeatPenalty))
+        #expect(runnable.model.overrideParameters["frequency_penalty"] == .double(LocalModelRecord.defaultFrequencyPenalty))
+        #expect(runnable.model.overrideParameters["presence_penalty"] == .double(LocalModelRecord.defaultPresencePenalty))
+        #expect(runnable.model.overrideParameters["grammar"] == .string(LocalModelRecord.defaultGrammar))
+        #expect(runnable.model.overrideParameters["ignore_eos"] == .bool(LocalModelRecord.defaultIgnoreEOS))
+        #expect(runnable.model.overrideParameters["sampler_seq"] == .string(LocalLLMSamplerKind.defaultChainString))
         #expect(runnable.model.overrideParameters["llama_cli_args"] == .string(LocalModelRecord.defaultAdvancedArguments))
         #expect(runnable.model.supportsToolCalling)
         #expect(runnable.model.supportsEmbedding)
@@ -130,7 +142,7 @@ struct LocalModelStoreTests {
         )
         var provider = LocalModelProviderBridge.provider(records: [record])
         provider.models[0].kind = .embedding
-        provider.models[0].overrideParameters["temperature"] = .double(0.2)
+        provider.models[0].overrideParameters["provider_only"] = .string("kept")
         provider.models[0].requestBodyControls = [
             ModelRequestBodyControl(
                 title: "归一化",
@@ -147,7 +159,7 @@ struct LocalModelStoreTests {
         )
 
         #expect(restored.models.first?.kind == .embedding)
-        #expect(restored.models.first?.overrideParameters["temperature"] == .double(0.2))
+        #expect(restored.models.first?.overrideParameters["provider_only"] == .string("kept"))
         #expect(restored.models.first?.requestBodyControls.count == 1)
     }
 
@@ -166,6 +178,18 @@ struct LocalModelStoreTests {
         model.overrideParameters["context_size"] = .string("4096")
         model.overrideParameters["max_output_tokens"] = .int(1024)
         model.overrideParameters["n_gpu_layers"] = .int(0)
+        model.overrideParameters["seed"] = .string("-1")
+        model.overrideParameters["temperature"] = .double(0.7)
+        model.overrideParameters["top_k"] = .int(12)
+        model.overrideParameters["top_p"] = .double(0.9)
+        model.overrideParameters["min_p"] = .double(0.2)
+        model.overrideParameters["repeat_last_n"] = .int(32)
+        model.overrideParameters["repeat_penalty"] = .double(1.2)
+        model.overrideParameters["frequency_penalty"] = .double(0.3)
+        model.overrideParameters["presence_penalty"] = .double(0.4)
+        model.overrideParameters["grammar"] = .string("root ::= \"ok\"")
+        model.overrideParameters["ignore_eos"] = .bool(true)
+        model.overrideParameters["sampler_seq"] = .string("kpt")
         model.overrideParameters["llama_cli_args"] = .string(" --temp 0.7 --top-p 0.9 ")
 
         store.updateFromProviderModel(model)
@@ -175,6 +199,18 @@ struct LocalModelStoreTests {
         #expect(store.models.first?.contextSize == 4096)
         #expect(store.models.first?.maxOutputTokens == 1024)
         #expect(store.models.first?.gpuLayers == 0)
+        #expect(store.models.first?.seed == LocalModelRecord.defaultSeed)
+        #expect(store.models.first?.temperature == 0.7)
+        #expect(store.models.first?.topK == 12)
+        #expect(store.models.first?.topP == 0.9)
+        #expect(store.models.first?.minP == 0.2)
+        #expect(store.models.first?.repeatLastN == 32)
+        #expect(store.models.first?.repeatPenalty == 1.2)
+        #expect(store.models.first?.frequencyPenalty == 0.3)
+        #expect(store.models.first?.presencePenalty == 0.4)
+        #expect(store.models.first?.grammar == "root ::= \"ok\"")
+        #expect(store.models.first?.ignoreEOS == true)
+        #expect(store.models.first?.samplerKinds == [.topK, .topP, .temperature])
         #expect(store.models.first?.advancedArguments == "--temp 0.7 --top-p 0.9")
     }
 

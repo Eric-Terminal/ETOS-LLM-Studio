@@ -57,6 +57,42 @@ public enum LocalModelProviderBridge {
         if preferRecordBasics || overrideParameters["n_gpu_layers"] == nil {
             overrideParameters["n_gpu_layers"] = .int(record.gpuLayers)
         }
+        if preferRecordBasics || overrideParameters["seed"] == nil {
+            overrideParameters["seed"] = .string(String(record.seed))
+        }
+        if preferRecordBasics || overrideParameters["temperature"] == nil {
+            overrideParameters["temperature"] = .double(record.temperature)
+        }
+        if preferRecordBasics || overrideParameters["top_k"] == nil {
+            overrideParameters["top_k"] = .int(record.topK)
+        }
+        if preferRecordBasics || overrideParameters["top_p"] == nil {
+            overrideParameters["top_p"] = .double(record.topP)
+        }
+        if preferRecordBasics || overrideParameters["min_p"] == nil {
+            overrideParameters["min_p"] = .double(record.minP)
+        }
+        if preferRecordBasics || overrideParameters["repeat_last_n"] == nil {
+            overrideParameters["repeat_last_n"] = .int(record.repeatLastN)
+        }
+        if preferRecordBasics || overrideParameters["repeat_penalty"] == nil {
+            overrideParameters["repeat_penalty"] = .double(record.repeatPenalty)
+        }
+        if preferRecordBasics || overrideParameters["frequency_penalty"] == nil {
+            overrideParameters["frequency_penalty"] = .double(record.frequencyPenalty)
+        }
+        if preferRecordBasics || overrideParameters["presence_penalty"] == nil {
+            overrideParameters["presence_penalty"] = .double(record.presencePenalty)
+        }
+        if preferRecordBasics || overrideParameters["grammar"] == nil {
+            overrideParameters["grammar"] = .string(record.grammar)
+        }
+        if preferRecordBasics || overrideParameters["ignore_eos"] == nil {
+            overrideParameters["ignore_eos"] = .bool(record.ignoreEOS)
+        }
+        if preferRecordBasics || overrideParameters["sampler_seq"] == nil {
+            overrideParameters["sampler_seq"] = .string(LocalLLMSamplerKind.chainString(record.samplerKinds))
+        }
         if preferRecordBasics || overrideParameters["llama_cli_args"] == nil {
             overrideParameters["llama_cli_args"] = .string(record.advancedArguments)
         }

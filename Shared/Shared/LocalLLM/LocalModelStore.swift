@@ -102,9 +102,7 @@ public final class LocalModelStore: ObservableObject {
     public func update(_ record: LocalModelRecord) {
         var updated = record
         updated.displayName = updated.sanitizedDisplayName
-        updated.contextSize = max(1, updated.contextSize)
-        updated.maxOutputTokens = max(1, updated.maxOutputTokens)
-        updated.advancedArguments = updated.advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.normalizeGenerationParameters()
         updated.updatedAt = Date()
 
         if let index = models.firstIndex(where: { $0.id == updated.id }) {
@@ -133,6 +131,45 @@ public final class LocalModelStore: ObservableObject {
         }
         if let gpuLayers = model.overrideParameters.localIntValue(for: "n_gpu_layers") {
             record.gpuLayers = gpuLayers
+        }
+        if let seed = model.overrideParameters.localUInt32Value(for: "seed") {
+            record.seed = seed
+        }
+        if let temperature = model.overrideParameters.localDoubleValue(for: "temperature") {
+            record.temperature = temperature
+        }
+        if let topK = model.overrideParameters.localIntValue(for: "top_k") {
+            record.topK = topK
+        }
+        if let topP = model.overrideParameters.localDoubleValue(for: "top_p") {
+            record.topP = topP
+        }
+        if let minP = model.overrideParameters.localDoubleValue(for: "min_p") {
+            record.minP = minP
+        }
+        if let repeatLastN = model.overrideParameters.localIntValue(for: "repeat_last_n") {
+            record.repeatLastN = repeatLastN
+        }
+        if let repeatPenalty = model.overrideParameters.localDoubleValue(for: "repeat_penalty") {
+            record.repeatPenalty = repeatPenalty
+        }
+        if let frequencyPenalty = model.overrideParameters.localDoubleValue(for: "frequency_penalty") {
+            record.frequencyPenalty = frequencyPenalty
+        }
+        if let presencePenalty = model.overrideParameters.localDoubleValue(for: "presence_penalty") {
+            record.presencePenalty = presencePenalty
+        }
+        if let grammar = model.overrideParameters.localStringValue(for: "grammar") {
+            record.grammar = grammar
+        }
+        if let ignoreEOS = model.overrideParameters.localBoolValue(for: "ignore_eos") {
+            record.ignoreEOS = ignoreEOS
+        }
+        if let samplerSequence = model.overrideParameters.localStringValue(for: "sampler_seq") {
+            let samplerKinds = LocalLLMSamplerKind.parse(samplerSequence)
+            if !samplerKinds.isEmpty {
+                record.samplerKinds = samplerKinds
+            }
         }
         if let advancedArguments = model.overrideParameters.localStringValue(for: "llama_cli_args") {
             record.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -265,6 +302,67 @@ private extension Dictionary where Key == String, Value == JSONValue {
             return Int(rawValue)
         case .string(let rawValue):
             return Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    func localUInt32Value(for key: String) -> UInt32? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            if rawValue == -1 {
+                return LocalModelRecord.defaultSeed
+            }
+            return UInt32(exactly: rawValue)
+        case .double(let rawValue):
+            if rawValue == -1 {
+                return LocalModelRecord.defaultSeed
+            }
+            return UInt32(exactly: rawValue)
+        case .string(let rawValue):
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == "-1" {
+                return LocalModelRecord.defaultSeed
+            }
+            return UInt32(trimmed)
+        default:
+            return nil
+        }
+    }
+
+    func localDoubleValue(for key: String) -> Double? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .double(let rawValue):
+            return rawValue
+        case .int(let rawValue):
+            return Double(rawValue)
+        case .string(let rawValue):
+            return Double(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    func localBoolValue(for key: String) -> Bool? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .bool(let rawValue):
+            return rawValue
+        case .int(let rawValue):
+            return rawValue != 0
+        case .double(let rawValue):
+            return rawValue != 0
+        case .string(let rawValue):
+            switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "yes", "1", "on":
+                return true
+            case "false", "no", "0", "off":
+                return false
+            default:
+                return nil
+            }
         default:
             return nil
         }

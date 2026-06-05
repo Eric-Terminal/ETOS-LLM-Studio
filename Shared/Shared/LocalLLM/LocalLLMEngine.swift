@@ -12,24 +12,55 @@ import Darwin
 public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var contextSize: Int
     public var maxOutputTokens: Int
-    public var temperature: Double?
-    public var topP: Double?
     public var gpuLayers: Int
+    public var seed: UInt32
+    public var temperature: Double
+    public var topK: Int
+    public var topP: Double
+    public var minP: Double
+    public var repeatLastN: Int
+    public var repeatPenalty: Double
+    public var frequencyPenalty: Double
+    public var presencePenalty: Double
+    public var grammar: String
+    public var ignoreEOS: Bool
+    public var samplerKinds: [LocalLLMSamplerKind]
     public var advancedArguments: String
 
     public init(
         contextSize: Int,
         maxOutputTokens: Int,
-        temperature: Double? = nil,
-        topP: Double? = nil,
+        temperature: Double = LocalModelRecord.defaultTemperature,
+        topP: Double = LocalModelRecord.defaultTopP,
         gpuLayers: Int = LocalModelRecord.defaultGPULayers,
+        seed: UInt32 = LocalModelRecord.defaultSeed,
+        topK: Int = LocalModelRecord.defaultTopK,
+        minP: Double = LocalModelRecord.defaultMinP,
+        repeatLastN: Int = LocalModelRecord.defaultRepeatLastN,
+        repeatPenalty: Double = LocalModelRecord.defaultRepeatPenalty,
+        frequencyPenalty: Double = LocalModelRecord.defaultFrequencyPenalty,
+        presencePenalty: Double = LocalModelRecord.defaultPresencePenalty,
+        grammar: String = LocalModelRecord.defaultGrammar,
+        ignoreEOS: Bool = LocalModelRecord.defaultIgnoreEOS,
+        samplerKinds: [LocalLLMSamplerKind] = LocalLLMSamplerKind.defaultChain,
         advancedArguments: String = LocalModelRecord.defaultAdvancedArguments
     ) {
-        self.contextSize = max(1, contextSize)
-        self.maxOutputTokens = max(1, maxOutputTokens)
-        self.temperature = temperature
-        self.topP = topP
+        self.contextSize = contextSize.clamped(to: 1...1_048_576)
+        self.maxOutputTokens = maxOutputTokens.clamped(to: 1...131_072)
         self.gpuLayers = gpuLayers
+        self.seed = seed
+        self.temperature = temperature.clamped(to: 0...5)
+        self.topK = topK.clamped(to: 0...1_000)
+        self.topP = topP.clamped(to: 0...1)
+        self.minP = minP.clamped(to: 0...1)
+        self.repeatLastN = repeatLastN.clamped(to: -1...1_048_576)
+        self.repeatPenalty = repeatPenalty.clamped(to: 0...4)
+        self.frequencyPenalty = frequencyPenalty.clamped(to: -2...2)
+        self.presencePenalty = presencePenalty.clamped(to: -2...2)
+        self.grammar = grammar.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.ignoreEOS = ignoreEOS
+        let uniqueSamplerKinds = LocalLLMSamplerKind.unique(samplerKinds)
+        self.samplerKinds = uniqueSamplerKinds.isEmpty ? LocalLLMSamplerKind.defaultChain : uniqueSamplerKinds
         self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
@@ -846,3 +877,9 @@ private func etos_local_llm_free_float(_ pointer: UnsafeMutablePointer<Float>)
 
 @_silgen_name("etos_local_llm_free_tool_calls")
 private func etos_local_llm_free_tool_calls(_ pointer: UnsafeMutablePointer<ETOSLocalLLMToolCall>, _ count: Int32)
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
+}

@@ -43,8 +43,8 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.ignoreEOS)
     }
 
-    @Test("grammar-file 会在 Swift 侧读取为 grammar 文本")
-    func grammarFileReadsTextInSwift() throws {
+    @Test("grammar-file 不会直接读取任意本地路径")
+    func grammarFileIsNotReadFromArbitraryPath() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("LocalLLMGenerationConfigTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -59,9 +59,78 @@ struct LocalLLMGenerationConfigTests {
             advancedArguments: "--grammar-file \(grammarURL.path)"
         )
 
+        #expect(throws: LocalLLMEngineError.self) {
+            _ = try LocalLLMGenerationConfig(options: options)
+        }
+    }
+
+    @Test("结构化参数会直接进入生成配置")
+    func structuredOptionsMapToGenerationConfig() throws {
+        let options = LocalLLMGenerationOptions(
+            contextSize: 4096,
+            maxOutputTokens: 256,
+            temperature: 0.65,
+            topP: 0.88,
+            gpuLayers: 12,
+            seed: 7,
+            topK: 20,
+            minP: 0.12,
+            repeatLastN: 128,
+            repeatPenalty: 1.15,
+            frequencyPenalty: 0.2,
+            presencePenalty: 0.1,
+            grammar: "root ::= \"ok\"",
+            ignoreEOS: true,
+            samplerKinds: [.penalties, .topK, .topP, .temperature]
+        )
+
         let config = try LocalLLMGenerationConfig(options: options)
 
+        #expect(config.contextSize == 4096)
+        #expect(config.maxOutputTokens == 256)
+        #expect(config.gpuLayers == 12)
+        #expect(config.seed == 7)
+        #expect(config.temperature == 0.65)
+        #expect(config.topK == 20)
+        #expect(config.topP == 0.88)
+        #expect(config.minP == 0.12)
+        #expect(config.repeatLastN == 128)
+        #expect(config.repeatPenalty == 1.15)
+        #expect(config.frequencyPenalty == 0.2)
+        #expect(config.presencePenalty == 0.1)
         #expect(config.grammar == "root ::= \"ok\"")
+        #expect(config.ignoreEOS)
+        #expect(config.samplerKinds == [.penalties, .topK, .topP, .temperature])
+    }
+
+    @Test("llama.cpp-style 导入会收集应用、不支持和出错参数")
+    func cliStyleImportCollectsResultBuckets() throws {
+        let record = LocalModelRecord(
+            displayName: "TinyLlama",
+            fileName: "tiny.gguf",
+            relativePath: "tiny.gguf",
+            fileSize: 8,
+            advancedArguments: "--temp 0.1"
+        )
+
+        let result = LocalLLMCLIStyleArgumentImporter.importArguments(
+            "--temp 0.7 --top-p 0.9 --ctx-size 4096 --seed -1 --repeat-last-n -1 --ngl -1 --sampler-seq kpt --grammar-file /tmp/x.gbnf --bad-option 1 --top-k nope stray",
+            into: record
+        )
+
+        #expect(result.updatedRecord.temperature == 0.7)
+        #expect(result.updatedRecord.topP == 0.9)
+        #expect(result.updatedRecord.contextSize == 4096)
+        #expect(result.updatedRecord.seed == LocalModelRecord.defaultSeed)
+        #expect(result.updatedRecord.repeatLastN == -1)
+        #expect(result.updatedRecord.gpuLayers == -1)
+        #expect(result.updatedRecord.samplerKinds == [.topK, .topP, .temperature])
+        #expect(result.updatedRecord.advancedArguments.isEmpty)
+        #expect(result.appliedParameters.map(\.title).contains("温度"))
+        #expect(result.unsupportedParameters.map(\.option).contains("--grammar-file"))
+        #expect(result.unsupportedParameters.map(\.option).contains("--bad-option"))
+        #expect(result.errorParameters.contains(where: { $0.option == "--top-k" }))
+        #expect(result.errorParameters.contains(where: { $0.option == "stray" }))
     }
 
     @Test("不支持的高级参数会在进入 C++ 前失败")
