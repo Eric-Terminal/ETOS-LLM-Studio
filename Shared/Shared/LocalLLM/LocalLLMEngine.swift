@@ -89,14 +89,22 @@ public final class LocalLLMEngine: @unchecked Sendable {
             throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
         }
 
-        return try await Task.detached(priority: .userInitiated) {
+        let cancellationState = LocalLLMCancellationState()
+        let task = Task.detached(priority: .userInitiated) {
             try LocalLLMBridge.generateChat(
                 messages: messages,
                 tools: tools,
                 modelPath: modelURL.path,
-                options: options
+                options: options,
+                cancellationState: cancellationState
             )
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            cancellationState.cancel()
+            task.cancel()
+        }
     }
 
     public func stream(
@@ -158,11 +166,14 @@ public final class LocalLLMEngine: @unchecked Sendable {
 }
 
 private enum LocalLLMBridge {
+    private static let cancelledStatus: Int32 = -2
+
     static func generateChat(
         messages: [LocalLLMChatMessage],
         tools: [LocalLLMToolDefinition],
         modelPath: String,
-        options: LocalLLMGenerationOptions
+        options: LocalLLMGenerationOptions,
+        cancellationState: LocalLLMCancellationState
     ) throws -> String {
         guard !messages.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
@@ -174,6 +185,7 @@ private enum LocalLLMBridge {
         let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
         let preparedMessages = try PreparedLocalLLMChatMessages(messages)
         let preparedTools = try PreparedLocalLLMTools(tools)
+        let statePointer = Unmanaged.passUnretained(cancellationState).toOpaque()
         let status = modelPath.withCString { modelPathCString in
             preparedMessages.withUnsafeBufferPointer { messagesPointer in
                 preparedTools.withUnsafeBufferPointer { toolsPointer in
@@ -185,6 +197,8 @@ private enum LocalLLMBridge {
                             toolsPointer.baseAddress,
                             Int32(toolsPointer.count),
                             configPointer,
+                            localLLMGenerationShouldCancel,
+                            statePointer,
                             &outputPointer,
                             &errorPointer
                         )
@@ -202,6 +216,9 @@ private enum LocalLLMBridge {
         }
 
         guard status == 0, let outputPointer else {
+            if status == cancelledStatus {
+                throw CancellationError()
+            }
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
         }
@@ -249,6 +266,7 @@ private enum LocalLLMBridge {
                                         Int32(toolsPointer.count),
                                         configPointer,
                                         localLLMStreamCallback,
+                                        localLLMStreamShouldCancel,
                                         statePointer,
                                         &errorPointer
                                     )
@@ -263,6 +281,10 @@ private enum LocalLLMBridge {
                     }
 
                     guard status == 0 else {
+                        if status == cancelledStatus {
+                            continuation.finish(throwing: CancellationError())
+                            return
+                        }
                         let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
                         continuation.finish(throwing: LocalLLMEngineError.generationFailed(message))
                         return
@@ -671,14 +693,9 @@ private final class PreparedLocalLLMGenerationConfig {
     }
 }
 
-private final class LocalLLMStreamState: @unchecked Sendable {
-    private let continuation: AsyncThrowingStream<String, Error>.Continuation
+private final class LocalLLMCancellationState: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
-
-    init(continuation: AsyncThrowingStream<String, Error>.Continuation) {
-        self.continuation = continuation
-    }
 
     func cancel() {
         lock.lock()
@@ -686,11 +703,32 @@ private final class LocalLLMStreamState: @unchecked Sendable {
         lock.unlock()
     }
 
-    func yield(_ text: String) -> Bool {
+    func isCancelled() -> Bool {
         lock.lock()
-        let shouldStop = cancelled
+        let value = cancelled
         lock.unlock()
-        guard !shouldStop else { return false }
+        return value
+    }
+}
+
+private final class LocalLLMStreamState: @unchecked Sendable {
+    private let continuation: AsyncThrowingStream<String, Error>.Continuation
+    private let cancellationState = LocalLLMCancellationState()
+
+    init(continuation: AsyncThrowingStream<String, Error>.Continuation) {
+        self.continuation = continuation
+    }
+
+    func cancel() {
+        cancellationState.cancel()
+    }
+
+    func isCancelled() -> Bool {
+        cancellationState.isCancelled()
+    }
+
+    func yield(_ text: String) -> Bool {
+        guard !isCancelled() else { return false }
 
         let result = continuation.yield(text)
         switch result {
@@ -711,11 +749,25 @@ private let localLLMStreamCallback: @convention(c) (UnsafePointer<CChar>?, Unsaf
     return state.yield(String(cString: text)) ? 1 : 0
 }
 
+private let localLLMStreamShouldCancel: @convention(c) (UnsafeMutableRawPointer?) -> Int32 = { userData in
+    guard let userData else { return 0 }
+    let state = Unmanaged<LocalLLMStreamState>.fromOpaque(userData).takeUnretainedValue()
+    return state.isCancelled() ? 1 : 0
+}
+
+private let localLLMGenerationShouldCancel: @convention(c) (UnsafeMutableRawPointer?) -> Int32 = { userData in
+    guard let userData else { return 0 }
+    let state = Unmanaged<LocalLLMCancellationState>.fromOpaque(userData).takeUnretainedValue()
+    return state.isCancelled() ? 1 : 0
+}
+
 @_silgen_name("etos_local_llm_generate")
 private func etos_local_llm_generate(
     _ modelPath: UnsafePointer<CChar>,
     _ prompt: UnsafePointer<CChar>,
     _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
+    _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
+    _ userData: UnsafeMutableRawPointer?,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -728,6 +780,8 @@ private func etos_local_llm_generate_chat(
     _ tools: UnsafePointer<ETOSLocalLLMTool>?,
     _ toolCount: Int32,
     _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
+    _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
+    _ userData: UnsafeMutableRawPointer?,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -738,6 +792,7 @@ private func etos_local_llm_generate_stream(
     _ prompt: UnsafePointer<CChar>,
     _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
+    _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
@@ -751,6 +806,7 @@ private func etos_local_llm_generate_chat_stream(
     _ toolCount: Int32,
     _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
+    _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32

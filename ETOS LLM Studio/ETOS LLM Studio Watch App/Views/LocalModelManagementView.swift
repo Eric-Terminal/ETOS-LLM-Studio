@@ -93,6 +93,7 @@ struct LocalModelManagementView: View {
 
     private func downloadModel() {
         guard let url = normalizedURL else { return }
+        let requestedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         isDownloading = true
         statusMessage = nil
         Task {
@@ -101,12 +102,12 @@ struct LocalModelManagementView: View {
                 defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 try validateDownloadResponse(response)
                 let suggestedName = url.lastPathComponent.isEmpty ? "model.gguf" : url.lastPathComponent
-                _ = try store.registerDownloadedModel(
-                    fileAt: downloadedURL,
-                    suggestedFileName: suggestedName,
-                    displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : displayName
-                )
-                await MainActor.run {
+                try await MainActor.run {
+                    _ = try store.registerDownloadedModel(
+                        fileAt: downloadedURL,
+                        suggestedFileName: suggestedName,
+                        displayName: requestedDisplayName.isEmpty ? nil : requestedDisplayName
+                    )
                     downloadURLText = ""
                     displayName = ""
                     statusMessage = NSLocalizedString("下载完成。", comment: "Local model download completed")

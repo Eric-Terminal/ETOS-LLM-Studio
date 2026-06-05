@@ -32,6 +32,7 @@ using json = nlohmann::ordered_json;
 namespace {
 
 std::once_flag backend_init_once;
+constexpr int32_t local_llm_cancelled_status = -2;
 
 char * copy_string(const std::string & value) {
     char * result = static_cast<char *>(std::malloc(value.size() + 1));
@@ -47,6 +48,17 @@ int32_t fail(const std::string & message, char ** error_message) {
         *error_message = copy_string(message);
     }
     return -1;
+}
+
+int32_t cancelled(char ** error_message) {
+    if (error_message) {
+        *error_message = copy_string("本地推理已取消。");
+    }
+    return local_llm_cancelled_status;
+}
+
+bool should_cancel(etos_local_llm_cancel_callback cancel_callback, void * user_data) {
+    return cancel_callback && cancel_callback(user_data) != 0;
 }
 
 int32_t thread_count() {
@@ -669,6 +681,7 @@ int32_t generate(
     const etos_local_llm_generation_config * config,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
 ) {
@@ -683,6 +696,9 @@ int32_t generate(
     }
 
     local_generation_params generation_params = generation_params_from_config(*config);
+    if (should_cancel(cancel_callback, user_data)) {
+        return cancelled(error_message);
+    }
 
     std::call_once(backend_init_once, [] {
         llama_backend_init();
@@ -700,9 +716,17 @@ int32_t generate(
     if (!model) {
         return fail("无法加载本地模型权重。", error_message);
     }
+    if (should_cancel(cancel_callback, user_data)) {
+        llama_model_free(model);
+        return cancelled(error_message);
+    }
 
     local_chat_template_result chat_template;
     if (!prompt || prompt[0] == '\0') {
+        if (should_cancel(cancel_callback, user_data)) {
+            llama_model_free(model);
+            return cancelled(error_message);
+        }
         chat_template = apply_chat_template(
             model,
             messages,
@@ -726,12 +750,20 @@ int32_t generate(
         generation_params.additional_stops = chat_template.additional_stops;
         prompt = chat_template.prompt.c_str();
     }
+    if (should_cancel(cancel_callback, user_data)) {
+        llama_model_free(model);
+        return cancelled(error_message);
+    }
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
     std::vector<llama_token> prompt_tokens = tokenize_prompt(vocab, prompt);
     if (prompt_tokens.empty()) {
         llama_model_free(model);
         return fail("本地模型无法解析提示词。", error_message);
+    }
+    if (should_cancel(cancel_callback, user_data)) {
+        llama_model_free(model);
+        return cancelled(error_message);
     }
 
     const int32_t requested_context = std::max<int32_t>(1, generation_params.context_size);
@@ -757,6 +789,11 @@ int32_t generate(
         llama_model_free(model);
         return fail("无法创建本地模型上下文。", error_message);
     }
+    if (should_cancel(cancel_callback, user_data)) {
+        llama_free(ctx);
+        llama_model_free(model);
+        return cancelled(error_message);
+    }
 
     llama_sampler * sampler = create_sampler(model, vocab, generation_params);
     if (!sampler) {
@@ -764,24 +801,47 @@ int32_t generate(
         llama_model_free(model);
         return fail("无法创建本地模型采样器。", error_message);
     }
+    if (should_cancel(cancel_callback, user_data)) {
+        llama_sampler_free(sampler);
+        llama_free(ctx);
+        llama_model_free(model);
+        return cancelled(error_message);
+    }
 
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     int32_t generated_tokens = 0;
     std::string pending_text;
     const size_t retained_stop_suffix = longest_stop_length(generation_params.additional_stops);
-    bool should_flush_pending = true;
 
     while (generated_tokens < output_limit) {
+        if (should_cancel(cancel_callback, user_data)) {
+            llama_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return cancelled(error_message);
+        }
         if (llama_decode(ctx, batch) != 0) {
             llama_sampler_free(sampler);
             llama_free(ctx);
             llama_model_free(model);
             return fail("本地模型解码失败。", error_message);
         }
+        if (should_cancel(cancel_callback, user_data)) {
+            llama_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return cancelled(error_message);
+        }
 
         llama_token token = llama_sampler_sample(sampler, ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) {
             break;
+        }
+        if (should_cancel(cancel_callback, user_data)) {
+            llama_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return cancelled(error_message);
         }
 
         std::string piece = token_to_piece(vocab, token);
@@ -796,14 +856,19 @@ int32_t generate(
         const size_t stop_position = first_stop_position(pending_text, generation_params.additional_stops);
         if (stop_position != std::string::npos) {
             pending_text.erase(stop_position);
-            should_flush_pending = flush_pending_text(
+            if (!flush_pending_text(
                 pending_text,
                 0,
                 true,
                 output_text,
                 token_callback,
                 user_data
-            );
+            )) {
+                llama_sampler_free(sampler);
+                llama_free(ctx);
+                llama_model_free(model);
+                return cancelled(error_message);
+            }
             break;
         }
         if (!flush_pending_text(
@@ -814,16 +879,21 @@ int32_t generate(
             token_callback,
             user_data
         )) {
-            should_flush_pending = false;
-            break;
+            llama_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return cancelled(error_message);
         }
 
         batch = llama_batch_get_one(&token, 1);
         generated_tokens += 1;
     }
 
-    if (should_flush_pending) {
-        flush_pending_text(pending_text, 0, true, output_text, token_callback, user_data);
+    if (!flush_pending_text(pending_text, 0, true, output_text, token_callback, user_data)) {
+        llama_sampler_free(sampler);
+        llama_free(ctx);
+        llama_model_free(model);
+        return cancelled(error_message);
     }
     llama_sampler_free(sampler);
     llama_free(ctx);
@@ -1028,6 +1098,8 @@ int32_t etos_local_llm_generate(
     const char * model_path,
     const char * prompt,
     const etos_local_llm_generation_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
     char ** output,
     char ** error_message
 ) {
@@ -1052,7 +1124,8 @@ int32_t etos_local_llm_generate(
         config,
         &response,
         nullptr,
-        nullptr,
+        cancel_callback,
+        user_data,
         error_message
     );
     if (status != 0) {
@@ -1070,6 +1143,8 @@ int32_t etos_local_llm_generate_chat(
     const etos_local_llm_tool * tools,
     int32_t tool_count,
     const etos_local_llm_generation_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
     char ** output,
     char ** error_message
 ) {
@@ -1094,7 +1169,8 @@ int32_t etos_local_llm_generate_chat(
         config,
         &response,
         nullptr,
-        nullptr,
+        cancel_callback,
+        user_data,
         error_message
     );
     if (status != 0) {
@@ -1110,6 +1186,7 @@ int32_t etos_local_llm_generate_stream(
     const char * prompt,
     const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
 ) {
@@ -1126,6 +1203,7 @@ int32_t etos_local_llm_generate_stream(
         config,
         nullptr,
         token_callback,
+        cancel_callback,
         user_data,
         error_message
     );
@@ -1139,6 +1217,7 @@ int32_t etos_local_llm_generate_chat_stream(
     int32_t tool_count,
     const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
 ) {
@@ -1155,6 +1234,7 @@ int32_t etos_local_llm_generate_chat_stream(
         config,
         nullptr,
         token_callback,
+        cancel_callback,
         user_data,
         error_message
     );

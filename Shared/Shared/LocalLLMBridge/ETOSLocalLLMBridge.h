@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 typedef int32_t (*etos_local_llm_token_callback)(const char * text, void * user_data);
+typedef int32_t (*etos_local_llm_cancel_callback)(void * user_data);
 
 typedef struct etos_local_llm_chat_message {
     const char * role;
@@ -91,6 +92,8 @@ int32_t etos_local_llm_generate(
     const char * model_path,
     const char * prompt,
     const etos_local_llm_generation_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
     char ** output,
     char ** error_message
 );
@@ -102,6 +105,8 @@ int32_t etos_local_llm_generate_chat(
     const etos_local_llm_tool * tools,
     int32_t tool_count,
     const etos_local_llm_generation_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
     char ** output,
     char ** error_message
 );
@@ -111,6 +116,7 @@ int32_t etos_local_llm_generate_stream(
     const char * prompt,
     const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
 );
@@ -123,6 +129,7 @@ int32_t etos_local_llm_generate_chat_stream(
     int32_t tool_count,
     const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
 );
