@@ -29,8 +29,18 @@ extension ChatView {
             }
             .sheet(item: $viewModel.messageRewritePayload) { payload in
                 NavigationStack {
-                    RewriteMessageView(message: payload.message) { instruction in
-                        viewModel.rewriteMessage(payload.message, instruction: instruction)
+                    RewriteMessageView(
+                        message: payload.message,
+                        referenceVersions: MessageRewriteReferenceSupport.referenceVersions(
+                            for: payload.message,
+                            in: viewModel.allMessagesForSession
+                        )
+                    ) { instruction, referenceVersions in
+                        viewModel.rewriteMessage(
+                            payload.message,
+                            instruction: instruction,
+                            referenceVersions: referenceVersions
+                        )
                     }
                 }
                 .presentationDetents([.medium, .large])

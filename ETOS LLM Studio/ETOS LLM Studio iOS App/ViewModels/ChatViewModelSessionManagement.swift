@@ -186,7 +186,11 @@ extension ChatViewModel {
         }
     }
 
-    func rewriteMessage(_ message: ChatMessage, instruction: String) {
+    func rewriteMessage(
+        _ message: ChatMessage,
+        instruction: String,
+        referenceVersions: [MessageRewriteReferenceVersion] = []
+    ) {
         let sessionID = currentSession?.id
         Task {
             do {
@@ -194,7 +198,8 @@ extension ChatViewModel {
                     message,
                     instruction: instruction,
                     aiTemperature: aiTemperature,
-                    sessionID: sessionID
+                    sessionID: sessionID,
+                    referenceVersions: referenceVersions
                 )
             } catch is CancellationError {
             } catch {

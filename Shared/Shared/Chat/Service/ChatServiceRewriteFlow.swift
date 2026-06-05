@@ -41,7 +41,8 @@ extension ChatService {
         _ message: ChatMessage,
         instruction: String,
         aiTemperature: Double,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        referenceVersions: [MessageRewriteReferenceVersion] = []
     ) async throws {
         await waitForInitialPersistenceStateIfNeeded()
 
@@ -133,6 +134,7 @@ extension ChatService {
             let rewrittenContent = try await self.generateRewriteContent(
                 originalContent: originalContent,
                 instruction: trimmedInstruction,
+                referenceVersions: referenceVersions,
                 aiTemperature: aiTemperature,
                 sessionID: resolvedSessionID,
                 runnableModel: targetModel
@@ -193,6 +195,7 @@ extension ChatService {
     private func generateRewriteContent(
         originalContent: String,
         instruction: String,
+        referenceVersions: [MessageRewriteReferenceVersion],
         aiTemperature: Double,
         sessionID: UUID,
         runnableModel: RunnableModel?
@@ -206,14 +209,30 @@ extension ChatService {
         - 直接输出修改后的原文全文，输出内容会原样作为新的回复版本。
         - 不要输出“好的，这是你要求的修改后的文案”等说明、寒暄、标题、前后缀或代码围栏。
         """, comment: "Message rewrite system prompt")
-        let userPromptTemplate = NSLocalizedString("""
-        重写要求：
-        %@
+        let userPrompt: String
+        let referenceVersionBlock = makeReferenceVersionPromptBlock(referenceVersions)
+        if referenceVersionBlock.isEmpty {
+            let userPromptTemplate = NSLocalizedString("""
+            重写要求：
+            %@
 
-        原文：
-        %@
-        """, comment: "Message rewrite user prompt")
-        let userPrompt = String(format: userPromptTemplate, instruction, originalContent)
+            原文：
+            %@
+            """, comment: "Message rewrite user prompt")
+            userPrompt = String(format: userPromptTemplate, instruction, originalContent)
+        } else {
+            let userPromptTemplate = NSLocalizedString("""
+            重写要求：
+            %@
+
+            其他版本：
+            %@
+
+            原文：
+            %@
+            """, comment: "Message rewrite user prompt with reference versions")
+            userPrompt = String(format: userPromptTemplate, instruction, referenceVersionBlock, originalContent)
+        }
 
         return try await generateDetachedChatCompletion(
             systemPrompt: systemPrompt,
@@ -224,6 +243,21 @@ extension ChatService {
             sessionID: sessionID,
             appendOutputLanguageInstruction: false
         )
+    }
+
+    private func makeReferenceVersionPromptBlock(
+        _ referenceVersions: [MessageRewriteReferenceVersion]
+    ) -> String {
+        referenceVersions
+            .sorted { $0.versionNumber < $1.versionNumber }
+            .map { version in
+                String(
+                    format: NSLocalizedString("版本 %d：\n%@", comment: "Message rewrite reference version prompt item"),
+                    version.versionNumber,
+                    version.content
+                )
+            }
+            .joined(separator: "\n\n")
     }
 
     private func prepareRewriteAttemptMetadata(

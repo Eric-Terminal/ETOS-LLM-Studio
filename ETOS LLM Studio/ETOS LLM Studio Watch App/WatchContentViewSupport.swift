@@ -372,8 +372,18 @@ extension ContentView {
     @ViewBuilder
     func rewriteMessageView(for messageID: UUID) -> some View {
         if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
-            RewriteMessageView(message: message) { instruction in
-                viewModel.rewriteMessage(message, instruction: instruction)
+            RewriteMessageView(
+                message: message,
+                referenceVersions: MessageRewriteReferenceSupport.referenceVersions(
+                    for: message,
+                    in: viewModel.allMessagesForSession
+                )
+            ) { instruction, referenceVersions in
+                viewModel.rewriteMessage(
+                    message,
+                    instruction: instruction,
+                    referenceVersions: referenceVersions
+                )
             }
         } else {
             EmptyView()

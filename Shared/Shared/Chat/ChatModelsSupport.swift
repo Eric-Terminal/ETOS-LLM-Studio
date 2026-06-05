@@ -15,6 +15,18 @@ public struct ChatResponseAttemptVersionInfo: Equatable, Sendable {
     public let totalCount: Int
 }
 
+public struct MessageRewriteReferenceVersion: Identifiable, Equatable, Hashable, Sendable {
+    public let versionNumber: Int
+    public let content: String
+
+    public var id: Int { versionNumber }
+
+    public init(versionNumber: Int, content: String) {
+        self.versionNumber = versionNumber
+        self.content = content
+    }
+}
+
 public enum ChatQuickRetrySupport {
     public static func canRetryLatestMessage(in messages: [ChatMessage], isSending: Bool) -> Bool {
         guard !isSending else { return false }
@@ -309,6 +321,70 @@ public enum ChatResponseAttemptSupport {
             return true
         case .user:
             return false
+        }
+    }
+}
+
+public enum MessageRewriteReferenceSupport {
+    public static func referenceVersions(
+        for message: ChatMessage,
+        in messages: [ChatMessage]
+    ) -> [MessageRewriteReferenceVersion] {
+        if let responseAttemptReferences = responseAttemptReferenceVersions(for: message, in: messages) {
+            return responseAttemptReferences
+        }
+        return legacyReferenceVersions(for: message)
+    }
+
+    private static func responseAttemptReferenceVersions(
+        for message: ChatMessage,
+        in messages: [ChatMessage]
+    ) -> [MessageRewriteReferenceVersion]? {
+        guard let groupID = message.responseGroupID,
+              let currentAttemptID = message.responseAttemptID else {
+            return nil
+        }
+
+        let attempts = ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages)
+        guard attempts.count > 1, attempts.contains(currentAttemptID) else { return nil }
+
+        return attempts.enumerated().compactMap { index, attemptID in
+            guard attemptID != currentAttemptID,
+                  let content = representativeContent(
+                    forAttemptID: attemptID,
+                    groupID: groupID,
+                    in: messages
+                  ) else {
+                return nil
+            }
+            return MessageRewriteReferenceVersion(versionNumber: index + 1, content: content)
+        }
+    }
+
+    private static func representativeContent(
+        forAttemptID attemptID: UUID,
+        groupID: UUID,
+        in messages: [ChatMessage]
+    ) -> String? {
+        messages
+            .reversed()
+            .first {
+                $0.responseGroupID == groupID
+                    && $0.responseAttemptID == attemptID
+                    && ($0.role == .assistant || $0.role == .error)
+                    && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }?
+            .content
+    }
+
+    private static func legacyReferenceVersions(for message: ChatMessage) -> [MessageRewriteReferenceVersion] {
+        let currentIndex = message.getCurrentVersionIndex()
+        return message.getAllVersions().enumerated().compactMap { index, content in
+            guard index != currentIndex,
+                  !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return nil
+            }
+            return MessageRewriteReferenceVersion(versionNumber: index + 1, content: content)
         }
     }
 }
