@@ -179,9 +179,11 @@ extension DailyPulseManager {
         let activeTasks = pendingTasks
         let preferenceProfile = Self.makePreferenceProfile(history: feedbackHistory, recentRuns: runs)
         let externalContext = buildExternalContext()
+        let globalSystemPrompt = GlobalSystemPromptStore.load().activeSystemPrompt
         return DailyPulseGenerationInput(
             focusText: focusText.trimmingCharacters(in: .whitespacesAndNewlines),
             curationText: Self.activeCurationText(for: todayKey, pendingCuration: pendingCuration),
+            globalSystemPrompt: globalSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
             sessionExcerpts: sessionExcerpts,
             memories: memories,
             requestLogSummary: requestLogSummary,
