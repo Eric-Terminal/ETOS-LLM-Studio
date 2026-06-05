@@ -65,9 +65,8 @@ public enum LocalModelProviderBridge {
         writeOverride("sampler_seq", value: record.samplerKinds.map { .string(LocalLLMSamplerKind.chainString($0)) }, to: &overrideParameters, preferRecordBasics: preferRecordBasics)
         writeOverride("llama_cli_args", value: record.advancedArguments.nilIfEmpty.map(JSONValue.string), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
 
-        let capabilities = Model.orderedCapabilities(
-            (existingModel?.capabilities ?? []) + [.toolCalling, .streaming, .embedding]
-        )
+        let preservedCapabilities = (existingModel?.capabilities ?? []).filter { $0 != .toolCalling }
+        let capabilities = Model.orderedCapabilities(preservedCapabilities + [.streaming, .embedding])
 
         return Model(
             id: record.id,

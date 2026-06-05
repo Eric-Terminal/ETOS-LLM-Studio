@@ -288,7 +288,7 @@ extension ChatService {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext,
-                availableTools: runnableModel.model.supportsToolCalling ? tools : nil
+                availableTools: nil
             )
             return
         }
