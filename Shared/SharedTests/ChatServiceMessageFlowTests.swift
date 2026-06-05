@@ -633,7 +633,10 @@ extension ChatServiceTests {
         )
         try await Task.sleep(for: .milliseconds(300))
 
+        let summarySystemPrompt = mockAdapter.receivedConversationSummaryMessages?.first(where: { $0.role == .system })?.content ?? ""
         let summaryUserPrompt = mockAdapter.receivedConversationSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
+        #expect(summarySystemPrompt.contains("长期记忆"))
+        #expect(summarySystemPrompt.contains("敏感隐私"))
         #expect(summaryUserPrompt.contains(String(repeating: "甲", count: 2_000)))
         #expect(!summaryUserPrompt.contains(String(repeating: "甲", count: 2_001)))
 

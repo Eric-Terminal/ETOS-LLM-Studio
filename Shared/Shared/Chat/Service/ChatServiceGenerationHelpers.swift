@@ -152,12 +152,21 @@ extension ChatService {
         let summaryContext = makeConversationSummaryContext(from: conversationalMessages)
         guard !summaryContext.isEmpty else { return }
         let summarySystemPrompt = NSLocalizedString("""
-        你是会话压缩助手。请基于给定对话生成“跨对话可复用”的摘要。
-        约束：
-        - 中文输出 60~140 字，其他语言输出 50~120 个词；
-        - 只保留关键主题、用户意图、明确结论；
-        - 不要罗列细节，不要添加免责声明；
-        - 仅输出摘要正文。
+        你是会话压缩助手，负责生成可用于长期记忆的跨对话摘要。请基于给定对话提炼后续对话真正有用的信息，而不是复述聊天记录。
+        优先保留：
+        - 用户稳定偏好、写作/编码风格、默认语言与输出格式；
+        - 用户长期项目、角色背景、正在推进的目标；
+        - 已明确达成的结论、决策、约定、待办；
+        - 对后续协作有帮助的术语、文件、业务背景或上下文。
+        忽略：
+        - 寒暄、礼貌语、临时操作步骤、一次性细节；
+        - 未确认的猜测、模型自己的推断、失败过程；
+        - 敏感隐私与第三方隐私，除非用户明确要求长期记住且对后续任务必要；
+        - 大段原文、代码或附件内容，只提炼长期有用结论。
+        输出约束：
+        - 中文输出 80~180 字，其他语言输出 70~160 个词；
+        - 信息不足时只记录明确事实，不要编造；
+        - 仅输出摘要正文，不要加标题、列表编号或免责声明。
         """, comment: "Conversation summary system prompt")
         let summaryUserPrompt = String(
             format: NSLocalizedString("""
