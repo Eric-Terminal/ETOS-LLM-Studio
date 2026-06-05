@@ -14,6 +14,7 @@
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -95,7 +96,21 @@ struct local_generation_params {
         ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE,
     };
     std::string grammar;
+    bool grammar_lazy = false;
+    bool grammar_needs_prefill = false;
+    std::vector<common_grammar_trigger> grammar_triggers;
+    std::string generation_prompt;
+    std::vector<std::string> additional_stops;
     bool ignore_eos = false;
+};
+
+struct local_chat_template_result {
+    std::string prompt;
+    std::string grammar;
+    bool grammar_lazy = false;
+    std::vector<common_grammar_trigger> grammar_triggers;
+    std::string generation_prompt;
+    std::vector<std::string> additional_stops;
 };
 
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config) {
@@ -144,117 +159,19 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
     return params;
 }
 
-llama_sampler * create_sampler(
-    const llama_model * model,
-    const llama_vocab * vocab,
-    const local_generation_params & params
-) {
-    llama_sampler * sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
-
-    if (params.ignore_eos) {
-        llama_logit_bias eos_bias = {
-            llama_vocab_eos(vocab),
-            -INFINITY
-        };
-        llama_sampler_chain_add(sampler, llama_sampler_init_logit_bias(llama_vocab_n_tokens(vocab), 1, &eos_bias));
-    }
-
-    const size_t min_keep = params.min_keep <= 0 ? 0 : static_cast<size_t>(params.min_keep);
-    if (params.mirostat == 1) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
-        llama_sampler_chain_add(sampler, llama_sampler_init_mirostat(llama_vocab_n_tokens(vocab), params.seed, params.mirostat_tau, params.mirostat_eta, 100));
-        return sampler;
-    }
-    if (params.mirostat == 2) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
-        llama_sampler_chain_add(sampler, llama_sampler_init_mirostat_v2(params.seed, params.mirostat_tau, params.mirostat_eta));
-        return sampler;
-    }
-
-    bool uses_terminal_sampler = false;
-    for (const int32_t sampler_kind : params.sampler_kinds) {
-        switch (sampler_kind) {
-        case ETOS_LOCAL_LLM_SAMPLER_PENALTIES:
-            llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
-                params.repeat_last_n,
-                params.repeat_penalty,
-                params.frequency_penalty,
-                params.presence_penalty
-            ));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_DRY: {
-            std::vector<const char *> breakers;
-            breakers.reserve(params.dry_sequence_breakers.size());
-            for (const std::string & breaker : params.dry_sequence_breakers) {
-                breakers.push_back(breaker.c_str());
-            }
-            llama_sampler_chain_add(sampler, llama_sampler_init_dry(
-                vocab,
-                llama_model_n_ctx_train(model),
-                params.dry_multiplier,
-                params.dry_base,
-                params.dry_allowed_length,
-                params.dry_penalty_last_n,
-                breakers.data(),
-                breakers.size()
-            ));
-            break;
-        }
-        case ETOS_LOCAL_LLM_SAMPLER_TOP_N_SIGMA:
-            llama_sampler_chain_add(sampler, llama_sampler_init_top_n_sigma(params.top_n_sigma));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_TOP_K:
-            llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.top_k));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_TYPICAL:
-            llama_sampler_chain_add(sampler, llama_sampler_init_typical(params.typical_p, min_keep));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_TOP_P:
-            llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.top_p, min_keep));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_MIN_P:
-            llama_sampler_chain_add(sampler, llama_sampler_init_min_p(params.min_p, min_keep));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_XTC:
-            llama_sampler_chain_add(sampler, llama_sampler_init_xtc(params.xtc_probability, params.xtc_threshold, min_keep, params.seed));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE:
-            llama_sampler_chain_add(sampler, llama_sampler_init_temp_ext(params.temperature, params.dynatemp_range, params.dynatemp_exponent));
-            break;
-        case ETOS_LOCAL_LLM_SAMPLER_ADAPTIVE:
-            uses_terminal_sampler = true;
-            break;
-        default:
-            break;
-        }
-    }
-
-    if (!params.grammar.empty()) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_grammar(vocab, params.grammar.c_str(), "root"));
-    }
-    if (uses_terminal_sampler) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_adaptive_p(params.adaptive_target, params.adaptive_decay, params.seed));
-    } else if (params.temperature <= 0.0f) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
-    } else {
-        llama_sampler_chain_add(sampler, llama_sampler_init_dist(params.seed));
-    }
-    return sampler;
-}
-
-std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & prompt) {
-    const int32_t token_count = -llama_tokenize(vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()), nullptr, 0, true, true);
+std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & text, bool add_special = true) {
+    const int32_t token_count = -llama_tokenize(vocab, text.c_str(), static_cast<int32_t>(text.size()), nullptr, 0, add_special, true);
     if (token_count <= 0) {
         return {};
     }
     std::vector<llama_token> tokens(static_cast<size_t>(token_count));
     const int32_t written = llama_tokenize(
         vocab,
-        prompt.c_str(),
-        static_cast<int32_t>(prompt.size()),
+        text.c_str(),
+        static_cast<int32_t>(text.size()),
         tokens.data(),
         static_cast<int32_t>(tokens.size()),
-        true,
+        add_special,
         true
     );
     if (written < 0) {
@@ -262,6 +179,10 @@ std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string &
     }
     tokens.resize(static_cast<size_t>(written));
     return tokens;
+}
+
+std::vector<llama_token> tokenize_prompt(const llama_vocab * vocab, const std::string & prompt) {
+    return tokenize(vocab, prompt, true);
 }
 
 std::string token_to_piece(const llama_vocab * vocab, llama_token token) {
@@ -287,6 +208,162 @@ std::string token_to_piece(const llama_vocab * vocab, llama_token token) {
     return std::string(dynamic_buffer.data(), static_cast<size_t>(dynamic_written));
 }
 
+llama_sampler * create_sampler(
+    const llama_model * model,
+    const llama_vocab * vocab,
+    const local_generation_params & params
+) {
+    llama_sampler * sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
+
+    if (params.ignore_eos) {
+        llama_logit_bias eos_bias = {
+            llama_vocab_eos(vocab),
+            -INFINITY
+        };
+        llama_sampler_chain_add(sampler, llama_sampler_init_logit_bias(llama_vocab_n_tokens(vocab), 1, &eos_bias));
+    }
+
+    const size_t min_keep = params.min_keep <= 0 ? 0 : static_cast<size_t>(params.min_keep);
+    bool uses_terminal_sampler = false;
+    if (params.mirostat == 0) {
+        for (const int32_t sampler_kind : params.sampler_kinds) {
+            switch (sampler_kind) {
+            case ETOS_LOCAL_LLM_SAMPLER_PENALTIES:
+                llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
+                    params.repeat_last_n,
+                    params.repeat_penalty,
+                    params.frequency_penalty,
+                    params.presence_penalty
+                ));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_DRY: {
+                std::vector<const char *> breakers;
+                breakers.reserve(params.dry_sequence_breakers.size());
+                for (const std::string & breaker : params.dry_sequence_breakers) {
+                    breakers.push_back(breaker.c_str());
+                }
+                llama_sampler_chain_add(sampler, llama_sampler_init_dry(
+                    vocab,
+                    llama_model_n_ctx_train(model),
+                    params.dry_multiplier,
+                    params.dry_base,
+                    params.dry_allowed_length,
+                    params.dry_penalty_last_n,
+                    breakers.data(),
+                    breakers.size()
+                ));
+                break;
+            }
+            case ETOS_LOCAL_LLM_SAMPLER_TOP_N_SIGMA:
+                llama_sampler_chain_add(sampler, llama_sampler_init_top_n_sigma(params.top_n_sigma));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_TOP_K:
+                llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.top_k));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_TYPICAL:
+                llama_sampler_chain_add(sampler, llama_sampler_init_typical(params.typical_p, min_keep));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_TOP_P:
+                llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.top_p, min_keep));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_MIN_P:
+                llama_sampler_chain_add(sampler, llama_sampler_init_min_p(params.min_p, min_keep));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_XTC:
+                llama_sampler_chain_add(sampler, llama_sampler_init_xtc(params.xtc_probability, params.xtc_threshold, min_keep, params.seed));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE:
+                llama_sampler_chain_add(sampler, llama_sampler_init_temp_ext(params.temperature, params.dynatemp_range, params.dynatemp_exponent));
+                break;
+            case ETOS_LOCAL_LLM_SAMPLER_ADAPTIVE:
+                uses_terminal_sampler = true;
+                break;
+            default:
+                break;
+            }
+        }
+    } else {
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
+    }
+
+    if (!params.grammar.empty()) {
+        std::vector<std::string> trigger_patterns;
+        std::vector<llama_token> trigger_tokens;
+        for (const auto & trigger : params.grammar_triggers) {
+            switch (trigger.type) {
+            case COMMON_GRAMMAR_TRIGGER_TYPE_WORD:
+                trigger_patterns.push_back(regex_escape(trigger.value));
+                break;
+            case COMMON_GRAMMAR_TRIGGER_TYPE_PATTERN:
+                trigger_patterns.push_back(trigger.value);
+                break;
+            case COMMON_GRAMMAR_TRIGGER_TYPE_PATTERN_FULL: {
+                std::string anchored = "^$";
+                if (!trigger.value.empty()) {
+                    anchored = (trigger.value.front() != '^' ? "^" : "")
+                        + trigger.value
+                        + (trigger.value.back() != '$' ? "$" : "");
+                }
+                trigger_patterns.push_back(anchored);
+                break;
+            }
+            case COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN:
+                trigger_tokens.push_back(trigger.token);
+                break;
+            }
+        }
+
+        std::vector<const char *> trigger_patterns_c;
+        trigger_patterns_c.reserve(trigger_patterns.size());
+        for (const auto & pattern : trigger_patterns) {
+            trigger_patterns_c.push_back(pattern.c_str());
+        }
+
+        llama_sampler * grammar_sampler = params.grammar_lazy
+            ? llama_sampler_init_grammar_lazy_patterns(
+                vocab,
+                params.grammar.c_str(),
+                "root",
+                trigger_patterns_c.data(),
+                trigger_patterns_c.size(),
+                trigger_tokens.data(),
+                trigger_tokens.size()
+            )
+            : llama_sampler_init_grammar(vocab, params.grammar.c_str(), "root");
+        if (!grammar_sampler) {
+            llama_sampler_free(sampler);
+            return nullptr;
+        }
+        if (!params.grammar_lazy && params.grammar_needs_prefill && !params.generation_prompt.empty()) {
+            const auto prefill_tokens = tokenize(vocab, params.generation_prompt, false);
+            for (size_t index = 0; index < prefill_tokens.size(); ++index) {
+                const std::string piece = token_to_piece(vocab, prefill_tokens[index]);
+                if (index == 0
+                    && !piece.empty()
+                    && !params.generation_prompt.empty()
+                    && std::isspace(static_cast<unsigned char>(piece[0]))
+                    && !std::isspace(static_cast<unsigned char>(params.generation_prompt[0]))) {
+                    continue;
+                }
+                llama_sampler_accept(grammar_sampler, prefill_tokens[index]);
+            }
+        }
+        llama_sampler_chain_add(sampler, grammar_sampler);
+    }
+    if (params.mirostat == 1) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_mirostat(llama_vocab_n_tokens(vocab), params.seed, params.mirostat_tau, params.mirostat_eta, 100));
+    } else if (params.mirostat == 2) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_mirostat_v2(params.seed, params.mirostat_tau, params.mirostat_eta));
+    } else if (uses_terminal_sampler) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_adaptive_p(params.adaptive_target, params.adaptive_decay, params.seed));
+    } else if (params.temperature <= 0.0f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    } else {
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(params.seed));
+    }
+    return sampler;
+}
+
 void batch_add(llama_batch & batch, llama_token token, llama_pos position, llama_seq_id sequence_id, bool output) {
     batch.token[batch.n_tokens] = token;
     batch.pos[batch.n_tokens] = position;
@@ -307,7 +384,64 @@ void normalize_embedding(const float * input, float * output, int32_t dimension)
     }
 }
 
-std::string apply_chat_template(
+size_t longest_stop_length(const std::vector<std::string> & stops) {
+    size_t length = 0;
+    for (const std::string & stop : stops) {
+        length = std::max(length, stop.size());
+    }
+    return length;
+}
+
+size_t first_stop_position(const std::string & text, const std::vector<std::string> & stops) {
+    size_t position = std::string::npos;
+    for (const std::string & stop : stops) {
+        if (stop.empty()) {
+            continue;
+        }
+        const size_t found = text.find(stop);
+        if (found != std::string::npos) {
+            position = std::min(position, found);
+        }
+    }
+    return position;
+}
+
+bool emit_text_chunk(
+    const std::string & chunk,
+    std::string * output_text,
+    etos_local_llm_token_callback token_callback,
+    void * user_data
+) {
+    if (chunk.empty()) {
+        return true;
+    }
+    if (output_text) {
+        output_text->append(chunk);
+    }
+    return !token_callback || token_callback(chunk.c_str(), user_data) != 0;
+}
+
+bool flush_pending_text(
+    std::string & pending_text,
+    size_t retained_suffix_length,
+    bool final_flush,
+    std::string * output_text,
+    etos_local_llm_token_callback token_callback,
+    void * user_data
+) {
+    if (pending_text.empty()) {
+        return true;
+    }
+    const size_t retained_length = final_flush ? 0 : std::min(retained_suffix_length, pending_text.size());
+    if (pending_text.size() <= retained_length) {
+        return true;
+    }
+    std::string chunk = pending_text.substr(0, pending_text.size() - retained_length);
+    pending_text.erase(0, chunk.size());
+    return emit_text_chunk(chunk, output_text, token_callback, user_data);
+}
+
+local_chat_template_result apply_chat_template(
     const llama_model * model,
     const etos_local_llm_chat_message * messages,
     int32_t message_count,
@@ -400,7 +534,14 @@ std::string apply_chat_template(
             parser_params->parser = std::move(parser);
             parser_params->reasoning_format = COMMON_REASONING_FORMAT_NONE;
         }
-        return params.prompt;
+        local_chat_template_result result;
+        result.prompt = params.prompt;
+        result.grammar = params.grammar;
+        result.grammar_lazy = params.grammar_lazy;
+        result.grammar_triggers = params.grammar_triggers;
+        result.generation_prompt = params.generation_prompt;
+        result.additional_stops = params.additional_stops;
+        return result;
     } catch (const std::exception & e) {
         fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
         return {};
@@ -430,7 +571,7 @@ int32_t generate(
         return fail("本地推理配置无效。", error_message);
     }
 
-    const local_generation_params generation_params = generation_params_from_config(*config);
+    local_generation_params generation_params = generation_params_from_config(*config);
 
     std::call_once(backend_init_once, [] {
         llama_backend_init();
@@ -449,9 +590,9 @@ int32_t generate(
         return fail("无法加载本地模型权重。", error_message);
     }
 
-    std::string templated_prompt;
+    local_chat_template_result chat_template;
     if (!prompt || prompt[0] == '\0') {
-        templated_prompt = apply_chat_template(
+        chat_template = apply_chat_template(
             model,
             messages,
             message_count,
@@ -460,15 +601,23 @@ int32_t generate(
             nullptr,
             error_message
         );
-        if (templated_prompt.empty()) {
+        if (chat_template.prompt.empty()) {
             llama_model_free(model);
             return -1;
         }
-        prompt = templated_prompt.c_str();
+        if (!chat_template.grammar.empty()) {
+            generation_params.grammar = chat_template.grammar;
+            generation_params.grammar_lazy = chat_template.grammar_lazy;
+            generation_params.grammar_needs_prefill = true;
+            generation_params.grammar_triggers = chat_template.grammar_triggers;
+            generation_params.generation_prompt = chat_template.generation_prompt;
+        }
+        generation_params.additional_stops = chat_template.additional_stops;
+        prompt = chat_template.prompt.c_str();
     }
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
-    std::vector<llama_token> prompt_tokens = tokenize(vocab, prompt);
+    std::vector<llama_token> prompt_tokens = tokenize_prompt(vocab, prompt);
     if (prompt_tokens.empty()) {
         llama_model_free(model);
         return fail("本地模型无法解析提示词。", error_message);
@@ -499,6 +648,9 @@ int32_t generate(
 
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     int32_t generated_tokens = 0;
+    std::string pending_text;
+    const size_t retained_stop_suffix = longest_stop_length(generation_params.additional_stops);
+    bool should_flush_pending = true;
 
     while (generated_tokens < requested_output) {
         if (llama_decode(ctx, batch) != 0) {
@@ -521,10 +673,27 @@ int32_t generate(
             return fail("本地模型输出转换失败。", error_message);
         }
 
-        if (output_text) {
-            output_text->append(piece);
+        pending_text.append(piece);
+        const size_t stop_position = first_stop_position(pending_text, generation_params.additional_stops);
+        if (stop_position != std::string::npos) {
+            should_flush_pending = emit_text_chunk(
+                pending_text.substr(0, stop_position),
+                output_text,
+                token_callback,
+                user_data
+            );
+            pending_text.clear();
+            break;
         }
-        if (token_callback && token_callback(piece.c_str(), user_data) == 0) {
+        if (!flush_pending_text(
+            pending_text,
+            retained_stop_suffix > 0 ? retained_stop_suffix - 1 : 0,
+            false,
+            output_text,
+            token_callback,
+            user_data
+        )) {
+            should_flush_pending = false;
             break;
         }
 
@@ -532,6 +701,9 @@ int32_t generate(
         generated_tokens += 1;
     }
 
+    if (should_flush_pending) {
+        flush_pending_text(pending_text, 0, true, output_text, token_callback, user_data);
+    }
     llama_sampler_free(sampler);
     llama_free(ctx);
     llama_model_free(model);
@@ -703,7 +875,7 @@ int32_t parse_tool_calls(
     }
 
     common_chat_parser_params parser_params;
-    std::string prompt = apply_chat_template(
+    local_chat_template_result chat_template = apply_chat_template(
         model,
         messages,
         message_count,
@@ -713,7 +885,7 @@ int32_t parse_tool_calls(
         error_message
     );
     llama_model_free(model);
-    if (prompt.empty()) {
+    if (chat_template.prompt.empty()) {
         return -1;
     }
 
