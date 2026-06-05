@@ -364,6 +364,8 @@ extension ChatServiceTests {
 
         let prompt = mockAdapter.receivedMessages?.last(where: { $0.role == .user })?.content ?? ""
         #expect(description == "打开灯光并播放音乐")
+        #expect(prompt.contains("字段说明"))
+        #expect(prompt.contains("- <shortcut_name>：快捷指令名称"))
         #expect(prompt.contains("<shortcut>"))
         #expect(prompt.contains("<shortcut_name>打开 &lt;灯&gt; &amp; 音乐</shortcut_name>"))
         #expect(prompt.contains("<metadata>{\"note\":\"A &lt; B &amp; C\"}</metadata>"))

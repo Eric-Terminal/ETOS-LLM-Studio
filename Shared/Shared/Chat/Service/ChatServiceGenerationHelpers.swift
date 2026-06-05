@@ -356,6 +356,11 @@ extension ChatService {
         - 避免空话，不要出现免责声明；
         - 只返回描述正文。
 
+        字段说明：
+        - <shortcut_name>：快捷指令名称；
+        - <metadata>：快捷指令元数据；
+        - <source_summary>：源码或流程摘要；无内容时为“无”。
+
         <shortcut>
           <shortcut_name>%@</shortcut_name>
           <metadata>%@</metadata>
