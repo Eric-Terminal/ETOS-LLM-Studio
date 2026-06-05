@@ -259,14 +259,13 @@ extension ChatView {
                 selectSessionFromPicker(session, messageOrdinal: result.messageOrdinal)
             }
         } label: {
-            MarqueeTitleSubtitleSelectionRow(
+            SessionSearchResultRowContent(
                 title: searchResultTitle(for: result),
-                subtitle: result.match.preview,
-                isSelected: isCurrent,
-                titleUIFont: .systemFont(ofSize: 15, weight: .semibold),
-                subtitleUIFont: .systemFont(ofSize: 12)
+                preview: result.match.preview,
+                isCurrent: isCurrent,
+                titleColor: TelegramColors.navBarText,
+                previewColor: .secondary
             )
-            .foregroundColor(TelegramColors.navBarText)
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, alignment: .leading)

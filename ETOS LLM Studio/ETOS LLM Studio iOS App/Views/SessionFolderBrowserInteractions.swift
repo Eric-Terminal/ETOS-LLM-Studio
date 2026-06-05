@@ -482,13 +482,14 @@ extension SessionFolderBrowserView {
             Button {
                 selectSession(session, messageOrdinal: result.messageOrdinal)
             } label: {
-                SessionListRowContent(
-                    title: searchResultTitle(for: result),
-                    subtitle: result.match.preview,
-                    footnote: nil,
-                    isCurrent: session.id == viewModel.currentSession?.id,
-                    isRunning: viewModel.runningSessionIDs.contains(session.id)
-                )
+                SessionRowCard(isCurrent: session.id == viewModel.currentSession?.id) {
+                    SessionSearchResultRowContent(
+                        title: searchResultTitle(for: result),
+                        preview: result.match.preview,
+                        isCurrent: session.id == viewModel.currentSession?.id,
+                        isRunning: viewModel.runningSessionIDs.contains(session.id)
+                    )
+                }
             }
             .buttonStyle(.plain)
         }

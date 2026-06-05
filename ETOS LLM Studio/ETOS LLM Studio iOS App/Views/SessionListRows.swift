@@ -431,6 +431,75 @@ struct SessionListRowContent: View {
     }
 }
 
+struct SessionSearchResultRowContent: View {
+    let title: String
+    let preview: String
+    let isCurrent: Bool
+    let isRunning: Bool
+    let titleColor: Color
+    let previewColor: Color
+    let selectedColor: Color
+
+    init(
+        title: String,
+        preview: String,
+        isCurrent: Bool,
+        isRunning: Bool = false,
+        titleColor: Color = .primary,
+        previewColor: Color = .secondary,
+        selectedColor: Color = .accentColor
+    ) {
+        self.title = title
+        self.preview = preview
+        self.isCurrent = isCurrent
+        self.isRunning = isRunning
+        self.titleColor = titleColor
+        self.previewColor = previewColor
+        self.selectedColor = selectedColor
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .etFont(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isCurrent ? selectedColor : titleColor)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(preview)
+                    .etFont(.system(size: 12.5))
+                    .foregroundStyle(previewColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            trailingStatus
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var trailingStatus: some View {
+        if isRunning {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+                Text(NSLocalizedString("生成中", comment: ""))
+                    .etFont(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.green)
+            }
+            .padding(.top, 1)
+        } else if isCurrent {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(selectedColor)
+                .padding(.top, 1)
+        }
+    }
+}
+
 // MARK: - 会话信息 Sheet
 
 struct SessionInfoPayload: Identifiable {
