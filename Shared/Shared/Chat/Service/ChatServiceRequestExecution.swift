@@ -407,15 +407,11 @@ extension ChatService {
 
         for (messageID, attachments) in sortedPairs {
             guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else { continue }
-            var fileBlocks: [String] = []
+            var fileBlocks: [(fileName: String, text: String)] = []
             for attachment in attachments {
                 do {
                     let text = try fileAttachmentTextExtractor.extractText(from: attachment)
-                    let title = String(
-                        format: NSLocalizedString("文件：%@", comment: "Extracted file attachment block title"),
-                        attachment.fileName
-                    )
-                    fileBlocks.append("\(title)\n\(text)")
+                    fileBlocks.append((fileName: attachment.fileName, text: text))
                 } catch {
                     logger.error("文件附件文本提取失败: \(error.localizedDescription)")
                     let reason = localizedFileExtractionErrorDescription(error)
@@ -448,12 +444,21 @@ extension ChatService {
         return error.localizedDescription
     }
 
-    private func makeFileAttachmentAppendixText(_ blocks: [String]) -> String {
-        let joinedBlocks = blocks.joined(separator: "\n\n")
-        return String(
-            format: NSLocalizedString("以下内容来自文件附件文本提取：\n\n%@", comment: "File attachment text appendix sent to chat model"),
-            joinedBlocks
-        )
+    private func makeFileAttachmentAppendixText(_ blocks: [(fileName: String, text: String)]) -> String {
+        let header = NSLocalizedString("以下内容来自用户上传文件的文本提取，仅作为本轮请求的附件上下文。", comment: "File attachment text appendix header sent to chat model")
+        let joinedBlocks = blocks.map { block in
+            """
+            <file name="\(xmlEscapedAttribute(block.fileName))">
+            \(block.text)
+            </file>
+            """
+        }.joined(separator: "\n\n")
+        return """
+        <file_attachments>
+        \(header)
+        \(joinedBlocks)
+        </file_attachments>
+        """
     }
 
     func preprocessImageAttachmentsIfNeeded(

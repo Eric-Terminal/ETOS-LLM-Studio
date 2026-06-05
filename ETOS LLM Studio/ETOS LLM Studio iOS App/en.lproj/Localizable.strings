@@ -2539,8 +2539,7 @@
 "读取“%@”失败：%@。" = "Failed to read \"%@\": %@.";
 "当前平台不支持读取 PDF 附件“%@”。请在 iOS 端发送，或先转换为纯文本。" = "This platform does not support reading PDF attachment \"%@\". Please send it from iOS or convert it to plain text first.";
 "无法读取 PDF 附件“%@”。" = "Unable to read PDF attachment \"%@\".";
-"文件：%@" = "File: %@";
-"以下内容来自文件附件文本提取：\n\n%@" = "The following content was extracted from file attachments:\n\n%@";
+"以下内容来自用户上传文件的文本提取，仅作为本轮请求的附件上下文。" = "The following content was extracted from user-uploaded files and is only attachment context for this request.";
 "附件“%@”文本提取失败：%@" = "Failed to extract text from attachment \"%@\": %@";
 "扫描深度" = "Scan depth";
 "最大递归层级" = "Max recursion depth";

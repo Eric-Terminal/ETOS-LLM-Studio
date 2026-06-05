@@ -102,10 +102,15 @@ extension ChatServiceTests {
         setupMockResponsesForChatAndTitle()
         mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "文件附件已收到")
 
-        let attachment = FileAttachment(
+        let firstAttachment = FileAttachment(
             data: Data("附件原文".utf8),
             mimeType: "text/plain",
             fileName: "notes.txt"
+        )
+        let secondAttachment = FileAttachment(
+            data: Data("第二份附件".utf8),
+            mimeType: "text/plain",
+            fileName: "todo.txt"
         )
 
         await chatService.sendAndProcessMessage(
@@ -118,15 +123,21 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            fileAttachments: [attachment],
+            fileAttachments: [firstAttachment, secondAttachment],
             includeSystemTime: false
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
         let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
         #expect(userMessage.content.contains("请处理这个附件"))
-        #expect(userMessage.content.contains("notes.txt"))
+        #expect(userMessage.content.components(separatedBy: "<file_attachments>").count - 1 == 1)
+        #expect(userMessage.content.contains("<file name=\"notes.txt\">"))
+        #expect(userMessage.content.contains("<file name=\"todo.txt\">"))
         #expect(userMessage.content.contains("附件原文"))
+        #expect(userMessage.content.contains("第二份附件"))
+        #expect(userMessage.content.contains("</file_attachments>"))
+        #expect(!userMessage.content.contains("以下内容来自文件附件文本提取："))
+        #expect(!userMessage.content.contains("文件："))
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
