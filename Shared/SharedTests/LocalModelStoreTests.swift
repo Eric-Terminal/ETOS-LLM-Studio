@@ -147,8 +147,8 @@ struct LocalModelStoreTests {
         )
 
         #expect(restored.models.first?.kind == .embedding)
-        #expect(restored.models.first?.capabilities.contains(.toolCalling) == false)
-        #expect(restored.models.first?.capabilities.contains(.embedding) == false)
+        #expect(restored.models.first?.capabilities.contains(.toolCalling) == true)
+        #expect(restored.models.first?.capabilities.contains(.embedding) == true)
         #expect(restored.models.first?.capabilities.contains(.reasoning) == true)
         #expect(restored.models.first?.supportsStreaming == true)
         #expect(restored.models.first?.supportsEmbedding == true)
