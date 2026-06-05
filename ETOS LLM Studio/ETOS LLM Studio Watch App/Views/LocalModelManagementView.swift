@@ -170,7 +170,6 @@ private struct LocalModelDetailView: View {
     @ObservedObject private var store = LocalModelStore.shared
     @State private var draft: LocalModelRecord
     @State private var showDeleteAlert = false
-    @State private var showAdvancedIntro = false
     @State private var showCLIImport = false
     @State private var cliImportResult: LocalLLMCLIStyleImportResult?
     @State private var contextSizeText: String
@@ -205,7 +204,15 @@ private struct LocalModelDetailView: View {
     var body: some View {
         List {
             Section {
-                LocalModelAdvancedIntroCard(isExpanded: $showAdvancedIntro)
+                NavigationLink {
+                    LocalModelAdvancedIntroView()
+                } label: {
+                    Label(NSLocalizedString("本地模型调参", comment: "Local model tuning intro title"), systemImage: "slider.horizontal.3")
+                }
+            } footer: {
+                Text(NSLocalizedString("参数说明和编辑都放在二级页面，避免手表端误触。", comment: "Watch local model tuning intro footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -272,23 +279,23 @@ private struct LocalModelDetailView: View {
 
     private var runtimeSection: some View {
         Section {
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "contextSize"),
+            parameterEditorLink(
+                descriptorID: "contextSize",
                 text: $contextSizeText,
                 isEnabled: overrideEnabledBinding(\.contextSize, defaultValue: LocalModelRecord.defaultContextSize)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "maxOutputTokens"),
+            parameterEditorLink(
+                descriptorID: "maxOutputTokens",
                 text: $maxOutputTokensText,
                 isEnabled: overrideEnabledBinding(\.maxOutputTokens, defaultValue: LocalModelRecord.defaultMaxOutputTokens)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "gpuLayers"),
+            parameterEditorLink(
+                descriptorID: "gpuLayers",
                 text: $gpuLayersText,
                 isEnabled: overrideEnabledBinding(\.gpuLayers, defaultValue: LocalModelRecord.defaultGPULayers)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "seed"),
+            parameterEditorLink(
+                descriptorID: "seed",
                 text: $seedText,
                 isEnabled: overrideEnabledBinding(\.seed, defaultValue: LocalModelRecord.defaultSeed)
             )
@@ -299,43 +306,43 @@ private struct LocalModelDetailView: View {
 
     private var samplingSection: some View {
         Section {
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "temperature"),
+            parameterEditorLink(
+                descriptorID: "temperature",
                 text: $temperatureText,
                 isEnabled: overrideEnabledBinding(\.temperature, defaultValue: LocalModelRecord.defaultTemperature)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "topK"),
+            parameterEditorLink(
+                descriptorID: "topK",
                 text: $topKText,
                 isEnabled: overrideEnabledBinding(\.topK, defaultValue: LocalModelRecord.defaultTopK)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "topP"),
+            parameterEditorLink(
+                descriptorID: "topP",
                 text: $topPText,
                 isEnabled: overrideEnabledBinding(\.topP, defaultValue: LocalModelRecord.defaultTopP)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "minP"),
+            parameterEditorLink(
+                descriptorID: "minP",
                 text: $minPText,
                 isEnabled: overrideEnabledBinding(\.minP, defaultValue: LocalModelRecord.defaultMinP)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "repeatLastN"),
+            parameterEditorLink(
+                descriptorID: "repeatLastN",
                 text: $repeatLastNText,
                 isEnabled: overrideEnabledBinding(\.repeatLastN, defaultValue: LocalModelRecord.defaultRepeatLastN)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "repeatPenalty"),
+            parameterEditorLink(
+                descriptorID: "repeatPenalty",
                 text: $repeatPenaltyText,
                 isEnabled: overrideEnabledBinding(\.repeatPenalty, defaultValue: LocalModelRecord.defaultRepeatPenalty)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "frequencyPenalty"),
+            parameterEditorLink(
+                descriptorID: "frequencyPenalty",
                 text: $frequencyPenaltyText,
                 isEnabled: overrideEnabledBinding(\.frequencyPenalty, defaultValue: LocalModelRecord.defaultFrequencyPenalty)
             )
-            LocalModelParameterTextField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "presencePenalty"),
+            parameterEditorLink(
+                descriptorID: "presencePenalty",
                 text: $presencePenaltyText,
                 isEnabled: overrideEnabledBinding(\.presencePenalty, defaultValue: LocalModelRecord.defaultPresencePenalty)
             )
@@ -346,18 +353,58 @@ private struct LocalModelDetailView: View {
 
     private var grammarSection: some View {
         Section {
-            LocalModelGrammarField(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "grammar"),
-                text: grammarTextBinding,
-                isEnabled: overrideEnabledBinding(\.grammar, defaultValue: LocalModelRecord.defaultGrammar)
-            )
-            LocalModelToggleParameterRow(
-                descriptor: LocalLLMParameterCatalog.descriptor(for: "ignoreEOS"),
-                value: ignoreEOSBinding,
-                isEnabled: overrideEnabledBinding(\.ignoreEOS, defaultValue: true)
-            )
+            let grammarDescriptor = LocalLLMParameterCatalog.descriptor(for: "grammar")
+            NavigationLink {
+                LocalModelTextOverrideEditor(
+                    descriptor: grammarDescriptor,
+                    text: grammarTextBinding,
+                    isEnabled: overrideEnabledBinding(\.grammar, defaultValue: LocalModelRecord.defaultGrammar)
+                )
+            } label: {
+                LocalModelParameterSummaryRow(
+                    descriptor: grammarDescriptor,
+                    isEnabled: draft.grammar != nil,
+                    valueText: draft.grammar ?? NSLocalizedString("已设置", comment: "Configured local parameter")
+                )
+            }
+
+            let ignoreEOSDescriptor = LocalLLMParameterCatalog.descriptor(for: "ignoreEOS")
+            NavigationLink {
+                LocalModelBoolOverrideEditor(
+                    descriptor: ignoreEOSDescriptor,
+                    value: ignoreEOSBinding,
+                    isEnabled: overrideEnabledBinding(\.ignoreEOS, defaultValue: true)
+                )
+            } label: {
+                LocalModelBoolSummaryRow(
+                    descriptor: ignoreEOSDescriptor,
+                    isEnabled: draft.ignoreEOS != nil,
+                    value: draft.effectiveIgnoreEOS
+                )
+            }
         } header: {
             Text(NSLocalizedString("输出约束", comment: "Local model grammar section"))
+        }
+    }
+
+    private func parameterEditorLink(
+        descriptorID: String,
+        text: Binding<String>,
+        isEnabled: Binding<Bool>
+    ) -> some View {
+        let descriptor = LocalLLMParameterCatalog.descriptor(for: descriptorID)
+        return NavigationLink {
+            LocalModelParameterOverrideEditor(
+                descriptor: descriptor,
+                text: text,
+                isEnabled: isEnabled
+            )
+        } label: {
+            LocalModelParameterSummaryRow(
+                descriptor: descriptor,
+                isEnabled: isEnabled.wrappedValue,
+                valueText: text.wrappedValue
+            )
         }
     }
 
@@ -518,127 +565,163 @@ private struct LocalModelDetailView: View {
     }
 }
 
-private struct LocalModelAdvancedIntroCard: View {
-    @Binding var isExpanded: Bool
-
+private struct LocalModelAdvancedIntroView: View {
     var body: some View {
-        Button {
-            isExpanded = true
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Label(NSLocalizedString("本地模型调参", comment: "Local model tuning intro title"), systemImage: "slider.horizontal.3")
-                    .etFont(.caption.weight(.semibold))
-                Text(NSLocalizedString("手表端与 iOS 使用同一套覆盖参数；只有打开自定义的项目才会保存。", comment: "Watch local model tuning intro summary"))
-                    .etFont(.caption2)
+        List {
+            Section {
+                Text(NSLocalizedString("普通高级设置保存结构化参数；只有开启“自定义”的项目才会作为模型覆盖项保存。未开启的项目会沿用 App 默认或全局聊天设置，并在调用前映射到 llama.cpp C ABI。", comment: "Watch local model tuning intro details body"))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                Text(NSLocalizedString("llama.cpp-style 参数导入只支持常用子集，会转换成这些覆盖项。", comment: "Watch local model tuning import intro"))
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .sheet(isPresented: $isExpanded) {
-            NavigationStack {
-                ScrollView {
-                    Text(NSLocalizedString("普通高级设置保存结构化参数；只有开启“自定义”的项目才会作为模型覆盖项保存。未开启的项目会沿用 App 默认或全局聊天设置，并在调用前映射到 llama.cpp C ABI。llama.cpp-style 参数导入只支持常用子集，会转换成这些覆盖项。", comment: "Watch local model tuning intro details body"))
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
-                .navigationTitle(NSLocalizedString("本地模型调参", comment: "Local model tuning intro sheet title"))
-                .navigationBarTitleDisplayMode(.inline)
-            }
-        }
+        .navigationTitle(NSLocalizedString("本地模型调参", comment: "Local model tuning intro sheet title"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-private struct LocalModelParameterTextField: View {
+private struct LocalModelParameterOverrideEditor: View {
     let descriptor: LocalLLMParameterDescriptor
     @Binding var text: String
     @Binding var isEnabled: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Toggle(isOn: $isEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(descriptor.title)
-                        .etFont(.caption.weight(.medium))
-                    if !descriptor.aliasText.isEmpty {
+        List {
+            Section {
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+
+                if isEnabled {
+                    TextField(descriptor.title, text: $text.watchKeyboardNewlineBinding())
+                        .textInputAutocapitalization(.never)
+                }
+            } footer: {
+                Text(descriptor.summary)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent(NSLocalizedString("默认", comment: "Local parameter default")) {
+                    Text(descriptor.defaultValue)
+                }
+                LabeledContent(NSLocalizedString("作用", comment: "Local parameter scope")) {
+                    Text(descriptor.effectScope)
+                }
+                if !descriptor.aliasText.isEmpty {
+                    LabeledContent(NSLocalizedString("别名", comment: "Local parameter alias")) {
                         Text(descriptor.aliasText)
                             .etFont(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
-
-            if isEnabled {
-                TextField(descriptor.title, text: $text.watchKeyboardNewlineBinding())
-                    .textInputAutocapitalization(.never)
-            }
-
-            Text(descriptor.summary)
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            Text("\(isEnabled ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled") : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
-                .etFont(.caption2)
-                .foregroundStyle(.tertiary)
         }
+        .navigationTitle(descriptor.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-private struct LocalModelToggleParameterRow: View {
+private struct LocalModelTextOverrideEditor: View {
+    let descriptor: LocalLLMParameterDescriptor
+    @Binding var text: String
+    @Binding var isEnabled: Bool
+
+    var body: some View {
+        List {
+            Section {
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+
+                if isEnabled {
+                    TextField(descriptor.title, text: $text.watchKeyboardNewlineBinding(), axis: .vertical)
+                        .lineLimit(3...6)
+                        .textInputAutocapitalization(.never)
+                }
+            } footer: {
+                Text(descriptor.summary)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent(NSLocalizedString("默认", comment: "Local parameter default")) {
+                    Text(descriptor.defaultValue)
+                }
+                LabeledContent(NSLocalizedString("作用", comment: "Local parameter scope")) {
+                    Text(descriptor.effectScope)
+                }
+                LabeledContent(NSLocalizedString("别名", comment: "Local parameter alias")) {
+                    Text(descriptor.aliasText)
+                        .etFont(.caption2.monospaced())
+                }
+            }
+        }
+        .navigationTitle(descriptor.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LocalModelBoolOverrideEditor: View {
     let descriptor: LocalLLMParameterDescriptor
     @Binding var value: Bool
     @Binding var isEnabled: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Toggle(isOn: $isEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(descriptor.title)
-                        .etFont(.caption.weight(.medium))
+        List {
+            Section {
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+
+                if isEnabled {
+                    Toggle(NSLocalizedString("开启", comment: "Enable bool local parameter"), isOn: $value)
+                }
+            } footer: {
+                Text(descriptor.summary)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent(NSLocalizedString("默认", comment: "Local parameter default")) {
+                    Text(descriptor.defaultValue)
+                }
+                LabeledContent(NSLocalizedString("作用", comment: "Local parameter scope")) {
+                    Text(descriptor.effectScope)
+                }
+                LabeledContent(NSLocalizedString("别名", comment: "Local parameter alias")) {
                     Text(descriptor.aliasText)
                         .etFont(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
                 }
             }
-            if isEnabled {
-                Toggle(NSLocalizedString("开启", comment: "Enable bool local parameter"), isOn: $value)
-            }
-            Text(descriptor.summary)
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            Text("\(isEnabled ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled") : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
-                .etFont(.caption2)
-                .foregroundStyle(.tertiary)
+        }
+        .navigationTitle(descriptor.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LocalModelParameterSummaryRow: View {
+    let descriptor: LocalLLMParameterDescriptor
+    let isEnabled: Bool
+    let valueText: String
+
+    var body: some View {
+        LabeledContent(descriptor.title) {
+            Text(isEnabled ? valueText : NSLocalizedString("默认", comment: "Default local parameter state"))
+                .foregroundStyle(isEnabled ? .primary : .secondary)
         }
     }
 }
 
-private struct LocalModelGrammarField: View {
+private struct LocalModelBoolSummaryRow: View {
     let descriptor: LocalLLMParameterDescriptor
-    @Binding var text: String
-    @Binding var isEnabled: Bool
+    let isEnabled: Bool
+    let value: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Toggle(isOn: $isEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(descriptor.title)
-                        .etFont(.caption.weight(.medium))
-                    Text(descriptor.aliasText)
-                        .etFont(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if isEnabled {
-                TextField(descriptor.title, text: $text.watchKeyboardNewlineBinding(), axis: .vertical)
-                    .lineLimit(3...6)
-                    .textInputAutocapitalization(.never)
-            }
-            Text(descriptor.summary)
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            Text("\(isEnabled ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled") : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
-                .etFont(.caption2)
-                .foregroundStyle(.tertiary)
+        LabeledContent(descriptor.title) {
+            Text(isEnabled
+                ? (value ? NSLocalizedString("开启", comment: "Enabled") : NSLocalizedString("关闭", comment: "Disabled"))
+                : NSLocalizedString("默认", comment: "Default local parameter state"))
+                .foregroundStyle(isEnabled ? .primary : .secondary)
         }
     }
 }
@@ -821,24 +904,17 @@ private struct LocalModelSamplerChainLabView: View {
 
             Section {
                 ForEach(indexedCurrentKinds, id: \.element) { item in
-                    VStack(alignment: .leading, spacing: 5) {
+                    NavigationLink {
+                        LocalModelSamplerKindActionView(
+                            kind: item.element,
+                            canMoveUp: item.offset > 0,
+                            canMoveDown: item.offset < currentKinds.count - 1,
+                            onMoveUp: { moveKind(at: item.offset, by: -1) },
+                            onMoveDown: { moveKind(at: item.offset, by: 1) },
+                            onRemove: { removeKind(at: item.offset) }
+                        )
+                    } label: {
                         LocalModelSamplerKindRow(kind: item.element)
-                        HStack {
-                            Button(NSLocalizedString("上移", comment: "Move sampler up")) {
-                                moveKind(at: item.offset, by: -1)
-                            }
-                            .disabled(item.offset == 0)
-                            Button(NSLocalizedString("下移", comment: "Move sampler down")) {
-                                moveKind(at: item.offset, by: 1)
-                            }
-                            .disabled(item.offset == currentKinds.count - 1)
-                            Button(role: .destructive) {
-                                removeKind(at: item.offset)
-                            } label: {
-                                Text(NSLocalizedString("移除", comment: "Remove sampler"))
-                            }
-                        }
-                        .etFont(.caption2)
                     }
                 }
             } header: {
@@ -888,6 +964,48 @@ private struct LocalModelSamplerKindRow: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct LocalModelSamplerKindActionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let kind: LocalLLMSamplerKind
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        List {
+            Section {
+                LocalModelSamplerKindRow(kind: kind)
+            }
+
+            Section {
+                Button(NSLocalizedString("上移", comment: "Move sampler up")) {
+                    onMoveUp()
+                    dismiss()
+                }
+                .disabled(!canMoveUp)
+
+                Button(NSLocalizedString("下移", comment: "Move sampler down")) {
+                    onMoveDown()
+                    dismiss()
+                }
+                .disabled(!canMoveDown)
+
+                Button(role: .destructive) {
+                    onRemove()
+                    dismiss()
+                } label: {
+                    Text(NSLocalizedString("移除", comment: "Remove sampler"))
+                }
+            }
+        }
+        .navigationTitle(kind.localizedTitle)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
