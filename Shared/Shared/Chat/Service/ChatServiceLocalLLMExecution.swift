@@ -50,7 +50,7 @@ extension ChatService {
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
                     topP: overrides.localDoubleValue(for: "top_p") ?? record.effectiveTopP,
-                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers,
+                    gpuLayers: localGPULayers(overrides: overrides, record: record),
                     seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
                     topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
                     minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
@@ -147,7 +147,7 @@ extension ChatService {
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
                     topP: overrides.localDoubleValue(for: "top_p") ?? record.topP ?? (globalTopPEnabled ? aiTopP : nil) ?? LocalModelRecord.defaultTopP,
-                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers,
+                    gpuLayers: localGPULayers(overrides: overrides, record: record),
                     seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
                     topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
                     minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
@@ -311,6 +311,14 @@ extension ChatService {
                 errorKind: "local_generation_failed"
             )
         }
+    }
+
+    private func localGPULayers(overrides: [String: JSONValue], record: LocalModelRecord) -> Int {
+        #if os(watchOS)
+        return 0
+        #else
+        return overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers
+        #endif
     }
 }
 

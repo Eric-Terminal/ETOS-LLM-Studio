@@ -174,7 +174,6 @@ private struct LocalModelDetailView: View {
     @State private var cliImportResult: LocalLLMCLIStyleImportResult?
     @State private var contextSizeText: String
     @State private var maxOutputTokensText: String
-    @State private var gpuLayersText: String
     @State private var seedText: String
     @State private var temperatureText: String
     @State private var topKText: String
@@ -185,20 +184,23 @@ private struct LocalModelDetailView: View {
     @State private var frequencyPenaltyText: String
     @State private var presencePenaltyText: String
 
+    private static let watchOSGPULayers = 0
+
     init(record: LocalModelRecord) {
-        _draft = State(initialValue: record)
-        _contextSizeText = State(initialValue: "\(record.effectiveContextSize)")
-        _maxOutputTokensText = State(initialValue: "\(record.effectiveMaxOutputTokens)")
-        _gpuLayersText = State(initialValue: "\(record.effectiveGPULayers)")
-        _seedText = State(initialValue: "\(record.effectiveSeed)")
-        _temperatureText = State(initialValue: LocalModelFormat.decimal(record.effectiveTemperature))
-        _topKText = State(initialValue: "\(record.effectiveTopK)")
-        _topPText = State(initialValue: LocalModelFormat.decimal(record.effectiveTopP))
-        _minPText = State(initialValue: LocalModelFormat.decimal(record.effectiveMinP))
-        _repeatLastNText = State(initialValue: "\(record.effectiveRepeatLastN)")
-        _repeatPenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectiveRepeatPenalty))
-        _frequencyPenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectiveFrequencyPenalty))
-        _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectivePresencePenalty))
+        var initialDraft = record
+        initialDraft.gpuLayers = Self.watchOSGPULayers
+        _draft = State(initialValue: initialDraft)
+        _contextSizeText = State(initialValue: "\(initialDraft.effectiveContextSize)")
+        _maxOutputTokensText = State(initialValue: "\(initialDraft.effectiveMaxOutputTokens)")
+        _seedText = State(initialValue: "\(initialDraft.effectiveSeed)")
+        _temperatureText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveTemperature))
+        _topKText = State(initialValue: "\(initialDraft.effectiveTopK)")
+        _topPText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveTopP))
+        _minPText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveMinP))
+        _repeatLastNText = State(initialValue: "\(initialDraft.effectiveRepeatLastN)")
+        _repeatPenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveRepeatPenalty))
+        _frequencyPenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveFrequencyPenalty))
+        _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectivePresencePenalty))
     }
 
     var body: some View {
@@ -289,10 +291,11 @@ private struct LocalModelDetailView: View {
                 text: $maxOutputTokensText,
                 isEnabled: overrideEnabledBinding(\.maxOutputTokens, defaultValue: LocalModelRecord.defaultMaxOutputTokens)
             )
-            parameterEditorLink(
-                descriptorID: "gpuLayers",
-                text: $gpuLayersText,
-                isEnabled: overrideEnabledBinding(\.gpuLayers, defaultValue: LocalModelRecord.defaultGPULayers)
+            let gpuLayersDescriptor = LocalLLMParameterCatalog.descriptor(for: "gpuLayers")
+            LocalModelParameterSummaryRow(
+                descriptor: gpuLayersDescriptor,
+                isEnabled: true,
+                valueText: NSLocalizedString("0（固定）", comment: "Fixed watchOS GPU layers value")
             )
             parameterEditorLink(
                 descriptorID: "seed",
@@ -301,6 +304,10 @@ private struct LocalModelDetailView: View {
             )
         } header: {
             Text(NSLocalizedString("运行时", comment: "Local model runtime section"))
+        } footer: {
+            Text(NSLocalizedString("watchOS 本地推理只能使用 CPU 路径，GPU 层数固定为 0。", comment: "Watch fixed GPU layers footer"))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -474,9 +481,7 @@ private struct LocalModelDetailView: View {
         if draft.maxOutputTokens != nil, let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.maxOutputTokens = maxOutputTokens
         }
-        if draft.gpuLayers != nil, let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.gpuLayers = gpuLayers
-        }
+        draft.gpuLayers = Self.watchOSGPULayers
         if draft.seed != nil, let seed = parseSeed(seedText) {
             draft.seed = seed
         }
@@ -510,9 +515,9 @@ private struct LocalModelDetailView: View {
     }
 
     private func refreshTextFieldsFromDraft() {
+        draft.gpuLayers = Self.watchOSGPULayers
         contextSizeText = "\(draft.effectiveContextSize)"
         maxOutputTokensText = "\(draft.effectiveMaxOutputTokens)"
-        gpuLayersText = "\(draft.effectiveGPULayers)"
         seedText = "\(draft.effectiveSeed)"
         temperatureText = LocalModelFormat.decimal(draft.effectiveTemperature)
         topKText = "\(draft.effectiveTopK)"
