@@ -57,18 +57,15 @@ struct RewriteMessageView: View {
             }
 
             Section {
-                Text(message.content)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text(NSLocalizedString("原文预览", comment: "Message rewrite original preview section"))
+                NavigationLink {
+                    RewriteMessageOriginalPreviewView(content: message.content)
+                } label: {
+                    Label(
+                        NSLocalizedString("原文预览", comment: "Message rewrite original preview section"),
+                        systemImage: "doc.text.magnifyingglass"
+                    )
+                }
             }
-
-            Button(NSLocalizedString("重写", comment: "Submit message rewrite")) {
-                onSubmit(instruction, selectedReferenceVersions)
-                dismiss()
-            }
-            .disabled(!canSubmit)
         }
         .navigationTitle(NSLocalizedString("重写回复", comment: "Message rewrite navigation title"))
         .navigationBarTitleDisplayMode(.inline)
@@ -77,6 +74,12 @@ struct RewriteMessageView: View {
                 Button(NSLocalizedString("取消", comment: "")) {
                     dismiss()
                 }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("重写", comment: "Submit message rewrite")) {
+                    submitRewrite()
+                }
+                .disabled(!canSubmit)
             }
         }
     }
@@ -115,5 +118,24 @@ struct RewriteMessageView: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
+    }
+
+    private func submitRewrite() {
+        onSubmit(instruction, selectedReferenceVersions)
+        dismiss()
+    }
+}
+
+private struct RewriteMessageOriginalPreviewView: View {
+    let content: String
+
+    var body: some View {
+        List {
+            Text(content)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .navigationTitle(NSLocalizedString("原文预览", comment: "Message rewrite original preview section"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
