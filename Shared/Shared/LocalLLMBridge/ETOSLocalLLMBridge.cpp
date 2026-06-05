@@ -625,11 +625,19 @@ int32_t generate(
 
     const int32_t requested_context = std::max<int32_t>(1, generation_params.context_size);
     const int32_t requested_output = std::max<int32_t>(1, generation_params.max_output_tokens);
-    const int32_t required_context = static_cast<int32_t>(prompt_tokens.size()) + requested_output;
+    const size_t prompt_token_count = prompt_tokens.size();
+    if (prompt_token_count >= static_cast<size_t>(requested_context)) {
+        llama_model_free(model);
+        return fail("本地模型提示词已占满上下文窗口。请缩短聊天内容或调大上下文。", error_message);
+    }
+    const int32_t output_limit = std::min<int32_t>(
+        requested_output,
+        requested_context - static_cast<int32_t>(prompt_token_count)
+    );
 
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = std::max(requested_context, required_context);
-    ctx_params.n_batch = std::min<int32_t>(ctx_params.n_ctx, static_cast<int32_t>(prompt_tokens.size()));
+    ctx_params.n_ctx = requested_context;
+    ctx_params.n_batch = static_cast<int32_t>(prompt_token_count);
     ctx_params.n_threads = thread_count();
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
@@ -652,7 +660,7 @@ int32_t generate(
     const size_t retained_stop_suffix = longest_stop_length(generation_params.additional_stops);
     bool should_flush_pending = true;
 
-    while (generated_tokens < requested_output) {
+    while (generated_tokens < output_limit) {
         if (llama_decode(ctx, batch) != 0) {
             llama_sampler_free(sampler);
             llama_free(ctx);
