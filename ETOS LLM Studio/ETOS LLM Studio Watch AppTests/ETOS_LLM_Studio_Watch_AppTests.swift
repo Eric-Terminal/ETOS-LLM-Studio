@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import CoreGraphics
 import Testing
 import Shared
 @testable import ETOS_LLM_Studio_Watch_App
