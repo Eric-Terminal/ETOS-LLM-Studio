@@ -859,10 +859,6 @@ private struct LocalModelSamplerChainLabView: View {
         samplerKinds ?? LocalLLMSamplerKind.defaultChain
     }
 
-    private var indexedCurrentKinds: [(offset: Int, element: LocalLLMSamplerKind)] {
-        Array(currentKinds.enumerated())
-    }
-
     var body: some View {
         List {
             Section {
@@ -903,22 +899,24 @@ private struct LocalModelSamplerChainLabView: View {
             }
 
             Section {
-                ForEach(indexedCurrentKinds, id: \.element) { item in
+                ForEach(currentKindsBinding, id: \.self, editActions: .move) { $kind in
                     NavigationLink {
                         LocalModelSamplerKindActionView(
-                            kind: item.element,
-                            canMoveUp: item.offset > 0,
-                            canMoveDown: item.offset < currentKinds.count - 1,
-                            onMoveUp: { moveKind(at: item.offset, by: -1) },
-                            onMoveDown: { moveKind(at: item.offset, by: 1) },
-                            onRemove: { removeKind(at: item.offset) }
+                            kind: kind,
+                            canMoveUp: canMoveKind(kind, by: -1),
+                            canMoveDown: canMoveKind(kind, by: 1),
+                            onMoveUp: { moveKind(kind, by: -1) },
+                            onMoveDown: { moveKind(kind, by: 1) },
+                            onRemove: { removeKind(kind) }
                         )
                     } label: {
-                        LocalModelSamplerKindRow(kind: item.element)
+                        LocalModelSamplerKindRow(kind: kind)
                     }
                 }
             } header: {
                 Text(NSLocalizedString("当前采样链", comment: "Current sampler chain"))
+            } footer: {
+                Text(NSLocalizedString("拖拽右侧把手可调整采样器顺序。", comment: "Sampler chain reorder footer"))
             }
 
             Section {
@@ -937,19 +935,35 @@ private struct LocalModelSamplerChainLabView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func moveKind(at index: Int, by offset: Int) {
+    private var currentKindsBinding: Binding<[LocalLLMSamplerKind]> {
+        Binding {
+            currentKinds
+        } set: { updatedKinds in
+            let uniqueKinds = LocalLLMSamplerKind.unique(updatedKinds)
+            samplerKinds = uniqueKinds == LocalLLMSamplerKind.defaultChain ? nil : uniqueKinds
+        }
+    }
+
+    private func canMoveKind(_ kind: LocalLLMSamplerKind, by offset: Int) -> Bool {
+        guard let index = currentKinds.firstIndex(of: kind) else { return false }
+        return currentKinds.indices.contains(index + offset)
+    }
+
+    private func moveKind(_ kind: LocalLLMSamplerKind, by offset: Int) {
+        guard let index = currentKinds.firstIndex(of: kind) else { return }
         let destination = index + offset
         guard currentKinds.indices.contains(index), currentKinds.indices.contains(destination) else { return }
         var updatedKinds = currentKinds
         updatedKinds.swapAt(index, destination)
-        samplerKinds = updatedKinds
+        currentKindsBinding.wrappedValue = updatedKinds
     }
 
-    private func removeKind(at index: Int) {
+    private func removeKind(_ kind: LocalLLMSamplerKind) {
+        guard let index = currentKinds.firstIndex(of: kind) else { return }
         guard currentKinds.indices.contains(index) else { return }
         var updatedKinds = currentKinds
         updatedKinds.remove(at: index)
-        samplerKinds = updatedKinds
+        currentKindsBinding.wrappedValue = updatedKinds
     }
 }
 
