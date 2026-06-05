@@ -216,12 +216,13 @@ extension ChatServiceTests {
 
         let sentMessages = mockAdapter.receivedMessages ?? []
         let landmarkIndex = sentMessages.firstIndex(where: {
-            $0.role == .system && $0.content.contains("本条对话的请求时间为：")
+            $0.role == .system && $0.content.contains(TimeZone.current.identifier)
         })
         let insertedIndex = try #require(landmarkIndex)
         #expect(insertedIndex + 1 < sentMessages.count)
         #expect(sentMessages[insertedIndex + 1].id == oldMessage.id)
         #expect(!sentMessages[insertedIndex].content.contains("<periodic_time_landmark>"))
+        #expect(!sentMessages[insertedIndex].content.contains("本条对话的请求时间为："))
 
         await cleanup()
     }
@@ -255,7 +256,7 @@ extension ChatServiceTests {
             periodicTimeLandmarkIntervalMinutes: 30
         )
         let firstSentMessages = mockAdapter.receivedMessages ?? []
-        let firstCount = firstSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        let firstCount = firstSentMessages.filter { $0.role == .system && $0.content.contains(TimeZone.current.identifier) }.count
         #expect(firstCount == 1)
 
         await chatService.sendAndProcessMessage(
@@ -273,7 +274,7 @@ extension ChatServiceTests {
             periodicTimeLandmarkIntervalMinutes: 30
         )
         let secondSentMessages = mockAdapter.receivedMessages ?? []
-        let secondCount = secondSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        let secondCount = secondSentMessages.filter { $0.role == .system && $0.content.contains(TimeZone.current.identifier) }.count
         #expect(secondCount == 0)
 
         await cleanup()
