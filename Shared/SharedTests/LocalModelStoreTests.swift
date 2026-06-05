@@ -88,7 +88,7 @@ struct LocalModelStoreTests {
         #expect(runnable.model.overrideParameters.isEmpty)
         #expect(!runnable.model.supportsToolCalling)
         #expect(runnable.model.supportsStreaming)
-        #expect(runnable.model.supportsEmbedding)
+        #expect(!runnable.model.supportsEmbedding)
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
     }
 
@@ -129,7 +129,7 @@ struct LocalModelStoreTests {
         )
         var provider = LocalModelProviderBridge.provider(records: [record])
         provider.models[0].kind = .embedding
-        provider.models[0].capabilities = [.toolCalling, .reasoning]
+        provider.models[0].capabilities = [.toolCalling, .embedding, .reasoning]
         provider.models[0].overrideParameters["provider_only"] = .string("kept")
         provider.models[0].requestBodyControls = [
             ModelRequestBodyControl(
@@ -148,6 +148,7 @@ struct LocalModelStoreTests {
 
         #expect(restored.models.first?.kind == .embedding)
         #expect(restored.models.first?.capabilities.contains(.toolCalling) == false)
+        #expect(restored.models.first?.capabilities.contains(.embedding) == false)
         #expect(restored.models.first?.capabilities.contains(.reasoning) == true)
         #expect(restored.models.first?.supportsStreaming == true)
         #expect(restored.models.first?.supportsEmbedding == true)
