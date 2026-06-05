@@ -240,6 +240,45 @@ struct LocalModelStoreTests {
         #expect(!service.activatedConversationModels.contains(where: { LocalModelProviderBridge.isLocalRunnableModel($0) }))
     }
 
+    @Test("本地 Detached Completion 不依赖远端适配器")
+    func localDetachedCompletionRoutesBeforeAdapterLookup() async throws {
+        let root = try temporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            Persistence.clearUsageAnalyticsData()
+        }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let record = LocalModelRecord(
+            displayName: "Missing",
+            fileName: "missing.gguf",
+            relativePath: "missing.gguf",
+            fileSize: 0,
+            isActivated: true
+        )
+        store.update(record)
+
+        let service = ChatService(adapters: [:], localModelStore: store)
+        service.setSelectedModel(LocalModelProviderBridge.runnableModel(for: record))
+
+        do {
+            _ = try await service.generateDetachedChatCompletion(
+                userPrompt: "生成标题",
+                requestSource: .sessionTitle
+            )
+            Issue.record("缺失本地模型文件时不应生成成功。")
+        } catch ChatService.DetachedCompletionError.unsupportedAdapter {
+            Issue.record("本地 Detached Completion 不应退回 API adapter 查找。")
+        } catch let error as LocalLLMEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "missing.gguf")
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("LocalModelStoreTests-\(UUID().uuidString)", isDirectory: true)

@@ -10,6 +10,79 @@ import Foundation
 import OSLog
 
 extension ChatService {
+    func generateDetachedLocalLLMCompletion(
+        runnableModel: RunnableModel,
+        requestMessages: [ChatMessage],
+        temperature: Double,
+        requestLogContext: RequestLogContext
+    ) async throws -> String {
+        guard let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id),
+              let record = localModelStore.models.first(where: { $0.id == recordID }) else {
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "local_model_missing"
+            )
+            throw LocalLLMEngineError.modelFileMissing(runnableModel.model.displayName)
+        }
+
+        guard localModelStore.fileExists(for: record) else {
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "local_model_missing"
+            )
+            throw LocalLLMEngineError.modelFileMissing(record.fileName)
+        }
+
+        do {
+            let overrides = runnableModel.effectiveOverrideParameters
+            let output = try await LocalLLMEngine.shared.generate(
+                messages: LocalLLMChatMessageBuilder.messages(from: requestMessages),
+                modelURL: localModelStore.fileURL(for: record),
+                options: LocalLLMGenerationOptions(
+                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
+                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
+                    temperature: overrides.localDoubleValue(for: "temperature") ?? temperature,
+                    topP: overrides.localDoubleValue(for: "top_p"),
+                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers,
+                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
+                )
+            )
+            persistRequestLog(
+                context: requestLogContext,
+                status: .success,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch is CancellationError {
+            persistRequestLog(
+                context: requestLogContext,
+                status: .cancelled,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "cancelled"
+            )
+            throw CancellationError()
+        } catch {
+            let errorKind = isCancellationError(error) ? "cancelled" : "local_generation_failed"
+            let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed
+            persistRequestLog(
+                context: requestLogContext,
+                status: status,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: errorKind
+            )
+            throw error
+        }
+    }
+
     func handleLocalLLMResponse(
         runnableModel: RunnableModel,
         messagesToSend: [ChatMessage],
