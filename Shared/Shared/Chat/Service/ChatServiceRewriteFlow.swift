@@ -219,7 +219,11 @@ extension ChatService {
             原文：
             %@
             """, comment: "Message rewrite user prompt")
-            userPrompt = String(format: userPromptTemplate, instruction, originalContent)
+            userPrompt = String(
+                format: userPromptTemplate,
+                markdownSeparatedContent(instruction),
+                originalContent
+            )
         } else {
             let userPromptTemplate = NSLocalizedString("""
             重写要求：
@@ -231,7 +235,12 @@ extension ChatService {
             原文：
             %@
             """, comment: "Message rewrite user prompt with reference versions")
-            userPrompt = String(format: userPromptTemplate, instruction, referenceVersionBlock, originalContent)
+            userPrompt = String(
+                format: userPromptTemplate,
+                markdownSeparatedContent(instruction),
+                markdownSeparatedContent(referenceVersionBlock),
+                originalContent
+            )
         }
 
         return try await generateDetachedChatCompletion(
@@ -243,6 +252,10 @@ extension ChatService {
             sessionID: sessionID,
             appendOutputLanguageInstruction: false
         )
+    }
+
+    private func markdownSeparatedContent(_ content: String) -> String {
+        "\(content)\n\n---"
     }
 
     private func makeReferenceVersionPromptBlock(
