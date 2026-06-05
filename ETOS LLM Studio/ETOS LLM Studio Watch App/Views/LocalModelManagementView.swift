@@ -97,10 +97,12 @@ struct LocalModelManagementView: View {
         statusMessage = nil
         Task {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let (downloadedURL, response) = try await URLSession.shared.download(from: url)
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
+                try validateDownloadResponse(response)
                 let suggestedName = url.lastPathComponent.isEmpty ? "model.gguf" : url.lastPathComponent
                 _ = try store.registerDownloadedModel(
-                    data: data,
+                    fileAt: downloadedURL,
                     suggestedFileName: suggestedName,
                     displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : displayName
                 )
@@ -117,6 +119,19 @@ struct LocalModelManagementView: View {
                 }
             }
         }
+    }
+
+    private func validateDownloadResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse,
+              !(200..<300).contains(httpResponse.statusCode) else {
+            return
+        }
+        throw NSError(domain: "ETOSWatchLocalModelDownload", code: httpResponse.statusCode, userInfo: [
+            NSLocalizedDescriptionKey: String(
+                format: NSLocalizedString("下载权重失败（HTTP %d）。", comment: "Local model download HTTP failure"),
+                httpResponse.statusCode
+            )
+        ])
     }
 }
 

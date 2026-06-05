@@ -89,10 +89,10 @@ public final class LocalModelStore: ObservableObject {
         )
     }
 
-    public func registerDownloadedModel(data: Data, suggestedFileName: String, displayName: String? = nil) throws -> LocalModelRecord {
+    public func registerDownloadedModel(fileAt sourceURL: URL, suggestedFileName: String, displayName: String? = nil) throws -> LocalModelRecord {
         let destinationFileName = uniqueFileName(for: suggestedFileName)
         let destinationURL = directoryURL.appendingPathComponent(destinationFileName)
-        try data.write(to: destinationURL, options: [.atomic])
+        try fileManager.moveItem(at: sourceURL, to: destinationURL)
         return try registerImportedFile(
             fileName: destinationFileName,
             displayName: displayName ?? URL(fileURLWithPath: suggestedFileName).deletingPathExtension().lastPathComponent

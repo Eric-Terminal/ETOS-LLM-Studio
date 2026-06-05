@@ -45,6 +45,29 @@ struct LocalModelStoreTests {
         }
     }
 
+    @Test("下载落盘文件会移动登记为本地模型")
+    func downloadedModelFileRegistersWithoutDataBuffer() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let downloadedFile = root.appendingPathComponent("downloaded.tmp")
+        let payload = Data([9, 8, 7, 6])
+        try payload.write(to: downloadedFile)
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        let record = try store.registerDownloadedModel(
+            fileAt: downloadedFile,
+            suggestedFileName: "remote.gguf",
+            displayName: "  下载模型  "
+        )
+
+        #expect(record.fileName == "remote.gguf")
+        #expect(record.sanitizedDisplayName == "下载模型")
+        #expect(store.fileExists(for: record))
+        #expect(!FileManager.default.fileExists(atPath: downloadedFile.path))
+        #expect(try Data(contentsOf: store.fileURL(for: record)) == payload)
+    }
+
     @Test("本地模型虚拟提供商使用稳定 ID")
     func localProviderBridgeUsesStableRunnableID() {
         let id = UUID()
