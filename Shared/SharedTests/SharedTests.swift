@@ -104,6 +104,7 @@ struct ChatServiceTests {
         mockAdapter.receivedTitleMessages = nil
         mockAdapter.receivedReasoningSummaryMessages = nil
         mockAdapter.receivedConversationSummaryMessages = nil
+        mockAdapter.receivedConversationProfileMessages = nil
         mockAdapter.receivedTools = nil
         mockAdapter.receivedAudioAttachments = nil
         mockAdapter.receivedImageAttachments = nil
@@ -136,6 +137,13 @@ struct ChatServiceTests {
         let summaryHTTPResponse = HTTPURLResponse(url: summaryURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
         let summaryJSON = #"{"choices":[{"message":{"content":"\#(summary)"}}]}"#.data(using: .utf8) ?? Data()
         MockURLProtocol.mockResponses[summaryURL] = .success((summaryHTTPResponse, summaryJSON))
+    }
+
+    func setupMockConversationProfileResponse(profile: String) {
+        let profileURL = URL(string: "https://fake.url/conversation-profile")!
+        let profileHTTPResponse = HTTPURLResponse(url: profileURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let profileJSON = #"{"choices":[{"message":{"content":"\#(profile)"}}]}"#.data(using: .utf8) ?? Data()
+        MockURLProtocol.mockResponses[profileURL] = .success((profileHTTPResponse, profileJSON))
     }
 
     func createPermanentTestSession(name: String = "附件文本化测试") -> ChatSession {

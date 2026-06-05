@@ -206,7 +206,7 @@ extension ChatService {
         let profileSystemPrompt = NSLocalizedString("""
         你是用户画像整理助手。请根据“已有画像”和“最新会话摘要”输出更新后的用户画像。
         约束：
-        - 中文输出 80~220 字，其他语言输出 70~180 个词；
+        - 不设固定长度上限，根据信息量自然展开；
         - 强调稳定偏好、工作背景、长期关注点；
         - 避免一次性细节与短期噪音；
         - 仅输出画像正文。
@@ -232,7 +232,7 @@ extension ChatService {
                 requestSource: .conversationProfile,
                 sessionID: sessionID
             )
-            let profileContent = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
+            let profileContent = sanitizeConversationMemoryText(rawProfile)
             guard !profileContent.isEmpty else { return }
             try ConversationMemoryManager.saveUserProfile(
                 content: profileContent,
@@ -256,7 +256,7 @@ extension ChatService {
         约束：
         - 保留稳定偏好、长期背景、常见工作方式；
         - 合并重复语义，删除互相矛盾或一次性噪音；
-        - 中文输出 80~220 字，其他语言输出 70~180 个词；
+        - 不设固定长度上限，根据信息量自然展开；
         - 仅输出画像正文。
         """, comment: "Conversation profile dedup system prompt")
         let userPrompt = String(
@@ -276,7 +276,7 @@ extension ChatService {
                 requestSource: .conversationProfile,
                 sessionID: sessionID
             )
-            let profileContent = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
+            let profileContent = sanitizeConversationMemoryText(rawProfile)
             guard !profileContent.isEmpty else { return }
             try ConversationMemoryManager.saveUserProfile(
                 content: profileContent,
@@ -310,12 +310,13 @@ extension ChatService {
         return lines.joined(separator: "\n")
     }
 
-    private func sanitizeConversationMemoryText(_ text: String, maxLength: Int) -> String {
+    private func sanitizeConversationMemoryText(_ text: String, maxLength: Int? = nil) -> String {
         let normalized = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'“”‘’"))
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+        guard let maxLength else { return normalized }
         guard normalized.count > maxLength else { return normalized }
         let cutIndex = normalized.index(normalized.startIndex, offsetBy: maxLength)
         return String(normalized[..<cutIndex]).trimmingCharacters(in: .whitespacesAndNewlines)

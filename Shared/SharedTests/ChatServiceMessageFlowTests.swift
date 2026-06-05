@@ -643,6 +643,56 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("Conversation profile stores generated content without truncation")
+    func testConversationProfile_DoesNotTruncateGeneratedProfile() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+        let messages = [
+            ChatMessage(role: .user, content: "第一轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第一轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第二轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第二轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第三轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第三轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第四轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第四轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第五轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第五轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第六轮问题", requestedAt: Date()),
+            loadingMessage
+        ]
+        let longProfile = String(repeating: "长期偏好", count: 120)
+        chatService.updateMessages(messages, for: sessionID)
+        setupMockResponsesForChatAndTitle()
+        setupMockConversationProfileResponse(profile: longProfile)
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "会话摘要")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(role: .assistant, content: "最终答案"),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(500))
+
+        let profileSystemPrompt = mockAdapter.receivedConversationProfileMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(profileSystemPrompt.contains("不设固定长度上限"))
+        #expect(ConversationMemoryManager.loadUserProfile()?.content == longProfile)
+
+        await cleanup()
+    }
+
     @Test("Reasoning summary respects disabled preference")
     func testReasoningSummary_DisabledPreferenceSkipsRequest() async throws {
         await cleanup()
