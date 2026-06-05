@@ -72,11 +72,11 @@ struct local_generation_params {
     int32_t gpu_layers = -1;
     uint32_t seed = LLAMA_DEFAULT_SEED;
     int32_t min_keep = 0;
-    int32_t top_k = 40;
-    float top_p = 0.95f;
-    float min_p = 0.05f;
+    int32_t top_k = 0;
+    float top_p = 1.0f;
+    float min_p = 0.0f;
     float typical_p = 1.0f;
-    float temperature = 0.8f;
+    float temperature = 1.0f;
     float dynatemp_range = 0.0f;
     float dynatemp_exponent = 1.0f;
     float xtc_probability = 0.0f;
@@ -97,14 +97,6 @@ struct local_generation_params {
     float adaptive_target = -1.0f;
     float adaptive_decay = 0.9f;
     std::vector<int32_t> sampler_kinds = {
-        ETOS_LOCAL_LLM_SAMPLER_PENALTIES,
-        ETOS_LOCAL_LLM_SAMPLER_DRY,
-        ETOS_LOCAL_LLM_SAMPLER_TOP_N_SIGMA,
-        ETOS_LOCAL_LLM_SAMPLER_TOP_K,
-        ETOS_LOCAL_LLM_SAMPLER_TYPICAL,
-        ETOS_LOCAL_LLM_SAMPLER_TOP_P,
-        ETOS_LOCAL_LLM_SAMPLER_MIN_P,
-        ETOS_LOCAL_LLM_SAMPLER_XTC,
         ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE,
     };
     std::string grammar;

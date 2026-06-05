@@ -48,54 +48,22 @@ public enum LocalModelProviderBridge {
 
     public static func model(for record: LocalModelRecord, preserving existingModel: Model? = nil, preferRecordBasics: Bool = true) -> Model {
         var overrideParameters = existingModel?.overrideParameters ?? [:]
-        if preferRecordBasics || overrideParameters["context_size"] == nil {
-            overrideParameters["context_size"] = .int(record.contextSize)
-        }
-        if preferRecordBasics || overrideParameters["max_output_tokens"] == nil {
-            overrideParameters["max_output_tokens"] = .int(record.maxOutputTokens)
-        }
-        if preferRecordBasics || overrideParameters["n_gpu_layers"] == nil {
-            overrideParameters["n_gpu_layers"] = .int(record.gpuLayers)
-        }
-        if preferRecordBasics || overrideParameters["seed"] == nil {
-            overrideParameters["seed"] = .string(String(record.seed))
-        }
-        if preferRecordBasics || overrideParameters["temperature"] == nil {
-            overrideParameters["temperature"] = .double(record.temperature)
-        }
-        if preferRecordBasics || overrideParameters["top_k"] == nil {
-            overrideParameters["top_k"] = .int(record.topK)
-        }
-        if preferRecordBasics || overrideParameters["top_p"] == nil {
-            overrideParameters["top_p"] = .double(record.topP)
-        }
-        if preferRecordBasics || overrideParameters["min_p"] == nil {
-            overrideParameters["min_p"] = .double(record.minP)
-        }
-        if preferRecordBasics || overrideParameters["repeat_last_n"] == nil {
-            overrideParameters["repeat_last_n"] = .int(record.repeatLastN)
-        }
-        if preferRecordBasics || overrideParameters["repeat_penalty"] == nil {
-            overrideParameters["repeat_penalty"] = .double(record.repeatPenalty)
-        }
-        if preferRecordBasics || overrideParameters["frequency_penalty"] == nil {
-            overrideParameters["frequency_penalty"] = .double(record.frequencyPenalty)
-        }
-        if preferRecordBasics || overrideParameters["presence_penalty"] == nil {
-            overrideParameters["presence_penalty"] = .double(record.presencePenalty)
-        }
-        if preferRecordBasics || overrideParameters["grammar"] == nil {
-            overrideParameters["grammar"] = .string(record.grammar)
-        }
-        if preferRecordBasics || overrideParameters["ignore_eos"] == nil {
-            overrideParameters["ignore_eos"] = .bool(record.ignoreEOS)
-        }
-        if preferRecordBasics || overrideParameters["sampler_seq"] == nil {
-            overrideParameters["sampler_seq"] = .string(LocalLLMSamplerKind.chainString(record.samplerKinds))
-        }
-        if preferRecordBasics || overrideParameters["llama_cli_args"] == nil {
-            overrideParameters["llama_cli_args"] = .string(record.advancedArguments)
-        }
+        writeOverride("context_size", value: record.contextSize.map(JSONValue.int), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("max_output_tokens", value: record.maxOutputTokens.map(JSONValue.int), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("n_gpu_layers", value: record.gpuLayers.map(JSONValue.int), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("seed", value: record.seed.map { .string(String($0)) }, to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("temperature", value: record.temperature.map(JSONValue.double), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("top_k", value: record.topK.map(JSONValue.int), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("top_p", value: record.topP.map(JSONValue.double), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("min_p", value: record.minP.map(JSONValue.double), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("repeat_last_n", value: record.repeatLastN.map(JSONValue.int), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("repeat_penalty", value: record.repeatPenalty.map(JSONValue.double), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("frequency_penalty", value: record.frequencyPenalty.map(JSONValue.double), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("presence_penalty", value: record.presencePenalty.map(JSONValue.double), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("grammar", value: record.grammar.map(JSONValue.string), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("ignore_eos", value: record.ignoreEOS.map(JSONValue.bool), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("sampler_seq", value: record.samplerKinds.map { .string(LocalLLMSamplerKind.chainString($0)) }, to: &overrideParameters, preferRecordBasics: preferRecordBasics)
+        writeOverride("llama_cli_args", value: record.advancedArguments.nilIfEmpty.map(JSONValue.string), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
 
         let capabilities = Model.orderedCapabilities(
             (existingModel?.capabilities ?? []) + [.toolCalling, .streaming, .embedding]
@@ -160,6 +128,21 @@ public enum LocalModelProviderBridge {
 
     private static func sanitized(_ value: String?) -> String {
         value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private static func writeOverride(
+        _ key: String,
+        value: JSONValue?,
+        to overrideParameters: inout [String: JSONValue],
+        preferRecordBasics: Bool
+    ) {
+        if let value {
+            if preferRecordBasics || overrideParameters[key] == nil {
+                overrideParameters[key] = value
+            }
+        } else if preferRecordBasics {
+            overrideParameters.removeValue(forKey: key)
+        }
     }
 }
 

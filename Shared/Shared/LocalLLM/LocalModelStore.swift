@@ -123,57 +123,33 @@ public final class LocalModelStore: ObservableObject {
         record.displayName = model.displayName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             ?? record.sanitizedDisplayName
         record.isActivated = model.isActivated
-        if let contextSize = model.overrideParameters.localIntValue(for: "context_size") {
-            record.contextSize = max(1, contextSize)
+        record.contextSize = model.overrideParameters.localIntValue(for: "context_size")
+            ?? model.overrideParameters.localIntValue(for: "n_ctx")
+        record.maxOutputTokens = model.overrideParameters.localIntValue(for: "max_output_tokens")
+            ?? model.overrideParameters.localIntValue(for: "max_tokens")
+        record.gpuLayers = model.overrideParameters.localIntValue(for: "n_gpu_layers")
+        record.seed = model.overrideParameters.localUInt32Value(for: "seed")
+        record.temperature = model.overrideParameters.localDoubleValue(for: "temperature")
+        record.topK = model.overrideParameters.localIntValue(for: "top_k")
+        record.topP = model.overrideParameters.localDoubleValue(for: "top_p")
+        record.minP = model.overrideParameters.localDoubleValue(for: "min_p")
+        record.repeatLastN = model.overrideParameters.localIntValue(for: "repeat_last_n")
+        record.repeatPenalty = model.overrideParameters.localDoubleValue(for: "repeat_penalty")
+        record.frequencyPenalty = model.overrideParameters.localDoubleValue(for: "frequency_penalty")
+        record.presencePenalty = model.overrideParameters.localDoubleValue(for: "presence_penalty")
+        record.grammar = model.overrideParameters.localStringValue(for: "grammar").flatMap {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         }
-        if let maxOutputTokens = model.overrideParameters.localIntValue(for: "max_output_tokens") ?? model.overrideParameters.localIntValue(for: "max_tokens") {
-            record.maxOutputTokens = max(1, maxOutputTokens)
-        }
-        if let gpuLayers = model.overrideParameters.localIntValue(for: "n_gpu_layers") {
-            record.gpuLayers = gpuLayers
-        }
-        if let seed = model.overrideParameters.localUInt32Value(for: "seed") {
-            record.seed = seed
-        }
-        if let temperature = model.overrideParameters.localDoubleValue(for: "temperature") {
-            record.temperature = temperature
-        }
-        if let topK = model.overrideParameters.localIntValue(for: "top_k") {
-            record.topK = topK
-        }
-        if let topP = model.overrideParameters.localDoubleValue(for: "top_p") {
-            record.topP = topP
-        }
-        if let minP = model.overrideParameters.localDoubleValue(for: "min_p") {
-            record.minP = minP
-        }
-        if let repeatLastN = model.overrideParameters.localIntValue(for: "repeat_last_n") {
-            record.repeatLastN = repeatLastN
-        }
-        if let repeatPenalty = model.overrideParameters.localDoubleValue(for: "repeat_penalty") {
-            record.repeatPenalty = repeatPenalty
-        }
-        if let frequencyPenalty = model.overrideParameters.localDoubleValue(for: "frequency_penalty") {
-            record.frequencyPenalty = frequencyPenalty
-        }
-        if let presencePenalty = model.overrideParameters.localDoubleValue(for: "presence_penalty") {
-            record.presencePenalty = presencePenalty
-        }
-        if let grammar = model.overrideParameters.localStringValue(for: "grammar") {
-            record.grammar = grammar
-        }
-        if let ignoreEOS = model.overrideParameters.localBoolValue(for: "ignore_eos") {
-            record.ignoreEOS = ignoreEOS
-        }
+        record.ignoreEOS = model.overrideParameters.localBoolValue(for: "ignore_eos")
         if let samplerSequence = model.overrideParameters.localStringValue(for: "sampler_seq") {
             let samplerKinds = LocalLLMSamplerKind.parse(samplerSequence)
-            if !samplerKinds.isEmpty {
-                record.samplerKinds = samplerKinds
-            }
+            record.samplerKinds = samplerKinds.isEmpty ? nil : samplerKinds
+        } else {
+            record.samplerKinds = nil
         }
-        if let advancedArguments = model.overrideParameters.localStringValue(for: "llama_cli_args") {
-            record.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        record.advancedArguments = model.overrideParameters.localStringValue(for: "llama_cli_args")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? LocalModelRecord.defaultAdvancedArguments
         update(record)
     }
 
@@ -218,7 +194,10 @@ public final class LocalModelStore: ObservableObject {
         guard let data = try? Data(contentsOf: metadataURL) else { return [] }
         do {
             let snapshot = try JSONDecoder.localModelDecoder.decode(LocalModelStoreSnapshot.self, from: data)
-            return snapshot.models.sorted { lhs, rhs in
+            let models = snapshot.schemaVersion < 2
+                ? snapshot.models.map { $0.removingLegacyForcedDefaultOverrides() }
+                : snapshot.models
+            return models.sorted { lhs, rhs in
                 if lhs.createdAt == rhs.createdAt {
                     return lhs.id.uuidString < rhs.id.uuidString
                 }

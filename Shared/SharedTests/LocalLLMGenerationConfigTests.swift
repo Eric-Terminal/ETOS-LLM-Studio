@@ -12,6 +12,22 @@ import Foundation
 
 @Suite("本地 LLM 生成配置测试")
 struct LocalLLMGenerationConfigTests {
+    @Test("默认生成配置使用轻量聊天采样")
+    func defaultOptionsUseLightweightChatSampling() throws {
+        let options = LocalLLMGenerationOptions(
+            contextSize: 2048,
+            maxOutputTokens: 512
+        )
+
+        let config = try LocalLLMGenerationConfig(options: options)
+
+        #expect(config.temperature == 1.0)
+        #expect(config.topP == 1.0)
+        #expect(config.topK == 0)
+        #expect(config.minP == 0.0)
+        #expect(config.samplerKinds == [.temperature])
+    }
+
     @Test("高级参数会映射到结构化采样配置")
     func advancedArgumentsMapToStructuredConfig() throws {
         let options = LocalLLMGenerationOptions(

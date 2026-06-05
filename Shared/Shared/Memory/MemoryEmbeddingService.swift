@@ -172,8 +172,8 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
             texts: texts,
             modelURL: LocalModelStore.shared.fileURL(for: record),
             options: LocalLLMEmbeddingOptions(
-                contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
-                gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers
+                contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
+                gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers
             )
         )
     }

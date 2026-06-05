@@ -278,7 +278,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .aiTemperature:
             return .real(1.0)
         case .aiTopP:
-            return .real(0.95)
+            return .real(1.0)
         case .aiTemperatureEnabled,
              .aiTopPEnabled,
              .enableOpenAIStreamIncludeUsage,

@@ -41,25 +41,26 @@ extension ChatService {
 
         do {
             let overrides = runnableModel.effectiveOverrideParameters
+            let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let output = try await LocalLLMEngine.shared.generate(
                 messages: LocalLLMChatMessageBuilder.messages(from: requestMessages),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
-                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
-                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
-                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature,
-                    topP: overrides.localDoubleValue(for: "top_p") ?? record.topP,
-                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers,
-                    seed: overrides.localUInt32Value(for: "seed") ?? record.seed,
-                    topK: overrides.localIntValue(for: "top_k") ?? record.topK,
-                    minP: overrides.localDoubleValue(for: "min_p") ?? record.minP,
-                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.repeatLastN,
-                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.repeatPenalty,
-                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.frequencyPenalty,
-                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.presencePenalty,
-                    grammar: overrides.localStringValue(for: "grammar") ?? record.grammar,
-                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.ignoreEOS,
-                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.samplerKinds,
+                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
+                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
+                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
+                    topP: overrides.localDoubleValue(for: "top_p") ?? record.effectiveTopP,
+                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers,
+                    seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
+                    topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
+                    minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
+                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.effectiveRepeatLastN,
+                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.effectiveRepeatPenalty,
+                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.effectiveFrequencyPenalty,
+                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
+                    grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
+                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
+                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )
@@ -133,6 +134,8 @@ extension ChatService {
 
         do {
             let overrides = runnableModel.effectiveOverrideParameters
+            let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
+            let globalTopPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
             let localMessagesToSend = LocalLLMChatMessageBuilder.messages(from: messagesToSend)
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
             let stream = try LocalLLMEngine.shared.stream(
@@ -140,21 +143,21 @@ extension ChatService {
                 tools: localTools,
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
-                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.contextSize),
-                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.maxOutputTokens),
-                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature,
-                    topP: overrides.localDoubleValue(for: "top_p") ?? record.topP,
-                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.gpuLayers,
-                    seed: overrides.localUInt32Value(for: "seed") ?? record.seed,
-                    topK: overrides.localIntValue(for: "top_k") ?? record.topK,
-                    minP: overrides.localDoubleValue(for: "min_p") ?? record.minP,
-                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.repeatLastN,
-                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.repeatPenalty,
-                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.frequencyPenalty,
-                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.presencePenalty,
-                    grammar: overrides.localStringValue(for: "grammar") ?? record.grammar,
-                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.ignoreEOS,
-                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.samplerKinds,
+                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
+                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
+                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
+                    topP: overrides.localDoubleValue(for: "top_p") ?? record.topP ?? (globalTopPEnabled ? aiTopP : nil) ?? LocalModelRecord.defaultTopP,
+                    gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers,
+                    seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
+                    topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
+                    minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
+                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.effectiveRepeatLastN,
+                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.effectiveRepeatPenalty,
+                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.effectiveFrequencyPenalty,
+                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
+                    grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
+                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
+                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )

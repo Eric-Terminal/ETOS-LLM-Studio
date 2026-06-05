@@ -176,9 +176,9 @@ private struct LocalModelDetailView: View {
 
     init(record: LocalModelRecord) {
         _draft = State(initialValue: record)
-        _contextSizeText = State(initialValue: "\(record.contextSize)")
-        _maxOutputTokensText = State(initialValue: "\(record.maxOutputTokens)")
-        _gpuLayersText = State(initialValue: "\(record.gpuLayers)")
+        _contextSizeText = State(initialValue: "\(record.effectiveContextSize)")
+        _maxOutputTokensText = State(initialValue: "\(record.effectiveMaxOutputTokens)")
+        _gpuLayersText = State(initialValue: "\(record.effectiveGPULayers)")
         _advancedArgumentsText = State(initialValue: record.advancedArguments)
     }
 

@@ -274,7 +274,7 @@ public enum LocalLLMSamplerKind: Int32, Codable, CaseIterable, Identifiable, Has
         }
     }
 
-    public static let defaultChain: [LocalLLMSamplerKind] = parse("edskypmxt")
+    public static let defaultChain: [LocalLLMSamplerKind] = parse("t")
 
     public static var defaultChainString: String {
         chainString(defaultChain)
@@ -353,9 +353,16 @@ public struct LocalLLMSamplerChainPreset: Identifiable, Hashable, Sendable {
 
     public static let defaults = LocalLLMSamplerChainPreset(
         id: "default",
-        title: "默认链",
-        summary: "完整保留 llama.cpp 常用默认顺序，适合先从基准体验开始。",
+        title: "默认轻量",
+        summary: "只保留温度采样，接近常见聊天 API 的默认体验。",
         samplerKinds: LocalLLMSamplerKind.defaultChain
+    )
+
+    public static let llamaCppFull = LocalLLMSamplerChainPreset(
+        id: "llama-cpp-full",
+        title: "llama.cpp 全量",
+        summary: "完整启用 penalties、DRY、Top-n-sigma、Top-K、Typical-P、Top-P、Min-P、XTC 和温度。",
+        samplerKinds: LocalLLMSamplerKind.parse("edskypmxt")
     )
 
     public static let balanced = LocalLLMSamplerChainPreset(
@@ -388,6 +395,7 @@ public struct LocalLLMSamplerChainPreset: Identifiable, Hashable, Sendable {
 
     public static let allPresets: [LocalLLMSamplerChainPreset] = [
         .defaults,
+        .llamaCppFull,
         .balanced,
         .precise,
         .creative,
@@ -662,7 +670,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                     continue
                 }
                 updatedRecord.contextSize = parsedValue.clamped(to: 1...1_048_576)
-                appendApplied(rawName, "contextSize", "\(updatedRecord.contextSize)")
+                appendApplied(rawName, "contextSize", "\(updatedRecord.contextSize ?? LocalModelRecord.defaultContextSize)")
             case "predict", "n-predict", "max-tokens", "max-output-tokens", "n":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
@@ -670,7 +678,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                     continue
                 }
                 updatedRecord.maxOutputTokens = parsedValue.clamped(to: 1...131_072)
-                appendApplied(rawName, "maxOutputTokens", "\(updatedRecord.maxOutputTokens)")
+                appendApplied(rawName, "maxOutputTokens", "\(updatedRecord.maxOutputTokens ?? LocalModelRecord.defaultMaxOutputTokens)")
             case "gpu-layers", "n-gpu-layers", "ngl":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
@@ -678,7 +686,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                     continue
                 }
                 updatedRecord.gpuLayers = parsedValue.clamped(to: -1...999)
-                appendApplied(rawName, "gpuLayers", "\(updatedRecord.gpuLayers)")
+                appendApplied(rawName, "gpuLayers", "\(updatedRecord.gpuLayers ?? LocalModelRecord.defaultGPULayers)")
             case "seed", "s":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = parseSeed(value) else {
@@ -686,7 +694,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                     continue
                 }
                 updatedRecord.seed = parsedValue
-                appendApplied(rawName, "seed", "\(updatedRecord.seed)")
+                appendApplied(rawName, "seed", "\(updatedRecord.seed ?? LocalModelRecord.defaultSeed)")
             case "temp", "temperature":
                 applyDouble(
                     rawName: rawName,
@@ -704,7 +712,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                     continue
                 }
                 updatedRecord.topK = parsedValue.clamped(to: 0...1_000)
-                appendApplied(rawName, "topK", "\(updatedRecord.topK)")
+                appendApplied(rawName, "topK", "\(updatedRecord.topK ?? LocalModelRecord.defaultTopK)")
             case "top-p", "top-p-sampling":
                 applyDouble(rawName: rawName, value: requireValue(), range: 0...1, descriptorID: "topP", assign: { updatedRecord.topP = $0 }, applied: appendApplied, errors: &errors)
             case "min-p":
@@ -716,7 +724,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
                     continue
                 }
                 updatedRecord.repeatLastN = parsedValue.clamped(to: -1...1_048_576)
-                appendApplied(rawName, "repeatLastN", "\(updatedRecord.repeatLastN)")
+                appendApplied(rawName, "repeatLastN", "\(updatedRecord.repeatLastN ?? LocalModelRecord.defaultRepeatLastN)")
             case "repeat-penalty":
                 applyDouble(rawName: rawName, value: requireValue(), range: 0...4, descriptorID: "repeatPenalty", assign: { updatedRecord.repeatPenalty = $0 }, applied: appendApplied, errors: &errors)
             case "frequency-penalty":

@@ -33,10 +33,11 @@ struct LocalModelStoreTests {
         store.update(record)
 
         let reloaded = LocalModelStore(directoryURL: store.directoryURL)
-        #expect(reloaded.models.first?.sanitizedDisplayName == "新名字")
-        #expect(reloaded.models.first?.contextSize == 1)
-        #expect(reloaded.models.first?.maxOutputTokens == 1)
-        #expect(reloaded.models.first?.gpuLayers == 7)
+        let updatedRecord = try #require(reloaded.models.first)
+        #expect(updatedRecord.sanitizedDisplayName == "新名字")
+        #expect(updatedRecord.contextSize == 1)
+        #expect(updatedRecord.maxOutputTokens == 1)
+        #expect(updatedRecord.gpuLayers == 7)
 
         if let saved = reloaded.models.first {
             reloaded.delete(saved)
@@ -84,22 +85,7 @@ struct LocalModelStoreTests {
         #expect(runnable.provider.id == LocalModelProviderBridge.providerID)
         #expect(runnable.provider.apiFormat == LocalModelProviderBridge.apiFormat)
         #expect(runnable.model.id == id)
-        #expect(runnable.model.overrideParameters["context_size"] == .int(LocalModelRecord.defaultContextSize))
-        #expect(runnable.model.overrideParameters["max_output_tokens"] == .int(LocalModelRecord.defaultMaxOutputTokens))
-        #expect(runnable.model.overrideParameters["n_gpu_layers"] == .int(LocalModelRecord.defaultGPULayers))
-        #expect(runnable.model.overrideParameters["seed"] == .string(String(LocalModelRecord.defaultSeed)))
-        #expect(runnable.model.overrideParameters["temperature"] == .double(LocalModelRecord.defaultTemperature))
-        #expect(runnable.model.overrideParameters["top_k"] == .int(LocalModelRecord.defaultTopK))
-        #expect(runnable.model.overrideParameters["top_p"] == .double(LocalModelRecord.defaultTopP))
-        #expect(runnable.model.overrideParameters["min_p"] == .double(LocalModelRecord.defaultMinP))
-        #expect(runnable.model.overrideParameters["repeat_last_n"] == .int(LocalModelRecord.defaultRepeatLastN))
-        #expect(runnable.model.overrideParameters["repeat_penalty"] == .double(LocalModelRecord.defaultRepeatPenalty))
-        #expect(runnable.model.overrideParameters["frequency_penalty"] == .double(LocalModelRecord.defaultFrequencyPenalty))
-        #expect(runnable.model.overrideParameters["presence_penalty"] == .double(LocalModelRecord.defaultPresencePenalty))
-        #expect(runnable.model.overrideParameters["grammar"] == .string(LocalModelRecord.defaultGrammar))
-        #expect(runnable.model.overrideParameters["ignore_eos"] == .bool(LocalModelRecord.defaultIgnoreEOS))
-        #expect(runnable.model.overrideParameters["sampler_seq"] == .string(LocalLLMSamplerKind.defaultChainString))
-        #expect(runnable.model.overrideParameters["llama_cli_args"] == .string(LocalModelRecord.defaultAdvancedArguments))
+        #expect(runnable.model.overrideParameters.isEmpty)
         #expect(runnable.model.supportsToolCalling)
         #expect(runnable.model.supportsEmbedding)
         #expect(LocalModelProviderBridge.localRecordID(from: runnable.id) == id)
@@ -163,6 +149,54 @@ struct LocalModelStoreTests {
         #expect(restored.models.first?.requestBodyControls.count == 1)
     }
 
+    @Test("旧版强制默认参数会迁移为隐式默认")
+    func legacyForcedDefaultsMigrateToImplicitOverrides() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storeDirectory = root.appendingPathComponent("LocalModels")
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        let legacyRecord = LocalModelRecord(
+            displayName: "TinyLlama",
+            fileName: "tiny.gguf",
+            relativePath: "tiny.gguf",
+            fileSize: 8,
+            contextSize: LocalModelRecord.defaultContextSize,
+            maxOutputTokens: LocalModelRecord.defaultMaxOutputTokens,
+            gpuLayers: LocalModelRecord.defaultGPULayers,
+            seed: LocalModelRecord.defaultSeed,
+            temperature: 0.8,
+            topK: 40,
+            topP: 0.9,
+            minP: 0.05,
+            repeatLastN: LocalModelRecord.defaultRepeatLastN,
+            repeatPenalty: LocalModelRecord.defaultRepeatPenalty,
+            frequencyPenalty: LocalModelRecord.defaultFrequencyPenalty,
+            presencePenalty: LocalModelRecord.defaultPresencePenalty,
+            grammar: LocalModelRecord.defaultGrammar,
+            ignoreEOS: LocalModelRecord.defaultIgnoreEOS,
+            samplerKinds: LocalLLMSamplerKind.parse("edskypmxt")
+        )
+        let snapshot = LocalModelStoreSnapshot(schemaVersion: 1, models: [legacyRecord])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        try data.write(to: storeDirectory.appendingPathComponent("local-models.json"))
+
+        let store = LocalModelStore(directoryURL: storeDirectory)
+        let migrated = try #require(store.models.first)
+
+        #expect(migrated.contextSize == nil)
+        #expect(migrated.maxOutputTokens == nil)
+        #expect(migrated.gpuLayers == nil)
+        #expect(migrated.temperature == nil)
+        #expect(migrated.topK == nil)
+        #expect(migrated.topP == 0.9)
+        #expect(migrated.minP == nil)
+        #expect(migrated.samplerKinds == nil)
+        #expect(migrated.effectiveTemperature == LocalModelRecord.defaultTemperature)
+        #expect(migrated.effectiveSamplerKinds == LocalLLMSamplerKind.defaultChain)
+    }
+
     @Test("提供商模型设置会回写本地权重记录")
     func localProviderModelChangesPersistToRecord() throws {
         let root = try temporaryDirectory()
@@ -194,24 +228,25 @@ struct LocalModelStoreTests {
 
         store.updateFromProviderModel(model)
 
-        #expect(store.models.first?.sanitizedDisplayName == "模型别名")
-        #expect(store.models.first?.isActivated == false)
-        #expect(store.models.first?.contextSize == 4096)
-        #expect(store.models.first?.maxOutputTokens == 1024)
-        #expect(store.models.first?.gpuLayers == 0)
-        #expect(store.models.first?.seed == LocalModelRecord.defaultSeed)
-        #expect(store.models.first?.temperature == 0.7)
-        #expect(store.models.first?.topK == 12)
-        #expect(store.models.first?.topP == 0.9)
-        #expect(store.models.first?.minP == 0.2)
-        #expect(store.models.first?.repeatLastN == 32)
-        #expect(store.models.first?.repeatPenalty == 1.2)
-        #expect(store.models.first?.frequencyPenalty == 0.3)
-        #expect(store.models.first?.presencePenalty == 0.4)
-        #expect(store.models.first?.grammar == "root ::= \"ok\"")
-        #expect(store.models.first?.ignoreEOS == true)
-        #expect(store.models.first?.samplerKinds == [.topK, .topP, .temperature])
-        #expect(store.models.first?.advancedArguments == "--temp 0.7 --top-p 0.9")
+        let savedRecord = try #require(store.models.first)
+        #expect(savedRecord.sanitizedDisplayName == "模型别名")
+        #expect(savedRecord.isActivated == false)
+        #expect(savedRecord.contextSize == 4096)
+        #expect(savedRecord.maxOutputTokens == 1024)
+        #expect(savedRecord.gpuLayers == 0)
+        #expect(savedRecord.seed == LocalModelRecord.defaultSeed)
+        #expect(savedRecord.temperature == 0.7)
+        #expect(savedRecord.topK == 12)
+        #expect(savedRecord.topP == 0.9)
+        #expect(savedRecord.minP == 0.2)
+        #expect(savedRecord.repeatLastN == 32)
+        #expect(savedRecord.repeatPenalty == 1.2)
+        #expect(savedRecord.frequencyPenalty == 0.3)
+        #expect(savedRecord.presencePenalty == 0.4)
+        #expect(savedRecord.grammar == "root ::= \"ok\"")
+        #expect(savedRecord.ignoreEOS == true)
+        #expect(savedRecord.samplerKinds == [.topK, .topP, .temperature])
+        #expect(savedRecord.advancedArguments == "--temp 0.7 --top-p 0.9")
     }
 
     @Test("本地对话会转换为结构化 role/content 消息")

@@ -161,18 +161,18 @@ private struct LocalModelDetailView: View {
 
     init(record: LocalModelRecord) {
         _draft = State(initialValue: record)
-        _contextSizeText = State(initialValue: "\(record.contextSize)")
-        _maxOutputTokensText = State(initialValue: "\(record.maxOutputTokens)")
-        _gpuLayersText = State(initialValue: "\(record.gpuLayers)")
-        _seedText = State(initialValue: "\(record.seed)")
-        _temperatureText = State(initialValue: LocalModelFormat.decimal(record.temperature))
-        _topKText = State(initialValue: "\(record.topK)")
-        _topPText = State(initialValue: LocalModelFormat.decimal(record.topP))
-        _minPText = State(initialValue: LocalModelFormat.decimal(record.minP))
-        _repeatLastNText = State(initialValue: "\(record.repeatLastN)")
-        _repeatPenaltyText = State(initialValue: LocalModelFormat.decimal(record.repeatPenalty))
-        _frequencyPenaltyText = State(initialValue: LocalModelFormat.decimal(record.frequencyPenalty))
-        _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(record.presencePenalty))
+        _contextSizeText = State(initialValue: "\(record.effectiveContextSize)")
+        _maxOutputTokensText = State(initialValue: "\(record.effectiveMaxOutputTokens)")
+        _gpuLayersText = State(initialValue: "\(record.effectiveGPULayers)")
+        _seedText = State(initialValue: "\(record.effectiveSeed)")
+        _temperatureText = State(initialValue: LocalModelFormat.decimal(record.effectiveTemperature))
+        _topKText = State(initialValue: "\(record.effectiveTopK)")
+        _topPText = State(initialValue: LocalModelFormat.decimal(record.effectiveTopP))
+        _minPText = State(initialValue: LocalModelFormat.decimal(record.effectiveMinP))
+        _repeatLastNText = State(initialValue: "\(record.effectiveRepeatLastN)")
+        _repeatPenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectiveRepeatPenalty))
+        _frequencyPenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectiveFrequencyPenalty))
+        _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectivePresencePenalty))
     }
 
     var body: some View {
@@ -244,10 +244,30 @@ private struct LocalModelDetailView: View {
 
     private var runtimeSection: some View {
         Section {
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "contextSize"), text: $contextSizeText, keyboardType: .numberPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "maxOutputTokens"), text: $maxOutputTokensText, keyboardType: .numberPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "gpuLayers"), text: $gpuLayersText, keyboardType: .numbersAndPunctuation)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "seed"), text: $seedText, keyboardType: .numbersAndPunctuation)
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "contextSize"),
+                text: $contextSizeText,
+                isEnabled: overrideEnabledBinding(\.contextSize, defaultValue: LocalModelRecord.defaultContextSize),
+                keyboardType: .numberPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "maxOutputTokens"),
+                text: $maxOutputTokensText,
+                isEnabled: overrideEnabledBinding(\.maxOutputTokens, defaultValue: LocalModelRecord.defaultMaxOutputTokens),
+                keyboardType: .numberPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "gpuLayers"),
+                text: $gpuLayersText,
+                isEnabled: overrideEnabledBinding(\.gpuLayers, defaultValue: LocalModelRecord.defaultGPULayers),
+                keyboardType: .numbersAndPunctuation
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "seed"),
+                text: $seedText,
+                isEnabled: overrideEnabledBinding(\.seed, defaultValue: LocalModelRecord.defaultSeed),
+                keyboardType: .numbersAndPunctuation
+            )
         } header: {
             Text(NSLocalizedString("运行时", comment: "Local model runtime section"))
         }
@@ -255,14 +275,54 @@ private struct LocalModelDetailView: View {
 
     private var samplingSection: some View {
         Section {
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "temperature"), text: $temperatureText, keyboardType: .decimalPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "topK"), text: $topKText, keyboardType: .numberPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "topP"), text: $topPText, keyboardType: .decimalPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "minP"), text: $minPText, keyboardType: .decimalPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "repeatLastN"), text: $repeatLastNText, keyboardType: .numbersAndPunctuation)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "repeatPenalty"), text: $repeatPenaltyText, keyboardType: .decimalPad)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "frequencyPenalty"), text: $frequencyPenaltyText, keyboardType: .numbersAndPunctuation)
-            LocalModelParameterTextField(descriptor: LocalLLMParameterCatalog.descriptor(for: "presencePenalty"), text: $presencePenaltyText, keyboardType: .numbersAndPunctuation)
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "temperature"),
+                text: $temperatureText,
+                isEnabled: overrideEnabledBinding(\.temperature, defaultValue: LocalModelRecord.defaultTemperature),
+                keyboardType: .decimalPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "topK"),
+                text: $topKText,
+                isEnabled: overrideEnabledBinding(\.topK, defaultValue: LocalModelRecord.defaultTopK),
+                keyboardType: .numberPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "topP"),
+                text: $topPText,
+                isEnabled: overrideEnabledBinding(\.topP, defaultValue: LocalModelRecord.defaultTopP),
+                keyboardType: .decimalPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "minP"),
+                text: $minPText,
+                isEnabled: overrideEnabledBinding(\.minP, defaultValue: LocalModelRecord.defaultMinP),
+                keyboardType: .decimalPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "repeatLastN"),
+                text: $repeatLastNText,
+                isEnabled: overrideEnabledBinding(\.repeatLastN, defaultValue: LocalModelRecord.defaultRepeatLastN),
+                keyboardType: .numbersAndPunctuation
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "repeatPenalty"),
+                text: $repeatPenaltyText,
+                isEnabled: overrideEnabledBinding(\.repeatPenalty, defaultValue: LocalModelRecord.defaultRepeatPenalty),
+                keyboardType: .decimalPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "frequencyPenalty"),
+                text: $frequencyPenaltyText,
+                isEnabled: overrideEnabledBinding(\.frequencyPenalty, defaultValue: LocalModelRecord.defaultFrequencyPenalty),
+                keyboardType: .numbersAndPunctuation
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "presencePenalty"),
+                text: $presencePenaltyText,
+                isEnabled: overrideEnabledBinding(\.presencePenalty, defaultValue: LocalModelRecord.defaultPresencePenalty),
+                keyboardType: .numbersAndPunctuation
+            )
         } header: {
             Text(NSLocalizedString("采样", comment: "Local model sampling section"))
         }
@@ -272,11 +332,13 @@ private struct LocalModelDetailView: View {
         Section {
             LocalModelGrammarField(
                 descriptor: LocalLLMParameterCatalog.descriptor(for: "grammar"),
-                text: $draft.grammar
+                text: grammarTextBinding,
+                isEnabled: overrideEnabledBinding(\.grammar, defaultValue: LocalModelRecord.defaultGrammar)
             )
             LocalModelToggleParameterRow(
                 descriptor: LocalLLMParameterCatalog.descriptor(for: "ignoreEOS"),
-                isOn: $draft.ignoreEOS
+                value: ignoreEOSBinding,
+                isEnabled: overrideEnabledBinding(\.ignoreEOS, defaultValue: true)
             )
         } header: {
             Text(NSLocalizedString("输出约束", comment: "Local model grammar section"))
@@ -288,7 +350,7 @@ private struct LocalModelDetailView: View {
             LabeledContent(NSLocalizedString("采样链", comment: "Sampler chain status")) {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(isDefaultSamplerChain ? NSLocalizedString("默认", comment: "Default sampler chain") : NSLocalizedString("自定义", comment: "Custom sampler chain"))
-                    Text(LocalLLMSamplerKind.chainString(draft.samplerKinds))
+                    Text(LocalLLMSamplerKind.chainString(draft.effectiveSamplerKinds))
                         .etFont(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
@@ -339,44 +401,44 @@ private struct LocalModelDetailView: View {
     }
 
     private var isDefaultSamplerChain: Bool {
-        LocalLLMSamplerKind.unique(draft.samplerKinds) == LocalLLMSamplerKind.defaultChain
+        draft.samplerKinds == nil || LocalLLMSamplerKind.unique(draft.samplerKinds ?? []) == LocalLLMSamplerKind.defaultChain
     }
 
     private func applyDraftNumbers() {
-        if let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.contextSize != nil, let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.contextSize = contextSize
         }
-        if let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.maxOutputTokens != nil, let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.maxOutputTokens = maxOutputTokens
         }
-        if let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.gpuLayers != nil, let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.gpuLayers = gpuLayers
         }
-        if let seed = parseSeed(seedText) {
+        if draft.seed != nil, let seed = parseSeed(seedText) {
             draft.seed = seed
         }
-        if let temperature = Double(temperatureText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.temperature != nil, let temperature = Double(temperatureText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.temperature = temperature
         }
-        if let topK = Int(topKText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.topK != nil, let topK = Int(topKText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.topK = topK
         }
-        if let topP = Double(topPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.topP != nil, let topP = Double(topPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.topP = topP
         }
-        if let minP = Double(minPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.minP != nil, let minP = Double(minPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.minP = minP
         }
-        if let repeatLastN = Int(repeatLastNText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.repeatLastN != nil, let repeatLastN = Int(repeatLastNText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.repeatLastN = repeatLastN
         }
-        if let repeatPenalty = Double(repeatPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.repeatPenalty != nil, let repeatPenalty = Double(repeatPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.repeatPenalty = repeatPenalty
         }
-        if let frequencyPenalty = Double(frequencyPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.frequencyPenalty != nil, let frequencyPenalty = Double(frequencyPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.frequencyPenalty = frequencyPenalty
         }
-        if let presencePenalty = Double(presencePenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        if draft.presencePenalty != nil, let presencePenalty = Double(presencePenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.presencePenalty = presencePenalty
         }
         draft.advancedArguments = ""
@@ -385,18 +447,18 @@ private struct LocalModelDetailView: View {
     }
 
     private func refreshTextFieldsFromDraft() {
-        contextSizeText = "\(draft.contextSize)"
-        maxOutputTokensText = "\(draft.maxOutputTokens)"
-        gpuLayersText = "\(draft.gpuLayers)"
-        seedText = "\(draft.seed)"
-        temperatureText = LocalModelFormat.decimal(draft.temperature)
-        topKText = "\(draft.topK)"
-        topPText = LocalModelFormat.decimal(draft.topP)
-        minPText = LocalModelFormat.decimal(draft.minP)
-        repeatLastNText = "\(draft.repeatLastN)"
-        repeatPenaltyText = LocalModelFormat.decimal(draft.repeatPenalty)
-        frequencyPenaltyText = LocalModelFormat.decimal(draft.frequencyPenalty)
-        presencePenaltyText = LocalModelFormat.decimal(draft.presencePenalty)
+        contextSizeText = "\(draft.effectiveContextSize)"
+        maxOutputTokensText = "\(draft.effectiveMaxOutputTokens)"
+        gpuLayersText = "\(draft.effectiveGPULayers)"
+        seedText = "\(draft.effectiveSeed)"
+        temperatureText = LocalModelFormat.decimal(draft.effectiveTemperature)
+        topKText = "\(draft.effectiveTopK)"
+        topPText = LocalModelFormat.decimal(draft.effectiveTopP)
+        minPText = LocalModelFormat.decimal(draft.effectiveMinP)
+        repeatLastNText = "\(draft.effectiveRepeatLastN)"
+        repeatPenaltyText = LocalModelFormat.decimal(draft.effectiveRepeatPenalty)
+        frequencyPenaltyText = LocalModelFormat.decimal(draft.effectiveFrequencyPenalty)
+        presencePenaltyText = LocalModelFormat.decimal(draft.effectivePresencePenalty)
     }
 
     private func parseSeed(_ rawValue: String) -> UInt32? {
@@ -405,6 +467,38 @@ private struct LocalModelDetailView: View {
             return LocalModelRecord.defaultSeed
         }
         return UInt32(trimmed)
+    }
+
+    private func overrideEnabledBinding<Value>(
+        _ keyPath: WritableKeyPath<LocalModelRecord, Value?>,
+        defaultValue: Value
+    ) -> Binding<Bool> {
+        Binding {
+            draft[keyPath: keyPath] != nil
+        } set: { isEnabled in
+            if isEnabled {
+                draft[keyPath: keyPath] = defaultValue
+            } else {
+                draft[keyPath: keyPath] = nil
+            }
+            refreshTextFieldsFromDraft()
+        }
+    }
+
+    private var grammarTextBinding: Binding<String> {
+        Binding {
+            draft.grammar ?? ""
+        } set: { newValue in
+            draft.grammar = newValue
+        }
+    }
+
+    private var ignoreEOSBinding: Binding<Bool> {
+        Binding {
+            draft.ignoreEOS ?? LocalModelRecord.defaultIgnoreEOS
+        } set: { newValue in
+            draft.ignoreEOS = newValue
+        }
     }
 }
 
@@ -431,7 +525,7 @@ private struct LocalModelAdvancedIntroCard: View {
         .sheet(isPresented: $isExpanded) {
             NavigationStack {
                 ScrollView {
-                    Text(NSLocalizedString("普通高级设置使用 iOS 原生表单保存结构化参数；llama.cpp-style 参数导入只支持常用子集，并会转换成这些字段。App 不执行 llama.cpp CLI，也不会把命令行字符串当成本地推理的主交互。上下文长度和 GPU 层数通常需要重建 context；采样参数会在下一次请求或下一次采样链创建时生效。", comment: "Local model tuning intro details body"))
+                    Text(NSLocalizedString("普通高级设置使用 iOS 原生表单保存结构化参数；只有开启“自定义”的项目才会作为模型覆盖项保存。未开启的项目会沿用 App 默认或全局聊天设置，并在调用前映射到 llama.cpp C ABI。llama.cpp-style 参数导入只支持常用子集，会转换成这些覆盖项。App 不执行 llama.cpp CLI，也不会把命令行字符串当成本地推理的主交互。上下文长度和 GPU 层数通常需要重建 context；采样参数会在下一次请求或下一次采样链创建时生效。", comment: "Local model tuning intro details body"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -447,6 +541,7 @@ private struct LocalModelAdvancedIntroCard: View {
 private struct LocalModelParameterTextField: View {
     let descriptor: LocalLLMParameterDescriptor
     @Binding var text: String
+    @Binding var isEnabled: Bool
     var keyboardType: UIKeyboardType = .numberPad
 
     var body: some View {
@@ -464,13 +559,16 @@ private struct LocalModelParameterTextField: View {
 
                 Spacer()
 
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+                    .labelsHidden()
+            }
+
+            if isEnabled {
                 TextField(descriptor.title, text: $text)
                     .keyboardType(keyboardType)
-                    .multilineTextAlignment(.trailing)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: 132)
             }
 
             Text(descriptor.summary)
@@ -478,7 +576,9 @@ private struct LocalModelParameterTextField: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
-                Text(String(format: NSLocalizedString("默认 %@", comment: "Local parameter default label"), descriptor.defaultValue))
+                Text(isEnabled
+                    ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled")
+                    : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue))
                 Text(descriptor.effectScope)
             }
             .etFont(.caption2)
@@ -490,11 +590,12 @@ private struct LocalModelParameterTextField: View {
 
 private struct LocalModelToggleParameterRow: View {
     let descriptor: LocalLLMParameterDescriptor
-    @Binding var isOn: Bool
+    @Binding var value: Bool
+    @Binding var isEnabled: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: $isOn) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(descriptor.title)
                         .etFont(.subheadline.weight(.medium))
@@ -502,11 +603,17 @@ private struct LocalModelToggleParameterRow: View {
                         .etFont(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
+                Spacer()
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+                    .labelsHidden()
+            }
+            if isEnabled {
+                Toggle(NSLocalizedString("开启", comment: "Enable bool local parameter"), isOn: $value)
             }
             Text(descriptor.summary)
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
-            Text("\(String(format: NSLocalizedString("默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
+            Text("\(isEnabled ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled") : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
                 .etFont(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -517,25 +624,33 @@ private struct LocalModelToggleParameterRow: View {
 private struct LocalModelGrammarField: View {
     let descriptor: LocalLLMParameterDescriptor
     @Binding var text: String
+    @Binding var isEnabled: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(descriptor.title)
-                    .etFont(.subheadline.weight(.medium))
-                Text(descriptor.aliasText)
-                    .etFont(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(descriptor.title)
+                        .etFont(.subheadline.weight(.medium))
+                    Text(descriptor.aliasText)
+                        .etFont(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+                    .labelsHidden()
             }
-            TextEditor(text: $text)
-                .frame(minHeight: 88)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(.footnote, design: .monospaced))
+            if isEnabled {
+                TextEditor(text: $text)
+                    .frame(minHeight: 88)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(.footnote, design: .monospaced))
+            }
             Text(descriptor.summary)
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
-            Text("\(String(format: NSLocalizedString("默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
+            Text("\(isEnabled ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled") : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
                 .etFont(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -677,17 +792,26 @@ private struct LocalModelImportIssueRow: View {
 }
 
 private struct LocalModelSamplerChainLabView: View {
-    @Binding var samplerKinds: [LocalLLMSamplerKind]
+    @Binding var samplerKinds: [LocalLLMSamplerKind]?
+
+    private var currentKinds: [LocalLLMSamplerKind] {
+        samplerKinds ?? LocalLLMSamplerKind.defaultChain
+    }
 
     var body: some View {
         List {
             Section {
+                LabeledContent(NSLocalizedString("状态", comment: "Sampler chain override state")) {
+                    Text(samplerKinds == nil
+                        ? NSLocalizedString("使用默认", comment: "Use default sampler chain")
+                        : NSLocalizedString("自定义", comment: "Custom sampler chain"))
+                }
                 LabeledContent(NSLocalizedString("等价字符串", comment: "Sampler chain string")) {
-                    Text(LocalLLMSamplerKind.chainString(samplerKinds))
+                    Text(LocalLLMSamplerKind.chainString(currentKinds))
                         .etFont(.body.monospaced())
                 }
                 Button {
-                    samplerKinds = LocalLLMSamplerKind.defaultChain
+                    samplerKinds = nil
                 } label: {
                     Label(NSLocalizedString("重置为默认", comment: "Reset sampler chain to default"), systemImage: "arrow.counterclockwise")
                 }
@@ -696,7 +820,7 @@ private struct LocalModelSamplerChainLabView: View {
             Section {
                 ForEach(LocalLLMSamplerChainPreset.allPresets) { preset in
                     Button {
-                        samplerKinds = preset.samplerKinds
+                        samplerKinds = preset.samplerKinds == LocalLLMSamplerKind.defaultChain ? nil : preset.samplerKinds
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
@@ -718,18 +842,22 @@ private struct LocalModelSamplerChainLabView: View {
             }
 
             Section {
-                if samplerKinds.isEmpty {
+                if currentKinds.isEmpty {
                     Text(NSLocalizedString("当前链为空。", comment: "Empty sampler chain"))
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(samplerKinds, id: \.self) { kind in
+                    ForEach(currentKinds, id: \.self) { kind in
                         LocalModelSamplerKindRow(kind: kind)
                     }
                     .onMove { source, destination in
-                        samplerKinds.move(fromOffsets: source, toOffset: destination)
+                        var updatedKinds = currentKinds
+                        updatedKinds.move(fromOffsets: source, toOffset: destination)
+                        samplerKinds = updatedKinds
                     }
                     .onDelete { offsets in
-                        samplerKinds.remove(atOffsets: offsets)
+                        var updatedKinds = currentKinds
+                        updatedKinds.remove(atOffsets: offsets)
+                        samplerKinds = updatedKinds
                     }
                 }
             } header: {
@@ -741,9 +869,9 @@ private struct LocalModelSamplerChainLabView: View {
             }
 
             Section {
-                ForEach(LocalLLMSamplerKind.allCases.filter { !samplerKinds.contains($0) }) { kind in
+                ForEach(LocalLLMSamplerKind.allCases.filter { !currentKinds.contains($0) }) { kind in
                     Button {
-                        samplerKinds.append(kind)
+                        samplerKinds = currentKinds + [kind]
                     } label: {
                         LocalModelSamplerKindRow(kind: kind)
                     }

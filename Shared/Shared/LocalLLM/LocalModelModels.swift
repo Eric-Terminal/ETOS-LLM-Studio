@@ -14,16 +14,22 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public static let defaultGPULayers = -1
     public static let defaultAdvancedArguments = ""
     public static let defaultSeed = UInt32.max
-    public static let defaultTemperature = 0.8
-    public static let defaultTopK = 40
-    public static let defaultTopP = 0.95
-    public static let defaultMinP = 0.05
+    public static let defaultTemperature = 1.0
+    public static let defaultTopK = 0
+    public static let defaultTopP = 1.0
+    public static let defaultMinP = 0.0
     public static let defaultRepeatLastN = 64
     public static let defaultRepeatPenalty = 1.0
     public static let defaultFrequencyPenalty = 0.0
     public static let defaultPresencePenalty = 0.0
     public static let defaultGrammar = ""
     public static let defaultIgnoreEOS = false
+
+    private static let legacyForcedDefaultTemperature = 0.8
+    private static let legacyForcedDefaultTopK = 40
+    private static let legacyForcedDefaultTopP = 0.95
+    private static let legacyForcedDefaultMinP = 0.05
+    private static let legacyForcedDefaultSamplerKinds = LocalLLMSamplerKind.parse("edskypmxt")
 
     public var id: UUID
     public var displayName: String
@@ -33,21 +39,21 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var isActivated: Bool
-    public var contextSize: Int
-    public var maxOutputTokens: Int
-    public var gpuLayers: Int
-    public var seed: UInt32
-    public var temperature: Double
-    public var topK: Int
-    public var topP: Double
-    public var minP: Double
-    public var repeatLastN: Int
-    public var repeatPenalty: Double
-    public var frequencyPenalty: Double
-    public var presencePenalty: Double
-    public var grammar: String
-    public var ignoreEOS: Bool
-    public var samplerKinds: [LocalLLMSamplerKind]
+    public var contextSize: Int?
+    public var maxOutputTokens: Int?
+    public var gpuLayers: Int?
+    public var seed: UInt32?
+    public var temperature: Double?
+    public var topK: Int?
+    public var topP: Double?
+    public var minP: Double?
+    public var repeatLastN: Int?
+    public var repeatPenalty: Double?
+    public var frequencyPenalty: Double?
+    public var presencePenalty: Double?
+    public var grammar: String?
+    public var ignoreEOS: Bool?
+    public var samplerKinds: [LocalLLMSamplerKind]?
     public var advancedArguments: String
     public var note: String?
 
@@ -60,21 +66,21 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isActivated: Bool = true,
-        contextSize: Int = LocalModelRecord.defaultContextSize,
-        maxOutputTokens: Int = LocalModelRecord.defaultMaxOutputTokens,
-        gpuLayers: Int = LocalModelRecord.defaultGPULayers,
-        seed: UInt32 = LocalModelRecord.defaultSeed,
-        temperature: Double = LocalModelRecord.defaultTemperature,
-        topK: Int = LocalModelRecord.defaultTopK,
-        topP: Double = LocalModelRecord.defaultTopP,
-        minP: Double = LocalModelRecord.defaultMinP,
-        repeatLastN: Int = LocalModelRecord.defaultRepeatLastN,
-        repeatPenalty: Double = LocalModelRecord.defaultRepeatPenalty,
-        frequencyPenalty: Double = LocalModelRecord.defaultFrequencyPenalty,
-        presencePenalty: Double = LocalModelRecord.defaultPresencePenalty,
-        grammar: String = LocalModelRecord.defaultGrammar,
-        ignoreEOS: Bool = LocalModelRecord.defaultIgnoreEOS,
-        samplerKinds: [LocalLLMSamplerKind] = LocalLLMSamplerKind.defaultChain,
+        contextSize: Int? = nil,
+        maxOutputTokens: Int? = nil,
+        gpuLayers: Int? = nil,
+        seed: UInt32? = nil,
+        temperature: Double? = nil,
+        topK: Int? = nil,
+        topP: Double? = nil,
+        minP: Double? = nil,
+        repeatLastN: Int? = nil,
+        repeatPenalty: Double? = nil,
+        frequencyPenalty: Double? = nil,
+        presencePenalty: Double? = nil,
+        grammar: String? = nil,
+        ignoreEOS: Bool? = nil,
+        samplerKinds: [LocalLLMSamplerKind]? = nil,
         advancedArguments: String = LocalModelRecord.defaultAdvancedArguments,
         note: String? = nil
     ) {
@@ -86,8 +92,8 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isActivated = isActivated
-        self.contextSize = max(1, contextSize)
-        self.maxOutputTokens = max(1, maxOutputTokens)
+        self.contextSize = contextSize
+        self.maxOutputTokens = maxOutputTokens
         self.gpuLayers = gpuLayers
         self.seed = seed
         self.temperature = temperature
@@ -98,9 +104,9 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.repeatPenalty = repeatPenalty
         self.frequencyPenalty = frequencyPenalty
         self.presencePenalty = presencePenalty
-        self.grammar = grammar.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.grammar = grammar.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
         self.ignoreEOS = ignoreEOS
-        self.samplerKinds = LocalLLMSamplerKind.unique(samplerKinds)
+        self.samplerKinds = samplerKinds.flatMap { LocalLLMSamplerKind.unique($0).nilIfEmpty }
         self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
         self.note = note?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         normalizeGenerationParameters()
@@ -113,6 +119,66 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
 
     public var modelName: String {
         "local-gguf-\(id.uuidString.lowercased())"
+    }
+
+    public var effectiveContextSize: Int {
+        contextSize ?? Self.defaultContextSize
+    }
+
+    public var effectiveMaxOutputTokens: Int {
+        maxOutputTokens ?? Self.defaultMaxOutputTokens
+    }
+
+    public var effectiveGPULayers: Int {
+        gpuLayers ?? Self.defaultGPULayers
+    }
+
+    public var effectiveSeed: UInt32 {
+        seed ?? Self.defaultSeed
+    }
+
+    public var effectiveTemperature: Double {
+        temperature ?? Self.defaultTemperature
+    }
+
+    public var effectiveTopK: Int {
+        topK ?? Self.defaultTopK
+    }
+
+    public var effectiveTopP: Double {
+        topP ?? Self.defaultTopP
+    }
+
+    public var effectiveMinP: Double {
+        minP ?? Self.defaultMinP
+    }
+
+    public var effectiveRepeatLastN: Int {
+        repeatLastN ?? Self.defaultRepeatLastN
+    }
+
+    public var effectiveRepeatPenalty: Double {
+        repeatPenalty ?? Self.defaultRepeatPenalty
+    }
+
+    public var effectiveFrequencyPenalty: Double {
+        frequencyPenalty ?? Self.defaultFrequencyPenalty
+    }
+
+    public var effectivePresencePenalty: Double {
+        presencePenalty ?? Self.defaultPresencePenalty
+    }
+
+    public var effectiveGrammar: String {
+        grammar ?? Self.defaultGrammar
+    }
+
+    public var effectiveIgnoreEOS: Bool {
+        ignoreEOS ?? Self.defaultIgnoreEOS
+    }
+
+    public var effectiveSamplerKinds: [LocalLLMSamplerKind] {
+        samplerKinds ?? LocalLLMSamplerKind.defaultChain
     }
 
     enum CodingKeys: String, CodingKey {
@@ -154,50 +220,72 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
             createdAt: try container.decode(Date.self, forKey: .createdAt),
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             isActivated: try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? true,
-            contextSize: try container.decodeIfPresent(Int.self, forKey: .contextSize) ?? Self.defaultContextSize,
-            maxOutputTokens: try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens) ?? Self.defaultMaxOutputTokens,
-            gpuLayers: try container.decodeIfPresent(Int.self, forKey: .gpuLayers) ?? Self.defaultGPULayers,
-            seed: try container.decodeIfPresent(UInt32.self, forKey: .seed) ?? Self.defaultSeed,
-            temperature: try container.decodeIfPresent(Double.self, forKey: .temperature) ?? Self.defaultTemperature,
-            topK: try container.decodeIfPresent(Int.self, forKey: .topK) ?? Self.defaultTopK,
-            topP: try container.decodeIfPresent(Double.self, forKey: .topP) ?? Self.defaultTopP,
-            minP: try container.decodeIfPresent(Double.self, forKey: .minP) ?? Self.defaultMinP,
-            repeatLastN: try container.decodeIfPresent(Int.self, forKey: .repeatLastN) ?? Self.defaultRepeatLastN,
-            repeatPenalty: try container.decodeIfPresent(Double.self, forKey: .repeatPenalty) ?? Self.defaultRepeatPenalty,
-            frequencyPenalty: try container.decodeIfPresent(Double.self, forKey: .frequencyPenalty) ?? Self.defaultFrequencyPenalty,
-            presencePenalty: try container.decodeIfPresent(Double.self, forKey: .presencePenalty) ?? Self.defaultPresencePenalty,
-            grammar: try container.decodeIfPresent(String.self, forKey: .grammar) ?? Self.defaultGrammar,
-            ignoreEOS: try container.decodeIfPresent(Bool.self, forKey: .ignoreEOS) ?? Self.defaultIgnoreEOS,
-            samplerKinds: try container.decodeIfPresent([LocalLLMSamplerKind].self, forKey: .samplerKinds) ?? LocalLLMSamplerKind.defaultChain,
+            contextSize: try container.decodeIfPresent(Int.self, forKey: .contextSize),
+            maxOutputTokens: try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens),
+            gpuLayers: try container.decodeIfPresent(Int.self, forKey: .gpuLayers),
+            seed: try container.decodeIfPresent(UInt32.self, forKey: .seed),
+            temperature: try container.decodeIfPresent(Double.self, forKey: .temperature),
+            topK: try container.decodeIfPresent(Int.self, forKey: .topK),
+            topP: try container.decodeIfPresent(Double.self, forKey: .topP),
+            minP: try container.decodeIfPresent(Double.self, forKey: .minP),
+            repeatLastN: try container.decodeIfPresent(Int.self, forKey: .repeatLastN),
+            repeatPenalty: try container.decodeIfPresent(Double.self, forKey: .repeatPenalty),
+            frequencyPenalty: try container.decodeIfPresent(Double.self, forKey: .frequencyPenalty),
+            presencePenalty: try container.decodeIfPresent(Double.self, forKey: .presencePenalty),
+            grammar: try container.decodeIfPresent(String.self, forKey: .grammar),
+            ignoreEOS: try container.decodeIfPresent(Bool.self, forKey: .ignoreEOS),
+            samplerKinds: try container.decodeIfPresent([LocalLLMSamplerKind].self, forKey: .samplerKinds),
             advancedArguments: try container.decodeIfPresent(String.self, forKey: .advancedArguments) ?? Self.defaultAdvancedArguments,
             note: try container.decodeIfPresent(String.self, forKey: .note)
         )
     }
 
     public mutating func normalizeGenerationParameters() {
-        contextSize = contextSize.clamped(to: 1...1_048_576)
-        maxOutputTokens = maxOutputTokens.clamped(to: 1...131_072)
-        gpuLayers = gpuLayers.clamped(to: -1...999)
-        temperature = temperature.clamped(to: 0...5)
-        topK = topK.clamped(to: 0...1_000)
-        topP = topP.clamped(to: 0...1)
-        minP = minP.clamped(to: 0...1)
-        repeatLastN = repeatLastN.clamped(to: -1...1_048_576)
-        repeatPenalty = repeatPenalty.clamped(to: 0...4)
-        frequencyPenalty = frequencyPenalty.clamped(to: -2...2)
-        presencePenalty = presencePenalty.clamped(to: -2...2)
-        grammar = grammar.trimmingCharacters(in: .whitespacesAndNewlines)
-        samplerKinds = LocalLLMSamplerKind.unique(samplerKinds)
-        if samplerKinds.isEmpty {
-            samplerKinds = LocalLLMSamplerKind.defaultChain
-        }
+        contextSize = contextSize?.clamped(to: 1...1_048_576)
+        maxOutputTokens = maxOutputTokens?.clamped(to: 1...131_072)
+        gpuLayers = gpuLayers?.clamped(to: -1...999)
+        temperature = temperature?.clamped(to: 0...5)
+        topK = topK?.clamped(to: 0...1_000)
+        topP = topP?.clamped(to: 0...1)
+        minP = minP?.clamped(to: 0...1)
+        repeatLastN = repeatLastN?.clamped(to: -1...1_048_576)
+        repeatPenalty = repeatPenalty?.clamped(to: 0...4)
+        frequencyPenalty = frequencyPenalty?.clamped(to: -2...2)
+        presencePenalty = presencePenalty?.clamped(to: -2...2)
+        grammar = grammar.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+        samplerKinds = samplerKinds.flatMap { LocalLLMSamplerKind.unique($0).nilIfEmpty }
         advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
         note = note?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
+    func removingLegacyForcedDefaultOverrides() -> LocalModelRecord {
+        var record = self
+        if record.contextSize == Self.defaultContextSize { record.contextSize = nil }
+        if record.maxOutputTokens == Self.defaultMaxOutputTokens { record.maxOutputTokens = nil }
+        if record.gpuLayers == Self.defaultGPULayers { record.gpuLayers = nil }
+        if record.seed == Self.defaultSeed { record.seed = nil }
+        if record.temperature == Self.legacyForcedDefaultTemperature { record.temperature = nil }
+        if record.topK == Self.legacyForcedDefaultTopK { record.topK = nil }
+        if record.topP == Self.legacyForcedDefaultTopP { record.topP = nil }
+        if record.minP == Self.legacyForcedDefaultMinP { record.minP = nil }
+        if record.repeatLastN == Self.defaultRepeatLastN { record.repeatLastN = nil }
+        if record.repeatPenalty == Self.defaultRepeatPenalty { record.repeatPenalty = nil }
+        if record.frequencyPenalty == Self.defaultFrequencyPenalty { record.frequencyPenalty = nil }
+        if record.presencePenalty == Self.defaultPresencePenalty { record.presencePenalty = nil }
+        if record.grammar?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty == nil {
+            record.grammar = nil
+        }
+        if record.ignoreEOS == Self.defaultIgnoreEOS { record.ignoreEOS = nil }
+        if LocalLLMSamplerKind.unique(record.samplerKinds ?? []) == Self.legacyForcedDefaultSamplerKinds {
+            record.samplerKinds = nil
+        }
+        record.normalizeGenerationParameters()
+        return record
     }
 }
 
 public struct LocalModelStoreSnapshot: Codable, Hashable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var models: [LocalModelRecord]
@@ -213,6 +301,12 @@ public struct LocalModelStoreSnapshot: Codable, Hashable, Sendable {
 
 private extension String {
     var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
+private extension Array {
+    var nilIfEmpty: [Element]? {
         isEmpty ? nil : self
     }
 }
