@@ -315,6 +315,31 @@ struct LocalModelStoreTests {
         #expect(call.arguments.contains("\"timezone\":\"UTC\""))
     }
 
+    @Test("本地引擎工具调用解析不再加载 GGUF")
+    func localEngineToolCallsParseWithoutLoadingModel() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let modelURL = root.appendingPathComponent("placeholder.gguf")
+        try Data([0]).write(to: modelURL)
+        let tool = LocalLLMToolDefinition(
+            name: "app_get_system_time",
+            description: "获取当前设备时间",
+            parametersJSON: #"{"type":"object"}"#
+        )
+
+        let result = try await LocalLLMEngine().parseToolCalls(
+            from: #"{"tool_calls":[{"id":"call_1","name":"app_get_system_time","arguments":{"timezone":"UTC"}}]}"#,
+            messages: [LocalLLMChatMessage(role: "user", content: "现在几点？")],
+            tools: [tool],
+            modelURL: modelURL
+        )
+
+        let call = try #require(result.toolCalls.first)
+        #expect(result.toolCalls.count == 1)
+        #expect(call.id == "call_1")
+        #expect(call.toolName == "app_get_system_time")
+    }
+
     @Test("缺失文件的本地模型不会进入可用候选")
     func missingLocalModelIsNotActivatedCandidate() throws {
         let root = try temporaryDirectory()
