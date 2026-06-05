@@ -591,6 +591,55 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("Conversation summary keeps up to two thousand characters per message")
+    func testConversationSummary_UsesTwoThousandCharacterLimit() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let longUserContent = String(repeating: "甲", count: 2_500)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+        let messages = [
+            ChatMessage(role: .user, content: longUserContent, requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第一轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第二轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第二轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第三轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第三轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第四轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第四轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第五轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第五轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第六轮问题", requestedAt: Date()),
+            loadingMessage
+        ]
+        chatService.updateMessages(messages, for: sessionID)
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "会话摘要")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(role: .assistant, content: "最终答案"),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(300))
+
+        let summaryUserPrompt = mockAdapter.receivedConversationSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
+        #expect(summaryUserPrompt.contains(String(repeating: "甲", count: 2_000)))
+        #expect(!summaryUserPrompt.contains(String(repeating: "甲", count: 2_001)))
+
+        await cleanup()
+    }
+
     @Test("Reasoning summary respects disabled preference")
     func testReasoningSummary_DisabledPreferenceSkipsRequest() async throws {
         await cleanup()

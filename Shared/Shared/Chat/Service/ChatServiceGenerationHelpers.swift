@@ -295,7 +295,7 @@ extension ChatService {
         let slice = messages.suffix(max(1, messageLimit))
         let lines = slice.map { message -> String in
             let roleText = message.role == .user ? "用户" : "助手"
-            let compact = sanitizeConversationMemoryText(message.content, maxLength: 600)
+            let compact = sanitizeConversationMemoryText(message.content, maxLength: 2_000)
             return "\(roleText): \(compact)"
         }
         return lines.joined(separator: "\n")
