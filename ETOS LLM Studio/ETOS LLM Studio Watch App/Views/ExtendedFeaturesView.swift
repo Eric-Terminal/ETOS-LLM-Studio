@@ -187,6 +187,10 @@ public struct ExtendedFeaturesView: View {
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
+            } footer: {
+                Text(NSLocalizedString("管理手表端本地 GGUF 权重、提供商开关与高级调参。", comment: "本地模型入口说明"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
             }
 
             Section {

@@ -75,6 +75,10 @@ struct ExtendedFeaturesView: View {
                 } label: {
                     SettingsListIconLabel("本地模型", icon: .localModels)
                 }
+            } footer: {
+                Text(NSLocalizedString("管理本机 GGUF 权重、提供商开关与高级调参。", comment: "本地模型入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

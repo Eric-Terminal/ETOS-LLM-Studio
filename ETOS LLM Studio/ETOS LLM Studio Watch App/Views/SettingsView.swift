@@ -176,10 +176,6 @@ struct SettingsView: View {
                         settingsNavigationLabel("提供商与模型管理", icon: .providerManagement)
                     }
 
-                    NavigationLink(destination: LocalModelManagementView()) {
-                        settingsNavigationLabel("本地模型", icon: .localModels)
-                    }
-
                     NavigationLink(destination: ModelAdvancedSettingsView(
                         aiTemperature: $viewModel.aiTemperature,
                         aiTopP: $viewModel.aiTopP,
