@@ -194,21 +194,6 @@ struct LocalModelStoreTests {
         #expect(definition.parametersJSON.contains("\"type\":\"object\""))
     }
 
-    @Test("本地对话 Prompt 在 Swift 侧渲染")
-    func localPromptRendersInSwift() throws {
-        let prompt = try LocalLLMChatMessageBuilder.prompt(
-            messages: [
-                LocalLLMChatMessage(role: "system", content: "你是助手"),
-                LocalLLMChatMessage(role: "user", content: "Ping")
-            ],
-            tools: []
-        )
-
-        #expect(prompt.contains("<|im_start|>system\n你是助手<|im_end|>"))
-        #expect(prompt.contains("<|im_start|>user\nPing<|im_end|>"))
-        #expect(prompt.hasSuffix("<|im_start|>assistant\n"))
-    }
-
     @Test("本地工具调用在 Swift 侧解析")
     func localToolCallsParseInSwift() throws {
         let tool = LocalLLMToolDefinition(

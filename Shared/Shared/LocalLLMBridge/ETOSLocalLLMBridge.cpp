@@ -8,8 +8,10 @@
 
 #include "ETOSLocalLLMBridge.h"
 
+#include "chat.h"
 #include "ggml-backend.h"
 #include "llama.h"
+#include "nlohmann/json.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -23,6 +25,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+using json = nlohmann::ordered_json;
 
 namespace {
 
@@ -303,16 +307,120 @@ void normalize_embedding(const float * input, float * output, int32_t dimension)
     }
 }
 
+std::string apply_chat_template(
+    const llama_model * model,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    common_chat_parser_params * parser_params,
+    char ** error_message
+) {
+    if (!messages || message_count <= 0) {
+        fail("本地对话消息为空。", error_message);
+        return {};
+    }
+
+    json chat_messages = json::array();
+    for (int32_t index = 0; index < message_count; ++index) {
+        const char * role = messages[index].role;
+        const char * content = messages[index].content;
+        if (!role || role[0] == '\0') {
+            continue;
+        }
+
+        json message = {
+            { "role", role },
+        };
+        if (content) {
+            message["content"] = content;
+        }
+        if (messages[index].name && messages[index].name[0] != '\0') {
+            message["name"] = messages[index].name;
+        }
+        if (messages[index].tool_call_id && messages[index].tool_call_id[0] != '\0') {
+            message["tool_call_id"] = messages[index].tool_call_id;
+        }
+        if (messages[index].tool_calls_json && messages[index].tool_calls_json[0] != '\0') {
+            try {
+                message["tool_calls"] = json::parse(messages[index].tool_calls_json);
+            } catch (const std::exception & e) {
+                fail(std::string("本地工具调用历史 JSON 无效：") + e.what(), error_message);
+                return {};
+            }
+        }
+        chat_messages.push_back(std::move(message));
+    }
+
+    if (chat_messages.empty()) {
+        fail("本地对话消息为空。", error_message);
+        return {};
+    }
+
+    json tool_definitions = json::array();
+    for (int32_t index = 0; tools && index < tool_count; ++index) {
+        const char * name = tools[index].name;
+        if (!name || name[0] == '\0') {
+            continue;
+        }
+
+        json parameters = json::object();
+        if (tools[index].parameters_json && tools[index].parameters_json[0] != '\0') {
+            try {
+                parameters = json::parse(tools[index].parameters_json);
+            } catch (const std::exception & e) {
+                fail(std::string("本地工具参数 JSON Schema 无效：") + e.what(), error_message);
+                return {};
+            }
+        }
+        tool_definitions.push_back({
+            { "type", "function" },
+            { "function", {
+                { "name", name },
+                { "description", tools[index].description ? tools[index].description : "" },
+                { "parameters", parameters },
+            } },
+        });
+    }
+
+    try {
+        auto templates = common_chat_templates_init(model, "");
+        common_chat_templates_inputs inputs;
+        inputs.messages = common_chat_msgs_parse_oaicompat(chat_messages);
+        if (!tool_definitions.empty()) {
+            inputs.tools = common_chat_tools_parse_oaicompat(tool_definitions);
+            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
+            inputs.parallel_tool_calls = true;
+        }
+        common_chat_params params = common_chat_templates_apply(templates.get(), inputs);
+        if (parser_params) {
+            *parser_params = common_chat_parser_params(params);
+            common_peg_arena parser;
+            parser.load(params.parser);
+            parser_params->parser = std::move(parser);
+            parser_params->reasoning_format = COMMON_REASONING_FORMAT_NONE;
+        }
+        return params.prompt;
+    } catch (const std::exception & e) {
+        fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
+        return {};
+    }
+}
+
 int32_t generate(
     const char * model_path,
     const char * prompt,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
     const etos_local_llm_generation_config * config,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
     void * user_data,
     char ** error_message
 ) {
-    if (!model_path || !prompt || prompt[0] == '\0') {
+    if (!model_path || ((!prompt || prompt[0] == '\0') && (!messages || message_count <= 0))) {
         return fail("本地推理参数无效。", error_message);
     }
     if (!output_text && !token_callback) {
@@ -339,6 +447,24 @@ int32_t generate(
     llama_model * model = llama_model_load_from_file(model_path, model_params);
     if (!model) {
         return fail("无法加载本地模型权重。", error_message);
+    }
+
+    std::string templated_prompt;
+    if (!prompt || prompt[0] == '\0') {
+        templated_prompt = apply_chat_template(
+            model,
+            messages,
+            message_count,
+            tools,
+            tool_count,
+            nullptr,
+            error_message
+        );
+        if (templated_prompt.empty()) {
+            llama_model_free(model);
+            return -1;
+        }
+        prompt = templated_prompt.c_str();
     }
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
@@ -548,6 +674,61 @@ int32_t embed(
     return 0;
 }
 
+int32_t parse_tool_calls(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    std::string * content,
+    std::vector<common_chat_tool_call> * tool_calls,
+    char ** error_message
+) {
+    if (!model_path || !messages || message_count <= 0 || !generated_text || !content || !tool_calls) {
+        return fail("本地工具调用解析参数无效。", error_message);
+    }
+
+    std::call_once(backend_init_once, [] {
+        llama_backend_init();
+        ggml_backend_load_all();
+    });
+
+    llama_model_params model_params = llama_model_default_params();
+    model_params.n_gpu_layers = 0;
+
+    llama_model * model = llama_model_load_from_file(model_path, model_params);
+    if (!model) {
+        return fail("无法加载本地模型权重以解析工具调用。", error_message);
+    }
+
+    common_chat_parser_params parser_params;
+    std::string prompt = apply_chat_template(
+        model,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        &parser_params,
+        error_message
+    );
+    llama_model_free(model);
+    if (prompt.empty()) {
+        return -1;
+    }
+
+    try {
+        common_chat_msg parsed = common_chat_parse(generated_text, false, parser_params);
+        *content = parsed.content;
+        *tool_calls = parsed.tool_calls;
+        return 0;
+    } catch (const std::exception &) {
+        content->assign(generated_text);
+        tool_calls->clear();
+        return 0;
+    }
+}
+
 } // namespace
 
 int32_t etos_local_llm_generate(
@@ -571,6 +752,52 @@ int32_t etos_local_llm_generate(
     const int32_t status = generate(
         model_path,
         prompt,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        config,
+        &response,
+        nullptr,
+        nullptr,
+        error_message
+    );
+    if (status != 0) {
+        return status;
+    }
+
+    *output = copy_string(response);
+    return *output ? 0 : fail("本地模型输出内存分配失败。", error_message);
+}
+
+int32_t etos_local_llm_generate_chat(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const etos_local_llm_generation_config * config,
+    char ** output,
+    char ** error_message
+) {
+    if (output) {
+        *output = nullptr;
+    }
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    if (!output) {
+        return fail("本地推理参数无效。", error_message);
+    }
+
+    std::string response;
+    const int32_t status = generate(
+        model_path,
+        nullptr,
+        messages,
+        message_count,
+        tools,
+        tool_count,
         config,
         &response,
         nullptr,
@@ -599,6 +826,39 @@ int32_t etos_local_llm_generate_stream(
     return generate(
         model_path,
         prompt,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        config,
+        nullptr,
+        token_callback,
+        user_data,
+        error_message
+    );
+}
+
+int32_t etos_local_llm_generate_chat_stream(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const etos_local_llm_generation_config * config,
+    etos_local_llm_token_callback token_callback,
+    void * user_data,
+    char ** error_message
+) {
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    return generate(
+        model_path,
+        nullptr,
+        messages,
+        message_count,
+        tools,
+        tool_count,
         config,
         nullptr,
         token_callback,
@@ -660,10 +920,98 @@ int32_t etos_local_llm_embed(
     return 0;
 }
 
+int32_t etos_local_llm_parse_tool_calls(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    char ** content,
+    etos_local_llm_tool_call ** tool_calls,
+    int32_t * tool_call_count,
+    char ** error_message
+) {
+    if (content) {
+        *content = nullptr;
+    }
+    if (tool_calls) {
+        *tool_calls = nullptr;
+    }
+    if (tool_call_count) {
+        *tool_call_count = 0;
+    }
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    if (!content || !tool_calls || !tool_call_count) {
+        return fail("本地工具调用解析参数无效。", error_message);
+    }
+
+    std::string parsed_content;
+    std::vector<common_chat_tool_call> parsed_tool_calls;
+    const int32_t status = parse_tool_calls(
+        model_path,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        generated_text,
+        &parsed_content,
+        &parsed_tool_calls,
+        error_message
+    );
+    if (status != 0) {
+        return status;
+    }
+
+    *content = copy_string(parsed_content);
+    if (!*content) {
+        return fail("本地工具调用正文内存分配失败。", error_message);
+    }
+
+    if (parsed_tool_calls.empty()) {
+        return 0;
+    }
+
+    etos_local_llm_tool_call * copied_calls = static_cast<etos_local_llm_tool_call *>(
+        std::calloc(parsed_tool_calls.size(), sizeof(etos_local_llm_tool_call))
+    );
+    if (!copied_calls) {
+        return fail("本地工具调用内存分配失败。", error_message);
+    }
+
+    for (size_t index = 0; index < parsed_tool_calls.size(); ++index) {
+        copied_calls[index].id = copy_string(parsed_tool_calls[index].id);
+        copied_calls[index].name = copy_string(parsed_tool_calls[index].name);
+        copied_calls[index].arguments = copy_string(parsed_tool_calls[index].arguments);
+        if (!copied_calls[index].id || !copied_calls[index].name || !copied_calls[index].arguments) {
+            etos_local_llm_free_tool_calls(copied_calls, static_cast<int32_t>(parsed_tool_calls.size()));
+            return fail("本地工具调用内存分配失败。", error_message);
+        }
+    }
+
+    *tool_calls = copied_calls;
+    *tool_call_count = static_cast<int32_t>(parsed_tool_calls.size());
+    return 0;
+}
+
 void etos_local_llm_free(char * pointer) {
     std::free(pointer);
 }
 
 void etos_local_llm_free_float(float * pointer) {
+    std::free(pointer);
+}
+
+void etos_local_llm_free_tool_calls(etos_local_llm_tool_call * pointer, int32_t count) {
+    if (!pointer) {
+        return;
+    }
+    for (int32_t index = 0; index < count; ++index) {
+        std::free(pointer[index].id);
+        std::free(pointer[index].name);
+        std::free(pointer[index].arguments);
+    }
     std::free(pointer);
 }
