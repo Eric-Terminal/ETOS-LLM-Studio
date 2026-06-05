@@ -144,15 +144,6 @@ struct MessageActionsView: View {
                     }
                 }
 
-                if canRewrite {
-                    Button {
-                        onRewrite()
-                        dismiss()
-                    } label: {
-                        Label(NSLocalizedString("重写", comment: "Rewrite message action"), systemImage: "wand.and.stars")
-                    }
-                }
-
                 if canRetry {
                     Button {
                         pendingRetryMessage = message
@@ -203,6 +194,15 @@ struct MessageActionsView: View {
                             isMathRenderingEnabled ? NSLocalizedString("取消渲染公式", comment: "") : NSLocalizedString("渲染公式", comment: ""),
                             systemImage: isMathRenderingEnabled ? "xmark.circle" : "function"
                         )
+                    }
+                }
+
+                if canRewrite {
+                    Button {
+                        onRewrite()
+                        dismiss()
+                    } label: {
+                        Label(NSLocalizedString("重写", comment: "Rewrite message action"), systemImage: "wand.and.stars")
                     }
                 }
 
