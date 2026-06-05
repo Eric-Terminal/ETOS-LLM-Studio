@@ -122,10 +122,8 @@ extension ChatService {
     }
 
     func makeSystemTimePromptBlock() -> String {
-        let timeHeader = NSLocalizedString("# 以下是用户发送最后一条消息时的系统时间，每轮对话都会动态更新。", comment: "System time header for model prompt.")
         return """
 <time>
-\(timeHeader)
 \(SystemTimeContextFormatter.description())
 </time>
 """

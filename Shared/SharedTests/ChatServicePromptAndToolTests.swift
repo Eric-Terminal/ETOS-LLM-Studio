@@ -136,7 +136,8 @@ extension ChatServiceTests {
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
         #expect(content.contains("<time>"))
-        #expect(content.contains("ISO8601"))
+        #expect(content.contains(TimeZone.current.identifier))
+        #expect(!content.contains("ISO8601"))
 
         await cleanup()
     }
@@ -171,7 +172,8 @@ extension ChatServiceTests {
         #expect(!firstSystemContent.contains("<time>"))
         #expect(lastMessage?.role == .system)
         #expect(lastMessage?.content.contains("<time>") == true)
-        #expect(lastMessage?.content.contains("ISO8601") == true)
+        #expect(lastMessage?.content.contains(TimeZone.current.identifier) == true)
+        #expect(lastMessage?.content.contains("ISO8601") == false)
 
         await cleanup()
     }
