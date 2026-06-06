@@ -373,8 +373,8 @@ class ChatViewModel: ObservableObject {
     var additionalHistoryLoaded: Int = 0
     var lastSessionID: UUID?
     let incrementalHistoryBatchSize = 5
-    let automaticHistoryWindowSize = 40
-    let automaticHistoryBatchSize = 30
+    let automaticHistoryWindowSize = 3
+    let automaticHistoryBatchSize = 4
     var visibleMessagesCache: [ChatMessage] = []
     var visibleMessagesWeightedCount: Int = 0
     var displayMessageIDs: [UUID] = []

@@ -331,8 +331,8 @@ final class ChatViewModel: ObservableObject {
     var additionalHistoryLoaded: Int = 0
     var lastSessionID: UUID?
     let incrementalHistoryBatchSize = 5
-    let automaticHistoryWindowSize = 120
-    let automaticHistoryBatchSize = 80
+    let automaticHistoryWindowSize = 25
+    let automaticHistoryBatchSize = 20
     var visibleMessagesCache: [ChatMessage] = []
     var visibleMessagesWeightedCount: Int = 0
     var cancellables = Set<AnyCancellable>()
