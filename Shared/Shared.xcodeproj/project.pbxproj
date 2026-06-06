@@ -139,7 +139,6 @@
 			buildConfigurationList = 073CA6AE2E8CFCF3004516A0 /* Build configuration list for PBXNativeTarget "Shared" */;
 			buildPhases = (
 				073CA6A02E8CFCF3004516A0 /* Headers */,
-				ETOSLLAMASCRIPT00000001 /* 准备 llama.cpp 静态库 */,
 				073CA6A12E8CFCF3004516A0 /* Sources */,
 				073CA6A22E8CFCF3004516A0 /* Frameworks */,
 				073CA6A32E8CFCF3004516A0 /* Resources */,
@@ -220,29 +219,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		ETOSLLAMASCRIPT00000001 /* 准备 llama.cpp 静态库 */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "准备 llama.cpp 静态库";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(SRCROOT)/../Dependencies/llama-build/products/$(PLATFORM_NAME)-$(CONFIGURATION)/libetos-llama.a",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/../scripts/build-llama-static-library.sh\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		072CF23C2E92C1B400A8E9D0 /* Sources */ = {

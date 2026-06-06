@@ -12,7 +12,27 @@
 
 ## 构建方式
 
-llama.cpp 位于 `Dependencies/llama.cpp` 子模块。Xcode 构建 Shared target 前会运行 `scripts/build-llama-static-library.sh`，按当前 SDK/架构生成 `Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a`，Shared 再通过 `-letos-llama` 链接。
+llama.cpp 位于 `Dependencies/llama.cpp` 子模块。Shared 不在 Xcode 构建阶段自动编译 llama.cpp；构建 App 前需要先手动生成匹配当前 SDK 和配置的 `libetos-llama.a`，产物路径为：
+
+```sh
+Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a
+```
+
+本机 Debug 模拟器通常只需要 Apple Silicon 架构：
+
+```sh
+SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
+SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
+```
+
+真机 Debug：
+
+```sh
+SDK_NAME=iphoneos PLATFORM_NAME=iphoneos CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
+SDK_NAME=watchos PLATFORM_NAME=watchos CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
+```
+
+如果 Xcode 报 `library 'etos-llama' not found`、`file not found: libetos-llama.a` 或某个平台链接不到 llama.cpp 符号，就按报错里的 SDK/Configuration 先运行对应命令，再重新构建 App。Shared 通过 `-letos-llama` 链接这个静态库。
 
 iOS、macOS 和 visionOS 启用 `GGML_USE_METAL=1`；watchOS 和模拟器运行期强制 `n_gpu_layers = 0`，避免把不支持的 Metal 路径带进受限平台。watchOS 的 `arm64_32` 风险主要关注指针与整数互转，工程里保留了 `-Wpointer-to-int-cast` 与 `-Wint-to-pointer-cast` 诊断。
 
