@@ -45,4 +45,4 @@ build_llama_static_library() {
 
 # Xcode Cloud 只用于发布归档，预构建发布包实际会链接的设备 slice。
 build_llama_static_library iphoneos arm64
-build_llama_static_library watchos arm64
+build_llama_static_library watchos "arm64 arm64_32"
