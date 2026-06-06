@@ -67,6 +67,11 @@ int32_t fail(const std::string & message, char ** error_message);
 int32_t cancelled(char ** error_message);
 bool should_cancel(etos_local_llm_cancel_callback cancel_callback, void * user_data);
 int32_t thread_count();
+llama_model_shared_handle load_model(
+    const char * model_path,
+    const llama_model_params & model_params,
+    bool use_model_cache
+);
 
 struct local_generation_params {
     int32_t context_size = 2048;
@@ -124,15 +129,36 @@ struct local_chat_parser_state {
     bool enabled = false;
 };
 
+struct local_chat_template_result {
+    std::string prompt;
+    std::string grammar;
+    bool grammar_lazy = false;
+    std::vector<common_grammar_trigger> grammar_triggers;
+    std::string generation_prompt;
+    std::vector<std::string> additional_stops;
+    common_chat_parser_params parser_params;
+    bool parser_enabled = false;
+};
+
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config);
 std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & text, bool add_special = true);
+std::string fallback_chat_message_json(const std::string & content);
+bool update_chat_parser_state(
+    local_chat_parser_state & state,
+    bool is_partial,
+    std::string * snapshot_json
+);
+local_chat_template_result apply_chat_template(
+    const llama_model * model,
+    const char * messages_json,
+    const char * tools_json,
+    char ** error_message
+);
 
 int32_t parse_chat_response(
     const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const char * generated_text,
     bool is_partial,
     std::string * output_json,
@@ -142,10 +168,8 @@ int32_t parse_chat_response(
 int32_t generate(
     const char * model_path,
     const char * prompt,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const etos_local_llm_generation_config * config,
     std::string * output_text,
     std::string * output_message_json,

@@ -19,21 +19,6 @@ typedef int32_t (*etos_local_llm_token_callback)(const char * text, void * user_
 typedef int32_t (*etos_local_llm_chat_snapshot_callback)(const char * message_json, void * user_data);
 typedef int32_t (*etos_local_llm_cancel_callback)(void * user_data);
 
-typedef struct etos_local_llm_chat_message {
-    const char * role;
-    const char * content;
-    const char * reasoning_content;
-    const char * name;
-    const char * tool_call_id;
-    const char * tool_calls_json;
-} etos_local_llm_chat_message;
-
-typedef struct etos_local_llm_tool {
-    const char * name;
-    const char * description;
-    const char * parameters_json;
-} etos_local_llm_tool;
-
 typedef enum etos_local_llm_sampler_kind {
     ETOS_LOCAL_LLM_SAMPLER_PENALTIES = 1,
     ETOS_LOCAL_LLM_SAMPLER_DRY = 2,
@@ -101,10 +86,8 @@ int32_t etos_local_llm_generate(
 
 int32_t etos_local_llm_generate_chat(
     const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const etos_local_llm_generation_config * config,
     etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
@@ -114,10 +97,8 @@ int32_t etos_local_llm_generate_chat(
 
 int32_t etos_local_llm_generate_chat_response(
     const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const etos_local_llm_generation_config * config,
     etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
@@ -137,10 +118,8 @@ int32_t etos_local_llm_generate_stream(
 
 int32_t etos_local_llm_generate_chat_stream(
     const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const etos_local_llm_generation_config * config,
     etos_local_llm_token_callback token_callback,
     etos_local_llm_cancel_callback cancel_callback,
@@ -150,10 +129,8 @@ int32_t etos_local_llm_generate_chat_stream(
 
 int32_t etos_local_llm_generate_chat_response_stream(
     const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const etos_local_llm_generation_config * config,
     etos_local_llm_chat_snapshot_callback snapshot_callback,
     etos_local_llm_cancel_callback cancel_callback,
@@ -163,10 +140,8 @@ int32_t etos_local_llm_generate_chat_response_stream(
 
 int32_t etos_local_llm_parse_chat_response(
     const char * model_path,
-    const etos_local_llm_chat_message * messages,
-    int32_t message_count,
-    const etos_local_llm_tool * tools,
-    int32_t tool_count,
+    const char * messages_json,
+    const char * tools_json,
     const char * generated_text,
     int32_t is_partial,
     char ** output_json,
