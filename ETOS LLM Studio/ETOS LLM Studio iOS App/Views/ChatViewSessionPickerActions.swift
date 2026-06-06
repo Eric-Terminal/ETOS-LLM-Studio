@@ -196,7 +196,6 @@ extension ChatView {
     func sessionPickerRow(_ session: ChatSession) -> some View {
         let isCurrent = session.id == viewModel.currentSession?.id
         let isEditing = editingSessionID == session.id
-        let selectedFill = Color.accentColor.opacity(colorScheme == .dark ? 0.2 : 0.12)
 
         return SessionPickerRow(
             session: session,
@@ -242,39 +241,29 @@ extension ChatView {
                 exportSession(session, format: format, includeReasoning: includeReasoning)
             }
         )
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isCurrent ? selectedFill : Color.clear)
-        )
     }
 
     func sessionPickerSearchResultRow(_ result: SessionHistorySearchResult) -> some View {
         let isCurrent = result.sessionID == viewModel.currentSession?.id
-        let selectedFill = Color.accentColor.opacity(colorScheme == .dark ? 0.2 : 0.12)
+        let isRunning = viewModel.runningSessionIDs.contains(result.sessionID)
 
         return Button {
             if let session = viewModel.chatSessions.first(where: { $0.id == result.sessionID }) {
                 selectSessionFromPicker(session, messageOrdinal: result.messageOrdinal)
             }
         } label: {
-            SessionSearchResultRowContent(
-                title: searchResultTitle(for: result),
-                preview: result.match.preview,
-                isCurrent: isCurrent,
-                titleColor: TelegramColors.navBarText,
-                previewColor: .secondary
-            )
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            SessionRowCard(isCurrent: isCurrent) {
+                SessionSearchResultRowContent(
+                    title: searchResultTitle(for: result),
+                    preview: result.match.preview,
+                    isCurrent: isCurrent,
+                    isRunning: isRunning,
+                    titleColor: TelegramColors.navBarText,
+                    previewColor: .secondary
+                )
+            }
         }
         .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isCurrent ? selectedFill : Color.clear)
-        )
     }
 
     func sourceLabel(for source: SessionHistorySearchHitSource) -> String {

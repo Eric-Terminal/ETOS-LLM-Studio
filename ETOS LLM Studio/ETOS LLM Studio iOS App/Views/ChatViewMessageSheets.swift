@@ -548,6 +548,16 @@ struct SessionPickerRow: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        SessionRowCard(isCurrent: isCurrent) {
+            rowContent
+        }
+        .contextMenu {
+            contextMenuContent
+        }
+    }
+
+    @ViewBuilder
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isEditing {
                 TextField(NSLocalizedString("会话名称", comment: ""), text: $draftName)
@@ -571,125 +581,110 @@ struct SessionPickerRow: View {
                 }
                 .padding(.top, 4)
             } else {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(session.name)
-                            .etFont(.headline)
-                        if let searchSummary, !searchSummary.isEmpty {
-                            Text(searchSummary)
-                                .etFont(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(nil)
-                        } else if let topic = session.topicPrompt, !topic.isEmpty {
-                            Text(topic)
-                                .etFont(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    Spacer()
-
-                    if isRunning {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 8, height: 8)
-                    }
-
-                    if isCurrent {
-                        Image(systemName: "checkmark")
-                            .etFont(.footnote.bold())
-                            .foregroundColor(.accentColor)
-                    }
-                }
+                SessionListRowContentBody(
+                    title: session.name,
+                    subtitle: sessionPickerSubtitle,
+                    footnote: nil,
+                    isCurrent: isCurrent,
+                    isRunning: isRunning
+                )
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onSelect()
                 }
             }
         }
-        .contextMenu {
-            Button {
-                onSelect()
-            } label: {
-                Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
-            }
+    }
 
-            Button {
-                onRename()
-            } label: {
-                Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
-            }
-
-            Button {
-                onBranch(false)
-            } label: {
-                Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
-            }
-
-            Button {
-                onBranch(true)
-            } label: {
-                Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
-            }
-
-            Button {
-                onDeleteLastMessage()
-            } label: {
-                Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
-            }
-
-            Button {
-                onInfo()
-            } label: {
-                Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
-            }
-
-            Menu {
-                Menu(NSLocalizedString("包含思考", comment: "")) {
-                    Button {
-                        onExport(.pdf, true)
-                    } label: {
-                        Label("PDF", systemImage: "doc.richtext")
-                    }
-                    Button {
-                        onExport(.markdown, true)
-                    } label: {
-                        Label("Markdown", systemImage: "number.square")
-                    }
-                    Button {
-                        onExport(.text, true)
-                    } label: {
-                        Label("TXT", systemImage: "doc.plaintext")
-                    }
-                }
-                Menu(NSLocalizedString("不包含思考", comment: "")) {
-                    Button {
-                        onExport(.pdf, false)
-                    } label: {
-                        Label("PDF", systemImage: "doc.richtext")
-                    }
-                    Button {
-                        onExport(.markdown, false)
-                    } label: {
-                        Label("Markdown", systemImage: "number.square")
-                    }
-                    Button {
-                        onExport(.text, false)
-                    } label: {
-                        Label("TXT", systemImage: "doc.plaintext")
-                    }
-                }
-            } label: {
-                Label(NSLocalizedString("导出会话", comment: ""), systemImage: "square.and.arrow.up")
-            }
-
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
-            }
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        Button {
+            onSelect()
+        } label: {
+            Label(NSLocalizedString("切换到此会话", comment: ""), systemImage: "checkmark.circle")
         }
+
+        Button {
+            onRename()
+        } label: {
+            Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
+        }
+
+        Button {
+            onBranch(false)
+        } label: {
+            Label(NSLocalizedString("创建提示词分支", comment: ""), systemImage: "arrow.branch")
+        }
+
+        Button {
+            onBranch(true)
+        } label: {
+            Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
+        }
+
+        Button {
+            onDeleteLastMessage()
+        } label: {
+            Label(NSLocalizedString("删除最后一条消息", comment: ""), systemImage: "delete.backward")
+        }
+
+        Button {
+            onInfo()
+        } label: {
+            Label(NSLocalizedString("查看会话信息", comment: ""), systemImage: "info.circle")
+        }
+
+        Menu {
+            Menu(NSLocalizedString("包含思考", comment: "")) {
+                Button {
+                    onExport(.pdf, true)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    onExport(.markdown, true)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    onExport(.text, true)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            }
+            Menu(NSLocalizedString("不包含思考", comment: "")) {
+                Button {
+                    onExport(.pdf, false)
+                } label: {
+                    Label("PDF", systemImage: "doc.richtext")
+                }
+                Button {
+                    onExport(.markdown, false)
+                } label: {
+                    Label("Markdown", systemImage: "number.square")
+                }
+                Button {
+                    onExport(.text, false)
+                } label: {
+                    Label("TXT", systemImage: "doc.plaintext")
+                }
+            }
+        } label: {
+            Label(NSLocalizedString("导出会话", comment: ""), systemImage: "square.and.arrow.up")
+        }
+
+        Button(role: .destructive) {
+            onDelete()
+        } label: {
+            Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
+        }
+    }
+
+    private var sessionPickerSubtitle: String? {
+        if let searchSummary, !searchSummary.isEmpty {
+            return searchSummary
+        }
+        return session.topicPrompt
     }
 
     private func commit() {
