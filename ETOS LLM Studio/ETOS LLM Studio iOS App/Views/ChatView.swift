@@ -278,9 +278,12 @@ struct ChatView: View {
 
             Group {
                 if isLandscape {
-                    landscapeChatLayout(chatViewportWidth: chatViewportWidth)
+                    landscapeChatLayout(chatViewportSize: proxy.size)
                 } else {
-                    chatConversationContent(chatViewportWidth: chatViewportWidth)
+                    chatConversationContent(
+                        chatViewportWidth: chatViewportWidth,
+                        chatViewportSize: proxy.size
+                    )
                 }
             }
             .onAppear {
@@ -330,10 +333,10 @@ private struct LocalResourceUsageFloatingPanel: View {
         )
 
         panelContent
-            .frame(width: panelWidth, alignment: .leading)
-            .position(
-                x: defaultCenter(for: panelSize).x + currentOffset.width,
-                y: defaultCenter(for: panelSize).y + currentOffset.height
+            .frame(width: panelWidth, height: panelHeight, alignment: .topLeading)
+            .offset(
+                x: defaultCenter(for: panelSize).x + currentOffset.width - containerSize.width / 2,
+                y: defaultCenter(for: panelSize).y + currentOffset.height - containerSize.height / 2
             )
             .contentShape(RoundedRectangle(cornerRadius: isExpanded ? 14 : 18, style: .continuous))
             .onTapGesture {
@@ -537,7 +540,8 @@ private struct LocalResourceUsageFloatingPanel: View {
 }
 
 extension ChatView {
-    func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
+    func landscapeChatLayout(chatViewportSize: CGSize) -> some View {
+        let chatViewportWidth = max(1, chatViewportSize.width)
         let expandedSidebarWidth = landscapeSessionSidebarWidth(for: chatViewportWidth)
         let sidebarWidth = isLandscapeSessionSidebarPresented ? expandedSidebarWidth : 0
         let detailWidth = max(1, chatViewportWidth - sidebarWidth)
@@ -562,6 +566,7 @@ extension ChatView {
 
                 chatConversationContent(
                     chatViewportWidth: detailWidth,
+                    chatViewportSize: CGSize(width: detailWidth, height: chatViewportSize.height),
                     showsBackground: false
                 )
                 .frame(width: detailWidth)
@@ -582,6 +587,7 @@ extension ChatView {
     @ViewBuilder
     func chatConversationContent(
         chatViewportWidth: CGFloat,
+        chatViewportSize: CGSize,
         showsBackground: Bool = true
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
@@ -793,16 +799,14 @@ extension ChatView {
                 .allowsHitTesting(!isOverlayPanelPresented)
 
                 if shouldShowLocalResourceUsageFloatingPanel {
-                    GeometryReader { proxy in
-                        LocalResourceUsageFloatingPanel(
-                            containerSize: proxy.size,
-                            topPadding: navBarHeight + 12,
-                            bottomPadding: chatInputBarHeight + 14,
-                            trailingPadding: 16,
-                            offset: $localResourceUsagePanelOffset,
-                            isLiquidGlassEnabled: isLiquidGlassEnabled
-                        )
-                    }
+                    LocalResourceUsageFloatingPanel(
+                        containerSize: chatViewportSize,
+                        topPadding: navBarHeight + 12,
+                        bottomPadding: chatInputBarHeight + 14,
+                        trailingPadding: 16,
+                        offset: $localResourceUsagePanelOffset,
+                        isLiquidGlassEnabled: isLiquidGlassEnabled
+                    )
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     .zIndex(24)
                 }
