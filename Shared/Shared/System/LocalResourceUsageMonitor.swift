@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 读取当前 App 进程的 CPU、内存和可用平台上的 Metal 分配量。
+// 读取当前 App 进程的 CPU、内存足迹和可用平台上的 Metal 分配量。
 // ============================================================================
 
 import Combine
@@ -64,7 +64,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
     public func refresh() {
         snapshot = LocalResourceUsageSnapshot(
             cpuPercent: currentCPUPercent(),
-            memoryBytes: currentResidentMemoryBytes(),
+            memoryBytes: currentMemoryFootprintBytes(),
             gpuAllocatedBytes: currentGPUAllocatedBytes()
         )
     }
@@ -95,16 +95,16 @@ public final class LocalResourceUsageMonitor: ObservableObject {
             + Double(info.user_time.microseconds + info.system_time.microseconds) / 1_000_000
     }
 
-    private func currentResidentMemoryBytes() -> UInt64? {
-        var info = mach_task_basic_info_data_t()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+    private func currentMemoryFootprintBytes() -> UInt64? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in
             pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
             }
         }
         guard result == KERN_SUCCESS else { return nil }
-        return UInt64(info.resident_size)
+        return UInt64(info.phys_footprint)
     }
 
     private func currentGPUAllocatedBytes() -> UInt64? {
