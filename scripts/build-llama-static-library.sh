@@ -10,6 +10,11 @@ SDK_NAME="${SDK_NAME:-macosx}"
 SDK_FAMILY="${PLATFORM_NAME:-}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 REQUESTED_ARCHS="${ETOS_LLAMA_ARCHS:-${ARCHS:-${CURRENT_ARCH:-$(uname -m)}}}"
+EXPLICIT_LLAMA_ARCHS=0
+
+if [ -n "${ETOS_LLAMA_ARCHS:-}" ]; then
+    EXPLICIT_LLAMA_ARCHS=1
+fi
 
 if [ "$REQUESTED_ARCHS" = "undefined_arch" ] || [ -z "$REQUESTED_ARCHS" ]; then
     REQUESTED_ARCHS="$(uname -m)"
@@ -30,11 +35,46 @@ case "$SDK_NAME" in
     *) CMAKE_SYSTEM_NAME="Darwin" ;;
 esac
 
-case "$CONFIGURATION" in
-    Debug) CMAKE_BUILD_TYPE="Debug" ;;
-    Release) CMAKE_BUILD_TYPE="Release" ;;
-    *) CMAKE_BUILD_TYPE="RelWithDebInfo" ;;
-esac
+# 本地调试只需要当前目标架构；CI 和显式架构列表保留完整产物。
+if [ "$EXPLICIT_LLAMA_ARCHS" = "0" ] && [ "${CI_XCODE_CLOUD:-FALSE}" != "TRUE" ] && [ "${ETOS_LLAMA_FULL_ARCHS:-0}" != "1" ]; then
+    if [ -n "${CURRENT_ARCH:-}" ] && [ "$CURRENT_ARCH" != "undefined_arch" ]; then
+        case " $REQUESTED_ARCHS " in
+            *" $CURRENT_ARCH "*) REQUESTED_ARCHS="$CURRENT_ARCH" ;;
+        esac
+    else
+        NATIVE_ARCH="$(uname -m)"
+        case " $REQUESTED_ARCHS " in
+            *" $NATIVE_ARCH "*) REQUESTED_ARCHS="$NATIVE_ARCH" ;;
+            *)
+                for arch in $REQUESTED_ARCHS; do
+                    REQUESTED_ARCHS="$arch"
+                    break
+                done
+                ;;
+        esac
+    fi
+fi
+
+PRODUCT_CONFIGURATION="$CONFIGURATION"
+LOCAL_LIGHTWEIGHT_DEBUG=0
+
+# Xcode 仍按 Debug 目录找库，但本地 Debug 不需要 llama.cpp 的调试符号。
+if [ -n "${ETOS_LLAMA_CMAKE_BUILD_TYPE:-}" ]; then
+    CMAKE_BUILD_TYPE="$ETOS_LLAMA_CMAKE_BUILD_TYPE"
+else
+    case "$CONFIGURATION" in
+        Debug)
+            if [ "${CI_XCODE_CLOUD:-FALSE}" = "TRUE" ] || [ "${ETOS_LLAMA_DEBUG_SYMBOLS:-0}" = "1" ]; then
+                CMAKE_BUILD_TYPE="Debug"
+            else
+                CMAKE_BUILD_TYPE="Release"
+                LOCAL_LIGHTWEIGHT_DEBUG=1
+            fi
+            ;;
+        Release) CMAKE_BUILD_TYPE="Release" ;;
+        *) CMAKE_BUILD_TYPE="RelWithDebInfo" ;;
+    esac
+fi
 
 case "$SDK_NAME" in
     *simulator*) PLATFORM_SUFFIX="simulator" ;;
@@ -47,10 +87,13 @@ case "$SDK_NAME" in
 esac
 LLAMA_WARNING_FLAGS="-Wno-ambiguous-macro -Wno-deprecated-declarations -Wno-documentation -Wno-shorten-64-to-32 -Wno-unreachable-code -Wno-unused-function -Wpointer-to-int-cast -Wint-to-pointer-cast"
 
-PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$CMAKE_BUILD_TYPE"
+PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$PRODUCT_CONFIGURATION"
 PRODUCT_LIBRARY="$PRODUCT_DIR/libetos-llama.a"
 PRODUCT_STAMP="$PRODUCT_DIR/libetos-llama.stamp"
 DEPLOYMENT_TARGET="default"
+# 默认只保留最终链接库，避免 CMake 中间目录和单架构临时库长期占盘。
+KEEP_CMAKE_BUILD="${ETOS_LLAMA_KEEP_CMAKE_BUILD:-0}"
+KEEP_ARCH_PRODUCTS="${ETOS_LLAMA_KEEP_ARCH_PRODUCTS:-0}"
 
 case "$SDK_FAMILY" in
     iphoneos|iphonesimulator)
@@ -67,7 +110,21 @@ case "$SDK_FAMILY" in
         ;;
 esac
 
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY config=$CMAKE_BUILD_TYPE archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+
+cleanup_intermediates() {
+    if [ "$KEEP_CMAKE_BUILD" != "1" ]; then
+        for arch in $REQUESTED_ARCHS; do
+            rm -rf "$OUTPUT_ROOT/cmake/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE"
+        done
+    fi
+
+    if [ "$KEEP_ARCH_PRODUCTS" != "1" ]; then
+        for arch in $REQUESTED_ARCHS; do
+            rm -rf "$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
+        done
+    fi
+}
 
 product_matches_archs() {
     [ -f "$PRODUCT_LIBRARY" ] || return 1
@@ -86,8 +143,13 @@ product_matches_archs() {
 }
 
 if product_matches_archs; then
+    cleanup_intermediates
     echo "llama.cpp 静态库已存在：$PRODUCT_LIBRARY"
     exit 0
+fi
+
+if [ "$LOCAL_LIGHTWEIGHT_DEBUG" = "1" ]; then
+    echo "本地 Debug 使用 Release 编译 llama.cpp，避免生成调试符号。若需要调试 llama.cpp，请设置 ETOS_LLAMA_DEBUG_SYMBOLS=1。"
 fi
 
 if ! command -v cmake >/dev/null 2>&1; then
@@ -114,10 +176,10 @@ ARCH_PRODUCTS=""
 
 for arch in $REQUESTED_ARCHS; do
     BUILD_DIR="$OUTPUT_ROOT/cmake/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE"
-    ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE"
+    ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY config=$CMAKE_BUILD_TYPE arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] || [ ! -f "$ARCH_PRODUCT_STAMP" ] || [ "$(cat "$ARCH_PRODUCT_STAMP")" != "$ARCH_SIGNATURE" ]; then
         mkdir -p "$BUILD_DIR" "$ARCH_PRODUCT_DIR"
@@ -188,6 +250,7 @@ else
     xcrun lipo -create $ARCH_PRODUCTS -output "$PRODUCT_LIBRARY"
 fi
 printf '%s' "$PRODUCT_SIGNATURE" > "$PRODUCT_STAMP"
+cleanup_intermediates
 
 echo "已生成 llama.cpp 静态库：$PRODUCT_LIBRARY"
-echo "构建平台：$SDK_FAMILY/$REQUESTED_ARCHS/$PLATFORM_SUFFIX/$CMAKE_BUILD_TYPE"
+echo "构建平台：$SDK_FAMILY/$REQUESTED_ARCHS/$PLATFORM_SUFFIX/$PRODUCT_CONFIGURATION，CMake=$CMAKE_BUILD_TYPE"
