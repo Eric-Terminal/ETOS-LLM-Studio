@@ -14,6 +14,26 @@
 namespace etos_local_llm_bridge {
 namespace {
 
+class llama_batch_handle {
+public:
+    llama_batch_handle(int32_t token_count, int32_t embedding_count, int32_t sequence_count)
+        : batch_(llama_batch_init(token_count, embedding_count, sequence_count)) {}
+
+    ~llama_batch_handle() {
+        llama_batch_free(batch_);
+    }
+
+    llama_batch_handle(const llama_batch_handle &) = delete;
+    llama_batch_handle & operator=(const llama_batch_handle &) = delete;
+
+    llama_batch & get() {
+        return batch_;
+    }
+
+private:
+    llama_batch batch_;
+};
+
 void batch_add(llama_batch & batch, llama_token token, llama_pos position, llama_seq_id sequence_id, bool output) {
     batch.token[batch.n_tokens] = token;
     batch.pos[batch.n_tokens] = position;
@@ -62,28 +82,25 @@ int32_t embed(
     model_params.n_gpu_layers = n_gpu_layers < 0 ? 999 : n_gpu_layers;
 #endif
 
-    llama_model * model = llama_model_load_from_file(model_path, model_params);
+    llama_model_handle model(llama_model_load_from_file(model_path, model_params));
     if (!model) {
         return fail("无法加载本地嵌入模型权重。", error_message);
     }
-    if (llama_model_has_encoder(model) && llama_model_has_decoder(model)) {
-        llama_model_free(model);
+    if (llama_model_has_encoder(model.get()) && llama_model_has_decoder(model.get())) {
         return fail("当前 llama.cpp 不支持 encoder-decoder 模型生成嵌入。", error_message);
     }
 
-    const llama_vocab * vocab = llama_model_get_vocab(model);
+    const llama_vocab * vocab = llama_model_get_vocab(model.get());
     std::vector<std::vector<llama_token>> tokenized_inputs;
     tokenized_inputs.reserve(static_cast<size_t>(text_count));
     int32_t max_token_count = 1;
     for (int32_t index = 0; index < text_count; ++index) {
         const char * text = texts[index];
         if (!text || text[0] == '\0') {
-            llama_model_free(model);
             return fail("本地嵌入文本不能为空。", error_message);
         }
         auto tokens = tokenize(vocab, text);
         if (tokens.empty()) {
-            llama_model_free(model);
             return fail("本地嵌入模型无法解析输入文本。", error_message);
         }
         max_token_count = std::max<int32_t>(max_token_count, static_cast<int32_t>(tokens.size()));
@@ -98,17 +115,14 @@ int32_t embed(
     ctx_params.n_threads = thread_count();
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
-    llama_context * ctx = llama_init_from_model(model, ctx_params);
+    llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
     if (!ctx) {
-        llama_model_free(model);
         return fail("无法创建本地嵌入上下文。", error_message);
     }
-    llama_set_embeddings(ctx, true);
+    llama_set_embeddings(ctx.get(), true);
 
-    const int32_t dimension = llama_model_n_embd_out(model);
+    const int32_t dimension = llama_model_n_embd_out(model.get());
     if (dimension <= 0) {
-        llama_free(ctx);
-        llama_model_free(model);
         return fail("本地嵌入模型输出维度无效。", error_message);
     }
 
@@ -116,28 +130,23 @@ int32_t embed(
     for (int32_t text_index = 0; text_index < text_count; ++text_index) {
         const auto & tokens = tokenized_inputs[static_cast<size_t>(text_index)];
         if (static_cast<int32_t>(tokens.size()) > static_cast<int32_t>(ctx_params.n_batch)) {
-            llama_free(ctx);
-            llama_model_free(model);
             return fail("本地嵌入输入超过上下文窗口。", error_message);
         }
 
-        llama_memory_clear(llama_get_memory(ctx), true);
-        llama_batch batch = llama_batch_init(static_cast<int32_t>(tokens.size()), 0, 1);
+        llama_memory_clear(llama_get_memory(ctx.get()), true);
+        llama_batch_handle batch(static_cast<int32_t>(tokens.size()), 0, 1);
         for (int32_t token_index = 0; token_index < static_cast<int32_t>(tokens.size()); ++token_index) {
-            batch_add(batch, tokens[static_cast<size_t>(token_index)], token_index, 0, true);
+            batch_add(batch.get(), tokens[static_cast<size_t>(token_index)], token_index, 0, true);
         }
 
         const int32_t token_count = static_cast<int32_t>(tokens.size());
-        const int32_t status = llama_decode(ctx, batch);
-        llama_batch_free(batch);
+        const int32_t status = llama_decode(ctx.get(), batch.get());
         if (status < 0) {
-            llama_free(ctx);
-            llama_model_free(model);
             return fail("本地嵌入模型解码失败。", error_message);
         }
 
         float * destination = output_embeddings->data() + static_cast<size_t>(text_index) * static_cast<size_t>(dimension);
-        const float * embedding = llama_get_embeddings_seq(ctx, 0);
+        const float * embedding = llama_get_embeddings_seq(ctx.get(), 0);
         if (embedding) {
             normalize_embedding(embedding, destination, dimension);
             continue;
@@ -146,7 +155,7 @@ int32_t embed(
         std::vector<float> mean(static_cast<size_t>(dimension), 0.0f);
         int32_t pooled_count = 0;
         for (int32_t token_index = 0; token_index < token_count; ++token_index) {
-            const float * token_embedding = llama_get_embeddings_ith(ctx, token_index);
+            const float * token_embedding = llama_get_embeddings_ith(ctx.get(), token_index);
             if (!token_embedding) {
                 continue;
             }
@@ -156,8 +165,6 @@ int32_t embed(
             pooled_count += 1;
         }
         if (pooled_count == 0) {
-            llama_free(ctx);
-            llama_model_free(model);
             return fail("无法读取本地嵌入向量。", error_message);
         }
         for (float & value : mean) {
@@ -167,8 +174,6 @@ int32_t embed(
     }
 
     *embedding_dimension = dimension;
-    llama_free(ctx);
-    llama_model_free(model);
     return 0;
 }
 

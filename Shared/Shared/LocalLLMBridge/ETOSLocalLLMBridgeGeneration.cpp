@@ -156,19 +156,22 @@ std::string token_to_piece(const llama_vocab * vocab, llama_token token) {
     return std::string(dynamic_buffer.data(), static_cast<size_t>(dynamic_written));
 }
 
-llama_sampler * create_sampler(
+llama_sampler_handle create_sampler(
     const llama_model * model,
     const llama_vocab * vocab,
     const local_generation_params & params
 ) {
-    llama_sampler * sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    llama_sampler_handle sampler(llama_sampler_chain_init(llama_sampler_chain_default_params()));
+    if (!sampler) {
+        return {};
+    }
 
     if (params.ignore_eos) {
         llama_logit_bias eos_bias = {
             llama_vocab_eos(vocab),
             -INFINITY
         };
-        llama_sampler_chain_add(sampler, llama_sampler_init_logit_bias(llama_vocab_n_tokens(vocab), 1, &eos_bias));
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_logit_bias(llama_vocab_n_tokens(vocab), 1, &eos_bias));
     }
 
     const size_t min_keep = params.min_keep <= 0 ? 0 : static_cast<size_t>(params.min_keep);
@@ -177,7 +180,7 @@ llama_sampler * create_sampler(
         for (const int32_t sampler_kind : params.sampler_kinds) {
             switch (sampler_kind) {
             case ETOS_LOCAL_LLM_SAMPLER_PENALTIES:
-                llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_penalties(
                     params.repeat_last_n,
                     params.repeat_penalty,
                     params.frequency_penalty,
@@ -190,7 +193,7 @@ llama_sampler * create_sampler(
                 for (const std::string & breaker : params.dry_sequence_breakers) {
                     breakers.push_back(breaker.c_str());
                 }
-                llama_sampler_chain_add(sampler, llama_sampler_init_dry(
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_dry(
                     vocab,
                     llama_model_n_ctx_train(model),
                     params.dry_multiplier,
@@ -203,25 +206,25 @@ llama_sampler * create_sampler(
                 break;
             }
             case ETOS_LOCAL_LLM_SAMPLER_TOP_N_SIGMA:
-                llama_sampler_chain_add(sampler, llama_sampler_init_top_n_sigma(params.top_n_sigma));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_top_n_sigma(params.top_n_sigma));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_TOP_K:
-                llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.top_k));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_top_k(params.top_k));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_TYPICAL:
-                llama_sampler_chain_add(sampler, llama_sampler_init_typical(params.typical_p, min_keep));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_typical(params.typical_p, min_keep));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_TOP_P:
-                llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.top_p, min_keep));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_top_p(params.top_p, min_keep));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_MIN_P:
-                llama_sampler_chain_add(sampler, llama_sampler_init_min_p(params.min_p, min_keep));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_min_p(params.min_p, min_keep));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_XTC:
-                llama_sampler_chain_add(sampler, llama_sampler_init_xtc(params.xtc_probability, params.xtc_threshold, min_keep, params.seed));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_xtc(params.xtc_probability, params.xtc_threshold, min_keep, params.seed));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_TEMPERATURE:
-                llama_sampler_chain_add(sampler, llama_sampler_init_temp_ext(params.temperature, params.dynatemp_range, params.dynatemp_exponent));
+                llama_sampler_chain_add(sampler.get(), llama_sampler_init_temp_ext(params.temperature, params.dynatemp_range, params.dynatemp_exponent));
                 break;
             case ETOS_LOCAL_LLM_SAMPLER_ADAPTIVE:
                 uses_terminal_sampler = true;
@@ -231,7 +234,7 @@ llama_sampler * create_sampler(
             }
         }
     } else {
-        llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_temp(params.temperature));
     }
 
     if (!params.grammar.empty()) {
@@ -267,7 +270,7 @@ llama_sampler * create_sampler(
             trigger_patterns_c.push_back(pattern.c_str());
         }
 
-        llama_sampler * grammar_sampler = params.grammar_lazy
+        llama_sampler_handle grammar_sampler(params.grammar_lazy
             ? llama_sampler_init_grammar_lazy_patterns(
                 vocab,
                 params.grammar.c_str(),
@@ -277,10 +280,9 @@ llama_sampler * create_sampler(
                 trigger_tokens.data(),
                 trigger_tokens.size()
             )
-            : llama_sampler_init_grammar(vocab, params.grammar.c_str(), "root");
+            : llama_sampler_init_grammar(vocab, params.grammar.c_str(), "root"));
         if (!grammar_sampler) {
-            llama_sampler_free(sampler);
-            return nullptr;
+            return {};
         }
         if (!params.grammar_lazy && params.grammar_needs_prefill && !params.generation_prompt.empty()) {
             const auto prefill_tokens = tokenize(vocab, params.generation_prompt, false);
@@ -293,21 +295,21 @@ llama_sampler * create_sampler(
                     && !std::isspace(static_cast<unsigned char>(params.generation_prompt[0]))) {
                     continue;
                 }
-                llama_sampler_accept(grammar_sampler, prefill_tokens[index]);
+                llama_sampler_accept(grammar_sampler.get(), prefill_tokens[index]);
             }
         }
-        llama_sampler_chain_add(sampler, grammar_sampler);
+        llama_sampler_chain_add(sampler.get(), grammar_sampler.release());
     }
     if (params.mirostat == 1) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_mirostat(llama_vocab_n_tokens(vocab), params.seed, params.mirostat_tau, params.mirostat_eta, 100));
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_mirostat(llama_vocab_n_tokens(vocab), params.seed, params.mirostat_tau, params.mirostat_eta, 100));
     } else if (params.mirostat == 2) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_mirostat_v2(params.seed, params.mirostat_tau, params.mirostat_eta));
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_mirostat_v2(params.seed, params.mirostat_tau, params.mirostat_eta));
     } else if (uses_terminal_sampler) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_adaptive_p(params.adaptive_target, params.adaptive_decay, params.seed));
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_adaptive_p(params.adaptive_target, params.adaptive_decay, params.seed));
     } else if (params.temperature <= 0.0f) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_greedy());
     } else {
-        llama_sampler_chain_add(sampler, llama_sampler_init_dist(params.seed));
+        llama_sampler_chain_add(sampler.get(), llama_sampler_init_dist(params.seed));
     }
     return sampler;
 }
@@ -620,23 +622,21 @@ int32_t generate(
     model_params.n_gpu_layers = generation_params.gpu_layers < 0 ? 999 : generation_params.gpu_layers;
 #endif
 
-    llama_model * model = llama_model_load_from_file(model_path, model_params);
+    llama_model_handle model(llama_model_load_from_file(model_path, model_params));
     if (!model) {
         return fail("无法加载本地模型权重。", error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
-        llama_model_free(model);
         return cancelled(error_message);
     }
 
     local_chat_template_result chat_template;
     if (!prompt || prompt[0] == '\0') {
         if (should_cancel(cancel_callback, user_data)) {
-            llama_model_free(model);
             return cancelled(error_message);
         }
         chat_template = apply_chat_template(
-            model,
+            model.get(),
             messages,
             message_count,
             tools,
@@ -644,7 +644,6 @@ int32_t generate(
             error_message
         );
         if (chat_template.prompt.empty()) {
-            llama_model_free(model);
             return -1;
         }
         if (!chat_template.grammar.empty()) {
@@ -658,18 +657,15 @@ int32_t generate(
         prompt = chat_template.prompt.c_str();
     }
     if (should_cancel(cancel_callback, user_data)) {
-        llama_model_free(model);
         return cancelled(error_message);
     }
 
-    const llama_vocab * vocab = llama_model_get_vocab(model);
+    const llama_vocab * vocab = llama_model_get_vocab(model.get());
     std::vector<llama_token> prompt_tokens = tokenize_prompt(vocab, prompt);
     if (prompt_tokens.empty()) {
-        llama_model_free(model);
         return fail("本地模型无法解析提示词。", error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
-        llama_model_free(model);
         return cancelled(error_message);
     }
 
@@ -677,7 +673,6 @@ int32_t generate(
     const int32_t requested_output = std::max<int32_t>(1, generation_params.max_output_tokens);
     const size_t prompt_token_count = prompt_tokens.size();
     if (prompt_token_count >= static_cast<size_t>(requested_context)) {
-        llama_model_free(model);
         return fail("本地模型提示词已占满上下文窗口。请缩短聊天内容或调大上下文。", error_message);
     }
     const int32_t output_limit = std::min<int32_t>(
@@ -691,27 +686,19 @@ int32_t generate(
     ctx_params.n_threads = thread_count();
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
-    llama_context * ctx = llama_init_from_model(model, ctx_params);
+    llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
     if (!ctx) {
-        llama_model_free(model);
         return fail("无法创建本地模型上下文。", error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
-        llama_free(ctx);
-        llama_model_free(model);
         return cancelled(error_message);
     }
 
-    llama_sampler * sampler = create_sampler(model, vocab, generation_params);
+    llama_sampler_handle sampler = create_sampler(model.get(), vocab, generation_params);
     if (!sampler) {
-        llama_free(ctx);
-        llama_model_free(model);
         return fail("无法创建本地模型采样器。", error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
-        llama_sampler_free(sampler);
-        llama_free(ctx);
-        llama_model_free(model);
         return cancelled(error_message);
     }
 
@@ -722,40 +709,25 @@ int32_t generate(
 
     while (generated_tokens < output_limit) {
         if (should_cancel(cancel_callback, user_data)) {
-            llama_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
             return cancelled(error_message);
         }
-        if (llama_decode(ctx, batch) != 0) {
-            llama_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
+        if (llama_decode(ctx.get(), batch) != 0) {
             return fail("本地模型解码失败。", error_message);
         }
         if (should_cancel(cancel_callback, user_data)) {
-            llama_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
             return cancelled(error_message);
         }
 
-        llama_token token = llama_sampler_sample(sampler, ctx, -1);
+        llama_token token = llama_sampler_sample(sampler.get(), ctx.get(), -1);
         if (llama_vocab_is_eog(vocab, token)) {
             break;
         }
         if (should_cancel(cancel_callback, user_data)) {
-            llama_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
             return cancelled(error_message);
         }
 
         std::string piece = token_to_piece(vocab, token);
         if (piece.empty()) {
-            llama_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
             return fail("本地模型输出转换失败。", error_message);
         }
 
@@ -771,9 +743,6 @@ int32_t generate(
                 token_callback,
                 user_data
             )) {
-                llama_sampler_free(sampler);
-                llama_free(ctx);
-                llama_model_free(model);
                 return cancelled(error_message);
             }
             break;
@@ -786,9 +755,6 @@ int32_t generate(
             token_callback,
             user_data
         )) {
-            llama_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
             return cancelled(error_message);
         }
 
@@ -797,14 +763,8 @@ int32_t generate(
     }
 
     if (!flush_pending_text(pending_text, 0, true, output_text, token_callback, user_data)) {
-        llama_sampler_free(sampler);
-        llama_free(ctx);
-        llama_model_free(model);
         return cancelled(error_message);
     }
-    llama_sampler_free(sampler);
-    llama_free(ctx);
-    llama_model_free(model);
     return 0;
 }
 

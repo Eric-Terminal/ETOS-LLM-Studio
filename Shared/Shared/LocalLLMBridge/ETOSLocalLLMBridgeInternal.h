@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <TargetConditionals.h>
@@ -31,6 +32,34 @@ namespace etos_local_llm_bridge {
 
 extern std::once_flag backend_init_once;
 constexpr int32_t local_llm_cancelled_status = -2;
+
+struct llama_model_deleter {
+    void operator()(llama_model * model) const {
+        if (model) {
+            llama_model_free(model);
+        }
+    }
+};
+
+struct llama_context_deleter {
+    void operator()(llama_context * context) const {
+        if (context) {
+            llama_free(context);
+        }
+    }
+};
+
+struct llama_sampler_deleter {
+    void operator()(llama_sampler * sampler) const {
+        if (sampler) {
+            llama_sampler_free(sampler);
+        }
+    }
+};
+
+using llama_model_handle = std::unique_ptr<llama_model, llama_model_deleter>;
+using llama_context_handle = std::unique_ptr<llama_context, llama_context_deleter>;
+using llama_sampler_handle = std::unique_ptr<llama_sampler, llama_sampler_deleter>;
 
 char * copy_string(const std::string & value);
 int32_t fail(const std::string & message, char ** error_message);
