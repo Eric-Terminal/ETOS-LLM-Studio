@@ -29,7 +29,7 @@ SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator CONFIGURATION=Debug ARCHS=a
 
 ```sh
 SDK_NAME=iphoneos PLATFORM_NAME=iphoneos CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
-SDK_NAME=watchos PLATFORM_NAME=watchos CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
+SDK_NAME=watchos PLATFORM_NAME=watchos CONFIGURATION=Debug ARCHS=arm64_32 scripts/build-llama-static-library.sh
 ```
 
 如果 Xcode 报 `library 'etos-llama' not found`、`file not found: libetos-llama.a` 或某个平台链接不到 llama.cpp 符号，就按报错里的 SDK/Configuration 先运行对应命令，再重新构建 App。Shared 通过 `-letos-llama` 链接这个静态库。

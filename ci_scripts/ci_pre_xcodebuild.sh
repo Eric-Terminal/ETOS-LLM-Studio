@@ -43,7 +43,6 @@ build_llama_static_library() {
     SDK_NAME="$sdk_name" ARCHS="$archs" "$ROOT_PATH/scripts/build-llama-static-library.sh"
 }
 
+# Xcode Cloud 只用于发布归档，预构建发布包实际会链接的设备 slice。
 build_llama_static_library iphoneos arm64
-build_llama_static_library iphonesimulator "arm64 x86_64"
-build_llama_static_library watchos "arm64 arm64_32"
-build_llama_static_library watchsimulator arm64
+build_llama_static_library watchos arm64_32
