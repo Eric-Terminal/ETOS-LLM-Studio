@@ -309,7 +309,7 @@ private struct LocalResourceUsageFloatingPanel: View {
 
     @State private var isExpanded = false
     @State private var resourceUsageTask: Task<Void, Never>?
-    @GestureState private var dragTranslation: CGSize = .zero
+    @State private var dragStartOffset: CGSize?
 
     private var panelWidth: CGFloat {
         isExpanded ? 248 : 236
@@ -324,13 +324,7 @@ private struct LocalResourceUsageFloatingPanel: View {
     }
 
     var body: some View {
-        let currentOffset = clampedOffset(
-            CGSize(
-                width: offset.width + dragTranslation.width,
-                height: offset.height + dragTranslation.height
-            ),
-            panelSize: panelSize
-        )
+        let currentOffset = clampedOffset(offset, panelSize: panelSize)
 
         panelContent
             .frame(width: panelWidth, height: panelHeight, alignment: .topLeading)
@@ -445,15 +439,30 @@ private struct LocalResourceUsageFloatingPanel: View {
     }
 
     private func dragGesture(panelSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 4)
-            .updating($dragTranslation) { value, state, _ in
-                state = value.translation
-            }
-            .onEnded { value in
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in
+                if dragStartOffset == nil {
+                    dragStartOffset = offset
+                }
+                let startOffset = dragStartOffset ?? offset
                 offset = clampedOffset(
-                    CGSize(width: offset.width + value.translation.width, height: offset.height + value.translation.height),
+                    CGSize(
+                        width: startOffset.width + value.translation.width,
+                        height: startOffset.height + value.translation.height
+                    ),
                     panelSize: panelSize
                 )
+            }
+            .onEnded { value in
+                let startOffset = dragStartOffset ?? offset
+                offset = clampedOffset(
+                    CGSize(
+                        width: startOffset.width + value.translation.width,
+                        height: startOffset.height + value.translation.height
+                    ),
+                    panelSize: panelSize
+                )
+                dragStartOffset = nil
             }
     }
 
