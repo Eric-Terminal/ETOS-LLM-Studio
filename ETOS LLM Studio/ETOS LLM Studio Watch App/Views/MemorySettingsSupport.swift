@@ -86,6 +86,278 @@ public struct AddMemorySheet: View {
     }
 }
 
+private enum MemoryReembedRowStatus: Equatable {
+    case pending
+    case running
+    case succeeded
+    case failed(String)
+}
+
+struct MemoryDataMaintenanceView: View {
+    @EnvironmentObject var viewModel: ChatViewModel
+    @State private var isReembeddingAll = false
+    @State private var runningMemoryIDs = Set<UUID>()
+    @State private var rowStatuses: [UUID: MemoryReembedRowStatus] = [:]
+    @State private var showReembedConfirmation = false
+    @State private var reembedAlert: MemoryReembedAlert?
+    @ObservedObject private var appConfig = AppConfigStore.shared
+
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }
+
+    private var memories: [MemoryItem] {
+        viewModel.memories.sorted { $0.displayDate > $1.displayDate }
+    }
+
+    private var normalizedConcurrencyLimit: Int {
+        max(1, appConfig.memoryReembeddingConcurrencyLimit)
+    }
+
+    private var isReembeddingBusy: Bool {
+        isReembeddingAll || !runningMemoryIDs.isEmpty || viewModel.isMemoryEmbeddingInProgress
+    }
+
+    var body: some View {
+        List {
+            Section(
+                header: Text(NSLocalizedString("重新嵌入", comment: "Memory reembedding maintenance section")),
+                footer: Text(NSLocalizedString("会清理旧的向量数据库，并按当前记忆重新生成嵌入。并发数量会自动保存。", comment: "Memory reembedding maintenance footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Button(role: .destructive) {
+                    showReembedConfirmation = true
+                } label: {
+                    Label(NSLocalizedString("重新生成全部嵌入", comment: ""), systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(isReembeddingBusy || memories.isEmpty)
+
+                HStack {
+                    Text(NSLocalizedString("并发数量", comment: "Memory reembedding concurrency limit field"))
+                    Spacer()
+                    TextField("1", value: $appConfig.memoryReembeddingConcurrencyLimit, formatter: numberFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 48)
+                        .disabled(isReembeddingBusy)
+                        .onChange(of: appConfig.memoryReembeddingConcurrencyLimit) { _, newValue in
+                            appConfig.memoryReembeddingConcurrencyLimit = max(1, newValue)
+                        }
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("记忆", comment: "Memory maintenance memory section")),
+                footer: Text(NSLocalizedString("重新嵌入完成后会显示勾选标记；失败的记忆可点按单独重试。", comment: "Memory maintenance memory footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                if memories.isEmpty {
+                    Text(NSLocalizedString("暂无记忆", comment: "Memory maintenance empty text"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(memories) { memory in
+                        let status = status(for: memory)
+                        if case .failed = status {
+                            Button {
+                                retry(memory)
+                            } label: {
+                                memoryRow(memory, status: status)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isReembeddingBusy)
+                        } else {
+                            memoryRow(memory, status: status)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("数据维护", comment: ""))
+        .confirmationDialog(NSLocalizedString("重新嵌入全部记忆？", comment: ""),
+            isPresented: $showReembedConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("重新嵌入", comment: ""), role: .destructive) {
+                triggerFullReembed()
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("此操作会删除旧的 SQLite 向量数据库，并基于当前记忆原文重新生成嵌入。", comment: ""))
+        }
+        .alert(item: $reembedAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
+            )
+        }
+    }
+
+    private func memoryRow(_ memory: MemoryItem, status: MemoryReembedRowStatus) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(memory.content)
+                    .lineLimit(2)
+                    .etFont(.footnote)
+                HStack(spacing: 5) {
+                    Text(memory.displayDate.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    if memory.isArchived {
+                        Text(NSLocalizedString("已归档", comment: "Archived memory status"))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if case .failed(let message) = status {
+                    Text(message)
+                        .etFont(.caption2)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+            statusIndicator(for: status)
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func statusIndicator(for status: MemoryReembedRowStatus) -> some View {
+        switch status {
+        case .pending:
+            Image(systemName: "circle")
+                .foregroundStyle(.tertiary)
+        case .running:
+            ProgressView()
+        case .succeeded:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.tint)
+        case .failed:
+            Image(systemName: "arrow.clockwise.circle.fill")
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private func status(for memory: MemoryItem) -> MemoryReembedRowStatus {
+        if runningMemoryIDs.contains(memory.id) {
+            return .running
+        }
+        return rowStatuses[memory.id] ?? .pending
+    }
+
+    private func triggerFullReembed() {
+        guard !isReembeddingBusy else { return }
+        let targetMemories = memories
+        guard !targetMemories.isEmpty else { return }
+        let targetIDs = Set(targetMemories.map(\.id))
+        let limit = normalizedConcurrencyLimit
+        isReembeddingAll = true
+        runningMemoryIDs = targetIDs
+        for id in targetIDs {
+            rowStatuses[id] = .running
+        }
+
+        Task {
+            do {
+                let results = try await viewModel.reembedAllMemoriesDetailed(concurrencyLimit: limit) { result in
+                    await MainActor.run {
+                        applyReembeddingResult(result)
+                    }
+                }
+                await MainActor.run {
+                    finishFullReembed(results: results, targetIDs: targetIDs)
+                }
+            } catch {
+                await MainActor.run {
+                    markRemainingAsFailed(targetIDs: targetIDs, message: error.localizedDescription)
+                    reembedAlert = MemoryReembedAlert.failure(message: error.localizedDescription)
+                    isReembeddingAll = false
+                }
+            }
+        }
+    }
+
+    private func retry(_ memory: MemoryItem) {
+        guard !isReembeddingBusy else { return }
+        runningMemoryIDs.insert(memory.id)
+        rowStatuses[memory.id] = .running
+
+        Task {
+            do {
+                let results = try await viewModel.reembedMemories(
+                    withIDs: [memory.id],
+                    concurrencyLimit: 1
+                ) { result in
+                    await MainActor.run {
+                        applyReembeddingResult(result)
+                    }
+                }
+                await MainActor.run {
+                    if results.isEmpty {
+                        runningMemoryIDs.remove(memory.id)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    runningMemoryIDs.remove(memory.id)
+                    rowStatuses[memory.id] = .failed(error.localizedDescription)
+                    reembedAlert = MemoryReembedAlert.failure(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func applyReembeddingResult(_ result: MemoryReembeddingItemResult) {
+        runningMemoryIDs.remove(result.memoryID)
+        if result.succeeded {
+            rowStatuses[result.memoryID] = .succeeded
+        } else {
+            rowStatuses[result.memoryID] = .failed(result.errorMessage ?? NSLocalizedString("未知错误", comment: ""))
+        }
+    }
+
+    private func finishFullReembed(results: [MemoryReembeddingItemResult], targetIDs: Set<UUID>) {
+        for id in targetIDs {
+            if runningMemoryIDs.contains(id) {
+                runningMemoryIDs.remove(id)
+            }
+            if rowStatuses[id] == .running {
+                rowStatuses[id] = .pending
+            }
+        }
+
+        let failedResults = results.filter { !$0.succeeded }
+        if failedResults.isEmpty {
+            let summary = MemoryReembeddingSummary(
+                processedMemories: results.count,
+                chunkCount: results.reduce(0) { $0 + $1.chunkCount }
+            )
+            reembedAlert = MemoryReembedAlert.success(summary: summary)
+        } else {
+            reembedAlert = MemoryReembedAlert.failure(
+                message: String(
+                    format: NSLocalizedString("%d 条记忆重嵌入失败，可点击失败项单独重试。", comment: "Memory reembedding partial failure alert"),
+                    failedResults.count
+                )
+            )
+        }
+        isReembeddingAll = false
+    }
+
+    private func markRemainingAsFailed(targetIDs: Set<UUID>, message: String) {
+        for id in targetIDs where runningMemoryIDs.contains(id) {
+            runningMemoryIDs.remove(id)
+            rowStatuses[id] = .failed(message)
+        }
+    }
+}
+
 struct ConversationMemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @State private var showClearConversationSummariesConfirmation = false

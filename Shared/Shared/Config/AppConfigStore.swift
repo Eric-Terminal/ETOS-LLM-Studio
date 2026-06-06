@@ -171,6 +171,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableMemoryWrite: Bool { didSet { write(.enableMemoryWrite, enableMemoryWrite) } }
     @Published public var enableMemoryActiveRetrieval: Bool { didSet { write(.enableMemoryActiveRetrieval, enableMemoryActiveRetrieval) } }
     @Published public var memoryTopK: Int { didSet { write(.memoryTopK, memoryTopK) } }
+    @Published public var memoryReembeddingConcurrencyLimit: Int { didSet { write(.memoryReembeddingConcurrencyLimit, memoryReembeddingConcurrencyLimit) } }
     @Published public var enableConversationMemoryAsync: Bool { didSet { write(.enableConversationMemoryAsync, enableConversationMemoryAsync) } }
     @Published public var conversationMemoryRecentLimit: Int { didSet { write(.conversationMemoryRecentLimit, conversationMemoryRecentLimit) } }
     @Published public var conversationMemoryRoundThreshold: Int { didSet { write(.conversationMemoryRoundThreshold, conversationMemoryRoundThreshold) } }
@@ -317,6 +318,7 @@ public final class AppConfigStore: ObservableObject {
         enableMemoryWrite = Self.boolValue(.enableMemoryWrite, userDefaults: userDefaults)
         enableMemoryActiveRetrieval = Self.boolValue(.enableMemoryActiveRetrieval, userDefaults: userDefaults)
         memoryTopK = Self.integerValue(.memoryTopK, userDefaults: userDefaults)
+        memoryReembeddingConcurrencyLimit = Self.integerValue(.memoryReembeddingConcurrencyLimit, userDefaults: userDefaults)
         enableConversationMemoryAsync = Self.boolValue(.enableConversationMemoryAsync, userDefaults: userDefaults)
         conversationMemoryRecentLimit = Self.integerValue(.conversationMemoryRecentLimit, userDefaults: userDefaults)
         conversationMemoryRoundThreshold = Self.integerValue(.conversationMemoryRoundThreshold, userDefaults: userDefaults)
@@ -745,6 +747,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableMemoryWrite: return .bool(enableMemoryWrite)
         case .enableMemoryActiveRetrieval: return .bool(enableMemoryActiveRetrieval)
         case .memoryTopK: return .integer(memoryTopK)
+        case .memoryReembeddingConcurrencyLimit: return .integer(memoryReembeddingConcurrencyLimit)
         case .enableConversationMemoryAsync: return .bool(enableConversationMemoryAsync)
         case .conversationMemoryRecentLimit: return .integer(conversationMemoryRecentLimit)
         case .conversationMemoryRoundThreshold: return .integer(conversationMemoryRoundThreshold)
@@ -913,6 +916,7 @@ public final class AppConfigStore: ObservableObject {
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
         case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .memoryTopK: memoryTopK = value
+        case .memoryReembeddingConcurrencyLimit: memoryReembeddingConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .conversationMemoryRecentLimit: conversationMemoryRecentLimit = value
         case .conversationMemoryRoundThreshold: conversationMemoryRoundThreshold = value
         case .conversationMemorySummaryMinIntervalMinutes: conversationMemorySummaryMinIntervalMinutes = value
@@ -1248,7 +1252,8 @@ public final class AppConfigStore: ObservableObject {
 
     private nonisolated static func normalizedIntegerValue(_ value: Int, for key: AppConfigKey) -> Int {
         switch key {
-        case .modelConnectivityTestConcurrencyLimit:
+        case .modelConnectivityTestConcurrencyLimit,
+             .memoryReembeddingConcurrencyLimit:
             return max(1, value)
         default:
             return value

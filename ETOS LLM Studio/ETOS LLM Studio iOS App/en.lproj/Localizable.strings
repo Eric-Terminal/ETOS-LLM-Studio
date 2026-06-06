@@ -3851,3 +3851,10 @@
 "文件与速度" = "File and Speed";
 "文件缺失时重新下载或停用模型；生成很慢时先降低上下文长度和最大输出 token。" = "If the file is missing, download it again or disable the model. If generation is slow, lower context size and max output tokens first.";
 "导入与排错" = "Import and Troubleshooting";
+"进入后可重新生成全部嵌入，并查看每条记忆的处理状态。" = "Open this page to regenerate all embeddings and review each memory's processing status.";
+"会清理旧的向量数据库，并按当前记忆重新生成嵌入。并发数量会自动保存。" = "This clears the old vector database and regenerates embeddings from the current memories. The concurrency setting is saved automatically.";
+"添加记忆后可在这里重新生成嵌入。" = "After adding memories, you can regenerate embeddings here.";
+"重新嵌入完成后会显示勾选标记；失败的记忆可点按单独重试。" = "Completed memories show a checkmark; tap failed memories to retry them individually.";
+"%d 条记忆重嵌入失败，可点击失败项单独重试。" = "%d memories failed to re-embed. Tap failed items to retry them individually.";
+"部分记忆重嵌入失败，可点击失败项单独重试。" = "Some memories failed to re-embed. Tap failed items to retry them individually.";
+"%d 条记忆重嵌入失败：%@" = "%d memories failed to re-embed: %@";

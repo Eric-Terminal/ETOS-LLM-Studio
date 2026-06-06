@@ -14,9 +14,6 @@ import Shared
 public struct MemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @State private var isAddingMemory = false
-    @State private var isReembeddingMemories = false
-    @State private var showReembedConfirmation = false
-    @State private var reembedAlert: MemoryReembedAlert?
     @ObservedObject private var appConfig = AppConfigStore.shared
 
     private var embeddingModelBinding: Binding<RunnableModel?> {
@@ -31,46 +28,6 @@ public struct MemorySettingsView: View {
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = 0
         return formatter
-    }
-    
-    private var activeEmbeddingProgress: MemoryEmbeddingProgress? {
-        viewModel.memoryEmbeddingProgress
-    }
-    
-    private var isEmbeddingBusy: Bool {
-        isReembeddingMemories || viewModel.isMemoryEmbeddingInProgress
-    }
-    
-    private func embeddingProgressTitle(for progress: MemoryEmbeddingProgress) -> String {
-        switch (progress.kind, progress.phase) {
-        case (.reembedAll, .running):
-            return NSLocalizedString("正在重新生成嵌入…", comment: "Memory re-embedding in progress title")
-        case (.reembedAll, .completed):
-            return NSLocalizedString("重新嵌入完成", comment: "Memory re-embedding completed title")
-        case (.reembedAll, .failed):
-            return NSLocalizedString("重新嵌入失败", comment: "Memory re-embedding failed title")
-        case (.reconcilePending, .running):
-            return NSLocalizedString("正在补偿缺失嵌入…", comment: "Memory embedding reconcile in progress title")
-        case (.reconcilePending, .completed):
-            return NSLocalizedString("补偿嵌入已完成", comment: "Memory embedding reconcile completed title")
-        case (.reconcilePending, .failed):
-            return NSLocalizedString("补偿嵌入部分失败", comment: "Memory embedding reconcile partially failed title")
-        @unknown default:
-            return NSLocalizedString("记忆嵌入状态更新中", comment: "Fallback memory embedding status title")
-        }
-    }
-    
-    private func embeddingProgressColor(for progress: MemoryEmbeddingProgress) -> Color {
-        switch progress.phase {
-        case .running:
-            return .secondary
-        case .completed:
-            return .green
-        case .failed:
-            return .orange
-        @unknown default:
-            return .secondary
-        }
     }
 
     public init() {}
@@ -88,24 +45,6 @@ public struct MemorySettingsView: View {
             .sheet(isPresented: $isAddingMemory) {
                 AddMemorySheet()
                     .environmentObject(viewModel)
-            }
-            .confirmationDialog(NSLocalizedString("重新嵌入全部记忆？", comment: ""),
-                isPresented: $showReembedConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button(NSLocalizedString("重新嵌入", comment: ""), role: .destructive) {
-                    triggerFullReembed()
-                }
-                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
-            } message: {
-                Text(NSLocalizedString("将删除旧的 SQLite 向量数据库，并根据当前记忆重新生成嵌入。", comment: ""))
-            }
-            .alert(item: $reembedAlert) { alert in
-                Alert(
-                    title: Text(alert.title),
-                    message: Text(alert.message),
-                    dismissButton: .default(Text(NSLocalizedString("好的", comment: "")))
-                )
             }
             .task {
                 viewModel.reloadConversationMemoryState()
@@ -182,58 +121,15 @@ public struct MemorySettingsView: View {
 
             Section(
                 header: Text(NSLocalizedString("数据维护", comment: "")),
-                footer: Text(NSLocalizedString("将清空旧向量数据库，并按当前记忆重算所有嵌入。", comment: ""))
+                footer: Text(NSLocalizedString("进入后可重新生成全部嵌入，并查看每条记忆的处理状态。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
-                Button(role: .destructive) {
-                    showReembedConfirmation = true
+                NavigationLink {
+                    MemoryDataMaintenanceView()
+                        .environmentObject(viewModel)
                 } label: {
-                    Label(NSLocalizedString("重新生成全部嵌入", comment: ""), systemImage: "arrow.triangle.2.circlepath")
-                }
-                .disabled(isEmbeddingBusy)
-                
-                if let progress = activeEmbeddingProgress {
-                    Text(embeddingProgressTitle(for: progress))
-                        .etFont(.caption2)
-                        .foregroundStyle(embeddingProgressColor(for: progress))
-                    
-                    ProgressView(
-                        value: Double(progress.processedMemories),
-                        total: Double(max(progress.totalMemories, 1))
-                    )
-                    
-                    Text(
-                        String(
-                            format: NSLocalizedString("解析进度 %d / %d", comment: ""),
-                            progress.processedMemories,
-                            progress.totalMemories
-                        )
-                    )
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    
-                    if progress.phase == .running,
-                       let preview = progress.currentMemoryPreview,
-                       !preview.isEmpty {
-                        Text(
-                            String(
-                                format: NSLocalizedString("正在处理：%@", comment: ""),
-                                preview
-                            )
-                        )
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
-                    
-                    if progress.phase == .failed,
-                       let message = progress.errorMessage,
-                       !message.isEmpty {
-                        Text(message)
-                            .etFont(.caption2)
-                            .foregroundStyle(.orange)
-                    }
+                    Label(NSLocalizedString("数据维护", comment: ""), systemImage: "wrench.and.screwdriver")
                 }
             }
 
@@ -336,26 +232,6 @@ public struct MemorySettingsView: View {
             return NSLocalizedString("未选择", comment: "")
         }
         return "\(selected.model.displayName) | \(selected.provider.name)"
-    }
-    
-    private func triggerFullReembed() {
-        guard !isReembeddingMemories else { return }
-        isReembeddingMemories = true
-        
-        Task {
-            do {
-                let summary = try await viewModel.reembedAllMemories()
-                await MainActor.run {
-                    reembedAlert = MemoryReembedAlert.success(summary: summary)
-                    isReembeddingMemories = false
-                }
-            } catch {
-                await MainActor.run {
-                    reembedAlert = MemoryReembedAlert.failure(message: error.localizedDescription)
-                    isReembeddingMemories = false
-                }
-            }
-        }
     }
 }
 

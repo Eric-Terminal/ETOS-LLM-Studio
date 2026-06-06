@@ -138,6 +138,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableMemoryWrite = "enableMemoryWrite"
     case enableMemoryActiveRetrieval = "enableMemoryActiveRetrieval"
     case memoryTopK = "memoryTopK"
+    case memoryReembeddingConcurrencyLimit = "memoryReembedding.concurrencyLimit"
     case enableConversationMemoryAsync = "enableConversationMemoryAsync"
     case conversationMemoryRecentLimit = "conversationMemoryRecentLimit"
     case conversationMemoryRoundThreshold = "conversationMemoryRoundThreshold"
@@ -329,6 +330,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .memoryTopK:
             return .integer(3)
+        case .memoryReembeddingConcurrencyLimit:
+            return .integer(1)
         case .conversationMemoryRecentLimit:
             return .integer(5)
         case .conversationMemoryRoundThreshold:

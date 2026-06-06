@@ -256,8 +256,30 @@ extension ChatViewModel {
         await MemoryManager.shared.deleteMemories(itemsToDelete)
     }
 
-    func reembedAllMemories() async throws -> MemoryReembeddingSummary {
-        try await MemoryManager.shared.reembedAllMemories()
+    func reembedAllMemories(concurrencyLimit: Int = 1) async throws -> MemoryReembeddingSummary {
+        try await MemoryManager.shared.reembedAllMemories(concurrencyLimit: concurrencyLimit)
+    }
+
+    func reembedAllMemoriesDetailed(
+        concurrencyLimit: Int = 1,
+        itemProgressHandler: MemoryReembeddingItemProgressHandler? = nil
+    ) async throws -> [MemoryReembeddingItemResult] {
+        try await MemoryManager.shared.reembedAllMemoriesDetailed(
+            concurrencyLimit: concurrencyLimit,
+            itemProgressHandler: itemProgressHandler
+        )
+    }
+
+    func reembedMemories(
+        withIDs memoryIDs: Set<UUID>,
+        concurrencyLimit: Int = 1,
+        itemProgressHandler: MemoryReembeddingItemProgressHandler? = nil
+    ) async throws -> [MemoryReembeddingItemResult] {
+        try await MemoryManager.shared.reembedMemories(
+            withIDs: memoryIDs,
+            concurrencyLimit: concurrencyLimit,
+            itemProgressHandler: itemProgressHandler
+        )
     }
 
     func reloadConversationMemoryState() {

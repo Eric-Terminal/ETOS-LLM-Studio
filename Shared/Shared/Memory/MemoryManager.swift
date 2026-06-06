@@ -13,6 +13,17 @@ import Combine
 import NaturalLanguage
 import os.log
 
+private struct MemoryReembeddingWorkItem {
+    let memory: MemoryItem
+    let chunkTexts: [String]
+}
+
+private struct PreparedMemoryReembedding {
+    let memory: MemoryItem
+    let chunkTexts: [String]
+    let result: Result<[[Float]], Error>
+}
+
 public class MemoryManager {
 
     // MARK: - 单例
@@ -372,15 +383,73 @@ public class MemoryManager {
 
     /// 重新构建所有记忆的嵌入，并清空旧的向量存储。
     @discardableResult
-    public func reembedAllMemories() async throws -> MemoryReembeddingSummary {
+    public func reembedAllMemories(concurrencyLimit: Int = 1) async throws -> MemoryReembeddingSummary {
+        let results = try await reembedAllMemoriesDetailed(concurrencyLimit: concurrencyLimit)
+        let failedResults = results.filter { !$0.succeeded }
+        if let firstFailure = failedResults.first {
+            throw MemoryReembeddingError.failedMemories(
+                count: failedResults.count,
+                firstMessage: firstFailure.errorMessage ?? NSLocalizedString("未知错误", comment: "")
+            )
+        }
+
+        return MemoryReembeddingSummary(
+            processedMemories: results.count,
+            chunkCount: results.reduce(0) { $0 + $1.chunkCount }
+        )
+    }
+
+    /// 重新构建所有记忆的嵌入，并逐条返回处理结果，供维护页面展示状态。
+    @discardableResult
+    public func reembedAllMemoriesDetailed(
+        concurrencyLimit: Int = 1,
+        itemProgressHandler: MemoryReembeddingItemProgressHandler? = nil
+    ) async throws -> [MemoryReembeddingItemResult] {
+        try await reembedMemories(
+            memoryIDs: nil,
+            concurrencyLimit: concurrencyLimit,
+            shouldResetVectorStore: true,
+            itemProgressHandler: itemProgressHandler
+        )
+    }
+
+    /// 重新构建指定记忆的嵌入，用于失败条目的单独重试。
+    @discardableResult
+    public func reembedMemories(
+        withIDs memoryIDs: Set<UUID>,
+        concurrencyLimit: Int = 1,
+        itemProgressHandler: MemoryReembeddingItemProgressHandler? = nil
+    ) async throws -> [MemoryReembeddingItemResult] {
+        guard !memoryIDs.isEmpty else { return [] }
+        return try await reembedMemories(
+            memoryIDs: memoryIDs,
+            concurrencyLimit: concurrencyLimit,
+            shouldResetVectorStore: false,
+            itemProgressHandler: itemProgressHandler
+        )
+    }
+
+    private func reembedMemories(
+        memoryIDs: Set<UUID>?,
+        concurrencyLimit: Int,
+        shouldResetVectorStore: Bool,
+        itemProgressHandler: MemoryReembeddingItemProgressHandler?
+    ) async throws -> [MemoryReembeddingItemResult] {
         await initializationTask.value
         guard hasConfiguredEmbeddingModel() else {
             logger.warning("尚未选择嵌入模型，无法重新生成嵌入。")
             throw MemoryEmbeddingError.noAvailableModel
         }
-        logger.info("正在重新生成全部记忆嵌入...")
-        resetAllAutoRetryState()
-        let memories = cachedMemories
+        logger.info("正在重新生成记忆嵌入...")
+        let memories = cachedMemories.filter { memory in
+            guard let memoryIDs else { return true }
+            return memoryIDs.contains(memory.id)
+        }
+        if shouldResetVectorStore {
+            resetAllAutoRetryState()
+        } else {
+            resetAutoRetryState(for: Set(memories.map(\.id)))
+        }
         let totalMemories = memories.count
         let jobID = UUID()
         publishEmbeddingProgress(
@@ -393,10 +462,14 @@ public class MemoryManager {
             currentMemoryPreview: nil,
             errorMessage: nil
         )
-        
-        similarityIndex.removeAll()
-        purgePersistedVectorStores()
-        
+
+        if shouldResetVectorStore {
+            similarityIndex.removeAll()
+            purgePersistedVectorStores()
+        } else {
+            removeVectorEntries(for: Set(memories.map(\.id)))
+        }
+
         guard !memories.isEmpty else {
             saveIndex()
             publishEmbeddingProgress(
@@ -410,88 +483,148 @@ public class MemoryManager {
                 errorMessage: nil
             )
             logger.info(" 记忆列表为空，已写入空索引。")
-            return MemoryReembeddingSummary(processedMemories: 0, chunkCount: 0)
+            return []
         }
-        
+
+        let workItems = memories.map { memory in
+            MemoryReembeddingWorkItem(
+                memory: memory,
+                chunkTexts: chunker.chunk(text: memory.content)
+            )
+        }
+        let maxActiveCount = min(max(1, concurrencyLimit), workItems.count)
+        var results: [MemoryReembeddingItemResult] = []
         var processedMemories = 0
-        var progressProcessed = 0
+        var failedMemories = 0
         var chunkCount = 0
-        
-        for memory in memories {
-            let memoryPreview = embeddingProgressPreview(for: memory)
-            let chunkTexts = chunker.chunk(text: memory.content)
-            guard !chunkTexts.isEmpty else {
-                logger.error("记忆 \(memory.id.uuidString) 无有效分块，跳过。")
-                progressProcessed += 1
+
+        await withTaskGroup(of: PreparedMemoryReembedding.self) { group in
+            var nextWorkItemIndex = 0
+            var activeTaskCount = 0
+
+            while activeTaskCount < maxActiveCount,
+                  nextWorkItemIndex < workItems.count,
+                  !Task.isCancelled {
+                let workItem = workItems[nextWorkItemIndex]
+                nextWorkItemIndex += 1
+                group.addTask { [self] in
+                    await prepareReembedding(for: workItem)
+                }
+                activeTaskCount += 1
+            }
+
+            while activeTaskCount > 0 {
+                guard let prepared = await group.next() else { break }
+                activeTaskCount -= 1
+                processedMemories += 1
+
+                let memory = prepared.memory
+                let memoryPreview = embeddingProgressPreview(for: memory)
+                let itemResult: MemoryReembeddingItemResult
+                var currentErrorMessage: String?
+
+                switch prepared.result {
+                case .success(let embeddings):
+                    var memoryChunkCount = 0
+                    for (index, chunkText) in prepared.chunkTexts.enumerated() {
+                        let chunkID = UUID().uuidString
+                        let metadata = chunkMetadata(for: memory, chunkIndex: index, chunkId: chunkID)
+                        await similarityIndex.addItem(
+                            id: chunkID,
+                            text: chunkText,
+                            metadata: metadata,
+                            embedding: embeddings[index]
+                        )
+                        memoryChunkCount += 1
+                    }
+                    chunkCount += memoryChunkCount
+                    resetAutoRetryState(for: memory.id)
+                    itemResult = MemoryReembeddingItemResult(
+                        memoryID: memory.id,
+                        chunkCount: memoryChunkCount,
+                        errorMessage: nil
+                    )
+
+                case .failure(let error):
+                    failedMemories += 1
+                    notifyEmbeddingErrorIfNeeded(error)
+                    let message = error.localizedDescription
+                    currentErrorMessage = message
+                    logger.error("记忆重嵌入失败：\(message)")
+                    itemResult = MemoryReembeddingItemResult(
+                        memoryID: memory.id,
+                        chunkCount: 0,
+                        errorMessage: message
+                    )
+                }
+
+                results.append(itemResult)
                 publishEmbeddingProgress(
                     jobID: jobID,
                     kind: .reembedAll,
                     phase: .running,
-                    processedMemories: progressProcessed,
+                    processedMemories: processedMemories,
                     totalMemories: totalMemories,
-                    failedMemories: 0,
+                    failedMemories: failedMemories,
                     currentMemoryPreview: memoryPreview,
-                    errorMessage: nil
+                    errorMessage: currentErrorMessage
                 )
-                continue
+                await itemProgressHandler?(itemResult)
+
+                if Task.isCancelled {
+                    group.cancelAll()
+                    continue
+                }
+
+                if nextWorkItemIndex < workItems.count {
+                    let workItem = workItems[nextWorkItemIndex]
+                    nextWorkItemIndex += 1
+                    group.addTask { [self] in
+                        await prepareReembedding(for: workItem)
+                    }
+                    activeTaskCount += 1
+                }
             }
-            
-            let embeddings: [[Float]]
-            do {
-                embeddings = try await embeddingsWithRetry(for: chunkTexts)
-            } catch {
-                publishEmbeddingProgress(
-                    jobID: jobID,
-                    kind: .reembedAll,
-                    phase: .failed,
-                    processedMemories: progressProcessed,
-                    totalMemories: totalMemories,
-                    failedMemories: 1,
-                    currentMemoryPreview: memoryPreview,
-                    errorMessage: error.localizedDescription
-                )
-                throw error
-            }
-            
-            for (index, chunkText) in chunkTexts.enumerated() {
-                let chunkID = UUID().uuidString
-                let metadata = chunkMetadata(for: memory, chunkIndex: index, chunkId: chunkID)
-                await similarityIndex.addItem(
-                    id: chunkID,
-                    text: chunkText,
-                    metadata: metadata,
-                    embedding: embeddings[index]
-                )
-                chunkCount += 1
-            }
-            
-            processedMemories += 1
-            progressProcessed += 1
-            publishEmbeddingProgress(
-                jobID: jobID,
-                kind: .reembedAll,
-                phase: .running,
-                processedMemories: progressProcessed,
-                totalMemories: totalMemories,
-                failedMemories: 0,
-                currentMemoryPreview: memoryPreview,
-                errorMessage: nil
-            )
         }
-        
+
         saveIndex()
         publishEmbeddingProgress(
             jobID: jobID,
             kind: .reembedAll,
-            phase: .completed,
+            phase: failedMemories == 0 ? .completed : .failed,
             processedMemories: totalMemories,
             totalMemories: totalMemories,
-            failedMemories: 0,
+            failedMemories: failedMemories,
             currentMemoryPreview: nil,
-            errorMessage: nil
+            errorMessage: failedMemories == 0 ? nil : NSLocalizedString("部分记忆重嵌入失败，可点击失败项单独重试。", comment: "Memory reembedding partial failure message")
         )
-        logger.info("记忆重嵌入完成：\(processedMemories) 条记忆 -> \(chunkCount) 个分块。")
-        return MemoryReembeddingSummary(processedMemories: processedMemories, chunkCount: chunkCount)
+        logger.info("记忆重嵌入完成：\(processedMemories) 条记忆 -> \(chunkCount) 个分块，失败 \(failedMemories) 条。")
+        return results
+    }
+
+    private func prepareReembedding(for workItem: MemoryReembeddingWorkItem) async -> PreparedMemoryReembedding {
+        guard !workItem.chunkTexts.isEmpty else {
+            return PreparedMemoryReembedding(
+                memory: workItem.memory,
+                chunkTexts: workItem.chunkTexts,
+                result: .failure(MemoryEmbeddingError.emptyInput)
+            )
+        }
+
+        do {
+            let embeddings = try await embeddingsWithRetry(for: workItem.chunkTexts)
+            return PreparedMemoryReembedding(
+                memory: workItem.memory,
+                chunkTexts: workItem.chunkTexts,
+                result: .success(embeddings)
+            )
+        } catch {
+            return PreparedMemoryReembedding(
+                memory: workItem.memory,
+                chunkTexts: workItem.chunkTexts,
+                result: .failure(error)
+            )
+        }
     }
 
     // MARK: - 公开方法 (搜索)

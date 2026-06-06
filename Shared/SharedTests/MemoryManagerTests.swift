@@ -100,6 +100,18 @@ struct MemoryManagerTests {
         }
     }
 
+    actor ReembeddingResultRecorder {
+        private var results: [MemoryReembeddingItemResult] = []
+
+        func append(_ result: MemoryReembeddingItemResult) {
+            results.append(result)
+        }
+
+        func snapshot() -> [MemoryReembeddingItemResult] {
+            results
+        }
+    }
+
     private func cleanup(memoryManager: MemoryManager) async {
         let allMems = await memoryManager.getAllMemories()
         if !allMems.isEmpty {
@@ -247,10 +259,34 @@ struct MemoryManagerTests {
 
         if let last = events.last {
             #expect(last.phase == .failed)
-            #expect(last.processedMemories < last.totalMemories)
+            #expect(last.processedMemories == last.totalMemories)
+            #expect(last.failedMemories == 1)
         } else {
             Issue.record("未捕获到重嵌入失败进度事件。")
         }
+
+        await cleanup(memoryManager: memoryManager)
+    }
+
+    @Test("Detailed Reembed Reports Per Memory Results")
+    func testDetailedReembedReportsPerMemoryResults() async throws {
+        let memoryManager = MemoryManager(embeddingGenerator: MockEmbeddingGenerator())
+        await memoryManager.waitForInitialization()
+        await cleanup(memoryManager: memoryManager)
+
+        await memoryManager.addMemory(content: "用户喜欢手冲咖啡。")
+        await memoryManager.addMemory(content: "用户偏好简洁回答。")
+
+        let recorder = ReembeddingResultRecorder()
+        let results = try await memoryManager.reembedAllMemoriesDetailed(concurrencyLimit: 2) { result in
+            await recorder.append(result)
+        }
+        let callbackResults = await recorder.snapshot()
+
+        #expect(results.count == 2)
+        #expect(callbackResults.count == 2)
+        #expect(results.allSatisfy { $0.succeeded })
+        #expect(results.allSatisfy { $0.chunkCount > 0 })
 
         await cleanup(memoryManager: memoryManager)
     }

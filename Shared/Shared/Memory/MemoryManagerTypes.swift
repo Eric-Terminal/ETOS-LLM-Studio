@@ -25,6 +25,43 @@ public struct MemoryEmbeddingRetryPolicy {
 public struct MemoryReembeddingSummary {
     public let processedMemories: Int
     public let chunkCount: Int
+
+    public init(processedMemories: Int, chunkCount: Int) {
+        self.processedMemories = processedMemories
+        self.chunkCount = chunkCount
+    }
+}
+
+public struct MemoryReembeddingItemResult: Identifiable, Equatable {
+    public let memoryID: UUID
+    public let chunkCount: Int
+    public let errorMessage: String?
+
+    public var id: UUID { memoryID }
+    public var succeeded: Bool { errorMessage == nil }
+
+    public init(memoryID: UUID, chunkCount: Int, errorMessage: String?) {
+        self.memoryID = memoryID
+        self.chunkCount = chunkCount
+        self.errorMessage = errorMessage
+    }
+}
+
+public typealias MemoryReembeddingItemProgressHandler = (MemoryReembeddingItemResult) async -> Void
+
+public enum MemoryReembeddingError: LocalizedError {
+    case failedMemories(count: Int, firstMessage: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .failedMemories(let count, let firstMessage):
+            return String(
+                format: NSLocalizedString("%d 条记忆重嵌入失败：%@", comment: "Memory reembedding failed memories error"),
+                count,
+                firstMessage
+            )
+        }
+    }
 }
 
 public enum MemoryEmbeddingJobKind: Equatable {
