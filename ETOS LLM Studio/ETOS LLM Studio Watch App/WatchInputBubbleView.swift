@@ -11,6 +11,7 @@ import Shared
 
 struct WatchInputBubbleView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
 
     let isLiquidGlassEnabled: Bool
     let inputControlHeight: CGFloat
@@ -26,6 +27,7 @@ struct WatchInputBubbleView: View {
     @Binding var isRequestControlsPresented: Bool
     @Binding var isAttachmentImportPresented: Bool
     @Binding var attachmentSourceText: String
+    @State private var resourceUsageTask: Task<Void, Never>?
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -35,20 +37,58 @@ struct WatchInputBubbleView: View {
 
     private var transparentInputField: some View {
         ZStack(alignment: .leading) {
-            Text(viewModel.userInput.isEmpty ? inputPlaceholderText : viewModel.userInput)
-                .foregroundStyle(viewModel.userInput.isEmpty ? .secondary : .primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .allowsHitTesting(false)
+            inputDisplayText
             TextField("", text: $viewModel.userInput.watchKeyboardNewlineBinding())
                 .textFieldStyle(.plain)
                 .opacity(0.01)
                 .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
         }
-        .etFont(.body, sampleText: viewModel.userInput.isEmpty ? inputPlaceholderText : viewModel.userInput)
+        .etFont(.body, sampleText: viewModel.userInput.isEmpty ? inputSampleText : viewModel.userInput)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
         .layoutPriority(1)
+    }
+
+    private var inputSampleText: String {
+        if LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) {
+            return resourceUsageMonitor.snapshot.displayText
+        }
+        return inputPlaceholderText
+    }
+
+    @ViewBuilder
+    private var inputDisplayText: some View {
+        if viewModel.userInput.isEmpty {
+            if LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) {
+                MarqueeText(
+                    content: resourceUsageMonitor.snapshot.displayText,
+                    uiFont: .preferredFont(forTextStyle: .body),
+                    speed: 28,
+                    delay: 0.8,
+                    spacing: 24
+                )
+                .etFont(.body, sampleText: resourceUsageMonitor.snapshot.displayText)
+                .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(inputPlaceholderText)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .allowsHitTesting(false)
+                    .etFont(.body, sampleText: inputPlaceholderText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            Text(viewModel.userInput)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .allowsHitTesting(false)
+                .etFont(.body, sampleText: viewModel.userInput)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder
@@ -358,5 +398,37 @@ struct WatchInputBubbleView: View {
             } message: {
                 Text(viewModel.memoryEmbeddingErrorMessage)
             }
+            .onAppear {
+                updateResourceUsageSampling()
+            }
+            .onChange(of: viewModel.selectedModel?.id) { _, _ in
+                updateResourceUsageSampling()
+            }
+            .onDisappear {
+                stopResourceUsageSampling()
+            }
+    }
+
+    private func updateResourceUsageSampling() {
+        guard LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) else {
+            stopResourceUsageSampling()
+            return
+        }
+        guard resourceUsageTask == nil else { return }
+        resourceUsageTask = Task { @MainActor in
+            while !Task.isCancelled {
+                resourceUsageMonitor.refresh()
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopResourceUsageSampling() {
+        resourceUsageTask?.cancel()
+        resourceUsageTask = nil
     }
 }

@@ -168,6 +168,7 @@ public class ChatService {
     /// 重试 assistant 时保留原始消息快照，便于失败或取消时恢复，避免把错误写入版本历史。
     var retryTargetOriginalAssistantMessage: ChatMessage?
     var providers: [Provider]
+    let localModelStore: LocalModelStore
     let startupTemporarySession: ChatSession
     let adapters: [String: APIAdapter]
     let memoryManager: MemoryManager
@@ -447,6 +448,7 @@ public class ChatService {
         worldbookExportService: WorldbookExportService = WorldbookExportService(),
         worldbookEngine: WorldbookEngine = WorldbookEngine(),
         fileAttachmentTextExtractor: FileAttachmentTextExtractor = FileAttachmentTextExtractor(),
+        localModelStore: LocalModelStore = .shared,
         urlSession: URLSession = NetworkSessionConfiguration.shared
     ) {
         logger.info("ChatService 正在初始化...")
@@ -457,10 +459,16 @@ public class ChatService {
         self.worldbookExportService = worldbookExportService
         self.worldbookEngine = worldbookEngine
         self.fileAttachmentTextExtractor = fileAttachmentTextExtractor
+        self.localModelStore = localModelStore
         self.urlSession = urlSession
         ConfigLoader.setupInitialProviderConfigs()
         ConfigLoader.setupBackgroundsDirectory()
-        self.providers = ConfigLoader.loadProviders()
+        self.providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: ConfigLoader.loadProviders(),
+            records: localModelStore.models,
+            isEnabled: localModelStore.isProviderEnabled,
+            preferRecordBasics: true
+        )
         let startupTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
         self.startupTemporarySession = startupTemporarySession
         self.adapters = adapters ?? [
@@ -493,6 +501,11 @@ public class ChatService {
         self.currentSessionSubject
             .sink { [weak self] session in
                 self?.persistLastActiveSessionIDIfNeeded(session)
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .localModelStoreDidChange)
+            .sink { [weak self] _ in
+                self?.reloadProviders()
             }
             .store(in: &cancellables)
 

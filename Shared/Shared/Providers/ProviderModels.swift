@@ -214,11 +214,13 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     case reasoning
     case streaming
     case jsonMode
+    case embedding
     case speechToText
     case textToSpeech
 
     public static let editableCases: [ModelCapability] = [
-        .toolCalling
+        .toolCalling,
+        .embedding
     ]
 
     public var localizedName: String {
@@ -231,6 +233,8 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("流式输出", comment: "模型协议能力：流式输出")
         case .jsonMode:
             return NSLocalizedString("JSON 模式", comment: "模型协议能力：JSON 模式")
+        case .embedding:
+            return NSLocalizedString("嵌入", comment: "模型兼容能力：嵌入")
         case .speechToText:
             return NSLocalizedString("语音转文字", comment: "模型兼容能力：语音转文字")
         case .textToSpeech:

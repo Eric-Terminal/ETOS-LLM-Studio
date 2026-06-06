@@ -407,9 +407,6 @@ extension ChatService {
         guard let targetModel = runnableModel ?? detachedChatCompletionFallbackModel() else {
             throw DetachedCompletionError.noAvailableModel
         }
-        guard let adapter = adapters[targetModel.provider.apiFormat] else {
-            throw DetachedCompletionError.unsupportedAdapter
-        }
 
         var requestMessages: [ChatMessage] = []
         var didAttachLanguageInstruction = false
@@ -431,6 +428,30 @@ extension ChatService {
             : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt)
         requestMessages.append(ChatMessage(role: .user, content: finalUserPrompt))
 
+        let requestContext = RequestLogContext(
+            requestID: UUID(),
+            sessionID: sessionID,
+            providerID: targetModel.provider.id,
+            providerName: targetModel.provider.name,
+            modelID: targetModel.model.modelName,
+            requestSource: requestSource,
+            isStreaming: false,
+            requestedAt: Date()
+        )
+
+        if LocalModelProviderBridge.isLocalRunnableModel(targetModel) {
+            return try await generateDetachedLocalLLMCompletion(
+                runnableModel: targetModel,
+                requestMessages: requestMessages,
+                temperature: temperature,
+                requestLogContext: requestContext
+            )
+        }
+
+        guard let adapter = adapters[targetModel.provider.apiFormat] else {
+            throw DetachedCompletionError.unsupportedAdapter
+        }
+
         let payload: [String: Any] = [
             "temperature": temperature,
             "stream": false
@@ -448,17 +469,6 @@ extension ChatService {
         ) else {
             throw DetachedCompletionError.buildRequestFailed
         }
-
-        let requestContext = RequestLogContext(
-            requestID: UUID(),
-            sessionID: sessionID,
-            providerID: targetModel.provider.id,
-            providerName: targetModel.provider.name,
-            modelID: targetModel.model.modelName,
-            requestSource: requestSource,
-            isStreaming: false,
-            requestedAt: Date()
-        )
 
         do {
             let data = try await fetchData(for: request, provider: targetModel.provider)

@@ -98,6 +98,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case providerOrderIDs = "providerOrder.ids"
     case selectedRunnableModelID = "selectedRunnableModelID"
     case lastActiveSessionID = "launch.lastActiveSessionID"
+    case localModelsEnabled = "localModels.enabled"
+    case localModelPerformanceMonitorEnabled = "localModels.performanceMonitor.enabled"
+    case localModelCacheEnabled = "localModels.cache.enabled"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
     case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
@@ -244,6 +247,11 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .selectedRunnableModelID,
              .lastActiveSessionID:
             return .text("")
+        case .localModelsEnabled,
+             .localModelPerformanceMonitorEnabled:
+            return .bool(false)
+        case .localModelCacheEnabled:
+            return .bool(true)
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,
@@ -275,7 +283,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .aiTemperature:
             return .real(1.0)
         case .aiTopP:
-            return .real(0.95)
+            return .real(1.0)
         case .aiTemperatureEnabled,
              .aiTopPEnabled,
              .enableOpenAIStreamIncludeUsage,
@@ -460,6 +468,10 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .appLockTimeoutSeconds,
              .appLockBiometricEnabled,
              .databaseEncryptionEnabled:
+            return false
+        case .localModelsEnabled,
+             .localModelPerformanceMonitorEnabled,
+             .localModelCacheEnabled:
             return false
         default:
             return true

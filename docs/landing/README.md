@@ -23,4 +23,3 @@ pnpm preview  # 本地预览构建产物
 
 - **iPadOS 磁吸指针**（`useContextCursor.js`）—— 算法改编自 Marcel Wiethan 的 *context-cursor*（MIT，Copyright © 2020 Marcel Wiethan），经 [GoldenGoCoding/iPadOS](https://github.com/GoldenGoCoding/iPadOS) 引入；去掉了原版的 GSAP 依赖，改用 CSS 过渡 + requestAnimationFrame 插值。
 - **Liquid Glass 边缘折射**（`useLiquidGlass.js`）—— 改编自 [Shu Ding · liquid-glass](https://github.com/shuding/liquid-glass)（MIT）。
-

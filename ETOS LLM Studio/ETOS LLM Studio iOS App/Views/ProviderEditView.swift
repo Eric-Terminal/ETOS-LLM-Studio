@@ -28,6 +28,9 @@ struct ProviderEditView: View {
     let showsToolbarSaveButton: Bool
     let onSaveAvailabilityChange: (Bool) -> Void
     let onSave: (Provider) -> Void
+    private var isLocalProvider: Bool {
+        LocalModelProviderBridge.isLocalProvider(provider)
+    }
     
     init(
         provider: Provider,
@@ -74,6 +77,7 @@ struct ProviderEditView: View {
                     Text("Gemini").tag("gemini")
                     Text("Anthropic").tag("anthropic")
                 }
+                .disabled(isLocalProvider)
             }
             
             Section(header: Text(NSLocalizedString("认证", comment: "")), footer: Text(apiKeysHint)) {
@@ -197,8 +201,7 @@ struct ProviderEditView: View {
         updated.apiKeys = parsedApiKeys
         updated.headerOverrides = headerOverrides
         updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
-        ConfigLoader.saveProvider(updated)
-        ChatService.shared.reloadProviders()
+        ChatService.shared.saveProviderFromManagement(updated)
         provider = updated
         onSave(updated)
         notifySaveAvailability()
@@ -212,6 +215,9 @@ struct ProviderEditView: View {
     }
 
     private var apiBaseURLHint: String {
+        if isLocalProvider {
+            return NSLocalizedString("本地提供商只用于模型管理和排序；API 地址、认证、请求头和代理会被保留但不会参与本地推理。", comment: "Local provider base URL hint")
+        }
         switch provider.apiFormat {
         case "gemini":
             return NSLocalizedString("API 地址应为基础地址，例如: https://generativelanguage.googleapis.com/v1beta", comment: "")
@@ -225,7 +231,10 @@ struct ProviderEditView: View {
     }
 
     private var apiKeysHint: String {
-        NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
+        if isLocalProvider {
+            return NSLocalizedString("本地推理不会读取 API Key。这里保留字段只是为了沿用提供商配置界面。", comment: "Local provider API key hint")
+        }
+        return NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
     }
 
     private var numberFormatter: NumberFormatter {
@@ -271,7 +280,7 @@ struct ProviderEditView: View {
     private var isSaveDisabled: Bool {
         provider.name.isEmpty ||
         provider.baseURL.isEmpty ||
-        parsedApiKeys.isEmpty ||
+        (!isLocalProvider && parsedApiKeys.isEmpty) ||
         providerProxyValidationError != nil ||
         headerOverrideEntries.contains { $0.error != nil }
     }

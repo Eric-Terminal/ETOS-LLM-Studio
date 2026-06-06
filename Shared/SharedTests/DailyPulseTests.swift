@@ -223,3 +223,19 @@ struct DailyPulseTests {
 
     // 上下文与交付类测试已拆分到 `DailyPulseContextAndDeliveryTests.swift`。
 }
+
+private func makeRunnableModel(name: String, kind: ModelKind = .chat) -> RunnableModel {
+    let provider = Provider(
+        name: "测试提供商",
+        baseURL: "https://example.com",
+        apiKeys: ["test"],
+        apiFormat: "openai-compatible"
+    )
+    let model = Model(
+        modelName: name,
+        displayName: name,
+        isActivated: true,
+        kind: kind
+    )
+    return RunnableModel(provider: provider, model: model)
+}

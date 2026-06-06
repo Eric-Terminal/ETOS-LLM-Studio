@@ -94,7 +94,7 @@ extension ChatServiceTests {
     }
 
     @Test("文件附件会在发送前转换为纯文本并清空原始附件")
-    func testFileAttachmentsAreTextifiedBeforeSending() async {
+    func testFileAttachmentsAreTextifiedBeforeSending() async throws {
         await cleanup()
         let session = createPermanentTestSession()
         defer { chatService.deleteSessions([session]) }
@@ -123,8 +123,8 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            fileAttachments: [firstAttachment, secondAttachment],
-            includeSystemTime: false
+            includeSystemTime: false,
+            fileAttachments: [firstAttachment, secondAttachment]
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
@@ -193,8 +193,8 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            imageAttachments: [firstImage, secondImage],
-            includeSystemTime: false
+            includeSystemTime: false,
+            imageAttachments: [firstImage, secondImage]
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
@@ -235,8 +235,8 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            fileAttachments: [attachment],
-            includeSystemTime: false
+            includeSystemTime: false,
+            fileAttachments: [attachment]
         )
 
         let secondSession = createPermanentTestSession(name: "附件复用二")
@@ -254,8 +254,8 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            fileAttachments: [attachment],
-            includeSystemTime: false
+            includeSystemTime: false,
+            fileAttachments: [attachment]
         )
 
         let firstFileName = try #require(Persistence.loadMessages(for: firstSession.id).first { $0.fileFileNames?.isEmpty == false }?.fileFileNames?.first)
@@ -301,10 +301,10 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
+            includeSystemTime: false,
             audioAttachment: audioAttachment,
             imageAttachments: [imageAttachment],
-            fileAttachments: [fileAttachment],
-            includeSystemTime: false
+            fileAttachments: [fileAttachment]
         )
 
         let storedUserMessages = Persistence.loadMessages(for: session.id).filter { $0.role == .user }
@@ -351,8 +351,8 @@ extension ChatServiceTests {
             enhancedPrompt: nil,
             enableMemory: false,
             enableMemoryWrite: false,
-            fileAttachments: [attachment],
-            includeSystemTime: false
+            includeSystemTime: false,
+            fileAttachments: [attachment]
         )
 
         #expect(mockAdapter.receivedMessages == nil)

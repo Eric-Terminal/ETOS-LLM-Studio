@@ -148,6 +148,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var appLockTimeoutSeconds: Int { didSet { write(.appLockTimeoutSeconds, appLockTimeoutSeconds) } }
     @Published public var appLockBiometricEnabled: Bool { didSet { write(.appLockBiometricEnabled, appLockBiometricEnabled) } }
     @Published public var databaseEncryptionEnabled: Bool { didSet { write(.databaseEncryptionEnabled, databaseEncryptionEnabled) } }
+    @Published public var localModelsEnabled: Bool { didSet { write(.localModelsEnabled, localModelsEnabled) } }
+    @Published public var localModelPerformanceMonitorEnabled: Bool { didSet { write(.localModelPerformanceMonitorEnabled, localModelPerformanceMonitorEnabled) } }
+    @Published public var localModelCacheEnabled: Bool { didSet { write(.localModelCacheEnabled, localModelCacheEnabled) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -289,6 +292,9 @@ public final class AppConfigStore: ObservableObject {
         appLockTimeoutSeconds = Self.integerValue(.appLockTimeoutSeconds, userDefaults: userDefaults)
         appLockBiometricEnabled = Self.boolValue(.appLockBiometricEnabled, userDefaults: userDefaults)
         databaseEncryptionEnabled = Self.boolValue(.databaseEncryptionEnabled, userDefaults: userDefaults)
+        localModelsEnabled = Self.boolValue(.localModelsEnabled, userDefaults: userDefaults)
+        localModelPerformanceMonitorEnabled = Self.boolValue(.localModelPerformanceMonitorEnabled, userDefaults: userDefaults)
+        localModelCacheEnabled = Self.boolValue(.localModelCacheEnabled, userDefaults: userDefaults)
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
         aiTopP = Self.realValue(.aiTopP, userDefaults: userDefaults)
@@ -716,6 +722,9 @@ public final class AppConfigStore: ObservableObject {
         case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
         case .appLockBiometricEnabled: return .bool(appLockBiometricEnabled)
         case .databaseEncryptionEnabled: return .bool(databaseEncryptionEnabled)
+        case .localModelsEnabled: return .bool(localModelsEnabled)
+        case .localModelPerformanceMonitorEnabled: return .bool(localModelPerformanceMonitorEnabled)
+        case .localModelCacheEnabled: return .bool(localModelCacheEnabled)
 
         case .aiTemperature: return .real(aiTemperature)
         case .aiTopP: return .real(aiTopP)
@@ -854,6 +863,9 @@ public final class AppConfigStore: ObservableObject {
         case .appLockEnabled: appLockEnabled = value
         case .appLockBiometricEnabled: appLockBiometricEnabled = value
         case .databaseEncryptionEnabled: databaseEncryptionEnabled = value
+        case .localModelsEnabled: localModelsEnabled = value
+        case .localModelPerformanceMonitorEnabled: localModelPerformanceMonitorEnabled = value
+        case .localModelCacheEnabled: localModelCacheEnabled = value
         case .aiTemperatureEnabled: aiTemperatureEnabled = value
         case .aiTopPEnabled: aiTopPEnabled = value
         case .enableStreaming: enableStreaming = value

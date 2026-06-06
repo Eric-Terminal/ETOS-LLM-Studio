@@ -73,8 +73,6 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "CloudEmbeddingService")
     private let adapters: [String: APIAdapter]
     private let urlSession: URLSession
-    private var cachedRunnableModels: [RunnableModel]?
-    private let cacheQueue = DispatchQueue(label: "com.etos.embeddings.cache")
     
     init(
         adapters: [String: APIAdapter] = [
@@ -100,6 +98,9 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         }
         
         let targetModel = try resolveModel(preferredID: preferredModelID, from: embeddingModels)
+        if LocalModelProviderBridge.isLocalRunnableModel(targetModel) {
+            return try await generateLocalEmbeddings(for: texts, using: targetModel)
+        }
         guard let adapter = adapters[targetModel.provider.apiFormat] else {
             throw MemoryEmbeddingError.adapterMissing(targetModel.provider.apiFormat)
         }
@@ -125,29 +126,24 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
     }
     
     private func loadRunnableModels() -> [RunnableModel] {
-        // 使用缓存避免重复加载
-        return cacheQueue.sync {
-            if let cached = cachedRunnableModels {
-                return cached
+        let localModelStore = LocalModelStore.shared
+        let providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: ConfigLoader.loadProviders(),
+            records: localModelStore.models,
+            isEnabled: localModelStore.isProviderEnabled,
+            preferRecordBasics: true
+        )
+        var runnable: [RunnableModel] = []
+        for provider in providers {
+            for model in provider.models {
+                runnable.append(RunnableModel(provider: provider, model: model))
             }
-            
-            let providers = ConfigLoader.loadProviders()
-            var runnable: [RunnableModel] = []
-            for provider in providers {
-                for model in provider.models {
-                    runnable.append(RunnableModel(provider: provider, model: model))
-                }
-            }
-            cachedRunnableModels = runnable
-            return runnable
         }
+        return runnable
     }
     
     /// 清除缓存，当提供商配置发生变化时调用
     func clearCache() {
-        cacheQueue.sync {
-            cachedRunnableModels = nil
-        }
     }
     
     private func resolveModel(preferredID: String?, from models: [RunnableModel]) throws -> RunnableModel {
@@ -162,5 +158,39 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         }
 
         return models[0]
+    }
+
+    private func generateLocalEmbeddings(for texts: [String], using runnableModel: RunnableModel) async throws -> [[Float]] {
+        guard let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id),
+              let record = LocalModelStore.shared.models.first(where: { $0.id == recordID }),
+              LocalModelStore.shared.fileExists(for: record) else {
+            throw MemoryEmbeddingError.preferredModelUnavailable(runnableModel.id)
+        }
+
+        let overrides = runnableModel.effectiveOverrideParameters
+        return try await LocalLLMEngine.shared.embed(
+            texts: texts,
+            modelURL: LocalModelStore.shared.fileURL(for: record),
+            options: LocalLLMEmbeddingOptions(
+                contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
+                gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers
+            )
+        )
+    }
+}
+
+private extension Dictionary where Key == String, Value == JSONValue {
+    func localIntValue(for key: String) -> Int? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            return rawValue
+        case .double(let rawValue):
+            return Int(rawValue)
+        case .string(let rawValue):
+            return Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
     }
 }
