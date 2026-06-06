@@ -100,7 +100,7 @@ extension ChatView {
         pendingHistoryResetWorkItem = nil
         shouldRestorePendingJumpOnAppear = false
 
-        let shouldResetHistoryWindow = viewModel.lazyLoadMessageCount > 0
+        let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading || viewModel.usesAutomaticHistoryWindow
         showScrollToBottom = false
 
         guard shouldResetHistoryWindow else {
@@ -123,6 +123,19 @@ extension ChatView {
         pendingHistoryResetWorkItem = workItem
 
         DispatchQueue.main.async(execute: workItem)
+    }
+
+    func loadMoreAutomaticHistoryIfNeeded(
+        anchorMessageID: UUID,
+        isFirstDisplayedMessage: Bool
+    ) {
+        guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
+        suppressAutoScrollOnce = true
+        let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
+        guard didLoad else { return }
+        DispatchQueue.main.async {
+            setScrollTarget(.message(anchorMessageID), anchor: .top, animated: false, animation: .linear(duration: 0))
+        }
     }
 
     func scheduleImmediateBottomSnap() {
@@ -185,6 +198,9 @@ extension ChatView {
                 withAnimation(.easeInOut(duration: 0.18)) {
                     showScrollToBottom = shouldShow
                 }
+            }
+            if normalizedDistance < 24, viewModel.resetAutomaticHistoryWindowIfNeeded() {
+                scheduleDeferredBottomSnap()
             }
         }
     }

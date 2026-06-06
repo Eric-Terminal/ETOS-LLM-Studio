@@ -636,7 +636,7 @@ extension ChatView {
                         }
                         .frame(width: 0, height: 0)
 
-                        VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear.frame(height: 8)
 
@@ -707,6 +707,12 @@ extension ChatView {
                                     providers: viewModel.providers
                                 )
                                 .id(ChatScrollTargetID.message(state.id))
+                                .onAppear {
+                                    loadMoreAutomaticHistoryIfNeeded(
+                                        anchorMessageID: state.id,
+                                        isFirstDisplayedMessage: index == 0
+                                    )
+                                }
                             }
 
                             Color.clear

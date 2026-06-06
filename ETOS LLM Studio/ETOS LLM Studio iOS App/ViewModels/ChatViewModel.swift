@@ -172,7 +172,12 @@ final class ChatViewModel: ObservableObject {
         didSet { AppConfigStore.shared.enableOpenAIStreamIncludeUsage = enableOpenAIStreamIncludeUsage }
     }
     @Published var lazyLoadMessageCount: Int = AppConfigStore.shared.lazyLoadMessageCount {
-        didSet { AppConfigStore.shared.lazyLoadMessageCount = lazyLoadMessageCount }
+        didSet {
+            AppConfigStore.shared.lazyLoadMessageCount = lazyLoadMessageCount
+            guard oldValue != lazyLoadMessageCount else { return }
+            additionalHistoryLoaded = 0
+            updateDisplayedMessages()
+        }
     }
     @Published var currentBackgroundImage: String = AppConfigStore.shared.currentBackgroundImage {
         didSet {
@@ -326,6 +331,8 @@ final class ChatViewModel: ObservableObject {
     var additionalHistoryLoaded: Int = 0
     var lastSessionID: UUID?
     let incrementalHistoryBatchSize = 5
+    let automaticHistoryWindowSize = 120
+    let automaticHistoryBatchSize = 80
     var visibleMessagesCache: [ChatMessage] = []
     var visibleMessagesWeightedCount: Int = 0
     var cancellables = Set<AnyCancellable>()

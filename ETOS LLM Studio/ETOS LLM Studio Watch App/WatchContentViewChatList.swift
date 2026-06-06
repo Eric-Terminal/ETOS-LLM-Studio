@@ -23,7 +23,7 @@ extension ContentView {
             }
 
             let remainingCount = viewModel.remainingHistoryCount
-            if !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
+            if viewModel.usesManualHistoryLoading && !viewModel.isHistoryFullyLoaded && remainingCount > 0 {
                 let chunk = viewModel.historyLoadChunkCount
                 Button(action: {
                     suppressAutoScrollOnce = true
@@ -81,6 +81,13 @@ extension ContentView {
                         messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
                     }
                 )
+                .onAppear {
+                    loadMoreAutomaticHistoryIfNeeded(
+                        proxy: proxy,
+                        anchorMessageID: state.id,
+                        isFirstDisplayedMessage: index == 0
+                    )
+                }
             }
 
             if viewModel.activeAskUserInputRequest == nil {
@@ -140,6 +147,9 @@ extension ContentView {
                         isAtBottom = true
                         shouldKeepBottomPinned = true
                         showScrollToBottomButton = false
+                        if viewModel.resetAutomaticHistoryWindowIfNeeded() {
+                            scheduleDeferredBottomSnap(proxy: proxy)
+                        }
                     }
                     .onDisappear {
                         bottomAnchorVisibilityWorkItem?.cancel()
@@ -249,7 +259,8 @@ extension ContentView {
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
 
-            guard viewModel.lazyLoadMessageCount > 0 else {
+            let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading || viewModel.usesAutomaticHistoryWindow
+            guard shouldResetHistoryWindow else {
                 scrollToBottom(proxy: proxy, animated: true)
                 return
             }
@@ -339,6 +350,20 @@ extension ContentView {
             }
         } else {
             action()
+        }
+    }
+
+    func loadMoreAutomaticHistoryIfNeeded(
+        proxy: ScrollViewProxy,
+        anchorMessageID: UUID,
+        isFirstDisplayedMessage: Bool
+    ) {
+        guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
+        suppressAutoScrollOnce = true
+        let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
+        guard didLoad else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(anchorMessageID, anchor: .top)
         }
     }
 

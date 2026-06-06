@@ -10,6 +10,14 @@ import Foundation
 import Shared
 
 extension ChatViewModel {
+    var usesAutomaticHistoryWindow: Bool {
+        lazyLoadMessageCount == 0
+    }
+
+    var usesManualHistoryLoading: Bool {
+        lazyLoadMessageCount > 0
+    }
+
     func updateDisplayedMessages() {
         ensureVisibleMessagesCachePrepared()
 
@@ -32,6 +40,17 @@ extension ChatViewModel {
                 updateHistoryFullyLoadedIfNeeded(true)
                 additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, weightedCount - lazyCount))
             }
+        } else if usesAutomaticHistoryWindow && weightedCount > automaticHistoryWindowSize {
+            let limit = automaticHistoryWindowSize + additionalHistoryLoaded
+            if weightedCount > limit {
+                let subset = Self.suffixMessagesForLazyLoad(filtered, weightedLimit: limit)
+                updateDisplayedStatesIfNeeded(subset)
+                updateHistoryFullyLoadedIfNeeded(false)
+            } else {
+                updateDisplayedStatesIfNeeded(filtered)
+                updateHistoryFullyLoadedIfNeeded(true)
+                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, weightedCount - automaticHistoryWindowSize))
+            }
         } else {
             updateDisplayedStatesIfNeeded(filtered)
             updateHistoryFullyLoadedIfNeeded(true)
@@ -52,9 +71,26 @@ extension ChatViewModel {
         updateDisplayedMessages()
     }
 
+    @discardableResult
+    func loadMoreAutomaticHistoryIfNeeded(count: Int? = nil) -> Bool {
+        guard usesAutomaticHistoryWindow, !isHistoryFullyLoaded else { return false }
+        let previousLoaded = additionalHistoryLoaded
+        let increment = count ?? automaticHistoryBatchSize
+        additionalHistoryLoaded += increment
+        updateDisplayedMessages()
+        return additionalHistoryLoaded != previousLoaded
+    }
+
     func resetLazyLoadState() {
         additionalHistoryLoaded = 0
         updateDisplayedMessages()
+    }
+
+    @discardableResult
+    func resetAutomaticHistoryWindowIfNeeded() -> Bool {
+        guard usesAutomaticHistoryWindow, additionalHistoryLoaded > 0 else { return false }
+        resetLazyLoadState()
+        return true
     }
 
     func hasAutoOpenedPendingToolCall(_ toolCallID: String) -> Bool {

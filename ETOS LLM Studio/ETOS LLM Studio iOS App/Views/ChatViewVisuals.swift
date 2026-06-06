@@ -154,7 +154,7 @@ extension ChatView {
     @ViewBuilder
     var historyBanner: some View {
         let remainingCount = viewModel.remainingHistoryCount
-        if remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
+        if viewModel.usesManualHistoryLoading && remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
             let chunk = viewModel.historyLoadChunkCount
             Button {
                 suppressAutoScrollOnce = true
