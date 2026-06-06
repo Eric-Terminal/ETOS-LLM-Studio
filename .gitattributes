@@ -1,0 +1,12 @@
+# 让 GitHub Linguist 把 Xcode 维护的工程/工作区元数据视为自动生成文件，
+# 避免它们在语言统计、PR diff 和部分变更展示里放大代码改动量。
+*.xcodeproj/** linguist-generated=true
+*.xcworkspace/** linguist-generated=true
+*.pbxproj linguist-generated=true
+*.xcworkspacedata linguist-generated=true
+*.xcuserstate linguist-generated=true
+*.xcbkptlist linguist-generated=true
+xcschememanagement.plist linguist-generated=true
+
+# Xcode 用户级设置与断点文件也属于机器/本机状态，不参与代码量统计。
+*.xcuserdatad/** linguist-generated=true
