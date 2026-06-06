@@ -14,6 +14,7 @@ struct MemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @State private var isAddingMemory = false
     @State private var editingMemory: MemoryItem?
+    @State private var isShowingRetrievalIntroDetails = false
     @ObservedObject private var appConfig = AppConfigStore.shared
     
     private var embeddingModelBinding: Binding<RunnableModel?> {
@@ -66,6 +67,26 @@ struct MemorySettingsView: View {
             }
 
             Section {
+                settingsIntroCard(
+                    title: "记忆检索",
+                    summary: "控制记忆如何被选中，并决定发送给模型时附带哪些信息。",
+                    details: """
+                    检索数量 (Top K)
+                    • 大于 0 时，会按当前消息检索最相关的记忆。
+                    • 设置为 0 时，跳过向量检索，直接发送所有激活记忆原文。
+                    • 默认 3。
+
+                    主动检索
+                    • 开启后会向 AI 暴露 search_memory 工具。
+                    • AI 可按向量或关键词主动检索，并指定返回数量。
+                    • 主动检索可能降低上下文缓存命中率。
+
+                    发送更新时间
+                    • 开启时，每条记忆会附带最近更新时间。
+                    • 关闭时，只发送记忆条目内容。
+                    """,
+                    isExpanded: $isShowingRetrievalIntroDetails
+                )
                 LabeledContent(NSLocalizedString("检索数量 (Top K)", comment: "")) {
                     TextField(NSLocalizedString("0 表示关闭检索", comment: ""), value: $appConfig.memoryTopK, formatter: numberFormatter)
                         .keyboardType(.numberPad)
@@ -84,19 +105,11 @@ struct MemorySettingsView: View {
                         NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
                         isOn: $viewModel.enableMemoryActiveRetrieval
                     )
-                    Text(
-                        NSLocalizedString(
-                            "开启后会向 AI 暴露记忆检索工具，AI 可按向量或关键词主动检索，并指定返回数量。",
-                            comment: "Active retrieval toggle description"
-                        )
-                    )
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
                 }
             } header: {
                 Text(NSLocalizedString("检索设置", comment: ""))
             } footer: {
-                Text(NSLocalizedString("如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。关闭“发送更新时间”后，发送给模型的记忆只包含条目内容。", comment: ""))
+                Text(NSLocalizedString("Top K 为 0 时不执行检索；默认 3。", comment: "Memory retrieval settings footer"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -260,5 +273,43 @@ struct MemorySettingsView: View {
             return NSLocalizedString("未选择", comment: "")
         }
         return "\(selected.model.displayName) | \(selected.provider.name)"
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(NSLocalizedString(title, comment: "记忆检索介绍卡片标题"))
+                .etFont(.headline.weight(.semibold))
+            Text(NSLocalizedString(summary, comment: "记忆检索介绍卡片摘要"))
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: "记忆检索介绍卡片展开按钮"))
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString(details, comment: "记忆检索介绍卡片详情"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString(title, comment: "记忆检索介绍卡片详情标题"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 }

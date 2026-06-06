@@ -523,8 +523,11 @@
 "记忆内容" = "Memory content";
 "记忆列表" = "Memory list";
 "记忆库管理 (系统版本过低)" = "Memory library management (OS version too low)";
+"记忆检索" = "Memory retrieval";
+"控制记忆如何被选中，并决定发送给模型时附带哪些信息。" = "Controls how memories are selected and which extra information is sent to the model.";
+"检索数量 (Top K)\n• 大于 0 时，会按当前消息检索最相关的记忆。\n• 设置为 0 时，跳过向量检索，直接发送所有激活记忆原文。\n• 默认 3。\n\n主动检索\n• 开启后会向 AI 暴露 search_memory 工具。\n• AI 可按向量或关键词主动检索，并指定返回数量。\n• 主动检索可能降低上下文缓存命中率。\n\n发送更新时间\n• 开启时，每条记忆会附带最近更新时间。\n• 关闭时，只发送记忆条目内容。" = "Retrieval count (Top K)\n• When greater than 0, the most relevant memories are retrieved for the current message.\n• When set to 0, vector retrieval is skipped and all active memory text is sent directly.\n• Default is 3.\n\nActive retrieval\n• When enabled, AI can use the search_memory tool.\n• AI can search by vector or keyword and choose the result count.\n• Active retrieval may reduce context cache hit rates.\n\nSend update time\n• When enabled, each memory includes its latest update time.\n• When disabled, only the memory entry content is sent.";
 "发送更新时间" = "Send update time";
-"如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。关闭“发送更新时间”后，发送给模型的记忆只包含条目内容。" = "Enabling retrieval may make context cache hit rates extremely low. To turn retrieval off, set Top K to 0. Default is 3. When \"Send update time\" is off, memories sent to the model include only the entry content.";
+"Top K 为 0 时不执行检索；默认 3。" = "Top K = 0 disables retrieval. Default is 3.";
 "设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。" = "Set to 0 to skip retrieval and inject all memory text. Default is 3.";
 "设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。" = "Set how many recent messages are sent to the model. For example, 10 sends the last 5 user + 5 AI messages. 0 means no limit.";
 "设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。" = "Set the default number of recent messages when entering history. This reduces memory/perf cost for long chats. 0 disables and loads all messages.";
