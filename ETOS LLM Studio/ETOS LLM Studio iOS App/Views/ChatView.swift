@@ -334,10 +334,6 @@ private struct LocalResourceUsageFloatingPanel: View {
 
         panelContent
             .frame(width: panelWidth, height: panelHeight, alignment: .topLeading)
-            .offset(
-                x: defaultCenter(for: panelSize).x + currentOffset.width - containerSize.width / 2,
-                y: defaultCenter(for: panelSize).y + currentOffset.height - containerSize.height / 2
-            )
             .contentShape(RoundedRectangle(cornerRadius: isExpanded ? 14 : 18, style: .continuous))
             .onTapGesture {
                 withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
@@ -346,6 +342,10 @@ private struct LocalResourceUsageFloatingPanel: View {
                 }
             }
             .simultaneousGesture(dragGesture(panelSize: panelSize))
+            .position(
+                x: defaultCenter(for: panelSize).x + currentOffset.width,
+                y: defaultCenter(for: panelSize).y + currentOffset.height
+            )
             .onAppear {
                 startSampling()
             }
