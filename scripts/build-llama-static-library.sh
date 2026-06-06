@@ -36,21 +36,12 @@ case "$SDK_NAME" in
 esac
 
 # 本地调试只需要当前目标架构；CI 和显式架构列表保留完整产物。
+# Xcode 的脚本阶段可能只运行一次并把 CURRENT_ARCH 设为 undefined_arch。
+# 这种情况下如果 ARCHS 是多架构，必须保留完整列表，否则后续链接会缺 slice。
 if [ "$EXPLICIT_LLAMA_ARCHS" = "0" ] && [ "${CI_XCODE_CLOUD:-FALSE}" != "TRUE" ] && [ "${ETOS_LLAMA_FULL_ARCHS:-0}" != "1" ]; then
     if [ -n "${CURRENT_ARCH:-}" ] && [ "$CURRENT_ARCH" != "undefined_arch" ]; then
         case " $REQUESTED_ARCHS " in
             *" $CURRENT_ARCH "*) REQUESTED_ARCHS="$CURRENT_ARCH" ;;
-        esac
-    else
-        NATIVE_ARCH="$(uname -m)"
-        case " $REQUESTED_ARCHS " in
-            *" $NATIVE_ARCH "*) REQUESTED_ARCHS="$NATIVE_ARCH" ;;
-            *)
-                for arch in $REQUESTED_ARCHS; do
-                    REQUESTED_ARCHS="$arch"
-                    break
-                done
-                ;;
         esac
     fi
 fi
