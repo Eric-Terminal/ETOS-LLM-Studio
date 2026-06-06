@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import Shared
 
 extension ChatViewModel {
     enum ImageGenerationFeedbackPhase {
@@ -50,5 +51,10 @@ extension ChatViewModel {
     struct PendingBackgroundReplyNotificationContext {
         let baselineMarker: AssistantReplyMarker?
         let sessionName: String?
+    }
+
+    struct MessageRewritePayload: Identifiable {
+        let id = UUID()
+        let message: ChatMessage
     }
 }

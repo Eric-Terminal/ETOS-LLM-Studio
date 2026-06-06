@@ -125,9 +125,11 @@ struct UsageAnalyticsView: View {
                         Text(String(format: NSLocalizedString("Token %d · 错误 %d", comment: ""), card.totalTokens, card.errorCount))
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
-                        Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costSummaryText(card.costSummary)))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
+                        if let costText = costSummaryText(card.costSummary) {
+                            Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costText))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                         HStack(spacing: 3) {
                             Text(String(format: NSLocalizedString("常用模型：%@", comment: ""), ""))
                                 .etFont(.caption2)
@@ -184,9 +186,15 @@ struct UsageAnalyticsView: View {
                                     .etFont(.caption2.monospaced())
                                     .foregroundStyle(.secondary)
                             }
-                            Text(String(format: NSLocalizedString("Token %@ · 费用 %@", comment: "Watch model token and cost"), formattedNumber(series.totalTokens), costSummaryText(series.costSummary)))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
+                            if let costText = costSummaryText(series.costSummary) {
+                                Text(String(format: NSLocalizedString("Token %@ · 费用 %@", comment: "Watch model token and cost"), formattedNumber(series.totalTokens), costText))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(String(format: NSLocalizedString("Token %@", comment: "Watch model token count"), formattedNumber(series.totalTokens)))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     } else {
                         Text(NSLocalizedString("当前范围内还没有 Token 趋势数据。", comment: "Usage analytics empty token trend"))
@@ -208,9 +216,11 @@ struct UsageAnalyticsView: View {
                     Text(String(format: NSLocalizedString("Token %d · 取消 %d", comment: ""), viewModel.state.detail.tokenTotals.totalTokens, viewModel.state.detail.cancelledCount))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
-                    Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costSummaryText(viewModel.state.detail.costSummary)))
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
+                    if let costText = costSummaryText(viewModel.state.detail.costSummary) {
+                        Text(String(format: NSLocalizedString("费用 %@", comment: "Usage estimated cost"), costText))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     Text(String(
                         format: NSLocalizedString("缓存读取 %d · 缓存写入 %d · 命中 %@", comment: "Cache token totals summary"),
                         viewModel.state.detail.tokenTotals.cacheReadTokens,
@@ -436,9 +446,9 @@ struct UsageAnalyticsView: View {
         return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
-    private func costSummaryText(_ summary: UsageAnalyticsCostSummary) -> String {
+    private func costSummaryText(_ summary: UsageAnalyticsCostSummary) -> String? {
         guard !summary.totals.isEmpty else {
-            return NSLocalizedString("暂无", comment: "No usage analytics metric value")
+            return nil
         }
         return MessageCostFormatter.formatTotal(summary.totals.reduce(0) { $0 + $1.totalCost })
     }

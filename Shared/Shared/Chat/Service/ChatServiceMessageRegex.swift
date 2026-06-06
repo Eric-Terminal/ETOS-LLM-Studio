@@ -13,6 +13,8 @@ extension ChatService {
         from message: ChatMessage,
         rules: [MessageRegexRule] = MessageRegexRuleStore.currentRules()
     ) -> ChatMessage {
+        guard !rules.isEmpty else { return message }
+
         let scope: MessageRegexRoleScope
         switch message.role {
         case .user:
@@ -39,7 +41,9 @@ extension ChatService {
         scope: MessageRegexRoleScope,
         mode: MessageRegexMode
     ) -> String {
-        MessageRegexRuleTransformer.apply(
+        guard !rules.isEmpty else { return content }
+
+        return MessageRegexRuleTransformer.apply(
             content,
             rules: rules,
             scope: scope,
@@ -52,6 +56,8 @@ extension ChatService {
         rules: [MessageRegexRule] = MessageRegexRuleStore.currentRules(),
         mode: MessageRegexMode
     ) -> ChatMessage {
+        guard !rules.isEmpty else { return message }
+
         let scope: MessageRegexRoleScope
         switch message.role {
         case .user:

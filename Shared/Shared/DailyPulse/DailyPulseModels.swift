@@ -226,6 +226,7 @@ public enum DailyPulseGenerationError: LocalizedError {
 internal struct DailyPulseGenerationInput: Sendable {
     let focusText: String
     let curationText: String
+    let globalSystemPrompt: String
     let sessionExcerpts: [DailyPulseSessionExcerpt]
     let memories: [String]
     let requestLogSummary: String
@@ -233,9 +234,32 @@ internal struct DailyPulseGenerationInput: Sendable {
     let preferenceProfile: DailyPulsePreferenceProfile
     let externalContext: DailyPulseExternalContext
 
+    init(
+        focusText: String,
+        curationText: String,
+        globalSystemPrompt: String = "",
+        sessionExcerpts: [DailyPulseSessionExcerpt],
+        memories: [String],
+        requestLogSummary: String,
+        activeTasks: [DailyPulseTask],
+        preferenceProfile: DailyPulsePreferenceProfile,
+        externalContext: DailyPulseExternalContext
+    ) {
+        self.focusText = focusText
+        self.curationText = curationText
+        self.globalSystemPrompt = globalSystemPrompt
+        self.sessionExcerpts = sessionExcerpts
+        self.memories = memories
+        self.requestLogSummary = requestLogSummary
+        self.activeTasks = activeTasks
+        self.preferenceProfile = preferenceProfile
+        self.externalContext = externalContext
+    }
+
     var hasUsableContext: Bool {
         !focusText.isEmpty
             || !curationText.isEmpty
+            || !globalSystemPrompt.isEmpty
             || !sessionExcerpts.isEmpty
             || !memories.isEmpty
             || !requestLogSummary.isEmpty
@@ -252,6 +276,7 @@ internal struct DailyPulseGenerationInput: Sendable {
         return [
             focusText,
             curationText,
+            globalSystemPrompt,
             sessionDigest,
             memoryDigest,
             requestLogSummary,

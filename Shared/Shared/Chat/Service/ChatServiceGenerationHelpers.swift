@@ -66,7 +66,9 @@ extension ChatService {
         let summaryUserPrompt = String(
             format: NSLocalizedString("""
             思考内容：
+            ```
             %@
+            ```
             """, comment: "Reasoning summary user prompt"),
             reasoning
         )
@@ -150,12 +152,21 @@ extension ChatService {
         let summaryContext = makeConversationSummaryContext(from: conversationalMessages)
         guard !summaryContext.isEmpty else { return }
         let summarySystemPrompt = NSLocalizedString("""
-        你是会话压缩助手。请基于给定对话生成“跨对话可复用”的摘要。
-        约束：
-        - 中文输出 60~140 字，其他语言输出 50~120 个词；
-        - 只保留关键主题、用户意图、明确结论；
-        - 不要罗列细节，不要添加免责声明；
-        - 仅输出摘要正文。
+        你是会话压缩助手，负责生成可用于长期记忆的跨对话摘要。请基于给定对话提炼后续对话真正有用的信息，而不是复述聊天记录。
+        优先保留：
+        - 用户稳定偏好、写作/编码风格、默认语言与输出格式；
+        - 用户长期项目、角色背景、正在推进的目标；
+        - 已明确达成的结论、决策、约定、待办；
+        - 对后续协作有帮助的术语、文件、业务背景或上下文。
+        忽略：
+        - 寒暄、礼貌语、临时操作步骤、一次性细节；
+        - 未确认的猜测、模型自己的推断、失败过程；
+        - 敏感隐私与第三方隐私，除非用户明确要求长期记住且对后续任务必要；
+        - 大段原文、代码或附件内容，只提炼长期有用结论。
+        输出约束：
+        - 中文输出 80~180 字，其他语言输出 70~160 个词；
+        - 信息不足时只记录明确事实，不要编造；
+        - 仅输出摘要正文，不要加标题、列表编号或免责声明。
         """, comment: "Conversation summary system prompt")
         let summaryUserPrompt = String(
             format: NSLocalizedString("""
@@ -195,7 +206,7 @@ extension ChatService {
         let profileSystemPrompt = NSLocalizedString("""
         你是用户画像整理助手。请根据“已有画像”和“最新会话摘要”输出更新后的用户画像。
         约束：
-        - 中文输出 80~220 字，其他语言输出 70~180 个词；
+        - 不设固定长度上限，根据信息量自然展开；
         - 强调稳定偏好、工作背景、长期关注点；
         - 避免一次性细节与短期噪音；
         - 仅输出画像正文。
@@ -221,7 +232,7 @@ extension ChatService {
                 requestSource: .conversationProfile,
                 sessionID: sessionID
             )
-            let profileContent = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
+            let profileContent = sanitizeConversationMemoryText(rawProfile)
             guard !profileContent.isEmpty else { return }
             try ConversationMemoryManager.saveUserProfile(
                 content: profileContent,
@@ -245,7 +256,7 @@ extension ChatService {
         约束：
         - 保留稳定偏好、长期背景、常见工作方式；
         - 合并重复语义，删除互相矛盾或一次性噪音；
-        - 中文输出 80~220 字，其他语言输出 70~180 个词；
+        - 不设固定长度上限，根据信息量自然展开；
         - 仅输出画像正文。
         """, comment: "Conversation profile dedup system prompt")
         let userPrompt = String(
@@ -265,7 +276,7 @@ extension ChatService {
                 requestSource: .conversationProfile,
                 sessionID: sessionID
             )
-            let profileContent = sanitizeConversationMemoryText(rawProfile, maxLength: 500)
+            let profileContent = sanitizeConversationMemoryText(rawProfile)
             guard !profileContent.isEmpty else { return }
             try ConversationMemoryManager.saveUserProfile(
                 content: profileContent,
@@ -293,21 +304,29 @@ extension ChatService {
         let slice = messages.suffix(max(1, messageLimit))
         let lines = slice.map { message -> String in
             let roleText = message.role == .user ? "用户" : "助手"
-            let compact = sanitizeConversationMemoryText(message.content, maxLength: 600)
+            let compact = sanitizeConversationMemoryText(message.content, maxLength: 2_000)
             return "\(roleText): \(compact)"
         }
         return lines.joined(separator: "\n")
     }
 
-    private func sanitizeConversationMemoryText(_ text: String, maxLength: Int) -> String {
+    private func sanitizeConversationMemoryText(_ text: String, maxLength: Int? = nil) -> String {
         let normalized = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'“”‘’"))
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+        guard let maxLength else { return normalized }
         guard normalized.count > maxLength else { return normalized }
         let cutIndex = normalized.index(normalized.startIndex, offsetBy: maxLength)
         return String(normalized[..<cutIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func escapeXMLText(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     public func generateShortcutToolDescription(
@@ -337,11 +356,23 @@ extension ChatService {
         - 避免空话，不要出现免责声明；
         - 只返回描述正文。
 
-        快捷指令名称：%@
-        元数据：%@
-        源码/流程摘要：%@
+        字段说明：
+        - <shortcut_name>：快捷指令名称；
+        - <metadata>：快捷指令元数据；
+        - <source_summary>：源码或流程摘要；无内容时为“无”。
+
+        <shortcut>
+          <shortcut_name>%@</shortcut_name>
+          <metadata>%@</metadata>
+          <source_summary>%@</source_summary>
+        </shortcut>
         """, comment: "Prompt for generating shortcut tool description.")
-        let prompt = String(format: promptTemplate, toolName, metadataText, sourceText)
+        let prompt = String(
+            format: promptTemplate,
+            escapeXMLText(toolName),
+            escapeXMLText(metadataText),
+            escapeXMLText(sourceText)
+        )
 
         do {
             let rawDescription = try await generateDetachedChatCompletion(
@@ -367,16 +398,13 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        appendOutputLanguageInstruction: Bool = true
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
-        let promptLanguage = ModelPromptLanguage.current
 
-        let fallbackModel = selectedModelSubject.value?.model.isChatModel == true
-            ? selectedModelSubject.value
-            : activatedChatModels.first
-        guard let targetModel = runnableModel ?? fallbackModel else {
+        guard let targetModel = runnableModel ?? detachedChatCompletionFallbackModel() else {
             throw DetachedCompletionError.noAvailableModel
         }
 
@@ -385,16 +413,19 @@ extension ChatService {
         if let systemPrompt {
             let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedSystemPrompt.isEmpty {
+                let systemContent = appendOutputLanguageInstruction
+                    ? ModelPromptLanguage.appendingOutputInstruction(to: trimmedSystemPrompt)
+                    : trimmedSystemPrompt
                 requestMessages.append(ChatMessage(
                     role: .system,
-                    content: ModelPromptLanguage.appendingOutputInstruction(to: trimmedSystemPrompt, language: promptLanguage)
+                    content: systemContent
                 ))
-                didAttachLanguageInstruction = true
+                didAttachLanguageInstruction = appendOutputLanguageInstruction
             }
         }
-        let finalUserPrompt = didAttachLanguageInstruction
+        let finalUserPrompt = didAttachLanguageInstruction || !appendOutputLanguageInstruction
             ? trimmedUserPrompt
-            : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt, language: promptLanguage)
+            : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt)
         requestMessages.append(ChatMessage(role: .user, content: finalUserPrompt))
 
         let requestContext = RequestLogContext(
@@ -491,6 +522,12 @@ extension ChatService {
             )
             throw error
         }
+    }
+
+    func detachedChatCompletionFallbackModel() -> RunnableModel? {
+        selectedModelSubject.value?.model.isChatModel == true
+            ? selectedModelSubject.value
+            : activatedChatModels.first
     }
 
     func buildMemoryQueryContext(from messages: [ChatMessage], fallbackUserMessage: ChatMessage?) -> String? {

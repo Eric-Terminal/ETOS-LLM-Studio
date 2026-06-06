@@ -236,12 +236,10 @@ struct WatchSessionSearchView: View {
             onSelect(session, result.messageOrdinal)
             dismiss()
         } label: {
-            MarqueeTitleSubtitleSelectionRow(
+            WatchSessionSearchResultRowContent(
                 title: searchResultTitle(for: result),
-                subtitle: result.match.preview,
-                isSelected: result.sessionID == currentSessionID,
-                titleUIFont: .preferredFont(forTextStyle: .footnote),
-                subtitleUIFont: .preferredFont(forTextStyle: .caption2)
+                preview: result.match.preview,
+                isSelected: result.sessionID == currentSessionID
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -372,6 +370,38 @@ struct WatchSessionSearchView: View {
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct WatchSessionSearchResultRowContent: View {
+    let title: String
+    let preview: String
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .etFont(.footnote.weight(.semibold))
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(preview)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.footnote)
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.top, 2)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

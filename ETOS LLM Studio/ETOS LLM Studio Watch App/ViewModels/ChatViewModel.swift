@@ -68,6 +68,7 @@ class ChatViewModel: ObservableObject {
         }
     }
     @Published var messageToEdit: ChatMessage?
+    @Published var messageRewriteErrorMessage: String?
     @Published var activeSheet: ActiveSheet?
     
     @Published var chatSessions: [ChatSession] = []
@@ -367,6 +368,8 @@ class ChatViewModel: ObservableObject {
     var additionalHistoryLoaded: Int = 0
     var lastSessionID: UUID?
     let incrementalHistoryBatchSize = 5
+    var visibleMessagesCache: [ChatMessage] = []
+    var visibleMessagesWeightedCount: Int = 0
     var displayMessageIDs: [UUID] = []
     var activatedModelIDs: [String] = []
     var audioRecorder: AVAudioRecorder?
@@ -562,6 +565,30 @@ class ChatViewModel: ObservableObject {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics
             )
+        }
+    }
+
+    func rewriteMessage(
+        _ message: ChatMessage,
+        instruction: String,
+        referenceVersions: [MessageRewriteReferenceVersion] = []
+    ) {
+        let sessionID = currentSession?.id
+        Task {
+            do {
+                try await chatService.rewriteMessage(
+                    message,
+                    instruction: instruction,
+                    aiTemperature: aiTemperature,
+                    sessionID: sessionID,
+                    referenceVersions: referenceVersions
+                )
+            } catch is CancellationError {
+            } catch {
+                await MainActor.run {
+                    messageRewriteErrorMessage = error.localizedDescription
+                }
+            }
         }
     }
     

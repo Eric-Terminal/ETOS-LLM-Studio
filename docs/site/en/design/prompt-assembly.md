@@ -66,7 +66,7 @@ Global and topic prompts are **not mutually exclusive** — they stack.
 
 ### 3. System Time `<time>`
 
-Current local time + ISO 8601 timestamp, attached as its own block.
+Current system time + time zone, attached as its own block.
 
 - **Purpose 1**: anchor the model for relative time ("today", "tomorrow", "this morning", "just now")
 - **Purpose 2**: avoid guesswork on time-sensitive tasks

@@ -102,10 +102,15 @@ extension ChatServiceTests {
         setupMockResponsesForChatAndTitle()
         mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "文件附件已收到")
 
-        let attachment = FileAttachment(
+        let firstAttachment = FileAttachment(
             data: Data("附件原文".utf8),
             mimeType: "text/plain",
             fileName: "notes.txt"
+        )
+        let secondAttachment = FileAttachment(
+            data: Data("第二份附件".utf8),
+            mimeType: "text/plain",
+            fileName: "todo.txt"
         )
 
         await chatService.sendAndProcessMessage(
@@ -119,15 +124,90 @@ extension ChatServiceTests {
             enableMemory: false,
             enableMemoryWrite: false,
             includeSystemTime: false,
-            fileAttachments: [attachment]
+            fileAttachments: [firstAttachment, secondAttachment]
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
         let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
         #expect(userMessage.content.contains("请处理这个附件"))
-        #expect(userMessage.content.contains("notes.txt"))
+        #expect(userMessage.content.components(separatedBy: "<file_attachments>").count - 1 == 1)
+        #expect(userMessage.content.contains("<file name=\"notes.txt\">"))
+        #expect(userMessage.content.contains("<file name=\"todo.txt\">"))
         #expect(userMessage.content.contains("附件原文"))
+        #expect(userMessage.content.contains("第二份附件"))
+        #expect(userMessage.content.contains("</file_attachments>"))
+        #expect(!userMessage.content.contains("以下内容来自文件附件文本提取："))
+        #expect(!userMessage.content.contains("文件："))
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
+    }
+
+    @Test("图片 OCR 文本会以结构化上下文附加")
+    func testImageOCRAttachmentsAreStructuredBeforeSending() async throws {
+        await cleanup()
+        let session = createPermanentTestSession(name: "图片 OCR 结构化测试")
+        defer { chatService.deleteSessions([session]) }
+
+        let ocrModel = Model(
+            modelName: "ocr-vision-model",
+            displayName: "OCR Vision Model",
+            isActivated: true,
+            kind: .chat,
+            inputModalities: [.text, .image]
+        )
+        let ocrProvider = Provider(
+            name: "OCR Attachment Test Provider",
+            baseURL: "https://fake.url",
+            apiKeys: ["key-ocr"],
+            apiFormat: "openai-compatible",
+            models: [ocrModel]
+        )
+        ConfigLoader.saveProvider(ocrProvider)
+        defer {
+            Persistence.deleteAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue)
+            ConfigLoader.deleteProvider(ocrProvider)
+        }
+        let ocrRunnable = RunnableModel(provider: ocrProvider, model: ocrModel)
+        Persistence.writeAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue, text: ocrRunnable.id)
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "图片识别文字")
+
+        let firstImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "receipt.png"
+        )
+        let secondImage = ImageAttachment(
+            data: Data([0x89, 0x50, 0x4E, 0x47]),
+            mimeType: "image/png",
+            fileName: "menu.png"
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请读取图片文字",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            imageAttachments: [firstImage, secondImage]
+        )
+
+        let sentMessages = try #require(mockAdapter.receivedMessages)
+        let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
+        #expect(userMessage.content.contains("请读取图片文字"))
+        #expect(userMessage.content.components(separatedBy: "<image_ocr_attachments>").count - 1 == 1)
+        #expect(userMessage.content.contains("<image name=\"receipt.png\">"))
+        #expect(userMessage.content.contains("<image name=\"menu.png\">"))
+        #expect(userMessage.content.contains("图片识别文字"))
+        #expect(userMessage.content.contains("</image_ocr_attachments>"))
+        #expect(!userMessage.content.contains("以下内容来自图片 OCR 提取："))
+        #expect(!userMessage.content.contains("图片 1（"))
+        #expect(mockAdapter.receivedImageAttachments?.isEmpty == true)
     }
 
     @Test("同名同内容文件附件会复用实体文件名")
@@ -476,12 +556,13 @@ extension ChatServiceTests {
         )
         Persistence.writeAppConfig(key: AppConfigKey.reasoningSummaryModelIdentifier.rawValue, text: dedicatedSummaryModel.id)
         setupMockReasoningSummaryResponse(summary: "比较成本后选稳妥方案")
+        let reasoningContent = "先比较各个方案的成本，再收敛到风险最低、维护成本更低的实现路径。"
 
         await chatService.processResponseMessage(
             responseMessage: ChatMessage(
                 role: .assistant,
                 content: "最终答案",
-                reasoningContent: "先比较各个方案的成本，再收敛到风险最低、维护成本更低的实现路径。"
+                reasoningContent: reasoningContent
             ),
             loadingMessageID: loadingMessage.id,
             currentSessionID: sessionID,
@@ -499,10 +580,115 @@ extension ChatServiceTests {
         try await Task.sleep(for: .milliseconds(200))
 
         let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
+        let reasoningSummaryUserPrompt = mockAdapter.receivedReasoningSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
         #expect(mockAdapter.receivedReasoningSummaryModel?.id == dedicatedSummaryModel.id)
         #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("中文输出 6~18 字") == true)
         #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains(ModelPromptLanguage.current.outputInstruction) == true)
+        #expect(reasoningSummaryUserPrompt.contains("```\n\(reasoningContent)"))
+        #expect(reasoningSummaryUserPrompt.hasSuffix("```"))
         #expect(storedMessage?.responseMetrics?.reasoningSummary == "比较成本后选稳妥方案")
+
+        await cleanup()
+    }
+
+    @Test("Conversation summary keeps up to two thousand characters per message")
+    func testConversationSummary_UsesTwoThousandCharacterLimit() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let longUserContent = String(repeating: "甲", count: 2_500)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+        let messages = [
+            ChatMessage(role: .user, content: longUserContent, requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第一轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第二轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第二轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第三轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第三轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第四轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第四轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第五轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第五轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第六轮问题", requestedAt: Date()),
+            loadingMessage
+        ]
+        chatService.updateMessages(messages, for: sessionID)
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "会话摘要")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(role: .assistant, content: "最终答案"),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(300))
+
+        let summarySystemPrompt = mockAdapter.receivedConversationSummaryMessages?.first(where: { $0.role == .system })?.content ?? ""
+        let summaryUserPrompt = mockAdapter.receivedConversationSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
+        #expect(summarySystemPrompt.contains("长期记忆"))
+        #expect(summarySystemPrompt.contains("敏感隐私"))
+        #expect(summaryUserPrompt.contains(String(repeating: "甲", count: 2_000)))
+        #expect(!summaryUserPrompt.contains(String(repeating: "甲", count: 2_001)))
+
+        await cleanup()
+    }
+
+    @Test("Conversation profile stores generated content without truncation")
+    func testConversationProfile_DoesNotTruncateGeneratedProfile() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+        let messages = [
+            ChatMessage(role: .user, content: "第一轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第一轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第二轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第二轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第三轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第三轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第四轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第四轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第五轮问题", requestedAt: Date()),
+            ChatMessage(role: .assistant, content: "第五轮回答", requestedAt: Date()),
+            ChatMessage(role: .user, content: "第六轮问题", requestedAt: Date()),
+            loadingMessage
+        ]
+        let longProfile = String(repeating: "长期偏好", count: 120)
+        chatService.updateMessages(messages, for: sessionID)
+        setupMockResponsesForChatAndTitle()
+        setupMockConversationProfileResponse(profile: longProfile)
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "会话摘要")
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(role: .assistant, content: "最终答案"),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: nil,
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        try await Task.sleep(for: .milliseconds(500))
+
+        let profileSystemPrompt = mockAdapter.receivedConversationProfileMessages?.first(where: { $0.role == .system })?.content ?? ""
+        #expect(profileSystemPrompt.contains("不设固定长度上限"))
+        #expect(ConversationMemoryManager.loadUserProfile()?.content == longProfile)
 
         await cleanup()
     }

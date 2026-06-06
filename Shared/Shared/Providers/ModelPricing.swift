@@ -279,7 +279,7 @@ public struct MessageCostEstimate: Codable, Hashable, Sendable {
 
 public enum ModelCostCalculator {
     public static func tierBasisTokens(for usage: MessageTokenUsage) -> Int {
-        max(0, usage.promptTokens ?? 0)
+        billableInputTokens(for: usage)
             + max(0, usage.cacheWriteTokens ?? 0)
             + max(0, usage.cacheReadTokens ?? 0)
     }
@@ -298,7 +298,7 @@ public enum ModelCostCalculator {
 
         appendComponent(
             kind: .input,
-            tokens: usage.promptTokens,
+            tokens: billableInputTokens(for: usage),
             pricePerMillionTokens: effective.inputPerMillionTokens,
             to: &components
         )
@@ -348,6 +348,12 @@ public enum ModelCostCalculator {
                 subtotal: subtotal
             )
         )
+    }
+
+    private static func billableInputTokens(for usage: MessageTokenUsage) -> Int {
+        let promptTokens = max(0, usage.promptTokens ?? 0)
+        let cacheReadTokens = max(0, usage.cacheReadTokens ?? 0)
+        return max(0, promptTokens - cacheReadTokens)
     }
 }
 

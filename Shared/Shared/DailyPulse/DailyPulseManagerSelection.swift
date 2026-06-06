@@ -131,41 +131,48 @@ extension DailyPulseManager {
         return Array(selected.prefix(max(1, limit)))
     }
 
-    static let systemPrompt = """
-    你是 ETOS LLM Studio 的“每日脉冲”策展助手。
+    nonisolated static var systemPrompt: String {
+        NSLocalizedString(
+            "Daily Pulse generation system prompt",
+            value: """
+            你是 ETOS LLM Studio 的“每日脉冲”策展助手。
 
-    任务：
-    - 依据用户最近聊天、长期记忆、近期使用轨迹、最近卡片反馈、外部能力上下文、用户主动填写的关注焦点与“明日想看什么”策展输入，输出一组候选卡片。
-    - 如果给到了未完成的 Pulse 任务，请优先帮助用户推进这些任务，但不要把已经完成的任务原样重复成卡片标题。
-    - 卡片要尽量具体、可继续对话、可直接转成一个新会话。
-    - 优先推荐近期可行动、可延续、和用户真实上下文强相关的话题。
-    - 不要捏造用户经历，不要凭空加入外部事实；如果上下文不足，就保守一点。
-    - 如果有 MCP / 快捷指令能力上下文，可以优先推荐“能马上借助这些能力继续推进”的卡片。
-    - 工具能力描述只代表“可以调用的能力”，不代表你已经读取到外部实时数据。
-    - 如果给到了“最近已获取到的外部结果快照”，那部分才代表用户最近真的拿到过的外部内容。
-    - 如果给到了“公告与趋势信号”，可以把它们当作近期外部变化，但不要夸大成已经完全确认的个人事实。
-    - 输出要有明显多样性，避免所有卡片都围绕同一件事。
-    - 如果用户已经明确 dislike / hidden 某类主题，就尽量别再推同类主题。
-    - 如果用户过去喜欢或保存过某类主题，可以适度延续，但不要机械重复昨天的标题。
+            任务：
+            - 依据用户最近聊天、长期记忆、全局系统提示词与偏好、近期使用轨迹、最近卡片反馈、外部能力上下文、用户主动填写的关注焦点与“明日想看什么”策展输入，输出一组候选卡片。
+            - 如果给到了全局系统提示词与偏好，请提取其中和每日脉冲相关的偏好、目标、长期要求与输出倾向；不要把角色扮演、聊天格式或临时口吻要求当作用户真实经历。
+            - 如果给到了未完成的 Pulse 任务，请优先帮助用户推进这些任务，但不要把已经完成的任务原样重复成卡片标题。
+            - 卡片要尽量具体、可继续对话、可直接转成一个新会话。
+            - 优先推荐近期可行动、可延续、和用户真实上下文强相关的话题。
+            - 不要捏造用户经历，不要凭空加入外部事实；如果上下文不足，就保守一点。
+            - 如果有 MCP / 快捷指令能力上下文，可以优先推荐“能马上借助这些能力继续推进”的卡片。
+            - 工具能力描述只代表“可以调用的能力”，不代表你已经读取到外部实时数据。
+            - 如果给到了“最近已获取到的外部结果快照”，那部分才代表用户最近真的拿到过的外部内容。
+            - 如果给到了“公告与趋势信号”，可以把它们当作近期外部变化，但不要夸大成已经完全确认的个人事实。
+            - 输出要有明显多样性，避免所有卡片都围绕同一件事。
+            - 如果用户已经明确 dislike / hidden 某类主题，就尽量别再推同类主题。
+            - 如果用户过去喜欢或保存过某类主题，可以适度延续，但不要机械重复昨天的标题。
 
-    输出要求：
-    - 只返回 JSON，不要使用 Markdown 代码块。
-    - JSON 结构必须严格符合：
-      {
-        "headline": "一句话总标题",
-        "cards": [
-          {
-            "title": "卡片标题",
-            "why": "为什么推荐给用户",
-            "summary": "一句或两句摘要",
-            "details_markdown": "可保存为聊天的详细 Markdown 内容",
-            "suggested_prompt": "用户点继续聊时可直接发送的追问"
-          }
-        ]
-      }
-    """
+            输出要求：
+            - 只返回 JSON，不要使用 Markdown 代码块。
+            - JSON 结构必须严格符合：
+              {
+                "headline": "一句话总标题",
+                "cards": [
+                  {
+                    "title": "卡片标题",
+                    "why": "为什么推荐给用户",
+                    "summary": "一句或两句摘要",
+                    "details_markdown": "可保存为聊天的详细 Markdown 内容",
+                    "suggested_prompt": "用户点继续聊时可直接发送的追问"
+                  }
+                ]
+              }
+            """,
+            comment: "Daily Pulse generation system prompt"
+        )
+    }
 
-    static func makeUserPrompt(
+    nonisolated static func makeUserPrompt(
         from input: DailyPulseGenerationInput,
         cardsPerRun: Int,
         candidateCardsPerRun: Int
@@ -185,6 +192,7 @@ extension DailyPulseManager {
 
         let focus = input.focusText.isEmpty ? "（未填写）" : input.focusText
         let curation = input.curationText.isEmpty ? "（无）" : input.curationText
+        let globalSystemPrompt = input.globalSystemPrompt.isEmpty ? "（无）" : input.globalSystemPrompt
         let logSummary = input.requestLogSummary.isEmpty ? "（无）" : input.requestLogSummary
         let taskBlock: String = {
             guard !input.activeTasks.isEmpty else { return "（无）" }
@@ -193,37 +201,59 @@ extension DailyPulseManager {
             }.joined(separator: "\n")
         }()
 
-        return """
-        当前时间：\(Self.userFacingDateString(from: Date()))
-        最终展示目标卡片数：\(cardsPerRun)
-        候选卡片建议输出数：\(candidateCardsPerRun)
+        let userPromptTemplate = NSLocalizedString(
+            "Daily Pulse generation user prompt",
+            value: """
+            当前时间：%@
+            最终展示目标卡片数：%d
+            候选卡片建议输出数：%d
 
-        用户关注焦点：
-        \(focus)
+            用户关注焦点：
+            %@
 
-        明日策展要求：
-        \(curation)
+            明日策展要求：
+            %@
 
-        最近聊天摘要：
-        \(sessionBlock)
+            全局系统提示词与偏好：
+            %@
 
-        长期记忆：
-        \(memoryBlock)
+            最近聊天摘要：
+            %@
 
-        最近请求日志摘要：
-        \(logSummary)
+            长期记忆：
+            %@
 
-        当前未完成的 Pulse 任务：
-        \(taskBlock)
+            最近请求日志摘要：
+            %@
 
-        最近卡片偏好与历史：
-        \(input.preferenceProfile.summaryText)
+            当前未完成的 Pulse 任务：
+            %@
 
-        外部上下文与可用能力：
-        \(input.externalContext.summaryText)
+            最近卡片偏好与历史：
+            %@
 
-        请基于这些信息，为用户生成今日的每日脉冲候选卡片。
-        """
+            外部上下文与可用能力：
+            %@
+
+            请基于这些信息，为用户生成今日的每日脉冲候选卡片。
+            """,
+            comment: "Daily Pulse generation user prompt"
+        )
+        return String(
+            format: userPromptTemplate,
+            Self.userFacingDateString(from: Date()),
+            cardsPerRun,
+            candidateCardsPerRun,
+            focus,
+            curation,
+            globalSystemPrompt,
+            sessionBlock,
+            memoryBlock,
+            logSummary,
+            taskBlock,
+            input.preferenceProfile.summaryText,
+            input.externalContext.summaryText
+        )
     }
 
     internal nonisolated static func score(card: DailyPulseCard, profile: DailyPulsePreferenceProfile, focusText: String) -> Int {

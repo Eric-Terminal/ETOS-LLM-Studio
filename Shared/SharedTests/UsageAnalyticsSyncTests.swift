@@ -37,6 +37,25 @@ struct UsageAnalyticsSyncTests {
         #expect(UsageAnalyticsCacheMetrics.hitRate(for: .init()) == nil)
     }
 
+    @Test("排行总 Token 不重复累计缓存 Token")
+    func rankItemTotalTokensExcludeCacheTokens() {
+        let item = UsageAnalyticsRankItem(
+            id: "openai|gpt-5",
+            title: "gpt-5",
+            requestCount: 1,
+            totalTokens: 0,
+            errorCount: 0,
+            tokenTotals: RequestLogTokenTotals(
+                sentTokens: 1_000,
+                receivedTokens: 2_000,
+                cacheWriteTokens: 300,
+                cacheReadTokens: 200
+            )
+        )
+
+        #expect(item.totalTokens == 3_000)
+    }
+
     @Test("用量事件会生成按天与按模型汇总")
     func usageEventsBuildDailyRollups() {
         let originalBundles = Persistence.loadUsageStatsDayBundles()
@@ -243,7 +262,11 @@ struct UsageAnalyticsSyncTests {
         let viewModel = UsageAnalyticsDashboardViewModel(calendar: UsageAnalyticsRuntimeContext.calendar())
         try await waitForDashboard(viewModel) { !$0.state.isLoading }
 
-        let expectedCost = 0.001 + 0.004 + 0.0009 + 0.0001
+        #expect(viewModel.state.activeOverviewCard?.totalTokens == 3_000)
+        #expect(viewModel.state.detail.tokenTotals.totalTokens == 3_000)
+        #expect(viewModel.state.detail.topModels.first?.totalTokens == 3_000)
+
+        let expectedCost = 0.0008 + 0.004 + 0.0009 + 0.0001
         let overviewCost = try #require(viewModel.state.activeOverviewCard?.costSummary.totals.first)
         #expect(abs(overviewCost.totalCost - expectedCost) < 0.000001)
 

@@ -154,11 +154,14 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
         tokenShare: Double = 0
     ) {
         let resolvedTokenTotals = tokenTotals ?? RequestLogTokenTotals(totalTokens: totalTokens)
-        let inferredTotalTokens = resolvedTokenTotals.sentTokens
-            + resolvedTokenTotals.receivedTokens
-            + resolvedTokenTotals.thinkingTokens
-            + resolvedTokenTotals.cacheWriteTokens
-            + resolvedTokenTotals.cacheReadTokens
+        let nonCacheTotalTokens = resolvedTokenTotals.sentTokens + resolvedTokenTotals.receivedTokens
+        let hasCacheTokens = resolvedTokenTotals.cacheWriteTokens > 0 || resolvedTokenTotals.cacheReadTokens > 0
+        let inferredTotalTokens: Int
+        if hasCacheTokens && nonCacheTotalTokens > 0 {
+            inferredTotalTokens = nonCacheTotalTokens
+        } else {
+            inferredTotalTokens = max(resolvedTokenTotals.totalTokens, nonCacheTotalTokens)
+        }
         self.id = id
         self.title = title
         self.subtitle = subtitle

@@ -188,6 +188,32 @@ struct DailyPulseContextAndDeliveryTests {
         #expect(input.sourceDigest.contains("继续推进 PR 审查"))
     }
 
+    @Test("全局系统提示词会进入每日脉冲上下文")
+    func userPromptIncludesGlobalSystemPrompt() {
+        let input = DailyPulseGenerationInput(
+            focusText: "",
+            curationText: "",
+            globalSystemPrompt: "偏好 SwiftUI、watchOS 和原生交互细节。",
+            sessionExcerpts: [],
+            memories: [],
+            requestLogSummary: "",
+            activeTasks: [],
+            preferenceProfile: .empty,
+            externalContext: .empty
+        )
+
+        let prompt = DailyPulseManager.makeUserPrompt(
+            from: input,
+            cardsPerRun: 3,
+            candidateCardsPerRun: 6
+        )
+
+        #expect(input.hasUsableContext)
+        #expect(input.sourceDigest.contains("偏好 SwiftUI"))
+        #expect(prompt.contains("全局系统提示词与偏好："))
+        #expect(prompt.contains("偏好 SwiftUI、watchOS 和原生交互细节。"))
+    }
+
     @Test("外部信号历史会按主题去重并保留最新记录")
     func appendingExternalSignalDeduplicatesByTopic() {
         let older = DailyPulseExternalSignal(

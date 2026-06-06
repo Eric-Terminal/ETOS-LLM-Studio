@@ -9,19 +9,44 @@
 import Combine
 import Foundation
 
+private final class MessageRegexRuleCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var rules: [MessageRegexRule]
+
+    init(rules: [MessageRegexRule]) {
+        self.rules = rules
+    }
+
+    func load() -> [MessageRegexRule] {
+        lock.lock()
+        let snapshot = rules
+        lock.unlock()
+        return snapshot
+    }
+
+    func store(_ rules: [MessageRegexRule]) {
+        lock.lock()
+        self.rules = rules
+        lock.unlock()
+    }
+}
+
 @MainActor
 public final class MessageRegexRuleStore: ObservableObject {
     public static let shared = MessageRegexRuleStore()
     public nonisolated static let didChangeNotification = Notification.Name("com.ETOS.messageRegexRules.didChange")
+    private nonisolated static let cache = MessageRegexRuleCache(rules: MessageRegexRuleStore.loadRulesFromStore())
 
     @Published public private(set) var rules: [MessageRegexRule]
 
     public init() {
-        self.rules = Self.loadRules()
+        self.rules = Self.cache.load()
     }
 
     public func reload(notify: Bool = false) {
-        rules = Self.loadRules()
+        let loaded = Self.loadRulesFromStore()
+        Self.cache.store(loaded)
+        rules = loaded
         if notify {
             NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
         }
@@ -29,6 +54,7 @@ public final class MessageRegexRuleStore: ObservableObject {
 
     public func save(_ rules: [MessageRegexRule]) {
         let normalized = Self.normalizedRules(rules)
+        Self.cache.store(normalized)
         self.rules = normalized
         Self.persist(normalized)
         NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
@@ -53,12 +79,16 @@ public final class MessageRegexRuleStore: ObservableObject {
     }
 
     public nonisolated static func currentRules() -> [MessageRegexRule] {
-        loadRules()
+        cache.load()
     }
 
     public nonisolated static func loadRules() -> [MessageRegexRule] {
-        let raw = AppConfigStore.textValue(for: .messageRegexRules)
-        guard let data = raw.data(using: .utf8),
+        loadRulesFromStore()
+    }
+
+    private nonisolated static func loadRulesFromStore() -> [MessageRegexRule] {
+        guard let raw = AppConfigStore.persistentSnapshot()[AppConfigKey.messageRegexRules.rawValue] as? String,
+              let data = raw.data(using: .utf8),
               let decoded = try? JSONDecoder().decode([MessageRegexRule].self, from: data) else {
             return []
         }

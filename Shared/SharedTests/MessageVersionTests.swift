@@ -11,9 +11,9 @@ import XCTest
 @testable import Shared
 
 final class MessageVersionTests: XCTestCase {
-    
+
     // MARK: - 兼容性测试
-    
+
     /// 测试旧格式（单字符串 content）的反序列化
     func testDecodeLegacyFormat() throws {
         let json = """
@@ -23,11 +23,11 @@ final class MessageVersionTests: XCTestCase {
             "content": "Hello, world!"
         }
         """
-        
+
         let data = json.data(using: .utf8)!
         let decoder = JSONDecoder()
         let message = try decoder.decode(ChatMessage.self, from: data)
-        
+
         XCTAssertEqual(message.content, "Hello, world!")
         XCTAssertEqual(message.getAllVersions(), ["Hello, world!"])
         XCTAssertEqual(message.getCurrentVersionIndex(), 0)
@@ -38,7 +38,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertNil(message.responseAttemptIndex)
         XCTAssertNil(message.selectedResponseAttemptID)
     }
-    
+
     /// 测试新格式（多版本数组）的反序列化
     func testDecodeNewFormat() throws {
         let json = """
@@ -49,17 +49,17 @@ final class MessageVersionTests: XCTestCase {
             "currentVersionIndex": 1
         }
         """
-        
+
         let data = json.data(using: .utf8)!
         let decoder = JSONDecoder()
         let message = try decoder.decode(ChatMessage.self, from: data)
-        
+
         XCTAssertEqual(message.content, "Second version")
         XCTAssertEqual(message.getAllVersions(), ["First version", "Second version", "Third version"])
         XCTAssertEqual(message.getCurrentVersionIndex(), 1)
         XCTAssertTrue(message.hasMultipleVersions)
     }
-    
+
     /// 测试新格式序列化
     func testEncodeNewFormat() throws {
         var message = ChatMessage(
@@ -67,76 +67,76 @@ final class MessageVersionTests: XCTestCase {
             content: "Initial content"
         )
         message.addVersion("Updated content")
-        
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(message)
         let jsonString = String(data: data, encoding: .utf8)!
-        
+
         XCTAssertTrue(jsonString.contains("\"content\""))
         XCTAssertTrue(jsonString.contains("currentVersionIndex"))
         XCTAssertTrue(jsonString.contains("Initial content"))
         XCTAssertTrue(jsonString.contains("Updated content"))
     }
-    
+
     // MARK: - 版本管理功能测试
-    
+
     /// 测试添加版本
     func testAddVersion() {
         var message = ChatMessage(role: .user, content: "Version 1")
-        
+
         XCTAssertEqual(message.getAllVersions().count, 1)
         XCTAssertFalse(message.hasMultipleVersions)
-        
+
         message.addVersion("Version 2")
-        
+
         XCTAssertEqual(message.getAllVersions().count, 2)
         XCTAssertTrue(message.hasMultipleVersions)
         XCTAssertEqual(message.content, "Version 2")
         XCTAssertEqual(message.getCurrentVersionIndex(), 1)
-        
+
         message.addVersion("Version 3")
-        
+
         XCTAssertEqual(message.getAllVersions().count, 3)
         XCTAssertEqual(message.content, "Version 3")
         XCTAssertEqual(message.getCurrentVersionIndex(), 2)
     }
-    
+
     /// 测试切换版本
     func testSwitchVersion() {
         var message = ChatMessage(role: .assistant, content: "V1")
         message.addVersion("V2")
         message.addVersion("V3")
-        
+
         XCTAssertEqual(message.getCurrentVersionIndex(), 2)
         XCTAssertEqual(message.content, "V3")
-        
+
         message.switchToVersion(0)
         XCTAssertEqual(message.getCurrentVersionIndex(), 0)
         XCTAssertEqual(message.content, "V1")
-        
+
         message.switchToVersion(1)
         XCTAssertEqual(message.getCurrentVersionIndex(), 1)
         XCTAssertEqual(message.content, "V2")
-        
+
         // 无效索引应该被忽略
         message.switchToVersion(10)
         XCTAssertEqual(message.getCurrentVersionIndex(), 1)
         XCTAssertEqual(message.content, "V2")
     }
-    
+
     /// 测试删除版本
     func testRemoveVersion() {
         var message = ChatMessage(role: .user, content: "V1")
         message.addVersion("V2")
         message.addVersion("V3")
-        
+
         // 删除当前版本（V3）
         message.removeVersion(at: 2)
         XCTAssertEqual(message.getAllVersions().count, 2)
         XCTAssertEqual(message.getCurrentVersionIndex(), 1)
         XCTAssertEqual(message.content, "V2")
-        
+
         // 删除中间版本
         message.addVersion("V3 again")
         message.switchToVersion(0)
@@ -144,7 +144,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(message.getAllVersions().count, 2)
         XCTAssertEqual(message.getCurrentVersionIndex(), 0)
         XCTAssertEqual(message.content, "V1")
-        
+
         // 尝试删除最后一个版本（应该保留）
         message.removeVersion(at: 0)
         XCTAssertEqual(message.getAllVersions().count, 1)
@@ -163,54 +163,54 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(message.getAllVersions(), ["V2", "V3"])
         XCTAssertEqual(message.content, "V3")
     }
-    
+
     /// 测试修改 content 属性
     func testModifyContent() {
         var message = ChatMessage(role: .user, content: "Original")
         message.addVersion("Version 2")
-        
+
         XCTAssertEqual(message.content, "Version 2")
-        
+
         // 修改当前版本的内容
         message.content = "Modified Version 2"
-        
+
         XCTAssertEqual(message.content, "Modified Version 2")
         let versions = message.getAllVersions()
         XCTAssertEqual(versions[1], "Modified Version 2")
         XCTAssertEqual(versions[0], "Original")
     }
-    
+
     // MARK: - 边界条件测试
-    
+
     /// 测试空内容
     func testEmptyContent() {
         var message = ChatMessage(role: .system, content: "")
-        
+
         XCTAssertEqual(message.content, "")
         XCTAssertEqual(message.getAllVersions(), [""])
-        
+
         message.addVersion("Non-empty")
         XCTAssertEqual(message.getAllVersions().count, 2)
         XCTAssertEqual(message.content, "Non-empty")
     }
-    
+
     /// 测试只有一个版本时的行为
     func testSingleVersionBehavior() {
         var message = ChatMessage(role: .user, content: "Only one")
-        
+
         XCTAssertFalse(message.hasMultipleVersions)
-        
+
         // 切换到同一个索引
         message.switchToVersion(0)
         XCTAssertEqual(message.content, "Only one")
-        
+
         // 尝试删除唯一版本
         message.removeVersion(at: 0)
         XCTAssertEqual(message.getAllVersions().count, 1)
     }
-    
+
     // MARK: - 序列化往返测试
-    
+
     /// 测试完整的序列化和反序列化往返
     func testSerializationRoundTrip() throws {
         let responseGroupID = UUID()
@@ -231,13 +231,13 @@ final class MessageVersionTests: XCTestCase {
         original.addVersion("Second")
         original.addVersion("Third")
         original.switchToVersion(1)
-        
+
         let encoder = JSONEncoder()
         let data = try encoder.encode(original)
-        
+
         let decoder = JSONDecoder()
         let decoded = try decoder.decode(ChatMessage.self, from: data)
-        
+
         XCTAssertEqual(decoded.id, original.id)
         XCTAssertEqual(decoded.role, original.role)
         XCTAssertEqual(decoded.content, "Second")
@@ -470,6 +470,104 @@ final class MessageVersionTests: XCTestCase {
         ])
     }
 
+    func testMessageRewriteReferenceVersionsFromResponseAttempts() throws {
+        let userID = UUID()
+        let attemptIDs = (0..<5).map { _ in UUID() }
+        let userMessage = ChatMessage(
+            id: userID,
+            role: .user,
+            content: "请给我多个版本",
+            selectedResponseAttemptID: attemptIDs[4]
+        )
+        let firstToolCall = ChatMessage(
+            role: .assistant,
+            content: "",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[0],
+            responseAttemptIndex: 0
+        )
+        let firstToolResult = ChatMessage(
+            role: .tool,
+            content: "工具结果不应作为重写参考正文",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[0],
+            responseAttemptIndex: 0
+        )
+        let firstFinal = ChatMessage(
+            role: .assistant,
+            content: "版本 1 正文",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[0],
+            responseAttemptIndex: 0
+        )
+        let secondFinal = ChatMessage(
+            role: .assistant,
+            content: "版本 2 正文",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[1],
+            responseAttemptIndex: 1
+        )
+        let thirdFinal = ChatMessage(
+            role: .assistant,
+            content: "版本 3 正文",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[2],
+            responseAttemptIndex: 2
+        )
+        let fourthFinal = ChatMessage(
+            role: .assistant,
+            content: "版本 4 正文",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[3],
+            responseAttemptIndex: 3
+        )
+        let currentFinal = ChatMessage(
+            role: .assistant,
+            content: "版本 5 正文",
+            responseGroupID: userID,
+            responseAttemptID: attemptIDs[4],
+            responseAttemptIndex: 4
+        )
+        let messages = [
+            userMessage,
+            firstToolCall,
+            firstToolResult,
+            firstFinal,
+            secondFinal,
+            thirdFinal,
+            fourthFinal,
+            currentFinal
+        ]
+
+        let references = MessageRewriteReferenceSupport.referenceVersions(
+            for: currentFinal,
+            in: messages
+        )
+
+        XCTAssertEqual(references.map(\.versionNumber), [1, 2, 3, 4])
+        XCTAssertEqual(references.map(\.content), [
+            "版本 1 正文",
+            "版本 2 正文",
+            "版本 3 正文",
+            "版本 4 正文"
+        ])
+    }
+
+    func testMessageRewriteReferenceVersionsFromLegacyVersions() {
+        var message = ChatMessage(role: .assistant, content: "版本 1 正文")
+        message.addVersion("版本 2 正文")
+        message.addVersion("版本 3 正文")
+        message.switchToVersion(1)
+
+        let references = MessageRewriteReferenceSupport.referenceVersions(
+            for: message,
+            in: [message]
+        )
+
+        XCTAssertEqual(references.map(\.versionNumber), [1, 3])
+        XCTAssertEqual(references.map(\.content), ["版本 1 正文", "版本 3 正文"])
+    }
+
     /// 测试扩展 Token 字段的序列化与反序列化兼容
     func testExtendedTokenUsageRoundTrip() throws {
         let originalUsage = MessageTokenUsage(
@@ -593,7 +691,7 @@ final class MessageVersionTests: XCTestCase {
         XCTAssertEqual(decodedMetrics.reasoningSummary, "先确认约束，再落实现细节。")
         XCTAssertNil(decodedMetrics.speedSamples)
     }
-    
+
     /// 测试旧数据升级后的序列化
     func testLegacyUpgradeAndSerialize() throws {
         // 1. 反序列化旧格式
@@ -604,21 +702,21 @@ final class MessageVersionTests: XCTestCase {
             "content": "Legacy content"
         }
         """
-        
+
         let decoder = JSONDecoder()
         var message = try decoder.decode(ChatMessage.self, from: legacyJSON.data(using: .utf8)!)
-        
+
         // 2. 添加新版本
         message.addVersion("New version")
-        
+
         // 3. 重新序列化
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(message)
-        
+
         // 4. 再次反序列化验证
         let finalMessage = try decoder.decode(ChatMessage.self, from: data)
-        
+
         XCTAssertEqual(finalMessage.getAllVersions(), ["Legacy content", "New version"])
         XCTAssertEqual(finalMessage.getCurrentVersionIndex(), 1)
         XCTAssertEqual(finalMessage.content, "New version")

@@ -72,18 +72,17 @@ public enum SystemTimeContextFormatter {
     public static func description(at date: Date = Date()) -> String {
         let localeFormatter = DateFormatter()
         localeFormatter.calendar = Calendar(identifier: .gregorian)
-        localeFormatter.locale = Locale(identifier: "zh_CN")
+        localeFormatter.locale = Locale(identifier: "en_US_POSIX")
         localeFormatter.timeZone = TimeZone.current
-        localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
+        localeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         let localTime = localeFormatter.string(from: date)
+        let timeZoneIdentifier = TimeZone.current.identifier
 
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.timeZone = TimeZone.current
-        let isoTime = isoFormatter.string(from: date)
-
-        let localTimeLine = String(format: NSLocalizedString("当前系统本地时间：%@", comment: "System local time line for model prompt."), localTime)
-        let isoTimeLine = String(format: NSLocalizedString("ISO8601：%@", comment: "ISO8601 time line for model prompt."), isoTime)
-        return "\(localTimeLine)\n\(isoTimeLine)"
+        return String(
+            format: NSLocalizedString("当前系统时间%@，时区%@", comment: "System time line for model prompt."),
+            localTime,
+            timeZoneIdentifier
+        )
     }
 }
 

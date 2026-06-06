@@ -81,10 +81,10 @@
   --etos-shadow-product: 3px 5px 30px rgba(0, 0, 0, 0.22);
 
   /* —— 字体 —— */
-  --etos-font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont,
-    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", sans-serif;
-  --etos-font-text: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont,
-    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --etos-font-display: "Inter", "Noto Sans SC", "SF Pro Display", system-ui, -apple-system,
+    BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans GB", sans-serif;
+  --etos-font-text: "Inter", "Noto Sans SC", "SF Pro Text", system-ui, -apple-system,
+    BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans GB", sans-serif;
 
   /* —— 圆角 —— */
   --etos-radius-sm: 8px;

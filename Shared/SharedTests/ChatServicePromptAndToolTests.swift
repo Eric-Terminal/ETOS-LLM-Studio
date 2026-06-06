@@ -107,6 +107,7 @@ extension ChatServiceTests {
         #expect(lastMessage?.role == .system)
         #expect(systemContent.contains("<enhanced_prompt>"))
         #expect(systemContent.contains(enhancedPrompt))
+        #expect(systemContent.contains("\n\n---\n\n\(enhancedPrompt)"))
         #expect(!systemMessages.contains(where: { $0.content.contains("<app_language>") }))
         #expect(systemMessages.count == 1)
         #expect(userContent == userText)
@@ -136,7 +137,8 @@ extension ChatServiceTests {
         let systemMessage = mockAdapter.receivedMessages?.first(where: { $0.role == .system })
         let content = systemMessage?.content ?? ""
         #expect(content.contains("<time>"))
-        #expect(content.contains("ISO8601"))
+        #expect(content.contains(TimeZone.current.identifier))
+        #expect(!content.contains("ISO8601"))
 
         await cleanup()
     }
@@ -171,7 +173,8 @@ extension ChatServiceTests {
         #expect(!firstSystemContent.contains("<time>"))
         #expect(lastMessage?.role == .system)
         #expect(lastMessage?.content.contains("<time>") == true)
-        #expect(lastMessage?.content.contains("ISO8601") == true)
+        #expect(lastMessage?.content.contains(TimeZone.current.identifier) == true)
+        #expect(lastMessage?.content.contains("ISO8601") == false)
 
         await cleanup()
     }
@@ -214,12 +217,13 @@ extension ChatServiceTests {
 
         let sentMessages = mockAdapter.receivedMessages ?? []
         let landmarkIndex = sentMessages.firstIndex(where: {
-            $0.role == .system && $0.content.contains("本条对话的请求时间为：")
+            $0.role == .system && $0.content.contains(TimeZone.current.identifier)
         })
         let insertedIndex = try #require(landmarkIndex)
         #expect(insertedIndex + 1 < sentMessages.count)
         #expect(sentMessages[insertedIndex + 1].id == oldMessage.id)
         #expect(!sentMessages[insertedIndex].content.contains("<periodic_time_landmark>"))
+        #expect(!sentMessages[insertedIndex].content.contains("本条对话的请求时间为："))
 
         await cleanup()
     }
@@ -253,7 +257,7 @@ extension ChatServiceTests {
             periodicTimeLandmarkIntervalMinutes: 30
         )
         let firstSentMessages = mockAdapter.receivedMessages ?? []
-        let firstCount = firstSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        let firstCount = firstSentMessages.filter { $0.role == .system && $0.content.contains(TimeZone.current.identifier) }.count
         #expect(firstCount == 1)
 
         await chatService.sendAndProcessMessage(
@@ -271,7 +275,7 @@ extension ChatServiceTests {
             periodicTimeLandmarkIntervalMinutes: 30
         )
         let secondSentMessages = mockAdapter.receivedMessages ?? []
-        let secondCount = secondSentMessages.filter { $0.role == .system && $0.content.contains("本条对话的请求时间为：") }.count
+        let secondCount = secondSentMessages.filter { $0.role == .system && $0.content.contains(TimeZone.current.identifier) }.count
         #expect(secondCount == 0)
 
         await cleanup()
@@ -344,6 +348,31 @@ extension ChatServiceTests {
         )
 
         #expect(self.mockAdapter.receivedTools?.contains(where: { $0.name == "search_memory" }) != true)
+        await cleanup()
+    }
+
+    @Test("快捷指令描述生成使用 XML 包裹上下文")
+    func testShortcutDescriptionPromptUsesXMLContext() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "打开灯光并播放音乐")
+
+        let description = await chatService.generateShortcutToolDescription(
+            toolName: "打开 <灯> & 音乐",
+            metadata: ["note": .string("A < B & C")],
+            source: "if x < 1 && y > 0"
+        )
+
+        let prompt = mockAdapter.receivedMessages?.last(where: { $0.role == .user })?.content ?? ""
+        #expect(description == "打开灯光并播放音乐")
+        #expect(prompt.contains("字段说明"))
+        #expect(prompt.contains("- <shortcut_name>：快捷指令名称"))
+        #expect(prompt.contains("<shortcut>"))
+        #expect(prompt.contains("<shortcut_name>打开 &lt;灯&gt; &amp; 音乐</shortcut_name>"))
+        #expect(prompt.contains("<metadata>{\"note\":\"A &lt; B &amp; C\"}</metadata>"))
+        #expect(prompt.contains("<source_summary>if x &lt; 1 &amp;&amp; y &gt; 0</source_summary>"))
+        #expect(!prompt.contains("快捷指令名称："))
+
         await cleanup()
     }
 

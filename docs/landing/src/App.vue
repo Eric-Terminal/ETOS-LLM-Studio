@@ -13,7 +13,7 @@ const QUICKSTART_PATH = '/guide/getting-started';
 const MODULES_PATH = '/modules/chat-and-models';
 
 const { wavePaths, showLoader, loaderLeaving, showFrame, frameLeaving } = useWaveLoader();
-const { cursorEl } = useMagneticCursor();
+useMagneticCursor();
 const { isDark, toggle: toggleTheme } = useTheme();
 const { current: currentLang, list: langList, set: setLang } = useLang();
 
@@ -34,6 +34,60 @@ const titleLetters = computed(() => {
   // 把标题切成字符数组，CJK 单字也独立动画。空格保留。
   return Array.from(text.value.hero.title);
 });
+
+// 个性化预览：三项真实外观功能——上传壁纸 / 对话框颜色（调色盘）/ 去掉 AI 气泡。
+// 默认值对齐 App：Telegram 浅蓝灰壁纸 + Telegram 蓝气泡（rgb 0.24,0.56,0.95）。
+const DEFAULT_BUBBLE = '#3477d3';
+const DEFAULT_WALL = 'linear-gradient(180deg, #d9e6eb 0%, #e0ebf2 100%)';
+
+const bubbleColor = ref(DEFAULT_BUBBLE);
+const wallpaperUrl = ref('');
+const hideBotBubble = ref(false);
+
+// 把 hex 按比例压暗，模拟 App 用户气泡渐变的深色端（darkened factor 0.86）。
+function darkenHex(hex, factor) {
+  const n = hex.replace('#', '');
+  if (n.length !== 6) return hex;
+  const ch = (i) => Math.round(parseInt(n.slice(i, i + 2), 16) * factor);
+  const h = (v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+  return `#${h(ch(0))}${h(ch(2))}${h(ch(4))}`;
+}
+
+const wallValue = computed(() =>
+  wallpaperUrl.value ? `url("${wallpaperUrl.value}") center / cover no-repeat` : DEFAULT_WALL
+);
+const phoneStyle = computed(() => ({
+  '--persona-accent': bubbleColor.value,
+  '--persona-accent-dark': darkenHex(bubbleColor.value, 0.86),
+  '--persona-wall': wallValue.value
+}));
+
+function onWallpaperChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (wallpaperUrl.value) URL.revokeObjectURL(wallpaperUrl.value);
+  wallpaperUrl.value = URL.createObjectURL(file);
+}
+function resetPersona() {
+  if (wallpaperUrl.value) URL.revokeObjectURL(wallpaperUrl.value);
+  wallpaperUrl.value = '';
+  bubbleColor.value = DEFAULT_BUBBLE;
+  hideBotBubble.value = false;
+}
+
+// 滚动 marquee：统一英文，不走 i18n。
+const marqueeItems = [
+  'OpenAI',
+  'Anthropic Claude',
+  'Google Gemini',
+  'OpenAI-compatible',
+  'MCP',
+  'Agent Skills',
+  'Shortcuts',
+  'Local RAG',
+  'Worldbook',
+  'Daily Pulse'
+];
 
 const isLangMenuOpen = ref(false);
 function toggleLangMenu() {
@@ -79,6 +133,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick);
   window.removeEventListener('scroll', onScroll);
   window.removeEventListener('scroll', onScrollCondense);
+  if (wallpaperUrl.value) URL.revokeObjectURL(wallpaperUrl.value);
 });
 </script>
 
@@ -102,7 +157,7 @@ onBeforeUnmount(() => {
           <span>{{ text.loader.kicker }}</span>
           <span>{{ text.loader.year }}</span>
         </div>
-        <div class="loader-title">ETOS</div>
+        <div class="loader-title">ETOS!</div>
         <div class="loader-line">
           <span>{{ text.loader.line }}</span>
           <span>· · · · ·</span>
@@ -151,6 +206,7 @@ onBeforeUnmount(() => {
     </a>
     <div class="nav-right">
       <a class="nav-link" href="#features">{{ text.nav.features }}</a>
+      <a class="nav-link" href="#personalize">{{ text.nav.personalize }}</a>
       <a class="nav-link" href="#privacy">{{ text.nav.privacy }}</a>
       <a class="nav-link" href="#tech">{{ text.nav.tech }}</a>
       <a class="nav-link" :href="DOCS_URL" target="_blank" rel="noopener">{{ text.nav.docs }}</a>
@@ -207,7 +263,7 @@ onBeforeUnmount(() => {
         <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
       <div class="hero-inner">
-        <div class="section-label">{{ text.hero.eyebrow }}</div>
+        <div class="section-label">NATIVE · iOS 18 · watchOS 11</div>
         <h1 class="hero-title" :aria-label="text.hero.title">
           <span
             v-for="(letter, i) in titleLetters"
@@ -243,15 +299,15 @@ onBeforeUnmount(() => {
     <!-- 滚动横向 marquee -->
     <section class="marquee" aria-hidden="true">
       <div class="marquee-track">
-        <span v-for="(m, i) in text.marquee" :key="`a-${i}`">{{ m }}</span>
-        <span v-for="(m, i) in text.marquee" :key="`b-${i}`">{{ m }}</span>
+        <span v-for="(m, i) in marqueeItems" :key="`a-${i}`">{{ m }}</span>
+        <span v-for="(m, i) in marqueeItems" :key="`b-${i}`">{{ m }}</span>
       </div>
     </section>
 
     <!-- 截图 -->
     <section class="screenshots tile-parchment" v-reveal>
       <div class="container">
-        <div class="section-label">{{ text.screenshots.captionOne }} · {{ text.screenshots.captionTwo }}</div>
+        <div class="section-label">SCREENSHOTS · CURRENT BUILD</div>
         <h2 class="tile-title">{{ text.screenshots.title }}</h2>
         <p class="tile-lead">{{ text.screenshots.lead }}</p>
         <div class="screenshots-grid">
@@ -271,10 +327,165 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <!-- 个性化外观 -->
+    <section id="personalize" class="personalize tile-light" v-reveal>
+      <div class="container">
+        <div class="section-label">MAKE IT YOURS</div>
+        <h2 class="tile-title">{{ text.personalize.title }}</h2>
+        <p class="tile-lead">{{ text.personalize.lead }}</p>
+
+        <div class="persona-stage">
+          <!-- 左：三项真实外观功能 -->
+          <div class="persona-controls">
+            <div class="persona-picker-hint">
+              <span class="persona-live-dot" aria-hidden="true"></span>
+              {{ text.personalize.pickerHint }}
+            </div>
+
+            <!-- 1. 上传壁纸 -->
+            <div class="persona-control">
+              <span class="persona-control-label">{{ text.personalize.wallpaperLabel }}</span>
+              <label class="persona-upload">
+                <input type="file" accept="image/*" @change="onWallpaperChange" hidden />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="8.5" cy="8.5" r="1.6" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+                <span>{{ wallpaperUrl ? '✓' : '' }} {{ text.personalize.wallpaperAction }}</span>
+              </label>
+            </div>
+
+            <!-- 2. 对话框颜色（调色盘） -->
+            <div class="persona-control persona-control-row">
+              <span class="persona-control-label">{{ text.personalize.colorLabel }}</span>
+              <label class="persona-colorpicker">
+                <input type="color" v-model="bubbleColor" aria-label="bubble color" />
+                <span class="persona-color-hex">{{ bubbleColor.toUpperCase() }}</span>
+              </label>
+            </div>
+
+            <!-- 3. 去掉 AI 回复气泡 -->
+            <div class="persona-control persona-control-row">
+              <span class="persona-control-label">{{ text.personalize.hideBubbleLabel }}</span>
+              <button
+                class="persona-toggle"
+                :class="{ on: hideBotBubble }"
+                type="button"
+                role="switch"
+                :aria-checked="hideBotBubble"
+                :aria-label="text.personalize.hideBubbleLabel"
+                @click="hideBotBubble = !hideBotBubble"
+              >
+                <span class="persona-toggle-knob" aria-hidden="true"></span>
+              </button>
+            </div>
+
+            <button class="persona-reset" type="button" @click="resetPersona">{{ text.personalize.reset }}</button>
+          </div>
+
+          <!-- 右：仿 iPhone 聊天界面，随预设实时换肤 -->
+          <div class="persona-phone-wrap">
+            <div class="persona-phone" :style="phoneStyle">
+              <img class="persona-frame" src="/images/phone-frame.svg" alt="" aria-hidden="true" />
+              <div class="persona-screen">
+                <div class="persona-wall" aria-hidden="true"></div>
+                <svg v-if="!wallpaperUrl" class="persona-wall-pattern" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="personaTgPattern" width="120" height="120" patternUnits="userSpaceOnUse">
+                      <g fill="#4a5a66">
+                        <path transform="translate(22,12)" d="M8 0.6 9.9 5.4 15 5.8 11.1 9.1 12.4 14.1 8 11.3 3.6 14.1 4.9 9.1 1 5.8 6.1 5.4Z" />
+                        <path transform="translate(77,17)" d="M8 14.2C8 14.2 1.2 9.9 1.2 5.4 1.2 3.1 2.9 1.6 4.8 1.6 6.1 1.6 7.3 2.4 8 3.6 8.7 2.4 9.9 1.6 11.2 1.6 13.1 1.6 14.8 3.1 14.8 5.4 14.8 9.9 8 14.2 8 14.2Z" />
+                        <path transform="translate(10,54)" d="M1.2 7.4 14.8 1.4 8.8 14.8 7 8.8Z" />
+                        <path transform="translate(62,50)" d="M3.5 2H12.5A2 2 0 0 1 14.5 4V9A2 2 0 0 1 12.5 11H6.5L3.5 13.8V11A2 2 0 0 1 1.5 9V4A2 2 0 0 1 3.5 2Z" />
+                        <path transform="translate(40,90)" d="M8 14.2C8 14.2 1.2 9.9 1.2 5.4 1.2 3.1 2.9 1.6 4.8 1.6 6.1 1.6 7.3 2.4 8 3.6 8.7 2.4 9.9 1.6 11.2 1.6 13.1 1.6 14.8 3.1 14.8 5.4 14.8 9.9 8 14.2 8 14.2Z" />
+                        <path transform="translate(92,84)" d="M8 0.6 9.9 5.4 15 5.8 11.1 9.1 12.4 14.1 8 11.3 3.6 14.1 4.9 9.1 1 5.8 6.1 5.4Z" />
+                      </g>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#personaTgPattern)" />
+                </svg>
+                <div class="persona-scrim" aria-hidden="true"></div>
+                <div class="persona-statusbar">
+                  <span class="persona-status-left">
+                    <span class="persona-time">11:20</span>
+                  </span>
+                  <span class="persona-island" aria-hidden="true"></span>
+                  <span class="persona-statusbar-right" aria-hidden="true">
+                    <svg class="persona-signal" viewBox="0 0 17 12" fill="currentColor">
+                      <rect x="0" y="8" width="3" height="4" rx="1" />
+                      <rect x="4.6" y="5.5" width="3" height="6.5" rx="1" />
+                      <rect x="9.2" y="3" width="3" height="9" rx="1" />
+                      <rect x="13.8" y="0" width="3" height="12" rx="1" />
+                    </svg>
+                    <span class="persona-net">4G</span>
+                    <svg class="persona-batt" viewBox="0 0 26 12" fill="none">
+                      <rect x="0.6" y="0.6" width="21.5" height="10.8" rx="3" stroke="currentColor" stroke-opacity="0.4" />
+                      <rect x="2" y="2" width="18" height="8" rx="1.6" fill="currentColor" />
+                      <rect x="23.6" y="4" width="1.6" height="4" rx="0.8" fill="currentColor" fill-opacity="0.4" />
+                    </svg>
+                  </span>
+                </div>
+                <div class="persona-nav">
+                  <span class="persona-nav-btn" v-liquid-glass aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                      <circle cx="4.6" cy="7" r="1.15" fill="currentColor" stroke="none" />
+                      <line x1="9" y1="7" x2="20" y2="7" />
+                      <circle cx="4.6" cy="12" r="1.15" fill="currentColor" stroke="none" />
+                      <line x1="9" y1="12" x2="20" y2="12" />
+                      <circle cx="4.6" cy="17" r="1.15" fill="currentColor" stroke="none" />
+                      <line x1="9" y1="17" x2="20" y2="17" />
+                    </svg>
+                  </span>
+                  <span class="persona-nav-pill" v-liquid-glass>
+                    <span class="persona-nav-texts">
+                      <span class="persona-nav-title">{{ text.personalize.chat.title }}</span>
+                      <span class="persona-nav-sub">GPT-5.5 · OpenAI</span>
+                    </span>
+                    <svg class="persona-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </span>
+                  <span class="persona-nav-btn" v-liquid-glass aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                    </svg>
+                  </span>
+                </div>
+                <div class="persona-messages">
+                  <div class="persona-row persona-row-user">
+                    <div class="persona-bubble persona-bubble-user" v-liquid-glass="{ blur: 1 }"><span class="persona-btext">{{ text.personalize.chat.user }}</span></div>
+                  </div>
+                  <div class="persona-row persona-row-bot">
+                    <div v-if="!hideBotBubble" class="persona-bubble persona-bubble-bot" v-liquid-glass="{ blur: 6 }"><span class="persona-btext">{{ text.personalize.chat.bot }}</span></div>
+                    <div v-else class="persona-bubble persona-bubble-bot persona-bubble-bot--bare"><span class="persona-btext">{{ text.personalize.chat.bot }}</span></div>
+                  </div>
+                </div>
+                <div class="persona-inputbar">
+                  <span class="persona-circle persona-clip" v-liquid-glass aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20.5 11.5l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4l8.5-8.5a3 3 0 0 1 4.3 4.3l-8.5 8.5a1.5 1.5 0 0 1-2.1-2.1l7.8-7.8" />
+                    </svg>
+                  </span>
+                  <span class="persona-input" v-liquid-glass><span class="persona-input-text">{{ text.personalize.chat.placeholder }}</span></span>
+                  <span class="persona-circle persona-send" v-liquid-glass aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="19" x2="12" y2="5" />
+                      <polyline points="6 11 12 5 18 11" />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 功能 -->
     <section id="features" class="features tile-dark" v-reveal>
       <div class="container">
-        <div class="section-label section-label-light">{{ text.sectionLabel.features }}</div>
+        <div class="section-label section-label-light">FEATURE MATRIX</div>
         <h2 class="tile-title">{{ text.features.title }}</h2>
         <p class="tile-lead">{{ text.features.lead }}</p>
         <div class="feature-grid">
@@ -299,7 +510,7 @@ onBeforeUnmount(() => {
     <!-- 隐私 -->
     <section id="privacy" class="privacy tile-light" v-reveal>
       <div class="container">
-        <div class="section-label">{{ text.sectionLabel.privacy }}</div>
+        <div class="section-label">PRIVACY & LOCAL-FIRST</div>
         <h2 class="tile-title">{{ text.privacy.title }}</h2>
         <p class="tile-lead">{{ text.privacy.lead }}</p>
         <div class="privacy-grid">
@@ -320,7 +531,7 @@ onBeforeUnmount(() => {
     <!-- 技术栈 -->
     <section id="tech" class="tech tile-parchment" v-reveal>
       <div class="container">
-        <div class="section-label">{{ text.sectionLabel.tech }}</div>
+        <div class="section-label">TECH STACK</div>
         <h2 class="tile-title">{{ text.tech.title }}</h2>
         <p class="tile-lead">{{ text.tech.lead }}</p>
         <div class="tech-grid">
@@ -335,7 +546,7 @@ onBeforeUnmount(() => {
     <!-- CTA -->
     <section class="cta tile-dark" v-reveal>
       <div class="container cta-inner">
-        <div class="section-label section-label-light">{{ text.sectionLabel.cta }}</div>
+        <div class="section-label section-label-light">READY TO START</div>
         <h2 class="cta-title">{{ text.cta.title }}</h2>
         <p class="cta-lead">{{ text.cta.lead }}</p>
         <div class="cta-actions">
@@ -383,8 +594,4 @@ onBeforeUnmount(() => {
       <polyline points="18 15 12 9 6 15"></polyline>
     </svg>
   </button>
-
-  <div ref="cursorEl" class="cursor" aria-hidden="true">
-    <span></span><span></span><span></span><span></span>
-  </div>
 </template>

@@ -108,6 +108,9 @@ extension ChatService {
         let content = """
 <enhanced_prompt>
 \(metaInstruction)
+
+---
+
 \(trimmed)
 </enhanced_prompt>
 """
@@ -119,10 +122,8 @@ extension ChatService {
     }
 
     func makeSystemTimePromptBlock() -> String {
-        let timeHeader = NSLocalizedString("# 以下是用户发送最后一条消息时的系统时间，每轮对话都会动态更新。", comment: "System time header for model prompt.")
         return """
 <time>
-\(timeHeader)
 \(SystemTimeContextFormatter.description())
 </time>
 """
@@ -279,17 +280,8 @@ extension ChatService {
     }
 
     func makePeriodicTimeLandmarkMessage(anchorTime: Date) -> ChatMessage {
-        let content = "本条对话的请求时间为：\(formattedPeriodicTimeLandmarkDescription(at: anchorTime))。"
+        let content = SystemTimeContextFormatter.description(at: anchorTime)
         return ChatMessage(role: .system, content: content)
-    }
-
-    func formattedPeriodicTimeLandmarkDescription(at date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.timeZone = TimeZone.current
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZZ"
-        return formatter.string(from: date)
     }
 
     func findSafeInsertIndex(_ preferredIndex: Int, in messages: [ChatMessage]) -> Int {

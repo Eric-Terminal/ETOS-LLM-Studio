@@ -54,6 +54,10 @@ struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
     let id: UUID
 }
 
+struct WatchMessageRewriteNavigationTarget: Identifiable, Hashable {
+    let id: UUID
+}
+
 struct FullErrorContentWrapper: Identifiable {
     let id = UUID()
     let content: String

@@ -858,14 +858,12 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
     }
 
     private nonisolated static func inferredTotalTokens(_ totals: RequestLogTokenTotals) -> Int {
-        max(
-            totals.totalTokens,
-            totals.sentTokens
-            + totals.receivedTokens
-            + totals.thinkingTokens
-            + totals.cacheWriteTokens
-            + totals.cacheReadTokens
-        )
+        let nonCacheTotalTokens = totals.sentTokens + totals.receivedTokens
+        let hasCacheTokens = totals.cacheWriteTokens > 0 || totals.cacheReadTokens > 0
+        if hasCacheTokens && nonCacheTotalTokens > 0 {
+            return nonCacheTotalTokens
+        }
+        return max(totals.totalTokens, nonCacheTotalTokens)
     }
 
     private nonisolated static func rankComparator(_ lhs: UsageAnalyticsRankItem, _ rhs: UsageAnalyticsRankItem) -> Bool {
