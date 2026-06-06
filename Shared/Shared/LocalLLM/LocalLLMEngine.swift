@@ -95,10 +95,12 @@ public struct LocalLLMEmbeddingOptions: Hashable, Sendable {
 
 public struct LocalLLMToolCallParseResult: Hashable, Sendable {
     public var content: String
+    public var reasoningContent: String?
     public var toolCalls: [InternalToolCall]
 
-    public init(content: String, toolCalls: [InternalToolCall]) {
+    public init(content: String, reasoningContent: String? = nil, toolCalls: [InternalToolCall]) {
         self.content = content
+        self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
     }
 }

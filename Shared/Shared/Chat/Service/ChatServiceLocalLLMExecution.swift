@@ -76,7 +76,11 @@ extension ChatService {
                 tokenUsage: nil,
                 finishedAt: Date()
             )
-            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parsedOutput = LocalLLMChatMessageBuilder.parseGeneratedOutput(from: output)
+            if !parsedOutput.content.isEmpty {
+                return parsedOutput.content
+            }
+            return (parsedOutput.reasoningContent ?? output).trimmingCharacters(in: .whitespacesAndNewlines)
         } catch is CancellationError {
             persistRequestLog(
                 context: requestLogContext,
@@ -177,6 +181,9 @@ extension ChatService {
             var output = ""
             var firstTokenAt: Date?
             var lastTokenAt: Date?
+            var reasoningStartedAt: Date?
+            var reasoningLastDeltaAt: Date?
+            var reasoningCompletedAt: Date?
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
             var messages = messagesSnapshot(for: currentSessionID)
 
@@ -188,33 +195,68 @@ extension ChatService {
                 }
                 lastTokenAt = receivedAt
                 output += tokenText
+                let parsedStreamingOutput = LocalLLMChatMessageBuilder.parseGeneratedOutput(
+                    from: output,
+                    tools: localTools
+                )
+                let parsedReasoning = parsedStreamingOutput.reasoningContent?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !parsedReasoning.isEmpty {
+                    if reasoningStartedAt == nil {
+                        reasoningStartedAt = receivedAt
+                    }
+                    reasoningLastDeltaAt = receivedAt
+                }
+                let parsedContent = parsedStreamingOutput.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if reasoningStartedAt != nil,
+                   reasoningCompletedAt == nil,
+                   (!parsedContent.isEmpty || !parsedStreamingOutput.toolCalls.isEmpty) {
+                    reasoningCompletedAt = reasoningLastDeltaAt ?? receivedAt
+                }
 
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
                     messages[index].role = .assistant
-                    messages[index].content += tokenText
+                    messages[index].content = parsedStreamingOutput.content
+                    messages[index].reasoningContent = parsedStreamingOutput.reasoningContent
+                    if parsedStreamingOutput.toolCalls.isEmpty {
+                        messages[index].toolCalls = nil
+                        messages[index].toolCallsPlacement = nil
+                    } else {
+                        messages[index].toolCalls = parsedStreamingOutput.toolCalls
+                        if messages[index].toolCallsPlacement == nil {
+                            messages[index].toolCallsPlacement = inferredToolCallsPlacement(from: parsedStreamingOutput.content)
+                        }
+                    }
                     messages[index].modelReference = requestLogContext.modelReference
-                    if enableResponseSpeedMetrics {
+                    if enableResponseSpeedMetrics || reasoningStartedAt != nil {
                         let estimatedTokens = estimatedCompletionTokens(from: output)
-                        let speed = streamingTokenPerSecond(
-                            tokens: estimatedTokens,
-                            requestStartedAt: requestStartedAt,
-                            firstTokenAt: firstTokenAt,
-                            snapshotAt: receivedAt
-                        )
-                        appendSpeedSample(
-                            to: &speedSamples,
-                            elapsed: max(0, receivedAt.timeIntervalSince(requestStartedAt)),
-                            speed: speed
-                        )
+                        let speed: Double?
+                        if enableResponseSpeedMetrics {
+                            speed = streamingTokenPerSecond(
+                                tokens: estimatedTokens,
+                                requestStartedAt: requestStartedAt,
+                                firstTokenAt: firstTokenAt,
+                                snapshotAt: receivedAt
+                            )
+                            appendSpeedSample(
+                                to: &speedSamples,
+                                elapsed: max(0, receivedAt.timeIntervalSince(requestStartedAt)),
+                                speed: speed
+                            )
+                        } else {
+                            speed = nil
+                        }
                         messages[index].responseMetrics = makeResponseMetrics(
                             requestStartedAt: requestStartedAt,
                             responseCompletedAt: nil,
                             totalResponseDuration: nil,
-                            timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
-                            completionTokensForSpeed: estimatedTokens,
+                            timeToFirstToken: enableResponseSpeedMetrics ? firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) } : nil,
+                            reasoningStartedAt: reasoningStartedAt,
+                            reasoningCompletedAt: reasoningCompletedAt,
+                            completionTokensForSpeed: enableResponseSpeedMetrics ? estimatedTokens : nil,
                             tokenPerSecond: speed,
-                            isEstimated: true,
-                            speedSamples: speedSamples.isEmpty ? nil : speedSamples
+                            isEstimated: enableResponseSpeedMetrics,
+                            speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                         )
                     }
                     messages = publishStreamingMessages(
@@ -241,34 +283,38 @@ extension ChatService {
                     speed: finalSpeed
                 )
             }
-            let parsedOutput: LocalLLMToolCallParseResult
-            if localTools.isEmpty {
-                parsedOutput = LocalLLMToolCallParseResult(content: output, toolCalls: [])
-            } else {
-                parsedOutput = try await LocalLLMEngine.shared.parseToolCalls(
-                    from: output,
-                    messages: localMessagesToSend,
-                    tools: localTools,
-                    modelURL: localModelStore.fileURL(for: record)
-                )
+            let parsedOutput = LocalLLMChatMessageBuilder.parseGeneratedOutput(
+                from: output,
+                tools: localTools
+            )
+            if reasoningStartedAt != nil && reasoningCompletedAt == nil {
+                reasoningCompletedAt = reasoningLastDeltaAt ?? responseCompletedAt
+            }
+            if reasoningStartedAt == nil,
+               !(parsedOutput.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                reasoningStartedAt = requestStartedAt
+                reasoningCompletedAt = responseCompletedAt
             }
             var responseMessage = ChatMessage(
                 role: .assistant,
                 content: parsedOutput.content,
                 requestedAt: requestStartedAt,
+                reasoningContent: parsedOutput.reasoningContent,
                 toolCalls: parsedOutput.toolCalls.isEmpty ? nil : parsedOutput.toolCalls,
                 modelReference: requestLogContext.modelReference
             )
-            if enableResponseSpeedMetrics {
+            if enableResponseSpeedMetrics || reasoningStartedAt != nil {
                 responseMessage.responseMetrics = makeResponseMetrics(
                     requestStartedAt: requestStartedAt,
-                    responseCompletedAt: responseCompletedAt,
-                    totalResponseDuration: totalDuration,
-                    timeToFirstToken: firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) },
-                    completionTokensForSpeed: estimatedCompletionTokens,
-                    tokenPerSecond: finalSpeed ?? tokenPerSecond(tokens: estimatedCompletionTokens, elapsed: totalDuration),
-                    isEstimated: true,
-                    speedSamples: speedSamples.isEmpty ? nil : speedSamples
+                    responseCompletedAt: enableResponseSpeedMetrics ? responseCompletedAt : nil,
+                    totalResponseDuration: enableResponseSpeedMetrics ? totalDuration : nil,
+                    timeToFirstToken: enableResponseSpeedMetrics ? firstTokenAt.map { max(0, $0.timeIntervalSince(requestStartedAt)) } : nil,
+                    reasoningStartedAt: reasoningStartedAt,
+                    reasoningCompletedAt: reasoningCompletedAt,
+                    completionTokensForSpeed: enableResponseSpeedMetrics ? estimatedCompletionTokens : nil,
+                    tokenPerSecond: enableResponseSpeedMetrics ? (finalSpeed ?? tokenPerSecond(tokens: estimatedCompletionTokens, elapsed: totalDuration)) : nil,
+                    isEstimated: enableResponseSpeedMetrics,
+                    speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                 )
             }
             attachCostEstimateIfPossible(to: &responseMessage, using: requestLogContext)
