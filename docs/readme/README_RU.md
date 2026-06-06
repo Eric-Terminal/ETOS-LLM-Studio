@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**Нативный AI‑клиент для iOS и Apple Watch. Поддерживает OpenAI, Anthropic Claude, Google Gemini и других провайдеров моделей, встроенный вызов MCP‑инструментов, пакеты Agent Skills, локальную RAG‑память, Worldbook, Daily Pulse, блокировку приложения и полнодисковое шифрование SQLCipher, синхронизацию между устройствами через CloudKit / WatchConnectivity, а также Siri Shortcuts.**
+**Нативный AI‑клиент для iOS и Apple Watch. Поддерживает OpenAI, Anthropic Claude, Google Gemini и локальные GGUF / llama.cpp модели на устройстве, встроенный вызов MCP‑инструментов, пакеты Agent Skills, локальную RAG‑память, Worldbook, Daily Pulse, блокировку приложения и полнодисковое шифрование SQLCipher, синхронизацию между устройствами через CloudKit / WatchConnectivity, а также Siri Shortcuts.**
 
 [简体中文](../../README.md) | [English](README_EN.md) | [繁體中文](README_ZH_HANT.md) | [日本語](README_JA.md)
 
@@ -23,9 +23,9 @@
 
 В школе часто скучно, а вопросов к AI всегда слишком много. Когда я смотрела на приложения в App Store, почти все были либо слишком дорогими, либо слишком урезанными — особенно на Apple Watch. Поэтому я просто решила сделать своё.
 
-Изначально это был маленький эксперимент: около 1 800 строк и даже захардкоженные API‑ключи. Сейчас проект вырос до **595 Swift‑файлов и 167 821 строки Swift‑кода** (по подсчёту `cloc . --timeout=0`, только Swift; зависимости VitePress doc‑сайта не учитываются). Название «ETOS LLM Studio» звучит громко, но по сути это всё ещё мой полигон для экспериментов с LLM‑приложениями.
+Изначально это был маленький эксперимент: около 1 800 строк и даже захардкоженные API‑ключи. Сейчас проект вырос до **614 Swift‑файлов и 207 600 строк Swift‑кода** (только Swift внутри проекта; сабмодуль llama.cpp и зависимости VitePress doc‑сайта не учитываются). Название «ETOS LLM Studio» звучит громко, но по сути это всё ещё мой полигон для экспериментов с LLM‑приложениями.
 
-Раньше это был почти чисто watch‑проект, а теперь iOS‑часть тоже стала полноценной: модели, инструменты, память, worldbook, Daily Pulse и синхронизация между устройствами в одном приложении.
+Раньше это был почти чисто watch‑проект, а теперь iOS‑часть тоже стала полноценной: облачные модели, локальные GGUF‑веса, инструменты, память, worldbook, Daily Pulse и синхронизация между устройствами в одном приложении.
 
 В повседневной жизни я в основном пользуюсь Mac и Apple Watch, так что у iPhone‑части ещё остаются углы, которые хочется отполировать, но я буду их потихоньку дорабатывать.
 
@@ -35,9 +35,12 @@
 
 *   **Нативно на двух платформах**: iOS и Apple Watch с единым стилем и адаптированным UX. На iOS список чатов оформлен в виде карточек с чёткой группировкой папок и сессий, а в альбомной ориентации автоматически переключается на фиксированный двухколоночный сайдбар.
 *   **Расширенное управление чатами**: полнотекстовый поиск, предпросмотр найденного контекста, переход по номеру сообщения, папки, вложенные перемещения, массовые операции, отправка отдельного чата между устройствами и бесконечная подгрузка истории.
-*   **Поддержка нескольких провайдеров**: нативные адаптеры для OpenAI Chat, OpenAI Responses, Anthropic (Claude) и Google (Gemini), управление провайдерами и моделями в приложении, а также массовая проверка связности всех моделей провайдера.
+*   **Поддержка нескольких провайдеров**: нативные адаптеры для OpenAI Chat, OpenAI Responses, Anthropic (Claude) и Google (Gemini), управление провайдерами и моделями в приложении, сортировка провайдеров долгим нажатием и перетаскиванием, а также массовая проверка связности всех моделей провайдера с настраиваемой параллельностью.
+*   **Локальные модели на устройстве**: импорт GGUF‑весов как провайдера «Local Models» с выполнением через C ABI‑мост к llama.cpp. Поддерживаются streaming‑ответы, GGUF Jinja chat template, разбор локальных tool calls, разбор reasoning‑контента, маршрутизация локальных embedding‑моделей и detached completion в фоне.
+*   **Продвинутая настройка локальных моделей**: для каждого GGUF можно переопределить context size, лимит вывода, GPU layers, batch / ubatch, KV offload, flash attention, seed, sampler chain, grammar, repetition penalties и другие параметры. Также есть импорт частого подмножества llama.cpp-style CLI параметров, переключатель model cache и поддержка iOS high-memory entitlement.
 *   **Расширенная настройка запросов**: кастомные заголовки, выражения параметров, структурированный контроль запроса, редактирование key/value payload, raw JSON body и предпросмотр запроса для совместимых API и экспериментальных моделей.
 *   **Регулярные правила для сообщений**: пакетная перезапись отправляемых и приходящих сообщений по правилам, управление несколькими правилами в настройках и быстрый доступ со страницы провайдера.
+*   **Переписывание одного ответа AI**: можно переписать конкретный старый ответ ассистента, при необходимости ссылаясь на другие версии того же сообщения, без повторного запуска всего диалога.
 *   **Тарификация моделей и оценка стоимости**: задаются локальные цены для модели (включая ступенчатые диапазоны), и стоимость каждого сообщения автоматически оценивается по расходу токенов.
 *   **Мультимодальность и генерация изображений**: голосовой, графический ввод и файловые вложения; изображения могут идти через отдельный OCR‑канал, файловые вложения текстифицируются перед отправкой, поддерживается AI image generation.
 *   **Импорт и экспорт чатов**: импорт из ETOS, Cherry Studio, RikkaHub, Kelivo, ChatGPT conversations и экспорт в PDF / Markdown / TXT.
@@ -48,6 +51,7 @@
 #### Отображение и чтение
 
 *   **Гибкая система отображения**: пользовательские шрифты (включая WOFF / WOFF2), масштаб шрифтов, приоритеты слотов шрифтов, цвета пузырей/текста, профили цветовой схемы чата, автоматическое переключение цветов по времени и режим без пузырей для ассистента.
+*   **Монитор локальной производительности**: на iOS при чате с локальной моделью над полем ввода можно показывать CPU, Metal и память. Панель умеет сворачиваться, перетаскиваться, пропускать касания и запоминать позицию.
 *   **Панель действий под пузырём**: настраиваемая панель под каждым пузырём сообщения с однострочной горизонтальной прокруткой, опциональной внешней рамкой, раздельными набором по умолчанию для iOS и watchOS (для пользователя/ассистента) и возможностью перетаскивания на watchOS.
 *   **Стратегия fallback‑шрифтов**: выбор диапазона fallback на уровне абзаца и символа для стабильного смешанного текста.
 *   **Таймлайн мыслей и инструментов**: прокручиваемый предпросмотр мыслей, время на размышление, асинхронные сводки, связный таймлайн вызовов инструментов, продолжение после ретрая по ошибке и переключение между версиями ответа. Подтверждение использования инструмента переработано в нативный Q&A‑шит с раскладкой опций по строкам/колонкам.
@@ -67,7 +71,7 @@
 
 #### Память и организация знаний
 
-*   **Локальная RAG‑память**: embeddings могут быть облачными, но **векторная БД полностью локальная (SQLite)**; также поддерживаются чанкование, визуализация прогресса эмбеддинга, редактирование памяти и активный инструмент поиска.
+*   **Локальная RAG‑память**: embeddings могут быть облачными или идти через зарегистрированную локальную embedding‑модель, но **векторная БД полностью локальная (SQLite)**; также поддерживаются чанкование, визуализация прогресса эмбеддинга, редактирование памяти и активный инструмент поиска.
 *   **Реляционное хранение на GRDB**: основная персистентность мигрирована с JSON на GRDB + SQLite — сессии, настройки, MCP, worldbook, память, feedback, shortcuts, аналитика и глобальные промпты; в качестве базы можно опционально включить полнодисковое физическое шифрование SQLCipher.
 *   **Worldbook**: система в стиле Lorebook (как в SillyTavern) с условными триггерами, изоляцией по сессии, system‑инъекцией и импортом по URL; совместимость с SillyTavern дополнительно улучшена для одновременной инъекции нескольких книг, контроля бюджета инъекций и изоляции полей.
 *   **Совместимость форматов**: PNG naidata, JSON top-level array, `character_book`.
@@ -118,26 +122,27 @@
 
 ## 🛠️ Технологии
 
-*   **Язык**: Swift 6
+*   **Язык**: Swift 6, C / C++ (слой моста llama.cpp)
 *   **UI**: SwiftUI
 *   **Архитектура**: MVVM + Protocol Oriented Programming
 *   **Данные**: GRDB + SQLite + SQLCipher (основная персистентность, локальная векторная БД и опциональное полнодисковое физическое шифрование), JSON (форматы импорта/экспорта и совместимости)
 *   **Настройки**: AppConfigStore (заменяет `@AppStorage`; GRDB‑персистентность + runtime‑кеш + фоновая асинхронная запись)
 *   **Безопасность**: полнодисковое шифрование SQLCipher, master‑пароль PBKDF2 в Keychain, биометрия LocalAuthentication, шифрование снапшотов AES-256-GCM
 *   **Сеть и транспорт**: URLSession (запросы к API), Streamable HTTP / SSE (транспорт MCP), WatchConnectivity / CloudKit / APNs silent push (межустройственный и облачный транспорт), WebSocket / HTTP polling (LAN‑отладка)
-*   **AI‑протокол**: Model Context Protocol (на базе официального [swift-sdk](https://github.com/modelcontextprotocol/swift-sdk)), OpenAI Chat / Responses, Anthropic Messages, Gemini API
+*   **AI‑протокол**: Model Context Protocol (на базе официального [swift-sdk](https://github.com/modelcontextprotocol/swift-sdk)), OpenAI Chat / Responses, Anthropic Messages, Gemini API, локальный провайдер `local-llama-cpp`
+*   **Локальный inference**: llama.cpp / GGUF, мост Swift ↔ C ABI ↔ C++, заранее собираемый через CMake `libetos-llama.a`, Accelerate / Metal (на watchOS runtime фиксируется на CPU path)
 *   **Системные интеграции**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, BackgroundTasks (iOS), LocalAuthentication, Speech / AVFoundation
 *   **Сайт документации**: VitePress / Teek (используется только сайтом; его зависимости не учитываются в подсчёте размера кода в README)
-*   **Зависимости**: Swift Package Manager — текущие явные зависимости: `GRDB.swift` (форк Eric-Terminal), `SQLCipher.swift`, `swift-sdk` (MCP), `swift-markdown-ui`, `SwiftMath`, `ZIPFoundation`, `Cepheus` (сторонняя клавиатура для watchOS); транзитивно подтягиваются `networkimage`, `swift-cmark`, `eventsource`, `swift-nio` и т. д.
+*   **Зависимости**: Swift Package Manager — текущие явные зависимости: `GRDB.swift` (форк Eric-Terminal), `SQLCipher.swift`, `swift-sdk` (MCP), `swift-markdown-ui`, `SwiftMath`, `ZIPFoundation`, `Cepheus` (сторонняя клавиатура для watchOS); транзитивно подтягиваются `networkimage`, `swift-cmark`, `eventsource`, `swift-nio` и т. д. + Git submodule llama.cpp
 
 ---
 
 ## 🏗️ Архитектура проекта
 
-Проект разделён на два уровня: платформенно‑независимый Shared и отдельные UI‑слои для каждой платформы. В последнем рефакторинге появился настроечный хаб `Config/AppConfigStore`, полностью заменивший `@AppStorage` и собравший все runtime‑настройки в GRDB; самый большой Swift‑файл сейчас занимает около 1 224 строк (`Config/AppConfigStore.swift`), остальные модули укладываются в 1 000 строк, благодаря чему Shared / iOS / watchOS / тесты проще поддерживать локально.
+Проект разделён на два уровня: платформенно‑независимый Shared и отдельные UI‑слои для каждой платформы. В последнем рефакторинге появился настроечный хаб `Config/AppConfigStore`, полностью заменивший `@AppStorage`, а новые `LocalLLM` / `LocalLLMBridge` подключили локальный GGUF inference к существующему жизненному циклу чата. Самый большой Swift‑файл сейчас занимает около 1 365 строк (`Config/AppConfigStore.swift`); экраны управления локальными моделями и маппинг параметров генерации остаются тяжёлыми модулями, которые стоит дальше постепенно разгружать.
 
 ```
-Shared/Shared/                         ← Общая бизнес-логика (268 Swift-файлов)
+Shared/Shared/                         ← Общая бизнес-логика (278 Swift-файлов)
 ├── AppTool/                            ← Локальные инструменты, ask_user_input, утилиты для SQLite и sandbox-файлов
 ├── Attachments/                        ← Извлечение текста из файловых вложений
 ├── Chat/                               ← Модели чата, версии сообщений, экспорт, состояние рендера
@@ -149,6 +154,8 @@ Shared/Shared/                         ← Общая бизнес-логика 
 ├── Feedback/                           ← Встроенный feedback-модуль, сбор окружения, DTO и локальное хранение
 ├── Font/                               ← Библиотека пользовательских шрифтов, маршрутизация и диапазоны fallback
 ├── LocalDebugServer/                   ← Клиент LAN-отладки, web-консоль, файловые команды и захват запросов
+├── LocalLLM/                            ← Записи локальных GGUF-моделей, мост провайдера, маппинг параметров и Swift-точка входа inference
+├── LocalLLMBridge/                      ← Граница C ABI / C++ моста llama.cpp и линковки статической библиотеки
 ├── Math/                               ← Движок рендеринга LaTeX/математики
 ├── MCP/                                ← MCP-клиент, хранилище серверов, Streamable HTTP / SSE (на базе официального swift-sdk)
 ├── Memory/ + SimilaritySearch/         ← Локальная RAG, embeddings, чанкование, векторный поиск в SQLite
@@ -167,30 +174,44 @@ Shared/Shared/                         ← Общая бизнес-логика 
 ├── UsageAnalytics/                     ← События использования, дашборды, почасовые тренды и доли токенов по моделям
 └── Worldbook/                          ← Модели worldbook, импорт/экспорт, SQLite-хранилище и движок триггеров
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (127 Swift-файлов)
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (107 Swift-файлов)
-Shared/SharedTests/                         ← Тесты Shared-слоя (91 Swift-файл)
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (130 Swift-файлов)
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (109 Swift-файлов)
+Shared/SharedTests/                         ← Тесты Shared-слоя (96 Swift-файлов)
 ```
 
-Поток данных: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Сессии, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами слоя Shared и хранилищем GRDB / SQLite.
+Поток данных для облачных моделей: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Поток данных для локальных моделей: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Сессии, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами слоя Shared и хранилищем GRDB / SQLite.
 
 ---
 
 ## 🚀 Сборка
 
-1.  **Клонируйте проект**:
+1.  **Клонируйте проект и сабмодули**:
     ```bash
-    git clone https://github.com/Eric-Terminal/ETOS-LLM-Studio.git
+    git clone --recurse-submodules https://github.com/Eric-Terminal/ETOS-LLM-Studio.git
+    cd ETOS-LLM-Studio
     ```
 2.  **Требования**:
     *   Xcode 26.0+
     *   watchOS 26.0+ SDK
-3.  **Откройте проект**:
+    *   CMake (если его нет, выполните `brew install cmake`)
+3.  **Первый шаг перед сборкой: соберите статическую библиотеку llama.cpp**:
+    Xcode больше не пересобирает llama.cpp на каждом app build. Shared линкуется с заранее созданным `libetos-llama.a`. Для device / Release выполните:
+    ```bash
+    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh
+    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS=arm64_32 scripts/build-llama-static-library.sh
+    ```
+    Для локального Debug simulator можно использовать:
+    ```bash
+    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-llama-static-library.sh
+    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-llama-static-library.sh
+    ```
+    Артефакт появится в `Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a`. Скрипт использует stamp, чтобы не пересобирать лишнее. Если Xcode сообщает `library 'etos-llama' not found`, `file not found: libetos-llama.a` или не находит символы llama.cpp, повторите команду для текущих SDK / Configuration.
+4.  **Откройте проект**:
     `ETOS LLM Studio.xcworkspace` (именно workspace, не xcodeproj).
     При первом открытии Xcode автоматически подтянет Swift Package зависимости.
-4.  **Запуск**:
+5.  **Запуск**:
     Выберите target `ETOS LLM Studio Watch App` или `ETOS LLM Studio iOS App`, подключите устройство/симулятор и нажмите Command + R.
-5.  **Настройка**:
+6.  **Настройка**:
     Добавьте API key в настройках. Для удобства можно через LAN Debugging отправить готовый JSON в `Documents/Providers/`.
 
 ---
@@ -203,4 +224,4 @@ Shared/SharedTests/                         ← Тесты Shared-слоя (91 S
 
 ---
 
-Этот README обновлён 23 мая 2026 года (на основе коммитов после `7d150f1c`). Если README не успел за кодом, смотрите историю коммитов.
+Этот README обновлён 7 июня 2026 года (на основе коммитов после `1552347d`). Если README не успел за кодом, смотрите историю коммитов.
