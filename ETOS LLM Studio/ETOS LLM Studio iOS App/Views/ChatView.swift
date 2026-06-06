@@ -302,8 +302,7 @@ private struct LocalResourceUsageFloatingPanel: View {
     @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
     let containerSize: CGSize
     let topPadding: CGFloat
-    let bottomPadding: CGFloat
-    let trailingPadding: CGFloat
+    let leadingPadding: CGFloat
     @Binding var offset: CGSize
     let isLiquidGlassEnabled: Bool
 
@@ -312,7 +311,7 @@ private struct LocalResourceUsageFloatingPanel: View {
     @State private var dragStartOffset: CGSize?
 
     private var panelWidth: CGFloat {
-        isExpanded ? 248 : 236
+        isExpanded ? 248 : 168
     }
 
     private var panelHeight: CGFloat {
@@ -429,12 +428,12 @@ private struct LocalResourceUsageFloatingPanel: View {
     private var compactDisplayText: String {
         var parts: [String] = []
         if let cpuPercent = resourceUsageMonitor.snapshot.cpuPercent {
-            parts.append(String(format: NSLocalizedString("CPU %.0f%%", comment: "Local resource compact CPU"), cpuPercent))
+            parts.append(String(format: NSLocalizedString("%.0f%%", comment: "Local resource compact CPU percent"), cpuPercent))
         }
         if let memoryBytes = resourceUsageMonitor.snapshot.memoryBytes {
-            parts.append(String(format: NSLocalizedString("内存 %@", comment: "Local resource compact memory"), formatBytes(memoryBytes)))
+            parts.append(formatBytes(memoryBytes))
         }
-        return parts.isEmpty ? resourceUsageMonitor.snapshot.displayText : parts.joined(separator: " · ")
+        return parts.isEmpty ? resourceUsageMonitor.snapshot.displayText : parts.joined(separator: " / ")
     }
 
     private func resourceUsageMetricRow(iconName: String, title: String, value: String) -> some View {
@@ -498,8 +497,8 @@ private struct LocalResourceUsageFloatingPanel: View {
 
     private func defaultCenter(for panelSize: CGSize) -> CGPoint {
         CGPoint(
-            x: containerSize.width - trailingPadding - panelSize.width / 2,
-            y: containerSize.height - bottomPadding - panelSize.height / 2
+            x: leadingPadding + panelSize.width / 2,
+            y: topPadding + panelSize.height / 2
         )
     }
 
@@ -830,8 +829,7 @@ extension ChatView {
                     LocalResourceUsageFloatingPanel(
                         containerSize: chatViewportSize,
                         topPadding: navBarHeight + 12,
-                        bottomPadding: chatInputBarHeight + 14,
-                        trailingPadding: 16,
+                        leadingPadding: 16,
                         offset: $localResourceUsagePanelOffset,
                         isLiquidGlassEnabled: isLiquidGlassEnabled
                     )
