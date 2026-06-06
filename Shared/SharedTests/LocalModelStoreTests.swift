@@ -30,6 +30,8 @@ struct LocalModelStoreTests {
         record.contextSize = 0
         record.maxOutputTokens = 0
         record.gpuLayers = 7
+        record.batchSize = -1
+        record.ubatchSize = 2_000_000
         store.update(record)
 
         let reloaded = LocalModelStore(directoryURL: store.directoryURL)
@@ -38,6 +40,8 @@ struct LocalModelStoreTests {
         #expect(updatedRecord.contextSize == 1)
         #expect(updatedRecord.maxOutputTokens == 1)
         #expect(updatedRecord.gpuLayers == 7)
+        #expect(updatedRecord.batchSize == 0)
+        #expect(updatedRecord.ubatchSize == 1_048_576)
 
         if let saved = reloaded.models.first {
             reloaded.delete(saved)
@@ -219,6 +223,10 @@ struct LocalModelStoreTests {
         model.overrideParameters["context_size"] = .string("4096")
         model.overrideParameters["max_output_tokens"] = .int(1024)
         model.overrideParameters["n_gpu_layers"] = .int(0)
+        model.overrideParameters["batch_size"] = .int(256)
+        model.overrideParameters["ubatch_size"] = .int(128)
+        model.overrideParameters["kv_offload"] = .bool(false)
+        model.overrideParameters["flash_attn"] = .string("off")
         model.overrideParameters["seed"] = .string("-1")
         model.overrideParameters["temperature"] = .double(0.7)
         model.overrideParameters["top_k"] = .int(12)
@@ -241,6 +249,10 @@ struct LocalModelStoreTests {
         #expect(savedRecord.contextSize == 4096)
         #expect(savedRecord.maxOutputTokens == 1024)
         #expect(savedRecord.gpuLayers == 0)
+        #expect(savedRecord.batchSize == 256)
+        #expect(savedRecord.ubatchSize == 128)
+        #expect(savedRecord.kvOffload == false)
+        #expect(savedRecord.flashAttention == .disabled)
         #expect(savedRecord.seed == LocalModelRecord.defaultSeed)
         #expect(savedRecord.temperature == 0.7)
         #expect(savedRecord.topK == 12)

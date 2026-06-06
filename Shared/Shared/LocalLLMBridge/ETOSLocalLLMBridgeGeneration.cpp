@@ -12,6 +12,8 @@
 
 #include <cctype>
 #include <cmath>
+#include <limits>
+#include <sstream>
 #include <utility>
 
 using json = nlohmann::ordered_json;
@@ -19,6 +21,10 @@ using json = nlohmann::ordered_json;
 namespace etos_local_llm_bridge {
 
 std::once_flag backend_init_once;
+std::mutex model_cache_mutex;
+llama_model_shared_handle cached_model;
+std::string cached_model_path;
+int32_t cached_model_gpu_layers = std::numeric_limits<int32_t>::min();
 
 char * copy_string(const std::string & value) {
     char * result = static_cast<char *>(std::malloc(value.size() + 1));
@@ -52,6 +58,64 @@ int32_t thread_count() {
     return static_cast<int32_t>(std::max(1, std::min(8, processors > 2 ? processors - 2 : processors)));
 }
 
+llama_model_shared_handle make_model_handle(llama_model * model) {
+    return llama_model_shared_handle(model, llama_model_deleter());
+}
+
+llama_model_shared_handle load_model(
+    const char * model_path,
+    const llama_model_params & model_params,
+    bool use_model_cache
+) {
+    if (!use_model_cache) {
+        return make_model_handle(llama_model_load_from_file(model_path, model_params));
+    }
+
+    std::lock_guard<std::mutex> lock(model_cache_mutex);
+    if (cached_model
+        && cached_model_path == model_path
+        && cached_model_gpu_layers == model_params.n_gpu_layers) {
+        return cached_model;
+    }
+
+    llama_model_shared_handle loaded_model = make_model_handle(llama_model_load_from_file(model_path, model_params));
+    if (loaded_model) {
+        cached_model = loaded_model;
+        cached_model_path = model_path;
+        cached_model_gpu_layers = model_params.n_gpu_layers;
+    }
+    return loaded_model;
+}
+
+void clear_model_cache() {
+    std::lock_guard<std::mutex> lock(model_cache_mutex);
+    cached_model.reset();
+    cached_model_path.clear();
+    cached_model_gpu_layers = std::numeric_limits<int32_t>::min();
+}
+
+std::string decode_failure_message(
+    int status,
+    const char * phase,
+    int32_t generated_tokens,
+    const llama_context_params & ctx_params,
+    const local_generation_params & generation_params
+) {
+    std::ostringstream stream;
+    stream
+        << "本地模型解码失败（status=" << status
+        << "，阶段=" << phase
+        << "，已生成=" << generated_tokens
+        << "，n_ctx=" << ctx_params.n_ctx
+        << "，n_batch=" << ctx_params.n_batch
+        << "，n_ubatch=" << ctx_params.n_ubatch
+        << "，GPU层=" << generation_params.gpu_layers
+        << "，KV offload=" << (generation_params.kv_offload ? 1 : 0)
+        << "，Flash Attention=" << generation_params.flash_attention
+        << "）。";
+    return stream.str();
+}
+
 struct local_chat_template_result {
     std::string prompt;
     std::string grammar;
@@ -66,6 +130,20 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
     params.context_size = std::max<int32_t>(1, config.context_size);
     params.max_output_tokens = std::max<int32_t>(1, config.max_output_tokens);
     params.gpu_layers = config.gpu_layers;
+    params.batch_size = std::max<int32_t>(0, config.batch_size);
+    params.ubatch_size = std::max<int32_t>(0, config.ubatch_size);
+    params.kv_offload = config.kv_offload != 0;
+    switch (config.flash_attention) {
+    case LLAMA_FLASH_ATTN_TYPE_DISABLED:
+    case LLAMA_FLASH_ATTN_TYPE_ENABLED:
+    case LLAMA_FLASH_ATTN_TYPE_AUTO:
+        params.flash_attention = config.flash_attention;
+        break;
+    default:
+        params.flash_attention = LLAMA_FLASH_ATTN_TYPE_AUTO;
+        break;
+    }
+    params.use_model_cache = config.use_model_cache != 0;
     params.seed = config.seed;
     params.min_keep = config.min_keep;
     params.top_k = config.top_k;
@@ -622,7 +700,7 @@ int32_t generate(
     model_params.n_gpu_layers = generation_params.gpu_layers < 0 ? 999 : generation_params.gpu_layers;
 #endif
 
-    llama_model_handle model(llama_model_load_from_file(model_path, model_params));
+    llama_model_shared_handle model = load_model(model_path, model_params, generation_params.use_model_cache);
     if (!model) {
         return fail("无法加载本地模型权重。", error_message);
     }
@@ -682,9 +760,21 @@ int32_t generate(
 
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = requested_context;
-    ctx_params.n_batch = static_cast<int32_t>(prompt_token_count);
+    const int32_t decode_batch_size = generation_params.batch_size > 0
+        ? std::min<int32_t>(requested_context, generation_params.batch_size)
+        : static_cast<int32_t>(prompt_token_count);
+    ctx_params.n_batch = static_cast<uint32_t>(std::max<int32_t>(1, decode_batch_size));
+    if (generation_params.ubatch_size > 0) {
+        ctx_params.n_ubatch = static_cast<uint32_t>(std::min<int32_t>(
+            static_cast<int32_t>(ctx_params.n_batch),
+            std::max<int32_t>(1, generation_params.ubatch_size)
+        ));
+    }
+    ctx_params.n_ubatch = std::min(ctx_params.n_ubatch, ctx_params.n_batch);
     ctx_params.n_threads = thread_count();
     ctx_params.n_threads_batch = ctx_params.n_threads;
+    ctx_params.offload_kqv = generation_params.kv_offload;
+    ctx_params.flash_attn_type = static_cast<llama_flash_attn_type>(generation_params.flash_attention);
 
     llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
     if (!ctx) {
@@ -702,17 +792,40 @@ int32_t generate(
         return cancelled(error_message);
     }
 
-    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     int32_t generated_tokens = 0;
     std::string pending_text;
     const size_t retained_stop_suffix = longest_stop_length(generation_params.additional_stops);
+    const int32_t prompt_chunk_size = static_cast<int32_t>(ctx_params.n_batch);
+
+    for (size_t offset = 0; offset < prompt_tokens.size(); offset += static_cast<size_t>(prompt_chunk_size)) {
+        if (should_cancel(cancel_callback, user_data)) {
+            return cancelled(error_message);
+        }
+        const int32_t chunk_size = static_cast<int32_t>(std::min<size_t>(
+            static_cast<size_t>(prompt_chunk_size),
+            prompt_tokens.size() - offset
+        ));
+        llama_batch prompt_batch = llama_batch_get_one(prompt_tokens.data() + offset, chunk_size);
+        const int status = llama_decode(ctx.get(), prompt_batch);
+        if (status != 0) {
+            return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
+        }
+    }
+
+    bool has_pending_decode = false;
+    llama_token pending_decode_token = 0;
 
     while (generated_tokens < output_limit) {
         if (should_cancel(cancel_callback, user_data)) {
             return cancelled(error_message);
         }
-        if (llama_decode(ctx.get(), batch) != 0) {
-            return fail("本地模型解码失败。", error_message);
+        if (has_pending_decode) {
+            llama_batch token_batch = llama_batch_get_one(&pending_decode_token, 1);
+            const int status = llama_decode(ctx.get(), token_batch);
+            if (status != 0) {
+                return fail(decode_failure_message(status, "生成", generated_tokens, ctx_params, generation_params), error_message);
+            }
+            has_pending_decode = false;
         }
         if (should_cancel(cancel_callback, user_data)) {
             return cancelled(error_message);
@@ -758,7 +871,8 @@ int32_t generate(
             return cancelled(error_message);
         }
 
-        batch = llama_batch_get_one(&token, 1);
+        pending_decode_token = token;
+        has_pending_decode = true;
         generated_tokens += 1;
     }
 

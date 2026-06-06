@@ -49,6 +49,11 @@ typedef struct etos_local_llm_generation_config {
     int32_t context_size;
     int32_t max_output_tokens;
     int32_t gpu_layers;
+    int32_t batch_size;
+    int32_t ubatch_size;
+    int32_t kv_offload;
+    int32_t flash_attention;
+    int32_t use_model_cache;
     uint32_t seed;
     int32_t min_keep;
     int32_t top_k;
@@ -142,6 +147,7 @@ int32_t etos_local_llm_embed(
 
 void etos_local_llm_free(char * pointer);
 void etos_local_llm_free_float(float * pointer);
+void etos_local_llm_clear_model_cache(void);
 
 #ifdef __cplusplus
 }

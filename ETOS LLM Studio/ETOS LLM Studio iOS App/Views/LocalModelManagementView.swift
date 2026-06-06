@@ -38,6 +38,14 @@ struct LocalModelManagementView: View {
             }
 
             Section {
+                Toggle(NSLocalizedString("模型缓存", comment: "Local model cache toggle"), isOn: localModelCacheEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("打开后会复用最近一次加载的 GGUF 权重，减少重复加载耗时；关闭会释放当前缓存。", comment: "Local model cache footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Button {
                     isImportingModel = true
                 } label: {
@@ -112,6 +120,17 @@ struct LocalModelManagementView: View {
             appConfig.localModelPerformanceMonitorEnabled = isEnabled
         }
     }
+
+    private var localModelCacheEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelCacheEnabled
+        } set: { isEnabled in
+            appConfig.localModelCacheEnabled = isEnabled
+            if !isEnabled {
+                LocalLLMEngine.shared.clearModelCache()
+            }
+        }
+    }
 }
 
 private struct LocalModelRow: View {
@@ -165,6 +184,8 @@ private struct LocalModelDetailView: View {
     @State private var contextSizeText: String
     @State private var maxOutputTokensText: String
     @State private var gpuLayersText: String
+    @State private var batchSizeText: String
+    @State private var ubatchSizeText: String
     @State private var seedText: String
     @State private var temperatureText: String
     @State private var topKText: String
@@ -180,6 +201,8 @@ private struct LocalModelDetailView: View {
         _contextSizeText = State(initialValue: "\(record.effectiveContextSize)")
         _maxOutputTokensText = State(initialValue: "\(record.effectiveMaxOutputTokens)")
         _gpuLayersText = State(initialValue: "\(record.effectiveGPULayers)")
+        _batchSizeText = State(initialValue: "\(record.effectiveBatchSize)")
+        _ubatchSizeText = State(initialValue: "\(record.effectiveUbatchSize)")
         _seedText = State(initialValue: "\(record.effectiveSeed)")
         _temperatureText = State(initialValue: LocalModelFormat.decimal(record.effectiveTemperature))
         _topKText = State(initialValue: "\(record.effectiveTopK)")
@@ -203,6 +226,7 @@ private struct LocalModelDetailView: View {
             }
 
             runtimeSection
+            metalStabilitySection
             samplingSection
             grammarSection
             samplerChainSection
@@ -279,6 +303,18 @@ private struct LocalModelDetailView: View {
                 keyboardType: .numbersAndPunctuation
             )
             LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "batchSize"),
+                text: $batchSizeText,
+                isEnabled: overrideEnabledBinding(\.batchSize, defaultValue: 128),
+                keyboardType: .numberPad
+            )
+            LocalModelParameterTextField(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "ubatchSize"),
+                text: $ubatchSizeText,
+                isEnabled: overrideEnabledBinding(\.ubatchSize, defaultValue: 64),
+                keyboardType: .numberPad
+            )
+            LocalModelParameterTextField(
                 descriptor: LocalLLMParameterCatalog.descriptor(for: "seed"),
                 text: $seedText,
                 isEnabled: overrideEnabledBinding(\.seed, defaultValue: LocalModelRecord.defaultSeed),
@@ -286,6 +322,23 @@ private struct LocalModelDetailView: View {
             )
         } header: {
             Text(NSLocalizedString("运行时", comment: "Local model runtime section"))
+        }
+    }
+
+    private var metalStabilitySection: some View {
+        Section {
+            LocalModelToggleParameterRow(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "kvOffload"),
+                value: kvOffloadBinding,
+                isEnabled: overrideEnabledBinding(\.kvOffload, defaultValue: false)
+            )
+            LocalModelFlashAttentionParameterRow(
+                descriptor: LocalLLMParameterCatalog.descriptor(for: "flashAttention"),
+                value: flashAttentionBinding,
+                isEnabled: overrideEnabledBinding(\.flashAttention, defaultValue: .disabled)
+            )
+        } header: {
+            Text(NSLocalizedString("Metal 稳定性", comment: "Local model Metal stability section"))
         }
     }
 
@@ -430,6 +483,12 @@ private struct LocalModelDetailView: View {
         if draft.gpuLayers != nil, let gpuLayers = Int(gpuLayersText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             draft.gpuLayers = gpuLayers
         }
+        if draft.batchSize != nil, let batchSize = Int(batchSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.batchSize = batchSize
+        }
+        if draft.ubatchSize != nil, let ubatchSize = Int(ubatchSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            draft.ubatchSize = ubatchSize
+        }
         if draft.seed != nil, let seed = parseSeed(seedText) {
             draft.seed = seed
         }
@@ -466,6 +525,8 @@ private struct LocalModelDetailView: View {
         contextSizeText = "\(draft.effectiveContextSize)"
         maxOutputTokensText = "\(draft.effectiveMaxOutputTokens)"
         gpuLayersText = "\(draft.effectiveGPULayers)"
+        batchSizeText = "\(draft.effectiveBatchSize)"
+        ubatchSizeText = "\(draft.effectiveUbatchSize)"
         seedText = "\(draft.effectiveSeed)"
         temperatureText = LocalModelFormat.decimal(draft.effectiveTemperature)
         topKText = "\(draft.effectiveTopK)"
@@ -514,6 +575,22 @@ private struct LocalModelDetailView: View {
             draft.ignoreEOS ?? LocalModelRecord.defaultIgnoreEOS
         } set: { newValue in
             draft.ignoreEOS = newValue
+        }
+    }
+
+    private var kvOffloadBinding: Binding<Bool> {
+        Binding {
+            draft.kvOffload ?? LocalModelRecord.defaultKVOffload
+        } set: { newValue in
+            draft.kvOffload = newValue
+        }
+    }
+
+    private var flashAttentionBinding: Binding<LocalLLMFlashAttentionMode> {
+        Binding {
+            draft.flashAttention ?? LocalModelRecord.defaultFlashAttention
+        } set: { newValue in
+            draft.flashAttention = newValue
         }
     }
 }
@@ -625,6 +702,44 @@ private struct LocalModelToggleParameterRow: View {
             }
             if isEnabled {
                 Toggle(NSLocalizedString("开启", comment: "Enable bool local parameter"), isOn: $value)
+            }
+            Text(descriptor.summary)
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+            Text("\(isEnabled ? NSLocalizedString("覆盖默认", comment: "Local parameter custom override enabled") : String(format: NSLocalizedString("使用默认 %@", comment: "Local parameter default label"), descriptor.defaultValue)) · \(descriptor.effectScope)")
+                .etFont(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct LocalModelFlashAttentionParameterRow: View {
+    let descriptor: LocalLLMParameterDescriptor
+    @Binding var value: LocalLLMFlashAttentionMode
+    @Binding var isEnabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(descriptor.title)
+                        .etFont(.subheadline.weight(.medium))
+                    Text(descriptor.aliasText)
+                        .etFont(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle(NSLocalizedString("自定义", comment: "Enable local parameter override"), isOn: $isEnabled)
+                    .labelsHidden()
+            }
+            if isEnabled {
+                Picker(descriptor.title, selection: $value) {
+                    ForEach(LocalLLMFlashAttentionMode.allCases) { mode in
+                        Text(mode.localizedTitle).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
             Text(descriptor.summary)
                 .etFont(.caption)

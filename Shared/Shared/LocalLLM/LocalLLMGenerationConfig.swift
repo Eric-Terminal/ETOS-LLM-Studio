@@ -12,6 +12,11 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
     var contextSize: Int32
     var maxOutputTokens: Int32
     var gpuLayers: Int32
+    var batchSize: Int32
+    var ubatchSize: Int32
+    var kvOffload: Bool
+    var flashAttention: LocalLLMFlashAttentionMode
+    var useModelCache: Bool
     var seed: UInt32
     var minKeep: Int32
     var topK: Int32
@@ -46,6 +51,11 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
         self.contextSize = Int32(clamping: options.contextSize.clamped(to: 1...1_048_576))
         self.maxOutputTokens = Int32(clamping: options.maxOutputTokens.clamped(to: 1...131_072))
         self.gpuLayers = Int32(clamping: options.gpuLayers.clamped(to: -1...999))
+        self.batchSize = Int32(clamping: options.batchSize.clamped(to: 0...1_048_576))
+        self.ubatchSize = Int32(clamping: options.ubatchSize.clamped(to: 0...1_048_576))
+        self.kvOffload = options.kvOffload
+        self.flashAttention = options.flashAttention
+        self.useModelCache = options.useModelCache
         self.seed = options.seed
         self.minKeep = 0
         self.topK = Int32(clamping: options.topK.clamped(to: 0...1_000))
@@ -113,6 +123,17 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
                 return arguments[index]
             }
 
+            func optionalBoolValue(default defaultValue: Bool) throws -> Bool {
+                if let value = parsed.value {
+                    return try parseBool(value, option: rawName)
+                }
+                guard index < arguments.count, !isOptionToken(arguments[index]) else {
+                    return defaultValue
+                }
+                defer { index += 1 }
+                return try parseBool(arguments[index], option: rawName)
+            }
+
             switch name {
             case "ctx-size", "n-ctx", "c":
                 contextSize = try parseInt32(nextValue(), option: rawName)
@@ -120,6 +141,16 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
                 maxOutputTokens = try parseInt32(nextValue(), option: rawName)
             case "gpu-layers", "n-gpu-layers", "ngl":
                 gpuLayers = try parseInt32(nextValue(), option: rawName)
+            case "batch-size", "n-batch", "b":
+                batchSize = (try parseInt32(nextValue(), option: rawName)).clamped(to: 0...1_048_576)
+            case "ubatch-size", "n-ubatch", "ub":
+                ubatchSize = (try parseInt32(nextValue(), option: rawName)).clamped(to: 0...1_048_576)
+            case "kv-offload", "kvo":
+                kvOffload = try optionalBoolValue(default: true)
+            case "no-kv-offload", "nkvo":
+                kvOffload = !(try optionalBoolValue(default: true))
+            case "flash-attn", "fa":
+                flashAttention = try parseFlashAttentionMode(nextValue(), option: rawName)
             case "seed", "s":
                 seed = try parseUInt32(nextValue(), option: rawName)
             case "temp", "temperature":
@@ -472,6 +503,38 @@ public enum LocalLLMParameterCatalog {
             effectScope: contextRebuildText
         ),
         LocalLLMParameterDescriptor(
+            id: "batchSize",
+            title: NSLocalizedString("批处理大小", comment: "Local parameter batch size title"),
+            aliases: ["--batch-size", "-b"],
+            summary: NSLocalizedString("限制一次解码的 token 批量；调小可降低峰值内存。0 表示自动。", comment: "Local parameter batch size summary"),
+            defaultValue: NSLocalizedString("自动", comment: "Automatic local parameter default"),
+            effectScope: contextRebuildText
+        ),
+        LocalLLMParameterDescriptor(
+            id: "ubatchSize",
+            title: NSLocalizedString("微批处理大小", comment: "Local parameter ubatch size title"),
+            aliases: ["--ubatch-size", "-ub"],
+            summary: NSLocalizedString("限制 llama.cpp 内部 micro-batch；调小通常更稳但更慢。0 表示默认。", comment: "Local parameter ubatch size summary"),
+            defaultValue: NSLocalizedString("默认", comment: "Default local parameter default"),
+            effectScope: contextRebuildText
+        ),
+        LocalLLMParameterDescriptor(
+            id: "kvOffload",
+            title: NSLocalizedString("KV Offload", comment: "Local parameter KV offload title"),
+            aliases: ["--kv-offload", "--no-kv-offload", "-kvo", "-nkvo"],
+            summary: NSLocalizedString("控制 K/Q/V 相关缓存是否交给 Metal；关闭可绕开部分 GPU 解码失败。", comment: "Local parameter KV offload summary"),
+            defaultValue: NSLocalizedString("开启", comment: "Enabled"),
+            effectScope: contextRebuildText
+        ),
+        LocalLLMParameterDescriptor(
+            id: "flashAttention",
+            title: "Flash Attention",
+            aliases: ["--flash-attn", "-fa"],
+            summary: NSLocalizedString("自动、开启或关闭 Flash Attention；Metal 报错时可先试关闭。", comment: "Local parameter flash attention summary"),
+            defaultValue: LocalModelRecord.defaultFlashAttention.localizedTitle,
+            effectScope: contextRebuildText
+        ),
+        LocalLLMParameterDescriptor(
             id: "seed",
             title: NSLocalizedString("随机种子", comment: "Local parameter seed title"),
             aliases: ["--seed", "-s"],
@@ -705,6 +768,47 @@ public enum LocalLLMCLIStyleArgumentImporter {
                 }
                 updatedRecord.gpuLayers = parsedValue.clamped(to: -1...999)
                 appendApplied(rawName, "gpuLayers", "\(updatedRecord.gpuLayers ?? LocalModelRecord.defaultGPULayers)")
+            case "batch-size", "n-batch", "b":
+                guard let value = requireValue() else { continue }
+                guard let parsedValue = Int(value) else {
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
+                    continue
+                }
+                updatedRecord.batchSize = parsedValue.clamped(to: 0...1_048_576)
+                appendApplied(rawName, "batchSize", "\(updatedRecord.batchSize ?? LocalModelRecord.defaultBatchSize)")
+            case "ubatch-size", "n-ubatch", "ub":
+                guard let value = requireValue() else { continue }
+                guard let parsedValue = Int(value) else {
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
+                    continue
+                }
+                updatedRecord.ubatchSize = parsedValue.clamped(to: 0...1_048_576)
+                appendApplied(rawName, "ubatchSize", "\(updatedRecord.ubatchSize ?? LocalModelRecord.defaultUbatchSize)")
+            case "kv-offload", "kvo":
+                guard let parsedValue = optionalBoolValue(rawName: rawName, defaultValue: true, nextValue: nextValue, errors: &errors) else { continue }
+                updatedRecord.kvOffload = parsedValue
+                appendApplied(rawName, "kvOffload", parsedValue ? NSLocalizedString("开启", comment: "Enabled") : NSLocalizedString("关闭", comment: "Disabled"))
+            case "no-kv-offload", "nkvo":
+                guard let parsedValue = optionalBoolValue(rawName: rawName, defaultValue: true, nextValue: nextValue, errors: &errors) else { continue }
+                updatedRecord.kvOffload = !parsedValue
+                appendApplied(rawName, "kvOffload", updatedRecord.effectiveKVOffload ? NSLocalizedString("开启", comment: "Enabled") : NSLocalizedString("关闭", comment: "Disabled"))
+            case "flash-attn", "fa":
+                guard let value = requireValue() else { continue }
+                guard let mode = LocalLLMFlashAttentionMode.parse(value) else {
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要 on、off 或 auto，收到 %@。", comment: "Local llama import flash attention error"),
+                        value
+                    )))
+                    continue
+                }
+                updatedRecord.flashAttention = mode
+                appendApplied(rawName, "flashAttention", mode.localizedTitle)
             case "seed", "s":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = parseSeed(value) else {
@@ -817,6 +921,25 @@ public enum LocalLLMCLIStyleArgumentImporter {
         assign(clampedValue)
         applied(rawName, descriptorID, formatDouble(clampedValue))
     }
+
+    private static func optionalBoolValue(
+        rawName: String,
+        defaultValue: Bool,
+        nextValue: () -> String?,
+        errors: inout [LocalLLMCLIStyleImportIssue]
+    ) -> Bool? {
+        guard let value = nextValue() else {
+            return defaultValue
+        }
+        guard let parsedValue = parseBoolLiteral(value) else {
+            errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                format: NSLocalizedString("需要布尔值，收到 %@。", comment: "Local llama import bool error"),
+                value
+            )))
+            return nil
+        }
+        return parsedValue
+    }
 }
 
 private func splitArguments(_ raw: String) -> [String] {
@@ -924,6 +1047,39 @@ private func parseFloat(_ rawValue: String, option: String) throws -> Float {
         ))
     }
     return value
+}
+
+private func parseBool(_ rawValue: String, option: String) throws -> Bool {
+    guard let value = parseBoolLiteral(rawValue) else {
+        throw LocalLLMEngineError.generationFailed(String(
+            format: NSLocalizedString("本地高级参数布尔值无效：%@ %@", comment: "Local LLM advanced arg invalid bool"),
+            option,
+            rawValue
+        ))
+    }
+    return value
+}
+
+private func parseBoolLiteral(_ rawValue: String) -> Bool? {
+    switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "true", "yes", "1", "on", "enable", "enabled":
+        return true
+    case "false", "no", "0", "off", "disable", "disabled":
+        return false
+    default:
+        return nil
+    }
+}
+
+private func parseFlashAttentionMode(_ rawValue: String, option: String) throws -> LocalLLMFlashAttentionMode {
+    guard let mode = LocalLLMFlashAttentionMode.parse(rawValue) else {
+        throw LocalLLMEngineError.generationFailed(String(
+            format: NSLocalizedString("本地高级参数 Flash Attention 无效：%@ %@", comment: "Local LLM advanced arg invalid flash attention"),
+            option,
+            rawValue
+        ))
+    }
+    return mode
 }
 
 private func parseSeed(_ rawValue: String) -> UInt32? {

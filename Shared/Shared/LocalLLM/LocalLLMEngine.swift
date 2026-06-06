@@ -13,6 +13,11 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var contextSize: Int
     public var maxOutputTokens: Int
     public var gpuLayers: Int
+    public var batchSize: Int
+    public var ubatchSize: Int
+    public var kvOffload: Bool
+    public var flashAttention: LocalLLMFlashAttentionMode
+    public var useModelCache: Bool
     public var seed: UInt32
     public var temperature: Double
     public var topK: Int
@@ -33,6 +38,11 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         temperature: Double = LocalModelRecord.defaultTemperature,
         topP: Double = LocalModelRecord.defaultTopP,
         gpuLayers: Int = LocalModelRecord.defaultGPULayers,
+        batchSize: Int = LocalModelRecord.defaultBatchSize,
+        ubatchSize: Int = LocalModelRecord.defaultUbatchSize,
+        kvOffload: Bool = LocalModelRecord.defaultKVOffload,
+        flashAttention: LocalLLMFlashAttentionMode = LocalModelRecord.defaultFlashAttention,
+        useModelCache: Bool = true,
         seed: UInt32 = LocalModelRecord.defaultSeed,
         topK: Int = LocalModelRecord.defaultTopK,
         minP: Double = LocalModelRecord.defaultMinP,
@@ -48,6 +58,11 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         self.contextSize = contextSize.clamped(to: 1...1_048_576)
         self.maxOutputTokens = maxOutputTokens.clamped(to: 1...131_072)
         self.gpuLayers = gpuLayers
+        self.batchSize = batchSize.clamped(to: 0...1_048_576)
+        self.ubatchSize = ubatchSize.clamped(to: 0...1_048_576)
+        self.kvOffload = kvOffload
+        self.flashAttention = flashAttention
+        self.useModelCache = useModelCache
         self.seed = seed
         self.temperature = temperature.clamped(to: 0...5)
         self.topK = topK.clamped(to: 0...1_000)
@@ -189,10 +204,18 @@ public final class LocalLLMEngine: @unchecked Sendable {
             )
         }.value
     }
+
+    public func clearModelCache() {
+        LocalLLMBridge.clearModelCache()
+    }
 }
 
 private enum LocalLLMBridge {
     private static let cancelledStatus: Int32 = -2
+
+    static func clearModelCache() {
+        etos_local_llm_clear_model_cache()
+    }
 
     static func generateChat(
         messages: [LocalLLMChatMessage],
@@ -517,6 +540,11 @@ private struct ETOSLocalLLMGenerationConfig {
     var contextSize: Int32
     var maxOutputTokens: Int32
     var gpuLayers: Int32
+    var batchSize: Int32
+    var ubatchSize: Int32
+    var kvOffload: Int32
+    var flashAttention: Int32
+    var useModelCache: Int32
     var seed: UInt32
     var minKeep: Int32
     var topK: Int32
@@ -569,6 +597,11 @@ private final class PreparedLocalLLMGenerationConfig {
             contextSize: config.contextSize,
             maxOutputTokens: config.maxOutputTokens,
             gpuLayers: config.gpuLayers,
+            batchSize: config.batchSize,
+            ubatchSize: config.ubatchSize,
+            kvOffload: config.kvOffload ? 1 : 0,
+            flashAttention: config.flashAttention.rawValue,
+            useModelCache: config.useModelCache ? 1 : 0,
             seed: config.seed,
             minKeep: config.minKeep,
             topK: config.topK,
@@ -766,6 +799,9 @@ private func etos_local_llm_free(_ pointer: UnsafeMutablePointer<CChar>)
 
 @_silgen_name("etos_local_llm_free_float")
 private func etos_local_llm_free_float(_ pointer: UnsafeMutablePointer<Float>)
+
+@_silgen_name("etos_local_llm_clear_model_cache")
+private func etos_local_llm_clear_model_cache()
 
 private extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {

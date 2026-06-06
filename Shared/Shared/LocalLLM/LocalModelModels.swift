@@ -8,10 +8,46 @@
 
 import Foundation
 
+public enum LocalLLMFlashAttentionMode: Int32, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+    case auto = -1
+    case disabled = 0
+    case enabled = 1
+
+    public var id: Int32 { rawValue }
+
+    public var localizedTitle: String {
+        switch self {
+        case .auto:
+            return NSLocalizedString("自动", comment: "Local flash attention auto")
+        case .disabled:
+            return NSLocalizedString("关闭", comment: "Local flash attention disabled")
+        case .enabled:
+            return NSLocalizedString("开启", comment: "Local flash attention enabled")
+        }
+    }
+
+    public static func parse(_ rawValue: String) -> LocalLLMFlashAttentionMode? {
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "auto", "-1":
+            return .auto
+        case "off", "false", "0", "disabled", "disable", "no":
+            return .disabled
+        case "on", "true", "1", "enabled", "enable", "yes":
+            return .enabled
+        default:
+            return nil
+        }
+    }
+}
+
 public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public static let defaultContextSize = 2048
     public static let defaultMaxOutputTokens = 512
     public static let defaultGPULayers = -1
+    public static let defaultBatchSize = 0
+    public static let defaultUbatchSize = 0
+    public static let defaultKVOffload = true
+    public static let defaultFlashAttention = LocalLLMFlashAttentionMode.auto
     public static let defaultAdvancedArguments = ""
     public static let defaultSeed = UInt32.max
     public static let defaultTemperature = 1.0
@@ -42,6 +78,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public var contextSize: Int?
     public var maxOutputTokens: Int?
     public var gpuLayers: Int?
+    public var batchSize: Int?
+    public var ubatchSize: Int?
+    public var kvOffload: Bool?
+    public var flashAttention: LocalLLMFlashAttentionMode?
     public var seed: UInt32?
     public var temperature: Double?
     public var topK: Int?
@@ -69,6 +109,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         contextSize: Int? = nil,
         maxOutputTokens: Int? = nil,
         gpuLayers: Int? = nil,
+        batchSize: Int? = nil,
+        ubatchSize: Int? = nil,
+        kvOffload: Bool? = nil,
+        flashAttention: LocalLLMFlashAttentionMode? = nil,
         seed: UInt32? = nil,
         temperature: Double? = nil,
         topK: Int? = nil,
@@ -95,6 +139,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.contextSize = contextSize
         self.maxOutputTokens = maxOutputTokens
         self.gpuLayers = gpuLayers
+        self.batchSize = batchSize
+        self.ubatchSize = ubatchSize
+        self.kvOffload = kvOffload
+        self.flashAttention = flashAttention
         self.seed = seed
         self.temperature = temperature
         self.topK = topK
@@ -131,6 +179,22 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
 
     public var effectiveGPULayers: Int {
         gpuLayers ?? Self.defaultGPULayers
+    }
+
+    public var effectiveBatchSize: Int {
+        batchSize ?? Self.defaultBatchSize
+    }
+
+    public var effectiveUbatchSize: Int {
+        ubatchSize ?? Self.defaultUbatchSize
+    }
+
+    public var effectiveKVOffload: Bool {
+        kvOffload ?? Self.defaultKVOffload
+    }
+
+    public var effectiveFlashAttention: LocalLLMFlashAttentionMode {
+        flashAttention ?? Self.defaultFlashAttention
     }
 
     public var effectiveSeed: UInt32 {
@@ -193,6 +257,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         case contextSize
         case maxOutputTokens
         case gpuLayers
+        case batchSize
+        case ubatchSize
+        case kvOffload
+        case flashAttention
         case seed
         case temperature
         case topK
@@ -223,6 +291,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
             contextSize: try container.decodeIfPresent(Int.self, forKey: .contextSize),
             maxOutputTokens: try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens),
             gpuLayers: try container.decodeIfPresent(Int.self, forKey: .gpuLayers),
+            batchSize: try container.decodeIfPresent(Int.self, forKey: .batchSize),
+            ubatchSize: try container.decodeIfPresent(Int.self, forKey: .ubatchSize),
+            kvOffload: try container.decodeIfPresent(Bool.self, forKey: .kvOffload),
+            flashAttention: try container.decodeIfPresent(LocalLLMFlashAttentionMode.self, forKey: .flashAttention),
             seed: try container.decodeIfPresent(UInt32.self, forKey: .seed),
             temperature: try container.decodeIfPresent(Double.self, forKey: .temperature),
             topK: try container.decodeIfPresent(Int.self, forKey: .topK),
@@ -244,6 +316,8 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         contextSize = contextSize?.clamped(to: 1...1_048_576)
         maxOutputTokens = maxOutputTokens?.clamped(to: 1...131_072)
         gpuLayers = gpuLayers?.clamped(to: -1...999)
+        batchSize = batchSize?.clamped(to: 0...1_048_576)
+        ubatchSize = ubatchSize?.clamped(to: 0...1_048_576)
         temperature = temperature?.clamped(to: 0...5)
         topK = topK?.clamped(to: 0...1_000)
         topP = topP?.clamped(to: 0...1)
@@ -263,6 +337,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         if record.contextSize == Self.defaultContextSize { record.contextSize = nil }
         if record.maxOutputTokens == Self.defaultMaxOutputTokens { record.maxOutputTokens = nil }
         if record.gpuLayers == Self.defaultGPULayers { record.gpuLayers = nil }
+        if record.batchSize == Self.defaultBatchSize { record.batchSize = nil }
+        if record.ubatchSize == Self.defaultUbatchSize { record.ubatchSize = nil }
+        if record.kvOffload == Self.defaultKVOffload { record.kvOffload = nil }
+        if record.flashAttention == Self.defaultFlashAttention { record.flashAttention = nil }
         if record.seed == Self.defaultSeed { record.seed = nil }
         if record.temperature == Self.legacyForcedDefaultTemperature { record.temperature = nil }
         if record.topK == Self.legacyForcedDefaultTopK { record.topK = nil }

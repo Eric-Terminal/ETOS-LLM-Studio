@@ -100,6 +100,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case lastActiveSessionID = "launch.lastActiveSessionID"
     case localModelsEnabled = "localModels.enabled"
     case localModelPerformanceMonitorEnabled = "localModels.performanceMonitor.enabled"
+    case localModelCacheEnabled = "localModels.cache.enabled"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
     case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
@@ -249,6 +250,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .localModelsEnabled,
              .localModelPerformanceMonitorEnabled:
             return .bool(false)
+        case .localModelCacheEnabled:
+            return .bool(true)
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,
@@ -467,7 +470,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .databaseEncryptionEnabled:
             return false
         case .localModelsEnabled,
-             .localModelPerformanceMonitorEnabled:
+             .localModelPerformanceMonitorEnabled,
+             .localModelCacheEnabled:
             return false
         default:
             return true

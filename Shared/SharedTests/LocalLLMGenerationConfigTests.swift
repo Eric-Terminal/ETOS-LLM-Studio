@@ -25,6 +25,11 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.topP == 1.0)
         #expect(config.topK == 0)
         #expect(config.minP == 0.0)
+        #expect(config.batchSize == 0)
+        #expect(config.ubatchSize == 0)
+        #expect(config.kvOffload)
+        #expect(config.flashAttention == .auto)
+        #expect(config.useModelCache)
         #expect(config.samplerKinds == [.temperature])
     }
 
@@ -36,7 +41,7 @@ struct LocalLLMGenerationConfigTests {
             temperature: 0.2,
             topP: 0.7,
             gpuLayers: 3,
-            advancedArguments: "--ctx-size 2048 --n-predict=128 --ngl 0 --seed 42 --temp 0.9 --top-k 12 --top-p 0.8 --min-p 0.2 --typ-p 0.6 --repeat-last-n 32 --repeat-penalty 1.2 --frequency-penalty 0.3 --presence-penalty 0.4 --dry-sequence-breaker none --dry-sequence-breaker <stop> --sampler-seq kpt --ignore-eos"
+            advancedArguments: "--ctx-size 2048 --n-predict=128 --ngl 0 --n-batch 128 --n-ubatch 64 --no-kv-offload --flash-attn off --seed 42 --temp 0.9 --top-k 12 --top-p 0.8 --min-p 0.2 --typ-p 0.6 --repeat-last-n 32 --repeat-penalty 1.2 --frequency-penalty 0.3 --presence-penalty 0.4 --dry-sequence-breaker none --dry-sequence-breaker <stop> --sampler-seq kpt --ignore-eos"
         )
 
         let config = try LocalLLMGenerationConfig(options: options)
@@ -44,6 +49,10 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.contextSize == 2048)
         #expect(config.maxOutputTokens == 128)
         #expect(config.gpuLayers == 0)
+        #expect(config.batchSize == 128)
+        #expect(config.ubatchSize == 64)
+        #expect(!config.kvOffload)
+        #expect(config.flashAttention == .disabled)
         #expect(config.seed == 42)
         #expect(config.temperature == 0.9)
         #expect(config.topK == 12)
@@ -88,6 +97,11 @@ struct LocalLLMGenerationConfigTests {
             temperature: 0.65,
             topP: 0.88,
             gpuLayers: 12,
+            batchSize: 256,
+            ubatchSize: 128,
+            kvOffload: false,
+            flashAttention: .disabled,
+            useModelCache: false,
             seed: 7,
             topK: 20,
             minP: 0.12,
@@ -105,6 +119,11 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.contextSize == 4096)
         #expect(config.maxOutputTokens == 256)
         #expect(config.gpuLayers == 12)
+        #expect(config.batchSize == 256)
+        #expect(config.ubatchSize == 128)
+        #expect(!config.kvOffload)
+        #expect(config.flashAttention == .disabled)
+        #expect(!config.useModelCache)
         #expect(config.seed == 7)
         #expect(config.temperature == 0.65)
         #expect(config.topK == 20)
@@ -130,7 +149,7 @@ struct LocalLLMGenerationConfigTests {
         )
 
         let result = LocalLLMCLIStyleArgumentImporter.importArguments(
-            "--temp 0.7 --top-p 0.9 --ctx-size 4096 --seed -1 --repeat-last-n -1 --ngl -1 --sampler-seq kpt --grammar-file /tmp/x.gbnf --bad-option 1 --top-k nope stray",
+            "--temp 0.7 --top-p 0.9 --ctx-size 4096 --seed -1 --repeat-last-n -1 --ngl -1 --n-batch 256 --n-ubatch 128 --no-kv-offload --flash-attn auto --sampler-seq kpt --grammar-file /tmp/x.gbnf --bad-option 1 --top-k nope stray",
             into: record
         )
 
@@ -140,6 +159,10 @@ struct LocalLLMGenerationConfigTests {
         #expect(result.updatedRecord.seed == LocalModelRecord.defaultSeed)
         #expect(result.updatedRecord.repeatLastN == -1)
         #expect(result.updatedRecord.gpuLayers == -1)
+        #expect(result.updatedRecord.batchSize == 256)
+        #expect(result.updatedRecord.ubatchSize == 128)
+        #expect(result.updatedRecord.kvOffload == false)
+        #expect(result.updatedRecord.flashAttention == .auto)
         #expect(result.updatedRecord.samplerKinds == [.topK, .topP, .temperature])
         #expect(result.updatedRecord.advancedArguments.isEmpty)
         #expect(result.appliedParameters.map(\.title).contains("温度"))

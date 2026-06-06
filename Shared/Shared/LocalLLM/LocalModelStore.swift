@@ -128,6 +128,12 @@ public final class LocalModelStore: ObservableObject {
         record.maxOutputTokens = model.overrideParameters.localIntValue(for: "max_output_tokens")
             ?? model.overrideParameters.localIntValue(for: "max_tokens")
         record.gpuLayers = model.overrideParameters.localIntValue(for: "n_gpu_layers")
+        record.batchSize = model.overrideParameters.localIntValue(for: "batch_size")
+            ?? model.overrideParameters.localIntValue(for: "n_batch")
+        record.ubatchSize = model.overrideParameters.localIntValue(for: "ubatch_size")
+            ?? model.overrideParameters.localIntValue(for: "n_ubatch")
+        record.kvOffload = model.overrideParameters.localBoolValue(for: "kv_offload")
+        record.flashAttention = model.overrideParameters.localFlashAttentionValue(for: "flash_attn")
         record.seed = model.overrideParameters.localUInt32Value(for: "seed")
         record.temperature = model.overrideParameters.localDoubleValue(for: "temperature")
         record.topK = model.overrideParameters.localIntValue(for: "top_k")
@@ -342,6 +348,22 @@ private extension Dictionary where Key == String, Value == JSONValue {
             default:
                 return nil
             }
+        default:
+            return nil
+        }
+    }
+
+    func localFlashAttentionValue(for key: String) -> LocalLLMFlashAttentionMode? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            return LocalLLMFlashAttentionMode(rawValue: Int32(rawValue))
+        case .double(let rawValue):
+            return LocalLLMFlashAttentionMode(rawValue: Int32(rawValue))
+        case .string(let rawValue):
+            return LocalLLMFlashAttentionMode.parse(rawValue)
+        case .bool(let rawValue):
+            return rawValue ? .enabled : .disabled
         default:
             return nil
         }

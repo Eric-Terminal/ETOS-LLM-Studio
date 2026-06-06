@@ -42,6 +42,7 @@ extension ChatService {
         do {
             let overrides = runnableModel.effectiveOverrideParameters
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
+            let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
             let output = try await LocalLLMEngine.shared.generate(
                 messages: LocalLLMChatMessageBuilder.messages(from: requestMessages),
                 modelURL: localModelStore.fileURL(for: record),
@@ -51,6 +52,11 @@ extension ChatService {
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
                     topP: overrides.localDoubleValue(for: "top_p") ?? record.effectiveTopP,
                     gpuLayers: localGPULayers(overrides: overrides, record: record),
+                    batchSize: overrides.localIntValue(for: "batch_size") ?? overrides.localIntValue(for: "n_batch") ?? record.effectiveBatchSize,
+                    ubatchSize: overrides.localIntValue(for: "ubatch_size") ?? overrides.localIntValue(for: "n_ubatch") ?? record.effectiveUbatchSize,
+                    kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
+                    flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
+                    useModelCache: localModelCacheEnabled,
                     seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
                     topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
                     minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
@@ -136,6 +142,7 @@ extension ChatService {
             let overrides = runnableModel.effectiveOverrideParameters
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let globalTopPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
+            let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
             let localMessagesToSend = LocalLLMChatMessageBuilder.messages(from: messagesToSend)
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
             let stream = try LocalLLMEngine.shared.stream(
@@ -148,6 +155,11 @@ extension ChatService {
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
                     topP: overrides.localDoubleValue(for: "top_p") ?? record.topP ?? (globalTopPEnabled ? aiTopP : nil) ?? LocalModelRecord.defaultTopP,
                     gpuLayers: localGPULayers(overrides: overrides, record: record),
+                    batchSize: overrides.localIntValue(for: "batch_size") ?? overrides.localIntValue(for: "n_batch") ?? record.effectiveBatchSize,
+                    ubatchSize: overrides.localIntValue(for: "ubatch_size") ?? overrides.localIntValue(for: "n_ubatch") ?? record.effectiveUbatchSize,
+                    kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
+                    flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
+                    useModelCache: localModelCacheEnabled,
                     seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
                     topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
                     minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
@@ -297,7 +309,7 @@ extension ChatService {
                 errorKind: "cancelled"
             )
         } catch {
-            logger.error("本地推理失败: \(error.localizedDescription)")
+            logger.error("本地推理失败: \(error.localizedDescription, privacy: .public)")
             addErrorMessage(String(
                 format: NSLocalizedString("本地推理失败: %@", comment: "Local LLM generation failed"),
                 error.localizedDescription
@@ -402,6 +414,22 @@ private extension Dictionary where Key == String, Value == JSONValue {
         guard let sequence = localStringValue(for: key) else { return nil }
         let samplerKinds = LocalLLMSamplerKind.parse(sequence)
         return samplerKinds.isEmpty ? nil : samplerKinds
+    }
+
+    func localFlashAttentionValue(for key: String) -> LocalLLMFlashAttentionMode? {
+        guard let value = self[key] else { return nil }
+        switch value {
+        case .int(let rawValue):
+            return LocalLLMFlashAttentionMode(rawValue: Int32(rawValue))
+        case .double(let rawValue):
+            return LocalLLMFlashAttentionMode(rawValue: Int32(rawValue))
+        case .string(let rawValue):
+            return LocalLLMFlashAttentionMode.parse(rawValue)
+        case .bool(let rawValue):
+            return rawValue ? .enabled : .disabled
+        default:
+            return nil
+        }
     }
 
     func localStringValue(for key: String) -> String? {

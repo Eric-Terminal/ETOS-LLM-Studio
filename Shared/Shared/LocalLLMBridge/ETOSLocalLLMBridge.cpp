@@ -214,3 +214,7 @@ void etos_local_llm_free(char * pointer) {
 void etos_local_llm_free_float(float * pointer) {
     std::free(pointer);
 }
+
+void etos_local_llm_clear_model_cache(void) {
+    etos_local_llm_bridge::clear_model_cache();
+}
