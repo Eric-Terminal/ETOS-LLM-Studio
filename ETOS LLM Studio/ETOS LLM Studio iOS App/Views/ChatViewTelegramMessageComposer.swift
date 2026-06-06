@@ -36,6 +36,7 @@ struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
+    @State private var isResourceUsageExpanded = false
     @State private var resourceUsageTask: Task<Void, Never>?
 
     private let controlSize: CGFloat = 40
@@ -86,12 +87,24 @@ struct TelegramMessageComposer: View {
     private var canQuickRetry: Bool {
         viewModel.canQuickRetryLatestMessage
     }
+    private var shouldShowResourceUsagePanel: Bool {
+        LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel)
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
                 telegramAttachmentPreview
                     .padding(.horizontal, 16)
+            }
+
+            if shouldShowResourceUsagePanel {
+                HStack {
+                    Spacer(minLength: 48)
+                    resourceUsagePanel
+                }
+                .padding(.horizontal, 16)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
             HStack(alignment: .bottom, spacing: 12) {
@@ -320,26 +333,91 @@ struct TelegramMessageComposer: View {
 
     @ViewBuilder
     private var inputPlaceholder: some View {
-        if LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) {
-            MarqueeText(
-                content: resourceUsageMonitor.snapshot.displayText,
-                uiFont: inputUIFont,
-                speed: 32,
-                delay: 0.8,
-                spacing: 28
-            )
-            .etFont(.system(size: inputBasePointSize), sampleText: resourceUsageMonitor.snapshot.displayText)
+        Text(inputPlaceholderText)
+            .etFont(.system(size: inputBasePointSize))
             .foregroundColor(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
             .allowsHitTesting(false)
             .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(inputPlaceholderText)
-                .etFont(.system(size: inputBasePointSize))
+    }
+
+    private var resourceUsagePanel: some View {
+        Button {
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                isResourceUsageExpanded.toggle()
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: isResourceUsageExpanded ? 8 : 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "speedometer")
+                        .etFont(.system(size: 12, weight: .semibold))
+                        .foregroundColor(TelegramColors.attachButtonColor)
+
+                    Text(resourceUsageMonitor.snapshot.displayText)
+                        .etFont(.system(size: 12, weight: .semibold), sampleText: resourceUsageMonitor.snapshot.displayText)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Image(systemName: isResourceUsageExpanded ? "chevron.down" : "chevron.up")
+                        .etFont(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+
+                if isResourceUsageExpanded {
+                    VStack(spacing: 6) {
+                        if let cpuPercent = resourceUsageMonitor.snapshot.cpuPercent {
+                            resourceUsageMetricRow(
+                                iconName: "cpu",
+                                title: NSLocalizedString("CPU", comment: "Local resource CPU title"),
+                                value: String(format: NSLocalizedString("%.0f%%", comment: "Local resource CPU percent value"), cpuPercent)
+                            )
+                        }
+                        if let gpuAllocatedBytes = resourceUsageMonitor.snapshot.gpuAllocatedBytes {
+                            resourceUsageMetricRow(
+                                iconName: "display",
+                                title: NSLocalizedString("GPU", comment: "Local resource GPU title"),
+                                value: StorageUtility.formatSize(Int64(gpuAllocatedBytes))
+                            )
+                        }
+                        if let memoryBytes = resourceUsageMonitor.snapshot.memoryBytes {
+                            resourceUsageMetricRow(
+                                iconName: "memorychip",
+                                title: NSLocalizedString("内存", comment: "Local resource memory title"),
+                                value: StorageUtility.formatSize(Int64(memoryBytes))
+                            )
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, isResourceUsageExpanded ? 10 : 7)
+            .frame(maxWidth: isResourceUsageExpanded ? 260 : 300, alignment: .leading)
+            .background(glassRoundedBackground(cornerRadius: isResourceUsageExpanded ? 14 : 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(resourceUsageMonitor.snapshot.displayText)
+    }
+
+    private func resourceUsageMetricRow(iconName: String, title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: iconName)
+                .etFont(.system(size: 11, weight: .semibold))
+                .foregroundColor(TelegramColors.attachButtonColor)
+                .frame(width: 14)
+
+            Text(title)
+                .etFont(.system(size: 12))
                 .foregroundColor(.secondary)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .etFont(.system(size: 12, weight: .semibold), sampleText: value)
+                .foregroundColor(.primary)
                 .lineLimit(1)
-                .truncationMode(.tail)
-                .allowsHitTesting(false)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -412,6 +490,7 @@ struct TelegramMessageComposer: View {
 
     private func updateResourceUsageSampling() {
         guard LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) else {
+            isResourceUsageExpanded = false
             stopResourceUsageSampling()
             return
         }
