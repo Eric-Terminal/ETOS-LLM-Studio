@@ -203,7 +203,7 @@ Shared/SharedTests/                         ← Shared 层测试（96 个 Swift 
     Xcode 现在不会在构建阶段反复编译 llama.cpp，Shared 只会链接已经生成好的 `libetos-llama.a`。如果你要跑真机 / Release，先执行：
     ```bash
     CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh
-    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS=arm64_32 scripts/build-llama-static-library.sh
+    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS=arm64 scripts/build-llama-static-library.sh
     ```
     如果只是本机 Debug 模拟器，可以改用：
     ```bash
