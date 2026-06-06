@@ -311,7 +311,7 @@ private struct LocalResourceUsageFloatingPanel: View {
     @State private var dragStartOffset: CGSize?
 
     private var panelWidth: CGFloat {
-        isExpanded ? 248 : 168
+        isExpanded ? 248 : 188
     }
 
     private var panelHeight: CGFloat {
@@ -397,13 +397,11 @@ private struct LocalResourceUsageFloatingPanel: View {
                 .etFont(.system(size: 12, weight: .semibold), sampleText: compactDisplayText)
                 .foregroundColor(.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.86)
+                .minimumScaleFactor(0.82)
+                .allowsTightening(true)
+                .layoutPriority(1)
 
             Spacer(minLength: 4)
-
-            Image(systemName: "line.3.horizontal")
-                .etFont(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary.opacity(0.8))
 
             Image(systemName: "chevron.up")
                 .etFont(.system(size: 10, weight: .semibold))
