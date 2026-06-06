@@ -187,6 +187,82 @@ struct ChatServiceConcurrentSessionInteractionTests {
     }
 
     @MainActor
+    @Test("流式尾部混入代理错误响应体时展示 HTTP 状态和完整详情")
+    func testStreamingTrailingProxyErrorBodyUsesHTTPErrorFormatting() async throws {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            replaceProviders(with: originalProviders)
+        }
+
+        let provider = Provider(
+            name: "Streaming Proxy Error Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "test-model", displayName: "Test Model", isActivated: true)
+            ]
+        )
+        replaceProviders(with: [provider])
+
+        let longTail = String(repeating: "代理错误详情", count: 80)
+        StreamingTrailingProxyErrorURLProtocol.reset()
+        StreamingTrailingProxyErrorURLProtocol.register(
+            marker: "proxy-timeout",
+            chunks: [
+                "delta:第一段回复\n",
+                "HTTP/1.1 504 Gateway Timeout\n",
+                "<html><head><title>504 Gateway Time-out</title></head><body>\(longTail)</body></html>\n"
+            ],
+            finishErrorMessage: "代理关闭了空闲流式连接。"
+        )
+
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [StreamingTrailingProxyErrorURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+
+        let service = ChatService(
+            adapters: ["openai-compatible": StreamingTrailingProxyErrorMockAdapter()],
+            memoryManager: MemoryManager(),
+            urlSession: session
+        )
+        service.setSelectedModel(service.activatedRunnableModels.first)
+
+        let testSession = service.createSavedSession(name: "流式代理错误体")
+        defer {
+            service.deleteSessions([testSession])
+            StreamingTrailingProxyErrorURLProtocol.reset()
+        }
+        service.setCurrentSession(testSession)
+
+        await service.sendAndProcessMessage(
+            content: "proxy-timeout",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: true,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let storedMessages = Persistence.loadMessages(for: testSession.id)
+        #expect(storedMessages.count == 3)
+        #expect(storedMessages[1].role == .assistant)
+        #expect(storedMessages[1].content == "第一段回复")
+
+        let errorMessage = try #require(storedMessages.last)
+        #expect(errorMessage.role == .error)
+        #expect(errorMessage.content.contains("HTTP 504"))
+        #expect(errorMessage.content.contains("504 Gateway Time-out"))
+        #expect(errorMessage.content.contains("响应已截断"))
+        #expect(errorMessage.fullErrorContent?.contains("HTTP 504") == true)
+        #expect(errorMessage.fullErrorContent?.contains(longTail) == true)
+    }
+
+    @MainActor
     @Test("流式输出期间编辑历史用户消息不会被后续分片覆盖")
     func testEditingUserMessageDuringStreamingIsPreserved() async throws {
         let originalProviders = ConfigLoader.loadProviders()
@@ -357,6 +433,148 @@ private final class StreamingFailureMockAdapter: APIAdapter {
 
     func parseStreamingResponse(line: String) -> ChatMessagePart? {
         ChatMessagePart(content: line)
+    }
+}
+
+private final class StreamingTrailingProxyErrorMockAdapter: APIAdapter {
+    func buildChatRequest(
+        for model: RunnableModel,
+        commonPayload: [String : Any],
+        messages: [ChatMessage],
+        tools: [InternalToolDefinition]?,
+        audioAttachments: [UUID : AudioAttachment],
+        imageAttachments: [UUID : [ImageAttachment]],
+        fileAttachments: [UUID : [FileAttachment]]
+    ) -> URLRequest? {
+        let marker = messages.last(where: { $0.role == .user })?.content ?? "unknown"
+        var components = URLComponents(string: "https://example.com/proxy-stream")
+        components?.queryItems = [URLQueryItem(name: "marker", value: marker)]
+        guard let url = components?.url else { return nil }
+        return URLRequest(url: url)
+    }
+
+    func buildModelListRequest(for provider: Provider) -> URLRequest? {
+        URLRequest(url: URL(string: "https://example.com/models")!)
+    }
+
+    func parseModelListResponse(data: Data) throws -> [Model] {
+        []
+    }
+
+    func parseResponse(data: Data) throws -> ChatMessage {
+        ChatMessage(role: .assistant, content: String(decoding: data, as: UTF8.self))
+    }
+
+    func parseStreamingResponse(line: String) -> ChatMessagePart? {
+        guard line.hasPrefix("delta:") else { return nil }
+        let content = String(line.dropFirst("delta:".count))
+        return ChatMessagePart(content: content)
+    }
+}
+
+private final class StreamingTrailingProxyErrorURLProtocol: URLProtocol {
+    private struct RegisteredScenario {
+        let chunks: [Data]
+        let finishError: Error?
+    }
+
+    private static let lock = NSLock()
+    private static var registeredScenarios: [String: RegisteredScenario] = [:]
+
+    private let stateLock = NSLock()
+    private var isStopped = false
+
+    static func reset() {
+        lock.lock()
+        registeredScenarios.removeAll()
+        lock.unlock()
+    }
+
+    static func register(marker: String, chunks: [String], finishErrorMessage: String? = nil) {
+        let finishError = finishErrorMessage.map {
+            NSError(
+                domain: "StreamingTrailingProxyErrorURLProtocol",
+                code: -1005,
+                userInfo: [NSLocalizedDescriptionKey: $0]
+            )
+        }
+        lock.lock()
+        registeredScenarios[marker] = RegisteredScenario(
+            chunks: chunks.map { Data($0.utf8) },
+            finishError: finishError
+        )
+        lock.unlock()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let requestURL = request.url,
+              let components = URLComponents(url: requestURL, resolvingAgainstBaseURL: false),
+              let marker = components.queryItems?.first(where: { $0.name == "marker" })?.value else {
+            failWithError(message: "缺少 marker 参数")
+            return
+        }
+
+        Self.lock.lock()
+        let scenario = Self.registeredScenarios[marker]
+        Self.lock.unlock()
+
+        guard let scenario else {
+            failWithError(message: "未注册 marker: \(marker)")
+            return
+        }
+
+        DispatchQueue.global().async {
+            let response = HTTPURLResponse(
+                url: requestURL,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream; charset=utf-8"]
+            )!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+
+            for chunk in scenario.chunks {
+                self.stateLock.lock()
+                let stopped = self.isStopped
+                self.stateLock.unlock()
+                if stopped { return }
+                self.client?.urlProtocol(self, didLoad: chunk)
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+
+            self.stateLock.lock()
+            let stopped = self.isStopped
+            self.stateLock.unlock()
+            if stopped { return }
+
+            if let finishError = scenario.finishError {
+                self.client?.urlProtocol(self, didFailWithError: finishError)
+            } else {
+                self.client?.urlProtocolDidFinishLoading(self)
+            }
+        }
+    }
+
+    override func stopLoading() {
+        stateLock.lock()
+        isStopped = true
+        stateLock.unlock()
+    }
+
+    private func failWithError(message: String) {
+        let error = NSError(
+            domain: "StreamingTrailingProxyErrorURLProtocol",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
+        client?.urlProtocol(self, didFailWithError: error)
     }
 }
 
