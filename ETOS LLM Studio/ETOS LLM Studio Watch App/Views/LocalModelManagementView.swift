@@ -724,7 +724,7 @@ private struct LocalModelBoolSummaryRow: View {
     var body: some View {
         LabeledContent(descriptor.title) {
             Text(isEnabled
-                ? (value ? NSLocalizedString("开启", comment: "Enabled") : NSLocalizedString("关闭", comment: "Disabled"))
+                ? (value ? NSLocalizedString("开启", comment: "Enabled") : NSLocalizedString("已关闭", comment: "Disabled local parameter state"))
                 : NSLocalizedString("默认", comment: "Default local parameter state"))
                 .foregroundStyle(isEnabled ? .primary : .secondary)
         }

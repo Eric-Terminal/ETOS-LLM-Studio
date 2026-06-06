@@ -89,7 +89,10 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
             let token = arguments[index]
             index += 1
             guard token.hasPrefix("-") else {
-                throw LocalLLMEngineError.generationFailed("本地高级参数必须使用 llama.cpp CLI 风格选项：\(token)")
+                throw LocalLLMEngineError.generationFailed(String(
+                    format: NSLocalizedString("本地高级参数必须使用 llama.cpp CLI 风格选项：%@", comment: "Local LLM advanced args option format error"),
+                    token
+                ))
             }
 
             let parsed = parseOptionToken(token)
@@ -101,7 +104,10 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
                     return value
                 }
                 guard index < arguments.count else {
-                    throw LocalLLMEngineError.generationFailed("本地高级参数缺少取值：\(rawName)")
+                    throw LocalLLMEngineError.generationFailed(String(
+                        format: NSLocalizedString("本地高级参数缺少取值：%@", comment: "Local LLM advanced args missing value"),
+                        rawName
+                    ))
                 }
                 defer { index += 1 }
                 return arguments[index]
@@ -178,11 +184,14 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
                 grammar = try nextValue()
             case "grammar-file":
                 _ = try nextValue()
-                throw LocalLLMEngineError.generationFailed("暂不支持从本地高级参数读取 grammar-file；请在 App 表单中粘贴 grammar 文本。")
+                throw LocalLLMEngineError.generationFailed(NSLocalizedString("暂不支持从本地高级参数读取 grammar-file；请在 App 表单中粘贴 grammar 文本。", comment: "Local LLM grammar file unsupported"))
             case "ignore-eos":
                 ignoreEOS = true
             default:
-                throw LocalLLMEngineError.generationFailed("暂不支持的本地 llama.cpp CLI 参数：\(rawName)")
+                throw LocalLLMEngineError.generationFailed(String(
+                    format: NSLocalizedString("暂不支持的本地 llama.cpp CLI 参数：%@", comment: "Local LLM unsupported advanced arg"),
+                    rawName
+                ))
             }
         }
     }
@@ -236,41 +245,41 @@ public enum LocalLLMSamplerKind: Int32, Codable, CaseIterable, Identifiable, Has
 
     public var localizedTitle: String {
         switch self {
-        case .penalties: return "重复惩罚"
-        case .dry: return "DRY 去复读"
-        case .topNSigma: return "Top-n-sigma"
-        case .topK: return "Top-K"
-        case .typical: return "Typical-P"
-        case .topP: return "Top-P"
-        case .minP: return "Min-P"
-        case .xtc: return "XTC"
-        case .temperature: return "温度"
-        case .adaptive: return "Adaptive"
+        case .penalties: return NSLocalizedString("重复惩罚", comment: "Local sampler penalties title")
+        case .dry: return NSLocalizedString("DRY 去复读", comment: "Local sampler DRY title")
+        case .topNSigma: return NSLocalizedString("Top-n-sigma", comment: "Local sampler Top-n-sigma title")
+        case .topK: return NSLocalizedString("Top-K", comment: "Local sampler Top-K title")
+        case .typical: return NSLocalizedString("Typical-P", comment: "Local sampler Typical-P title")
+        case .topP: return NSLocalizedString("Top-P", comment: "Local sampler Top-P title")
+        case .minP: return NSLocalizedString("Min-P", comment: "Local sampler Min-P title")
+        case .xtc: return NSLocalizedString("XTC", comment: "Local sampler XTC title")
+        case .temperature: return NSLocalizedString("温度", comment: "Local sampler temperature title")
+        case .adaptive: return NSLocalizedString("Adaptive", comment: "Local sampler adaptive title")
         }
     }
 
     public var summary: String {
         switch self {
         case .penalties:
-            return "先压低近期重复 token，让模型少原地打转。"
+            return NSLocalizedString("先压低近期重复 token，让模型少原地打转。", comment: "Local sampler penalties summary")
         case .dry:
-            return "针对重复片段做更强抑制，适合长回复防复读。"
+            return NSLocalizedString("针对重复片段做更强抑制，适合长回复防复读。", comment: "Local sampler DRY summary")
         case .topNSigma:
-            return "按 logits 分布标准差裁掉离群候选，偏实验。"
+            return NSLocalizedString("按 logits 分布标准差裁掉离群候选，偏实验。", comment: "Local sampler Top-n-sigma summary")
         case .topK:
-            return "只保留概率最高的一批候选，先做粗筛。"
+            return NSLocalizedString("只保留概率最高的一批候选，先做粗筛。", comment: "Local sampler Top-K summary")
         case .typical:
-            return "保留更“典型”的候选，减少奇怪但高概率的跳字。"
+            return NSLocalizedString("保留更“典型”的候选，减少奇怪但高概率的跳字。", comment: "Local sampler Typical-P summary")
         case .topP:
-            return "按累计概率保留候选，控制开放程度。"
+            return NSLocalizedString("按累计概率保留候选，控制开放程度。", comment: "Local sampler Top-P summary")
         case .minP:
-            return "过滤相对概率太低的候选，常和 Top-P 搭配。"
+            return NSLocalizedString("过滤相对概率太低的候选，常和 Top-P 搭配。", comment: "Local sampler Min-P summary")
         case .xtc:
-            return "实验性地移除过于显眼的候选，增加表达变化。"
+            return NSLocalizedString("实验性地移除过于显眼的候选，增加表达变化。", comment: "Local sampler XTC summary")
         case .temperature:
-            return "最后缩放随机性，数值越高越发散。"
+            return NSLocalizedString("最后缩放随机性，数值越高越发散。", comment: "Local sampler temperature summary")
         case .adaptive:
-            return "保留给自适应采样实验，普通场景可不启用。"
+            return NSLocalizedString("保留给自适应采样实验，普通场景可不启用。", comment: "Local sampler adaptive summary")
         }
     }
 
@@ -353,43 +362,43 @@ public struct LocalLLMSamplerChainPreset: Identifiable, Hashable, Sendable {
 
     public static let defaults = LocalLLMSamplerChainPreset(
         id: "default",
-        title: "默认轻量",
-        summary: "只保留温度采样，接近常见聊天 API 的默认体验。",
+        title: NSLocalizedString("默认轻量", comment: "Local sampler preset default title"),
+        summary: NSLocalizedString("只保留温度采样，接近常见聊天 API 的默认体验。", comment: "Local sampler preset default summary"),
         samplerKinds: LocalLLMSamplerKind.defaultChain
     )
 
     public static let llamaCppFull = LocalLLMSamplerChainPreset(
         id: "llama-cpp-full",
-        title: "llama.cpp 全量",
-        summary: "完整启用 penalties、DRY、Top-n-sigma、Top-K、Typical-P、Top-P、Min-P、XTC 和温度。",
+        title: NSLocalizedString("llama.cpp 全量", comment: "Local sampler preset llama.cpp full title"),
+        summary: NSLocalizedString("完整启用 penalties、DRY、Top-n-sigma、Top-K、Typical-P、Top-P、Min-P、XTC 和温度。", comment: "Local sampler preset llama.cpp full summary"),
         samplerKinds: LocalLLMSamplerKind.parse("edskypmxt")
     )
 
     public static let balanced = LocalLLMSamplerChainPreset(
         id: "balanced",
-        title: "均衡聊天",
-        summary: "保留重复惩罚、Top-K、Top-P、Min-P 和温度，适合日常对话。",
+        title: NSLocalizedString("均衡聊天", comment: "Local sampler preset balanced title"),
+        summary: NSLocalizedString("保留重复惩罚、Top-K、Top-P、Min-P 和温度，适合日常对话。", comment: "Local sampler preset balanced summary"),
         samplerKinds: [.penalties, .topK, .topP, .minP, .temperature]
     )
 
     public static let precise = LocalLLMSamplerChainPreset(
         id: "precise",
-        title: "稳健问答",
-        summary: "减少实验采样器，只保留基础筛选，适合需要稳定回答的场景。",
+        title: NSLocalizedString("稳健问答", comment: "Local sampler preset precise title"),
+        summary: NSLocalizedString("减少实验采样器，只保留基础筛选，适合需要稳定回答的场景。", comment: "Local sampler preset precise summary"),
         samplerKinds: [.penalties, .topK, .topP, .temperature]
     )
 
     public static let creative = LocalLLMSamplerChainPreset(
         id: "creative",
-        title: "创作发散",
-        summary: "加入 Typical-P 和 Min-P，给写作类回复更多候选空间。",
+        title: NSLocalizedString("创作发散", comment: "Local sampler preset creative title"),
+        summary: NSLocalizedString("加入 Typical-P 和 Min-P，给写作类回复更多候选空间。", comment: "Local sampler preset creative summary"),
         samplerKinds: [.penalties, .topK, .typical, .topP, .minP, .temperature]
     )
 
     public static let longContext = LocalLLMSamplerChainPreset(
         id: "long-context",
-        title: "长文防复读",
-        summary: "把 DRY 放在前段，适合长回复或长上下文里减少重复片段。",
+        title: NSLocalizedString("长文防复读", comment: "Local sampler preset long context title"),
+        summary: NSLocalizedString("把 DRY 放在前段，适合长回复或长上下文里减少重复片段。", comment: "Local sampler preset long context summary"),
         samplerKinds: [.penalties, .dry, .topK, .topP, .minP, .temperature]
     )
 
@@ -433,48 +442,48 @@ public struct LocalLLMParameterDescriptor: Identifiable, Hashable, Sendable {
 }
 
 public enum LocalLLMParameterCatalog {
-    public static let contextRebuildText = "需要重建 context"
-    public static let nextRequestText = "下次请求生效"
-    public static let samplerText = "下次采样生效"
+    public static let contextRebuildText = NSLocalizedString("需要重建 context", comment: "Local parameter effect context rebuild")
+    public static let nextRequestText = NSLocalizedString("下次请求生效", comment: "Local parameter effect next request")
+    public static let samplerText = NSLocalizedString("下次采样生效", comment: "Local parameter effect next sampler")
 
     public static let descriptors: [LocalLLMParameterDescriptor] = [
         LocalLLMParameterDescriptor(
             id: "contextSize",
-            title: "上下文长度",
+            title: NSLocalizedString("上下文长度", comment: "Local parameter context size title"),
             aliases: ["--ctx-size", "--n-ctx", "-c"],
-            summary: "模型一次能看到的上下文 token 数；越大越吃内存。",
+            summary: NSLocalizedString("模型一次能看到的上下文 token 数；越大越吃内存。", comment: "Local parameter context size summary"),
             defaultValue: "\(LocalModelRecord.defaultContextSize)",
             effectScope: contextRebuildText
         ),
         LocalLLMParameterDescriptor(
             id: "maxOutputTokens",
-            title: "最大输出 token",
+            title: NSLocalizedString("最大输出 token", comment: "Local parameter max output tokens title"),
             aliases: ["--n-predict", "--predict", "--max-tokens", "-n"],
-            summary: "单次回复最多生成多少 token。",
+            summary: NSLocalizedString("单次回复最多生成多少 token。", comment: "Local parameter max output tokens summary"),
             defaultValue: "\(LocalModelRecord.defaultMaxOutputTokens)",
             effectScope: nextRequestText
         ),
         LocalLLMParameterDescriptor(
             id: "gpuLayers",
-            title: "GPU 层数",
+            title: NSLocalizedString("GPU 层数", comment: "Local parameter GPU layers title"),
             aliases: ["--gpu-layers", "--n-gpu-layers", "--ngl"],
-            summary: "-1 表示尽量使用 Metal，0 表示强制 CPU。",
+            summary: NSLocalizedString("-1 表示尽量使用 Metal，0 表示强制 CPU。", comment: "Local parameter GPU layers summary"),
             defaultValue: "\(LocalModelRecord.defaultGPULayers)",
             effectScope: contextRebuildText
         ),
         LocalLLMParameterDescriptor(
             id: "seed",
-            title: "随机种子",
+            title: NSLocalizedString("随机种子", comment: "Local parameter seed title"),
             aliases: ["--seed", "-s"],
-            summary: "\(LocalModelRecord.defaultSeed) 表示随机；固定种子可复现实验。",
+            summary: String(format: NSLocalizedString("%@ 表示随机；固定种子可复现实验。", comment: "Local parameter seed summary"), "\(LocalModelRecord.defaultSeed)"),
             defaultValue: "\(LocalModelRecord.defaultSeed)",
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
             id: "temperature",
-            title: "温度",
+            title: NSLocalizedString("温度", comment: "Local parameter temperature title"),
             aliases: ["--temp", "--temperature"],
-            summary: "控制随机性；越高越发散，0 更确定。",
+            summary: NSLocalizedString("控制随机性；越高越发散，0 更确定。", comment: "Local parameter temperature summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultTemperature),
             effectScope: samplerText
         ),
@@ -482,7 +491,7 @@ public enum LocalLLMParameterCatalog {
             id: "topK",
             title: "Top-K",
             aliases: ["--top-k"],
-            summary: "只保留概率最高的 K 个候选；0 通常表示关闭。",
+            summary: NSLocalizedString("只保留概率最高的 K 个候选；0 通常表示关闭。", comment: "Local parameter Top-K summary"),
             defaultValue: "\(LocalModelRecord.defaultTopK)",
             effectScope: samplerText
         ),
@@ -490,7 +499,7 @@ public enum LocalLLMParameterCatalog {
             id: "topP",
             title: "Top-P",
             aliases: ["--top-p"],
-            summary: "保留累计概率达到 P 的候选集合。",
+            summary: NSLocalizedString("保留累计概率达到 P 的候选集合。", comment: "Local parameter Top-P summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultTopP),
             effectScope: samplerText
         ),
@@ -498,39 +507,39 @@ public enum LocalLLMParameterCatalog {
             id: "minP",
             title: "Min-P",
             aliases: ["--min-p"],
-            summary: "过滤相对最高概率太低的候选。",
+            summary: NSLocalizedString("过滤相对最高概率太低的候选。", comment: "Local parameter Min-P summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultMinP),
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
             id: "repeatLastN",
-            title: "重复检查窗口",
+            title: NSLocalizedString("重复检查窗口", comment: "Local parameter repeat last n title"),
             aliases: ["--repeat-last-n"],
-            summary: "回看多少 token 做重复惩罚；-1 表示回看整个上下文。",
+            summary: NSLocalizedString("回看多少 token 做重复惩罚；-1 表示回看整个上下文。", comment: "Local parameter repeat last n summary"),
             defaultValue: "\(LocalModelRecord.defaultRepeatLastN)",
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
             id: "repeatPenalty",
-            title: "重复惩罚",
+            title: NSLocalizedString("重复惩罚", comment: "Local parameter repeat penalty title"),
             aliases: ["--repeat-penalty"],
-            summary: "高于 1 会压低近期重复 token。",
+            summary: NSLocalizedString("高于 1 会压低近期重复 token。", comment: "Local parameter repeat penalty summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultRepeatPenalty),
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
             id: "frequencyPenalty",
-            title: "频率惩罚",
+            title: NSLocalizedString("频率惩罚", comment: "Local parameter frequency penalty title"),
             aliases: ["--frequency-penalty"],
-            summary: "按 token 出现频率施加惩罚。",
+            summary: NSLocalizedString("按 token 出现频率施加惩罚。", comment: "Local parameter frequency penalty summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultFrequencyPenalty),
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
             id: "presencePenalty",
-            title: "存在惩罚",
+            title: NSLocalizedString("存在惩罚", comment: "Local parameter presence penalty title"),
             aliases: ["--presence-penalty"],
-            summary: "只要 token 出现过就施加惩罚。",
+            summary: NSLocalizedString("只要 token 出现过就施加惩罚。", comment: "Local parameter presence penalty summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultPresencePenalty),
             effectScope: samplerText
         ),
@@ -538,23 +547,23 @@ public enum LocalLLMParameterCatalog {
             id: "grammar",
             title: "Grammar",
             aliases: ["--grammar"],
-            summary: "粘贴 GBNF grammar 文本来约束输出格式。",
-            defaultValue: "空",
+            summary: NSLocalizedString("粘贴 GBNF grammar 文本来约束输出格式。", comment: "Local parameter grammar summary"),
+            defaultValue: NSLocalizedString("空", comment: "Empty local parameter default"),
             effectScope: nextRequestText
         ),
         LocalLLMParameterDescriptor(
             id: "ignoreEOS",
-            title: "忽略 EOS",
+            title: NSLocalizedString("忽略 EOS", comment: "Local parameter ignore EOS title"),
             aliases: ["--ignore-eos"],
-            summary: "忽略模型的结束 token，可能让回复继续生成到上限。",
-            defaultValue: "关闭",
+            summary: NSLocalizedString("忽略模型的结束 token，可能让回复继续生成到上限。", comment: "Local parameter ignore EOS summary"),
+            defaultValue: NSLocalizedString("已关闭", comment: "Disabled local parameter default"),
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
             id: "samplerKinds",
-            title: "采样链",
+            title: NSLocalizedString("采样链", comment: "Local parameter sampler chain title"),
             aliases: ["--samplers", "--sampler-seq", "--sampling-seq"],
-            summary: "控制采样器执行顺序；普通设置页只显示默认或自定义。",
+            summary: NSLocalizedString("控制采样器执行顺序；普通设置页只显示默认或自定义。", comment: "Local parameter sampler chain summary"),
             defaultValue: LocalLLMSamplerKind.defaultChainString,
             effectScope: samplerText
         ),
@@ -633,7 +642,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
             let token = arguments[index]
             index += 1
             guard token.hasPrefix("-") else {
-                errors.append(LocalLLMCLIStyleImportIssue(option: token, message: "不是 llama.cpp-style 选项。"))
+                errors.append(LocalLLMCLIStyleImportIssue(option: token, message: NSLocalizedString("不是 llama.cpp-style 选项。", comment: "Local llama import invalid token")))
                 continue
             }
 
@@ -656,7 +665,7 @@ public enum LocalLLMCLIStyleArgumentImporter {
 
             func requireValue() -> String? {
                 guard let value = nextValue() else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "缺少取值。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("缺少取值。", comment: "Local llama import missing value")))
                     return nil
                 }
                 return value
@@ -666,7 +675,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "ctx-size", "n-ctx", "c":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要整数，收到 \(value)。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
                     continue
                 }
                 updatedRecord.contextSize = parsedValue.clamped(to: 1...1_048_576)
@@ -674,7 +686,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "predict", "n-predict", "max-tokens", "max-output-tokens", "n":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要整数，收到 \(value)。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
                     continue
                 }
                 updatedRecord.maxOutputTokens = parsedValue.clamped(to: 1...131_072)
@@ -682,7 +697,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "gpu-layers", "n-gpu-layers", "ngl":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要整数，收到 \(value)。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
                     continue
                 }
                 updatedRecord.gpuLayers = parsedValue.clamped(to: -1...999)
@@ -690,7 +708,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "seed", "s":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = parseSeed(value) else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要 0 到 \(UInt32.max) 的整数，-1 表示随机。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要 0 到 %@ 的整数，-1 表示随机。", comment: "Local llama import seed error"),
+                        "\(UInt32.max)"
+                    )))
                     continue
                 }
                 updatedRecord.seed = parsedValue
@@ -708,7 +729,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "top-k", "top-k-sampling":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要整数，收到 \(value)。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
                     continue
                 }
                 updatedRecord.topK = parsedValue.clamped(to: 0...1_000)
@@ -720,7 +744,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "repeat-last-n":
                 guard let value = requireValue() else { continue }
                 guard let parsedValue = Int(value) else {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要整数，收到 \(value)。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
                     continue
                 }
                 updatedRecord.repeatLastN = parsedValue.clamped(to: -1...1_048_576)
@@ -734,25 +761,25 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "grammar":
                 guard let value = requireValue() else { continue }
                 updatedRecord.grammar = value
-                appendApplied(rawName, "grammar", value.isEmpty ? "空" : "已设置")
+                appendApplied(rawName, "grammar", value.isEmpty ? NSLocalizedString("空", comment: "Empty local parameter default") : NSLocalizedString("已设置", comment: "Configured local parameter"))
             case "ignore-eos":
                 updatedRecord.ignoreEOS = true
-                appendApplied(rawName, "ignoreEOS", "开启")
+                appendApplied(rawName, "ignoreEOS", NSLocalizedString("开启", comment: "Enabled"))
             case "samplers", "sampler-seq", "sampling-seq":
                 guard let value = requireValue() else { continue }
                 let samplerKinds = LocalLLMSamplerKind.parse(value)
                 if samplerKinds.isEmpty {
-                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "没有识别到可用 sampler。"))
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("没有识别到可用 sampler。", comment: "Local llama import no sampler")))
                 } else {
                     updatedRecord.samplerKinds = samplerKinds
                     appendApplied(rawName, "samplerKinds", LocalLLMSamplerKind.chainString(samplerKinds))
                 }
             case "grammar-file":
                 _ = nextValue()
-                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "iOS 沙盒下不导入任意路径文件，请改用 Grammar 文本。"))
+                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("iOS 沙盒下不导入任意路径文件，请改用 Grammar 文本。", comment: "Local llama import grammar file unsupported")))
             default:
                 _ = nextValue()
-                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "当前只支持常用 llama.cpp-style 参数子集。"))
+                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("当前只支持常用 llama.cpp-style 参数子集。", comment: "Local llama import unsupported option")))
             }
         }
 
@@ -780,7 +807,10 @@ public enum LocalLLMCLIStyleArgumentImporter {
     ) {
         guard let value else { return }
         guard let parsedValue = Double(value) else {
-            errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: "需要数字，收到 \(value)。"))
+            errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                format: NSLocalizedString("需要数字，收到 %@。", comment: "Local llama import number error"),
+                value
+            )))
             return
         }
         let clampedValue = parsedValue.clamped(to: range)
@@ -862,7 +892,11 @@ private func isOptionToken(_ token: String) -> Bool {
 
 private func parseInt32(_ rawValue: String, option: String) throws -> Int32 {
     guard let value = Int32(rawValue) else {
-        throw LocalLLMEngineError.generationFailed("本地高级参数整数无效：\(option) \(rawValue)")
+        throw LocalLLMEngineError.generationFailed(String(
+            format: NSLocalizedString("本地高级参数整数无效：%@ %@", comment: "Local LLM advanced arg invalid integer"),
+            option,
+            rawValue
+        ))
     }
     return value
 }
@@ -872,14 +906,22 @@ private func parseUInt32(_ rawValue: String, option: String) throws -> UInt32 {
         return LocalModelRecord.defaultSeed
     }
     guard let value = UInt32(rawValue) else {
-        throw LocalLLMEngineError.generationFailed("本地高级参数整数无效：\(option) \(rawValue)")
+        throw LocalLLMEngineError.generationFailed(String(
+            format: NSLocalizedString("本地高级参数整数无效：%@ %@", comment: "Local LLM advanced arg invalid integer"),
+            option,
+            rawValue
+        ))
     }
     return value
 }
 
 private func parseFloat(_ rawValue: String, option: String) throws -> Float {
     guard let value = Float(rawValue) else {
-        throw LocalLLMEngineError.generationFailed("本地高级参数数字无效：\(option) \(rawValue)")
+        throw LocalLLMEngineError.generationFailed(String(
+            format: NSLocalizedString("本地高级参数数字无效：%@ %@", comment: "Local LLM advanced arg invalid number"),
+            option,
+            rawValue
+        ))
     }
     return value
 }
