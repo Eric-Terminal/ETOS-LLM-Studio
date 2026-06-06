@@ -123,6 +123,8 @@ struct local_chat_template_result {
     std::vector<common_grammar_trigger> grammar_triggers;
     std::string generation_prompt;
     std::vector<std::string> additional_stops;
+    common_chat_parser_params parser_params;
+    bool parser_enabled = false;
 };
 
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config) {
@@ -505,10 +507,55 @@ size_t valid_utf8_prefix_length(const std::string & text, size_t limit) {
     return index;
 }
 
+std::string next_local_tool_call_id(local_chat_parser_state & state) {
+    return "local_tool_" + std::to_string(state.next_tool_call_index++);
+}
+
+std::string fallback_chat_message_json(const std::string & content) {
+    json message = {
+        { "role", "assistant" },
+        { "content", content },
+    };
+    return message.dump();
+}
+
+bool update_chat_parser_state(
+    local_chat_parser_state & state,
+    bool is_partial,
+    std::string * snapshot_json
+) {
+    if (!state.enabled) {
+        return false;
+    }
+
+    try {
+        common_chat_msg parsed = common_chat_parse(state.generated_text, is_partial, state.parser_params);
+        if (parsed.empty()) {
+            return false;
+        }
+        parsed.set_tool_call_ids(state.tool_call_ids, [&state] {
+            return next_local_tool_call_id(state);
+        });
+        state.message = std::move(parsed);
+        if (snapshot_json) {
+            *snapshot_json = state.message.to_json_oaicompat(true).dump();
+        }
+        return true;
+    } catch (const std::exception &) {
+        if (!is_partial && snapshot_json) {
+            *snapshot_json = fallback_chat_message_json(state.generated_text);
+            return true;
+        }
+        return false;
+    }
+}
+
 bool emit_text_chunk(
     const std::string & chunk,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
+    local_chat_parser_state * parser_state,
     void * user_data
 ) {
     if (chunk.empty()) {
@@ -517,7 +564,19 @@ bool emit_text_chunk(
     if (output_text) {
         output_text->append(chunk);
     }
-    return !token_callback || token_callback(chunk.c_str(), user_data) != 0;
+    if (parser_state && parser_state->enabled) {
+        parser_state->generated_text.append(chunk);
+    }
+    if (token_callback && token_callback(chunk.c_str(), user_data) == 0) {
+        return false;
+    }
+    if (snapshot_callback && parser_state && parser_state->enabled) {
+        std::string snapshot_json;
+        if (update_chat_parser_state(*parser_state, true, &snapshot_json) && !snapshot_json.empty()) {
+            return snapshot_callback(snapshot_json.c_str(), user_data) != 0;
+        }
+    }
+    return true;
 }
 
 bool flush_pending_text(
@@ -526,6 +585,8 @@ bool flush_pending_text(
     bool final_flush,
     std::string * output_text,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
+    local_chat_parser_state * parser_state,
     void * user_data
 ) {
     if (pending_text.empty()) {
@@ -543,6 +604,9 @@ bool flush_pending_text(
             if (output_text) {
                 output_text->append(pending_text);
             }
+            if (parser_state && parser_state->enabled) {
+                parser_state->generated_text.append(pending_text);
+            }
             pending_text.clear();
         }
         return true;
@@ -550,10 +614,20 @@ bool flush_pending_text(
 
     std::string chunk = pending_text.substr(0, chunk_length);
     pending_text.erase(0, chunk_length);
-    const bool should_continue = emit_text_chunk(chunk, output_text, token_callback, user_data);
+    const bool should_continue = emit_text_chunk(
+        chunk,
+        output_text,
+        token_callback,
+        snapshot_callback,
+        parser_state,
+        user_data
+    );
     if (final_flush && !pending_text.empty()) {
         if (output_text) {
             output_text->append(pending_text);
+        }
+        if (parser_state && parser_state->enabled) {
+            parser_state->generated_text.append(pending_text);
         }
         pending_text.clear();
     }
@@ -586,6 +660,9 @@ local_chat_template_result apply_chat_template(
         };
         if (content) {
             message["content"] = content;
+        }
+        if (messages[index].reasoning_content && messages[index].reasoning_content[0] != '\0') {
+            message["reasoning_content"] = messages[index].reasoning_content;
         }
         if (messages[index].name && messages[index].name[0] != '\0') {
             message["name"] = messages[index].name;
@@ -639,6 +716,7 @@ local_chat_template_result apply_chat_template(
         auto templates = common_chat_templates_init(model, "");
         common_chat_templates_inputs inputs;
         inputs.messages = common_chat_msgs_parse_oaicompat(chat_messages);
+        inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
         if (!tool_definitions.empty()) {
             inputs.tools = common_chat_tools_parse_oaicompat(tool_definitions);
             inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
@@ -652,11 +730,72 @@ local_chat_template_result apply_chat_template(
         result.grammar_triggers = params.grammar_triggers;
         result.generation_prompt = params.generation_prompt;
         result.additional_stops = params.additional_stops;
+        result.parser_params = common_chat_parser_params(params);
+        result.parser_params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+        if (!params.parser.empty()) {
+            result.parser_params.parser.load(params.parser);
+        }
+        result.parser_enabled = true;
         return result;
     } catch (const std::exception & e) {
         fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
         return {};
     }
+}
+
+int32_t parse_chat_response(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    bool is_partial,
+    std::string * output_json,
+    char ** error_message
+) {
+    if (!model_path || !messages || message_count <= 0 || !generated_text || !output_json) {
+        return fail("本地对话解析参数无效。", error_message);
+    }
+
+    std::call_once(backend_init_once, [] {
+        llama_backend_init();
+        ggml_backend_load_all();
+    });
+
+    llama_model_params model_params = llama_model_default_params();
+    model_params.no_alloc = true;
+    model_params.n_gpu_layers = 0;
+
+    llama_model_shared_handle model = load_model(model_path, model_params, false);
+    if (!model) {
+        return fail("无法读取本地模型 GGUF 元数据。", error_message);
+    }
+
+    local_chat_template_result chat_template = apply_chat_template(
+        model.get(),
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        error_message
+    );
+    if (chat_template.prompt.empty()) {
+        return -1;
+    }
+
+    local_chat_parser_state parser_state;
+    parser_state.enabled = chat_template.parser_enabled;
+    parser_state.parser_params = chat_template.parser_params;
+    parser_state.generated_text = generated_text;
+
+    std::string snapshot_json;
+    if (update_chat_parser_state(parser_state, is_partial, &snapshot_json) && !snapshot_json.empty()) {
+        *output_json = snapshot_json;
+    } else {
+        *output_json = fallback_chat_message_json(generated_text);
+    }
+    return 0;
 }
 
 int32_t generate(
@@ -668,7 +807,9 @@ int32_t generate(
     int32_t tool_count,
     const etos_local_llm_generation_config * config,
     std::string * output_text,
+    std::string * output_message_json,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
     etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
@@ -676,7 +817,7 @@ int32_t generate(
     if (!model_path || ((!prompt || prompt[0] == '\0') && (!messages || message_count <= 0))) {
         return fail("本地推理参数无效。", error_message);
     }
-    if (!output_text && !token_callback) {
+    if (!output_text && !output_message_json && !token_callback && !snapshot_callback) {
         return fail("本地推理输出参数无效。", error_message);
     }
     if (!config) {
@@ -709,6 +850,7 @@ int32_t generate(
     }
 
     local_chat_template_result chat_template;
+    local_chat_parser_state parser_state;
     if (!prompt || prompt[0] == '\0') {
         if (should_cancel(cancel_callback, user_data)) {
             return cancelled(error_message);
@@ -732,6 +874,8 @@ int32_t generate(
             generation_params.generation_prompt = chat_template.generation_prompt;
         }
         generation_params.additional_stops = chat_template.additional_stops;
+        parser_state.enabled = chat_template.parser_enabled;
+        parser_state.parser_params = chat_template.parser_params;
         prompt = chat_template.prompt.c_str();
     }
     if (should_cancel(cancel_callback, user_data)) {
@@ -854,6 +998,8 @@ int32_t generate(
                 true,
                 output_text,
                 token_callback,
+                snapshot_callback,
+                &parser_state,
                 user_data
             )) {
                 return cancelled(error_message);
@@ -866,6 +1012,8 @@ int32_t generate(
             false,
             output_text,
             token_callback,
+            snapshot_callback,
+            &parser_state,
             user_data
         )) {
             return cancelled(error_message);
@@ -876,8 +1024,31 @@ int32_t generate(
         generated_tokens += 1;
     }
 
-    if (!flush_pending_text(pending_text, 0, true, output_text, token_callback, user_data)) {
+    if (!flush_pending_text(
+        pending_text,
+        0,
+        true,
+        output_text,
+        token_callback,
+        snapshot_callback,
+        &parser_state,
+        user_data
+    )) {
         return cancelled(error_message);
+    }
+    if ((output_message_json || snapshot_callback) && parser_state.enabled) {
+        std::string snapshot_json;
+        if (!update_chat_parser_state(parser_state, false, &snapshot_json) || snapshot_json.empty()) {
+            snapshot_json = fallback_chat_message_json(parser_state.generated_text);
+        }
+        if (output_message_json) {
+            *output_message_json = snapshot_json;
+        }
+        if (snapshot_callback && snapshot_callback(snapshot_json.c_str(), user_data) == 0) {
+            return cancelled(error_message);
+        }
+    } else if (output_message_json && output_text) {
+        *output_message_json = fallback_chat_message_json(*output_text);
     }
     return 0;
 }

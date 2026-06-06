@@ -155,6 +155,34 @@ public final class LocalLLMEngine: @unchecked Sendable {
         }
     }
 
+    public func generateParsed(
+        messages: [LocalLLMChatMessage],
+        tools: [LocalLLMToolDefinition] = [],
+        modelURL: URL,
+        options: LocalLLMGenerationOptions
+    ) async throws -> LocalLLMToolCallParseResult {
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
+        }
+
+        let cancellationState = LocalLLMCancellationState()
+        let task = Task.detached(priority: .userInitiated) {
+            try LocalLLMBridge.generateChatResponse(
+                messages: messages,
+                tools: tools,
+                modelPath: modelURL.path,
+                options: options,
+                cancellationState: cancellationState
+            )
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            cancellationState.cancel()
+            task.cancel()
+        }
+    }
+
     public func stream(
         messages: [LocalLLMChatMessage],
         tools: [LocalLLMToolDefinition] = [],
@@ -166,6 +194,24 @@ public final class LocalLLMEngine: @unchecked Sendable {
         }
 
         return try LocalLLMBridge.streamChat(
+            messages: messages,
+            tools: tools,
+            modelPath: modelURL.path,
+            options: options
+        )
+    }
+
+    public func streamParsed(
+        messages: [LocalLLMChatMessage],
+        tools: [LocalLLMToolDefinition] = [],
+        modelURL: URL,
+        options: LocalLLMGenerationOptions
+    ) throws -> AsyncThrowingStream<LocalLLMToolCallParseResult, Error> {
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
+        }
+
+        return try LocalLLMBridge.streamChatResponse(
             messages: messages,
             tools: tools,
             modelPath: modelURL.path,
@@ -185,7 +231,37 @@ public final class LocalLLMEngine: @unchecked Sendable {
         guard !messages.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
         }
-        return LocalLLMChatMessageBuilder.parseToolCalls(from: generatedText, tools: tools)
+        return try await parseGeneratedOutput(
+            from: generatedText,
+            messages: messages,
+            tools: tools,
+            modelURL: modelURL,
+            isPartial: false
+        )
+    }
+
+    public func parseGeneratedOutput(
+        from generatedText: String,
+        messages: [LocalLLMChatMessage],
+        tools: [LocalLLMToolDefinition] = [],
+        modelURL: URL,
+        isPartial: Bool = false
+    ) async throws -> LocalLLMToolCallParseResult {
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
+        }
+        guard !messages.isEmpty else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
+        }
+        return try await Task.detached(priority: .userInitiated) {
+            try LocalLLMBridge.parseChatResponse(
+                generatedText: generatedText,
+                isPartial: isPartial,
+                messages: messages,
+                tools: tools,
+                modelPath: modelURL.path
+            )
+        }.value
     }
 
     public func embed(
@@ -276,6 +352,63 @@ private enum LocalLLMBridge {
         return String(cString: outputPointer)
     }
 
+    static func generateChatResponse(
+        messages: [LocalLLMChatMessage],
+        tools: [LocalLLMToolDefinition],
+        modelPath: String,
+        options: LocalLLMGenerationOptions,
+        cancellationState: LocalLLMCancellationState
+    ) throws -> LocalLLMToolCallParseResult {
+        guard !messages.isEmpty else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
+        }
+
+        var outputPointer: UnsafeMutablePointer<CChar>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        let generationConfig = try LocalLLMGenerationConfig(options: options)
+        let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
+        let preparedMessages = try PreparedLocalLLMChatMessages(messages)
+        let preparedTools = try PreparedLocalLLMTools(tools)
+        let statePointer = Unmanaged.passUnretained(cancellationState).toOpaque()
+        let status = modelPath.withCString { modelPathCString in
+            preparedMessages.withUnsafeBufferPointer { messagesPointer in
+                preparedTools.withUnsafeBufferPointer { toolsPointer in
+                    preparedConfig.withUnsafePointer { configPointer in
+                        etos_local_llm_generate_chat_response(
+                            modelPathCString,
+                            messagesPointer.baseAddress,
+                            Int32(messagesPointer.count),
+                            toolsPointer.baseAddress,
+                            Int32(toolsPointer.count),
+                            configPointer,
+                            localLLMGenerationShouldCancel,
+                            statePointer,
+                            &outputPointer,
+                            &errorPointer
+                        )
+                    }
+                }
+            }
+        }
+        defer {
+            if let outputPointer {
+                etos_local_llm_free(outputPointer)
+            }
+            if let errorPointer {
+                etos_local_llm_free(errorPointer)
+            }
+        }
+
+        guard status == 0, let outputPointer else {
+            if status == cancelledStatus {
+                throw CancellationError()
+            }
+            let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+            throw LocalLLMEngineError.generationFailed(message)
+        }
+        return try parseChatResponseJSON(String(cString: outputPointer))
+    }
+
     static func streamChat(
         messages: [LocalLLMChatMessage],
         tools: [LocalLLMToolDefinition],
@@ -348,6 +481,128 @@ private enum LocalLLMBridge {
         }
     }
 
+    static func streamChatResponse(
+        messages: [LocalLLMChatMessage],
+        tools: [LocalLLMToolDefinition],
+        modelPath: String,
+        options: LocalLLMGenerationOptions
+    ) throws -> AsyncThrowingStream<LocalLLMToolCallParseResult, Error> {
+        let generationConfig = try LocalLLMGenerationConfig(options: options)
+        return AsyncThrowingStream<LocalLLMToolCallParseResult, Error> { continuation in
+            guard !messages.isEmpty else {
+                continuation.finish(throwing: LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages")))
+                return
+            }
+
+            let state = LocalLLMParsedStreamState(continuation: continuation)
+            continuation.onTermination = { @Sendable _ in
+                state.cancel()
+            }
+
+            Task.detached(priority: .userInitiated) {
+                let statePointer = Unmanaged.passRetained(state).toOpaque()
+                defer {
+                    Unmanaged<LocalLLMParsedStreamState>.fromOpaque(statePointer).release()
+                }
+
+                var errorPointer: UnsafeMutablePointer<CChar>?
+                do {
+                    let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
+                    let preparedMessages = try PreparedLocalLLMChatMessages(messages)
+                    let preparedTools = try PreparedLocalLLMTools(tools)
+                    let status = modelPath.withCString { modelPathCString in
+                        preparedMessages.withUnsafeBufferPointer { messagesPointer in
+                            preparedTools.withUnsafeBufferPointer { toolsPointer in
+                                preparedConfig.withUnsafePointer { configPointer in
+                                    etos_local_llm_generate_chat_response_stream(
+                                        modelPathCString,
+                                        messagesPointer.baseAddress,
+                                        Int32(messagesPointer.count),
+                                        toolsPointer.baseAddress,
+                                        Int32(toolsPointer.count),
+                                        configPointer,
+                                        localLLMParsedStreamCallback,
+                                        localLLMParsedStreamShouldCancel,
+                                        statePointer,
+                                        &errorPointer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    defer {
+                        if let errorPointer {
+                            etos_local_llm_free(errorPointer)
+                        }
+                    }
+
+                    guard status == 0 else {
+                        if status == cancelledStatus {
+                            continuation.finish(throwing: CancellationError())
+                            return
+                        }
+                        let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+                        continuation.finish(throwing: LocalLLMEngineError.generationFailed(message))
+                        return
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    static func parseChatResponse(
+        generatedText: String,
+        isPartial: Bool,
+        messages: [LocalLLMChatMessage],
+        tools: [LocalLLMToolDefinition],
+        modelPath: String
+    ) throws -> LocalLLMToolCallParseResult {
+        guard !messages.isEmpty else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话消息为空。", comment: "Local LLM empty messages"))
+        }
+
+        var outputPointer: UnsafeMutablePointer<CChar>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        let preparedMessages = try PreparedLocalLLMChatMessages(messages)
+        let preparedTools = try PreparedLocalLLMTools(tools)
+        let status = modelPath.withCString { modelPathCString in
+            generatedText.withCString { generatedTextCString in
+                preparedMessages.withUnsafeBufferPointer { messagesPointer in
+                    preparedTools.withUnsafeBufferPointer { toolsPointer in
+                        etos_local_llm_parse_chat_response(
+                            modelPathCString,
+                            messagesPointer.baseAddress,
+                            Int32(messagesPointer.count),
+                            toolsPointer.baseAddress,
+                            Int32(toolsPointer.count),
+                            generatedTextCString,
+                            isPartial ? 1 : 0,
+                            &outputPointer,
+                            &errorPointer
+                        )
+                    }
+                }
+            }
+        }
+        defer {
+            if let outputPointer {
+                etos_local_llm_free(outputPointer)
+            }
+            if let errorPointer {
+                etos_local_llm_free(errorPointer)
+            }
+        }
+
+        guard status == 0, let outputPointer else {
+            let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+            throw LocalLLMEngineError.generationFailed(message)
+        }
+        return try parseChatResponseJSON(String(cString: outputPointer))
+    }
+
     static func embed(
         texts: [String],
         modelPath: String,
@@ -416,6 +671,7 @@ private enum LocalLLMBridge {
 private struct ETOSLocalLLMChatMessage {
     var role: UnsafePointer<CChar>?
     var content: UnsafePointer<CChar>?
+    var reasoningContent: UnsafePointer<CChar>?
     var name: UnsafePointer<CChar>?
     var toolCallID: UnsafePointer<CChar>?
     var toolCallsJSON: UnsafePointer<CChar>?
@@ -425,6 +681,51 @@ private struct ETOSLocalLLMTool {
     var name: UnsafePointer<CChar>?
     var description: UnsafePointer<CChar>?
     var parametersJSON: UnsafePointer<CChar>?
+}
+
+private struct LocalLLMParsedChatMessage: Decodable {
+    var content: String?
+    var reasoningContent: String?
+    var toolCalls: [ToolCall]?
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case reasoningContent = "reasoning_content"
+        case toolCalls = "tool_calls"
+    }
+
+    struct ToolCall: Decodable {
+        var id: String?
+        var function: FunctionCall?
+    }
+
+    struct FunctionCall: Decodable {
+        var name: String?
+        var arguments: String?
+    }
+}
+
+private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallParseResult {
+    guard let data = json.data(using: .utf8) else {
+        throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地模型结构化输出不是有效 UTF-8。", comment: "Local LLM structured output invalid UTF-8"))
+    }
+    let message = try JSONDecoder().decode(LocalLLMParsedChatMessage.self, from: data)
+    let reasoning = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let toolCalls = (message.toolCalls ?? []).enumerated().compactMap { index, toolCall -> InternalToolCall? in
+        let name = toolCall.function?.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        let id = toolCall.id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return InternalToolCall(
+            id: id?.isEmpty == false ? id! : "local_tool_\(index + 1)",
+            toolName: name,
+            arguments: toolCall.function?.arguments ?? "{}"
+        )
+    }
+    return LocalLLMToolCallParseResult(
+        content: message.content ?? "",
+        reasoningContent: reasoning?.isEmpty == false ? reasoning : nil,
+        toolCalls: toolCalls
+    )
 }
 
 private final class PreparedLocalLLMChatMessages {
@@ -443,12 +744,14 @@ private final class PreparedLocalLLMChatMessages {
                 stringPointers.append(content)
 
                 let name = try Self.duplicateOptional(message.name, keepingIn: &stringPointers)
+                let reasoningContent = try Self.duplicateOptional(message.reasoningContent, keepingIn: &stringPointers)
                 let toolCallID = try Self.duplicateOptional(message.toolCallID, keepingIn: &stringPointers)
                 let toolCallsJSON = try Self.duplicateOptional(message.toolCallsJSON, keepingIn: &stringPointers)
 
                 bridgedMessages.append(ETOSLocalLLMChatMessage(
                     role: UnsafePointer(role),
                     content: UnsafePointer(content),
+                    reasoningContent: reasoningContent.map { UnsafePointer($0) },
                     name: name.map { UnsafePointer($0) },
                     toolCallID: toolCallID.map { UnsafePointer($0) },
                     toolCallsJSON: toolCallsJSON.map { UnsafePointer($0) }
@@ -715,15 +1018,65 @@ private final class LocalLLMStreamState: @unchecked Sendable {
     }
 }
 
+private final class LocalLLMParsedStreamState: @unchecked Sendable {
+    private let continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation
+    private let cancellationState = LocalLLMCancellationState()
+
+    init(continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation) {
+        self.continuation = continuation
+    }
+
+    func cancel() {
+        cancellationState.cancel()
+    }
+
+    func isCancelled() -> Bool {
+        cancellationState.isCancelled()
+    }
+
+    func yield(json: String) -> Bool {
+        guard !isCancelled() else { return false }
+
+        do {
+            let result = continuation.yield(try parseChatResponseJSON(json))
+            switch result {
+            case .terminated:
+                cancel()
+                return false
+            case .dropped, .enqueued:
+                return true
+            @unknown default:
+                return true
+            }
+        } catch {
+            continuation.finish(throwing: error)
+            cancel()
+            return false
+        }
+    }
+}
+
 private let localLLMStreamCallback: @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32 = { text, userData in
     guard let text, let userData else { return 0 }
     let state = Unmanaged<LocalLLMStreamState>.fromOpaque(userData).takeUnretainedValue()
     return state.yield(String(cString: text)) ? 1 : 0
 }
 
+private let localLLMParsedStreamCallback: @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32 = { messageJSON, userData in
+    guard let messageJSON, let userData else { return 0 }
+    let state = Unmanaged<LocalLLMParsedStreamState>.fromOpaque(userData).takeUnretainedValue()
+    return state.yield(json: String(cString: messageJSON)) ? 1 : 0
+}
+
 private let localLLMStreamShouldCancel: @convention(c) (UnsafeMutableRawPointer?) -> Int32 = { userData in
     guard let userData else { return 0 }
     let state = Unmanaged<LocalLLMStreamState>.fromOpaque(userData).takeUnretainedValue()
+    return state.isCancelled() ? 1 : 0
+}
+
+private let localLLMParsedStreamShouldCancel: @convention(c) (UnsafeMutableRawPointer?) -> Int32 = { userData in
+    guard let userData else { return 0 }
+    let state = Unmanaged<LocalLLMParsedStreamState>.fromOpaque(userData).takeUnretainedValue()
     return state.isCancelled() ? 1 : 0
 }
 
@@ -758,6 +1111,20 @@ private func etos_local_llm_generate_chat(
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 
+@_silgen_name("etos_local_llm_generate_chat_response")
+private func etos_local_llm_generate_chat_response(
+    _ modelPath: UnsafePointer<CChar>,
+    _ messages: UnsafePointer<ETOSLocalLLMChatMessage>?,
+    _ messageCount: Int32,
+    _ tools: UnsafePointer<ETOSLocalLLMTool>?,
+    _ toolCount: Int32,
+    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
+    _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
+    _ userData: UnsafeMutableRawPointer?,
+    _ outputJSON: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32
+
 @_silgen_name("etos_local_llm_generate_stream")
 private func etos_local_llm_generate_stream(
     _ modelPath: UnsafePointer<CChar>,
@@ -780,6 +1147,33 @@ private func etos_local_llm_generate_chat_stream(
     _ tokenCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
     _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
     _ userData: UnsafeMutableRawPointer?,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32
+
+@_silgen_name("etos_local_llm_generate_chat_response_stream")
+private func etos_local_llm_generate_chat_response_stream(
+    _ modelPath: UnsafePointer<CChar>,
+    _ messages: UnsafePointer<ETOSLocalLLMChatMessage>?,
+    _ messageCount: Int32,
+    _ tools: UnsafePointer<ETOSLocalLLMTool>?,
+    _ toolCount: Int32,
+    _ config: UnsafePointer<ETOSLocalLLMGenerationConfig>,
+    _ snapshotCallback: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Int32)?,
+    _ cancelCallback: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?,
+    _ userData: UnsafeMutableRawPointer?,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32
+
+@_silgen_name("etos_local_llm_parse_chat_response")
+private func etos_local_llm_parse_chat_response(
+    _ modelPath: UnsafePointer<CChar>,
+    _ messages: UnsafePointer<ETOSLocalLLMChatMessage>?,
+    _ messageCount: Int32,
+    _ tools: UnsafePointer<ETOSLocalLLMTool>?,
+    _ toolCount: Int32,
+    _ generatedText: UnsafePointer<CChar>,
+    _ isPartial: Int32,
+    _ outputJSON: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 

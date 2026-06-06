@@ -38,6 +38,8 @@ int32_t etos_local_llm_generate(
         config,
         &response,
         nullptr,
+        nullptr,
+        nullptr,
         cancel_callback,
         user_data,
         error_message
@@ -83,6 +85,8 @@ int32_t etos_local_llm_generate_chat(
         config,
         &response,
         nullptr,
+        nullptr,
+        nullptr,
         cancel_callback,
         user_data,
         error_message
@@ -93,6 +97,53 @@ int32_t etos_local_llm_generate_chat(
 
     *output = etos_local_llm_bridge::copy_string(response);
     return *output ? 0 : etos_local_llm_bridge::fail("本地模型输出内存分配失败。", error_message);
+}
+
+int32_t etos_local_llm_generate_chat_response(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const etos_local_llm_generation_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
+    char ** output_json,
+    char ** error_message
+) {
+    if (output_json) {
+        *output_json = nullptr;
+    }
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    if (!output_json) {
+        return etos_local_llm_bridge::fail("本地推理参数无效。", error_message);
+    }
+
+    std::string response_json;
+    const int32_t status = etos_local_llm_bridge::generate(
+        model_path,
+        nullptr,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        config,
+        nullptr,
+        &response_json,
+        nullptr,
+        nullptr,
+        cancel_callback,
+        user_data,
+        error_message
+    );
+    if (status != 0) {
+        return status;
+    }
+
+    *output_json = etos_local_llm_bridge::copy_string(response_json);
+    return *output_json ? 0 : etos_local_llm_bridge::fail("本地模型结构化输出内存分配失败。", error_message);
 }
 
 int32_t etos_local_llm_generate_stream(
@@ -116,7 +167,9 @@ int32_t etos_local_llm_generate_stream(
         0,
         config,
         nullptr,
+        nullptr,
         token_callback,
+        nullptr,
         cancel_callback,
         user_data,
         error_message
@@ -147,11 +200,87 @@ int32_t etos_local_llm_generate_chat_stream(
         tool_count,
         config,
         nullptr,
+        nullptr,
         token_callback,
+        nullptr,
         cancel_callback,
         user_data,
         error_message
     );
+}
+
+int32_t etos_local_llm_generate_chat_response_stream(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const etos_local_llm_generation_config * config,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
+    char ** error_message
+) {
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    return etos_local_llm_bridge::generate(
+        model_path,
+        nullptr,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        config,
+        nullptr,
+        nullptr,
+        nullptr,
+        snapshot_callback,
+        cancel_callback,
+        user_data,
+        error_message
+    );
+}
+
+int32_t etos_local_llm_parse_chat_response(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    int32_t is_partial,
+    char ** output_json,
+    char ** error_message
+) {
+    if (output_json) {
+        *output_json = nullptr;
+    }
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    if (!output_json) {
+        return etos_local_llm_bridge::fail("本地对话解析参数无效。", error_message);
+    }
+
+    std::string response_json;
+    const int32_t status = etos_local_llm_bridge::parse_chat_response(
+        model_path,
+        messages,
+        message_count,
+        tools,
+        tool_count,
+        generated_text,
+        is_partial != 0,
+        &response_json,
+        error_message
+    );
+    if (status != 0) {
+        return status;
+    }
+
+    *output_json = etos_local_llm_bridge::copy_string(response_json);
+    return *output_json ? 0 : etos_local_llm_bridge::fail("本地对话解析输出内存分配失败。", error_message);
 }
 
 int32_t etos_local_llm_embed(

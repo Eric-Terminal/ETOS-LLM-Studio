@@ -43,7 +43,7 @@ extension ChatService {
             let overrides = runnableModel.effectiveOverrideParameters
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
-            let output = try await LocalLLMEngine.shared.generate(
+            let parsedOutput = try await LocalLLMEngine.shared.generateParsed(
                 messages: LocalLLMChatMessageBuilder.messages(from: requestMessages),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
@@ -76,11 +76,10 @@ extension ChatService {
                 tokenUsage: nil,
                 finishedAt: Date()
             )
-            let parsedOutput = LocalLLMChatMessageBuilder.parseGeneratedOutput(from: output)
             if !parsedOutput.content.isEmpty {
                 return parsedOutput.content
             }
-            return (parsedOutput.reasoningContent ?? output).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (parsedOutput.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         } catch is CancellationError {
             persistRequestLog(
                 context: requestLogContext,
@@ -149,7 +148,7 @@ extension ChatService {
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
             let localMessagesToSend = LocalLLMChatMessageBuilder.messages(from: messagesToSend)
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
-            let stream = try LocalLLMEngine.shared.stream(
+            let stream = try LocalLLMEngine.shared.streamParsed(
                 messages: localMessagesToSend,
                 tools: localTools,
                 modelURL: localModelStore.fileURL(for: record),
@@ -178,7 +177,8 @@ extension ChatService {
                 )
             )
 
-            var output = ""
+            var outputForMetrics = ""
+            var latestParsedOutput = LocalLLMToolCallParseResult(content: "", toolCalls: [])
             var firstTokenAt: Date?
             var lastTokenAt: Date?
             var reasoningStartedAt: Date?
@@ -187,18 +187,19 @@ extension ChatService {
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
             var messages = messagesSnapshot(for: currentSessionID)
 
-            for try await tokenText in stream {
-                guard !tokenText.isEmpty else { continue }
+            for try await parsedStreamingOutput in stream {
+                guard !parsedStreamingOutput.content.isEmpty ||
+                    parsedStreamingOutput.reasoningContent?.isEmpty == false ||
+                    !parsedStreamingOutput.toolCalls.isEmpty else {
+                    continue
+                }
                 let receivedAt = Date()
                 if firstTokenAt == nil {
                     firstTokenAt = receivedAt
                 }
                 lastTokenAt = receivedAt
-                output += tokenText
-                let parsedStreamingOutput = LocalLLMChatMessageBuilder.parseGeneratedOutput(
-                    from: output,
-                    tools: localTools
-                )
+                latestParsedOutput = parsedStreamingOutput
+                outputForMetrics = localResponseMetricText(from: parsedStreamingOutput)
                 let parsedReasoning = parsedStreamingOutput.reasoningContent?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if !parsedReasoning.isEmpty {
@@ -229,7 +230,7 @@ extension ChatService {
                     }
                     messages[index].modelReference = requestLogContext.modelReference
                     if enableResponseSpeedMetrics || reasoningStartedAt != nil {
-                        let estimatedTokens = estimatedCompletionTokens(from: output)
+                        let estimatedTokens = estimatedCompletionTokens(from: outputForMetrics)
                         let speed: Double?
                         if enableResponseSpeedMetrics {
                             speed = streamingTokenPerSecond(
@@ -269,7 +270,7 @@ extension ChatService {
 
             let responseCompletedAt = Date()
             let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
-            let estimatedCompletionTokens = estimatedCompletionTokens(from: output)
+            let estimatedCompletionTokens = estimatedCompletionTokens(from: outputForMetrics)
             let finalSpeed = enableResponseSpeedMetrics ? streamingTokenPerSecond(
                 tokens: estimatedCompletionTokens,
                 requestStartedAt: requestStartedAt,
@@ -283,10 +284,7 @@ extension ChatService {
                     speed: finalSpeed
                 )
             }
-            let parsedOutput = LocalLLMChatMessageBuilder.parseGeneratedOutput(
-                from: output,
-                tools: localTools
-            )
+            let parsedOutput = latestParsedOutput
             if reasoningStartedAt != nil && reasoningCompletedAt == nil {
                 reasoningCompletedAt = reasoningLastDeltaAt ?? responseCompletedAt
             }
@@ -378,6 +376,21 @@ extension ChatService {
         return overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers
         #endif
     }
+}
+
+private func localResponseMetricText(from result: LocalLLMToolCallParseResult) -> String {
+    var parts: [String] = []
+    if let reasoningContent = result.reasoningContent, !reasoningContent.isEmpty {
+        parts.append(reasoningContent)
+    }
+    if !result.content.isEmpty {
+        parts.append(result.content)
+    }
+    for toolCall in result.toolCalls {
+        parts.append(toolCall.toolName)
+        parts.append(toolCall.arguments)
+    }
+    return parts.joined(separator: "\n")
 }
 
 private extension Dictionary where Key == String, Value == JSONValue {

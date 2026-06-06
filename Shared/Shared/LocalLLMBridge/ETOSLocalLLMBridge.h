@@ -16,11 +16,13 @@ extern "C" {
 #endif
 
 typedef int32_t (*etos_local_llm_token_callback)(const char * text, void * user_data);
+typedef int32_t (*etos_local_llm_chat_snapshot_callback)(const char * message_json, void * user_data);
 typedef int32_t (*etos_local_llm_cancel_callback)(void * user_data);
 
 typedef struct etos_local_llm_chat_message {
     const char * role;
     const char * content;
+    const char * reasoning_content;
     const char * name;
     const char * tool_call_id;
     const char * tool_calls_json;
@@ -110,6 +112,19 @@ int32_t etos_local_llm_generate_chat(
     char ** error_message
 );
 
+int32_t etos_local_llm_generate_chat_response(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const etos_local_llm_generation_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
+    char ** output_json,
+    char ** error_message
+);
+
 int32_t etos_local_llm_generate_stream(
     const char * model_path,
     const char * prompt,
@@ -130,6 +145,31 @@ int32_t etos_local_llm_generate_chat_stream(
     etos_local_llm_token_callback token_callback,
     etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
+    char ** error_message
+);
+
+int32_t etos_local_llm_generate_chat_response_stream(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const etos_local_llm_generation_config * config,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
+    char ** error_message
+);
+
+int32_t etos_local_llm_parse_chat_response(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    int32_t is_partial,
+    char ** output_json,
     char ** error_message
 );
 

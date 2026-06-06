@@ -115,8 +115,29 @@ struct local_generation_params {
     bool ignore_eos = false;
 };
 
+struct local_chat_parser_state {
+    common_chat_parser_params parser_params;
+    std::string generated_text;
+    common_chat_msg message;
+    std::vector<std::string> tool_call_ids;
+    int32_t next_tool_call_index = 1;
+    bool enabled = false;
+};
+
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config);
 std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & text, bool add_special = true);
+
+int32_t parse_chat_response(
+    const char * model_path,
+    const etos_local_llm_chat_message * messages,
+    int32_t message_count,
+    const etos_local_llm_tool * tools,
+    int32_t tool_count,
+    const char * generated_text,
+    bool is_partial,
+    std::string * output_json,
+    char ** error_message
+);
 
 int32_t generate(
     const char * model_path,
@@ -127,7 +148,9 @@ int32_t generate(
     int32_t tool_count,
     const etos_local_llm_generation_config * config,
     std::string * output_text,
+    std::string * output_message_json,
     etos_local_llm_token_callback token_callback,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
     etos_local_llm_cancel_callback cancel_callback,
     void * user_data,
     char ** error_message
