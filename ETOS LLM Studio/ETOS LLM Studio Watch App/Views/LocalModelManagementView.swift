@@ -209,10 +209,10 @@ private struct LocalModelDetailView: View {
                 NavigationLink {
                     LocalModelAdvancedIntroView()
                 } label: {
-                    Label(NSLocalizedString("本地模型调参", comment: "Local model tuning intro title"), systemImage: "slider.horizontal.3")
+                    Label(NSLocalizedString("本地模型设置指南", comment: "Local model guide title"), systemImage: "book.pages")
                 }
             } footer: {
-                Text(NSLocalizedString("参数说明和编辑都放在二级页面，避免手表端误触。", comment: "Watch local model tuning intro footer"))
+                Text(NSLocalizedString("先读指南，再进入各参数二级页编辑；这样可以减少手表端误触。", comment: "Watch local model guide footer"))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -574,16 +574,80 @@ private struct LocalModelAdvancedIntroView: View {
     var body: some View {
         List {
             Section {
-                Text(NSLocalizedString("普通高级设置保存结构化参数；只有开启“自定义”的项目才会作为模型覆盖项保存。未开启的项目会沿用 App 默认或全局聊天设置，并在调用前映射到 llama.cpp C ABI。", comment: "Watch local model tuning intro details body"))
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
-                Text(NSLocalizedString("llama.cpp-style 参数导入只支持常用子集，会转换成这些覆盖项。", comment: "Watch local model tuning import intro"))
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("先确认能聊天", comment: "Local model guide quick start title"),
+                    detail: NSLocalizedString("导入权重并加入候选模型后，先用默认参数发一条短消息。", comment: "Local model guide quick start detail")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("只覆盖必要项目", comment: "Watch local model guide overrides title"),
+                    detail: NSLocalizedString("没有打开“自定义”的项目会继续使用 App 默认值或聊天页全局采样设置。", comment: "Watch local model guide overrides detail")
+                )
+            } header: {
+                Text(NSLocalizedString("推荐配置顺序", comment: "Local model guide section order"))
+            }
+
+            Section {
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("上下文长度", comment: "Local parameter context size title"),
+                    detail: NSLocalizedString("上下文越大越占内存；手表端建议从较小值开始，确认稳定后再提高。", comment: "Watch local model guide context detail")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("最大输出 token", comment: "Local parameter max output title"),
+                    detail: NSLocalizedString("这是单次回复的上限。手表端短问答可以压低，避免长时间高负载生成。", comment: "Watch local model guide output detail")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("采样", comment: "Local model sampling section"),
+                    detail: NSLocalizedString("不确定时先只调 Temperature；复读明显时再看重复检查窗口和重复惩罚。", comment: "Watch local model guide sampling detail")
+                )
+            } header: {
+                Text(NSLocalizedString("参数怎么调", comment: "Watch local model guide parameters section"))
+            }
+
+            Section {
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("CPU 路径", comment: "Watch local model guide CPU title"),
+                    detail: NSLocalizedString("watchOS 本地推理只能使用 CPU 路径，GPU 层数固定为 0。", comment: "Watch fixed GPU layers footer")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("模型大小", comment: "Watch local model guide model size title"),
+                    detail: NSLocalizedString("手表端建议先用更小的 GGUF 和较短上下文，确认不会被系统回收后再提高参数。", comment: "Watch local model guide model size detail")
+                )
+            } header: {
+                Text(NSLocalizedString("手表端限制", comment: "Watch local model guide limits section"))
+            }
+
+            Section {
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("参数导入", comment: "Local llama style import navigation title"),
+                    detail: NSLocalizedString("llama.cpp-style 参数导入只解析常用子集，导入后会变成表单覆盖项；App 不执行完整 CLI。", comment: "Local model guide advanced import")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("文件与速度", comment: "Watch local model guide troubleshooting title"),
+                    detail: NSLocalizedString("文件缺失时重新下载或停用模型；生成很慢时先降低上下文长度和最大输出 token。", comment: "Watch local model guide troubleshooting detail")
+                )
+            } header: {
+                Text(NSLocalizedString("导入与排错", comment: "Watch local model guide import troubleshooting section"))
             }
         }
-        .navigationTitle(NSLocalizedString("本地模型调参", comment: "Local model tuning intro sheet title"))
+        .navigationTitle(NSLocalizedString("本地模型设置指南", comment: "Local model guide navigation title"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LocalModelWatchGuideRow: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .etFont(.caption.weight(.semibold))
+            Text(detail)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 2)
     }
 }
 

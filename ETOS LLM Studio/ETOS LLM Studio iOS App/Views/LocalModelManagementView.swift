@@ -599,16 +599,41 @@ private struct LocalModelAdvancedIntroCard: View {
     @Binding var isExpanded: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(NSLocalizedString("本地模型调参", comment: "Local model tuning intro title"))
-                .etFont(.headline.weight(.semibold))
-            Text(NSLocalizedString("这里保存 App 自己的结构化配置，再映射到 llama.cpp C ABI。", comment: "Local model tuning intro summary"))
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text(NSLocalizedString("本地模型设置指南", comment: "Local model guide card title"))
+                    .etFont(.headline.weight(.semibold))
+            } icon: {
+                Image(systemName: "book.pages")
+                    .foregroundStyle(.blue)
+            }
+
+            Text(NSLocalizedString("这里管理当前 GGUF 权重的运行参数、采样行为和 llama.cpp-style 导入。先保持默认跑通，再按需要打开“自定义”逐项覆盖。", comment: "Local model guide card summary"))
                 .etFont(.subheadline)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            LocalModelIntroHighlightRow(
+                systemImage: "1.circle",
+                title: NSLocalizedString("先确认能聊天", comment: "Local model guide quick start title"),
+                detail: NSLocalizedString("导入权重并加入候选模型后，先用默认参数发一条短消息。", comment: "Local model guide quick start detail")
+            )
+            LocalModelIntroHighlightRow(
+                systemImage: "2.circle",
+                title: NSLocalizedString("再调整容量", comment: "Local model guide runtime title"),
+                detail: NSLocalizedString("优先看上下文长度、最大输出和 GPU 层数，它们最影响内存与加载速度。", comment: "Local model guide runtime detail")
+            )
+            LocalModelIntroHighlightRow(
+                systemImage: "3.circle",
+                title: NSLocalizedString("最后微调风格", comment: "Local model guide sampling title"),
+                detail: NSLocalizedString("Temperature、Top-P、重复惩罚和采样器链会改变回复稳定性。", comment: "Local model guide sampling detail")
+            )
+
             Button {
                 isExpanded = true
             } label: {
-                Text(NSLocalizedString("进一步了解…", comment: "Local model tuning intro details"))
+                Label(NSLocalizedString("阅读完整指南", comment: "Local model guide open details"), systemImage: "chevron.right.circle")
                     .etFont(.footnote.weight(.medium))
                     .foregroundStyle(.blue)
             }
@@ -617,16 +642,140 @@ private struct LocalModelAdvancedIntroCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $isExpanded) {
             NavigationStack {
-                ScrollView {
-                    Text(NSLocalizedString("普通高级设置使用 iOS 原生表单保存结构化参数；只有开启“自定义”的项目才会作为模型覆盖项保存。未开启的项目会沿用 App 默认或全局聊天设置，并在调用前映射到 llama.cpp C ABI。llama.cpp-style 参数导入只支持常用子集，会转换成这些覆盖项。App 不执行 llama.cpp CLI，也不会把命令行字符串当成本地推理的主交互。上下文长度和 GPU 层数通常需要重建 context；采样参数会在下一次请求或下一次采样链创建时生效。", comment: "Local model tuning intro details body"))
+                LocalModelTuningGuideView()
+            }
+        }
+    }
+}
+
+private struct LocalModelIntroHighlightRow: View {
+    let systemImage: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.blue)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .etFont(.footnote.weight(.medium))
+                Text(detail)
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct LocalModelTuningGuideView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("本地模型设置指南", comment: "Local model guide title"))
+                        .etFont(.title3.weight(.semibold))
+                    Text(NSLocalizedString("这页只保存当前 GGUF 权重的覆盖参数。没有打开“自定义”的项目会继续使用 App 默认值或聊天页全局采样设置。", comment: "Local model guide overview"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
                 }
-                .navigationTitle(NSLocalizedString("本地模型调参", comment: "Local model tuning intro sheet title"))
-                .navigationBarTitleDisplayMode(.inline)
+
+                LocalModelTuningGuideSection(
+                    title: NSLocalizedString("推荐配置顺序", comment: "Local model guide section order"),
+                    summary: NSLocalizedString("先让模型稳定跑起来，再逐项提高质量和速度。", comment: "Local model guide section order summary"),
+                    items: [
+                        NSLocalizedString("导入 GGUF 后先打开“加入候选模型”，到聊天页确认能正常回复。", comment: "Local model guide order import"),
+                        NSLocalizedString("先只改“上下文长度”和“最大输出 token”；上下文越大越占内存，输出上限越大越容易等待很久。", comment: "Local model guide order context"),
+                        NSLocalizedString("确认稳定后再调采样参数，最后再动 Metal、Grammar 和采样器链。", comment: "Local model guide order advanced")
+                    ]
+                )
+
+                LocalModelTuningGuideSection(
+                    title: NSLocalizedString("运行时与内存", comment: "Local model guide section runtime"),
+                    summary: NSLocalizedString("这些参数决定模型加载成本、回复长度和设备压力。", comment: "Local model guide section runtime summary"),
+                    items: [
+                        NSLocalizedString("上下文长度决定模型一次能看多少 token；iPhone 内存吃紧或模型容易被系统杀掉时，先降低它。", comment: "Local model guide runtime context"),
+                        NSLocalizedString("最大输出 token 是单次回复的上限；短问答可以压低，长写作再提高。", comment: "Local model guide runtime output"),
+                        NSLocalizedString("GPU 层数会影响 Metal 占用；值越高越可能加速，也越可能触发内存或 Metal 稳定性问题。", comment: "Local model guide runtime gpu"),
+                        NSLocalizedString("模型缓存会复用最近加载的权重；换模型频繁或需要释放内存时可以关闭缓存。", comment: "Local model guide runtime cache")
+                    ]
+                )
+
+                LocalModelTuningGuideSection(
+                    title: NSLocalizedString("采样参数怎么读", comment: "Local model guide section sampling"),
+                    summary: NSLocalizedString("采样控制模型从候选 token 里怎么挑下一个字。", comment: "Local model guide section sampling summary"),
+                    items: [
+                        NSLocalizedString("Temperature 控制发散程度；0 更稳定，0.6 到 0.8 适合大多数聊天。", comment: "Local model guide sampling temperature"),
+                        NSLocalizedString("Top-P、Top-K、Min-P 会一起过滤候选 token；不确定时先只调 Temperature。", comment: "Local model guide sampling filters"),
+                        NSLocalizedString("重复检查窗口和重复惩罚用来减少复读；长回复重复时，提高惩罚或扩大窗口。", comment: "Local model guide sampling repeat"),
+                        NSLocalizedString("固定随机种子可以复现实验；想每次都自然变化就保持随机。", comment: "Local model guide sampling seed")
+                    ]
+                )
+
+                LocalModelTuningGuideSection(
+                    title: NSLocalizedString("高级区与导入", comment: "Local model guide section advanced"),
+                    summary: NSLocalizedString("这里更接近 llama.cpp 底层能力，建议一次只改一类。", comment: "Local model guide section advanced summary"),
+                    items: [
+                        NSLocalizedString("KV Offload 和 Flash Attention 属于 Metal 稳定性开关；遇到 GPU/Metal 报错时先尝试关闭 Flash Attention 或 KV Offload。", comment: "Local model guide advanced metal"),
+                        NSLocalizedString("Grammar 适合约束 JSON、枚举或固定格式输出；语法不合法会直接影响生成。", comment: "Local model guide advanced grammar"),
+                        NSLocalizedString("采样器链会改变候选 token 的处理顺序，建议只在你知道每个 sampler 作用时再自定义。", comment: "Local model guide advanced sampler"),
+                        NSLocalizedString("llama.cpp-style 参数导入只解析常用子集，导入后会变成表单覆盖项；App 不执行完整 CLI。", comment: "Local model guide advanced import")
+                    ]
+                )
+
+                LocalModelTuningGuideSection(
+                    title: NSLocalizedString("常见排错路径", comment: "Local model guide section troubleshooting"),
+                    summary: NSLocalizedString("大多数问题可以先从文件、内存、输出上限和采样默认值排查。", comment: "Local model guide section troubleshooting summary"),
+                    items: [
+                        NSLocalizedString("文件缺失时重新导入权重，或先停用该模型，避免聊天页继续选到它。", comment: "Local model guide troubleshooting file"),
+                        NSLocalizedString("加载慢通常来自大权重、大上下文或缓存未命中；可以降低上下文、减少 GPU 层数，或打开模型缓存。", comment: "Local model guide troubleshooting loading"),
+                        NSLocalizedString("输出短或提前结束时，检查最大输出 token、Grammar 和“忽略 EOS”。", comment: "Local model guide troubleshooting short output"),
+                        NSLocalizedString("回复发散、复读或格式不稳时，先恢复采样器链默认，再少量调整 Temperature、Top-P 和重复惩罚。", comment: "Local model guide troubleshooting sampling")
+                    ]
+                )
             }
+            .padding()
+        }
+        .navigationTitle(NSLocalizedString("本地模型设置指南", comment: "Local model guide navigation title"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LocalModelTuningGuideSection: View {
+    let title: String
+    let summary: String
+    let items: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+            Text(summary)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    LocalModelTuningGuideBullet(text: item)
+                }
+            }
+        }
+    }
+}
+
+private struct LocalModelTuningGuideBullet: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .etFont(.caption)
+                .foregroundStyle(.green)
+                .padding(.top, 2)
+            Text(text)
+                .etFont(.footnote)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
