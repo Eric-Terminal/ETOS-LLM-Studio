@@ -171,6 +171,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableMemoryWrite: Bool { didSet { write(.enableMemoryWrite, enableMemoryWrite) } }
     @Published public var enableMemoryActiveRetrieval: Bool { didSet { write(.enableMemoryActiveRetrieval, enableMemoryActiveRetrieval) } }
     @Published public var memoryTopK: Int { didSet { write(.memoryTopK, memoryTopK) } }
+    @Published public var memorySendUpdateTime: Bool { didSet { write(.memorySendUpdateTime, memorySendUpdateTime) } }
     @Published public var memoryReembeddingConcurrencyLimit: Int { didSet { write(.memoryReembeddingConcurrencyLimit, memoryReembeddingConcurrencyLimit) } }
     @Published public var enableConversationMemoryAsync: Bool { didSet { write(.enableConversationMemoryAsync, enableConversationMemoryAsync) } }
     @Published public var conversationMemoryRecentLimit: Int { didSet { write(.conversationMemoryRecentLimit, conversationMemoryRecentLimit) } }
@@ -318,6 +319,7 @@ public final class AppConfigStore: ObservableObject {
         enableMemoryWrite = Self.boolValue(.enableMemoryWrite, userDefaults: userDefaults)
         enableMemoryActiveRetrieval = Self.boolValue(.enableMemoryActiveRetrieval, userDefaults: userDefaults)
         memoryTopK = Self.integerValue(.memoryTopK, userDefaults: userDefaults)
+        memorySendUpdateTime = Self.boolValue(.memorySendUpdateTime, userDefaults: userDefaults)
         memoryReembeddingConcurrencyLimit = Self.integerValue(.memoryReembeddingConcurrencyLimit, userDefaults: userDefaults)
         enableConversationMemoryAsync = Self.boolValue(.enableConversationMemoryAsync, userDefaults: userDefaults)
         conversationMemoryRecentLimit = Self.integerValue(.conversationMemoryRecentLimit, userDefaults: userDefaults)
@@ -747,6 +749,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableMemoryWrite: return .bool(enableMemoryWrite)
         case .enableMemoryActiveRetrieval: return .bool(enableMemoryActiveRetrieval)
         case .memoryTopK: return .integer(memoryTopK)
+        case .memorySendUpdateTime: return .bool(memorySendUpdateTime)
         case .memoryReembeddingConcurrencyLimit: return .integer(memoryReembeddingConcurrencyLimit)
         case .enableConversationMemoryAsync: return .bool(enableConversationMemoryAsync)
         case .conversationMemoryRecentLimit: return .integer(conversationMemoryRecentLimit)
@@ -879,6 +882,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableMemory: enableMemory = value
         case .enableMemoryWrite: enableMemoryWrite = value
         case .enableMemoryActiveRetrieval: enableMemoryActiveRetrieval = value
+        case .memorySendUpdateTime: memorySendUpdateTime = value
         case .enableConversationMemoryAsync: enableConversationMemoryAsync = value
         case .enableConversationProfileDailyUpdate: enableConversationProfileDailyUpdate = value
         case .enableMarkdown: enableMarkdown = value

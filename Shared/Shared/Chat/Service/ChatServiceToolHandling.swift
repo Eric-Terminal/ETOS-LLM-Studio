@@ -320,11 +320,14 @@ extension ChatService {
     ) -> String {
         let formatter = ISO8601DateFormatter()
         let items: [[String: Any]] = memories.map { memory in
-            [
+            var item: [String: Any] = [
                 "id": memory.id.uuidString,
-                "createdAt": formatter.string(from: memory.createdAt),
                 "content": memory.content
             ]
+            if shouldSendMemoryUpdateTime() {
+                item["updatedAt"] = formatter.string(from: memory.updatedAt ?? memory.createdAt)
+            }
+            return item
         }
         let payload: [String: Any] = [
             "mode": mode,

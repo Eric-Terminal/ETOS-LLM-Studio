@@ -418,6 +418,94 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("记忆提示可按设置隐藏更新时间")
+    func testMemoryPromptCanHideUpdateTime() async throws {
+        await cleanup()
+        let memory = MemoryItem(
+            id: UUID(),
+            content: "用户喜欢喝抹茶拿铁。",
+            embedding: [],
+            createdAt: Date(timeIntervalSince1970: 978_307_200),
+            updatedAt: Date(timeIntervalSince1970: 1_234_567_890)
+        )
+
+        Persistence.writeAppConfig(
+            key: AppConfigKey.memorySendUpdateTime.rawValue,
+            integer: 1,
+            typeHint: AppConfigKey.memorySendUpdateTime.typeHint
+        )
+        let promptWithTime = chatService.buildFinalSystemPrompt(
+            global: nil,
+            topic: nil,
+            memories: [memory],
+            recentConversationSummaries: [],
+            conversationProfile: nil,
+            includeSystemTime: false
+        )
+        #expect(promptWithTime.contains("): 用户喜欢喝抹茶拿铁。"))
+
+        Persistence.writeAppConfig(
+            key: AppConfigKey.memorySendUpdateTime.rawValue,
+            integer: 0,
+            typeHint: AppConfigKey.memorySendUpdateTime.typeHint
+        )
+        let promptWithoutTime = chatService.buildFinalSystemPrompt(
+            global: nil,
+            topic: nil,
+            memories: [memory],
+            recentConversationSummaries: [],
+            conversationProfile: nil,
+            includeSystemTime: false
+        )
+        #expect(promptWithoutTime.contains("- 用户喜欢喝抹茶拿铁。"))
+        #expect(!promptWithoutTime.contains("): 用户喜欢喝抹茶拿铁。"))
+
+        await cleanup()
+    }
+
+    @Test("search_memory 工具结果可按设置隐藏更新时间")
+    func testSearchMemoryToolResultCanHideUpdateTime() async throws {
+        await cleanup()
+        let memory = MemoryItem(
+            id: UUID(),
+            content: "用户使用 Swift 做 iOS 开发。",
+            embedding: [],
+            createdAt: Date(timeIntervalSince1970: 978_307_200),
+            updatedAt: Date(timeIntervalSince1970: 1_234_567_890)
+        )
+
+        Persistence.writeAppConfig(
+            key: AppConfigKey.memorySendUpdateTime.rawValue,
+            integer: 1,
+            typeHint: AppConfigKey.memorySendUpdateTime.typeHint
+        )
+        let resultWithTime = chatService.serializeMemorySearchResult(
+            mode: "keyword",
+            query: "Swift",
+            requestedCount: 1,
+            memories: [memory]
+        )
+        #expect(resultWithTime.contains("\"updatedAt\""))
+        #expect(!resultWithTime.contains("\"createdAt\""))
+
+        Persistence.writeAppConfig(
+            key: AppConfigKey.memorySendUpdateTime.rawValue,
+            integer: 0,
+            typeHint: AppConfigKey.memorySendUpdateTime.typeHint
+        )
+        let resultWithoutTime = chatService.serializeMemorySearchResult(
+            mode: "keyword",
+            query: "Swift",
+            requestedCount: 1,
+            memories: [memory]
+        )
+        #expect(resultWithoutTime.contains("用户使用 Swift 做 iOS 开发。"))
+        #expect(!resultWithoutTime.contains("\"updatedAt\""))
+        #expect(!resultWithoutTime.contains("\"createdAt\""))
+
+        await cleanup()
+    }
+
     @Test("save_memory tool call correctly saves memory")
     func testSaveMemoryTool_Execution() async throws {
         await cleanup()

@@ -92,6 +92,7 @@ struct ChatServiceTests {
         Persistence.deleteAppConfig(key: AppConfigKey.enableMemoryWrite.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.enableMemoryActiveRetrieval.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.memoryTopK.rawValue)
+        Persistence.deleteAppConfig(key: AppConfigKey.memorySendUpdateTime.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.enableConversationMemoryAsync.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.conversationMemoryRecentLimit.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.conversationMemoryRoundThreshold.rawValue)

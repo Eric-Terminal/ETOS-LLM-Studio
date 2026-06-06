@@ -523,7 +523,8 @@
 "记忆内容" = "Memory content";
 "记忆列表" = "Memory list";
 "记忆库管理 (系统版本过低)" = "Memory library management (OS version too low)";
-"如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。" = "Enabling retrieval may make context cache hit rates extremely low. To turn retrieval off, set Top K to 0. Default is 3.";
+"发送更新时间" = "Send update time";
+"如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。关闭“发送更新时间”后，发送给模型的记忆只包含条目内容。" = "Enabling retrieval may make context cache hit rates extremely low. To turn retrieval off, set Top K to 0. Default is 3. When \"Send update time\" is off, memories sent to the model include only the entry content.";
 "设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。" = "Set to 0 to skip retrieval and inject all memory text. Default is 3.";
 "设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。" = "Set how many recent messages are sent to the model. For example, 10 sends the last 5 user + 5 AI messages. 0 means no limit.";
 "设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。" = "Set the default number of recent messages when entering history. This reduces memory/perf cost for long chats. 0 disables and loads all messages.";

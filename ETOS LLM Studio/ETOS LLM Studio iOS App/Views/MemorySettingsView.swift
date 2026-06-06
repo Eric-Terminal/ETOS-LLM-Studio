@@ -75,6 +75,10 @@ struct MemorySettingsView: View {
                             appConfig.memoryTopK = max(0, newValue)
                         }
                 }
+                Toggle(
+                    NSLocalizedString("发送更新时间", comment: "Memory send update time toggle title"),
+                    isOn: $appConfig.memorySendUpdateTime
+                )
                 if appConfig.memoryTopK > 0 {
                     Toggle(
                         NSLocalizedString("主动检索", comment: "Active retrieval toggle title"),
@@ -92,7 +96,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("检索设置", comment: ""))
             } footer: {
-                Text(NSLocalizedString("如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。", comment: ""))
+                Text(NSLocalizedString("如果开启检索，可能会导致上下文缓存命中率极低。若想关闭检索，请将 Top K 设置为 0。默认 3。关闭“发送更新时间”后，发送给模型的记忆只包含条目内容。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

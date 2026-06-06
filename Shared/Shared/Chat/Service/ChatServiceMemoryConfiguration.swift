@@ -85,6 +85,10 @@ extension ChatService {
         resolvedConfigInteger(.memoryTopK, minimum: 0)
     }
 
+    func shouldSendMemoryUpdateTime() -> Bool {
+        resolvedConfigBool(.memorySendUpdateTime)
+    }
+
     func isConversationMemoryEnabled() -> Bool {
         resolvedConfigBool(.enableMemory) && resolvedConfigBool(.enableConversationMemoryAsync)
     }
