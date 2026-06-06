@@ -142,6 +142,25 @@ struct local_chat_template_result {
 
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config);
 std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & text, bool add_special = true);
+std::vector<llama_token> tokenize_prompt(const llama_vocab * vocab, const std::string & prompt);
+std::string token_to_piece(const llama_vocab * vocab, llama_token token);
+llama_sampler_handle create_sampler(
+    const llama_model * model,
+    const llama_vocab * vocab,
+    const local_generation_params & params
+);
+size_t longest_stop_length(const std::vector<std::string> & stops);
+size_t first_stop_position(const std::string & text, const std::vector<std::string> & stops);
+bool flush_pending_text(
+    std::string & pending_text,
+    size_t retained_suffix_length,
+    bool final_flush,
+    std::string * output_text,
+    etos_local_llm_token_callback token_callback,
+    etos_local_llm_chat_snapshot_callback snapshot_callback,
+    local_chat_parser_state * parser_state,
+    void * user_data
+);
 std::string fallback_chat_message_json(const std::string & content);
 bool update_chat_parser_state(
     local_chat_parser_state & state,

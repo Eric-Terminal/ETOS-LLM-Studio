@@ -6,7 +6,8 @@
 
 - `ETOSLocalLLMBridge.h` 是 Swift 可见的稳定 C ABI，只放 POD 结构体、函数指针和 `extern "C"` 函数声明。
 - `ETOSLocalLLMBridge.cpp` 是 C ABI 出入口，只做参数检查、调用内部分层实现和内存释放。
-- `ETOSLocalLLMBridgeGeneration.cpp` 负责模型加载、采样器创建、token 生成循环、stop 处理和流式文本输出。
+- `ETOSLocalLLMBridgeGeneration.cpp` 负责模型缓存、上下文创建和 token 生成循环。
+- `ETOSLocalLLMBridgeGenerationSupport.cpp` 负责生成配置映射、采样器创建、分词、stop 处理和流式文本输出。
 - `ETOSLocalLLMBridgeChatTemplate.cpp` 负责 GGUF Jinja 聊天模板应用，以及使用 llama.cpp parser 解析工具调用响应。
 - `../LocalLLM/LocalLLMChatMessageBuilder.swift` 负责结构化消息转换和工具定义组装；`../LocalLLM/LocalLLMChatTemplatePayload.swift` 负责把这些内容编码为传给 C++ 的 OpenAI 兼容 JSON。
 - `../LocalLLM/LocalLLMGenerationConfig.swift` 负责解析用户输入的高级参数，并映射为 `etos_local_llm_generation_config`。不要把 CLI 字符串解析和大段参数 if-else 塞回 C++。
