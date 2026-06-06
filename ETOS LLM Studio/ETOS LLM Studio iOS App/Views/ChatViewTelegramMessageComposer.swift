@@ -88,7 +88,8 @@ struct TelegramMessageComposer: View {
         viewModel.canQuickRetryLatestMessage
     }
     private var shouldShowResourceUsagePanel: Bool {
-        LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel)
+        appConfig.localModelPerformanceMonitorEnabled
+            && LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel)
     }
 
     var body: some View {
@@ -180,6 +181,9 @@ struct TelegramMessageComposer: View {
             updateResourceUsageSampling()
         }
         .onChange(of: viewModel.selectedModel?.id) { _, _ in
+            updateResourceUsageSampling()
+        }
+        .onChange(of: appConfig.localModelPerformanceMonitorEnabled) { _, _ in
             updateResourceUsageSampling()
         }
         .onDisappear {
@@ -489,7 +493,7 @@ struct TelegramMessageComposer: View {
     }
 
     private func updateResourceUsageSampling() {
-        guard LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel) else {
+        guard shouldShowResourceUsagePanel else {
             isResourceUsageExpanded = false
             stopResourceUsageSampling()
             return

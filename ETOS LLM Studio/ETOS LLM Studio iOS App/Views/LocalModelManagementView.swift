@@ -30,6 +30,14 @@ struct LocalModelManagementView: View {
             }
 
             Section {
+                Toggle(NSLocalizedString("性能监视面板", comment: "Local model performance monitor toggle"), isOn: localPerformanceMonitorEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("打开后，使用本地模型聊天时会在输入栏上方显示 CPU、GPU 与内存占用；关闭后隐藏面板并停止采样。", comment: "Local model performance monitor footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Button {
                     isImportingModel = true
                 } label: {
@@ -94,6 +102,14 @@ struct LocalModelManagementView: View {
         } set: { isEnabled in
             appConfig.localModelsEnabled = isEnabled
             ChatService.shared.setLocalModelsEnabled(isEnabled)
+        }
+    }
+
+    private var localPerformanceMonitorEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelPerformanceMonitorEnabled
+        } set: { isEnabled in
+            appConfig.localModelPerformanceMonitorEnabled = isEnabled
         }
     }
 }
