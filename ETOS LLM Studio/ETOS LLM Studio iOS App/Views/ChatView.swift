@@ -74,6 +74,7 @@ struct ChatView: View {
     @State var needsImmediateBottomSnap: Bool = true
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
+    @State var localResourceUsagePanelOffset: CGSize = .zero
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
     @Namespace var modelPickerNamespace
@@ -161,6 +162,11 @@ struct ChatView: View {
             return viewModel.enableLiquidGlass
         }
         return false
+    }
+    var shouldShowLocalResourceUsageFloatingPanel: Bool {
+        appConfig.localModelPerformanceMonitorEnabled
+            && LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel)
+            && !isOverlayPanelPresented
     }
     var messageDeleteAlertPresented: Binding<Bool> {
         Binding(
@@ -286,6 +292,251 @@ struct ChatView: View {
         }
     }
 
+}
+
+private struct LocalResourceUsageFloatingPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
+    let containerSize: CGSize
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
+    let trailingPadding: CGFloat
+    @Binding var offset: CGSize
+    let isLiquidGlassEnabled: Bool
+
+    @State private var isExpanded = false
+    @State private var resourceUsageTask: Task<Void, Never>?
+    @GestureState private var dragTranslation: CGSize = .zero
+
+    private var panelWidth: CGFloat {
+        isExpanded ? 248 : 236
+    }
+
+    private var panelHeight: CGFloat {
+        isExpanded ? 128 : 40
+    }
+
+    private var panelSize: CGSize {
+        CGSize(width: panelWidth, height: panelHeight)
+    }
+
+    var body: some View {
+        let currentOffset = clampedOffset(
+            CGSize(
+                width: offset.width + dragTranslation.width,
+                height: offset.height + dragTranslation.height
+            ),
+            panelSize: panelSize
+        )
+
+        panelContent
+            .frame(width: panelWidth, alignment: .leading)
+            .position(
+                x: defaultCenter(for: panelSize).x + currentOffset.width,
+                y: defaultCenter(for: panelSize).y + currentOffset.height
+            )
+            .contentShape(RoundedRectangle(cornerRadius: isExpanded ? 14 : 18, style: .continuous))
+            .onTapGesture {
+                withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                    isExpanded.toggle()
+                    offset = self.clampedOffset(offset, panelSize: panelSize)
+                }
+            }
+            .simultaneousGesture(dragGesture(panelSize: panelSize))
+            .onAppear {
+                startSampling()
+            }
+            .onDisappear {
+                stopSampling()
+            }
+            .animation(.spring(response: 0.26, dampingFraction: 0.86), value: isExpanded)
+            .accessibilityLabel(resourceUsageMonitor.snapshot.displayText)
+            .accessibilityAddTraits(.isButton)
+    }
+
+    private var panelContent: some View {
+        VStack(alignment: .leading, spacing: isExpanded ? 8 : 0) {
+            HStack(spacing: 7) {
+                Image(systemName: "speedometer")
+                    .etFont(.system(size: 12, weight: .semibold))
+                    .foregroundColor(TelegramColors.attachButtonColor)
+
+                Text(compactDisplayText)
+                    .etFont(.system(size: 12, weight: .semibold), sampleText: compactDisplayText)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "line.3.horizontal")
+                    .etFont(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.8))
+
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.up")
+                    .etFont(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+
+            if isExpanded {
+                VStack(spacing: 6) {
+                    if let cpuPercent = resourceUsageMonitor.snapshot.cpuPercent {
+                        resourceUsageMetricRow(
+                            iconName: "cpu",
+                            title: NSLocalizedString("CPU", comment: "Local resource CPU title"),
+                            value: String(format: NSLocalizedString("%.0f%%", comment: "Local resource CPU percent value"), cpuPercent)
+                        )
+                    }
+                    if let gpuAllocatedBytes = resourceUsageMonitor.snapshot.gpuAllocatedBytes {
+                        resourceUsageMetricRow(
+                            iconName: "display",
+                            title: NSLocalizedString("GPU", comment: "Local resource GPU title"),
+                            value: formatBytes(gpuAllocatedBytes)
+                        )
+                    }
+                    if let memoryBytes = resourceUsageMonitor.snapshot.memoryBytes {
+                        resourceUsageMetricRow(
+                            iconName: "memorychip",
+                            title: NSLocalizedString("内存", comment: "Local resource memory title"),
+                            value: formatBytes(memoryBytes)
+                        )
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, isExpanded ? 10 : 8)
+        .background(panelBackground(cornerRadius: isExpanded ? 14 : 18))
+    }
+
+    private var compactDisplayText: String {
+        var parts: [String] = []
+        if let cpuPercent = resourceUsageMonitor.snapshot.cpuPercent {
+            parts.append(String(format: NSLocalizedString("CPU %.0f%%", comment: "Local resource compact CPU"), cpuPercent))
+        }
+        if let memoryBytes = resourceUsageMonitor.snapshot.memoryBytes {
+            parts.append(String(format: NSLocalizedString("内存 %@", comment: "Local resource compact memory"), formatBytes(memoryBytes)))
+        }
+        return parts.isEmpty ? resourceUsageMonitor.snapshot.displayText : parts.joined(separator: " · ")
+    }
+
+    private func resourceUsageMetricRow(iconName: String, title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: iconName)
+                .etFont(.system(size: 11, weight: .semibold))
+                .foregroundColor(TelegramColors.attachButtonColor)
+                .frame(width: 14)
+
+            Text(title)
+                .etFont(.system(size: 12))
+                .foregroundColor(.secondary)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .etFont(.system(size: 12, weight: .semibold), sampleText: value)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+        }
+    }
+
+    private func dragGesture(panelSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .updating($dragTranslation) { value, state, _ in
+                state = value.translation
+            }
+            .onEnded { value in
+                offset = clampedOffset(
+                    CGSize(width: offset.width + value.translation.width, height: offset.height + value.translation.height),
+                    panelSize: panelSize
+                )
+            }
+    }
+
+    private func clampedOffset(_ candidate: CGSize, panelSize: CGSize) -> CGSize {
+        let defaultCenter = defaultCenter(for: panelSize)
+        let minX = panelSize.width / 2 + 12
+        let maxX = max(minX, containerSize.width - panelSize.width / 2 - 12)
+        let minY = topPadding + panelSize.height / 2
+        let maxY = max(minY, containerSize.height - panelSize.height / 2 - 12)
+        let clampedX = min(max(defaultCenter.x + candidate.width, minX), maxX)
+        let clampedY = min(max(defaultCenter.y + candidate.height, minY), maxY)
+        return CGSize(width: clampedX - defaultCenter.x, height: clampedY - defaultCenter.y)
+    }
+
+    private func defaultCenter(for panelSize: CGSize) -> CGPoint {
+        CGPoint(
+            x: containerSize.width - trailingPadding - panelSize.width / 2,
+            y: containerSize.height - bottomPadding - panelSize.height / 2
+        )
+    }
+
+    private func formatBytes(_ bytes: UInt64) -> String {
+        bytes == 0 ? "0 B" : StorageUtility.formatSize(Int64(bytes))
+    }
+
+    private func startSampling() {
+        guard resourceUsageTask == nil else { return }
+        resourceUsageTask = Task { @MainActor in
+            while !Task.isCancelled {
+                resourceUsageMonitor.refresh()
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopSampling() {
+        resourceUsageTask?.cancel()
+        resourceUsageTask = nil
+    }
+
+    private func panelBackground(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    shape
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: shape)
+                        .overlay(shape.fill(glassOverlayColor))
+                        .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                        .shadow(color: glassShadowColor, radius: 8, x: 0, y: 3)
+                } else {
+                    materialPanelBackground(shape: shape)
+                }
+            } else {
+                materialPanelBackground(shape: shape)
+            }
+        }
+    }
+
+    private func materialPanelBackground(shape: RoundedRectangle) -> some View {
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay(shape.fill(glassOverlayColor))
+            .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+            .shadow(color: glassShadowColor, radius: 8, x: 0, y: 3)
+    }
+
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
+    }
+}
+
+extension ChatView {
     func landscapeChatLayout(chatViewportWidth: CGFloat) -> some View {
         let expandedSidebarWidth = landscapeSessionSidebarWidth(for: chatViewportWidth)
         let sidebarWidth = isLandscapeSessionSidebarPresented ? expandedSidebarWidth : 0
@@ -540,6 +791,21 @@ struct ChatView: View {
                     }
                 }
                 .allowsHitTesting(!isOverlayPanelPresented)
+
+                if shouldShowLocalResourceUsageFloatingPanel {
+                    GeometryReader { proxy in
+                        LocalResourceUsageFloatingPanel(
+                            containerSize: proxy.size,
+                            topPadding: navBarHeight + 12,
+                            bottomPadding: chatInputBarHeight + 14,
+                            trailingPadding: 16,
+                            offset: $localResourceUsagePanelOffset,
+                            isLiquidGlassEnabled: isLiquidGlassEnabled
+                        )
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(24)
+                }
 
                 VStack {
                     Spacer()
