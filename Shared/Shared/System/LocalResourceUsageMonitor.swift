@@ -32,8 +32,8 @@ public struct LocalResourceUsageSnapshot: Hashable, Sendable {
             parts.append(String(format: NSLocalizedString("CPU %.0f%%", comment: "Local resource CPU usage"), cpuPercent))
         }
         #if !os(watchOS)
-        if let gpuAllocatedBytes {
-            parts.append(String(format: NSLocalizedString("GPU %@", comment: "Local resource GPU usage"), StorageUtility.formatSize(Int64(gpuAllocatedBytes))))
+        if let gpuAllocatedBytes, gpuAllocatedBytes > 0 {
+            parts.append(String(format: NSLocalizedString("Metal %@", comment: "Local resource Metal allocated memory usage"), StorageUtility.formatSize(Int64(gpuAllocatedBytes))))
         }
         #endif
         if let memoryBytes {

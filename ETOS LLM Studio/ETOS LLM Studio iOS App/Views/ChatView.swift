@@ -316,7 +316,7 @@ private struct LocalResourceUsageFloatingPanel: View {
     }
 
     private var panelHeight: CGFloat {
-        isExpanded ? 128 : 40
+        isExpanded ? max(64, CGFloat(expandedMetricRowCount) * 28 + 20) : 40
     }
 
     private var panelSize: CGSize {
@@ -353,28 +353,6 @@ private struct LocalResourceUsageFloatingPanel: View {
 
     private var panelContent: some View {
         VStack(alignment: .leading, spacing: isExpanded ? 8 : 0) {
-            HStack(spacing: 7) {
-                Image(systemName: "speedometer")
-                    .etFont(.system(size: 12, weight: .semibold))
-                    .foregroundColor(TelegramColors.attachButtonColor)
-
-                Text(compactDisplayText)
-                    .etFont(.system(size: 12, weight: .semibold), sampleText: compactDisplayText)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.86)
-
-                Spacer(minLength: 4)
-
-                Image(systemName: "line.3.horizontal")
-                    .etFont(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary.opacity(0.8))
-
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.up")
-                    .etFont(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
-            }
-
             if isExpanded {
                 VStack(spacing: 6) {
                     if let cpuPercent = resourceUsageMonitor.snapshot.cpuPercent {
@@ -384,10 +362,11 @@ private struct LocalResourceUsageFloatingPanel: View {
                             value: String(format: NSLocalizedString("%.0f%%", comment: "Local resource CPU percent value"), cpuPercent)
                         )
                     }
-                    if let gpuAllocatedBytes = resourceUsageMonitor.snapshot.gpuAllocatedBytes {
+                    if let gpuAllocatedBytes = resourceUsageMonitor.snapshot.gpuAllocatedBytes,
+                       gpuAllocatedBytes > 0 {
                         resourceUsageMetricRow(
                             iconName: "display",
-                            title: NSLocalizedString("GPU", comment: "Local resource GPU title"),
+                            title: NSLocalizedString("Metal", comment: "Local resource Metal allocated memory title"),
                             value: formatBytes(gpuAllocatedBytes)
                         )
                     }
@@ -400,11 +379,51 @@ private struct LocalResourceUsageFloatingPanel: View {
                     }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
+            } else {
+                compactHeader
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, isExpanded ? 10 : 8)
         .background(panelBackground(cornerRadius: isExpanded ? 14 : 18))
+    }
+
+    private var compactHeader: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "speedometer")
+                .etFont(.system(size: 12, weight: .semibold))
+                .foregroundColor(TelegramColors.attachButtonColor)
+
+            Text(compactDisplayText)
+                .etFont(.system(size: 12, weight: .semibold), sampleText: compactDisplayText)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+
+            Spacer(minLength: 4)
+
+            Image(systemName: "line.3.horizontal")
+                .etFont(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary.opacity(0.8))
+
+            Image(systemName: "chevron.up")
+                .etFont(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var expandedMetricRowCount: Int {
+        var count = 0
+        if resourceUsageMonitor.snapshot.cpuPercent != nil {
+            count += 1
+        }
+        if let gpuAllocatedBytes = resourceUsageMonitor.snapshot.gpuAllocatedBytes, gpuAllocatedBytes > 0 {
+            count += 1
+        }
+        if resourceUsageMonitor.snapshot.memoryBytes != nil {
+            count += 1
+        }
+        return count
     }
 
     private var compactDisplayText: String {
