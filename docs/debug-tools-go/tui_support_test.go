@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestTUIEscReturnsToNavigationWithoutQuit(t *testing.T) {
@@ -150,6 +151,9 @@ func TestSessionUserBubbleIndentIsStable(t *testing.T) {
 	for index, line := range lines[1:] {
 		if got := leadingSpaces(line); got != want {
 			t.Fatalf("第 %d 行缩进 = %d, want %d，气泡可能被按行错位渲染: %q", index+2, got, want, bubble)
+		}
+		if width := lipgloss.Width(line); width > model.content.Width-2 {
+			t.Fatalf("第 %d 行宽度 = %d, want <= %d，气泡可能触发终端自动换行: %q", index+2, width, model.content.Width-2, bubble)
 		}
 	}
 }

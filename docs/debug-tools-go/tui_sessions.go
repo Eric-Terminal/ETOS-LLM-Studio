@@ -218,7 +218,7 @@ func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, 
 	label := fmt.Sprintf("%s #%d", sessionRoleLabel(role), index+1)
 	body := label + "\n" + sessionMessagePreview(message)
 
-	width := maxInt(24, minInt(76, m.content.Width-8))
+	width := sessionBubbleInnerWidth(body, maxInt(18, minInt(76, m.content.Width-10)))
 	style := sessionBubbleStyle(role)
 	if selected {
 		style = tuiSessionSelectedBubbleStyle
@@ -226,7 +226,7 @@ func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, 
 	bubble := style.Width(width).Render(body)
 
 	if role == "user" {
-		return indentMultiline(bubble, maxInt(0, m.content.Width-lipgloss.Width(bubble)))
+		return rightAlignMultiline(bubble, maxInt(lipgloss.Width(bubble), m.content.Width-2))
 	}
 	return bubble
 }
@@ -441,14 +441,19 @@ func runeLen(value string) int {
 	return len([]rune(value))
 }
 
-func indentMultiline(value string, width int) string {
-	if width <= 0 {
-		return value
+func sessionBubbleInnerWidth(value string, maxWidth int) int {
+	maxLineWidth := 0
+	for _, line := range strings.Split(value, "\n") {
+		maxLineWidth = maxInt(maxLineWidth, lipgloss.Width(line))
 	}
-	prefix := strings.Repeat(" ", width)
+	return maxInt(18, minInt(maxWidth, maxLineWidth+2))
+}
+
+func rightAlignMultiline(value string, width int) string {
 	lines := strings.Split(value, "\n")
 	for index, line := range lines {
-		lines[index] = prefix + line
+		padding := maxInt(0, width-lipgloss.Width(line))
+		lines[index] = strings.Repeat(" ", padding) + line
 	}
 	return strings.Join(lines, "\n")
 }
