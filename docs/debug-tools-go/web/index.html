@@ -125,6 +125,7 @@
     }
     .split.two { grid-template-columns: 300px 1fr; }
     .split.files { grid-template-columns: 260px 1fr 1fr; }
+    .split.sqlite { grid-template-columns: 340px 1fr; align-items: start; }
     .card {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -165,6 +166,50 @@
       overflow: auto;
     }
     .preview img { max-width: 100%; border-radius: 8px; }
+    .sql-editor { min-height: 132px; }
+    .sqlite-schema {
+      display: grid;
+      gap: 10px;
+    }
+    .sqlite-detail {
+      max-height: 300px;
+      overflow: auto;
+    }
+    .table-wrap {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+    .table-wrap table th,
+    .table-wrap table td {
+      white-space: nowrap;
+    }
+    .result-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 8px 0;
+    }
+    .checkbox-row {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .checkbox-row input {
+      width: auto;
+      margin: 0;
+    }
+    .raw-json {
+      min-height: 180px;
+      max-height: 320px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     .footer-note {
       margin-top: 10px;
       color: var(--muted);
@@ -235,6 +280,7 @@
     }
     @media (max-width: 1180px) {
       .split.files { grid-template-columns: 1fr; }
+      .split.sqlite { grid-template-columns: 1fr; }
     }
     .hidden { display: none !important; }
   </style>
@@ -256,6 +302,7 @@
     <button class="tab-btn" data-tab="providers">提供商</button>
     <button class="tab-btn" data-tab="sessions">会话</button>
     <button class="tab-btn" data-tab="memories">记忆</button>
+    <button class="tab-btn" data-tab="sqlite">SQLite</button>
     <button class="tab-btn" data-tab="captures">OpenAI 捕获</button>
   </div>
 
@@ -417,6 +464,77 @@
     </div>
   </section>
 
+  <section id="panel-sqlite" class="panel">
+    <div class="toolbar">
+      <select id="sqliteDatabase">
+        <option value="chat">chat</option>
+        <option value="config">config</option>
+        <option value="memory">memory</option>
+      </select>
+      <label class="checkbox-row"><input id="sqliteIncludeInternal" type="checkbox" />内部表</label>
+      <label class="checkbox-row"><input id="sqliteIncludeCreateSQL" type="checkbox" checked />建表 SQL</label>
+      <button id="btnSQLiteLoadTables" class="primary">加载结构</button>
+      <span id="sqliteSchemaMeta" class="pill">未加载</span>
+    </div>
+
+    <div class="split sqlite">
+      <div class="sqlite-schema">
+        <div class="card">
+          <div class="muted">表与视图</div>
+          <div class="list">
+            <table>
+              <thead><tr><th>名称</th><th>类型</th><th>字段</th></tr></thead>
+              <tbody id="sqliteTablesBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted">字段</div>
+          <div id="sqliteTableDetail" class="sqlite-detail muted">请选择表</div>
+        </div>
+      </div>
+
+      <div class="sqlite-schema">
+        <div class="card">
+          <div class="toolbar">
+            <button id="btnSQLiteRunQuery" class="primary">执行查询</button>
+            <span class="muted">Max Rows</span>
+            <input id="sqliteMaxRows" type="number" min="1" max="500" value="50" style="width:90px;" />
+          </div>
+          <textarea id="sqliteQuerySQL" class="mono sql-editor" spellcheck="false">SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') LIMIT 50;</textarea>
+          <textarea id="sqliteQueryParams" class="mono" style="min-height:66px;" spellcheck="false" placeholder="参数 JSON 数组，例如 []">[]</textarea>
+        </div>
+
+        <div class="card">
+          <div class="result-meta">
+            <span id="sqliteResultTitle" class="pill">结果</span>
+            <span id="sqliteResultMeta" class="muted">暂无数据</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead id="sqliteResultHead"></thead>
+              <tbody id="sqliteResultBody"></tbody>
+            </table>
+          </div>
+          <div class="muted" style="margin-top:10px;">原始 JSON</div>
+          <pre id="sqliteRawJSON" class="preview mono raw-json">{}</pre>
+        </div>
+
+        <div class="card">
+          <div class="toolbar">
+            <button id="btnSQLiteRunMutate" class="danger">确认并写入</button>
+            <label class="checkbox-row"><input id="sqliteAllowWithoutWhere" type="checkbox" />允许无 WHERE</label>
+            <span class="muted">RETURNING</span>
+            <input id="sqliteReturningMaxRows" type="number" min="1" max="500" value="50" style="width:90px;" />
+          </div>
+          <textarea id="sqliteMutateSQL" class="mono sql-editor" spellcheck="false" placeholder="INSERT / UPDATE / DELETE / REPLACE"></textarea>
+          <textarea id="sqliteMutateParams" class="mono" style="min-height:66px;" spellcheck="false" placeholder="参数 JSON 数组，例如 []">[]</textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="panel-captures" class="panel">
     <div class="toolbar">
       <button id="btnCapturesLoad" class="primary">刷新捕获队列</button>
@@ -446,6 +564,12 @@
     sessionMessageMode: 'form',
     memories: [],
     selectedMemory: null,
+    sqlite: {
+      database: 'chat',
+      tables: [],
+      selectedTable: null,
+      lastResponse: null
+    },
     captures: []
   }
 
@@ -491,6 +615,18 @@
       if (!Number.isNaN(date.getTime())) return date.toLocaleString()
     } catch (_) {}
     return String(ts)
+  }
+
+  function prettyJSON(value) {
+    return JSON.stringify(value ?? {}, null, 2)
+  }
+
+  function appendTextCell(row, value, className = '') {
+    const cell = document.createElement('td')
+    if (className) cell.className = className
+    cell.textContent = value == null ? '-' : String(value)
+    row.appendChild(cell)
+    return cell
   }
 
   function switchTab(tab) {
@@ -1173,6 +1309,255 @@
     await loadMemories()
   }
 
+  function parseSQLiteParameters(inputID) {
+    const raw = el(inputID).value.trim()
+    if (!raw) return []
+    let parsed
+    try {
+      parsed = JSON.parse(raw)
+    } catch (error) {
+      throw new Error(`参数 JSON 格式错误：${error.message}`)
+    }
+    if (!Array.isArray(parsed)) throw new Error('参数必须是 JSON 数组')
+    return parsed
+  }
+
+  function sqliteNumberValue(inputID, fallback) {
+    const value = Number(el(inputID).value)
+    if (!Number.isFinite(value) || value <= 0) return fallback
+    return Math.min(500, Math.round(value))
+  }
+
+  function quoteSQLiteIdentifier(identifier) {
+    return `"${String(identifier).replace(/"/g, '""')}"`
+  }
+
+  function formatSQLiteCell(value) {
+    if (value === null || value === undefined) return 'NULL'
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+  }
+
+  function renderSQLiteTables() {
+    const tbody = el('sqliteTablesBody')
+    tbody.innerHTML = ''
+
+    if (!state.sqlite.tables.length) {
+      const tr = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.colSpan = 3
+      cell.className = 'muted'
+      cell.textContent = '暂无结构数据'
+      tr.appendChild(cell)
+      tbody.appendChild(tr)
+      return
+    }
+
+    state.sqlite.tables.forEach(table => {
+      const tr = document.createElement('tr')
+      if (state.sqlite.selectedTable?.name === table.name) tr.classList.add('selected')
+      appendTextCell(tr, table.name, 'mono')
+      appendTextCell(tr, table.type || 'table')
+      appendTextCell(tr, table.columnCount ?? table.columns?.length ?? 0)
+      tr.addEventListener('click', () => selectSQLiteTable(table).catch(showError))
+      tbody.appendChild(tr)
+    })
+  }
+
+  function renderSQLiteTableDetail() {
+    const wrap = el('sqliteTableDetail')
+    wrap.innerHTML = ''
+    const table = state.sqlite.selectedTable
+    if (!table) {
+      wrap.classList.add('muted')
+      wrap.textContent = '请选择表'
+      return
+    }
+
+    wrap.classList.remove('muted')
+    const title = document.createElement('div')
+    title.className = 'mono'
+    title.textContent = `${table.name} · ${table.type || 'table'}`
+    wrap.appendChild(title)
+
+    const columns = Array.isArray(table.columns) ? table.columns : []
+    const tableEl = document.createElement('table')
+    const thead = document.createElement('thead')
+    thead.innerHTML = '<tr><th>字段</th><th>类型</th><th>约束</th><th>默认值</th></tr>'
+    tableEl.appendChild(thead)
+    const tbody = document.createElement('tbody')
+    columns.forEach(column => {
+      const tr = document.createElement('tr')
+      appendTextCell(tr, column.name, 'mono')
+      appendTextCell(tr, column.type || '-')
+      const flags = []
+      if (column.isPrimaryKey) flags.push('PK')
+      if (column.notNull) flags.push('NOT NULL')
+      appendTextCell(tr, flags.join(' · ') || '-')
+      appendTextCell(tr, column.defaultValue ?? '-')
+      tbody.appendChild(tr)
+    })
+    tableEl.appendChild(tbody)
+    wrap.appendChild(tableEl)
+
+    if (table.createSQL) {
+      const label = document.createElement('div')
+      label.className = 'muted'
+      label.style.marginTop = '8px'
+      label.textContent = 'Create SQL'
+      const createSQL = document.createElement('pre')
+      createSQL.className = 'preview mono raw-json'
+      createSQL.style.minHeight = '80px'
+      createSQL.textContent = table.createSQL
+      wrap.appendChild(label)
+      wrap.appendChild(createSQL)
+    }
+  }
+
+  function renderSQLiteResultTable(columns, rows) {
+    const head = el('sqliteResultHead')
+    const body = el('sqliteResultBody')
+    head.innerHTML = ''
+    body.innerHTML = ''
+
+    if (!columns.length) {
+      const tr = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.className = 'muted'
+      cell.textContent = '没有表格结果'
+      tr.appendChild(cell)
+      body.appendChild(tr)
+      return
+    }
+
+    const headRow = document.createElement('tr')
+    columns.forEach(column => {
+      const th = document.createElement('th')
+      th.textContent = column
+      headRow.appendChild(th)
+    })
+    head.appendChild(headRow)
+
+    if (!rows.length) {
+      const tr = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.colSpan = columns.length
+      cell.className = 'muted'
+      cell.textContent = '0 行'
+      tr.appendChild(cell)
+      body.appendChild(tr)
+      return
+    }
+
+    rows.forEach(row => {
+      const tr = document.createElement('tr')
+      columns.forEach((column, index) => {
+        const value = Array.isArray(row) ? row[index] : row?.[column]
+        appendTextCell(tr, formatSQLiteCell(value), typeof value === 'object' ? 'mono' : '')
+      })
+      body.appendChild(tr)
+    })
+  }
+
+  function renderSQLiteResult(response, title) {
+    state.sqlite.lastResponse = response
+    el('sqliteResultTitle').textContent = title
+    el('sqliteRawJSON').textContent = prettyJSON(response)
+
+    if (Array.isArray(response?.columns)) {
+      const rows = Array.isArray(response.rows) ? response.rows : []
+      renderSQLiteResultTable(response.columns, rows)
+      const truncated = response.truncated ? '，已截断' : ''
+      el('sqliteResultMeta').textContent = `${response.database || state.sqlite.database} · ${response.rowCount ?? rows.length} 行${truncated}`
+      return
+    }
+
+    if (Array.isArray(response?.returningColumns)) {
+      const rows = Array.isArray(response.returningRows) ? response.returningRows : []
+      renderSQLiteResultTable(response.returningColumns, rows)
+      const truncated = response.returningTruncated ? '，RETURNING 已截断' : ''
+      el('sqliteResultMeta').textContent = `影响 ${response.affectedRows ?? '-'} 行 · RETURNING ${response.returningRowCount ?? rows.length} 行${truncated}`
+      return
+    }
+
+    renderSQLiteResultTable([], [])
+    if (response?.affectedRows !== undefined) {
+      el('sqliteResultMeta').textContent = `影响 ${response.affectedRows} 行 · 总变更 ${response.totalChanges ?? '-'}`
+    } else if (response?.tableCount !== undefined) {
+      el('sqliteResultMeta').textContent = `${response.database || state.sqlite.database} · ${response.tableCount} 张表`
+    } else {
+      el('sqliteResultMeta').textContent = '暂无表格数据'
+    }
+  }
+
+  async function loadSQLiteTables() {
+    const database = el('sqliteDatabase').value
+    const data = await api('/api/sqlite/tables', 'POST', {
+      database,
+      include_internal: el('sqliteIncludeInternal').checked,
+      include_create_sql: el('sqliteIncludeCreateSQL').checked
+    })
+
+    const previousName = state.sqlite.selectedTable?.name
+    state.sqlite.database = database
+    state.sqlite.tables = Array.isArray(data.tables) ? data.tables : []
+    state.sqlite.selectedTable = state.sqlite.tables.find(table => table.name === previousName) || null
+    el('sqliteSchemaMeta').textContent = `${database} · ${data.tableCount ?? state.sqlite.tables.length} 张表`
+    renderSQLiteTables()
+    renderSQLiteTableDetail()
+    renderSQLiteResult(data, '结构')
+  }
+
+  async function selectSQLiteTable(table) {
+    state.sqlite.selectedTable = table
+    renderSQLiteTables()
+    renderSQLiteTableDetail()
+    const limit = sqliteNumberValue('sqliteMaxRows', 50)
+    el('sqliteQuerySQL').value = `SELECT * FROM ${quoteSQLiteIdentifier(table.name)} LIMIT ${limit};`
+    el('sqliteQueryParams').value = '[]'
+    await runSQLiteQuery()
+  }
+
+  async function runSQLiteQuery() {
+    const sql = el('sqliteQuerySQL').value.trim()
+    if (!sql) {
+      alert('请输入查询 SQL')
+      return
+    }
+    const data = await api('/api/sqlite/query', 'POST', {
+      database: el('sqliteDatabase').value,
+      sql,
+      parameters: parseSQLiteParameters('sqliteQueryParams'),
+      max_rows: sqliteNumberValue('sqliteMaxRows', 50)
+    })
+    renderSQLiteResult(data, '查询')
+  }
+
+  async function runSQLiteMutate() {
+    const sql = el('sqliteMutateSQL').value.trim()
+    if (!sql) {
+      alert('请输入写入 SQL')
+      return
+    }
+
+    const parameters = parseSQLiteParameters('sqliteMutateParams')
+    const database = el('sqliteDatabase').value
+    const allowWithoutWhere = el('sqliteAllowWithoutWhere').checked
+    const preview = sql.length > 360 ? `${sql.slice(0, 360)}...` : sql
+    const warning = allowWithoutWhere ? '\n已允许 UPDATE/DELETE 无 WHERE。' : ''
+    if (!confirm(`确认执行写入 SQL？\n数据库：${database}${warning}\n\n${preview}`)) return
+
+    const data = await api('/api/sqlite/mutate', 'POST', {
+      database,
+      sql,
+      parameters,
+      allow_without_where: allowWithoutWhere,
+      returning_max_rows: sqliteNumberValue('sqliteReturningMaxRows', 50)
+    })
+    renderSQLiteResult(data, '写入')
+    alert(`写入完成，影响 ${data.affectedRows ?? '-'} 行`)
+  }
+
   function renderCaptures() {
     const tbody = el('capturesTableBody')
     tbody.innerHTML = ''
@@ -1267,6 +1652,23 @@
     el('btnMemorySave').addEventListener('click', () => saveMemory().catch(showError))
     el('btnReembedAll').addEventListener('click', () => reembedAllMemories().catch(showError))
 
+    el('sqliteDatabase').addEventListener('change', () => {
+      state.sqlite.database = el('sqliteDatabase').value
+      state.sqlite.tables = []
+      state.sqlite.selectedTable = null
+      state.sqlite.lastResponse = null
+      el('sqliteSchemaMeta').textContent = '未加载'
+      el('sqliteResultTitle').textContent = '结果'
+      el('sqliteResultMeta').textContent = '暂无数据'
+      el('sqliteRawJSON').textContent = '{}'
+      renderSQLiteTables()
+      renderSQLiteTableDetail()
+      renderSQLiteResultTable([], [])
+    })
+    el('btnSQLiteLoadTables').addEventListener('click', () => loadSQLiteTables().catch(showError))
+    el('btnSQLiteRunQuery').addEventListener('click', () => runSQLiteQuery().catch(showError))
+    el('btnSQLiteRunMutate').addEventListener('click', () => runSQLiteMutate().catch(showError))
+
     el('btnCapturesLoad').addEventListener('click', () => loadCaptures().catch(showError))
   }
 
@@ -1274,6 +1676,8 @@
     bindEvents()
     renderSessionMessagesForm()
     updateSessionMessagesModeUI()
+    renderSQLiteTables()
+    renderSQLiteTableDetail()
     await refreshDirTree({ reset: true, focusPath: '.' }).catch(() => {})
     await refreshStatus()
     setInterval(refreshStatus, 2000)
