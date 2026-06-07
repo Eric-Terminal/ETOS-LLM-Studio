@@ -1011,21 +1011,30 @@ func (m tuiModel) addProvider() tea.Cmd {
 		proxyPort := "8080"
 		proxyUsername := ""
 		proxyPassword := ""
+		editProxy := false
 		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API Key").EchoMode(huh.EchoModePassword).Value(&apiKey),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
-			huh.NewText().Title("Header Overrides JSON").Value(&headerOverrides),
-			huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
-			huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
-			huh.NewInput().Title("代理主机").Value(&proxyHost),
-			huh.NewInput().Title("代理端口").Value(&proxyPort),
-			huh.NewInput().Title("代理用户名").Value(&proxyUsername),
-			huh.NewInput().Title("代理密码").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
+			huh.NewInput().Title("Header Overrides JSON").Value(&headerOverrides),
+			huh.NewConfirm().Title("编辑代理高级配置").Affirmative("编辑").Negative("跳过").Value(&editProxy),
 		))
 		if err := form.Run(); err != nil {
 			return tuiFormErrorResult(err)
+		}
+		if editProxy {
+			proxyForm := forms.Form(huh.NewGroup(
+				huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
+				huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
+				huh.NewInput().Title("代理主机").Value(&proxyHost),
+				huh.NewInput().Title("代理端口").Value(&proxyPort),
+				huh.NewInput().Title("代理用户名").Value(&proxyUsername),
+				huh.NewInput().Title("代理密码").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
+			))
+			if err := proxyForm.Run(); err != nil {
+				return tuiFormErrorResult(err)
+			}
 		}
 		payload, err := buildProviderUpsertPayload(providerUpsertInput{
 			Name:            name,
@@ -1067,21 +1076,30 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		proxyPort := providerProxyField(provider, "port", "8080")
 		proxyUsername := providerProxyField(provider, "username", "")
 		proxyPassword := providerProxyField(provider, "password", "")
+		editProxy := false
 		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
 			huh.NewInput().Title("API Key（留空则不修改）").EchoMode(huh.EchoModePassword).Value(&apiKey),
-			huh.NewText().Title("Header Overrides JSON").Value(&headerOverrides),
-			huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
-			huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
-			huh.NewInput().Title("代理主机").Value(&proxyHost),
-			huh.NewInput().Title("代理端口").Value(&proxyPort),
-			huh.NewInput().Title("代理用户名").Value(&proxyUsername),
-			huh.NewInput().Title("代理密码（留空则清除）").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
+			huh.NewInput().Title("Header Overrides JSON").Value(&headerOverrides),
+			huh.NewConfirm().Title("编辑代理高级配置").Affirmative("编辑").Negative("跳过").Value(&editProxy),
 		))
 		if err := form.Run(); err != nil {
 			return tuiFormErrorResult(err)
+		}
+		if editProxy {
+			proxyForm := forms.Form(huh.NewGroup(
+				huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
+				huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
+				huh.NewInput().Title("代理主机").Value(&proxyHost),
+				huh.NewInput().Title("代理端口").Value(&proxyPort),
+				huh.NewInput().Title("代理用户名").Value(&proxyUsername),
+				huh.NewInput().Title("代理密码（留空则清除）").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
+			))
+			if err := proxyForm.Run(); err != nil {
+				return tuiFormErrorResult(err)
+			}
 		}
 		payload, err := buildProviderUpsertPayload(providerUpsertInput{
 			ProviderID:      providerID,
@@ -1175,7 +1193,6 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("当前 Provider 没有可编辑模型")}
 		}
 	}
-
 	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		modelID := asString(models[0]["id"])
 		options := make([]huh.Option[string], 0, len(models))
@@ -1303,7 +1320,7 @@ func (m tuiModel) showSelectedProvider() tea.Cmd {
 		}
 		for _, provider := range providers {
 			if asString(provider["id"]) == id {
-				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": prettyJSON(provider)}}
+				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": providerPreview(provider)}}
 			}
 		}
 		return tuiCommandResultMsg{op: "preview", err: fmt.Errorf("未找到提供商")}
@@ -1586,7 +1603,7 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.setMessage("提供商已保存", tuiOKStyle)
 	case msg.op == "providers:upsert":
 		if provider, ok := msg.response["provider"].(map[string]any); ok {
-			m.preview.SetValue(prettyJSON(provider))
+			m.preview.SetValue(providerPreview(provider))
 		} else {
 			m.preview.SetValue(prettyJSON(msg.response))
 		}

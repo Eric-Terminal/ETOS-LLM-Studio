@@ -525,6 +525,46 @@ func TestBuildProviderUpsertPayloadIncludesHeaderOverrides(t *testing.T) {
 	}
 }
 
+func TestProviderPreviewUsesReadableSummary(t *testing.T) {
+	preview := providerPreview(map[string]any{
+		"id":        "provider-1",
+		"name":      "DeepSeek",
+		"baseURL":   "https://api.deepseek.com/v1",
+		"apiFormat": "openai-compatible",
+		"headerOverrides": map[string]any{
+			"X-Test": "on",
+		},
+		"proxyConfiguration": map[string]any{
+			"isEnabled": true,
+			"type":      "socks5",
+			"host":      "127.0.0.1",
+			"port":      1080,
+			"username":  "eric",
+		},
+		"models": []any{
+			map[string]any{"id": "model-1", "modelName": "deepseek-chat", "kind": "chat", "isActivated": true},
+			map[string]any{"id": "model-2", "displayName": "DeepSeek Reasoner", "kind": "chat", "isActivated": false},
+		},
+	})
+
+	for _, want := range []string{
+		"提供商",
+		"名称: DeepSeek",
+		"API URL: https://api.deepseek.com/v1",
+		"模式: 启用",
+		"X-Test: on",
+		"deepseek-chat · chat · 启用",
+		"DeepSeek Reasoner · chat · 停用",
+	} {
+		if !strings.Contains(preview, want) {
+			t.Fatalf("Provider 预览缺少 %q:\n%s", want, preview)
+		}
+	}
+	if strings.HasPrefix(strings.TrimSpace(preview), "{") {
+		t.Fatalf("Provider 预览仍像 JSON: %s", preview)
+	}
+}
+
 func TestBuildProviderUpsertPayloadRejectsNonStringHeaders(t *testing.T) {
 	if _, err := buildProviderUpsertPayload(providerUpsertInput{
 		Name:            "Provider",

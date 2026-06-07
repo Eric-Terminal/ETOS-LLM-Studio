@@ -255,6 +255,101 @@ func providerProxyField(provider map[string]any, key, fallback string) string {
 	return value
 }
 
+func providerPreview(provider map[string]any) string {
+	lines := []string{
+		"提供商",
+		"  ID: " + emptyDash(asString(provider["id"])),
+		"  名称: " + emptyDash(asString(provider["name"])),
+		"  API URL: " + emptyDash(asString(provider["baseURL"])),
+		"  API 格式: " + emptyDash(asString(provider["apiFormat"])),
+		"  模型数量: " + fmt.Sprintf("%d", len(asMapSlice(provider["models"]))),
+		"",
+	}
+
+	lines = append(lines, "代理")
+	switch providerProxyMode(provider) {
+	case "enabled":
+		lines = append(lines,
+			"  模式: 启用",
+			"  类型: "+providerProxyField(provider, "type", "http"),
+			"  地址: "+providerProxyField(provider, "host", "-")+":"+providerProxyField(provider, "port", "8080"),
+			"  用户: "+emptyDash(providerProxyField(provider, "username", "")),
+		)
+	case "disabled":
+		lines = append(lines, "  模式: 禁用")
+	default:
+		lines = append(lines, "  模式: 继承全局")
+	}
+
+	lines = append(lines, "", "Header Overrides")
+	lines = append(lines, providerHeaderSummary(provider)...)
+
+	lines = append(lines, "", "模型")
+	lines = append(lines, providerModelSummary(provider)...)
+	return strings.Join(lines, "\n")
+}
+
+func providerHeaderSummary(provider map[string]any) []string {
+	value := provider["headerOverrides"]
+	headers := map[string]string{}
+	switch typed := value.(type) {
+	case map[string]string:
+		headers = typed
+	case map[string]any:
+		for key, item := range typed {
+			headers[key] = asString(item)
+		}
+	}
+	if len(headers) == 0 {
+		return []string{"  无"}
+	}
+	lines := make([]string, 0, len(headers))
+	for key, value := range headers {
+		lines = append(lines, fmt.Sprintf("  %s: %s", key, value))
+	}
+	return lines
+}
+
+func providerModelSummary(provider map[string]any) []string {
+	models := asMapSlice(provider["models"])
+	if len(models) == 0 {
+		return []string{"  无"}
+	}
+
+	lines := make([]string, 0, minInt(len(models), 12)+1)
+	for index, model := range models {
+		if index >= 12 {
+			lines = append(lines, fmt.Sprintf("  还有 %d 个模型未显示", len(models)-index))
+			break
+		}
+		name := firstNonEmpty(asString(model["displayName"]), asString(model["modelName"]), asString(model["id"]))
+		kind := firstNonEmpty(asString(model["kind"]), "chat")
+		status := "启用"
+		if model["isActivated"] != nil && !asBool(model["isActivated"]) {
+			status = "停用"
+		}
+		lines = append(lines, fmt.Sprintf("  %2d. %s · %s · %s", index+1, emptyDash(name), kind, status))
+	}
+	return lines
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func emptyDash(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
 type providerModelUpsertInput struct {
 	ProviderID              string
 	ModelID                 string
