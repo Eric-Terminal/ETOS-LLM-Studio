@@ -164,8 +164,8 @@ extension ChatView {
                 }
             }
 
-            sessionPickerFolderHeader
             sessionPickerSearchInput
+            sessionPickerFolderHeader
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -272,6 +272,10 @@ extension ChatView {
                         .fill(Color.black.opacity(colorScheme == .dark ? 0.28 : 0.06))
                 }
             }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color(.separator).opacity(0.35), lineWidth: 0.6)
         )
     }
 
