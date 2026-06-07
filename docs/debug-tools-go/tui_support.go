@@ -79,6 +79,40 @@ func splitCSV(value string) []string {
 	return result
 }
 
+func buildProviderUpsertPayload(providerID, name, baseURL, apiFormat, apiKey, headerOverrides string) (map[string]any, error) {
+	var headers map[string]string
+	if strings.TrimSpace(headerOverrides) != "" {
+		if err := json.Unmarshal([]byte(headerOverrides), &headers); err != nil {
+			return nil, fmt.Errorf("Header Overrides 不是合法 JSON 对象: %w", err)
+		}
+	}
+	if headers == nil {
+		headers = map[string]string{}
+	}
+
+	payload := map[string]any{
+		"command":          "provider_upsert",
+		"name":             strings.TrimSpace(name),
+		"base_url":         strings.TrimSpace(baseURL),
+		"api_format":       strings.TrimSpace(apiFormat),
+		"header_overrides": headers,
+	}
+	if trimmedProviderID := strings.TrimSpace(providerID); trimmedProviderID != "" {
+		payload["provider_id"] = trimmedProviderID
+	}
+	if strings.TrimSpace(apiKey) != "" {
+		payload["api_key"] = apiKey
+	}
+	return payload, nil
+}
+
+func providerHeaderOverridesText(provider map[string]any) string {
+	if value, ok := provider["headerOverrides"]; ok {
+		return prettyJSON(value)
+	}
+	return "{}"
+}
+
 func buildProviderModelUpsertPayload(providerID, modelID, modelName, displayName, kind, capabilities, overrideParameters string, isActivated bool) (map[string]any, error) {
 	var override map[string]any
 	if strings.TrimSpace(overrideParameters) != "" {

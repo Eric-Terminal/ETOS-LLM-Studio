@@ -317,7 +317,7 @@ func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/providers/upsert",
-		strings.NewReader(`{"name":"示例 Provider","base_url":"https://api.example.com/v1","api_key":"sk-test","api_format":"openai-compatible"}`),
+		strings.NewReader(`{"name":"示例 Provider","base_url":"https://api.example.com/v1","api_key":"sk-test","api_format":"openai-compatible","header_overrides":{"X-Test":"on"}}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -356,6 +356,13 @@ func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
 	}
 	if command["api_key"] != "sk-test" {
 		t.Fatalf("api_key = %v, want sk-test", command["api_key"])
+	}
+	headerOverrides, ok := command["header_overrides"].(map[string]any)
+	if !ok {
+		t.Fatalf("header_overrides 类型 = %T, want map[string]any", command["header_overrides"])
+	}
+	if headerOverrides["X-Test"] != "on" {
+		t.Fatalf("X-Test = %v, want on", headerOverrides["X-Test"])
 	}
 }
 

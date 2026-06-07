@@ -561,23 +561,20 @@ func (m tuiModel) addProvider() tea.Cmd {
 		baseURL := ""
 		apiKey := ""
 		apiFormat := "openai-compatible"
+		headerOverrides := "{}"
 		form := huh.NewForm(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API Key").EchoMode(huh.EchoModePassword).Value(&apiKey),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
+			huh.NewText().Title("Header Overrides JSON").Value(&headerOverrides),
 		))
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		payload := map[string]any{
-			"command":    "provider_upsert",
-			"name":       strings.TrimSpace(name),
-			"base_url":   strings.TrimSpace(baseURL),
-			"api_format": strings.TrimSpace(apiFormat),
-		}
-		if strings.TrimSpace(apiKey) != "" {
-			payload["api_key"] = apiKey
+		payload, err := buildProviderUpsertPayload("", name, baseURL, apiFormat, apiKey, headerOverrides)
+		if err != nil {
+			return tuiCommandResultMsg{op: "providers:upsert", err: err}
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:upsert", response: response, err: err}
@@ -596,24 +593,20 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		baseURL := asString(provider["baseURL"])
 		apiFormat := asString(provider["apiFormat"])
 		apiKey := ""
+		headerOverrides := providerHeaderOverridesText(provider)
 		form := huh.NewForm(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
 			huh.NewInput().Title("API Key（留空则不修改）").EchoMode(huh.EchoModePassword).Value(&apiKey),
+			huh.NewText().Title("Header Overrides JSON").Value(&headerOverrides),
 		))
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		payload := map[string]any{
-			"command":     "provider_upsert",
-			"provider_id": providerID,
-			"name":        strings.TrimSpace(name),
-			"base_url":    strings.TrimSpace(baseURL),
-			"api_format":  strings.TrimSpace(apiFormat),
-		}
-		if strings.TrimSpace(apiKey) != "" {
-			payload["api_key"] = apiKey
+		payload, err := buildProviderUpsertPayload(providerID, name, baseURL, apiFormat, apiKey, headerOverrides)
+		if err != nil {
+			return tuiCommandResultMsg{op: "providers:upsert", err: err}
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:upsert", response: response, err: err}

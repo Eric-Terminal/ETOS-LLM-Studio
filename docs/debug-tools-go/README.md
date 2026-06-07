@@ -26,7 +26,7 @@ cd docs/debug-tools-go
 go run .
 ```
 
-启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、`m` 新增模型、`M` 选择并编辑已有模型参数。
+启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider 与 Header Overrides、`m` 新增模型、`M` 选择并编辑已有模型参数。
 
 默认端口：
 
@@ -46,7 +46,7 @@ http://127.0.0.1:7654/
 GUI 主要功能：
 
 - Finder 风格文件浏览（左侧目录树 + 中间目录列表 + 右侧预览区）、文本/JSON/图片预览、上传/下载/删除
-- 提供商配置表单化编辑（Provider、API Key、模型类型、能力与 Override Parameters），也保留 JSON 高级编辑入口
+- 提供商配置表单化编辑（Provider、API Key、Header Overrides、模型类型、能力与 Override Parameters），也保留 JSON 高级编辑入口
 - 会话列表、会话元数据编辑、消息表单/JSON 双模式高级编辑
 - 记忆列表编辑与重嵌入触发
 - SQLite 表结构浏览、查询与写入 API
@@ -85,7 +85,7 @@ WebUI 和 TUI 共用同一组服务端能力。常用 SQLite API：
 
 - `GET /api/app-config?query=...`：列出 `app_config` 配置键、类型、当前值、默认值与同步属性
 - `POST /api/app-config/set`：参数 `key`、`value`，按配置原始类型写入单项设置
-- `POST /api/providers/upsert`：按 `provider_id` 更新或按 `name` 新增 Provider，可写入 `base_url`、`api_key`、`api_format` 等字段
+- `POST /api/providers/upsert`：按 `provider_id` 更新或按 `name` 新增 Provider，可写入 `base_url`、`api_key`、`api_format`、`header_overrides` 等字段
 - `POST /api/providers/models/upsert`：按 `provider_id` 为指定 Provider 新增或更新模型，可写入 `model_name`、`display_name`、`kind`、`capabilities` 与 `override_parameters`
 - `POST /api/sqlite/tables`：参数 `database` 为 `chat`、`config` 或 `memory`，可选 `include_internal`、`include_create_sql`
 - `POST /api/sqlite/query`：参数 `database`、`sql`，可选 `parameters`、`max_rows`

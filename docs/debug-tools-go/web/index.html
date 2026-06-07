@@ -395,6 +395,7 @@
             <option value="gemini">gemini</option>
           </select>
           <div>API Key</div><input id="providerAPIKey" type="password" placeholder="留空则不修改已有 Key" />
+          <div>Header Overrides</div><textarea id="providerHeaders" class="mono" style="min-height:90px;" spellcheck="false">{}</textarea>
         </div>
         <div class="actions" style="margin-bottom:12px;">
           <button id="btnProviderNew">新建 Provider</button>
@@ -1140,6 +1141,7 @@
     el('providerBaseURL').value = provider?.baseURL || ''
     el('providerFormat').value = provider?.apiFormat || 'openai-compatible'
     el('providerAPIKey').value = ''
+    el('providerHeaders').value = JSON.stringify(provider?.headerOverrides || {}, null, 2)
     renderProviderModelSelect()
     syncProviderModelForm()
   }
@@ -1208,11 +1210,27 @@
   }
 
   async function saveProviderForm() {
+    let headerOverrides = {}
+    try {
+      headerOverrides = JSON.parse(el('providerHeaders').value || '{}')
+      if (!headerOverrides || Array.isArray(headerOverrides) || typeof headerOverrides !== 'object') {
+        throw new Error('Header Overrides 必须是 JSON 对象')
+      }
+      for (const [key, value] of Object.entries(headerOverrides)) {
+        if (typeof value !== 'string') {
+          throw new Error(`${key} 的值必须是字符串`)
+        }
+      }
+    } catch (error) {
+      alert(`Header Overrides 格式错误：${error.message}`)
+      return
+    }
     const payload = {
       provider_id: el('providerID').value.trim() || undefined,
       name: el('providerName').value.trim(),
       base_url: el('providerBaseURL').value.trim(),
-      api_format: el('providerFormat').value
+      api_format: el('providerFormat').value,
+      header_overrides: headerOverrides
     }
     const apiKey = el('providerAPIKey').value.trim()
     if (apiKey) payload.api_key = apiKey
