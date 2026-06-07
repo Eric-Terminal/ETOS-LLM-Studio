@@ -14,7 +14,7 @@
 - HTTP 轮询调试通道（备用）
 - OpenAI 兼容请求导入代理（`/v1/chat/completions`）
 - Bonjour/mDNS 自动发现（服务类型 `_etos-debug._tcp`）
-- Bubble Tea TUI：文件、提供商、会话、记忆、SQLite 统一操作
+- Bubble Tea TUI：文件、提供商、MCP、会话、记忆、SQLite 统一操作
 - 内置 Web GUI 控制台（同源 API，无 CORS）
 - SQLite 调试 API：列出 chat/config/memory 数据库表、执行只读查询与受保护写入
 - 与现有 iOS/watchOS 设备端协议兼容（命令字保持一致）
@@ -26,7 +26,9 @@ cd docs/debug-tools-go
 go run .
 ```
 
-启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 返回侧栏或取消输入，按 `Ctrl+C` 退出。会话列表会显示提示词、世界书、标签与隔离等信息摘要；会话页按 `Enter` 进入气泡预览，`↑/↓` 选择消息气泡，再按 `Enter` 查看更多，`Esc` 会按层级返回。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、Header Overrides 与独立代理、`m` 新增模型、`M` 选择并编辑已有模型参数。
+启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 返回侧栏或取消输入，按 `Ctrl+C` 退出。所有输入表单都嵌在当前 TUI 内，不会清空原页面；在高屏终端里会保留上方上下文，在小屏终端里保持可取消和可滚动。
+
+会话列表会显示提示词、世界书、标签与隔离等信息摘要；会话页按 `Enter` 进入气泡预览，`↑/↓` 选择消息气泡，再按 `Enter` 查看更多，`Esc` 会按层级返回。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、Header Overrides 与独立代理、`m` 新增模型、`M` 选择并编辑已有模型参数。MCP 页复用现有 SQLite 调试能力，可按 `a` 新增 Streamable HTTP/SSE/OAuth 服务器、`e` 编辑 Endpoint/API Key/Header、`t` 切换是否加入聊天路由、`P` 选择缓存工具并设置启用状态与审批策略、`p` 直接编辑禁用工具与审批策略 JSON、`g` 设置全局 MCP 工具暴露开关、`x` 删除服务器。OAuth Payload JSON 至少需要 `tokenEndpoint`、`clientID`、`grantType`；HTTP/SSE 只保存 Bearer Key 与 Header，OAuth 只保存 OAuth Payload，避免切换传输类型后残留无关字段。SQLite 页的查询/写入表单支持 Parameters JSON、返回行数限制，写入时可显式允许无 WHERE 的 UPDATE/DELETE。
 
 默认只监听一个端口：
 
@@ -118,6 +120,7 @@ go test ./...
 - 典型接口参数校验（如文件读取缺少 path）
 - app_config 设置接口参数校验与命令转发
 - Provider 与模型 upsert 接口参数校验、命令转发，以及 TUI 模型高级编辑 payload 生成
+- TUI 内嵌表单在多种终端尺寸下保留当前上下文，MCP 服务器 upsert、SSE Endpoint 推断与审批策略校验
 - SQLite API 参数校验与命令转发
 
 ## Release 下载（CI）

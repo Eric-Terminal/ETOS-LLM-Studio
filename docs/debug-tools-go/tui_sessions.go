@@ -469,7 +469,7 @@ func (m tuiModel) selectedSessionDetailLineRange() (int, int, int, bool) {
 	return start, start + selectedLines - 1, totalLines, true
 }
 
-func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
+func (m *tuiModel) editSelectedSessionDetail() tea.Cmd {
 	if m.sessionMode != tuiSessionModeMessageDetail {
 		return nil
 	}
@@ -496,31 +496,29 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 		}
 	}
 
-	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
-		value := sessionDetailEditValue(selectedMessage, section.kind)
-		form := forms.Form(huh.NewGroup(
-			huh.NewText().Title(section.title).Value(&value),
-		))
-		if err := form.Run(); err != nil {
-			return tuiFormErrorResult(err)
-		}
-
+	value := sessionDetailEditValue(selectedMessage, section.kind)
+	form := newTUIForm(huh.NewGroup(
+		huh.NewText().Title(section.title).Value(&value),
+	))
+	return m.beginInlineForm("编辑会话消息", form, func(m *tuiModel) tea.Cmd {
 		updatedMessages := cloneSessionMessages(m.allSessionMessagesForEditing())
 		targetIndex := sessionMessageIndexByID(updatedMessages, asString(selectedMessage["id"]))
 		if targetIndex < 0 {
-			return tuiCommandResultMsg{op: "sessions:update_messages", err: fmt.Errorf("未找到当前消息")}
+			return tuiMessageCommand(tuiCommandResultMsg{op: "sessions:update_messages", err: fmt.Errorf("未找到当前消息")})
 		}
 		updateSessionMessageDetail(updatedMessages[targetIndex], section.kind, value)
-		response, err := m.server.sendCommandWithResponse(map[string]any{
-			"command":    "session_update_messages",
-			"session_id": sessionID,
-			"messages":   updatedMessages,
-		}, 45*time.Second)
-		if response == nil {
-			response = map[string]any{}
+		return func() tea.Msg {
+			response, err := m.server.sendCommandWithResponse(map[string]any{
+				"command":    "session_update_messages",
+				"session_id": sessionID,
+				"messages":   updatedMessages,
+			}, 45*time.Second)
+			if response == nil {
+				response = map[string]any{}
+			}
+			response["messages"] = updatedMessages
+			return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
 		}
-		response["messages"] = updatedMessages
-		return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
 	})
 }
 

@@ -513,6 +513,17 @@ func parseOptionalJSONArray(value, title string) ([]any, error) {
 	return array, nil
 }
 
+func normalizedSQLiteRowLimit(value string) int {
+	limit := asInt(strings.TrimSpace(value))
+	if limit < 1 {
+		return 50
+	}
+	if limit > 500 {
+		return 500
+	}
+	return limit
+}
+
 func findProviderModelRow(models []map[string]any, modelID string) map[string]any {
 	for _, model := range models {
 		if asString(model["id"]) == modelID {

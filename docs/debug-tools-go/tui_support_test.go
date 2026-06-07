@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -69,19 +68,6 @@ func TestTUINavigationHidesOpenAICapture(t *testing.T) {
 	}
 }
 
-func TestTUIFormErrorResultIgnoresUserAbort(t *testing.T) {
-	result := tuiFormErrorResult(huh.ErrUserAborted)
-	if result.err != nil {
-		t.Fatalf("用户取消表单后 err = %v, want nil", result.err)
-	}
-	if result.op != "noop" {
-		t.Fatalf("op = %q, want noop", result.op)
-	}
-	if !result.clearScreen {
-		t.Fatal("用户取消表单后未请求清屏，容易留下输入框残影")
-	}
-}
-
 func TestNewTUIFormHidesDefaultHelp(t *testing.T) {
 	value := "SELECT 1"
 	form := newTUIForm(huh.NewGroup(huh.NewText().Title("SQL").Value(&value)))
@@ -94,38 +80,60 @@ func TestNewTUIFormHidesDefaultHelp(t *testing.T) {
 	}
 }
 
-func TestTUIBlockingCommandPassesTerminalIOToFormRunner(t *testing.T) {
-	input := strings.NewReader("")
-	var output bytes.Buffer
-	var stderr bytes.Buffer
-	command := &tuiBlockingCommand{
-		run: func(forms tuiFormRunner) tea.Msg {
-			if forms.stdin != input {
-				t.Fatalf("stdin 未传给表单运行器")
-			}
-			if forms.stdout != &output {
-				t.Fatalf("stdout 未传给表单运行器")
-			}
-			if forms.stderr != &stderr {
-				t.Fatalf("stderr 未传给表单运行器")
-			}
-			return tuiCommandResultMsg{op: "noop"}
-		},
+func TestTUIInlineFormKeepsCurrentContextVisible(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSQLite
+	model.focus = tuiFocusContent
+	model.layout(120, 40)
+	model.syncFocusedComponent()
+	model.syncContentViewport()
+
+	cmd := model.promptSQLiteQuery(false)
+	if cmd == nil {
+		t.Fatal("SQL 输入未启动表单")
+	}
+	view := model.View()
+	for _, want := range []string{"数据库: chat", "SQLite 查询", "表单"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("内嵌表单视图缺少 %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "\x1b[?1049") {
+		t.Fatalf("内嵌表单不应输出备用屏幕转义序列: %q", view)
+	}
+}
+
+func TestTUIInlineFormAcrossTerminalSizes(t *testing.T) {
+	sizes := []struct {
+		width  int
+		height int
+	}{
+		{64, 18},
+		{100, 30},
+		{180, 70},
 	}
 
-	command.SetStdin(input)
-	command.SetStdout(&output)
-	command.SetStderr(&stderr)
+	for _, size := range sizes {
+		model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+		model.active = tuiSQLite
+		model.focus = tuiFocusContent
+		updated, _ := model.Update(tea.WindowSizeMsg{Width: size.width, Height: size.height})
+		model = updated.(tuiModel)
+		model.syncFocusedComponent()
+		model.syncContentViewport()
 
-	if err := command.Run(); err != nil {
-		t.Fatalf("Run 返回错误: %v", err)
-	}
-	if result, ok := command.msg.(tuiCommandResultMsg); !ok || result.op != "noop" {
-		t.Fatalf("msg = %#v, want noop result", command.msg)
-	}
-	rendered := output.String()
-	if !strings.Contains(rendered, tuiEnterFormScreen) || !strings.Contains(rendered, tuiExitFormScreen) {
-		t.Fatalf("表单命令没有隔离到独立屏幕，输出 = %q", rendered)
+		if cmd := model.promptSQLiteQuery(false); cmd == nil {
+			t.Fatalf("%dx%d 未启动 SQL 表单", size.width, size.height)
+		}
+		view := model.View()
+		if !strings.Contains(view, "SQLite 查询") || !strings.Contains(view, "数据库: chat") {
+			t.Fatalf("%dx%d 内嵌表单没有保留 SQL 上下文:\n%s", size.width, size.height, view)
+		}
+		updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		model = updated.(tuiModel)
+		if model.activeForm != nil {
+			t.Fatalf("%dx%d Esc 后表单仍未关闭", size.width, size.height)
+		}
 	}
 }
 
@@ -799,6 +807,20 @@ func TestTUIReadablePreviewsAvoidRawJSON(t *testing.T) {
 		}
 		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 			t.Fatalf("摘要仍像 JSON: %s", preview)
+		}
+	}
+}
+
+func TestNormalizedSQLiteRowLimit(t *testing.T) {
+	cases := map[string]int{
+		"":     50,
+		"0":    50,
+		"12":   12,
+		"9999": 500,
+	}
+	for input, want := range cases {
+		if got := normalizedSQLiteRowLimit(input); got != want {
+			t.Fatalf("normalizedSQLiteRowLimit(%q) = %d, want %d", input, got, want)
 		}
 	}
 }
