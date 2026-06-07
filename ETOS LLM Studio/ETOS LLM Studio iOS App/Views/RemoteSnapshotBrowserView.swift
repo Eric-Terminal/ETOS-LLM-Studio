@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// iOS 端从 S3/R2 兼容对象存储列出并下载 .elsbackup 快照。
+// iOS 端从 S3/R2 兼容对象存储列出 .elsbackup 快照，并在确认后下载。
 // ============================================================================
 
 import Foundation
@@ -15,14 +15,12 @@ struct RemoteSnapshotBrowserView: View {
 
     @State private var snapshots: [S3CompatibleRemoteSnapshot] = []
     @State private var isLoading = false
-    @State private var downloadingSnapshotID: String?
     @State private var errorMessage: String?
-    @State private var restorePayload: IncomingSnapshotRestorePayload?
 
     var body: some View {
         List {
             Section {
-                Text(NSLocalizedString("显示当前 S3/R2 配置路径下的 .elsbackup 文件。选择后会先下载到本机临时目录，再进入恢复确认。", comment: ""))
+                Text(NSLocalizedString("显示当前 S3/R2 配置路径下的 .elsbackup 文件。选择文件后会进入详情页，确认大小与修改时间后再下载恢复。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -47,14 +45,14 @@ struct RemoteSnapshotBrowserView: View {
                     )
                 } else {
                     ForEach(snapshots) { snapshot in
-                        Button {
-                            Task {
-                                await download(snapshot)
-                            }
+                        NavigationLink {
+                            RemoteSnapshotDetailView(
+                                snapshot: snapshot,
+                                configuration: configuration
+                            )
                         } label: {
                             remoteSnapshotRow(snapshot)
                         }
-                        .disabled(downloadingSnapshotID != nil)
                     }
                 }
             }
@@ -69,7 +67,7 @@ struct RemoteSnapshotBrowserView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .disabled(isLoading || downloadingSnapshotID != nil)
+                .disabled(isLoading)
                 .accessibilityLabel(NSLocalizedString("刷新", comment: ""))
             }
         }
@@ -88,44 +86,18 @@ struct RemoteSnapshotBrowserView: View {
         } message: {
             Text(errorMessage ?? NSLocalizedString("未知错误", comment: ""))
         }
-        .sheet(item: $restorePayload) { payload in
-            NavigationStack {
-                IncomingSnapshotRestoreView(fileURL: payload.fileURL) {
-                    try? FileManager.default.removeItem(at: payload.fileURL)
-                    restorePayload = nil
-                }
-            }
-        }
     }
 
     @ViewBuilder
     private func remoteSnapshotRow(_ snapshot: S3CompatibleRemoteSnapshot) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(snapshot.fileName)
-                    .etFont(.body)
-                    .foregroundStyle(.primary)
-                Text(snapshot.key)
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                HStack {
-                    if let byteSize = snapshot.byteSize {
-                        Text(String(format: NSLocalizedString("大小：%@", comment: ""), StorageUtility.formatSize(byteSize)))
-                    }
-                    if let lastModified = snapshot.lastModified {
-                        Text(String(format: NSLocalizedString("修改时间：%@", comment: ""), lastModified.formatted(date: .abbreviated, time: .shortened)))
-                    }
-                }
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if downloadingSnapshotID == snapshot.id {
-                ProgressView()
-            }
+        Label {
+            Text(snapshot.fileName)
+                .etFont(.body)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: "doc")
+                .foregroundStyle(.blue)
         }
-        .contentShape(Rectangle())
     }
 
     @MainActor
@@ -140,20 +112,95 @@ struct RemoteSnapshotBrowserView: View {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+private struct RemoteSnapshotDetailView: View {
+    let snapshot: S3CompatibleRemoteSnapshot
+    let configuration: S3CompatibleUploadConfiguration
+
+    @State private var isDownloading = false
+    @State private var errorMessage: String?
+    @State private var restorePayload: IncomingSnapshotRestorePayload?
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("远端快照", comment: "")) {
+                LabeledContent(NSLocalizedString("文件名", comment: "")) {
+                    Text(snapshot.fileName)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                LabeledContent(NSLocalizedString("远端路径", comment: "")) {
+                    Text(snapshot.key)
+                        .multilineTextAlignment(.trailing)
+                        .textSelection(.enabled)
+                }
+
+                if let byteSize = snapshot.byteSize {
+                    LabeledContent(NSLocalizedString("大小", comment: "")) {
+                        Text(StorageUtility.formatSize(byteSize))
+                    }
+                }
+
+                if let lastModified = snapshot.lastModified {
+                    LabeledContent(NSLocalizedString("修改时间", comment: "")) {
+                        Text(lastModified.formatted(date: .abbreviated, time: .shortened))
+                    }
+                }
+            }
+
+            Section {
+                Button {
+                    Task {
+                        await download()
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isDownloading {
+                            ProgressView()
+                            Text(NSLocalizedString("正在下载快照…", comment: ""))
+                        } else {
+                            Label(NSLocalizedString("下载", comment: ""), systemImage: "tray.and.arrow.down")
+                        }
+                        Spacer()
+                    }
+                }
+                .disabled(isDownloading)
+            }
+        }
+        .navigationTitle(snapshot.fileName)
+        .alert(NSLocalizedString("快照操作失败", comment: ""), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? NSLocalizedString("未知错误", comment: ""))
+        }
+        .sheet(item: $restorePayload) { payload in
+            NavigationStack {
+                IncomingSnapshotRestoreView(fileURL: payload.fileURL) {
+                    try? FileManager.default.removeItem(at: payload.fileURL)
+                    restorePayload = nil
+                }
+            }
+        }
+    }
 
     @MainActor
-    private func download(_ snapshot: S3CompatibleRemoteSnapshot) async {
-        downloadingSnapshotID = snapshot.id
+    private func download() async {
+        isDownloading = true
         errorMessage = nil
         do {
             let fileURL = try await SyncPackageUploadService.downloadRemoteSnapshot(
                 objectKey: snapshot.key,
                 s3: configuration
             )
-            downloadingSnapshotID = nil
+            isDownloading = false
             restorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
         } catch {
-            downloadingSnapshotID = nil
+            isDownloading = false
             errorMessage = error.localizedDescription
         }
     }
