@@ -565,6 +565,42 @@ func TestProviderPreviewUsesReadableSummary(t *testing.T) {
 	}
 }
 
+func TestTUIReadablePreviewsAvoidRawJSON(t *testing.T) {
+	previews := []string{
+		settingPreview(map[string]any{
+			"key":                  "theme",
+			"group":                "ui",
+			"type":                 "string",
+			"participates_in_sync": true,
+			"value_text":           "dark",
+		}),
+		uploadPreview(map[string]any{
+			"message": "文件已写入",
+			"path":    "Documents/a.txt",
+		}),
+		sqliteTablesPreview("chat", []map[string]any{
+			{"name": "messages", "type": "table", "columnCount": 12},
+		}),
+		sqliteQueryPreview("chat", []string{"id", "content"}, 2, false),
+		sqliteMutationPreview(map[string]any{
+			"database":        "chat",
+			"affectedRows":    1,
+			"totalChanges":    3,
+			"lastInsertRowID": 9,
+		}),
+	}
+
+	for _, preview := range previews {
+		trimmed := strings.TrimSpace(preview)
+		if trimmed == "" {
+			t.Fatal("摘要为空")
+		}
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			t.Fatalf("摘要仍像 JSON: %s", preview)
+		}
+	}
+}
+
 func TestBuildProviderUpsertPayloadRejectsNonStringHeaders(t *testing.T) {
 	if _, err := buildProviderUpsertPayload(providerUpsertInput{
 		Name:            "Provider",

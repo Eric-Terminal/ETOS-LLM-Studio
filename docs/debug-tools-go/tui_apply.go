@@ -137,7 +137,7 @@ func (m *tuiModel) applySQLiteTables(response map[string]any) {
 	}
 	m.sqlTables.SetRows(rows)
 	m.sqlRows.SetRows([]table.Row{})
-	m.preview.SetValue(prettyJSON(response))
+	m.preview.SetValue(sqliteTablesPreview(m.sqlDatabase, tables))
 	m.setMessage(fmt.Sprintf("已加载 %s 库 %d 张表", m.sqlDatabase, len(rows)), tuiOKStyle)
 }
 
@@ -146,8 +146,9 @@ func (m *tuiModel) applySQLiteRows(response map[string]any) {
 	rowsRaw := asMapSlice(response["rows"])
 	if len(columns) == 0 {
 		m.sqlRows.SetColumns([]table.Column{{Title: "结果", Width: 90}})
-		m.sqlRows.SetRows([]table.Row{{prettyJSON(response)}})
-		m.preview.SetValue(prettyJSON(response))
+		message := firstNonEmpty(asString(response["message"]), "SQL 执行完成，无表格结果")
+		m.sqlRows.SetRows([]table.Row{{message}})
+		m.preview.SetValue(sqliteQueryPreview(asString(response["database"]), nil, 0, false))
 		return
 	}
 	cols := make([]table.Column, 0, len(columns))
@@ -164,6 +165,6 @@ func (m *tuiModel) applySQLiteRows(response map[string]any) {
 	}
 	m.sqlRows.SetColumns(cols)
 	m.sqlRows.SetRows(rows)
-	m.preview.SetValue(prettyJSON(response))
+	m.preview.SetValue(sqliteQueryPreview(asString(response["database"]), columns, len(rows), asBool(response["truncated"])))
 	m.setMessage(fmt.Sprintf("查询返回 %d 行", len(rows)), tuiOKStyle)
 }

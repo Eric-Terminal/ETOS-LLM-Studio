@@ -350,6 +350,88 @@ func emptyDash(value string) string {
 	return value
 }
 
+func settingPreview(setting map[string]any) string {
+	value := firstNonEmpty(asString(setting["value_text"]), asString(setting["value"]), asString(setting["default_value"]))
+	return strings.Join([]string{
+		"配置",
+		"  Key: " + emptyDash(asString(setting["key"])),
+		"  分组: " + emptyDash(asString(setting["group"])),
+		"  类型: " + emptyDash(asString(setting["type"])),
+		"  参与同步: " + boolLabel(asBool(setting["participates_in_sync"])),
+		"",
+		"值",
+		"  " + emptyDash(value),
+	}, "\n")
+}
+
+func uploadPreview(response map[string]any) string {
+	return strings.Join([]string{
+		"文件上传",
+		"  状态: " + emptyDash(firstNonEmpty(asString(response["message"]), "已上传")),
+		"  设备路径: " + emptyDash(asString(response["path"])),
+	}, "\n")
+}
+
+func sqliteTablesPreview(database string, tables []map[string]any) string {
+	lines := []string{
+		"SQLite 表结构",
+		"  数据库: " + emptyDash(database),
+		"  表/视图数量: " + fmt.Sprintf("%d", len(tables)),
+		"",
+		"表",
+	}
+	if len(tables) == 0 {
+		lines = append(lines, "  无")
+		return strings.Join(lines, "\n")
+	}
+	for index, item := range tables {
+		if index >= 12 {
+			lines = append(lines, fmt.Sprintf("  还有 %d 张表未显示", len(tables)-index))
+			break
+		}
+		lines = append(lines, fmt.Sprintf("  %2d. %s · %s · %d 字段",
+			index+1,
+			emptyDash(asString(item["name"])),
+			emptyDash(asString(item["type"])),
+			asInt(item["columnCount"]),
+		))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func sqliteQueryPreview(database string, columns []string, rowCount int, truncated bool) string {
+	lines := []string{
+		"SQLite 查询",
+		"  数据库: " + emptyDash(database),
+		"  返回行数: " + fmt.Sprintf("%d", rowCount),
+		"  已截断: " + boolLabel(truncated),
+	}
+	if len(columns) > 0 {
+		lines = append(lines, "  字段: "+strings.Join(columns, ", "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func sqliteMutationPreview(response map[string]any) string {
+	lines := []string{
+		"SQLite 写入",
+		"  数据库: " + emptyDash(asString(response["database"])),
+		"  影响行数: " + fmt.Sprintf("%d", asInt(response["affectedRows"])),
+		"  总变更数: " + fmt.Sprintf("%d", asInt(response["totalChanges"])),
+		"  最后插入 RowID: " + fmt.Sprintf("%d", asInt(response["lastInsertRowID"])),
+	}
+	if columns := asStringSlice(response["returningColumns"]); len(columns) > 0 {
+		lines = append(lines,
+			"",
+			"RETURNING",
+			"  返回行数: "+fmt.Sprintf("%d", asInt(response["returningRowCount"])),
+			"  已截断: "+boolLabel(asBool(response["returningTruncated"])),
+			"  字段: "+strings.Join(columns, ", "),
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
 type providerModelUpsertInput struct {
 	ProviderID              string
 	ModelID                 string

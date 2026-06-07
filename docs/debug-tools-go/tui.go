@@ -1340,7 +1340,7 @@ func (m tuiModel) showSelectedSetting() tea.Cmd {
 	return func() tea.Msg {
 		for _, setting := range m.settingRows {
 			if asString(setting["key"]) == key {
-				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": prettyJSON(setting)}}
+				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": settingPreview(setting)}}
 			}
 		}
 		return tuiCommandResultMsg{op: "preview", err: fmt.Errorf("未找到配置")}
@@ -1595,7 +1595,7 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 	case strings.HasPrefix(msg.op, "files:read:"):
 		m.applyReadFile(strings.TrimPrefix(msg.op, "files:read:"), msg.response)
 	case msg.op == "files:upload":
-		m.preview.SetValue(prettyJSON(msg.response))
+		m.preview.SetValue(uploadPreview(msg.response))
 		m.setMessage("文件已上传；按 r 可刷新目录", tuiOKStyle)
 	case msg.op == "providers:list":
 		m.applyProviders(msg.response)
@@ -1605,19 +1605,25 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		if provider, ok := msg.response["provider"].(map[string]any); ok {
 			m.preview.SetValue(providerPreview(provider))
 		} else {
-			m.preview.SetValue(prettyJSON(msg.response))
+			m.preview.SetValue(firstNonEmpty(asString(msg.response["message"]), "Provider 已保存"))
 		}
 		m.setMessage("Provider 已保存；按 r 可刷新列表", tuiOKStyle)
 	case msg.op == "providers:model_upsert":
-		m.preview.SetValue(prettyJSON(msg.response))
+		if provider, ok := msg.response["provider"].(map[string]any); ok {
+			m.preview.SetValue(providerPreview(provider))
+		} else if model, ok := msg.response["model"].(map[string]any); ok {
+			m.preview.SetValue(strings.Join(providerModelSummary(map[string]any{"models": []any{model}}), "\n"))
+		} else {
+			m.preview.SetValue(firstNonEmpty(asString(msg.response["message"]), "模型已保存"))
+		}
 		m.setMessage("模型已保存；按 r 可刷新列表", tuiOKStyle)
 	case msg.op == "settings:list":
 		m.applySettings(msg.response)
 	case msg.op == "settings:set":
 		if setting, ok := msg.response["setting"].(map[string]any); ok {
-			m.preview.SetValue(prettyJSON(setting))
+			m.preview.SetValue(settingPreview(setting))
 		} else {
-			m.preview.SetValue(prettyJSON(msg.response))
+			m.preview.SetValue(firstNonEmpty(asString(msg.response["message"]), "配置已保存"))
 		}
 		m.setMessage("配置已保存；按 r 可刷新列表", tuiOKStyle)
 	case msg.op == "sessions:list":
@@ -1637,7 +1643,7 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 	case msg.op == "sqlite:query":
 		m.applySQLiteRows(msg.response)
 	case msg.op == "sqlite:mutate":
-		m.preview.SetValue(prettyJSON(msg.response))
+		m.preview.SetValue(sqliteMutationPreview(msg.response))
 		m.setMessage("SQL 写入已执行", tuiOKStyle)
 	case msg.op == "preview":
 		m.preview.SetValue(asString(msg.response["preview"]))
