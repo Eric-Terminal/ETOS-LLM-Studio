@@ -198,7 +198,7 @@ public enum WatchDatabaseSyncService {
             .appendingPathComponent("ETOS-Watch-Database-Sync-\(UUID().uuidString)", isDirectory: false)
             .appendingPathExtension("etoswatchdb")
         try Persistence.removeItemIfExists(at: archiveURL)
-        let archive = try Archive(url: archiveURL, accessMode: .create)
+        let archive = try Archive(url: archiveURL, accessMode: .create, pathEncoding: nil)
         try archive.addEntry(with: manifestPath, fileURL: manifestURL, compressionMethod: .deflate)
         for item in databaseItems {
             try archive.addEntry(
@@ -239,7 +239,10 @@ public enum WatchDatabaseSyncService {
         try fileManager.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
-        guard let archive = try? Archive(url: archiveURL, accessMode: .read) else {
+        let archive: Archive
+        do {
+            archive = try Archive(url: archiveURL, accessMode: .read, pathEncoding: nil)
+        } catch {
             throw SyncError.invalidArchive
         }
         let extractedDirectory = workingDirectory.appendingPathComponent(databaseDirectoryPath, isDirectory: true)
@@ -520,7 +523,7 @@ extension Persistence {
         let replacements = try sources.map { kind, sourceURL in
             let targetURL = targetDatabaseURL(for: kind, targets: targets)
             if shouldPreserveDatabaseEncryption, let conversionDirectory {
-                return try makeEncryptedSnapshotRestoreReplacement(
+                return try makeWatchSyncEncryptedSnapshotRestoreReplacement(
                     sourceURL: sourceURL,
                     targetURL: targetURL,
                     fileName: kind.fileName,

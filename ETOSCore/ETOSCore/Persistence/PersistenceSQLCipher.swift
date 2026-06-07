@@ -344,6 +344,20 @@ extension Persistence {
             )
         ]
     }
+
+    static func makeWatchSyncEncryptedSnapshotRestoreReplacement(
+        sourceURL: URL,
+        targetURL: URL,
+        fileName: String,
+        temporaryDirectory: URL
+    ) throws -> DatabaseReplacement {
+        try makeEncryptedSnapshotRestoreReplacement(
+            sourceURL: sourceURL,
+            targetURL: targetURL,
+            fileName: fileName,
+            temporaryDirectory: temporaryDirectory
+        )
+    }
 }
 
 private extension Persistence {
