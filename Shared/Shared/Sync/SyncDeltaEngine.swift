@@ -265,6 +265,12 @@ public enum SyncDeltaEngine {
                     summary.importedProviders += 1
                     providerDeleted = true
                 }
+            case .sessionTag:
+                guard let id = UUID(uuidString: deletion.recordID) else { continue }
+                if chatService.sessionTagsSubject.value.contains(where: { $0.id == id }) {
+                    chatService.deleteSessionTag(tagID: id)
+                    summary.importedSessions += 1
+                }
             case .session:
                 guard let id = UUID(uuidString: deletion.recordID) else { continue }
                 if applySessionDeletion(sessionID: id, chatService: chatService) {

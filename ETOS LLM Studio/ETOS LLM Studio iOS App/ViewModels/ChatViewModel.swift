@@ -53,6 +53,7 @@ final class ChatViewModel: ObservableObject {
     @Published var activeSheet: ActiveSheet?
     @Published var chatSessions: [ChatSession] = []
     @Published var sessionFolders: [SessionFolder] = []
+    @Published var sessionTags: [SessionTag] = []
     @Published var currentSession: ChatSession?
     @Published var providers: [Provider] = []
     @Published var configuredModels: [RunnableModel] = []

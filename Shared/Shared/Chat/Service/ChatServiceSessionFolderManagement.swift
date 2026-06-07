@@ -131,6 +131,7 @@ extension ChatService {
     public func reloadSessionStateFromPersistenceAfterMigration() {
         let persistedSessions = Persistence.loadChatSessions()
         let persistedFolders = Persistence.loadSessionFolders()
+        let persistedTags = Persistence.loadSessionTags()
         let existingTemporary = chatSessionsSubject.value.first(where: \.isTemporary)
             ?? ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
 
@@ -144,6 +145,7 @@ extension ChatService {
 
         chatSessionsSubject.send(mergedSessions)
         sessionFoldersSubject.send(persistedFolders)
+        sessionTagsSubject.send(persistedTags)
         currentSessionSubject.send(resolvedCurrentSession)
 
         let resolvedMessages = resolvedCurrentSession.isTemporary
@@ -151,7 +153,7 @@ extension ChatService {
             : Persistence.loadMessages(for: resolvedCurrentSession.id)
         publishMessages(resolvedMessages)
 
-        logger.info("JSON→SQLite 迁移后已刷新会话状态: sessions=\(persistedSessions.count), folders=\(persistedFolders.count)")
+        logger.info("JSON→SQLite 迁移后已刷新会话状态: sessions=\(persistedSessions.count), folders=\(persistedFolders.count), tags=\(persistedTags.count)")
     }
 
     public func setCurrentSession(_ session: ChatSession?) {

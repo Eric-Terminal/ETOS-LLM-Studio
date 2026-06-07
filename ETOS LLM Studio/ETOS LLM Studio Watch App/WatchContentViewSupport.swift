@@ -202,6 +202,7 @@ extension ContentView {
         SessionListView(
             sessions: $viewModel.chatSessions,
             folders: $viewModel.sessionFolders,
+            tags: viewModel.sessionTags,
             currentSession: $viewModel.currentSession,
             runningSessionIDs: viewModel.runningSessionIDs,
             deleteSessionAction: { session in
@@ -245,6 +246,18 @@ extension ContentView {
             },
             moveFolderToFolderAction: { folder, parentID in
                 viewModel.moveSessionFolder(folder, toParentID: parentID)
+            },
+            createTagAction: { name, color in
+                viewModel.createSessionTag(name: name, color: color)
+            },
+            updateTagAction: { tag, name, color in
+                viewModel.updateSessionTag(tag, name: name, color: color)
+            },
+            deleteTagAction: { tag in
+                viewModel.deleteSessionTag(tag)
+            },
+            setSessionTagsAction: { session, tagIDs in
+                viewModel.setSessionTags(for: session, tagIDs: tagIDs)
             },
             createConversationAction: {
                 viewModel.createNewSession()

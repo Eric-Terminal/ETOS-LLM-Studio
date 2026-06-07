@@ -61,6 +61,7 @@ extension Persistence {
                 name: baseRecord.session.name,
                 folderID: baseRecord.session.folderID,
                 lorebookIDs: baseRecord.session.lorebookIDs,
+                tagIDs: baseRecord.session.tagIDs,
                 worldbookContextIsolationEnabled: baseRecord.session.worldbookContextIsolationEnabled,
                 conversationSummary: finalSummary,
                 conversationSummaryUpdatedAt: finalUpdatedAt
@@ -272,6 +273,7 @@ extension Persistence {
                 name: session.name,
                 folderID: session.folderID,
                 lorebookIDs: session.lorebookIDs,
+                tagIDs: session.tagIDs,
                 worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil,
                 conversationSummary: preservedSummary?.conversationSummary,
                 conversationSummaryUpdatedAt: preservedSummary?.conversationSummaryUpdatedAt
@@ -291,6 +293,7 @@ extension Persistence {
             topicPrompt: summary.prompts.topicPrompt,
             enhancedPrompt: summary.prompts.enhancedPrompt,
             lorebookIDs: summary.session.lorebookIDs,
+            tagIDs: summary.session.tagIDs ?? [],
             worldbookContextIsolationEnabled: summary.session.worldbookContextIsolationEnabled ?? false,
             folderID: summary.session.folderID,
             isTemporary: false
@@ -320,6 +323,7 @@ extension Persistence {
         summary.session.name == session.name &&
         summary.session.folderID == session.folderID &&
         summary.session.lorebookIDs == session.lorebookIDs &&
+        (summary.session.tagIDs ?? []) == session.tagIDs &&
         (summary.session.worldbookContextIsolationEnabled ?? false) == session.worldbookContextIsolationEnabled &&
         summary.prompts.topicPrompt == session.topicPrompt &&
         summary.prompts.enhancedPrompt == session.enhancedPrompt
@@ -354,6 +358,33 @@ extension Persistence {
         }
 
         return uniqueFolders
+    }
+
+    static func normalizeSessionTagsForPersistence(_ tags: [SessionTag]) -> [SessionTag] {
+        var uniqueTags: [SessionTag] = []
+        uniqueTags.reserveCapacity(tags.count)
+        var seenIDs = Set<UUID>()
+
+        for tag in tags {
+            guard seenIDs.insert(tag.id).inserted else { continue }
+            let normalizedName = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            uniqueTags.append(
+                SessionTag(
+                    id: tag.id,
+                    name: normalizedName.isEmpty ? "未命名标签" : normalizedName,
+                    color: tag.color,
+                    updatedAt: tag.updatedAt
+                )
+            )
+        }
+
+        return uniqueTags.sorted { left, right in
+            let order = left.name.localizedStandardCompare(right.name)
+            if order != .orderedSame {
+                return order == .orderedAscending
+            }
+            return left.id.uuidString < right.id.uuidString
+        }
     }
 
     static func isValidSessionFolderParent(

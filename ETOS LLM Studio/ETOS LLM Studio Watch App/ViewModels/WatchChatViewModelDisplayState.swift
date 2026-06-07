@@ -155,6 +155,23 @@ extension ChatViewModel {
         chatService.moveSession(session, toFolderID: folderID)
     }
 
+    @discardableResult
+    func createSessionTag(name: String, color: SessionTagColor?) -> SessionTag? {
+        chatService.createSessionTag(name: name, color: color)
+    }
+
+    func updateSessionTag(_ tag: SessionTag, name: String, color: SessionTagColor?) {
+        chatService.updateSessionTag(tag, name: name, color: color)
+    }
+
+    func deleteSessionTag(_ tag: SessionTag) {
+        chatService.deleteSessionTag(tag)
+    }
+
+    func setSessionTags(for session: ChatSession, tagIDs: [UUID]) {
+        chatService.setSessionTags(sessionID: session.id, tagIDs: tagIDs)
+    }
+
     func canRetry(message: ChatMessage) -> Bool {
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }

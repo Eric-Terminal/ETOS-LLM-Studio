@@ -171,6 +171,7 @@ extension ChatService {
             topicPrompt: sourceSession.topicPrompt,
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
+            tagIDs: sourceSession.tagIDs,
             worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false
@@ -221,6 +222,7 @@ extension ChatService {
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,
+            tagIDs: sourceSession.tagIDs,
             worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false

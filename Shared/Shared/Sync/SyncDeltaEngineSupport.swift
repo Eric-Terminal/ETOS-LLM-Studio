@@ -58,6 +58,7 @@ extension SyncDeltaEngine {
         }
 
         let providers = package.providers.filter { shouldKeep(.provider, $0.id.uuidString) }
+        let sessionTags = package.sessionTags.filter { shouldKeep(.sessionTag, $0.id.uuidString) }
         let sessions = package.sessions.filter { shouldKeep(.session, $0.session.id.uuidString) }
         let backgrounds = package.backgrounds.filter { shouldKeep(.background, $0.filename) }
         let memories = package.memories.filter { shouldKeep(.memory, $0.id.uuidString) }
@@ -86,7 +87,12 @@ extension SyncDeltaEngine {
 
         var options = package.options
         if package.options.contains(.providers), !package.providers.isEmpty, providers.isEmpty { options.remove(.providers) }
-        if package.options.contains(.sessions), !package.sessions.isEmpty, sessions.isEmpty { options.remove(.sessions) }
+        if package.options.contains(.sessions),
+           (!package.sessionTags.isEmpty || !package.sessions.isEmpty),
+           sessionTags.isEmpty,
+           sessions.isEmpty {
+            options.remove(.sessions)
+        }
         if package.options.contains(.backgrounds), !package.backgrounds.isEmpty, backgrounds.isEmpty { options.remove(.backgrounds) }
         if package.options.contains(.memories),
            (!package.memories.isEmpty || package.conversationUserProfile != nil),
@@ -120,6 +126,7 @@ extension SyncDeltaEngine {
             options: options,
             sourcePlatform: package.sourcePlatform,
             providers: providers,
+            sessionTags: sessionTags,
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
@@ -172,6 +179,14 @@ extension SyncDeltaEngine {
         }
 
         if package.options.contains(.sessions) {
+            records.append(contentsOf: package.sessionTags.map {
+                SyncRecordDescriptor(
+                    type: .sessionTag,
+                    recordID: $0.id.uuidString,
+                    checksum: stableChecksum($0),
+                    updatedAt: $0.updatedAt
+                )
+            })
             records.append(contentsOf: package.sessions.map {
                 let latest = $0.messages.compactMap(\.requestedAt).max() ?? .distantPast
                 return SyncRecordDescriptor(
@@ -375,6 +390,7 @@ extension SyncDeltaEngine {
         guard !keys.isEmpty else { return SyncPackage(options: []) }
 
         var providers: [Provider] = []
+        var sessionTags: [SessionTag] = []
         var sessions: [SyncedSession] = []
         var backgrounds: [SyncedBackground] = []
         var memories: [MemoryItem] = []
@@ -398,6 +414,7 @@ extension SyncDeltaEngine {
         var globalSystemPrompt: String?
 
         providers = full.providers.filter { keys.contains(SyncRecordDescriptor.key(type: .provider, recordID: $0.id.uuidString)) }
+        sessionTags = full.sessionTags.filter { keys.contains(SyncRecordDescriptor.key(type: .sessionTag, recordID: $0.id.uuidString)) }
         sessions = full.sessions.filter { keys.contains(SyncRecordDescriptor.key(type: .session, recordID: $0.session.id.uuidString)) }
         backgrounds = full.backgrounds.filter { keys.contains(SyncRecordDescriptor.key(type: .background, recordID: $0.filename)) }
         memories = full.memories.filter { keys.contains(SyncRecordDescriptor.key(type: .memory, recordID: $0.id.uuidString)) }
@@ -436,7 +453,7 @@ extension SyncDeltaEngine {
 
         var options: SyncOptions = []
         if !providers.isEmpty { options.insert(.providers) }
-        if !sessions.isEmpty { options.insert(.sessions) }
+        if !sessionTags.isEmpty || !sessions.isEmpty { options.insert(.sessions) }
         if !backgrounds.isEmpty { options.insert(.backgrounds) }
         if !memories.isEmpty || conversationUserProfile != nil { options.insert(.memories) }
         if !mcpServers.isEmpty { options.insert(.mcpServers) }
@@ -463,6 +480,7 @@ extension SyncDeltaEngine {
             options: options,
             sourcePlatform: full.sourcePlatform,
             providers: providers,
+            sessionTags: sessionTags,
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
@@ -543,7 +561,7 @@ extension SyncDeltaEngine {
         switch type {
         case .provider:
             return .providers
-        case .session:
+        case .sessionTag, .session:
             return .sessions
         case .background:
             return .backgrounds

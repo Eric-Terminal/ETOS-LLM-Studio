@@ -51,6 +51,33 @@ extension SessionFolderBrowserView {
             .sheet(isPresented: $showMoreActions) {
                 moreActionsSheet
             }
+            .sheet(isPresented: $showTagManagement) {
+                NavigationStack {
+                    WatchSessionTagManagementView(
+                        tags: tags,
+                        onCreate: { name, color in
+                            _ = createTagAction(name, color)
+                        },
+                        onUpdate: { tag, name, color in
+                            updateTagAction(tag, name, color)
+                        },
+                        onDelete: { tag in
+                            deleteTagAction(tag)
+                        }
+                    )
+                }
+            }
+            .sheet(item: $sessionForTagEditing) { session in
+                NavigationStack {
+                    WatchSessionTagAssignmentView(
+                        session: session,
+                        tags: tags,
+                        onSetTagIDs: { tagIDs in
+                            setSessionTagsAction(session, tagIDs)
+                        }
+                    )
+                }
+            }
     }
 
     func applyDialogs<Content: View>(to content: Content) -> some View {
@@ -185,6 +212,49 @@ extension SessionFolderBrowserView {
                             }
                         } label: {
                             Label(NSLocalizedString("搜索会话", comment: ""), systemImage: "magnifyingglass")
+                        }
+
+                        if !tags.isEmpty {
+                            NavigationLink {
+                                List {
+                                    ForEach(tags) { tag in
+                                        Button {
+                                            toggleTagFilter(tag.id)
+                                        } label: {
+                                            HStack {
+                                                Label {
+                                                    Text(tag.name)
+                                                        .lineLimit(1)
+                                                } icon: {
+                                                    Image(systemName: selectedTagFilterIDs.contains(tag.id) ? "checkmark.circle.fill" : "circle")
+                                                }
+                                                Spacer(minLength: 0)
+                                                WatchSessionTagDot(color: tag.color, size: 8)
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    if isTagFilterActive {
+                                        Button {
+                                            selectedTagFilterIDs.removeAll()
+                                        } label: {
+                                            Label(NSLocalizedString("清除筛选", comment: "Clear session tag filter"), systemImage: "xmark.circle")
+                                        }
+                                    }
+                                }
+                                .navigationTitle(NSLocalizedString("筛选标签", comment: "Filter by session tags"))
+                            } label: {
+                                Label(NSLocalizedString("筛选标签", comment: "Filter by session tags"), systemImage: "line.3.horizontal.decrease.circle")
+                            }
+                        }
+
+                        Button {
+                            dismissMoreActionsThen {
+                                showTagManagement = true
+                            }
+                        } label: {
+                            Label(NSLocalizedString("管理标签", comment: "Manage session tags"), systemImage: "tag")
                         }
 
                         Button {

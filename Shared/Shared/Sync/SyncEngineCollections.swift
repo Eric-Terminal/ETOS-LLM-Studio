@@ -10,6 +10,104 @@ import Foundation
 import Combine
 
 extension SyncEngine {
+    // MARK: - Session Tags
+
+    static func mergeSessionTags(
+        _ incoming: [SessionTag],
+        chatService: ChatService
+    ) -> (imported: Int, skipped: Int, idMapping: [UUID: UUID]) {
+        guard !incoming.isEmpty else { return (0, 0, [:]) }
+
+        var local = chatService.sessionTagsSubject.value
+        var imported = 0
+        var skipped = 0
+        var idMapping: [UUID: UUID] = [:]
+        var changed = false
+
+        for incomingTag in incoming {
+            let trimmedName = incomingTag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                skipped += 1
+                continue
+            }
+
+            var tag = incomingTag
+            tag.name = trimmedName
+
+            if let existingIndex = local.firstIndex(where: { $0.id == tag.id }) {
+                idMapping[tag.id] = local[existingIndex].id
+                if shouldAdoptIncomingSessionTag(local: local[existingIndex], incoming: tag),
+                   !local.contains(where: { $0.id != tag.id && normalizedSessionTagName($0.name) == normalizedSessionTagName(tag.name) }) {
+                    local[existingIndex].name = tag.name
+                    local[existingIndex].color = tag.color
+                    local[existingIndex].updatedAt = tag.updatedAt
+                    imported += 1
+                    changed = true
+                } else {
+                    skipped += 1
+                }
+                continue
+            }
+
+            if let sameNameIndex = local.firstIndex(where: { normalizedSessionTagName($0.name) == normalizedSessionTagName(tag.name) }) {
+                idMapping[tag.id] = local[sameNameIndex].id
+                if shouldAdoptIncomingSessionTag(local: local[sameNameIndex], incoming: tag) {
+                    local[sameNameIndex].color = tag.color
+                    local[sameNameIndex].updatedAt = tag.updatedAt
+                    imported += 1
+                    changed = true
+                } else {
+                    skipped += 1
+                }
+                continue
+            }
+
+            local.append(tag)
+            idMapping[tag.id] = tag.id
+            imported += 1
+            changed = true
+        }
+
+        if changed {
+            local = local.sorted { left, right in
+                let order = left.name.localizedStandardCompare(right.name)
+                if order != .orderedSame {
+                    return order == .orderedAscending
+                }
+                return left.id.uuidString < right.id.uuidString
+            }
+            Persistence.saveSessionTags(local)
+            chatService.sessionTagsSubject.send(local)
+        }
+
+        return (imported, skipped, idMapping)
+    }
+
+    static func remapSessionTagReferences(
+        _ sessions: [SyncedSession],
+        idMapping: [UUID: UUID]
+    ) -> [SyncedSession] {
+        guard !idMapping.isEmpty else { return sessions }
+        return sessions.map { payload in
+            var updated = payload
+            var seen = Set<UUID>()
+            updated.session.tagIDs = payload.session.tagIDs.compactMap { tagID in
+                let mapped = idMapping[tagID] ?? tagID
+                return seen.insert(mapped).inserted ? mapped : nil
+            }
+            return updated
+        }
+    }
+
+    static func shouldAdoptIncomingSessionTag(local: SessionTag, incoming: SessionTag) -> Bool {
+        guard incoming.updatedAt > local.updatedAt else { return false }
+        return local.name != incoming.name || local.color != incoming.color
+    }
+
+    static func normalizedSessionTagName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     // MARK: - Memories
 
     static func mergeMemories(

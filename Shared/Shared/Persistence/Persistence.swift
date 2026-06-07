@@ -14,6 +14,7 @@ public enum Persistence {
     static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Persistence")
     static let sessionStoreSchemaVersion = 3
     static let sessionFoldersFileSchemaVersion = 1
+    static let sessionTagsFileSchemaVersion = 1
     static let messagesFileSchemaVersion = 2
     static let requestLogSchemaVersion = 1
     static let defaultRequestLogRetentionLimit = 10_000
@@ -179,6 +180,7 @@ public enum Persistence {
 
     static let sessionIndexFileName = "index.json"
     static let sessionFoldersFileName = "folders.json"
+    static let sessionTagsFileName = "tags.json"
     static let sessionRecordsDirectoryName = "sessions"
     static let requestLogsDirectoryName = "RequestLogs"
     static let requestLogsFileName = "index.json"

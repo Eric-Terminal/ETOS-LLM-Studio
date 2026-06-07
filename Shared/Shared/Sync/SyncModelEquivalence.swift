@@ -69,7 +69,8 @@ extension ChatSession {
         enhancedPrompt == other.enhancedPrompt &&
         folderID == other.folderID &&
         worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
-        Set(lorebookIDs) == Set(other.lorebookIDs)
+        Set(lorebookIDs) == Set(other.lorebookIDs) &&
+        Set(tagIDs) == Set(other.tagIDs)
     }
     
     /// 去除所有同步后缀的基础名称
@@ -85,7 +86,8 @@ extension ChatSession {
         enhancedPrompt == other.enhancedPrompt &&
         folderID == other.folderID &&
         worldbookContextIsolationEnabled == other.worldbookContextIsolationEnabled &&
-        Set(lorebookIDs) == Set(other.lorebookIDs)
+        Set(lorebookIDs) == Set(other.lorebookIDs) &&
+        Set(tagIDs) == Set(other.tagIDs)
     }
 }
 

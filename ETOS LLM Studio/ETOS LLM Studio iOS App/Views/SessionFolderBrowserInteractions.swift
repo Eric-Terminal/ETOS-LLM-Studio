@@ -33,7 +33,12 @@ extension SessionFolderBrowserView {
                 syncLoadedSearchResultItemsWithSource()
             }
             .onChange(of: viewModel.chatSessionListVersion) { _, _ in
+                selectedTagFilterIDs.formIntersection(Set(viewModel.sessionTags.map(\.id)))
                 syncLoadedDirectSessionsWithSource()
+            }
+            .onChange(of: selectedTagFilterIDs) { _, _ in
+                resetLoadedDirectSessions()
+                resetLoadedSearchResultItems()
             }
 
         let searchContent = pagingContent
@@ -191,6 +196,29 @@ extension SessionFolderBrowserView {
         content
             .sheet(item: $sessionInfo) { info in
                 SessionInfoSheet(payload: info)
+            }
+            .sheet(isPresented: $isShowingTagManager) {
+                SessionTagManagementView(
+                    tags: viewModel.sessionTags,
+                    onCreate: { name, color in
+                        _ = viewModel.createSessionTag(name: name, color: color)
+                    },
+                    onUpdate: { tag, name, color in
+                        viewModel.updateSessionTag(tag, name: name, color: color)
+                    },
+                    onDelete: { tag in
+                        viewModel.deleteSessionTag(tag)
+                    }
+                )
+            }
+            .sheet(item: $sessionForTagEditing) { session in
+                SessionTagAssignmentView(
+                    session: session,
+                    tags: viewModel.sessionTags,
+                    onSetTagIDs: { tagIDs in
+                        viewModel.setSessionTags(for: session, tagIDs: tagIDs)
+                    }
+                )
             }
             .alert(NSLocalizedString("发现幽灵会话", comment: ""), isPresented: $showGhostSessionAlert) {
                 Button(NSLocalizedString("删除幽灵", comment: ""), role: .destructive) {
@@ -356,7 +384,8 @@ extension SessionFolderBrowserView {
                 SessionFolderBrowserView(
                     folderID: folder.id,
                     isRoot: false,
-                    createConversationAction: createConversationAction
+                    createConversationAction: createConversationAction,
+                    initialTagFilterIDs: selectedTagFilterIDs
                 )
             } label: {
                 folderLabel(for: folder)
@@ -393,6 +422,37 @@ extension SessionFolderBrowserView {
                 Label(folderID == nil ? NSLocalizedString("新建文件夹", comment: "") : NSLocalizedString("新建子文件夹", comment: ""), systemImage: "folder.badge.plus")
             }
 
+            if !viewModel.sessionTags.isEmpty {
+                Menu {
+                    ForEach(viewModel.sessionTags) { tag in
+                        Button {
+                            toggleTagFilter(tag.id)
+                        } label: {
+                            Label(
+                                tag.name,
+                                systemImage: selectedTagFilterIDs.contains(tag.id) ? "checkmark.circle.fill" : "circle"
+                            )
+                        }
+                    }
+
+                    if isTagFilterActive {
+                        Button {
+                            selectedTagFilterIDs.removeAll()
+                        } label: {
+                            Label(NSLocalizedString("清除筛选", comment: "Clear session tag filter"), systemImage: "xmark.circle")
+                        }
+                    }
+                } label: {
+                    Label(NSLocalizedString("筛选标签", comment: "Filter by session tags"), systemImage: "line.3.horizontal.decrease.circle")
+                }
+            }
+
+            Button {
+                isShowingTagManager = true
+            } label: {
+                Label(NSLocalizedString("管理标签", comment: "Manage session tags"), systemImage: "tag")
+            }
+
             Button {
                 toggleBatchMode()
             } label: {
@@ -417,6 +477,7 @@ extension SessionFolderBrowserView {
         if isBatchSelecting && !forceRegularMode {
             BatchSelectableSessionRow(
                 session: session,
+                tags: sessionTags(for: session),
                 isSelected: selectedSessionIDs.contains(session.id),
                 onToggle: {
                     toggleSessionSelection(session.id)
@@ -431,6 +492,7 @@ extension SessionFolderBrowserView {
                 draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
                 currentFolderID: normalizedFolderID(of: session),
                 moveOptions: moveFolderOptions,
+                tags: sessionTags(for: session),
                 searchSummary: searchSummary,
                 locationSummary: locationSummary,
                 onCommit: { newName in
@@ -468,6 +530,9 @@ extension SessionFolderBrowserView {
                         messageCount: viewModel.messageCount(for: session),
                         isCurrent: session.id == viewModel.currentSession?.id
                     )
+                },
+                onEditTags: {
+                    sessionForTagEditing = session
                 },
                 onSendToCompanion: {
                     syncManager.sendSessionToCompanion(sessionID: session.id)
@@ -538,6 +603,14 @@ extension SessionFolderBrowserView {
             selectedFolderIDs.remove(folderID)
         } else {
             selectedFolderIDs.insert(folderID)
+        }
+    }
+
+    func toggleTagFilter(_ tagID: UUID) {
+        if selectedTagFilterIDs.contains(tagID) {
+            selectedTagFilterIDs.remove(tagID)
+        } else {
+            selectedTagFilterIDs.insert(tagID)
         }
     }
 

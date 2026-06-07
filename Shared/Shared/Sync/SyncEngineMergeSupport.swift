@@ -32,6 +32,7 @@ extension SyncEngine {
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
+            tagIDs: session.tagIDs,
             worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
             folderID: session.folderID,
             isTemporary: false
@@ -53,6 +54,7 @@ extension SyncEngine {
             topicPrompt: session.topicPrompt,
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
+            tagIDs: session.tagIDs,
             worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
             folderID: session.folderID,
             isTemporary: false
@@ -183,6 +185,9 @@ extension SyncEngine {
         hasher.combine(session.worldbookContextIsolationEnabled)
         for worldbookID in session.lorebookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
             hasher.combine(worldbookID.uuidString)
+        }
+        for tagID in session.tagIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            hasher.combine(tagID.uuidString)
         }
         for message in messages {
             hasher.combine(messageSyncSignature(message))

@@ -27,8 +27,10 @@ struct SyncPackageBuildScopeTests {
         resetSessions(to: [])
         let chatService = ChatService()
 
-        let targetSession = ChatSession(id: UUID(), name: "目标会话", isTemporary: false)
-        let otherSession = ChatSession(id: UUID(), name: "其他会话", isTemporary: false)
+        let targetTag = SessionTag(name: "目标标签", color: .blue)
+        let otherTag = SessionTag(name: "其他标签", color: .gray)
+        let targetSession = ChatSession(id: UUID(), name: "目标会话", tagIDs: [targetTag.id], isTemporary: false)
+        let otherSession = ChatSession(id: UUID(), name: "其他会话", tagIDs: [otherTag.id], isTemporary: false)
         let temporarySession = ChatSession(id: UUID(), name: "临时会话", isTemporary: true)
 
         let targetMessage = ChatMessage(role: .user, content: "目标消息")
@@ -39,6 +41,7 @@ struct SyncPackageBuildScopeTests {
         Persistence.saveMessages([otherMessage], for: otherSession.id)
         Persistence.saveMessages([ChatMessage(role: .user, content: "临时消息")], for: temporarySession.id)
         chatService.chatSessionsSubject.send([targetSession, otherSession, temporarySession])
+        chatService.sessionTagsSubject.send([targetTag, otherTag])
 
         let package = SyncEngine.buildPackage(
             options: [.sessions],
@@ -49,6 +52,7 @@ struct SyncPackageBuildScopeTests {
         #expect(package.sessions.count == 1)
         #expect(package.sessions.first?.session.id == targetSession.id)
         #expect(package.sessions.first?.messages == [targetMessage])
+        #expect(package.sessionTags.map(\.id) == [targetTag.id])
     }
 
     @Test("未指定会话 ID 时保持原有行为（导出全部非临时会话）")
@@ -64,8 +68,10 @@ struct SyncPackageBuildScopeTests {
         resetSessions(to: [])
         let chatService = ChatService()
 
-        let firstSession = ChatSession(id: UUID(), name: "会话一", isTemporary: false)
-        let secondSession = ChatSession(id: UUID(), name: "会话二", isTemporary: false)
+        let firstTag = SessionTag(name: "会话一标签", color: .green)
+        let secondTag = SessionTag(name: "会话二标签", color: .purple)
+        let firstSession = ChatSession(id: UUID(), name: "会话一", tagIDs: [firstTag.id], isTemporary: false)
+        let secondSession = ChatSession(id: UUID(), name: "会话二", tagIDs: [secondTag.id], isTemporary: false)
         let temporarySession = ChatSession(id: UUID(), name: "临时会话", isTemporary: true)
 
         Persistence.saveChatSessions([firstSession, secondSession, temporarySession])
@@ -73,12 +79,15 @@ struct SyncPackageBuildScopeTests {
         Persistence.saveMessages([ChatMessage(role: .assistant, content: "B")], for: secondSession.id)
         Persistence.saveMessages([ChatMessage(role: .user, content: "T")], for: temporarySession.id)
         chatService.chatSessionsSubject.send([firstSession, secondSession, temporarySession])
+        chatService.sessionTagsSubject.send([firstTag, secondTag])
 
         let package = SyncEngine.buildPackage(options: [.sessions], chatService: chatService)
         let exportedIDs = Set(package.sessions.map(\.session.id))
+        let exportedTagIDs = Set(package.sessionTags.map(\.id))
 
         #expect(package.sessions.count == 2)
         #expect(exportedIDs == Set([firstSession.id, secondSession.id]))
+        #expect(exportedTagIDs == Set([firstTag.id, secondTag.id]))
     }
 
     private func resetSessions(to snapshots: [SyncedSession]) {

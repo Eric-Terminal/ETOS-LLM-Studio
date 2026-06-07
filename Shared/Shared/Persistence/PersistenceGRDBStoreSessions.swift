@@ -31,8 +31,10 @@ extension PersistenceGRDBStore {
                 for id in existingNonTemporaryIDs where !targetIDs.contains(id) {
                     try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [id])
                 }
+                try db.execute(sql: "DELETE FROM session_tag_assignments WHERE session_id NOT IN (SELECT id FROM sessions)")
 
                 let now = Date()
+                let existingTagIDStrings = Set(try String.fetchAll(db, sql: "SELECT id FROM session_tags"))
                 for (sortIndex, session) in persistedSessions.enumerated() {
                     try upsertSession(
                         db,
@@ -42,6 +44,12 @@ extension PersistenceGRDBStore {
                         conversationSummary: nil,
                         conversationSummaryUpdatedAt: nil,
                         preserveExistingSummary: true
+                    )
+                    try saveSessionTagAssignments(
+                        db,
+                        sessionID: session.id,
+                        tagIDs: session.tagIDs,
+                        existingTagIDStrings: existingTagIDStrings
                     )
                 }
             }
@@ -53,6 +61,7 @@ extension PersistenceGRDBStore {
     func loadChatSessions() -> [ChatSession] {
         do {
             return try dbPool.read { db in
+                let tagAssignments = try loadSessionTagAssignments(db)
                 let rows = try Row.fetchAll(
                     db,
                     sql: """
@@ -73,6 +82,7 @@ extension PersistenceGRDBStore {
                         topicPrompt: row["topic_prompt"],
                         enhancedPrompt: row["enhanced_prompt"],
                         lorebookIDs: lorebookIDs,
+                        tagIDs: tagAssignments[row["id"]] ?? [],
                         worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
                         folderID: uuid(from: row["folder_id"]),
                         isTemporary: false
@@ -82,6 +92,112 @@ extension PersistenceGRDBStore {
         } catch {
             logger.error("读取会话列表失败: \(error.localizedDescription)")
             return []
+        }
+    }
+
+    func saveSessionTags(_ tags: [SessionTag]) {
+        let normalized = normalizeSessionTagsForPersistence(tags)
+        do {
+            try dbPool.write { db in
+                let existingIDs = try String.fetchAll(db, sql: "SELECT id FROM session_tags")
+                let targetIDs = Set(normalized.map { $0.id.uuidString })
+                for id in existingIDs where !targetIDs.contains(id) {
+                    try db.execute(sql: "DELETE FROM session_tags WHERE id = ?", arguments: [id])
+                }
+
+                for tag in normalized {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO session_tags (id, name, color_raw_value, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            name = excluded.name,
+                            color_raw_value = excluded.color_raw_value,
+                            updated_at = excluded.updated_at
+                        """,
+                        arguments: [
+                            tag.id.uuidString,
+                            tag.name,
+                            tag.color?.rawValue,
+                            tag.updatedAt.timeIntervalSince1970
+                        ]
+                    )
+                }
+            }
+        } catch {
+            logger.error("保存会话标签失败: \(error.localizedDescription)")
+        }
+    }
+
+    func loadSessionTags() -> [SessionTag] {
+        do {
+            return try dbPool.read { db in
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, name, color_raw_value, updated_at
+                    FROM session_tags
+                    ORDER BY name COLLATE NOCASE ASC, updated_at DESC, id ASC
+                    """
+                )
+
+                return rows.map { row in
+                    let rawColor: String? = row["color_raw_value"]
+                    return SessionTag(
+                        id: UUID(uuidString: row["id"]) ?? UUID(),
+                        name: row["name"],
+                        color: rawColor.flatMap(SessionTagColor.init(rawValue:)),
+                        updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+                    )
+                }
+            }
+        } catch {
+            logger.error("读取会话标签失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func loadSessionTagAssignments(_ db: Database) throws -> [String: [UUID]] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT session_id, tag_id
+            FROM session_tag_assignments
+            ORDER BY session_id ASC, sort_index ASC
+            """
+        )
+        var assignments: [String: [UUID]] = [:]
+        for row in rows {
+            let sessionID: String = row["session_id"]
+            guard let tagID = UUID(uuidString: row["tag_id"]) else { continue }
+            assignments[sessionID, default: []].append(tagID)
+        }
+        return assignments
+    }
+
+    private func saveSessionTagAssignments(
+        _ db: Database,
+        sessionID: UUID,
+        tagIDs: [UUID],
+        existingTagIDStrings: Set<String>
+    ) throws {
+        try db.execute(
+            sql: "DELETE FROM session_tag_assignments WHERE session_id = ?",
+            arguments: [sessionID.uuidString]
+        )
+        var seen = Set<UUID>()
+        let validTagIDs = tagIDs.filter { tagID in
+            seen.insert(tagID).inserted && existingTagIDStrings.contains(tagID.uuidString)
+        }
+
+        for (sortIndex, tagID) in validTagIDs.enumerated() {
+            try db.execute(
+                sql: """
+                INSERT INTO session_tag_assignments (session_id, tag_id, sort_index)
+                VALUES (?, ?, ?)
+                """,
+                arguments: [sessionID.uuidString, tagID.uuidString, sortIndex]
+            )
         }
     }
 

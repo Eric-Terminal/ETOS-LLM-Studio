@@ -73,6 +73,7 @@ class ChatViewModel: ObservableObject {
     
     @Published var chatSessions: [ChatSession] = []
     @Published var sessionFolders: [SessionFolder] = []
+    @Published var sessionTags: [SessionTag] = []
     @Published var currentSession: ChatSession?
     
     @Published var providers: [Provider] = []

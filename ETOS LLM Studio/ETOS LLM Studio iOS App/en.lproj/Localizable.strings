@@ -1,3 +1,4 @@
+"清除" = "Clear";
 "Token 用量" = "Token Usage";
 "%d 条" = "%d items";
 "两端数据一致" = "Data matches on both devices";
@@ -3875,3 +3876,22 @@
 "应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。" = "App Lock and the database master password are stored only on this device. They are not synced to other devices through CloudKit, WatchConnectivity, or backups. Set them up again on a new device.";
 "失败后仍可输入应用锁密码。" = "If it fails, you can still enter the App Lock password.";
 "保护本机界面与离线数据库文件。" = "Protect the local interface and offline database files.";
+"红色" = "Red";
+"橙色" = "Orange";
+"黄色" = "Yellow";
+"绿色" = "Green";
+"蓝色" = "Blue";
+"紫色" = "Purple";
+"灰色" = "Gray";
+"无颜色" = "No Color";
+"新建标签" = "New Tag";
+"标签名称" = "Tag Name";
+"添加标签" = "Add Tag";
+"管理标签" = "Manage Tags";
+"编辑标签" = "Edit Tags";
+"编辑会话标签" = "Edit Session Tags";
+"删除标签" = "Delete Tag";
+"筛选标签" = "Filter Tags";
+"清除筛选" = "Clear Filter";
+"筛选：%@" = "Filter: %@";
+"颜色使用固定系统色板；无颜色会显示为空心圆点。" = "Colors use a fixed system palette; no color appears as a hollow dot.";

@@ -143,6 +143,64 @@ extension Persistence {
         }
     }
 
+    // MARK: - 会话标签持久化
+
+    /// 保存会话标签列表。
+    public static func saveSessionTags(_ tags: [SessionTag]) {
+        if let store = activeGRDBStore() {
+            store.saveSessionTags(tags)
+            return
+        }
+
+        migrateLegacySessionDirectoryToCurrentLayoutIfNeeded()
+
+        let normalizedTags = normalizeSessionTagsForPersistence(tags)
+        let envelope = SessionTagsFileEnvelope(
+            schemaVersion: sessionTagsFileSchemaVersion,
+            updatedAt: iso8601Timestamp(),
+            tags: normalizedTags
+        )
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(envelope)
+            try data.write(to: sessionTagsFileURL(), options: .atomic)
+            logger.info("会话标签保存成功，共 \(normalizedTags.count) 个。")
+        } catch {
+            logger.error("保存会话标签失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 加载会话标签列表。
+    public static func loadSessionTags() -> [SessionTag] {
+        if let store = activeGRDBStore() {
+            return store.loadSessionTags()
+        }
+
+        migrateLegacySessionDirectoryToCurrentLayoutIfNeeded()
+
+        let fileURL = sessionTagsFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return []
+        }
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let envelope = try JSONDecoder().decode(SessionTagsFileEnvelope.self, from: data)
+            let normalizedTags = normalizeSessionTagsForPersistence(envelope.tags)
+            let shouldRewrite = envelope.schemaVersion != sessionTagsFileSchemaVersion
+                || normalizedTags != envelope.tags
+            if shouldRewrite {
+                saveSessionTags(normalizedTags)
+            }
+            return normalizedTags
+        } catch {
+            logger.warning("读取会话标签失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
     // MARK: - 消息持久化
 
     /// 阻塞等待 GRDB 消息写队列清空，确保随后读取拿到最新消息快照。

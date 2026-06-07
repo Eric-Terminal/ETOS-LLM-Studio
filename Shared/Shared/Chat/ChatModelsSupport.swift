@@ -546,6 +546,8 @@ public struct ChatSession: Identifiable, Codable, Hashable {
     /// 会话所属文件夹，nil 表示未分类。
     public var folderID: UUID?
     public var lorebookIDs: [UUID]
+    /// 绑定到当前会话的标签 ID，标签实体由 SessionTag 单独维护。
+    public var tagIDs: [UUID]
     /// 开启后，仅在当前会话已绑定世界书时生效，发送时会屏蔽记忆与工具上下文。
     public var worldbookContextIsolationEnabled: Bool
     @available(*, deprecated, message: "请改用 lorebookIDs；worldbookIDs 为兼容旧代码保留。")
@@ -567,6 +569,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         enhancedPrompt: String? = nil,
         worldbookIDs: [UUID] = [],
         lorebookIDs: [UUID]? = nil,
+        tagIDs: [UUID] = [],
         worldbookContextIsolationEnabled: Bool = false,
         folderID: UUID? = nil,
         isTemporary: Bool = false
@@ -577,6 +580,7 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         self.enhancedPrompt = enhancedPrompt
         self.folderID = folderID
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
+        self.tagIDs = tagIDs
         self.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
         self.isTemporary = isTemporary
     }
@@ -590,6 +594,8 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         case worldbookIDs
         case lorebookIDs
         case lorebookIds
+        case tagIDs
+        case tagIds
         case worldbookContextIsolationEnabled
     }
 
@@ -609,6 +615,13 @@ public struct ChatSession: Identifiable, Codable, Hashable {
         } else {
             self.lorebookIDs = []
         }
+        if let ids = try container.decodeIfPresent([UUID].self, forKey: .tagIDs) {
+            self.tagIDs = ids
+        } else if let ids = try container.decodeIfPresent([UUID].self, forKey: .tagIds) {
+            self.tagIDs = ids
+        } else {
+            self.tagIDs = []
+        }
         self.worldbookContextIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .worldbookContextIsolationEnabled) ?? false
         self.isTemporary = false
     }
@@ -624,6 +637,9 @@ public struct ChatSession: Identifiable, Codable, Hashable {
             try container.encode(lorebookIDs, forKey: .lorebookIDs)
             // 兼容旧版本持久化字段，避免多端混用时丢失绑定。
             try container.encode(lorebookIDs, forKey: .worldbookIDs)
+        }
+        if !tagIDs.isEmpty {
+            try container.encode(tagIDs, forKey: .tagIDs)
         }
         if worldbookContextIsolationEnabled {
             try container.encode(worldbookContextIsolationEnabled, forKey: .worldbookContextIsolationEnabled)

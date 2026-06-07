@@ -434,6 +434,10 @@ final class PersistenceGRDBStore {
             }
         }
 
+        migrator.registerMigration("v5_session_tags") { db in
+            try Self.createSessionTagTables(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -445,6 +449,8 @@ final class PersistenceGRDBStore {
             try requireColumns(db, table: "messages", columns: ["id", "session_id", "role", "content"])
             try requireColumns(db, table: "request_logs", columns: ["id", "request_id", "provider_name", "model_id"])
             try requireColumns(db, table: "session_folders", columns: ["id", "name"])
+            try requireColumns(db, table: "session_tags", columns: ["id", "name"])
+            try requireColumns(db, table: "session_tag_assignments", columns: ["session_id", "tag_id"])
 
             try ensureColumn(db, table: "sessions", column: "topic_prompt", definition: "topic_prompt TEXT")
             try ensureColumn(db, table: "sessions", column: "enhanced_prompt", definition: "enhanced_prompt TEXT")
@@ -496,6 +502,7 @@ final class PersistenceGRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_requested_at ON request_logs(requested_at DESC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_session_id ON request_logs(session_id, requested_at DESC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_model ON request_logs(provider_name, model_id, requested_at DESC)")
+            try Self.createSessionTagTables(db)
             try ensureMessagesFTSObjects(db)
         }
     }
@@ -582,6 +589,28 @@ final class PersistenceGRDBStore {
                 updated_at REAL NOT NULL
             )
         """)
+        try Self.createSessionTagTables(db)
+    }
+
+    private static func createSessionTagTables(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS session_tags (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                color_raw_value TEXT CHECK(color_raw_value IN ('red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray') OR color_raw_value IS NULL),
+                updated_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS session_tag_assignments (
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                tag_id TEXT NOT NULL REFERENCES session_tags(id) ON DELETE CASCADE,
+                sort_index INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(session_id, tag_id)
+            )
+        """)
+        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_session_tag_assignments_tag ON session_tag_assignments(tag_id, sort_index ASC)")
+        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_session_tag_assignments_session ON session_tag_assignments(session_id, sort_index ASC)")
     }
 
     private func ensureMessagesFTSObjects(_ db: Database) throws {

@@ -120,6 +120,7 @@ extension SyncEngine {
         }
 
         merged.lorebookIDs = mergeOrderedUUIDs(local.lorebookIDs, incoming.lorebookIDs)
+        merged.tagIDs = mergeOrderedUUIDs(local.tagIDs, incoming.tagIDs)
 
         if local.worldbookContextIsolationEnabled != incoming.worldbookContextIsolationEnabled {
             let localHasBindings = !local.lorebookIDs.isEmpty

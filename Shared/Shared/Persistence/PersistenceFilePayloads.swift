@@ -30,6 +30,7 @@ struct SessionMetaPayload: Codable {
     let name: String
     let folderID: UUID?
     let lorebookIDs: [UUID]
+    let tagIDs: [UUID]?
     let worldbookContextIsolationEnabled: Bool?
     let conversationSummary: String?
     let conversationSummaryUpdatedAt: String?
@@ -63,6 +64,12 @@ struct SessionFoldersFileEnvelope: Codable {
     let schemaVersion: Int
     let updatedAt: String
     let folders: [SessionFolder]
+}
+
+struct SessionTagsFileEnvelope: Codable {
+    let schemaVersion: Int
+    let updatedAt: String
+    let tags: [SessionTag]
 }
 
 struct RequestLogFileEnvelope: Codable {

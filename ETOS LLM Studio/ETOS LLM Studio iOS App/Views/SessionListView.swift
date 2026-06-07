@@ -35,6 +35,20 @@ struct SessionFolderBrowserView: View {
     let folderID: UUID?
     let isRoot: Bool
     let createConversationAction: (() -> Void)?
+    let initialTagFilterIDs: Set<UUID>
+
+    init(
+        folderID: UUID?,
+        isRoot: Bool,
+        createConversationAction: (() -> Void)?,
+        initialTagFilterIDs: Set<UUID> = []
+    ) {
+        self.folderID = folderID
+        self.isRoot = isRoot
+        self.createConversationAction = createConversationAction
+        self.initialTagFilterIDs = initialTagFilterIDs
+        _selectedTagFilterIDs = State(initialValue: initialTagFilterIDs)
+    }
 
     @State var editingSessionID: UUID?
     @State var draftSessionName: String = ""
@@ -64,6 +78,9 @@ struct SessionFolderBrowserView: View {
     @State var pendingSearchWorkItem: DispatchWorkItem?
     @State var loadedDirectSessions: [ChatSession] = []
     @State var loadedSearchResultItems: [SessionHistorySearchResult] = []
+    @State var selectedTagFilterIDs: Set<UUID>
+    @State var isShowingTagManager = false
+    @State var sessionForTagEditing: ChatSession?
     @State var isLoadingMoreSessions: Bool = false
     @State var isLoadingMoreSearchResults: Bool = false
     @State var pendingLoadMoreSessionsTask: Task<Void, Never>?
@@ -82,11 +99,15 @@ struct SessionFolderBrowserView: View {
     }
 
     var childFolders: [SessionFolder] {
-        viewModel.sessionFolders.filter { normalizedParentID(of: $0) == folderID }
+        let folders = viewModel.sessionFolders.filter { normalizedParentID(of: $0) == folderID }
+        guard isTagFilterActive else { return folders }
+        return folders.filter { folderContainsTagFilteredSession($0.id) }
     }
 
     var directSessions: [ChatSession] {
-        viewModel.chatSessions.filter { normalizedFolderID(of: $0) == folderID }
+        viewModel.chatSessions.filter {
+            normalizedFolderID(of: $0) == folderID && sessionMatchesTagFilter($0)
+        }
     }
 
     var totalDirectSessionCount: Int {
@@ -176,15 +197,25 @@ struct SessionFolderBrowserView: View {
 
     var searchResultSessions: [ChatSession] {
         guard isSearchActive else { return [] }
-        return viewModel.chatSessions.filter { searchHits[$0.id] != nil }
+        return viewModel.chatSessions.filter {
+            searchHits[$0.id] != nil && sessionMatchesTagFilter($0)
+        }
     }
 
     var searchResultItems: [SessionHistorySearchResult] {
         guard isSearchActive else { return [] }
         return SessionHistorySearchSupport.flattenedResults(
-            sessions: viewModel.chatSessions,
+            sessions: viewModel.chatSessions.filter { sessionMatchesTagFilter($0) },
             hits: searchHits
         )
+    }
+
+    var isTagFilterActive: Bool {
+        !selectedTagFilterIDs.isEmpty
+    }
+
+    var selectedTagFilters: [SessionTag] {
+        viewModel.sessionTags.filter { selectedTagFilterIDs.contains($0.id) }
     }
 
     var totalSearchResultCount: Int {
@@ -234,6 +265,10 @@ struct SessionFolderBrowserView: View {
             return false
         }
         let baseList = List {
+            if isTagFilterActive {
+                activeTagFilterRow
+            }
+
             if isSearchActive {
                 searchResultSection
             } else {
@@ -309,6 +344,29 @@ struct SessionFolderBrowserView: View {
             .padding(.vertical, 28)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
+    }
+
+    private var activeTagFilterRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .foregroundStyle(Color.accentColor)
+            Text(String(format: NSLocalizedString("筛选：%@", comment: "Active session tag filter summary"), tagFilterSummary))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button(NSLocalizedString("清除", comment: "Clear session tag filter")) {
+                selectedTagFilterIDs.removeAll()
+                syncLoadedDirectSessionsWithSource()
+                syncLoadedSearchResultItemsWithSource()
+            }
+            .font(.footnote)
+            .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 6)
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
 
     var pagedSessionIDs: [UUID] {

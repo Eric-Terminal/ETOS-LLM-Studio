@@ -66,6 +66,7 @@ struct BatchSelectableFolderRow: View {
 
 struct BatchSelectableSessionRow: View {
     let session: ChatSession
+    let tags: [SessionTag]
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -74,10 +75,13 @@ struct BatchSelectableSessionRow: View {
             HStack(spacing: 8) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                Text(session.name)
-                    .etFont(.footnote)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.name)
+                        .etFont(.footnote)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    WatchSessionTagInlineList(tags: tags)
+                }
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
@@ -410,7 +414,10 @@ struct SessionRowView: View {
     let isRunning: Bool
     @Binding var currentSession: ChatSession?
     @Binding var folders: [SessionFolder]
+    let tags: [SessionTag]
+    let sessionTags: [SessionTag]
     @Binding var sessionToEdit: ChatSession?
+    @Binding var sessionForTagEditing: ChatSession?
     @Binding var sessionToBranch: ChatSession?
     @Binding var showBranchOptions: Bool
     @Binding var sessionToDelete: ChatSession?
@@ -423,10 +430,13 @@ struct SessionRowView: View {
 
     var body: some View {
         Button(action: { onSessionSelected(session, nil) }) {
-            HStack {
-                MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
-                    .foregroundColor(.primary)
-                    .allowsHitTesting(false)
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    MarqueeText(content: session.name, uiFont: .preferredFont(forTextStyle: .headline))
+                        .foregroundColor(.primary)
+                        .allowsHitTesting(false)
+                    WatchSessionTagInlineList(tags: sessionTags)
+                }
 
                 Spacer()
 
@@ -454,6 +464,10 @@ struct SessionRowView: View {
                     sessionToDelete: $sessionToDelete,
                     showDeleteSessionConfirm: $showDeleteSessionConfirm,
                     folders: $folders,
+                    tags: tags,
+                    onEditTags: {
+                        sessionForTagEditing = session
+                    },
                     onDeleteLastMessage: { deleteLastMessageAction(session) },
                     onSendSessionToCompanion: { sendSessionToCompanionAction(session) },
                     onMoveSessionToFolder: { targetFolderID in

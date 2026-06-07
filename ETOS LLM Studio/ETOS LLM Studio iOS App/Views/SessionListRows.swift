@@ -148,6 +148,7 @@ struct BatchSelectableFolderRow: View {
 
 struct BatchSelectableSessionRow: View {
     let session: ChatSession
+    let tags: [SessionTag]
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -160,6 +161,7 @@ struct BatchSelectableSessionRow: View {
                         title: session.name,
                         subtitle: session.topicPrompt,
                         footnote: nil,
+                        tags: tags,
                         isCurrent: false,
                         isRunning: false
                     )
@@ -186,6 +188,7 @@ struct SessionRow: View {
     @Binding var draftName: String
     let currentFolderID: UUID?
     let moveOptions: [SessionMoveFolderOption]
+    let tags: [SessionTag]
     let searchSummary: String?
     let locationSummary: String?
 
@@ -198,6 +201,7 @@ struct SessionRow: View {
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
+    let onEditTags: () -> Void
     let onSendToCompanion: () -> Void
 
     @FocusState private var focused: Bool
@@ -220,6 +224,7 @@ struct SessionRow: View {
             title: session.name,
             subtitle: primarySubtitle,
             footnote: secondarySubtitle,
+            tags: tags,
             isCurrent: isCurrent,
             isRunning: isRunning
         )
@@ -263,6 +268,12 @@ struct SessionRow: View {
             onRename()
         } label: {
             Label(NSLocalizedString("重命名", comment: ""), systemImage: "pencil")
+        }
+
+        Button {
+            onEditTags()
+        } label: {
+            Label(NSLocalizedString("编辑标签", comment: "Edit session tags action"), systemImage: "tag")
         }
 
         Menu {
@@ -358,12 +369,13 @@ struct SessionListRowContentBody: View {
     let title: String
     let subtitle: String?
     let footnote: String?
+    let tags: [SessionTag]
     let isCurrent: Bool
     let isRunning: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .etFont(.system(size: 15.5, weight: .semibold))
                     .foregroundStyle(isCurrent ? Color.accentColor : .primary)
@@ -382,6 +394,8 @@ struct SessionListRowContentBody: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
+
+                SessionTagInlineList(tags: tags)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -415,6 +429,7 @@ struct SessionListRowContent: View {
     let title: String
     let subtitle: String?
     let footnote: String?
+    let tags: [SessionTag]
     let isCurrent: Bool
     let isRunning: Bool
 
@@ -424,6 +439,7 @@ struct SessionListRowContent: View {
                 title: title,
                 subtitle: subtitle,
                 footnote: footnote,
+                tags: tags,
                 isCurrent: isCurrent,
                 isRunning: isRunning
             )

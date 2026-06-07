@@ -13,6 +13,7 @@ struct SessionFolderBrowserView: View {
 
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
+    let tags: [SessionTag]
     @Binding var currentSession: ChatSession?
     let runningSessionIDs: Set<UUID>
 
@@ -27,6 +28,10 @@ struct SessionFolderBrowserView: View {
     let deleteFolderAction: (SessionFolder) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
     let moveFolderToFolderAction: (SessionFolder, UUID?) -> Void
+    let createTagAction: (String, SessionTagColor?) -> SessionTag?
+    let updateTagAction: (SessionTag, String, SessionTagColor?) -> Void
+    let deleteTagAction: (SessionTag) -> Void
+    let setSessionTagsAction: (ChatSession, [UUID]) -> Void
     let createConversationAction: (() -> Void)?
     let isRoot: Bool
 
@@ -50,6 +55,9 @@ struct SessionFolderBrowserView: View {
     @State var selectedFolderIDs: Set<UUID> = []
     @State var showBatchDeleteConfirm = false
     @State var showSessionSearch = false
+    @State var showTagManagement = false
+    @State var sessionForTagEditing: ChatSession?
+    @State var selectedTagFilterIDs: Set<UUID> = []
     @State var loadedDirectSessions: [ChatSession] = []
     @State var isLoadingMoreSessions = false
     @State var pendingLoadMoreSessionsTask: Task<Void, Never>?
@@ -80,14 +88,18 @@ struct SessionFolderBrowserView: View {
         if hasPreparedSessionBrowserSource {
             return cachedChildFolders
         }
-        return folders.filter { normalizedParentID(of: $0) == folderID }
+        let childFolders = folders.filter { normalizedParentID(of: $0) == folderID }
+        guard isTagFilterActive else { return childFolders }
+        return childFolders.filter { folderContainsTagFilteredSession($0.id) }
     }
 
     var directSessions: [ChatSession] {
         if hasPreparedSessionBrowserSource {
             return cachedDirectSessions
         }
-        return sessions.filter { normalizedFolderID(of: $0) == folderID }
+        return sessions.filter {
+            normalizedFolderID(of: $0) == folderID && sessionMatchesTagFilter($0)
+        }
     }
 
     var totalDirectSessionCount: Int {
@@ -172,6 +184,14 @@ struct SessionFolderBrowserView: View {
         selectedBatchItemCount > 0
     }
 
+    var isTagFilterActive: Bool {
+        !selectedTagFilterIDs.isEmpty
+    }
+
+    var selectedTagFilters: [SessionTag] {
+        tags.filter { selectedTagFilterIDs.contains($0.id) }
+    }
+
     var emptyStateText: String {
         folderID == nil ? NSLocalizedString("暂无文件夹或会话。", comment: "") : NSLocalizedString("当前文件夹暂无内容。", comment: "")
     }
@@ -190,6 +210,19 @@ struct SessionFolderBrowserView: View {
 
     var listScaffold: some View {
         List {
+            if isTagFilterActive {
+                Button {
+                    selectedTagFilterIDs.removeAll()
+                    rebuildSessionBrowserSource()
+                    resetLoadedDirectSessions()
+                } label: {
+                    Label(tagFilterSummary, systemImage: "line.3.horizontal.decrease.circle")
+                        .etFont(.caption)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+            }
+
             if mergedEntries.isEmpty {
                 Text(emptyStateText)
                     .etFont(.footnote)
@@ -216,7 +249,7 @@ struct SessionFolderBrowserView: View {
         }
         .navigationDestination(isPresented: $showSessionSearch) {
             WatchSessionSearchView(
-                sessions: sessions,
+                sessions: sessions.filter { sessionMatchesTagFilter($0) },
                 folders: folders,
                 currentSessionID: currentSession?.id,
                 onSelect: { session, messageOrdinal in
@@ -248,6 +281,15 @@ struct SessionFolderBrowserView: View {
             .onChange(of: sessions) { _, _ in
                 rebuildSessionBrowserSource()
                 syncLoadedDirectSessionsWithSource()
+            }
+            .onChange(of: tags) { _, _ in
+                selectedTagFilterIDs.formIntersection(Set(tags.map(\.id)))
+                rebuildSessionBrowserSource()
+                syncLoadedDirectSessionsWithSource()
+            }
+            .onChange(of: selectedTagFilterIDs) { _, _ in
+                rebuildSessionBrowserSource()
+                resetLoadedDirectSessions()
             }
             .onChange(of: pagedSessionIDs) { _, visibleIDs in
                 selectedSessionIDs.formIntersection(Set(visibleIDs))

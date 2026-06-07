@@ -1,3 +1,4 @@
+"清除" = "クリア";
 "Token 用量" = "トークン使用量";
 "%d 条" = "%d 件";
 "两端数据一致" = "両端のデータが一致";
@@ -3842,3 +3843,22 @@
 "应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。" = "App Lock and the database master password are stored only on this device. They are not synced to other devices through CloudKit, WatchConnectivity, or backups. Set them up again on a new device.";
 "失败后仍可输入应用锁密码。" = "If it fails, you can still enter the App Lock password.";
 "保护本机界面与离线数据库文件。" = "Protect the local interface and offline database files.";
+"红色" = "赤";
+"橙色" = "オレンジ";
+"黄色" = "黄";
+"绿色" = "緑";
+"蓝色" = "青";
+"紫色" = "紫";
+"灰色" = "グレー";
+"无颜色" = "色なし";
+"新建标签" = "新規タグ";
+"标签名称" = "タグ名";
+"添加标签" = "タグを追加";
+"管理标签" = "タグを管理";
+"编辑标签" = "タグを編集";
+"编辑会话标签" = "セッションタグを編集";
+"删除标签" = "タグを削除";
+"筛选标签" = "タグで絞り込み";
+"清除筛选" = "フィルタをクリア";
+"筛选：%@" = "フィルタ：%@";
+"颜色使用固定系统色板；无颜色会显示为空心圆点。" = "色は固定のシステムパレットから選択します。色なしは中空の点で表示されます。";

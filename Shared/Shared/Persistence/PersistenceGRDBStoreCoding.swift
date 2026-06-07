@@ -146,6 +146,33 @@ extension PersistenceGRDBStore {
         return uniqueFolders
     }
 
+    func normalizeSessionTagsForPersistence(_ tags: [SessionTag]) -> [SessionTag] {
+        var uniqueTags: [SessionTag] = []
+        uniqueTags.reserveCapacity(tags.count)
+        var seenIDs = Set<UUID>()
+
+        for tag in tags {
+            guard seenIDs.insert(tag.id).inserted else { continue }
+            let normalizedName = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            uniqueTags.append(
+                SessionTag(
+                    id: tag.id,
+                    name: normalizedName.isEmpty ? "未命名标签" : normalizedName,
+                    color: tag.color,
+                    updatedAt: tag.updatedAt
+                )
+            )
+        }
+
+        return uniqueTags.sorted { left, right in
+            let order = left.name.localizedStandardCompare(right.name)
+            if order != .orderedSame {
+                return order == .orderedAscending
+            }
+            return left.id.uuidString < right.id.uuidString
+        }
+    }
+
     func isValidSessionFolderParent(
         _ parentID: UUID?,
         for folderID: UUID,

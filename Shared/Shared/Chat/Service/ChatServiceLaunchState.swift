@@ -13,6 +13,7 @@ import os.log
 extension ChatService {
     struct LaunchPersistenceState {
         let sessionFolders: [SessionFolder]
+        let sessionTags: [SessionTag]
         let loadedSessions: [ChatSession]
         let initialSession: ChatSession
         let initialMessages: [ChatMessage]
@@ -24,6 +25,7 @@ extension ChatService {
 
     static func loadLaunchPersistenceState(using temporarySession: ChatSession) -> LaunchPersistenceState {
         let sessionFolders = Persistence.loadSessionFolders()
+        let sessionTags = Persistence.loadSessionTags()
         let persistedSessions = Persistence.loadChatSessions()
         var loadedSessions = persistedSessions
         loadedSessions.insert(temporarySession, at: 0)
@@ -38,6 +40,7 @@ extension ChatService {
 
         return LaunchPersistenceState(
             sessionFolders: sessionFolders,
+            sessionTags: sessionTags,
             loadedSessions: loadedSessions,
             initialSession: initialSession,
             initialMessages: initialMessages
@@ -67,6 +70,7 @@ extension ChatService {
                 guard let self else { return }
                 if self.shouldApplyLaunchPersistenceState() {
                     self.sessionFoldersSubject.send(launchState.sessionFolders)
+                    self.sessionTagsSubject.send(launchState.sessionTags)
                     self.chatSessionsSubject.send(launchState.loadedSessions)
                     self.currentSessionSubject.send(launchState.initialSession)
                     self.messagesForSessionSubject.send(launchState.initialMessages)

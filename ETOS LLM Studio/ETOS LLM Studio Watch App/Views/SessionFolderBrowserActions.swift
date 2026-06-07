@@ -40,6 +40,7 @@ extension SessionFolderBrowserView {
                     folderID: folder.id,
                     sessions: $sessions,
                     folders: $folders,
+                    tags: tags,
                     currentSession: $currentSession,
                     runningSessionIDs: runningSessionIDs,
                     deleteSessionAction: deleteSessionAction,
@@ -53,6 +54,10 @@ extension SessionFolderBrowserView {
                     deleteFolderAction: deleteFolderAction,
                     moveSessionToFolderAction: moveSessionToFolderAction,
                     moveFolderToFolderAction: moveFolderToFolderAction,
+                    createTagAction: createTagAction,
+                    updateTagAction: updateTagAction,
+                    deleteTagAction: deleteTagAction,
+                    setSessionTagsAction: setSessionTagsAction,
                     createConversationAction: createConversationAction,
                     isRoot: false
                 )
@@ -67,6 +72,7 @@ extension SessionFolderBrowserView {
         if isBatchSelecting {
             BatchSelectableSessionRow(
                 session: session,
+                tags: sessionTags(for: session),
                 isSelected: selectedSessionIDs.contains(session.id),
                 onToggle: {
                     toggleSessionSelection(session.id)
@@ -78,7 +84,10 @@ extension SessionFolderBrowserView {
                 isRunning: runningSessionIDs.contains(session.id),
                 currentSession: $currentSession,
                 folders: $folders,
+                tags: tags,
+                sessionTags: sessionTags(for: session),
                 sessionToEdit: $sessionToEdit,
+                sessionForTagEditing: $sessionForTagEditing,
                 sessionToBranch: $sessionToBranch,
                 showBranchOptions: $showBranchOptions,
                 sessionToDelete: $sessionToDelete,
@@ -143,6 +152,14 @@ extension SessionFolderBrowserView {
             selectedFolderIDs.remove(folderID)
         } else {
             selectedFolderIDs.insert(folderID)
+        }
+    }
+
+    func toggleTagFilter(_ tagID: UUID) {
+        if selectedTagFilterIDs.contains(tagID) {
+            selectedTagFilterIDs.remove(tagID)
+        } else {
+            selectedTagFilterIDs.insert(tagID)
         }
     }
 
@@ -264,11 +281,12 @@ extension SessionFolderBrowserView {
         let foldersSnapshot = folders
         let sessionsSnapshot = sessions
         let folderByID = Dictionary(uniqueKeysWithValues: foldersSnapshot.map { ($0.id, $0) })
-        let childFolders = foldersSnapshot.filter { folder in
+        let allChildFolders = foldersSnapshot.filter { folder in
             normalizedParentID(of: folder, folderByID: folderByID) == folderID
         }
         let directSessions = sessionsSnapshot.filter { session in
             normalizedFolderID(of: session, folderByID: folderByID) == folderID
+                && sessionMatchesTagFilter(session)
         }
         let sessionOrderByID = Dictionary(uniqueKeysWithValues: sessionsSnapshot.enumerated().map { ($1.id, $0) })
         let folderAncestorIDsByFolderID = folderAncestorLookup(
@@ -284,7 +302,8 @@ extension SessionFolderBrowserView {
         }
 
         for (index, session) in sessionsSnapshot.enumerated() {
-            guard let assignedFolderID = normalizedFolderID(of: session, folderByID: folderByID) else { continue }
+            guard sessionMatchesTagFilter(session),
+                  let assignedFolderID = normalizedFolderID(of: session, folderByID: folderByID) else { continue }
             for ancestorID in folderAncestorIDsByFolderID[assignedFolderID, default: []] {
                 recursiveSessionCountByFolderID[ancestorID, default: 0] += 1
                 recentActivityIndexByFolderID[ancestorID] = min(
@@ -295,7 +314,9 @@ extension SessionFolderBrowserView {
         }
 
         cachedFolderByID = folderByID
-        cachedChildFolders = childFolders
+        cachedChildFolders = isTagFilterActive
+            ? allChildFolders.filter { recursiveSessionCountByFolderID[$0.id, default: 0] > 0 }
+            : allChildFolders
         cachedDirectSessions = directSessions
         cachedSessionOrderByID = sessionOrderByID
         cachedRecentActivityIndexByFolderID = recentActivityIndexByFolderID
@@ -374,7 +395,8 @@ extension SessionFolderBrowserView {
             return cached
         }
         for (index, session) in sessions.enumerated() {
-            guard let assignedFolderID = normalizedFolderID(of: session) else { continue }
+            guard sessionMatchesTagFilter(session),
+                  let assignedFolderID = normalizedFolderID(of: session) else { continue }
             if folderHierarchyContains(descendantFolderID: assignedFolderID, ancestorFolderID: folderID) {
                 return index
             }
@@ -417,8 +439,32 @@ extension SessionFolderBrowserView {
         let descendants = descendantFolderIDs(rootID: folderID)
         return sessions.filter { session in
             guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
-            return descendants.contains(assignedFolderID)
+            return descendants.contains(assignedFolderID) && sessionMatchesTagFilter(session)
         }.count
+    }
+
+    func sessionTags(for session: ChatSession) -> [SessionTag] {
+        let tagByID = tags.reduce(into: [UUID: SessionTag]()) { result, tag in
+            result[tag.id] = tag
+        }
+        return session.tagIDs.compactMap { tagByID[$0] }
+    }
+
+    func sessionMatchesTagFilter(_ session: ChatSession) -> Bool {
+        guard !selectedTagFilterIDs.isEmpty else { return true }
+        return session.tagIDs.contains { selectedTagFilterIDs.contains($0) }
+    }
+
+    func folderContainsTagFilteredSession(_ folderID: UUID) -> Bool {
+        let descendants = descendantFolderIDs(rootID: folderID)
+        return sessions.contains { session in
+            guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
+            return descendants.contains(assignedFolderID) && sessionMatchesTagFilter(session)
+        }
+    }
+
+    var tagFilterSummary: String {
+        selectedTagFilters.map(\.name).joined(separator: NSLocalizedString("、", comment: "List separator"))
     }
 
     func folderPath(_ folder: SessionFolder) -> String {

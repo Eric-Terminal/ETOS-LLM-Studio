@@ -20,6 +20,7 @@ extension SyncEngine {
         sessionIDs: Set<UUID>? = nil
     ) -> SyncPackage {
         var providers: [Provider] = []
+        var sessionTags: [SessionTag] = []
         var sessions: [SyncedSession] = []
         var backgrounds: [SyncedBackground] = []
         var memories: [MemoryItem] = []
@@ -53,6 +54,13 @@ extension SyncEngine {
                 guard !session.isTemporary else { return false }
                 guard let sessionIDs else { return true }
                 return sessionIDs.contains(session.id)
+            }
+            let allTags = chatService.sessionTagsSubject.value
+            if let sessionIDs {
+                let referencedTagIDs = Set(allSessions.flatMap(\.tagIDs))
+                sessionTags = allTags.filter { referencedTagIDs.contains($0.id) && !sessionIDs.isEmpty }
+            } else {
+                sessionTags = allTags
             }
             for session in allSessions {
                 let messages = Persistence.loadMessages(for: session.id)
@@ -177,6 +185,7 @@ extension SyncEngine {
             options: options,
             sourcePlatform: currentPlatformName,
             providers: providers,
+            sessionTags: sessionTags,
             sessions: sessions,
             backgrounds: backgrounds,
             memories: memories,
@@ -240,8 +249,9 @@ extension SyncEngine {
         }
 
         if package.options.contains(.sessions) {
+            let tagMerge = mergeSessionTags(package.sessionTags, chatService: chatService)
             let sessionPayloads = remapSessionMediaReferences(
-                package.sessions,
+                remapSessionTagReferences(package.sessions, idMapping: tagMerge.idMapping),
                 audioFiles: didMergeAudioFilesBeforeSessions ? package.audioFiles : [],
                 imageFiles: didMergeImageFilesBeforeSessions ? package.imageFiles : []
             )
@@ -250,8 +260,8 @@ extension SyncEngine {
                 chatService: chatService,
                 sourcePlatform: package.sourcePlatform
             )
-            summary.importedSessions = result.imported
-            summary.skippedSessions = result.skipped
+            summary.importedSessions = tagMerge.imported + result.imported
+            summary.skippedSessions = tagMerge.skipped + result.skipped
         }
 
         if package.options.contains(.backgrounds) {

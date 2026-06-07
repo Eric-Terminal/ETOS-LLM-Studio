@@ -85,6 +85,7 @@ public class ChatService {
     
     public let chatSessionsSubject: CurrentValueSubject<[ChatSession], Never>
     public let sessionFoldersSubject: CurrentValueSubject<[SessionFolder], Never>
+    public let sessionTagsSubject: CurrentValueSubject<[SessionTag], Never>
     public let currentSessionSubject: CurrentValueSubject<ChatSession?, Never>
     public let messagesForSessionSubject: CurrentValueSubject<[ChatMessage], Never>
     
@@ -489,6 +490,9 @@ public class ChatService {
         )
         self.sessionFoldersSubject = CurrentValueSubject(
             launchState?.sessionFolders ?? []
+        )
+        self.sessionTagsSubject = CurrentValueSubject(
+            launchState?.sessionTags ?? []
         )
         self.currentSessionSubject = CurrentValueSubject(
             launchState?.initialSession ?? startupTemporarySession

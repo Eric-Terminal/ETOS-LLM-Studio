@@ -1,3 +1,4 @@
+"清除" = "مسح";
 "Token 用量" = "استخدام الرموز";
 "%d 条" = "%d عناصر";
 "两端数据一致" = "البيانات متطابقة على كلا الجهازين";
@@ -3920,3 +3921,22 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。" = "App Lock and the database master password are stored only on this device. They are not synced to other devices through CloudKit, WatchConnectivity, or backups. Set them up again on a new device.";
 "失败后仍可输入应用锁密码。" = "If it fails, you can still enter the App Lock password.";
 "保护本机界面与离线数据库文件。" = "Protect the local interface and offline database files.";
+"红色" = "أحمر";
+"橙色" = "برتقالي";
+"黄色" = "أصفر";
+"绿色" = "أخضر";
+"蓝色" = "أزرق";
+"紫色" = "بنفسجي";
+"灰色" = "رمادي";
+"无颜色" = "بلا لون";
+"新建标签" = "وسم جديد";
+"标签名称" = "اسم الوسم";
+"添加标签" = "إضافة وسم";
+"管理标签" = "إدارة الوسوم";
+"编辑标签" = "تحرير الوسوم";
+"编辑会话标签" = "تحرير وسوم المحادثة";
+"删除标签" = "حذف الوسم";
+"筛选标签" = "تصفية الوسوم";
+"清除筛选" = "مسح التصفية";
+"筛选：%@" = "التصفية: %@";
+"颜色使用固定系统色板；无颜色会显示为空心圆点。" = "تستخدم الألوان لوحة ثابتة من ألوان النظام؛ ويظهر خيار بلا لون كنقطة مجوفة.";

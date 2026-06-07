@@ -257,6 +257,13 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
+        chatService.sessionTagsSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] tags in
+                self?.applySessionTags(tags)
+            }
+            .store(in: &cancellables)
+
         chatService.currentSessionSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] session in
@@ -458,6 +465,12 @@ extension ChatViewModel {
         guard sessionFolders != folders else { return }
         sessionFolders = folders
         sessionFolderListVersion &+= 1
+    }
+
+    func applySessionTags(_ tags: [SessionTag]) {
+        guard sessionTags != tags else { return }
+        sessionTags = tags
+        chatSessionListVersion &+= 1
     }
 
     func applyActivatedModels(_ models: [RunnableModel]) {

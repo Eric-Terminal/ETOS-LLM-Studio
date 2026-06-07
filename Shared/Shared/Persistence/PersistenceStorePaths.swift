@@ -231,6 +231,10 @@ extension Persistence {
         getChatsDirectory().appendingPathComponent(sessionFoldersFileName)
     }
 
+    static func sessionTagsFileURL() -> URL {
+        getChatsDirectory().appendingPathComponent(sessionTagsFileName)
+    }
+
     static func requestLogsFileURL() -> URL {
         requestLogsDirectoryURL().appendingPathComponent(requestLogsFileName)
     }

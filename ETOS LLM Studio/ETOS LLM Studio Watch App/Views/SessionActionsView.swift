@@ -21,12 +21,14 @@ struct SessionActionsView: View {
     @Binding var sessionToDelete: ChatSession?
     @Binding var showDeleteSessionConfirm: Bool
     @Binding var folders: [SessionFolder]
+    let tags: [SessionTag]
 
     // MARK: - 操作
 
     let onDeleteLastMessage: () -> Void
     let onSendSessionToCompanion: () -> Void
     let onMoveSessionToFolder: (UUID?) -> Void
+    let onEditTags: () -> Void
 
     // MARK: - 环境
 
@@ -58,6 +60,13 @@ struct SessionActionsView: View {
                     dismiss()
                 } label: {
                     Label(NSLocalizedString("编辑话题", comment: ""), systemImage: "pencil")
+                }
+
+                Button {
+                    onEditTags()
+                    dismiss()
+                } label: {
+                    Label(NSLocalizedString("编辑标签", comment: "Edit session tags action"), systemImage: "tag")
                 }
 
                 Button {
@@ -126,6 +135,15 @@ struct SessionActionsView: View {
             }
 
             Section(header: Text(NSLocalizedString("详细信息", comment: ""))) {
+                if !sessionTags.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(NSLocalizedString("标签", comment: "Session tags info label"))
+                            .etFont(.caption)
+                            .foregroundColor(.secondary)
+                        WatchSessionTagInlineList(tags: sessionTags)
+                    }
+                }
+
                 VStack(alignment: .leading, spacing: 5) {
                     Text(NSLocalizedString("会话 ID", comment: ""))
                         .etFont(.caption)
@@ -137,6 +155,13 @@ struct SessionActionsView: View {
         }
         .navigationTitle(session.name)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var sessionTags: [SessionTag] {
+        let tagByID = tags.reduce(into: [UUID: SessionTag]()) { result, tag in
+            result[tag.id] = tag
+        }
+        return session.tagIDs.compactMap { tagByID[$0] }
     }
 
     private func folderPath(_ folder: SessionFolder) -> String {

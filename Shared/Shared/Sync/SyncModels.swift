@@ -267,6 +267,7 @@ public struct SyncPackage: Codable {
     public var options: SyncOptions
     public var sourcePlatform: String?
     public var providers: [Provider]
+    public var sessionTags: [SessionTag]
     public var sessions: [SyncedSession]
     public var backgrounds: [SyncedBackground]
     public var memories: [MemoryItem]
@@ -292,13 +293,14 @@ public struct SyncPackage: Codable {
     public var globalSystemPrompt: String?
     
     enum CodingKeys: String, CodingKey {
-        case options, sourcePlatform, providers, sessions, backgrounds, memories, conversationUserProfile, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
+        case options, sourcePlatform, providers, sessionTags, sessions, backgrounds, memories, conversationUserProfile, mcpServers, audioFiles, imageFiles, skills, shortcutTools, worldbooks, feedbackTickets, dailyPulseRuns, dailyPulseFeedbackHistory, dailyPulsePendingCuration, dailyPulseExternalSignals, dailyPulseTasks, usageStatsDayBundles, fontFiles, fontRouteConfigurationData, appStorageSnapshot, globalSystemPrompt
     }
     
     public init(
         options: SyncOptions,
         sourcePlatform: String? = nil,
         providers: [Provider] = [],
+        sessionTags: [SessionTag] = [],
         sessions: [SyncedSession] = [],
         backgrounds: [SyncedBackground] = [],
         memories: [MemoryItem] = [],
@@ -324,6 +326,7 @@ public struct SyncPackage: Codable {
         self.options = options
         self.sourcePlatform = sourcePlatform
         self.providers = providers
+        self.sessionTags = sessionTags
         self.sessions = sessions
         self.backgrounds = backgrounds
         self.memories = memories
@@ -352,6 +355,7 @@ public struct SyncPackage: Codable {
         options = try container.decode(SyncOptions.self, forKey: .options)
         sourcePlatform = try container.decodeIfPresent(String.self, forKey: .sourcePlatform)
         providers = try container.decodeIfPresent([Provider].self, forKey: .providers) ?? []
+        sessionTags = try container.decodeIfPresent([SessionTag].self, forKey: .sessionTags) ?? []
         sessions = try container.decodeIfPresent([SyncedSession].self, forKey: .sessions) ?? []
         backgrounds = try container.decodeIfPresent([SyncedBackground].self, forKey: .backgrounds) ?? []
         memories = try container.decodeIfPresent([MemoryItem].self, forKey: .memories) ?? []
@@ -381,6 +385,7 @@ public struct SyncPackage: Codable {
 /// 差异同步记录类型。
 public enum SyncRecordType: String, Codable, CaseIterable, Sendable {
     case provider
+    case sessionTag
     case session
     case background
     case memory

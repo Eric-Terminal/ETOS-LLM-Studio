@@ -249,6 +249,14 @@ public enum SyncPackageTransferService {
         }
 
         if package.options.contains(.sessions) {
+            descriptors.append(contentsOf: package.sessionTags.map {
+                SyncRecordDescriptor(
+                    type: .sessionTag,
+                    recordID: $0.id.uuidString,
+                    checksum: checksum(for: $0),
+                    updatedAt: $0.updatedAt
+                )
+            })
             descriptors.append(contentsOf: package.sessions.map {
                 SyncRecordDescriptor(
                     type: .session,
@@ -501,6 +509,7 @@ public enum SyncPackageTransferService {
             try writeEncodedField("sourcePlatform", sourcePlatform, to: writer, encoder: encoder, firstField: &firstField)
         }
         try writeArrayField("providers", package.providers, to: writer, encoder: encoder, firstField: &firstField)
+        try writeArrayField("sessionTags", package.sessionTags, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("sessions", package.sessions, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("backgrounds", package.backgrounds, to: writer, encoder: encoder, firstField: &firstField)
         try writeArrayField("memories", package.memories, to: writer, encoder: encoder, firstField: &firstField)

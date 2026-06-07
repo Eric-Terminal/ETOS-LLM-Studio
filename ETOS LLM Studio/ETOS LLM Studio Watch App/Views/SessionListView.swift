@@ -20,6 +20,7 @@ struct SessionListView: View {
 
     @Binding var sessions: [ChatSession]
     @Binding var folders: [SessionFolder]
+    let tags: [SessionTag]
     @Binding var currentSession: ChatSession?
     let runningSessionIDs: Set<UUID>
 
@@ -36,6 +37,10 @@ struct SessionListView: View {
     let deleteFolderAction: (SessionFolder) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
     let moveFolderToFolderAction: (SessionFolder, UUID?) -> Void
+    let createTagAction: (String, SessionTagColor?) -> SessionTag?
+    let updateTagAction: (SessionTag, String, SessionTagColor?) -> Void
+    let deleteTagAction: (SessionTag) -> Void
+    let setSessionTagsAction: (ChatSession, [UUID]) -> Void
     var createConversationAction: (() -> Void)? = nil
 
     var body: some View {
@@ -43,6 +48,7 @@ struct SessionListView: View {
             folderID: nil,
             sessions: $sessions,
             folders: $folders,
+            tags: tags,
             currentSession: $currentSession,
             runningSessionIDs: runningSessionIDs,
             deleteSessionAction: deleteSessionAction,
@@ -56,6 +62,10 @@ struct SessionListView: View {
             deleteFolderAction: deleteFolderAction,
             moveSessionToFolderAction: moveSessionToFolderAction,
             moveFolderToFolderAction: moveFolderToFolderAction,
+            createTagAction: createTagAction,
+            updateTagAction: updateTagAction,
+            deleteTagAction: deleteTagAction,
+            setSessionTagsAction: setSessionTagsAction,
             createConversationAction: createConversationAction,
             isRoot: true
         )

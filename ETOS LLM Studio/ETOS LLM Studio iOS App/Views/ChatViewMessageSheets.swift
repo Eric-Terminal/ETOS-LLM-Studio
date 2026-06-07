@@ -585,6 +585,7 @@ struct SessionPickerRow: View {
                     title: session.name,
                     subtitle: sessionPickerSubtitle,
                     footnote: nil,
+                    tags: [],
                     isCurrent: isCurrent,
                     isRunning: isRunning
                 )

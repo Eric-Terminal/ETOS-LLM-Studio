@@ -138,7 +138,8 @@ extension SessionFolderBrowserView {
     func recentActivityIndex(for folderID: UUID) -> Int {
         let sessions = viewModel.chatSessions
         for (index, session) in sessions.enumerated() {
-            guard let assignedFolderID = normalizedFolderID(of: session) else { continue }
+            guard sessionMatchesTagFilter(session),
+                  let assignedFolderID = normalizedFolderID(of: session) else { continue }
             if folderHierarchyContains(descendantFolderID: assignedFolderID, ancestorFolderID: folderID) {
                 return index
             }
@@ -180,8 +181,32 @@ extension SessionFolderBrowserView {
         let descendants = descendantFolderIDs(rootID: folderID)
         return viewModel.chatSessions.filter { session in
             guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
-            return descendants.contains(assignedFolderID)
+            return descendants.contains(assignedFolderID) && sessionMatchesTagFilter(session)
         }.count
+    }
+
+    func sessionTags(for session: ChatSession) -> [SessionTag] {
+        let tagByID = viewModel.sessionTags.reduce(into: [UUID: SessionTag]()) { result, tag in
+            result[tag.id] = tag
+        }
+        return session.tagIDs.compactMap { tagByID[$0] }
+    }
+
+    func sessionMatchesTagFilter(_ session: ChatSession) -> Bool {
+        guard !selectedTagFilterIDs.isEmpty else { return true }
+        return session.tagIDs.contains { selectedTagFilterIDs.contains($0) }
+    }
+
+    func folderContainsTagFilteredSession(_ folderID: UUID) -> Bool {
+        let descendants = descendantFolderIDs(rootID: folderID)
+        return viewModel.chatSessions.contains { session in
+            guard let assignedFolderID = normalizedFolderID(of: session) else { return false }
+            return descendants.contains(assignedFolderID) && sessionMatchesTagFilter(session)
+        }
+    }
+
+    var tagFilterSummary: String {
+        selectedTagFilters.map(\.name).joined(separator: NSLocalizedString("、", comment: "List separator"))
     }
 
     func folderDisplayPath(_ folder: SessionFolder) -> String {
