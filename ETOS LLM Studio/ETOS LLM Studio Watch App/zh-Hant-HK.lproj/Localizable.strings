@@ -1776,7 +1776,7 @@
 "支持 HTTP / HTTPS 和 SOCKS5。填写用户名后会自动启用代理鉴权。" = "支持 HTTP / HTTPS 和 SOCKS5。填寫用戶名後會自動啟用代理鉴權。";
 "支持 Kelivo 的 settings.json + chats.json（建议使用包含两者的 JSON 目录导出内容）。" = "支持 Kelivo 的 settings.json + chats.json（建議使用包含两者的 JSON 目录導出內容）。";
 "支持 RikkaHub 的 settings.json（当前先导入提供商配置）。" = "支持 RikkaHub 的 settings.json（當前先導入提供商配置）。";
-"支持 http/https 的 JSON 链接。" = "支持 http/https 的 JSON 鏈接。";
+"支持 http/https 的 .json 或 .elsbackup 链接。" = "支援 http/https 的 .json 或 .elsbackup 連結。";
 "支持 http/https 的 TTF / OTF / TTC / WOFF / WOFF2 链接。" = "支持 http/https 的 TTF / OTF / TTC / WOFF / WOFF2 鏈接。";
 "支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。" = "支持 http/https 的文本鏈接，下載後按 SKILL.md 規则導入。";
 "支持导入 ETOS 导出的 JSON 数据包（含“同步与备份”导出）。" = "支持導入 ETOS 導出的 JSON 數據包（含“同步與备份”導出）。";
@@ -2036,7 +2036,7 @@
 "路标时间（分钟）" = "路標時間（分鐘）";
 "跳过" = "跳過";
 "软件设置" = "软件設置";
-"支持导入旧版 ETOS JSON 数据包。" = "支援匯入舊版 ETOS JSON 資料包。";
+"支持导入 .elsbackup 快照或旧版 ETOS JSON 数据包。" = "支援匯入 .elsbackup 快照或舊版 ETOS JSON 資料包。";
 "软件设置 +%d" = "软件設置 +%d";
 "轻量预处理（推荐）" = "轻量預處理（推荐）";
 "输入关键词" = "輸入關鍵词";
@@ -3162,7 +3162,7 @@
 "Cherry 备份未找到 localStorage。" = "Cherry 備份未找到 localStorage。";
 "Cherry 备份格式无法识别，或文件中没有可导入数据。" = "Cherry 備份格式無法識別，或文件中沒有可導入數據。";
 "ETOS 数据包" = "ETOS 數據包";
-"ETOS 数据包请直接选择 .json 文件，不支持压缩包。" = "ETOS 數據包請直接選擇 .json 文件，不支援壓縮包。";
+"ETOS 数据包支持 .elsbackup 快照和旧版 .json 导出，请不要选择 .zip / .bak。" = "ETOS 數據包支援 .elsbackup 快照和舊版 .json 導出，請不要選擇 .zip / .bak。";
 "Error" = "錯誤";
 "Kelivo 备份中未识别到 chats.json 会话。" = "Kelivo 備份中未識別到 chats.json 會話。";
 "Kelivo 备份中未识别到 provider_configs。" = "Kelivo 備份中未識別到 provider_configs。";
@@ -3245,7 +3245,7 @@
 "收到能力变更通知：%@" = "收到能力變更通知：%@";
 "收到通知：%@" = "收到通知：%@";
 "数据库表 %@ 缺少关键字段 %@，需要自动重建。" = "資料庫表 %@ 缺少關鍵欄位 %@，需要自動重建。";
-"文件不是可识别的 ETOS 导出数据包。" = "文件不是可識別的 ETOS 導出資料包。";
+"文件不是可识别的 ETOS 数据包或 .elsbackup 快照。" = "文件不是可識別的 ETOS 數據包或 .elsbackup 快照。";
 "新增提供商配置" = "新增提供商配置";
 "方法" = "方法";
 "无字段变化（覆盖保存）" = "無欄位變化（覆蓋儲存）";
@@ -3265,7 +3265,7 @@
 "服务器连接失败：%@" = "伺服器連接失敗：%@";
 "服务器连接成功：%@" = "伺服器連接成功：%@";
 "未在 RikkaHub 备份中识别到可导入的提供商。" = "未在 RikkaHub 備份中識別到可導入的提供商。";
-"未在目录中找到 ETOS 可识别的 JSON 导出包。" = "未在目錄中找到 ETOS 可識別的 JSON 導出包。";
+"未在目录中找到 ETOS 可识别的 .elsbackup 快照或 JSON 导出包。" = "未在目錄中找到 ETOS 可識別的 .elsbackup 快照或 JSON 導出包。";
 "未在目录中找到 conversations.json。" = "未在目錄中找到 conversations.json。";
 "未找到 RikkaHub 可识别的 settings.json。" = "未找到 RikkaHub 可識別的 settings.json。";
 "未识别到 ChatGPT conversations.json 结构。" = "未識別到 ChatGPT conversations.json 結構。";
@@ -3939,3 +3939,5 @@
 "立即同步" = "立即同步";
 "开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "開啟後會自動在同一 Apple ID 的裝置間同步支援的資料。";
 "iCloud 漫游同步已关闭" = "iCloud 漫遊同步已關閉";
+
+"当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "目前 .elsbackup 快照已加密。導入數據入口暫不支援解密合併，請改用「從快照恢復」入口，或選擇未加密快照。";

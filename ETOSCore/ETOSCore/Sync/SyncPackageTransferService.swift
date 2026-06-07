@@ -185,11 +185,14 @@ public enum SyncPackageTransferService {
     }
 
     /// 解析同步包：
-    /// 1. 解析 ETOS v2 导出信封
-    /// 2. 不再兼容旧版纯 SyncPackage JSON
+    /// 1. 优先解析 ETOS v2 导出信封
+    /// 2. 回退兼容旧版纯 SyncPackage JSON
     public static func decodePackage(from data: Data) throws -> SyncPackage {
         let decoder = JSONDecoder()
         guard let envelope = try? decoder.decode(SyncPackageExportEnvelope.self, from: data) else {
+            if let legacyPackage = try? decoder.decode(SyncPackage.self, from: data) {
+                return legacyPackage
+            }
             throw SyncPackageTransferError.invalidEnvelope
         }
         guard envelope.schemaVersion > 0 else {

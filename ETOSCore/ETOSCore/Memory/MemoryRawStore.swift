@@ -89,23 +89,7 @@ struct MemoryRawStore {
 
     private func loadMemoriesFromSQLite() -> [MemoryItem]? {
         guard let memories = Persistence.withMemoryDatabaseRead({ db in
-            try RelationalMemoryItemRecord.fetchAll(db)
-                .sorted {
-                    if $0.createdAt == $1.createdAt {
-                        return $0.id < $1.id
-                    }
-                    return $0.createdAt > $1.createdAt
-                }
-                .map { row in
-                    MemoryItem(
-                        id: UUID(uuidString: row.id) ?? UUID(),
-                        content: row.content,
-                        embedding: RelationalFloatArrayCodec.decode(row.embeddingData),
-                        createdAt: Date(timeIntervalSince1970: row.createdAt),
-                        updatedAt: row.updatedAt.map(Date.init(timeIntervalSince1970:)),
-                        isArchived: row.isArchived != 0
-                    )
-                }
+            try Self.loadMemories(from: db)
         }) else {
             return nil
         }
@@ -120,6 +104,26 @@ struct MemoryRawStore {
         }
 
         return memories
+    }
+
+    static func loadMemories(from db: Database) throws -> [MemoryItem] {
+        try RelationalMemoryItemRecord.fetchAll(db)
+            .sorted {
+                if $0.createdAt == $1.createdAt {
+                    return $0.id < $1.id
+                }
+                return $0.createdAt > $1.createdAt
+            }
+            .map { row in
+                MemoryItem(
+                    id: UUID(uuidString: row.id) ?? UUID(),
+                    content: row.content,
+                    embedding: RelationalFloatArrayCodec.decode(row.embeddingData),
+                    createdAt: Date(timeIntervalSince1970: row.createdAt),
+                    updatedAt: row.updatedAt.map(Date.init(timeIntervalSince1970:)),
+                    isArchived: row.isArchived != 0
+                )
+            }
     }
 
     @discardableResult
@@ -202,6 +206,16 @@ struct MemoryRawStore {
                 continue
             }
             return Persistence.loadAuxiliaryBlob([MemoryItem].self, forKey: key) ?? []
+        }
+        return nil
+    }
+
+    static func loadLegacyMemories(from store: PersistenceAuxiliaryGRDBStore) -> [MemoryItem]? {
+        let keys = ["memory_raw_memories", "memory_raw_memories_v1"]
+        for key in keys {
+            if let memories = store.loadAuxiliaryBlob([MemoryItem].self, forKey: key) {
+                return memories
+            }
         }
         return nil
     }

@@ -70,37 +70,41 @@ extension MCPServerStore {
 
     static func loadServersFromRelationalStore() -> [MCPServerConfiguration]? {
         Persistence.withConfigDatabaseRead { db in
-            let headers = try MCPServerHeaderRecord.fetchAll(
-                db,
-                sql: """
-                SELECT
-                    id, display_name, notes, is_selected_for_chat,
-                    status, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
-                    metadata_cached_at, updated_at
-                FROM \(relationalServerTable)
-                ORDER BY LOWER(display_name) ASC, id ASC
-                """
-            )
-            let payloadRows = try MCPServerPayloadRecord.fetchAll(
-                db,
-                sql: """
-                SELECT
-                    id, api_key, additional_headers_json, disabled_tool_ids_json,
-                    tool_approval_policies_json, oauth_payload_json, stream_resumption_token,
-                    info_json, resources_json, resource_templates_json, prompts_json, roots_json
-                FROM \(relationalServerTable)
-                """
-            )
-            let payloadByID = Dictionary(uniqueKeysWithValues: payloadRows.map { ($0.id, $0) })
+            try loadServersFromRelationalStore(db)
+        }
+    }
 
-            return headers.compactMap { header -> MCPServerConfiguration? in
-                guard let server = decodeServerConfiguration(from: header, payload: payloadByID[header.id]) else {
-                    let id = header.id
-                    mcpStoreLogger.error("读取 MCP 服务器失败：配置数据损坏 id=\(id, privacy: .public)")
-                    return nil
-                }
-                return server
+    static func loadServersFromRelationalStore(_ db: Database) throws -> [MCPServerConfiguration] {
+        let headers = try MCPServerHeaderRecord.fetchAll(
+            db,
+            sql: """
+            SELECT
+                id, display_name, notes, is_selected_for_chat,
+                status, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                metadata_cached_at, updated_at
+            FROM \(relationalServerTable)
+            ORDER BY LOWER(display_name) ASC, id ASC
+            """
+        )
+        let payloadRows = try MCPServerPayloadRecord.fetchAll(
+            db,
+            sql: """
+            SELECT
+                id, api_key, additional_headers_json, disabled_tool_ids_json,
+                tool_approval_policies_json, oauth_payload_json, stream_resumption_token,
+                info_json, resources_json, resource_templates_json, prompts_json, roots_json
+            FROM \(relationalServerTable)
+            """
+        )
+        let payloadByID = Dictionary(uniqueKeysWithValues: payloadRows.map { ($0.id, $0) })
+
+        return headers.compactMap { header -> MCPServerConfiguration? in
+            guard let server = decodeServerConfiguration(from: header, payload: payloadByID[header.id]) else {
+                let id = header.id
+                mcpStoreLogger.error("读取 MCP 服务器失败：配置数据损坏 id=\(id, privacy: .public)")
+                return nil
             }
+            return server
         }
     }
 

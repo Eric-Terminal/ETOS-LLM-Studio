@@ -1994,7 +1994,7 @@
 "支持 HTTP / HTTPS 和 SOCKS5。填写用户名后会自动启用代理鉴权。" = "Supports HTTP / HTTPS and SOCKS5. Filling in a username enables proxy authentication automatically.";
 "支持 Kelivo 的 settings.json + chats.json（建议选择解压后的目录一次导入）。" = "Supports Kelivo settings.json + chats.json. Selecting the extracted folder for one-step import is recommended.";
 "支持 RikkaHub 的 settings.json（可直接选文件或解压目录，当前先导入提供商配置）。" = "Supports RikkaHub settings.json. Select the file or extracted folder; currently imports provider configs first.";
-"支持 http/https 的 JSON 链接。" = "Supports http/https JSON links.";
+"支持 http/https 的 .json 或 .elsbackup 链接。" = "Supports http/https .json or .elsbackup links.";
 "支持 http/https 的 TTF / OTF / TTC / WOFF / WOFF2 链接。" = "Supports http/https links for TTF / OTF / TTC / WOFF / WOFF2.";
 "支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。" = "Supports http/https text links. After download, imports according to SKILL.md rules.";
 "支持导入 ETOS 导出的 JSON 数据包（包含“同步与备份”页导出的备份）。" = "Supports importing ETOS JSON export packages, including backups exported from Sync & Backup.";
@@ -2201,7 +2201,7 @@
 "软件设置 +%d" = "App Settings +%d";
 "软件设置（AppStorage）" = "App Settings (AppStorage)";
 "软件设置" = "App Settings";
-"支持导入旧版 ETOS JSON 数据包。" = "Supports importing legacy ETOS JSON packages.";
+"支持导入 .elsbackup 快照或旧版 ETOS JSON 数据包。" = "Supports .elsbackup snapshots and legacy ETOS JSON packages.";
 "迁移中" = "Migrating";
 "迁移失败" = "Migration Failed";
 "迁移完成后会再次询问是否删除旧 JSON 文件。" = "After migration completes, you will be asked again whether to delete old JSON files.";
@@ -3244,7 +3244,7 @@
 "Cherry 备份未找到 localStorage。" = "Cherry backup did not include localStorage.";
 "Cherry 备份格式无法识别，或文件中没有可导入数据。" = "The Cherry backup format was not recognized, or the file contains no importable data.";
 "ETOS 数据包" = "ETOS data package";
-"ETOS 数据包请直接选择 .json 文件，不支持压缩包。" = "For ETOS data packages, select a .json file directly. Compressed archives are not supported.";
+"ETOS 数据包支持 .elsbackup 快照和旧版 .json 导出，请不要选择 .zip / .bak。" = "ETOS data packages support .elsbackup snapshots and legacy .json exports. Do not choose .zip / .bak.";
 "Error" = "Error";
 "Kelivo 备份中未识别到 chats.json 会话。" = "No chats.json conversations were found in the Kelivo backup.";
 "Kelivo 备份中未识别到 provider_configs。" = "No provider_configs were found in the Kelivo backup.";
@@ -3326,7 +3326,7 @@
 "收到能力变更通知：%@" = "Received capability change notification: %@";
 "收到通知：%@" = "Received notification: %@";
 "数据库表 %@ 缺少关键字段 %@，需要自动重建。" = "Database table %@ is missing required column %@ and needs automatic rebuilding.";
-"文件不是可识别的 ETOS 导出数据包。" = "The file is not a recognized ETOS export package.";
+"文件不是可识别的 ETOS 数据包或 .elsbackup 快照。" = "The file is not a recognized ETOS data package or .elsbackup snapshot.";
 "新增提供商配置" = "Add provider configuration";
 "方法" = "Method";
 "无字段变化（覆盖保存）" = "No field changes (overwritten save)";
@@ -3346,7 +3346,7 @@
 "服务器连接失败：%@" = "Server connection failed: %@";
 "服务器连接成功：%@" = "Server connected: %@";
 "未在 RikkaHub 备份中识别到可导入的提供商。" = "No importable providers were found in the RikkaHub backup.";
-"未在目录中找到 ETOS 可识别的 JSON 导出包。" = "No ETOS-recognized JSON export package was found in the directory.";
+"未在目录中找到 ETOS 可识别的 .elsbackup 快照或 JSON 导出包。" = "No ETOS-recognized .elsbackup snapshot or JSON export package was found in the directory.";
 "未在目录中找到 conversations.json。" = "No conversations.json file was found in the directory.";
 "未找到 RikkaHub 可识别的 settings.json。" = "No RikkaHub-recognized settings.json was found.";
 "未识别到 ChatGPT conversations.json 结构。" = "The ChatGPT conversations.json structure was not recognized.";
@@ -3986,3 +3986,5 @@
 "立即同步" = "Sync Now";
 "开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "After it is enabled, supported data syncs automatically across devices signed in to the same Apple ID.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
+
+"当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "This .elsbackup snapshot is encrypted. The data import entry cannot decrypt and merge it yet; use Restore from Snapshot, or choose an unencrypted snapshot.";

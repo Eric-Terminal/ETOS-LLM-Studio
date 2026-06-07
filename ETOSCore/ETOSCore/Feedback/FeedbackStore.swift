@@ -149,39 +149,7 @@ public enum FeedbackStore {
 
     private static func loadTicketsFromSQLite() -> [FeedbackTicket]? {
         guard let tickets = Persistence.withConfigDatabaseRead({ db in
-            let rows = try RelationalFeedbackTicketRecord.fetchAll(db)
-            return rows.map { row in
-                FeedbackTicket(
-                    issueNumber: row.issueNumber,
-                    ticketToken: row.ticketToken,
-                    category: FeedbackCategory(rawValue: row.category) ?? .bug,
-                    title: row.title,
-                    createdAt: Date(timeIntervalSince1970: row.createdAt),
-                    lastKnownStatus: FeedbackTicketStatus(rawValue: row.lastKnownStatus) ?? .inProgress,
-                    lastCheckedAt: row.lastCheckedAt.map(Date.init(timeIntervalSince1970:)),
-                    lastKnownUpdatedAt: row.lastKnownUpdatedAt.map(Date.init(timeIntervalSince1970:)),
-                    publicURL: row.publicURL.flatMap(URL.init(string:)),
-                    moderationBlocked: row.moderationBlocked.map { $0 != 0 },
-                    moderationMessage: row.moderationMessage,
-                    archiveID: row.archiveID,
-                    submittedTitle: row.submittedTitle,
-                    submittedDetail: row.submittedDetail,
-                    submittedReproductionSteps: row.submittedReproductionSteps,
-                    submittedExpectedBehavior: row.submittedExpectedBehavior,
-                    submittedActualBehavior: row.submittedActualBehavior,
-                    submittedExtraContext: row.submittedExtraContext,
-                    lastKnownCommentCount: row.lastKnownCommentCount,
-                    lastKnownDeveloperCommentID: row.lastKnownDeveloperCommentID,
-                    lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:))
-                )
-            }.sorted { lhs, rhs in
-                let lhsDate = lhs.lastCheckedAt ?? lhs.createdAt
-                let rhsDate = rhs.lastCheckedAt ?? rhs.createdAt
-                if lhsDate != rhsDate {
-                    return lhsDate > rhsDate
-                }
-                return lhs.issueNumber > rhs.issueNumber
-            }
+            try loadTickets(from: db)
         }) else {
             return nil
         }
@@ -195,6 +163,42 @@ public enum FeedbackStore {
             return legacy
         }
         return tickets
+    }
+
+    static func loadTickets(from db: Database) throws -> [FeedbackTicket] {
+        let rows = try RelationalFeedbackTicketRecord.fetchAll(db)
+        return rows.map { row in
+            FeedbackTicket(
+                issueNumber: row.issueNumber,
+                ticketToken: row.ticketToken,
+                category: FeedbackCategory(rawValue: row.category) ?? .bug,
+                title: row.title,
+                createdAt: Date(timeIntervalSince1970: row.createdAt),
+                lastKnownStatus: FeedbackTicketStatus(rawValue: row.lastKnownStatus) ?? .inProgress,
+                lastCheckedAt: row.lastCheckedAt.map(Date.init(timeIntervalSince1970:)),
+                lastKnownUpdatedAt: row.lastKnownUpdatedAt.map(Date.init(timeIntervalSince1970:)),
+                publicURL: row.publicURL.flatMap(URL.init(string:)),
+                moderationBlocked: row.moderationBlocked.map { $0 != 0 },
+                moderationMessage: row.moderationMessage,
+                archiveID: row.archiveID,
+                submittedTitle: row.submittedTitle,
+                submittedDetail: row.submittedDetail,
+                submittedReproductionSteps: row.submittedReproductionSteps,
+                submittedExpectedBehavior: row.submittedExpectedBehavior,
+                submittedActualBehavior: row.submittedActualBehavior,
+                submittedExtraContext: row.submittedExtraContext,
+                lastKnownCommentCount: row.lastKnownCommentCount,
+                lastKnownDeveloperCommentID: row.lastKnownDeveloperCommentID,
+                lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:))
+            )
+        }.sorted { lhs, rhs in
+            let lhsDate = lhs.lastCheckedAt ?? lhs.createdAt
+            let rhsDate = rhs.lastCheckedAt ?? rhs.createdAt
+            if lhsDate != rhsDate {
+                return lhsDate > rhsDate
+            }
+            return lhs.issueNumber > rhs.issueNumber
+        }
     }
 
     @discardableResult
@@ -242,6 +246,15 @@ public enum FeedbackStore {
                 continue
             }
             return Persistence.loadAuxiliaryBlob([FeedbackTicket].self, forKey: key) ?? []
+        }
+        return nil
+    }
+
+    static func loadLegacyTickets(from store: PersistenceAuxiliaryGRDBStore) -> [FeedbackTicket]? {
+        for key in legacyBlobKeys {
+            if let tickets = store.loadAuxiliaryBlob([FeedbackTicket].self, forKey: key) {
+                return tickets
+            }
         }
         return nil
     }

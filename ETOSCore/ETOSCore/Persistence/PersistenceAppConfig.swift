@@ -100,33 +100,37 @@ extension Persistence {
 
     public static func loadAllAppConfigs() -> [(key: String, value: Any)] {
         withConfigDatabaseRead { db in
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT key, value_text, value_real, value_integer, type_hint
-                FROM app_config
-                ORDER BY key ASC
-                """
-            )
-            return rows.compactMap { row in
-                let key: String = row["key"]
-                let typeHint: String = row["type_hint"]
-                switch typeHint {
-                case "real":
-                    guard let value: Double = row["value_real"] else { return nil }
-                    return (key, value)
-                case "bool":
-                    guard let value: Int = row["value_integer"] else { return nil }
-                    return (key, value != 0)
-                case "integer":
-                    guard let value: Int = row["value_integer"] else { return nil }
-                    return (key, value)
-                default:
-                    guard let value: String = row["value_text"] else { return nil }
-                    return (key, value)
-                }
-            }
+            try loadAllAppConfigs(from: db)
         } ?? []
+    }
+
+    static func loadAllAppConfigs(from db: Database) throws -> [(key: String, value: Any)] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT key, value_text, value_real, value_integer, type_hint
+            FROM app_config
+            ORDER BY key ASC
+            """
+        )
+        return rows.compactMap { row in
+            let key: String = row["key"]
+            let typeHint: String = row["type_hint"]
+            switch typeHint {
+            case "real":
+                guard let value: Double = row["value_real"] else { return nil }
+                return (key, value)
+            case "bool":
+                guard let value: Int = row["value_integer"] else { return nil }
+                return (key, value != 0)
+            case "integer":
+                guard let value: Int = row["value_integer"] else { return nil }
+                return (key, value)
+            default:
+                guard let value: String = row["value_text"] else { return nil }
+                return (key, value)
+            }
+        }
     }
 
     @discardableResult

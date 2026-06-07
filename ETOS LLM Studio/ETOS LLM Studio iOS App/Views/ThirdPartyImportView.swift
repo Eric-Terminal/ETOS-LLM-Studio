@@ -249,6 +249,11 @@ struct ThirdPartyImportView: View {
         append(.data)
         append(.folder)
 
+        if selectedSource == .etosBackup,
+           let snapshotType = UTType(filenameExtension: SnapshotBuilder.fileExtension) {
+            append(snapshotType)
+        }
+
         if selectedSource == .cherryStudio || selectedSource == .rikkahub || selectedSource == .kelivo {
             if let zipType = UTType(filenameExtension: "zip") {
                 append(zipType)
@@ -264,7 +269,7 @@ struct ThirdPartyImportView: View {
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
         case .etosBackup:
-            return NSLocalizedString("支持导入旧版 ETOS JSON 数据包。", comment: "ETOS source hint")
+            return NSLocalizedString("支持导入 .elsbackup 快照或旧版 ETOS JSON 数据包。", comment: "ETOS source hint")
         case .cherryStudio:
             return NSLocalizedString("支持 Cherry Studio 的 .json 或解压后的备份目录；若是 .zip / .bak，请先解压后再导入。", comment: "Cherry source hint")
         case .rikkahub:

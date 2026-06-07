@@ -63,7 +63,7 @@ struct ThirdPartyImportWatchHintView: View {
                     progressRow(text: "正在导入并合并数据...")
                 }
 
-                Text(NSLocalizedString("支持 http/https 的 JSON 链接。", comment: ""))
+                Text(NSLocalizedString("支持 http/https 的 .json 或 .elsbackup 链接。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -169,7 +169,7 @@ struct ThirdPartyImportWatchHintView: View {
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
         switch source {
         case .etosBackup:
-            return NSLocalizedString("支持导入旧版 ETOS JSON 数据包。", comment: "")
+            return NSLocalizedString("支持导入 .elsbackup 快照或旧版 ETOS JSON 数据包。", comment: "")
         case .cherryStudio:
             return NSLocalizedString("支持 Cherry Studio 的 .json；若是 .zip / .bak，请先解压后再导入。", comment: "")
         case .rikkahub:
@@ -427,6 +427,17 @@ private enum ThirdPartyImportRemoteFileHelper {
             fileName = "import-data"
         }
 
+        if source == .etosBackup {
+            if data.starts(with: [0x50, 0x4B, 0x03, 0x04]) || data.starts(with: SnapshotEncryptor.magic) {
+                return (fileName as NSString).deletingPathExtension
+                    .appending(".\(SnapshotBuilder.fileExtension)")
+            }
+            if !(fileName as NSString).pathExtension.isEmpty {
+                return fileName
+            }
+            return "\(fileName).json"
+        }
+
         if !(fileName as NSString).pathExtension.isEmpty {
             return fileName
         }
@@ -445,7 +456,7 @@ private enum ThirdPartyImportRemoteFileHelper {
             return "\(fileName).zip"
         }
 
-        if source == .chatgpt || source == .etosBackup {
+        if source == .chatgpt {
             return "\(fileName).json"
         }
         return "\(fileName).json"

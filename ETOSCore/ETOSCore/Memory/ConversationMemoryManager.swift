@@ -106,6 +106,14 @@ public enum ConversationMemoryManager {
         profileStore.loadProfile()
     }
 
+    static func loadUserProfile(from db: Database) throws -> ConversationUserProfile? {
+        try ConversationUserProfileStore.loadProfile(from: db)
+    }
+
+    static func loadLegacyUserProfile(from store: PersistenceAuxiliaryGRDBStore) -> ConversationUserProfile? {
+        ConversationUserProfileStore.loadLegacyProfile(from: store)
+    }
+
     public static func saveUserProfile(
         content: String,
         updatedAt: Date = Date(),
@@ -298,10 +306,32 @@ private struct ConversationUserProfileStore {
         return nil
     }
 
+    static func loadLegacyProfile(from store: PersistenceAuxiliaryGRDBStore) -> ConversationUserProfile? {
+        let keys = ["conversation_user_profile", "conversation_user_profile_v1"]
+        for key in keys {
+            if let profile = store.loadAuxiliaryBlob(ConversationUserProfile.self, forKey: key) {
+                return profile
+            }
+        }
+        return nil
+    }
+
     private func removeLegacyProfileBlobs() {
         for key in legacyBlobKeys {
             _ = Persistence.removeAuxiliaryBlob(forKey: key)
         }
+    }
+
+    static func loadProfile(from db: Database) throws -> ConversationUserProfile? {
+        guard let record = try RelationalConversationUserProfileRecord.fetchOne(db, key: 1) else {
+            return nil
+        }
+        return ConversationUserProfile(
+            content: record.content,
+            updatedAt: Date(timeIntervalSince1970: record.updatedAt),
+            sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
+            needsLLMDedup: record.needsLLMDedup != 0
+        )
     }
 
     private struct RelationalConversationUserProfileRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {

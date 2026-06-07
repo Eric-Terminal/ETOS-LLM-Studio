@@ -1762,7 +1762,7 @@
 "支持 HTTP / HTTPS 和 SOCKS5。填写用户名后会自动启用代理鉴权。" = "Supports HTTP / HTTPS and SOCKS5. Filling in a username enables proxy authentication automatically.";
 "支持 Kelivo 的 settings.json + chats.json（建议使用包含两者的 JSON 目录导出内容）。" = "Supports Kelivo settings.json + chats.json (use a JSON directory export containing both).";
 "支持 RikkaHub 的 settings.json（当前先导入提供商配置）。" = "Supports RikkaHub settings.json (currently imports provider settings first).";
-"支持 http/https 的 JSON 链接。" = "Supports http/https JSON links.";
+"支持 http/https 的 .json 或 .elsbackup 链接。" = "http/https の .json または .elsbackup リンクに対応しています。";
 "支持 http/https 的 TTF / OTF / TTC / WOFF / WOFF2 链接。" = "http/https の TTF / OTF / TTC / WOFF / WOFF2 リンクに対応しています。";
 "支持 http/https 的文本链接，下载后按 SKILL.md 规则导入。" = "Supports http/https text links. After download, imports according to SKILL.md rules.";
 "支持导入 ETOS 导出的 JSON 数据包（含“同步与备份”导出）。" = "ETOS が書き出した JSON パッケージ（同期とバックアップの書き出しを含む）の取り込みに対応しています。";
@@ -2022,7 +2022,7 @@
 "路标时间（分钟）" = "Marker Interval (minutes)";
 "跳过" = "Skip";
 "软件设置" = "アプリ設定";
-"支持导入旧版 ETOS JSON 数据包。" = "旧式の ETOS JSON パッケージの取り込みに対応しています。";
+"支持导入 .elsbackup 快照或旧版 ETOS JSON 数据包。" = ".elsbackup スナップショットと旧式の ETOS JSON パッケージの取り込みに対応しています。";
 "软件设置 +%d" = "アプリ設定 +%d";
 "轻量预处理（推荐）" = "Lightweight Preprocessing (Recommended)";
 "输入关键词" = "Enter Keywords";
@@ -3161,7 +3161,7 @@
 "Cherry 备份未找到 localStorage。" = "Cherry backup did not include localStorage.";
 "Cherry 备份格式无法识别，或文件中没有可导入数据。" = "The Cherry backup format was not recognized, or the file contains no importable data.";
 "ETOS 数据包" = "ETOS data package";
-"ETOS 数据包请直接选择 .json 文件，不支持压缩包。" = "For ETOS data packages, select a .json file directly. Compressed archives are not supported.";
+"ETOS 数据包支持 .elsbackup 快照和旧版 .json 导出，请不要选择 .zip / .bak。" = "ETOS データパッケージは .elsbackup スナップショットと旧式の .json エクスポートに対応しています。.zip / .bak は選択しないでください。";
 "Error" = "Error";
 "Kelivo 备份中未识别到 chats.json 会话。" = "No chats.json conversations were found in the Kelivo backup.";
 "Kelivo 备份中未识别到 provider_configs。" = "No provider_configs were found in the Kelivo backup.";
@@ -3244,7 +3244,7 @@
 "收到能力变更通知：%@" = "Received capability change notification: %@";
 "收到通知：%@" = "Received notification: %@";
 "数据库表 %@ 缺少关键字段 %@，需要自动重建。" = "Database table %@ is missing required column %@ and needs automatic rebuilding.";
-"文件不是可识别的 ETOS 导出数据包。" = "The file is not a recognized ETOS export package.";
+"文件不是可识别的 ETOS 数据包或 .elsbackup 快照。" = "ファイルは認識可能な ETOS データパッケージまたは .elsbackup スナップショットではありません。";
 "新增提供商配置" = "Add provider configuration";
 "方法" = "Method";
 "无字段变化（覆盖保存）" = "No field changes (overwritten save)";
@@ -3264,7 +3264,7 @@
 "服务器连接失败：%@" = "Server connection failed: %@";
 "服务器连接成功：%@" = "Server connected: %@";
 "未在 RikkaHub 备份中识别到可导入的提供商。" = "No importable providers were found in the RikkaHub backup.";
-"未在目录中找到 ETOS 可识别的 JSON 导出包。" = "No ETOS-recognized JSON export package was found in the directory.";
+"未在目录中找到 ETOS 可识别的 .elsbackup 快照或 JSON 导出包。" = "ETOS が認識できる .elsbackup スナップショットまたは JSON エクスポートがディレクトリ内に見つかりません。";
 "未在目录中找到 conversations.json。" = "No conversations.json file was found in the directory.";
 "未找到 RikkaHub 可识别的 settings.json。" = "No RikkaHub-recognized settings.json was found.";
 "未识别到 ChatGPT conversations.json 结构。" = "The ChatGPT conversations.json structure was not recognized.";
@@ -3938,3 +3938,5 @@
 "立即同步" = "Sync Now";
 "开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "After it is enabled, supported data syncs automatically across devices signed in to the same Apple ID.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
+
+"当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "この .elsbackup スナップショットは暗号化されています。データ取り込み入口ではまだ復号してマージできません。「スナップショットから復元」を使用するか、未暗号化のスナップショットを選択してください。";

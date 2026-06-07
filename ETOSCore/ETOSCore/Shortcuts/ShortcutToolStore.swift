@@ -100,7 +100,7 @@ public struct ShortcutToolStore {
 
     private static func loadToolsFromSQLite() -> [ShortcutToolDefinition]? {
         guard let tools = Persistence.withConfigDatabaseRead({ db in
-            try loadToolsFromRelationalStore(db)
+            try loadTools(from: db)
         }) else {
             return nil
         }
@@ -126,6 +126,18 @@ public struct ShortcutToolStore {
                 return envelope.tools
             }
             if let tools = Persistence.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: key) {
+                return tools
+            }
+        }
+        return nil
+    }
+
+    static func loadLegacyTools(from store: PersistenceAuxiliaryGRDBStore) -> [ShortcutToolDefinition]? {
+        for key in legacyBlobKeys {
+            if let envelope = store.loadAuxiliaryBlob(StoredEnvelope.self, forKey: key) {
+                return envelope.tools
+            }
+            if let tools = store.loadAuxiliaryBlob([ShortcutToolDefinition].self, forKey: key) {
                 return tools
             }
         }
@@ -182,7 +194,7 @@ public struct ShortcutToolStore {
         }
     }
 
-    private static func loadToolsFromRelationalStore(_ db: Database) throws -> [ShortcutToolDefinition] {
+    static func loadTools(from db: Database) throws -> [ShortcutToolDefinition] {
         let toolRows = try RelationalShortcutToolRecord.fetchAll(db)
             .sorted { lhs, rhs in
                 let lhsName = lhs.name.lowercased()
