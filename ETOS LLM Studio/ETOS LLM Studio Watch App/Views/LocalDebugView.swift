@@ -23,227 +23,288 @@ public struct LocalDebugView: View {
     public init() {}
     
     public var body: some View {
+        content
+            .navigationTitle(NSLocalizedString("诊断", comment: ""))
+            .navigationBarBackButtonHidden(server.isRunning)
+            .sheet(isPresented: $showingDocs) {
+                NavigationStack {
+                    WatchDocumentationView()
+                }
+            }
+            .sheet(isPresented: $showingLogs) {
+                NavigationStack {
+                    WatchDebugLogsView(server: server)
+                }
+            }
+            .alert(
+                NSLocalizedString("发现调试服务器", comment: ""),
+                isPresented: discoveredServerAlertBinding
+            ) {
+                Button(NSLocalizedString("填入地址", comment: "")) {
+                    if let candidate = pendingDiscoveredServer {
+                        fillDiscoveredServer(candidate)
+                    }
+                    pendingDiscoveredServer = nil
+                }
+                Button(NSLocalizedString("稍后", comment: ""), role: .cancel) {
+                    pendingDiscoveredServer = nil
+                }
+            } message: {
+                discoveredServerAlertMessage
+            }
+            .onAppear {
+                loadStoredServerURL()
+                discovery.start()
+            }
+            .onDisappear {
+                discovery.stop()
+            }
+            .onChange(of: discovery.discoveredServers) { _, candidates in
+                promptForDiscoveredServerIfNeeded(candidates)
+            }
+            .onChange(of: server.isRunning) { _, isRunning in
+                if isRunning {
+                    discovery.stop()
+                } else {
+                    discovery.start()
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase != .active && server.isRunning {
+                    disconnectServer()
+                }
+            }
+    }
+
+    private var content: some View {
         List {
-            // 连接状态
-            Section {
-                HStack {
-                    Circle()
-                        .fill(server.isRunning ? Color.green : Color.secondary)
-                        .frame(width: 8, height: 8)
-                    Text(server.connectionStatus)
-                        .etFont(.caption)
-                        .foregroundStyle(server.isRunning ? .green : .secondary)
-                }
-                
-                if let error = server.errorMessage {
-                    Text(error)
-                        .etFont(.caption2)
-                        .foregroundStyle(.red)
-                }
-            }
-            
-            // 连接配置
+            connectionStatusSection
             if !server.isRunning {
-                Section(header: Text(NSLocalizedString("连接模式", comment: ""))) {
-                    Toggle(isOn: $server.useHTTP) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(server.useHTTP ? NSLocalizedString("HTTP 轮询", comment: "") : "WebSocket")
-                                .etFont(.caption)
-                            Text(server.useHTTP ? NSLocalizedString("稳定但较慢", comment: "") : NSLocalizedString("快速优先，失败自动回退 HTTP", comment: ""))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Section(header: Text(NSLocalizedString("自动发现", comment: ""))) {
-                    if discovery.discoveredServers.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: "dot.radiowaves.left.and.right")
-                                .foregroundStyle(.blue)
-                            Text(discovery.isSearching ? NSLocalizedString("正在搜索", comment: "") : NSLocalizedString("未发现调试服务器", comment: ""))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        ForEach(discovery.discoveredServers.prefix(3)) { candidate in
-                            Button {
-                                fillDiscoveredServer(candidate)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(candidate.name)
-                                        .etFont(.caption)
-                                    Text(candidate.connectionAddress(useHTTP: server.useHTTP))
-                                        .etFont(.caption2.monospaced())
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-
-                    Button {
-                        discovery.restart()
-                    } label: {
-                        Label(NSLocalizedString("重新扫描", comment: ""), systemImage: "arrow.clockwise")
-                            .etFont(.caption)
-                    }
-                } footer: {
-                    if let error = discovery.errorMessage {
-                        Text(error)
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(NSLocalizedString("发现电脑端后可一键填入地址。", comment: ""))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                Section(header: Text(NSLocalizedString("服务器地址", comment: ""))) {
-                    TextField(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765", text: $serverURL.watchKeyboardNewlineBinding())
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    Button(NSLocalizedString("连接", comment: "")) {
-                        connectToServer()
-                    }
-                    .foregroundStyle(.blue)
-                    .disabled(trimmedServerURL.isEmpty)
-                }
+                connectionModeSection
+                discoverySection
+                serverAddressSection
             } else {
-                Section(NSLocalizedString("连接信息", comment: "")) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(NSLocalizedString("服务器", comment: ""))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(server.serverURL)
-                            .etFont(.caption.monospaced())
-                    }
-                    
-                    Button(NSLocalizedString("断开", comment: "")) {
-                        disconnectServer()
-                    }
-                    .foregroundStyle(.red)
-                }
-                
-                // 调试日志
-                Section {
-                    Button {
-                        showingLogs = true
-                    } label: {
-                        HStack {
-                            Text(NSLocalizedString("调试日志", comment: ""))
-                                .etFont(.caption)
-                            Spacer()
-                            Text("\(server.debugLogs.count)")
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+                connectedInfoSection
+                debugLogsSection
+            }
+            pendingOpenAISection
+            documentationSection
+        }
+    }
+
+    private var connectionStatusSection: some View {
+        Section {
+            HStack {
+                Circle()
+                    .fill(server.isRunning ? Color.green : Color.secondary)
+                    .frame(width: 8, height: 8)
+                Text(server.connectionStatus)
+                    .etFont(.caption)
+                    .foregroundStyle(server.isRunning ? .green : .secondary)
             }
 
-            if server.isRunning, server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0 {
-                Section {
-                    if let pending = server.pendingOpenAIRequest {
-                        let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
-                        Text(String(format: NSLocalizedString("请求详情：模型 %@ · 消息 %d", comment: ""), modelName, pending.messageCount))
-                            .etFont(.caption2)
-                        Text(formatPendingTime(pending.receivedAt))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                        Button(NSLocalizedString("保存日志", comment: "")) {
-                            server.resolvePendingOpenAIRequest(save: true)
-                        }
+            if let error = server.errorMessage {
+                Text(error)
+                    .etFont(.caption2)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var connectionModeSection: some View {
+        Section {
+            Toggle(isOn: $server.useHTTP) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(server.useHTTP ? NSLocalizedString("HTTP 轮询", comment: "") : "WebSocket")
                         .etFont(.caption)
-                        Button(NSLocalizedString("忽略", comment: "")) {
-                            server.resolvePendingOpenAIRequest(save: false)
-                        }
-                        .etFont(.caption)
-                    }
-                } header: {
-                    Text(NSLocalizedString("API 流量分析", comment: ""))
-                } footer: {
-                    if server.pendingOpenAIQueueCount > 1 {
-                        Text(String(format: NSLocalizedString("剩余 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(server.useHTTP ? NSLocalizedString("稳定但较慢", comment: "") : NSLocalizedString("快速优先，失败自动回退 HTTP", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
-            
-            // 文档
-            Section {
-                Button {
-                    showingDocs = true
-                } label: {
-                    Label(NSLocalizedString("使用说明", comment: ""), systemImage: "book")
-                        .etFont(.caption)
-                }
-            } footer: {
-                Text(NSLocalizedString("远程诊断模式 · 主动连接调试端", comment: ""))
+        } header: {
+            Text(NSLocalizedString("连接模式", comment: ""))
+        }
+    }
+
+    private var discoverySection: some View {
+        Section {
+            discoveredServerRows
+            Button {
+                discovery.restart()
+            } label: {
+                Label(NSLocalizedString("重新扫描", comment: ""), systemImage: "arrow.clockwise")
+                    .etFont(.caption)
+            }
+        } header: {
+            Text(NSLocalizedString("自动发现", comment: ""))
+        } footer: {
+            Text(discoveryFooterText)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var discoveredServerRows: some View {
+        if discoveredServerCandidates.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(.blue)
+                Text(discovery.isSearching ? NSLocalizedString("正在搜索", comment: "") : NSLocalizedString("未发现调试服务器", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
-        }
-        .navigationTitle(NSLocalizedString("诊断", comment: ""))
-        .navigationBarBackButtonHidden(server.isRunning)
-        .sheet(isPresented: $showingDocs) {
-            NavigationStack {
-                WatchDocumentationView()
-            }
-        }
-        .sheet(isPresented: $showingLogs) {
-            NavigationStack {
-                WatchDebugLogsView(server: server)
-            }
-        }
-        .alert(
-            NSLocalizedString("发现调试服务器", comment: ""),
-            isPresented: Binding(
-                get: { pendingDiscoveredServer != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingDiscoveredServer = nil
+        } else {
+            ForEach(discoveredServerCandidates) { candidate in
+                Button {
+                    fillDiscoveredServer(candidate)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(candidate.name)
+                            .etFont(.caption)
+                        Text(candidate.connectionAddress(useHTTP: server.useHTTP))
+                            .etFont(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
                     }
                 }
-            )
-        ) {
-            Button(NSLocalizedString("填入地址", comment: "")) {
-                if let candidate = pendingDiscoveredServer {
-                    fillDiscoveredServer(candidate)
-                }
-                pendingDiscoveredServer = nil
-            }
-            Button(NSLocalizedString("稍后", comment: ""), role: .cancel) {
-                pendingDiscoveredServer = nil
-            }
-        } message: {
-            if let candidate = pendingDiscoveredServer {
-                Text(String(format: NSLocalizedString("是否填入 %@？", comment: ""), candidate.connectionAddress(useHTTP: server.useHTTP)))
             }
         }
-        .onAppear {
-            loadStoredServerURL()
-            discovery.start()
-        }
-        .onDisappear {
-            discovery.stop()
-        }
-        .onChange(of: discovery.discoveredServers) { _, candidates in
-            promptForDiscoveredServerIfNeeded(candidates)
-        }
-        .onChange(of: server.isRunning) { _, isRunning in
-            if isRunning {
-                discovery.stop()
-            } else {
-                discovery.start()
+    }
+
+    private var serverAddressSection: some View {
+        Section {
+            TextField(serverAddressPlaceholder, text: $serverURL.watchKeyboardNewlineBinding())
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            Button(NSLocalizedString("连接", comment: "")) {
+                connectToServer()
             }
+            .foregroundStyle(.blue)
+            .disabled(trimmedServerURL.isEmpty)
+        } header: {
+            Text(NSLocalizedString("服务器地址", comment: ""))
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active && server.isRunning {
+    }
+
+    private var connectedInfoSection: some View {
+        Section(NSLocalizedString("连接信息", comment: "")) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NSLocalizedString("服务器", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(server.serverURL)
+                    .etFont(.caption.monospaced())
+            }
+
+            Button(NSLocalizedString("断开", comment: "")) {
                 disconnectServer()
             }
+            .foregroundStyle(.red)
+        }
+    }
+
+    private var debugLogsSection: some View {
+        Section {
+            Button {
+                showingLogs = true
+            } label: {
+                HStack {
+                    Text(NSLocalizedString("调试日志", comment: ""))
+                        .etFont(.caption)
+                    Spacer()
+                    Text("\(server.debugLogs.count)")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pendingOpenAISection: some View {
+        if hasPendingOpenAIRequest {
+            Section {
+                if let pending = server.pendingOpenAIRequest {
+                    let modelName = pending.model ?? NSLocalizedString("未知", comment: "")
+                    Text(String(format: NSLocalizedString("请求详情：模型 %@ · 消息 %d", comment: ""), modelName, pending.messageCount))
+                        .etFont(.caption2)
+                    Text(formatPendingTime(pending.receivedAt))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Button(NSLocalizedString("保存日志", comment: "")) {
+                        server.resolvePendingOpenAIRequest(save: true)
+                    }
+                    .etFont(.caption)
+                    Button(NSLocalizedString("忽略", comment: "")) {
+                        server.resolvePendingOpenAIRequest(save: false)
+                    }
+                    .etFont(.caption)
+                }
+            } header: {
+                Text(NSLocalizedString("API 流量分析", comment: ""))
+            } footer: {
+                pendingOpenAIFooter
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pendingOpenAIFooter: some View {
+        if server.pendingOpenAIQueueCount > 1 {
+            Text(String(format: NSLocalizedString("剩余 %d 条记录", comment: ""), server.pendingOpenAIQueueCount - 1))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var documentationSection: some View {
+        Section {
+            Button {
+                showingDocs = true
+            } label: {
+                Label(NSLocalizedString("使用说明", comment: ""), systemImage: "book")
+                    .etFont(.caption)
+            }
+        } footer: {
+            Text(NSLocalizedString("远程诊断模式 · 主动连接调试端", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var discoveredServerCandidates: [LocalDebugDiscoveredServer] {
+        Array(discovery.discoveredServers.prefix(3))
+    }
+
+    private var discoveryFooterText: String {
+        discovery.errorMessage ?? NSLocalizedString("发现电脑端后可一键填入地址。", comment: "")
+    }
+
+    private var serverAddressPlaceholder: String {
+        server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"
+    }
+
+    private var hasPendingOpenAIRequest: Bool {
+        server.isRunning && (server.pendingOpenAIRequest != nil || server.pendingOpenAIQueueCount > 0)
+    }
+
+    private var discoveredServerAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDiscoveredServer != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDiscoveredServer = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var discoveredServerAlertMessage: some View {
+        if let candidate = pendingDiscoveredServer {
+            Text(String(format: NSLocalizedString("是否填入 %@？", comment: ""), candidate.connectionAddress(useHTTP: server.useHTTP)))
         }
     }
 
