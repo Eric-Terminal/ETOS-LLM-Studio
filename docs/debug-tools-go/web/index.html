@@ -4,206 +4,430 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ETOS 调试控制台</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
-    rel="stylesheet"
-  />
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: #0b0f17;
-      --card: #121826;
-      --text: #e8edf7;
-      --muted: #9aa5bd;
-      --accent: #57a6ff;
-      --border: #263048;
-      --danger: #ff6b6b;
-      --ok: #38d49c;
+      color-scheme: light;
+      --accent: #0066cc;
+      --accent-soft: #f5f5f7;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --quiet: #86868b;
+      --canvas: #ffffff;
+      --page: #f5f5f7;
+      --surface: #fafafc;
+      --divider: #e5e5ea;
+      --hairline: #d2d2d7;
+      --field: #ffffff;
+      --selected: #f5f5f7;
+      --on-primary: #ffffff;
     }
-    @media (prefers-color-scheme: light) {
-      :root {
-        --bg: #f6f8fc;
-        --card: #ffffff;
-        --text: #1f2a3d;
-        --muted: #5f6c86;
-        --accent: #1f73ff;
-        --border: #d7dfef;
-        --danger: #e53935;
-        --ok: #0b9d6f;
-      }
+
+    * {
+      box-sizing: border-box;
     }
-    * { box-sizing: border-box; }
+
+    html {
+      height: 100%;
+    }
+
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: 14px/1.5 "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      min-height: 100%;
+      overflow: hidden;
+      background: var(--page);
+      color: var(--ink);
+      font: 13px/1.42 "SF Pro Text", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif;
+      letter-spacing: 0;
     }
-    .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+
+    .app {
+      display: grid;
+      grid-template-columns: 244px minmax(0, 1fr);
+      grid-template-rows: 56px minmax(0, 1fr);
+      height: 100vh;
+      height: 100dvh;
+      background: var(--page);
+    }
+
     .topbar {
+      grid-column: 2;
+      grid-row: 1;
       display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 14px;
+      gap: 16px;
+      min-width: 0;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--divider);
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: saturate(180%) blur(18px);
     }
-    .title { font-size: 20px; font-weight: 700; }
+
+    .title {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .status {
       display: flex;
-      gap: 10px;
       align-items: center;
+      gap: 10px;
+      min-width: 0;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
+      white-space: nowrap;
     }
+
     .dot {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       display: inline-block;
-      background: #777;
+      background: var(--quiet);
+      flex: 0 0 auto;
     }
-    .dot.ok { background: var(--ok); }
+
+    .dot.ok {
+      background: var(--accent);
+    }
+
     .tabs {
+      position: relative;
+      grid-column: 1;
+      grid-row: 1 / span 2;
       display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-height: 0;
+      padding: 72px 12px 16px;
+      border-right: 1px solid var(--divider);
+      background: var(--canvas);
+    }
+
+    .tabs::before {
+      content: "ETOS 调试工具";
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      color: var(--ink);
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .tab-btn {
+      width: 100%;
+      min-height: 34px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      padding: 8px 12px;
+      text-align: left;
+      transition: background 120ms ease, color 120ms ease;
+    }
+
+    .tab-btn:hover {
+      background: var(--page);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .panel {
+      grid-column: 2;
+      grid-row: 2;
+      display: none;
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 20px 24px 28px;
+      background: var(--page);
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
       gap: 8px;
       flex-wrap: wrap;
       margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      background: var(--surface);
     }
-    .tab-btn {
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-    .tab-btn.active { border-color: var(--accent); color: var(--accent); }
-    .panel {
-      display: none;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--card);
-      padding: 14px;
-      min-height: 520px;
-    }
-    .panel.active { display: block; }
-    .toolbar {
+
+    .actions {
       display: flex;
+      align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      align-items: center;
-      margin-bottom: 10px;
     }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .command-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px;
+    }
+
+    .command-button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      border: 1px solid var(--hairline);
+      border-radius: 8px;
+      background: var(--canvas);
+      color: var(--ink);
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    .command-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .command-button span:last-child {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     input, textarea, select, button {
       font: inherit;
-      color: inherit;
+      letter-spacing: 0;
     }
+
     input, textarea, select {
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text);
+      min-height: 30px;
+      border: 1px solid var(--hairline);
       border-radius: 8px;
-      padding: 6px 8px;
+      background: var(--field);
+      color: var(--ink);
+      padding: 5px 8px;
+      outline: none;
     }
-    textarea { width: 100%; min-height: 120px; resize: vertical; }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      outline: 3px solid rgba(0, 102, 204, 0.12);
+    }
+
+    input[readonly], textarea[readonly] {
+      background: var(--surface);
+      color: var(--muted);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 112px;
+      resize: vertical;
+    }
+
     button {
-      border: 1px solid var(--border);
-      background: transparent;
+      min-height: 30px;
+      border: 1px solid var(--hairline);
       border-radius: 8px;
-      padding: 6px 10px;
+      background: var(--canvas);
+      color: var(--ink);
       cursor: pointer;
+      padding: 5px 10px;
+      transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
     }
-    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    button.danger { border-color: var(--danger); color: var(--danger); }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--on-primary);
+    }
+
+    button.primary:hover {
+      color: var(--on-primary);
+      filter: brightness(0.96);
+    }
+
+    button.danger {
+      border-color: var(--hairline);
+      color: var(--ink);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
     .split {
       display: grid;
-      gap: 10px;
+      gap: 12px;
+      min-width: 0;
     }
-    .split.two { grid-template-columns: 300px 1fr; }
-    .split.files { grid-template-columns: 260px 1fr 1fr; }
-    .split.providers { grid-template-columns: 360px 1fr; }
-    .split.sqlite { grid-template-columns: 340px 1fr; align-items: start; }
+
+    .split.two {
+      grid-template-columns: 340px minmax(0, 1fr);
+    }
+
+    .split.files {
+      grid-template-columns: 280px minmax(360px, 0.95fr) minmax(420px, 1.05fr);
+    }
+
+    .split.providers {
+      grid-template-columns: 380px minmax(0, 1fr);
+    }
+
+    .split.sqlite {
+      grid-template-columns: 360px minmax(0, 1fr);
+      align-items: start;
+    }
+
     .card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.05);
+      min-width: 0;
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      background: var(--canvas);
+      padding: 12px;
     }
-    .muted { color: var(--muted); }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 12px;
     }
+
     th, td {
-      border-bottom: 1px solid var(--border);
-      padding: 6px;
+      border-bottom: 1px solid var(--divider);
+      padding: 6px 8px;
       text-align: left;
       vertical-align: top;
     }
-    tr:hover { background: rgba(87, 166, 255, 0.08); }
-    tr.selected { background: rgba(87, 166, 255, 0.16); }
-    .list {
-      max-height: 460px;
-      overflow: auto;
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
     }
-    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+    tr:hover {
+      background: var(--surface);
+    }
+
+    tr.selected {
+      background: var(--selected);
+    }
+
+    .list {
+      max-height: calc(100vh - 190px);
+      overflow: auto;
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+    }
+
+    .mono {
+      font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
     .kv {
       display: grid;
-      grid-template-columns: 160px 1fr;
+      grid-template-columns: minmax(128px, 180px) minmax(0, 1fr);
       gap: 8px;
       align-items: center;
     }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
     .preview {
       min-height: 260px;
-      border: 1px dashed var(--border);
+      border: 1px solid var(--divider);
       border-radius: 8px;
+      background: var(--surface);
       padding: 10px;
       overflow: auto;
     }
-    .preview img { max-width: 100%; border-radius: 8px; }
-    .sql-editor { min-height: 132px; }
+
+    .preview img {
+      max-width: 100%;
+      border-radius: 8px;
+    }
+
+    .sql-editor {
+      min-height: 132px;
+    }
+
     .sqlite-schema {
       display: grid;
-      gap: 10px;
+      gap: 12px;
     }
+
     .sqlite-detail {
       max-height: 300px;
       overflow: auto;
     }
+
     .table-wrap {
       max-height: 360px;
       overflow: auto;
-      border: 1px dashed var(--border);
+      border: 1px solid var(--divider);
       border-radius: 8px;
     }
+
     .table-wrap table th,
     .table-wrap table td {
       white-space: nowrap;
     }
+
     .result-meta {
       display: flex;
-      gap: 8px;
       align-items: center;
+      gap: 8px;
       flex-wrap: wrap;
       margin: 8px 0;
     }
+
     .checkbox-row {
       display: inline-flex;
-      gap: 6px;
       align-items: center;
+      gap: 6px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
     }
+
     .checkbox-row input {
       width: auto;
       margin: 0;
     }
+
     .raw-json {
       min-height: 180px;
       max-height: 320px;
@@ -211,43 +435,60 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+
     .footer-note {
       margin-top: 10px;
       color: var(--muted);
       font-size: 12px;
     }
+
     .pill {
       display: inline-block;
-      border: 1px solid var(--border);
+      border: 1px solid var(--divider);
       border-radius: 999px;
-      padding: 2px 8px;
-      font-size: 12px;
+      background: var(--surface);
       color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+      padding: 3px 8px;
     }
+
     .msg-row {
-      border: 1px solid var(--border);
+      border: 1px solid var(--divider);
       border-radius: 8px;
+      background: var(--surface);
       padding: 8px;
       margin-bottom: 8px;
     }
+
+    .message-list {
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 8px;
+    }
+
     .msg-row-head {
       display: flex;
-      gap: 8px;
       align-items: center;
+      gap: 8px;
       flex-wrap: wrap;
       margin-bottom: 6px;
     }
+
     .msg-row-content {
       width: 100%;
       min-height: 72px;
     }
+
     .file-tree {
-      max-height: 460px;
+      max-height: calc(100vh - 190px);
       overflow: auto;
-      border: 1px dashed var(--border);
+      border: 1px solid var(--divider);
       border-radius: 8px;
       padding: 6px;
     }
+
     .tree-row {
       display: flex;
       align-items: center;
@@ -257,8 +498,16 @@
       cursor: pointer;
       user-select: none;
     }
-    .tree-row:hover { background: rgba(87, 166, 255, 0.08); }
-    .tree-row.selected { background: rgba(87, 166, 255, 0.16); }
+
+    .tree-row:hover {
+      background: var(--surface);
+    }
+
+    .tree-row.selected {
+      background: var(--selected);
+      color: var(--accent);
+    }
+
     .tree-toggle {
       width: 20px;
       padding: 0;
@@ -266,7 +515,9 @@
       line-height: 18px;
       text-align: center;
       border: 0;
+      background: transparent;
     }
+
     .tree-name {
       flex: 1;
       min-width: 0;
@@ -274,23 +525,92 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
     .tree-error {
-      color: var(--danger);
+      color: var(--ink);
       font-size: 12px;
       margin: 2px 0 4px 26px;
     }
+
+    input[type="file"] {
+      max-width: 220px;
+      background: var(--surface);
+    }
+
     @media (max-width: 1180px) {
       .split.files { grid-template-columns: 1fr; }
       .split.providers { grid-template-columns: 1fr; }
       .split.sqlite { grid-template-columns: 1fr; }
+      .overview-grid { grid-template-columns: 1fr; }
     }
+
+    @media (max-width: 760px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        display: block;
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        min-height: 76px;
+        padding: 12px 16px;
+      }
+
+      .tabs {
+        position: sticky;
+        top: 76px;
+        z-index: 9;
+        flex-direction: row;
+        overflow-x: auto;
+        min-height: 0;
+        padding: 8px 16px;
+        border-right: 0;
+        border-bottom: 1px solid var(--divider);
+      }
+
+      .tabs::before {
+        display: none;
+      }
+
+      .tab-btn {
+        width: auto;
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+
+      .split.two,
+      .split.files,
+      .split.providers,
+      .split.sqlite {
+        grid-template-columns: 1fr;
+      }
+
+      .kv {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="title">ETOS 调试控制台（Web GUI）</div>
+    <div class="title">ETOS 桌面调试工具</div>
     <div class="status">
       <span id="connDot" class="dot"></span>
       <span id="connText">正在检查连接...</span>
@@ -310,14 +630,32 @@
   </div>
 
   <section id="panel-overview" class="panel active">
-    <div class="card">
-      <div class="kv">
-        <div>连接状态</div><div id="ovConnected">-</div>
-        <div>连接模式</div><div id="ovMode">-</div>
-        <div>命令队列</div><div id="ovQueue">-</div>
-        <div>挂起请求</div><div id="ovPending">-</div>
+    <div class="overview-grid">
+      <div class="card">
+        <div class="muted" style="margin-bottom:8px;">连接状态</div>
+        <div class="kv">
+          <div>设备状态</div><div id="ovConnected">-</div>
+          <div>连接模式</div><div id="ovMode">-</div>
+          <div>命令队列</div><div id="ovQueue">-</div>
+          <div>挂起请求</div><div id="ovPending">-</div>
+          <div>WebSocket 端口</div><div id="ovWSPort">-</div>
+          <div>WebUI 端口</div><div id="ovHTTPPort">-</div>
+          <div>代理端口</div><div id="ovProxyPort">-</div>
+        </div>
+        <div class="footer-note">设备需要先在 App 的高级诊断中连接当前电脑，支持 WebSocket 或 HTTP 轮询。</div>
       </div>
-      <div class="footer-note">提示：设备需先在 App 的“高级诊断”中连接当前电脑（WebSocket 或 HTTP 轮询）。</div>
+      <div class="card">
+        <div class="muted" style="margin-bottom:8px;">操作入口</div>
+        <div class="command-grid">
+          <button class="command-button" data-open-tab="files"><span>文件管理</span><span>浏览与传输</span></button>
+          <button class="command-button" data-open-tab="providers"><span>提供商</span><span>配置与模型</span></button>
+          <button class="command-button" data-open-tab="settings"><span>设置</span><span>查看与修改</span></button>
+          <button class="command-button" data-open-tab="sessions"><span>会话</span><span>详情与消息</span></button>
+          <button class="command-button" data-open-tab="memories"><span>记忆</span><span>编辑与归档</span></button>
+          <button class="command-button" data-open-tab="sqlite"><span>SQLite</span><span>结构与 SQL</span></button>
+          <button class="command-button" data-open-tab="captures"><span>OpenAI 捕获</span><span>保存或忽略</span></button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -384,7 +722,7 @@
 
       <div class="card">
         <div class="kv" style="margin-bottom:8px;">
-          <div>Provider ID</div><input id="providerID" class="mono" readonly />
+          <div>提供商 ID</div><input id="providerID" class="mono" readonly />
           <div>名称</div><input id="providerName" />
           <div>Base URL</div><input id="providerBaseURL" class="mono" />
           <div>API 格式</div>
@@ -395,7 +733,7 @@
             <option value="gemini">gemini</option>
           </select>
           <div>API Key</div><input id="providerAPIKey" type="password" placeholder="留空则不修改已有 Key" />
-          <div>Header Overrides</div><textarea id="providerHeaders" class="mono" style="min-height:90px;" spellcheck="false">{}</textarea>
+          <div>Header 覆盖</div><textarea id="providerHeaders" class="mono" style="min-height:90px;" spellcheck="false">{}</textarea>
           <div>代理模式</div>
           <select id="providerProxyMode">
             <option value="inherit">inherit</option>
@@ -413,8 +751,8 @@
           <div>代理密码</div><input id="providerProxyPassword" type="password" />
         </div>
         <div class="actions" style="margin-bottom:12px;">
-          <button id="btnProviderNew">新建 Provider</button>
-          <button id="btnProviderSave" class="primary">保存 Provider</button>
+          <button id="btnProviderNew">新建提供商</button>
+          <button id="btnProviderSave" class="primary">保存提供商</button>
         </div>
 
         <div class="toolbar">
@@ -423,7 +761,7 @@
           <button id="btnProviderModelSave" class="primary">保存模型</button>
         </div>
         <div class="kv">
-          <div>Model ID</div><input id="modelID" class="mono" readonly />
+          <div>模型 ID</div><input id="modelID" class="mono" readonly />
           <div>模型名</div><input id="modelName" class="mono" />
           <div>显示名</div><input id="modelDisplayName" />
           <div>类型</div>
@@ -445,9 +783,10 @@
             <option value="expression">expression</option>
             <option value="rawJSON">rawJSON</option>
           </select>
-          <div>Raw Request Body JSON</div><textarea id="modelRawRequestBodyJSON" class="mono" style="min-height:90px;" spellcheck="false"></textarea>
-          <div>Override Parameters</div><textarea id="modelOverrideParameters" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
-          <div>Pricing</div><textarea id="modelPricing" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
+          <div>请求体原始 JSON</div><textarea id="modelRawRequestBodyJSON" class="mono" style="min-height:90px;" spellcheck="false"></textarea>
+          <div>覆盖参数</div><textarea id="modelOverrideParameters" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
+          <div>请求控件</div><textarea id="modelRequestBodyControls" class="mono" style="min-height:110px;" spellcheck="false">[]</textarea>
+          <div>定价</div><textarea id="modelPricing" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
         </div>
       </div>
     </div>
@@ -478,7 +817,7 @@
     </div>
     <div class="split two">
       <div class="card">
-        <div class="muted">app_config</div>
+        <div class="muted">app_config 设置表</div>
         <div class="list">
           <table>
             <thead><tr><th>Key</th><th>类型</th><th>同步</th></tr></thead>
@@ -520,8 +859,8 @@
         <div class="kv" style="margin-bottom:8px;">
           <div>会话ID</div><input id="sessionID" class="mono" readonly />
           <div>会话名称</div><input id="sessionName" />
-          <div>Topic Prompt</div><textarea id="sessionTopic" style="min-height:80px;"></textarea>
-          <div>Enhanced Prompt</div><textarea id="sessionEnhanced" style="min-height:80px;"></textarea>
+          <div>主题 Prompt</div><textarea id="sessionTopic" style="min-height:80px;"></textarea>
+          <div>增强 Prompt</div><textarea id="sessionEnhanced" style="min-height:80px;"></textarea>
           <div>世界书 IDs(JSON)</div><textarea id="sessionLorebookIDs" class="mono" style="min-height:70px;" placeholder="[]"></textarea>
         </div>
         <div class="actions" style="margin-bottom:8px;">
@@ -535,7 +874,7 @@
           <button id="btnMessageAdd">新增消息</button>
           <span id="sessionMessagesCount" class="pill">0 条消息</span>
         </div>
-        <div id="sessionMessagesFormWrap" class="card" style="margin-bottom:8px; max-height:280px; overflow:auto;">
+        <div id="sessionMessagesFormWrap" class="message-list" style="margin-bottom:8px; max-height:280px; overflow:auto;">
           <div id="sessionMessagesFormList"></div>
         </div>
         <textarea id="sessionMessagesJSON" class="mono hidden" style="min-height:220px;" placeholder="[]"></textarea>
@@ -613,7 +952,7 @@
         <div class="card">
           <div class="toolbar">
             <button id="btnSQLiteRunQuery" class="primary">执行查询</button>
-            <span class="muted">Max Rows</span>
+            <span class="muted">最大行数</span>
             <input id="sqliteMaxRows" type="number" min="1" max="500" value="50" style="width:90px;" />
           </div>
           <textarea id="sqliteQuerySQL" class="mono sql-editor" spellcheck="false">SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') LIMIT 50;</textarea>
@@ -639,7 +978,7 @@
           <div class="toolbar">
             <button id="btnSQLiteRunMutate" class="danger">确认并写入</button>
             <label class="checkbox-row"><input id="sqliteAllowWithoutWhere" type="checkbox" />允许无 WHERE</label>
-            <span class="muted">RETURNING</span>
+            <span class="muted">RETURNING 行数</span>
             <input id="sqliteReturningMaxRows" type="number" min="1" max="500" value="50" style="width:90px;" />
           </div>
           <textarea id="sqliteMutateSQL" class="mono sql-editor" spellcheck="false" placeholder="INSERT / UPDATE / DELETE / REPLACE"></textarea>
@@ -747,6 +1086,27 @@
     return cell
   }
 
+  function resetNode(node) {
+    node.replaceChildren()
+  }
+
+  function makeButton(label, className = '') {
+    const button = document.createElement('button')
+    if (className) button.className = className
+    button.textContent = label
+    return button
+  }
+
+  function setFileEditorContent(text) {
+    const preview = el('filePreview')
+    const editor = document.createElement('textarea')
+    editor.id = 'fileEditor'
+    editor.className = 'mono'
+    editor.style.minHeight = '320px'
+    editor.value = text
+    preview.replaceChildren(editor)
+  }
+
   function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tab)
@@ -768,6 +1128,9 @@
       el('ovMode').textContent = status.mode || '-'
       el('ovQueue').textContent = String(status.queue_size ?? '-')
       el('ovPending').textContent = String(status.pending_requests ?? '-')
+      el('ovWSPort').textContent = String(status.ws_port ?? '-')
+      el('ovHTTPPort').textContent = String(status.http_port ?? '-')
+      el('ovProxyPort').textContent = String(status.proxy_port ?? '-')
     } catch (error) {
       el('connDot').classList.remove('ok')
       el('connText').textContent = `状态查询失败：${error.message}`
@@ -776,16 +1139,14 @@
 
   function renderFiles() {
     const tbody = el('filesTableBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
     state.files.forEach(item => {
       const tr = document.createElement('tr')
       if (state.selectedFile?.name === item.name) tr.classList.add('selected')
-      tr.innerHTML = `
-        <td>${item.name}</td>
-        <td>${item.isDirectory ? '目录' : '文件'}</td>
-        <td>${item.isDirectory ? '-' : (item.size ?? 0)}</td>
-        <td>${toISODate(item.modificationDate)}</td>
-      `
+      appendTextCell(tr, item.name || '-')
+      appendTextCell(tr, item.isDirectory ? '目录' : '文件')
+      appendTextCell(tr, item.isDirectory ? '-' : (item.size ?? 0))
+      appendTextCell(tr, toISODate(item.modificationDate))
       tr.addEventListener('click', () => {
         state.selectedFile = item
         state.selectedFileBase64 = null
@@ -903,11 +1264,11 @@
     const toggle = document.createElement('button')
     toggle.className = 'tree-toggle'
     if (node.loading) {
-      toggle.textContent = '…'
+      toggle.textContent = '...'
     } else if (node.loaded && !(node.children || []).length) {
-      toggle.textContent = '·'
+      toggle.textContent = '-'
     } else {
-      toggle.textContent = node.expanded ? '▾' : '▸'
+      toggle.textContent = node.expanded ? 'v' : '>'
     }
     toggle.addEventListener('click', async (event) => {
       event.stopPropagation()
@@ -948,9 +1309,12 @@
 
   function renderFilesTree() {
     const container = el('filesTree')
-    container.innerHTML = ''
+    resetNode(container)
     if (!state.dirTreeRoot) {
-      container.innerHTML = '<div class="muted">目录树未初始化</div>'
+      const empty = document.createElement('div')
+      empty.className = 'muted'
+      empty.textContent = '目录树未初始化'
+      container.appendChild(empty)
       return
     }
     renderDirTreeNode(state.dirTreeRoot, 0, container)
@@ -992,7 +1356,10 @@
     const preview = el('filePreview')
 
     if (/(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.heic)$/.test(lower)) {
-      preview.innerHTML = `<img src="data:image/*;base64,${b64}" alt="preview">`
+      const image = document.createElement('img')
+      image.src = `data:image/*;base64,${b64}`
+      image.alt = state.selectedFile.name || 'preview'
+      preview.replaceChildren(image)
       return
     }
 
@@ -1001,11 +1368,11 @@
       if (lower.endsWith('.json')) {
         try {
           const parsed = JSON.parse(text)
-          preview.innerHTML = `<textarea id="fileEditor" class="mono" style="min-height:320px;">${JSON.stringify(parsed, null, 2)}</textarea>`
+          setFileEditorContent(JSON.stringify(parsed, null, 2))
           return
         } catch (_) {}
       }
-      preview.innerHTML = `<textarea id="fileEditor" class="mono" style="min-height:320px;">${text.replace(/</g, '&lt;')}</textarea>`
+      setFileEditorContent(text)
     } catch (_) {
       preview.textContent = '该文件不是可预览文本，请使用“下载到本机”。'
     }
@@ -1131,7 +1498,7 @@
 
   function renderProvidersTable() {
     const tbody = el('providersTableBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
     if (!state.providers.length) {
       const tr = document.createElement('tr')
       const cell = document.createElement('td')
@@ -1186,7 +1553,7 @@
 
   function renderProviderModelSelect() {
     const select = el('providerModelSelect')
-    select.innerHTML = ''
+    resetNode(select)
     const models = Array.isArray(state.selectedProvider?.models) ? state.selectedProvider.models : []
     if (!models.length) {
       const option = document.createElement('option')
@@ -1219,6 +1586,7 @@
     el('modelRequestBodyOverrideMode').value = model?.requestBodyOverrideMode || 'keyValue'
     el('modelRawRequestBodyJSON').value = model?.rawRequestBodyJSON || ''
     el('modelOverrideParameters').value = JSON.stringify(model?.overrideParameters || {}, null, 2)
+    el('modelRequestBodyControls').value = JSON.stringify(model?.requestBodyControls || [], null, 2)
     el('modelPricing').value = JSON.stringify(model?.pricing || {}, null, 2)
   }
 
@@ -1312,6 +1680,7 @@
       return
     }
     let overrideParameters = {}
+    let requestBodyControls = []
     let pricing = {}
     try {
       overrideParameters = JSON.parse(el('modelOverrideParameters').value || '{}')
@@ -1320,6 +1689,15 @@
       }
     } catch (error) {
       alert(`Override Parameters 格式错误：${error.message}`)
+      return
+    }
+    try {
+      requestBodyControls = JSON.parse(el('modelRequestBodyControls').value || '[]')
+      if (!Array.isArray(requestBodyControls)) {
+        throw new Error('Request Body Controls 必须是 JSON 数组')
+      }
+    } catch (error) {
+      alert(`Request Body Controls 格式错误：${error.message}`)
       return
     }
     try {
@@ -1344,6 +1722,7 @@
       request_body_override_mode: el('modelRequestBodyOverrideMode').value,
       raw_request_body_json: el('modelRawRequestBodyJSON').value.trim(),
       override_parameters: overrideParameters,
+      request_body_controls: requestBodyControls,
       pricing
     }
     if (!payload.model_id && !payload.model_name) {
@@ -1362,7 +1741,7 @@
 
   function renderSettings() {
     const tbody = el('settingsTableBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
     if (!state.settings.length) {
       const tr = document.createElement('tr')
       const cell = document.createElement('td')
@@ -1481,7 +1860,7 @@
 
   function renderSessionMessagesForm() {
     const list = el('sessionMessagesFormList')
-    list.innerHTML = ''
+    resetNode(list)
 
     if (!state.sessionMessages.length) {
       const empty = document.createElement('div')
@@ -1574,11 +1953,12 @@
 
   function renderSessions() {
     const tbody = el('sessionsTableBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
     state.sessions.forEach(session => {
       const tr = document.createElement('tr')
       if (state.selectedSession?.id === session.id) tr.classList.add('selected')
-      tr.innerHTML = `<td>${session.name || '-'}</td><td class="mono">${session.id}</td>`
+      appendTextCell(tr, session.name || '-')
+      appendTextCell(tr, session.id || '-', 'mono')
       tr.addEventListener('click', async () => {
         await loadSessionDetail(session.id)
       })
@@ -1692,16 +2072,13 @@
 
   function renderMemories() {
     const tbody = el('memoriesTableBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
     state.memories.forEach(memory => {
       const tr = document.createElement('tr')
       if (state.selectedMemory?.id === memory.id) tr.classList.add('selected')
-      const preview = (memory.content || '').slice(0, 36).replace(/</g, '&lt;')
-      tr.innerHTML = `
-        <td>${preview}</td>
-        <td>${memory.isArchived ? '是' : '否'}</td>
-        <td class="mono">${memory.id}</td>
-      `
+      appendTextCell(tr, (memory.content || '').slice(0, 36))
+      appendTextCell(tr, memory.isArchived ? '是' : '否')
+      appendTextCell(tr, memory.id || '-', 'mono')
       tr.addEventListener('click', () => {
         state.selectedMemory = memory
         el('memoryID').value = memory.id || ''
@@ -1775,7 +2152,7 @@
 
   function renderSQLiteTables() {
     const tbody = el('sqliteTablesBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
 
     if (!state.sqlite.tables.length) {
       const tr = document.createElement('tr')
@@ -1801,7 +2178,7 @@
 
   function renderSQLiteTableDetail() {
     const wrap = el('sqliteTableDetail')
-    wrap.innerHTML = ''
+    resetNode(wrap)
     const table = state.sqlite.selectedTable
     if (!table) {
       wrap.classList.add('muted')
@@ -1818,7 +2195,13 @@
     const columns = Array.isArray(table.columns) ? table.columns : []
     const tableEl = document.createElement('table')
     const thead = document.createElement('thead')
-    thead.innerHTML = '<tr><th>字段</th><th>类型</th><th>约束</th><th>默认值</th></tr>'
+    const headRow = document.createElement('tr')
+    ;['字段', '类型', '约束', '默认值'].forEach(label => {
+      const th = document.createElement('th')
+      th.textContent = label
+      headRow.appendChild(th)
+    })
+    thead.appendChild(headRow)
     tableEl.appendChild(thead)
     const tbody = document.createElement('tbody')
     columns.forEach(column => {
@@ -1852,8 +2235,8 @@
   function renderSQLiteResultTable(columns, rows) {
     const head = el('sqliteResultHead')
     const body = el('sqliteResultBody')
-    head.innerHTML = ''
-    body.innerHTML = ''
+    resetNode(head)
+    resetNode(body)
 
     if (!columns.length) {
       const tr = document.createElement('tr')
@@ -1995,20 +2378,22 @@
 
   function renderCaptures() {
     const tbody = el('capturesTableBody')
-    tbody.innerHTML = ''
+    resetNode(tbody)
     state.captures.forEach(item => {
       const tr = document.createElement('tr')
-      tr.innerHTML = `
-        <td>${item.model || '-'}</td>
-        <td>${item.message_count ?? '-'}</td>
-        <td>${item.received_at || '-'}</td>
-        <td class="mono">${item.id || '-'}</td>
-        <td>
-          <button data-action="save">保存</button>
-          <button data-action="ignore" class="danger">忽略</button>
-        </td>
-      `
-      tr.querySelector('[data-action="save"]').addEventListener('click', async () => {
+      appendTextCell(tr, item.model || '-')
+      appendTextCell(tr, item.message_count ?? '-')
+      appendTextCell(tr, item.received_at || '-')
+      appendTextCell(tr, item.id || '-', 'mono')
+
+      const actions = document.createElement('td')
+      const saveButton = makeButton('保存')
+      const ignoreButton = makeButton('忽略', 'danger')
+      actions.appendChild(saveButton)
+      actions.appendChild(ignoreButton)
+      tr.appendChild(actions)
+
+      saveButton.addEventListener('click', async () => {
         try {
           const data = await api('/api/openai-captures/resolve', 'POST', { id: item.id, save: true })
           alert(data.message || '已保存')
@@ -2017,7 +2402,7 @@
           showError(error)
         }
       })
-      tr.querySelector('[data-action="ignore"]').addEventListener('click', async () => {
+      ignoreButton.addEventListener('click', async () => {
         try {
           const data = await api('/api/openai-captures/resolve', 'POST', { id: item.id, save: false })
           alert(data.message || '已忽略')
@@ -2039,6 +2424,9 @@
   function bindEvents() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+    })
+    document.querySelectorAll('[data-open-tab]').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.openTab))
     })
 
     el('btnFilesList').addEventListener('click', () => loadFiles().catch(showError))
