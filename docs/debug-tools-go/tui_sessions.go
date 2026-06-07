@@ -259,14 +259,34 @@ func sessionDisplayName(session map[string]any) string {
 	return name
 }
 
-func sessionMessageCountText(session map[string]any) string {
-	if _, ok := session["messageCount"]; ok {
-		return fmt.Sprintf("%d", asInt(session["messageCount"]))
+func sessionInfoText(session map[string]any) string {
+	parts := []string{}
+	if strings.TrimSpace(asString(session["topicPrompt"])) != "" {
+		parts = append(parts, "主题")
 	}
-	if _, ok := session["message_count"]; ok {
-		return fmt.Sprintf("%d", asInt(session["message_count"]))
+	if strings.TrimSpace(asString(session["enhancedPrompt"])) != "" {
+		parts = append(parts, "增强")
 	}
-	return "-"
+	if count := len(sessionLorebookIDs(session)); count > 0 {
+		parts = append(parts, fmt.Sprintf("世界书%d", count))
+	}
+	if count := len(asStringSlice(session["tagIDs"])); count > 0 {
+		parts = append(parts, fmt.Sprintf("标签%d", count))
+	}
+	if strings.TrimSpace(asString(session["folderID"])) != "" {
+		parts = append(parts, "文件夹")
+	}
+	if asBool(session["worldbookContextIsolationEnabled"]) {
+		parts = append(parts, "隔离")
+	}
+	return truncateRunes(strings.Join(parts, " / "), 28)
+}
+
+func sessionLorebookIDs(session map[string]any) []string {
+	if ids := asStringSlice(session["lorebookIDs"]); len(ids) > 0 {
+		return ids
+	}
+	return asStringSlice(session["worldbookIDs"])
 }
 
 func sessionMessagePreview(message map[string]any) string {

@@ -95,7 +95,7 @@ func (m *tuiModel) applySessions(response map[string]any) {
 		rows = append(rows, table.Row{
 			asString(session["id"]),
 			asString(session["name"]),
-			sessionMessageCountText(session),
+			sessionInfoText(session),
 		})
 	}
 	m.sessionRows = sessions

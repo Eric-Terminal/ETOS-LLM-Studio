@@ -106,13 +106,7 @@ extension LocalDebugServer {
     func handleSessionsList() async -> [String: Any] {
         let sessions = Persistence.loadChatSessions()
         do {
-            var payload = try encodeWebConsoleJSONObject(sessions) as? [[String: Any]] ?? []
-            for index in payload.indices {
-                guard sessions.indices.contains(index) else { continue }
-                let count = Persistence.loadMessageCount(for: sessions[index].id)
-                payload[index]["messageCount"] = count
-                payload[index]["message_count"] = count
-            }
+            let payload = try encodeWebConsoleJSONObject(sessions)
             return ["status": "ok", "sessions": payload, "count": sessions.count]
         } catch {
             return ["status": "error", "message": "会话序列化失败：\(error.localizedDescription)"]

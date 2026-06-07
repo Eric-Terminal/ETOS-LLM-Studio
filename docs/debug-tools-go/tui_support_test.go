@@ -51,12 +51,20 @@ func TestTUIFormErrorResultIgnoresUserAbort(t *testing.T) {
 	}
 }
 
-func TestApplySessionsUsesMessageCountColumn(t *testing.T) {
+func TestApplySessionsUsesInfoColumn(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.applySessions(map[string]any{
 		"sessions": []any{
-			map[string]any{"id": "session-1", "name": "会话一", "messageCount": 7},
-			map[string]any{"id": "session-2", "name": "会话二", "message_count": 3},
+			map[string]any{
+				"id":                               "session-1",
+				"name":                             "会话一",
+				"topicPrompt":                      "主题提示",
+				"enhancedPrompt":                   "增强提示",
+				"lorebookIDs":                      []any{"lorebook-1", "lorebook-2"},
+				"tagIDs":                           []any{"tag-1"},
+				"worldbookContextIsolationEnabled": true,
+			},
+			map[string]any{"id": "session-2", "name": "会话二"},
 		},
 	})
 
@@ -64,8 +72,11 @@ func TestApplySessionsUsesMessageCountColumn(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("会话行数 = %d, want 2", len(rows))
 	}
-	if rows[0][2] != "7" || rows[1][2] != "3" {
-		t.Fatalf("消息条数列 = %q/%q, want 7/3", rows[0][2], rows[1][2])
+	if rows[0][2] != "主题 / 增强 / 世界书2 / 标签1 / 隔离" {
+		t.Fatalf("信息列 = %q, want 元数据摘要", rows[0][2])
+	}
+	if rows[1][2] != "" {
+		t.Fatalf("空元数据会话信息列 = %q, want empty", rows[1][2])
 	}
 	if model.sessionMode != tuiSessionModeList {
 		t.Fatalf("sessionMode = %v, want tuiSessionModeList", model.sessionMode)

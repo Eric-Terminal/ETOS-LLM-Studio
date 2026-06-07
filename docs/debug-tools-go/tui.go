@@ -182,7 +182,7 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		filesTable:   newTUITable([]table.Column{{Title: "名称", Width: 28}, {Title: "类型", Width: 8}, {Title: "大小", Width: 10}, {Title: "修改时间", Width: 18}}),
 		providers:    newTUITable([]table.Column{{Title: "名称", Width: 24}, {Title: "格式", Width: 18}, {Title: "模型", Width: 8}, {Title: "API URL", Width: 42}}),
 		settings:     newTUITable([]table.Column{{Title: "Key", Width: 38}, {Title: "分组", Width: 14}, {Title: "类型", Width: 8}, {Title: "同步", Width: 6}, {Title: "值", Width: 42}}),
-		sessions:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "名称", Width: 32}, {Title: "条数", Width: 8}}),
+		sessions:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "名称", Width: 42}, {Title: "信息", Width: 28}}),
 		memories:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "状态", Width: 8}, {Title: "内容", Width: 54}}),
 		sqlTables:    newTUITable([]table.Column{{Title: "表", Width: 30}, {Title: "类型", Width: 8}, {Title: "字段", Width: 8}}),
 		sqlRows:      newTUITable([]table.Column{{Title: "结果", Width: 90}}),
