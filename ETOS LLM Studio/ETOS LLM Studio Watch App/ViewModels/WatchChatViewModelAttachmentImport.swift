@@ -34,7 +34,7 @@ struct WatchAttachmentImportProgress: Equatable, Sendable {
     let bytesReceived: Int64
     let totalBytes: Int64
 
-    init(sourceName: String, bytesReceived: Int64, totalBytes: Int64) {
+    nonisolated init(sourceName: String, bytesReceived: Int64, totalBytes: Int64) {
         let normalizedTotalBytes = max(0, totalBytes)
         let normalizedBytesReceived = max(0, bytesReceived)
         self.sourceName = sourceName
@@ -44,11 +44,11 @@ struct WatchAttachmentImportProgress: Equatable, Sendable {
             : normalizedBytesReceived
     }
 
-    var isDeterminate: Bool {
+    nonisolated var isDeterminate: Bool {
         totalBytes > 0
     }
 
-    var fractionCompleted: Double {
+    nonisolated var fractionCompleted: Double {
         guard totalBytes > 0 else { return 0 }
         return min(max(Double(bytesReceived) / Double(totalBytes), 0), 1)
     }
