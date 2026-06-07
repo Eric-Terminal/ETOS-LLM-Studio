@@ -3937,3 +3937,7 @@
 "填入地址并连接" = "Fill address and connect";
 "自动发现失败: %@" = "Auto-discovery failed: %@";
 "自动发现解析失败: %@" = "Auto-discovery resolve failed: %@";
+"先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。" = "Review snapshot types, save location, upload method, and restore risks before using the actions below.";
+"当前选择：%@" = "Current selection: %@";
+"上传前请确认对象存储配置。" = "Confirm object storage settings before uploading.";
+"恢复前请确认快照来源可信。" = "Confirm the snapshot source is trusted before restoring.";

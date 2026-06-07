@@ -29,6 +29,7 @@ struct BackupRestoreView: View {
     @State private var pendingEncryptedSnapshotURL: URL?
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
     @State private var isPasswordPromptPresented = false
+    @State private var isSnapshotIntroPresented = false
 
     private let snapshotContentTypes: [UTType] = {
         var types: [UTType] = [.data]
@@ -40,6 +41,15 @@ struct BackupRestoreView: View {
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "快照备份",
+                    summary: "先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。",
+                    details: snapshotIntroDetails,
+                    isExpanded: $isSnapshotIntroPresented
+                )
+            }
+
             Section {
                 Picker(NSLocalizedString("快照类型", comment: ""), selection: $selectedSnapshotKind) {
                     Text(NSLocalizedString("数据库快照", comment: ""))
@@ -87,7 +97,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("手动快照", comment: ""))
             } footer: {
-                Text(snapshotKindFooter + "\n" + NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。", comment: ""))
+                Text(String(format: NSLocalizedString("当前选择：%@", comment: ""), snapshotKindTitle))
             }
 
             Section {
@@ -140,7 +150,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
             } footer: {
-                Text(snapshotKindFooter + "\n" + NSLocalizedString("会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。", comment: ""))
+                Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
             }
 
             Section {
@@ -162,7 +172,7 @@ struct BackupRestoreView: View {
             } header: {
                 Text(NSLocalizedString("恢复", comment: ""))
             } footer: {
-                Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: ""))
+                Text(NSLocalizedString("恢复前请确认快照来源可信。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("快照备份", comment: ""))
@@ -207,6 +217,62 @@ struct BackupRestoreView: View {
             return NSLocalizedString("数据库快照只包含聊天、配置与记忆数据库，会排除壁纸、附件、字体与记忆向量索引，适合日常轻量备份。", comment: "")
         case .full:
             return NSLocalizedString("完整快照会额外包含壁纸、音频附件、图片附件、文件附件、自定义字体与记忆向量索引，体积可能明显增大。", comment: "")
+        }
+    }
+
+    private var snapshotKindTitle: String {
+        switch selectedSnapshotKind {
+        case .database:
+            return NSLocalizedString("数据库快照", comment: "")
+        case .full:
+            return NSLocalizedString("完整快照", comment: "")
+        }
+    }
+
+    private var snapshotIntroDetails: String {
+        [
+            snapshotKindFooter,
+            NSLocalizedString("快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。", comment: ""),
+            NSLocalizedString("会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。", comment: ""),
+            NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: "")
+        ].joined(separator: "\n\n")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(NSLocalizedString(title, comment: "快照备份介绍卡片标题"))
+                .etFont(.headline.weight(.semibold))
+            Text(NSLocalizedString(summary, comment: "快照备份介绍卡片摘要"))
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: ""))
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString(title, comment: "快照备份介绍卡片详情标题"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 

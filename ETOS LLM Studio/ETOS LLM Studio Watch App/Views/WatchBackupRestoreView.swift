@@ -28,9 +28,19 @@ struct WatchBackupRestoreView: View {
     @State private var restorePassword = ""
     @State private var pendingEncryptedSnapshotURL: URL?
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
+    @State private var isSnapshotIntroPresented = false
 
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "快照备份",
+                    summary: "先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。",
+                    details: snapshotIntroDetails,
+                    isExpanded: $isSnapshotIntroPresented
+                )
+            }
+
             manualSnapshotSection
             s3UploadSection
             restoreSection
@@ -104,7 +114,7 @@ struct WatchBackupRestoreView: View {
         } header: {
             Text(NSLocalizedString("手动快照", comment: ""))
         } footer: {
-            Text(snapshotKindFooter)
+            Text(String(format: NSLocalizedString("当前选择：%@", comment: ""), snapshotKindTitle))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -180,7 +190,7 @@ struct WatchBackupRestoreView: View {
         } header: {
             Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
         } footer: {
-            Text(NSLocalizedString("会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。", comment: ""))
+            Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -237,7 +247,7 @@ struct WatchBackupRestoreView: View {
         } header: {
             Text(NSLocalizedString("恢复", comment: ""))
         } footer: {
-            Text(NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: ""))
+            Text(NSLocalizedString("恢复前请确认快照来源可信。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -275,6 +285,58 @@ struct WatchBackupRestoreView: View {
             return NSLocalizedString("数据库快照只包含聊天、配置与记忆数据库，会排除壁纸、附件、字体与记忆向量索引，适合日常轻量备份。", comment: "")
         case .full:
             return NSLocalizedString("完整快照会额外包含壁纸、音频附件、图片附件、文件附件、自定义字体与记忆向量索引，体积可能明显增大。", comment: "")
+        }
+    }
+
+    private var snapshotKindTitle: String {
+        switch selectedSnapshotKind {
+        case .database:
+            return NSLocalizedString("数据库快照", comment: "")
+        case .full:
+            return NSLocalizedString("完整快照", comment: "")
+        }
+    }
+
+    private var snapshotIntroDetails: String {
+        [
+            snapshotKindFooter,
+            NSLocalizedString("快照已生成，可通过分享发送到其他设备。", comment: ""),
+            NSLocalizedString("会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。", comment: ""),
+            NSLocalizedString("恢复会替换当前聊天、配置与记忆数据库；完整快照还会恢复壁纸、附件、字体与记忆向量索引文件。请选择可信的 .elsbackup 文件。", comment: "")
+        ].joined(separator: "\n\n")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString(title, comment: "快照备份介绍卡片标题"))
+                .etFont(.footnote.weight(.semibold))
+            Text(NSLocalizedString(summary, comment: "快照备份介绍卡片摘要"))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: ""))
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .sheet(isPresented: isExpanded) {
+            ScrollView {
+                Text(details)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
     }
 

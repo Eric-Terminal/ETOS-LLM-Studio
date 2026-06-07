@@ -4011,3 +4011,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "填入地址并连接" = "Remplir l’adresse et connecter";
 "自动发现失败: %@" = "Découverte automatique échouée : %@";
 "自动发现解析失败: %@" = "Résolution de découverte échouée : %@";
+"先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。" = "Vérifiez le type de snapshot, l’emplacement, le mode d’envoi et les risques de restauration avant d’utiliser les actions ci-dessous.";
+"当前选择：%@" = "Sélection actuelle : %@";
+"上传前请确认对象存储配置。" = "Vérifiez la configuration du stockage objet avant l’envoi.";
+"恢复前请确认快照来源可信。" = "Assurez-vous que la source du snapshot est fiable avant la restauration.";

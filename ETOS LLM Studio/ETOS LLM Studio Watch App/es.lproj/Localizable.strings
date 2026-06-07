@@ -3982,3 +3982,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "填入地址并连接" = "Rellenar dirección y conectar";
 "自动发现失败: %@" = "Falló la detección automática: %@";
 "自动发现解析失败: %@" = "Falló la resolución de detección: %@";
+"先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。" = "Revisa el tipo de instantánea, ubicación, método de subida y riesgos de restauración antes de usar las acciones inferiores.";
+"当前选择：%@" = "Selección actual: %@";
+"上传前请确认对象存储配置。" = "Confirma la configuración del almacenamiento de objetos antes de subir.";
+"恢复前请确认快照来源可信。" = "Confirma que el origen de la instantánea sea confiable antes de restaurar.";
