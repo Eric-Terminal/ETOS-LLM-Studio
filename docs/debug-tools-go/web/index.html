@@ -2513,10 +2513,12 @@
     renderSQLiteTables()
     renderSQLiteTableDetail()
     renderSettings()
-    await refreshDirTree({ reset: true, focusPath: '.' }).catch(() => {})
+    state.dirTreeRoot = createDirTreeNode('.', 'Documents')
+    state.dirTreeRoot.expanded = true
+    renderFilesTree()
+    renderFiles()
     await refreshStatus()
     setInterval(refreshStatus, 2000)
-    await loadFiles('.').catch(() => {})
   }
 
   bootstrap().catch(showError)
