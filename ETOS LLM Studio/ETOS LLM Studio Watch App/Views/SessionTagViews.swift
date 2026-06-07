@@ -96,7 +96,7 @@ struct WatchSessionTagManagementView: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("新建标签", comment: "Create session tag section")) {
+            Section(header: Text(NSLocalizedString("新建标签", comment: "Create session tag section"))) {
                 TextField(NSLocalizedString("标签名称", comment: "Session tag name field"), text: $draftName)
                 WatchSessionTagColorSelection(selectedColor: $draftColor)
                 Button {
@@ -107,7 +107,7 @@ struct WatchSessionTagManagementView: View {
                 .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
-            Section(NSLocalizedString("标签", comment: "Session tags section")) {
+            Section(header: Text(NSLocalizedString("标签", comment: "Session tags section"))) {
                 if tags.isEmpty {
                     Text(NSLocalizedString("暂无标签", comment: "No session tags"))
                         .foregroundStyle(.secondary)
@@ -178,7 +178,7 @@ struct WatchSessionTagEditView: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("标签", comment: "Session tag section")) {
+            Section(header: Text(NSLocalizedString("标签", comment: "Session tag section"))) {
                 TextField(NSLocalizedString("标签名称", comment: "Session tag name field"), text: $draftName)
                 WatchSessionTagColorSelection(selectedColor: $draftColor)
             }
@@ -226,7 +226,7 @@ struct WatchSessionTagAssignmentView: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("标签", comment: "Session tag assignment section")) {
+            Section(header: Text(NSLocalizedString("标签", comment: "Session tag assignment section"))) {
                 if tags.isEmpty {
                     Text(NSLocalizedString("暂无标签", comment: "No session tags"))
                         .foregroundStyle(.secondary)

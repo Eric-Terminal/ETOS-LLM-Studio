@@ -103,7 +103,7 @@ struct SessionTagManagementView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(NSLocalizedString("新建标签", comment: "Create session tag section")) {
+                Section(header: Text(NSLocalizedString("新建标签", comment: "Create session tag section"))) {
                     TextField(NSLocalizedString("标签名称", comment: "Session tag name field"), text: $draftName)
                     SessionTagColorSelection(selectedColor: $draftColor)
                     Button {
@@ -114,7 +114,10 @@ struct SessionTagManagementView: View {
                     .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
-                Section(NSLocalizedString("标签", comment: "Session tags section")) {
+                Section(
+                    header: Text(NSLocalizedString("标签", comment: "Session tags section")),
+                    footer: Text(NSLocalizedString("颜色使用固定系统色板；无颜色会显示为空心圆点。", comment: "Session tag palette footer"))
+                ) {
                     if tags.isEmpty {
                         Text(NSLocalizedString("暂无标签", comment: "No session tags"))
                             .foregroundStyle(.secondary)
@@ -141,8 +144,6 @@ struct SessionTagManagementView: View {
                             }
                         }
                     }
-                } footer: {
-                    Text(NSLocalizedString("颜色使用固定系统色板；无颜色会显示为空心圆点。", comment: "Session tag palette footer"))
                 }
             }
             .navigationTitle(NSLocalizedString("管理标签", comment: "Manage session tags title"))
@@ -200,7 +201,7 @@ struct SessionTagEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(NSLocalizedString("标签", comment: "Session tag section")) {
+                Section(header: Text(NSLocalizedString("标签", comment: "Session tag section"))) {
                     TextField(NSLocalizedString("标签名称", comment: "Session tag name field"), text: $draftName)
                     SessionTagColorSelection(selectedColor: $draftColor)
                 }
@@ -253,7 +254,7 @@ struct SessionTagAssignmentView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(NSLocalizedString("标签", comment: "Session tag assignment section")) {
+                Section(header: Text(NSLocalizedString("标签", comment: "Session tag assignment section"))) {
                     if tags.isEmpty {
                         Text(NSLocalizedString("暂无标签", comment: "No session tags"))
                             .foregroundStyle(.secondary)
