@@ -134,6 +134,15 @@ func TestHandleAPIStatusUsesHTTPPollingWhenWSDisconnected(t *testing.T) {
 	if payload["mode"] != "http_polling" {
 		t.Fatalf("mode = %v, want http_polling", payload["mode"])
 	}
+	if asInt(payload["ws_port"]) != 8765 {
+		t.Fatalf("ws_port = %v, want 8765", payload["ws_port"])
+	}
+	if asInt(payload["http_port"]) != 7654 {
+		t.Fatalf("http_port = %v, want 7654", payload["http_port"])
+	}
+	if asInt(payload["proxy_port"]) != 8080 {
+		t.Fatalf("proxy_port = %v, want 8080", payload["proxy_port"])
+	}
 }
 
 func TestHandleAPISQLiteTablesRequiresDatabase(t *testing.T) {
@@ -398,7 +407,7 @@ func TestHandleAPIProviderModelUpsertForwardsToDeviceCommand(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/providers/models/upsert",
-		strings.NewReader(`{"provider_id":"22222222-2222-4222-8222-222222222222","model_name":"gpt-test","display_name":"GPT Test","is_activated":false,"kind":"chat","input_modalities":["text","image"],"output_modalities":["text"],"capabilities":["toolCalling"],"request_body_override_mode":"rawJSON","raw_request_body_json":"{\"model\":\"gpt-test\"}","override_parameters":{"temperature":0.2},"pricing":{"inputPerMillionTokens":1.5,"outputPerMillionTokens":2.5}}`),
+		strings.NewReader(`{"provider_id":"22222222-2222-4222-8222-222222222222","model_name":"gpt-test","display_name":"GPT Test","is_activated":false,"kind":"chat","input_modalities":["text","image"],"output_modalities":["text"],"capabilities":["toolCalling"],"request_body_override_mode":"rawJSON","raw_request_body_json":"{\"model\":\"gpt-test\"}","override_parameters":{"temperature":0.2},"request_body_controls":[{"id":"thinking","label":"Thinking","value":true}],"pricing":{"inputPerMillionTokens":1.5,"outputPerMillionTokens":2.5}}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -448,6 +457,20 @@ func TestHandleAPIProviderModelUpsertForwardsToDeviceCommand(t *testing.T) {
 	}
 	if command["raw_request_body_json"] != `{"model":"gpt-test"}` {
 		t.Fatalf("raw_request_body_json = %v, want raw JSON", command["raw_request_body_json"])
+	}
+	requestBodyControls, ok := command["request_body_controls"].([]any)
+	if !ok {
+		t.Fatalf("request_body_controls 类型 = %T, want []any", command["request_body_controls"])
+	}
+	if len(requestBodyControls) != 1 {
+		t.Fatalf("request_body_controls 长度 = %d, want 1", len(requestBodyControls))
+	}
+	control, ok := requestBodyControls[0].(map[string]any)
+	if !ok {
+		t.Fatalf("request_body_controls[0] 类型 = %T, want map[string]any", requestBodyControls[0])
+	}
+	if control["id"] != "thinking" {
+		t.Fatalf("control id = %v, want thinking", control["id"])
 	}
 	pricing, ok := command["pricing"].(map[string]any)
 	if !ok {

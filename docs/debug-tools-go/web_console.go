@@ -141,6 +141,9 @@ func (s *DebugServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		"queue_size":         queueSize,
 		"pending_requests":   pendingCount,
 		"http_polling_alive": httpPollingAlive,
+		"ws_port":            s.wsPort,
+		"http_port":          s.httpPort,
+		"proxy_port":         s.proxyPort,
 	})
 }
 
@@ -409,6 +412,7 @@ func (s *DebugServer) handleAPIProviderModelUpsert(w http.ResponseWriter, r *htt
 		"request_body_override_mode",
 		"raw_request_body_json",
 		"override_parameters",
+		"request_body_controls",
 		"pricing",
 	} {
 		if value, ok := payload[key]; ok {
