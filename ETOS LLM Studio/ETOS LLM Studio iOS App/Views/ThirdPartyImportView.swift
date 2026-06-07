@@ -272,6 +272,8 @@ struct ThirdPartyImportView: View {
             return NSLocalizedString("支持 Kelivo 的 settings.json + chats.json（建议选择解压后的目录一次导入）。", comment: "Kelivo source hint")
         case .chatgpt:
             return NSLocalizedString("支持 ChatGPT 官方 conversations.json（可直接选文件或包含该文件的目录）。", comment: "ChatGPT source hint")
+        case .chatbox:
+            return NSLocalizedString("支持 ChatBox 导出的 chatbox-exported-data JSON，可导入提供商配置与会话记录。", comment: "ChatBox source hint")
         }
     }
 
