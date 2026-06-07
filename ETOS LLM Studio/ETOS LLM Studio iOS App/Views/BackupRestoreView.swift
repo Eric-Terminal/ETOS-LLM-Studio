@@ -30,6 +30,8 @@ struct BackupRestoreView: View {
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
     @State private var isPasswordPromptPresented = false
     @State private var isSnapshotIntroPresented = false
+    @State private var isSnapshotDestinationDialogPresented = false
+    @State private var snapshotSharePayload: SnapshotSharePayload?
 
     private let snapshotContentTypes: [UTType] = {
         var types: [UTType] = [.data]
@@ -59,22 +61,6 @@ struct BackupRestoreView: View {
                 }
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
-                Button {
-                    createManualSnapshot()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isCreatingSnapshot {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Label(NSLocalizedString("创建 iCloud Drive 快照", comment: ""), systemImage: "icloud.and.arrow.up")
-                            .etFont(.headline)
-                        Spacer()
-                    }
-                }
-                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
-
                 Toggle(NSLocalizedString("设置密码", comment: ""), isOn: $encryptExport)
                     .buttonStyle(.plain)
                     .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
@@ -89,15 +75,42 @@ struct BackupRestoreView: View {
                         .textContentType(.newPassword)
                 }
 
+            } header: {
+                Text(NSLocalizedString("手动快照", comment: ""))
+            } footer: {
+                Text(String(format: NSLocalizedString("当前选择：%@", comment: ""), snapshotKindTitle))
+            }
+
+            Section {
+                Button {
+                    isSnapshotDestinationDialogPresented = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isCreatingSnapshot || isUploadingSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label(NSLocalizedString("保存快照", comment: ""), systemImage: "square.and.arrow.up")
+                            .etFont(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+
+                if let uploadProgress {
+                    SnapshotUploadProgressView(progress: uploadProgress)
+                }
+
                 if let statusMessage, !statusMessage.isEmpty {
                     Text(statusMessage)
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Text(NSLocalizedString("手动快照", comment: ""))
+                Text(NSLocalizedString("保存", comment: ""))
             } footer: {
-                Text(String(format: NSLocalizedString("当前选择：%@", comment: ""), snapshotKindTitle))
+                Text(NSLocalizedString("选择保存位置后再创建快照。", comment: ""))
             }
 
             Section {
@@ -111,11 +124,9 @@ struct BackupRestoreView: View {
                             isCreatingSnapshot: $isCreatingSnapshot,
                             isUploadingSnapshot: $isUploadingSnapshot,
                             isRestoringSnapshot: $isRestoringSnapshot,
-                            uploadProgress: $uploadProgress,
                             isS3ConfigurationComplete: {
                                 isS3ConfigurationComplete
                             },
-                            uploadSnapshot: createAndUploadSnapshot,
                             remoteSnapshotConfiguration: {
                                 s3UploadConfiguration(reportErrors: false)
                             }
@@ -162,6 +173,29 @@ struct BackupRestoreView: View {
             allowsMultipleSelection: false
         ) { result in
             handleSnapshotImport(result)
+        }
+        .confirmationDialog(
+            NSLocalizedString("选择快照保存位置", comment: ""),
+            isPresented: $isSnapshotDestinationDialogPresented,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("保存到 iCloud Drive", comment: "")) {
+                createManualSnapshot()
+            }
+            Button(NSLocalizedString("保存到文件…", comment: "")) {
+                createSnapshotForSharing()
+            }
+            if appConfig.syncBackupS3Enabled {
+                Button(NSLocalizedString("上传到 S3/R2", comment: "")) {
+                    createAndUploadSnapshot()
+                }
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("选择保存位置后再创建快照。", comment: ""))
+        }
+        .sheet(item: $snapshotSharePayload, onDismiss: removeSnapshotSharePayload) { payload in
+            ActivityShareSheet(activityItems: [payload.fileURL])
         }
         .alert(NSLocalizedString("快照操作失败", comment: ""), isPresented: Binding(
             get: { errorMessage != nil },
@@ -298,6 +332,61 @@ struct BackupRestoreView: View {
                 }
             }
         }
+    }
+
+    private func createSnapshotForSharing() {
+        guard validateExportPasswordIfNeeded() else { return }
+        isCreatingSnapshot = true
+        statusMessage = nil
+        errorMessage = nil
+        let password = encryptExport ? exportPassword : nil
+        let useStrongPasswordDerivation = useStrongPasswordDerivation
+        let snapshotKind = selectedSnapshotKind
+
+        Task.detached(priority: .userInitiated) {
+            var snapshotURL: URL?
+            do {
+                await AppConfigStore.shared.flushPendingWrites()
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                let fileURL = try SnapshotBuilder.buildSnapshot(kind: snapshotKind)
+                snapshotURL = fileURL
+                if let password {
+                    try BackupRestoreFileWriter.encryptSnapshotInPlace(
+                        fileURL,
+                        password: password,
+                        useStrongDerivation: useStrongPasswordDerivation
+                    )
+                }
+                await MainActor.run {
+                    if let existing = snapshotSharePayload?.fileURL {
+                        try? FileManager.default.removeItem(at: existing)
+                    }
+                    if password != nil {
+                        exportPassword = ""
+                        exportPasswordConfirmation = ""
+                    }
+                    isCreatingSnapshot = false
+                    snapshotSharePayload = SnapshotSharePayload(fileURL: fileURL)
+                    statusMessage = NSLocalizedString("快照文件已准备好，可在系统分享面板中保存或发送。", comment: "")
+                }
+            } catch {
+                if let snapshotURL {
+                    try? FileManager.default.removeItem(at: snapshotURL)
+                }
+                await MainActor.run {
+                    isCreatingSnapshot = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func removeSnapshotSharePayload() {
+        if let fileURL = snapshotSharePayload?.fileURL {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+        snapshotSharePayload = nil
     }
 
     private func validateExportPasswordIfNeeded() -> Bool {
@@ -479,15 +568,18 @@ struct BackupRestoreView: View {
 
 }
 
+private struct SnapshotSharePayload: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
 private struct S3CompatibleSnapshotStorageSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
 
     @Binding var isCreatingSnapshot: Bool
     @Binding var isUploadingSnapshot: Bool
     @Binding var isRestoringSnapshot: Bool
-    @Binding var uploadProgress: SyncPackageUploadProgress?
     let isS3ConfigurationComplete: () -> Bool
-    let uploadSnapshot: () -> Void
     let remoteSnapshotConfiguration: () -> S3CompatibleUploadConfiguration?
 
     var body: some View {
@@ -526,22 +618,6 @@ private struct S3CompatibleSnapshotStorageSettingsView: View {
             }
 
             Section {
-                Button {
-                    uploadSnapshot()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isUploadingSnapshot {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
-                            .etFont(.headline)
-                        Spacer()
-                    }
-                }
-                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
-
                 NavigationLink {
                     if let configuration = remoteSnapshotConfiguration() {
                         RemoteSnapshotBrowserView(configuration: configuration)
@@ -554,14 +630,10 @@ private struct S3CompatibleSnapshotStorageSettingsView: View {
                     Label(NSLocalizedString("从 S3/R2 选择快照", comment: ""), systemImage: "tray.and.arrow.down")
                 }
                 .disabled(!isS3ConfigurationComplete() || isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
-
-                if let uploadProgress {
-                    SnapshotUploadProgressView(progress: uploadProgress)
-                }
             } header: {
-                Text(NSLocalizedString("操作", comment: ""))
+                Text(NSLocalizedString("远端快照", comment: ""))
             } footer: {
-                Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
+                Text(NSLocalizedString("请先完成对象存储配置。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))

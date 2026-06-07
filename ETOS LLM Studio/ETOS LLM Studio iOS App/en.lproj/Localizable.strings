@@ -2591,6 +2591,12 @@
 "关闭应用锁" = "Turn Off App Lock";
 "关闭数据库物理加密" = "Turn Off Database Encryption";
 "创建 iCloud Drive 快照" = "Create iCloud Drive Snapshot";
+"保存快照" = "Save Snapshot";
+"选择快照保存位置" = "Choose Snapshot Destination";
+"选择保存位置后再创建快照。" = "Choose where to save the snapshot before creating it.";
+"保存到 iCloud Drive" = "Save to iCloud Drive";
+"保存到文件…" = "Save to Files…";
+"快照文件已准备好，可在系统分享面板中保存或发送。" = "Snapshot file is ready. Save or send it from the system share sheet.";
 "创建并上传快照" = "Create and Upload Snapshot";
 "上传到自定义地址" = "Upload to Custom URL";
 "自定义地址上传" = "Custom URL Upload";

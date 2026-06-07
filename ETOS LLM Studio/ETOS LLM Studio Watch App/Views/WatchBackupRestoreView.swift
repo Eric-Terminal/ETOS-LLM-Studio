@@ -29,6 +29,7 @@ struct WatchBackupRestoreView: View {
     @State private var pendingEncryptedSnapshotURL: URL?
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
     @State private var isSnapshotIntroPresented = false
+    @State private var isSnapshotDestinationDialogPresented = false
 
     var body: some View {
         List {
@@ -42,12 +43,30 @@ struct WatchBackupRestoreView: View {
             }
 
             manualSnapshotSection
+            snapshotSaveSection
             s3UploadSection
             restoreSection
             statusSection
             errorSection
         }
         .navigationTitle(NSLocalizedString("快照备份", comment: ""))
+        .confirmationDialog(
+            NSLocalizedString("选择快照保存位置", comment: ""),
+            isPresented: $isSnapshotDestinationDialogPresented,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("生成快照文件", comment: "")) {
+                createSnapshotFile()
+            }
+            if appConfig.syncBackupS3Enabled {
+                Button(NSLocalizedString("上传到 S3/R2", comment: "")) {
+                    uploadSnapshotFile()
+                }
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("选择保存位置后再创建快照。", comment: ""))
+        }
         .onAppear {
             WatchSnapshotFileWriter.cleanupTemporaryImportFiles()
         }
@@ -80,21 +99,35 @@ struct WatchBackupRestoreView: View {
                 SecureField(NSLocalizedString("确认密码", comment: ""), text: $snapshotPasswordConfirmation.watchKeyboardNewlineBinding())
                     .textContentType(.newPassword)
             }
+        } header: {
+            Text(NSLocalizedString("手动快照", comment: ""))
+        } footer: {
+            Text(String(format: NSLocalizedString("当前选择：%@", comment: ""), snapshotKindTitle))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
 
+    private var snapshotSaveSection: some View {
+        Section {
             Button {
-                createSnapshotFile()
+                isSnapshotDestinationDialogPresented = true
             } label: {
                 HStack {
                     Spacer()
-                    if isCreatingSnapshot {
+                    if isCreatingSnapshot || isUploadingSnapshot {
                         ProgressView()
                             .padding(.trailing, 4)
                     }
-                    Label(NSLocalizedString("生成快照文件", comment: ""), systemImage: "externaldrive.badge.icloud")
+                    Label(NSLocalizedString("保存快照", comment: ""), systemImage: "square.and.arrow.up")
                     Spacer()
                 }
             }
             .disabled(isSnapshotBusy)
+
+            if let uploadProgress {
+                WatchSnapshotUploadProgressView(progress: uploadProgress)
+            }
 
             if let snapshotFileURL {
                 if #available(watchOS 9.0, *) {
@@ -112,9 +145,9 @@ struct WatchBackupRestoreView: View {
                 }
             }
         } header: {
-            Text(NSLocalizedString("手动快照", comment: ""))
+            Text(NSLocalizedString("保存", comment: ""))
         } footer: {
-            Text(String(format: NSLocalizedString("当前选择：%@", comment: ""), snapshotKindTitle))
+            Text(NSLocalizedString("选择保存位置后再创建快照。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -128,13 +161,7 @@ struct WatchBackupRestoreView: View {
 
             if appConfig.syncBackupS3Enabled {
                 NavigationLink {
-                    WatchS3CompatibleSnapshotStorageSettingsView(
-                        isCreatingSnapshot: $isCreatingSnapshot,
-                        isUploadingSnapshot: $isUploadingSnapshot,
-                        isRestoringSnapshot: $isRestoringSnapshot,
-                        uploadProgress: $uploadProgress,
-                        uploadSnapshot: uploadSnapshotFile
-                    )
+                    WatchS3CompatibleSnapshotStorageSettingsView()
                 } label: {
                     Label(NSLocalizedString("S3/R2 保存设置", comment: ""), systemImage: "shippingbox")
                 }
@@ -553,12 +580,6 @@ struct WatchBackupRestoreView: View {
 private struct WatchS3CompatibleSnapshotStorageSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
 
-    @Binding var isCreatingSnapshot: Bool
-    @Binding var isUploadingSnapshot: Bool
-    @Binding var isRestoringSnapshot: Bool
-    @Binding var uploadProgress: SyncPackageUploadProgress?
-    let uploadSnapshot: () -> Void
-
     var body: some View {
         List {
             Section {
@@ -615,39 +636,8 @@ private struct WatchS3CompatibleSnapshotStorageSettingsView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
-
-            Section {
-                Button {
-                    uploadSnapshot()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isUploadingSnapshot {
-                            ProgressView()
-                                .padding(.trailing, 4)
-                        }
-                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
-                        Spacer()
-                    }
-                }
-                .disabled(isSnapshotBusy)
-
-                if let uploadProgress {
-                    WatchSnapshotUploadProgressView(progress: uploadProgress)
-                }
-            } header: {
-                Text(NSLocalizedString("操作", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
         .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))
-    }
-
-    private var isSnapshotBusy: Bool {
-        isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot
     }
 }
 
