@@ -718,7 +718,8 @@ public final class AppConfigStore: ObservableObject {
              .shortcutOfficialImportShortcutName,
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,
-             .feedbackAPIBaseURL:
+             .feedbackAPIBaseURL,
+             .localDebugLastServerAddress:
             return Self.cachedValue(for: key) ?? key.defaultValue
         case .appLockEnabled: return .bool(appLockEnabled)
         case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
@@ -954,7 +955,8 @@ public final class AppConfigStore: ObservableObject {
              .appToolsToolApprovalPolicies,
              .skillsEnabledNames,
              .messageRegexRules,
-             .shortcutOfficialImportShortcutName:
+             .shortcutOfficialImportShortcutName,
+             .localDebugLastServerAddress:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)
         case .systemPrompt: systemPrompt = value
         case .reasoningContentEchoMode:

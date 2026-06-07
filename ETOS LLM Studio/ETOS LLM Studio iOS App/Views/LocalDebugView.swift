@@ -12,10 +12,13 @@ import ETOSCore
 
 struct LocalDebugView: View {
     @StateObject private var server = LocalDebugServer()
+    @StateObject private var discovery = LocalDebugServerDiscovery()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showAPIDoc = false
     @State private var serverURL: String = ""
     @State private var showLogs = false
+    @State private var pendingDiscoveredServer: LocalDebugDiscoveredServer?
+    @State private var promptedDiscoveredServerIDs: Set<String> = []
     
     var body: some View {
         List {
@@ -51,6 +54,45 @@ struct LocalDebugView: View {
                         }
                     }
                 }
+
+                Section {
+                    if discovery.discoveredServers.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .foregroundStyle(.blue)
+                            Text(discovery.isSearching ? NSLocalizedString("正在搜索局域网调试服务器", comment: "") : NSLocalizedString("未发现调试服务器", comment: ""))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ForEach(discovery.discoveredServers) { candidate in
+                            Button {
+                                fillDiscoveredServer(candidate)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(candidate.name)
+                                        .etFont(.body)
+                                    Text(candidate.connectionAddress(useHTTP: server.useHTTP))
+                                        .etFont(.caption.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    Button {
+                        discovery.restart()
+                    } label: {
+                        Label(NSLocalizedString("重新扫描", comment: ""), systemImage: "arrow.clockwise")
+                    }
+                } header: {
+                    Text(NSLocalizedString("自动发现", comment: ""))
+                } footer: {
+                    if let error = discovery.errorMessage {
+                        Text(error)
+                    } else {
+                        Text(NSLocalizedString("发现电脑端调试工具后，可一键填入服务器地址。", comment: ""))
+                    }
+                }
                 
                 Section {
                     TextField(NSLocalizedString("输入地址", comment: ""), text: $serverURL, prompt: Text(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"))
@@ -62,7 +104,7 @@ struct LocalDebugView: View {
                     Button(NSLocalizedString("连接", comment: "")) {
                         connectToServer()
                     }
-                    .disabled(serverURL.isEmpty)
+                    .disabled(trimmedServerURL.isEmpty)
                 } header: {
                     Text(NSLocalizedString("服务器地址", comment: ""))
                 } footer: {
@@ -166,21 +208,94 @@ struct LocalDebugView: View {
                 DebugLogsView(server: server)
             }
         }
+        .alert(
+            NSLocalizedString("发现调试服务器", comment: ""),
+            isPresented: Binding(
+                get: { pendingDiscoveredServer != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingDiscoveredServer = nil
+                    }
+                }
+            )
+        ) {
+            Button(NSLocalizedString("填入地址", comment: "")) {
+                if let candidate = pendingDiscoveredServer {
+                    fillDiscoveredServer(candidate)
+                }
+                pendingDiscoveredServer = nil
+            }
+            Button(NSLocalizedString("稍后", comment: ""), role: .cancel) {
+                pendingDiscoveredServer = nil
+            }
+        } message: {
+            if let candidate = pendingDiscoveredServer {
+                Text(String(format: NSLocalizedString("是否填入 %@？", comment: ""), candidate.connectionAddress(useHTTP: server.useHTTP)))
+            }
+        }
+        .onAppear {
+            loadStoredServerURL()
+            discovery.start()
+        }
+        .onDisappear {
+            discovery.stop()
+        }
+        .onChange(of: discovery.discoveredServers) { _, candidates in
+            promptForDiscoveredServerIfNeeded(candidates)
+        }
+        .onChange(of: server.isRunning) { _, isRunning in
+            if isRunning {
+                discovery.stop()
+            } else {
+                discovery.start()
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active && server.isRunning {
                 disconnectServer()
             }
         }
     }
+
+    private var trimmedServerURL: String {
+        serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     
     private func connectToServer() {
-        server.connect(to: serverURL)
+        let address = trimmedServerURL
+        guard !address.isEmpty else { return }
+        AppConfigStore.persistSynchronously(.text(address), for: .localDebugLastServerAddress, quickSync: false)
+        server.connect(to: address)
         UIApplication.shared.isIdleTimerDisabled = true
     }
     
     private func disconnectServer() {
         server.disconnect()
+        discovery.start()
         UIApplication.shared.isIdleTimerDisabled = false
+    }
+
+    private func loadStoredServerURL() {
+        guard trimmedServerURL.isEmpty else { return }
+        let storedAddress = AppConfigStore.textValue(for: .localDebugLastServerAddress)
+        if !storedAddress.isEmpty {
+            serverURL = storedAddress
+        }
+    }
+
+    private func fillDiscoveredServer(_ candidate: LocalDebugDiscoveredServer) {
+        serverURL = candidate.connectionAddress(useHTTP: server.useHTTP)
+    }
+
+    private func promptForDiscoveredServerIfNeeded(_ candidates: [LocalDebugDiscoveredServer]) {
+        guard !server.isRunning,
+              trimmedServerURL.isEmpty,
+              pendingDiscoveredServer == nil,
+              let candidate = candidates.first(where: { !promptedDiscoveredServerIDs.contains($0.id) }) else {
+            return
+        }
+        promptedDiscoveredServerIDs.insert(candidate.id)
+        pendingDiscoveredServer = candidate
     }
 
     private func formatPendingTime(_ date: Date) -> String {
@@ -301,8 +416,8 @@ private struct DocumentationView: View {
                     linkTitle: "前往下载页面",
                     linkURL: debugToolReleaseURL
                 )
-                StepRow(number: 2, title: "记录 IP", detail: "工具会显示电脑的局域网 IP 地址")
-                StepRow(number: 3, title: "输入并连接", detail: "在本界面输入 IP 地址和端口（默认 8765）")
+                StepRow(number: 2, title: "自动发现服务器", detail: "设备会扫描 Bonjour 服务，也可以手动记录 IP")
+                StepRow(number: 3, title: "填入并连接", detail: "选择发现到的电脑端，或输入 IP 地址和端口")
                 StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")
             }
             

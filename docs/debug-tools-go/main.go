@@ -68,6 +68,7 @@ type DebugServer struct {
 	pollHTTPServer  *http.Server
 	proxyHTTPServer *http.Server
 	wsHTTPServer    *http.Server
+	bonjourShutdown func()
 }
 
 func NewDebugServer(host string, wsPort, httpPort, proxyPort int) *DebugServer {
@@ -101,6 +102,7 @@ func (s *DebugServer) run(ctx context.Context) error {
 	localIP := getLocalIP()
 	s.startHTTPServers()
 	s.startWebSocketServer()
+	s.startBonjourAdvertisement()
 
 	if err := runTUI(ctx.Done(), s, localIP); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Printf("\nTUI 运行错误: %v\n", err)
@@ -114,6 +116,10 @@ func (s *DebugServer) run(ctx context.Context) error {
 
 func (s *DebugServer) shutdown(ctx context.Context) error {
 	var errs []error
+	if s.bonjourShutdown != nil {
+		s.bonjourShutdown()
+		s.bonjourShutdown = nil
+	}
 	if s.pollHTTPServer != nil {
 		if err := s.pollHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs = append(errs, err)

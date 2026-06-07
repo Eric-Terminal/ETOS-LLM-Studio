@@ -380,9 +380,10 @@ func (m tuiModel) renderDashboard() string {
 		fmt.Sprintf("  WebSocket: ws://%s:%d", m.localIP, m.server.wsPort),
 		fmt.Sprintf("  HTTP/Web: http://%s:%d", m.localIP, m.server.httpPort),
 		fmt.Sprintf("  OpenAI 代理: http://%s:%d/v1/chat/completions", m.localIP, m.server.proxyPort),
+		fmt.Sprintf("  Bonjour: %s -> HTTP %d", bonjourServiceType, m.server.httpPort),
 		"",
 		"快速开始",
-		"  在设备端填入电脑 IP 后连接；连接成功后用 Tab 切换模块。",
+		"  设备端可自动发现 Bonjour 服务；也可以手动填入上方地址。",
 		"  WebUI 与 TUI 共用同一组 /api/* 接口。",
 	}
 	return strings.Join(lines, "\n")

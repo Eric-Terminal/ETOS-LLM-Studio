@@ -34,6 +34,7 @@
 	<array>
 		<string>_http._tcp</string>
 		<string>_ws._tcp</string>
+		<string>_etos-debug._tcp</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

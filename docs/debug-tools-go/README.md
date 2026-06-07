@@ -13,6 +13,7 @@
 - WebSocket 调试通道（推荐）
 - HTTP 轮询调试通道（备用）
 - OpenAI 请求捕获代理（`/v1/chat/completions`）
+- Bonjour/mDNS 自动发现（服务类型 `_etos-debug._tcp`）
 - Bubble Tea TUI：文件、提供商、会话、记忆、SQLite、OpenAI 捕获统一操作
 - 内置 Web GUI 控制台（同源 API，无 CORS）
 - SQLite 调试 API：列出 chat/config/memory 数据库表、执行只读查询与受保护写入
@@ -32,6 +33,7 @@ go run .
 - WebSocket: `8765`
 - HTTP 轮询: `7654`
 - HTTP 代理: `8080`
+- Bonjour/mDNS: `_etos-debug._tcp`（发布 HTTP 端口，并在 TXT 中附带 WebSocket 与代理端口）
 
 ### Web GUI 控制台
 
@@ -54,6 +56,7 @@ GUI 主要功能：
 
 连接策略：
 
+- 设备端会优先通过 Bonjour 自动发现电脑端服务并询问是否填入地址；仍可手动输入 IP。
 - 设备端可优先走 WebSocket，若连接失败会自动回退 HTTP 轮询（默认端口 `7654`，也支持 `host:wsPort:httpPort` 双端口地址格式）。
 
 ### 自定义端口

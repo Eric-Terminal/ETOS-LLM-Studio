@@ -182,6 +182,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchBackgroundLastSource = "watch.background.lastSource"
     case watchBackgroundSourceHistory = "watch.background.sourceHistory"
     case watchUseThirdPartyKeyboard = "watch.keyboard.useThirdPartyKeyboard"
+    case localDebugLastServerAddress = "localDebug.lastServerAddress"
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
@@ -397,6 +398,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("[]")
         case .watchUseThirdPartyKeyboard:
             return .bool(false)
+        case .localDebugLastServerAddress:
+            return .text("")
         case .settingsColorfulIconsEnabled:
             #if os(watchOS)
             return .bool(false)
@@ -462,6 +465,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .hiddenAnnouncementKeys,
              .requestLogPlainMessageEnabled,
              .watchUseThirdPartyKeyboard,
+             .localDebugLastServerAddress,
              .appLockEnabled,
              .appLockTimeoutSeconds,
              .appLockBiometricEnabled,

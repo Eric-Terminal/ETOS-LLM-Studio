@@ -95,3 +95,28 @@ func TestSendCommandWithResponseTimeout(t *testing.T) {
 		t.Fatalf("pendingResponses[%s] 仍存在，期望已清理", requestID)
 	}
 }
+
+func TestBonjourTXTRecordsExposePorts(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	records := strings.Join(server.bonjourTXTRecords(), "\n")
+
+	for _, want := range []string{
+		"proto=etos-debug-v1",
+		"http_port=7654",
+		"ws_port=8765",
+		"proxy_port=8080",
+	} {
+		if !strings.Contains(records, want) {
+			t.Fatalf("Bonjour TXT 缺少 %q，当前记录: %v", want, records)
+		}
+	}
+}
+
+func TestBonjourInstanceNameFallback(t *testing.T) {
+	if got := bonjourInstanceName("  "); got != "ETOS Debug" {
+		t.Fatalf("空主机名实例名 = %q, want ETOS Debug", got)
+	}
+	if got := bonjourInstanceName("MacBook"); got != "ETOS Debug MacBook" {
+		t.Fatalf("实例名 = %q, want ETOS Debug MacBook", got)
+	}
+}
