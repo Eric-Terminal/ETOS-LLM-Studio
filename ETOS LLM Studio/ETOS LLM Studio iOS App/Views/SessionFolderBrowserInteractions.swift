@@ -219,6 +219,8 @@ extension SessionFolderBrowserView {
                         viewModel.setSessionTags(for: session, tagIDs: tagIDs)
                     }
                 )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .alert(NSLocalizedString("发现幽灵会话", comment: ""), isPresented: $showGhostSessionAlert) {
                 Button(NSLocalizedString("删除幽灵", comment: ""), role: .destructive) {

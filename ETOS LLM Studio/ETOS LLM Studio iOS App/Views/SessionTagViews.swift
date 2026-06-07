@@ -81,8 +81,6 @@ struct SessionTagInlineList: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 
