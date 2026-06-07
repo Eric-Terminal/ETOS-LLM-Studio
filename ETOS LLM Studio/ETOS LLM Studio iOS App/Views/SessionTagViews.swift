@@ -479,56 +479,64 @@ struct SessionTagColorMenu: View {
     var size: CGFloat
 
     var body: some View {
-        Menu {
-            colorButton(nil, title: NSLocalizedString("无", comment: "No color option"))
-            ForEach(SessionTagColor.allCases) { color in
-                colorButton(color, title: color.localizedName)
-            }
-        } label: {
-            SessionTagColorDot(color: selectedColor, size: size)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString("颜色", comment: "Session tag color menu"))
+        SessionTagColorMenuButton(selectedColor: $selectedColor, size: size)
+            .frame(width: size, height: size)
+            .accessibilityLabel(NSLocalizedString("颜色", comment: "Session tag color menu"))
+    }
+}
+
+private struct SessionTagColorMenuButton: UIViewRepresentable {
+    @Binding var selectedColor: SessionTagColor?
+    let size: CGFloat
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.showsMenuAsPrimaryAction = true
+        button.changesSelectionAsPrimaryAction = false
+        button.adjustsImageWhenHighlighted = true
+        button.tintColor = .label
+        return button
     }
 
-    private func colorButton(_ color: SessionTagColor?, title: String) -> some View {
-        Button {
-            selectedColor = color
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark")
-                    .opacity(selectedColor == color ? 1 : 0)
+    func updateUIView(_ button: UIButton, context: Context) {
+        button.setImage(SessionTagColorImageFactory.image(for: selectedColor, size: size), for: .normal)
+        button.menu = UIMenu(children: colorActions())
+    }
 
-                SessionTagMenuColorIcon(color: color)
-
-                Text(title)
+    private func colorActions() -> [UIAction] {
+        [colorAction(nil, title: NSLocalizedString("无", comment: "No color option"))]
+            + SessionTagColor.allCases.map { color in
+                colorAction(color, title: color.localizedName)
             }
+    }
+
+    private func colorAction(_ color: SessionTagColor?, title: String) -> UIAction {
+        UIAction(
+            title: title,
+            image: SessionTagColorImageFactory.image(for: color, size: 18),
+            state: selectedColor == color ? .on : .off
+        ) { _ in
+            selectedColor = color
         }
     }
 }
 
-private struct SessionTagMenuColorIcon: View {
-    let color: SessionTagColor?
-
-    var body: some View {
-        Image(uiImage: Self.image(for: color))
-            .renderingMode(.original)
-    }
-
-    private static func image(for color: SessionTagColor?) -> UIImage {
-        let size = CGSize(width: 18, height: 18)
-        let renderer = UIGraphicsImageRenderer(size: size)
+private enum SessionTagColorImageFactory {
+    static func image(for color: SessionTagColor?, size: CGFloat) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        let inset = max(size * 0.18, 2)
+        let circleRect = CGRect(x: inset, y: inset, width: size - inset * 2, height: size - inset * 2)
 
         return renderer.image { context in
-            let circleRect = CGRect(x: 3, y: 3, width: 12, height: 12)
             if let color {
                 color.menuUIColor.setFill()
                 context.cgContext.fillEllipse(in: circleRect)
-            } else {
-                UIColor.secondaryLabel.setStroke()
-                context.cgContext.setLineWidth(1.5)
-                context.cgContext.strokeEllipse(in: circleRect)
+                return
             }
+
+            UIColor.secondaryLabel.setStroke()
+            context.cgContext.setLineWidth(max(size * 0.08, 1))
+            context.cgContext.strokeEllipse(in: circleRect)
         }
         .withRenderingMode(.alwaysOriginal)
     }
