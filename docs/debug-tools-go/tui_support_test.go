@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,6 +48,87 @@ func TestTUIFormErrorResultIgnoresUserAbort(t *testing.T) {
 	}
 	if result.op != "noop" {
 		t.Fatalf("op = %q, want noop", result.op)
+	}
+}
+
+func TestApplySessionsUsesMessageCountColumn(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.applySessions(map[string]any{
+		"sessions": []any{
+			map[string]any{"id": "session-1", "name": "会话一", "messageCount": 7},
+			map[string]any{"id": "session-2", "name": "会话二", "message_count": 3},
+		},
+	})
+
+	rows := model.sessions.Rows()
+	if len(rows) != 2 {
+		t.Fatalf("会话行数 = %d, want 2", len(rows))
+	}
+	if rows[0][2] != "7" || rows[1][2] != "3" {
+		t.Fatalf("消息条数列 = %q/%q, want 7/3", rows[0][2], rows[1][2])
+	}
+	if model.sessionMode != tuiSessionModeList {
+		t.Fatalf("sessionMode = %v, want tuiSessionModeList", model.sessionMode)
+	}
+}
+
+func TestSessionDetailRendersBubblesAndMessageDetail(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.content.Width = 100
+	model.applySessionDetail(map[string]any{
+		"session": map[string]any{"id": "session-1", "name": "测试会话"},
+		"messages": []any{
+			map[string]any{"id": "message-1", "role": "user", "content": "你好"},
+			map[string]any{"id": "message-2", "role": "assistant", "content": "你好呀"},
+		},
+	})
+
+	view := model.renderSessionsView()
+	if !strings.Contains(view, "用户 #1") || !strings.Contains(view, "助手 #2") {
+		t.Fatalf("气泡视图缺少角色标题: %q", view)
+	}
+	if strings.Contains(view, `"messages"`) || strings.Contains(view, `"session"`) {
+		t.Fatalf("气泡视图不应渲染 JSON: %q", view)
+	}
+
+	model.selectNextSessionMessage()
+	if model.selectedSessionMessage != 1 {
+		t.Fatalf("selectedSessionMessage = %d, want 1", model.selectedSessionMessage)
+	}
+	_ = model.enterSelected()
+	if model.sessionMode != tuiSessionModeMessageDetail {
+		t.Fatalf("Enter 后 sessionMode = %v, want tuiSessionModeMessageDetail", model.sessionMode)
+	}
+	detail := model.renderSessionsView()
+	if !strings.Contains(detail, "消息详情") || !strings.Contains(detail, "你好呀") {
+		t.Fatalf("消息详情渲染异常: %q", detail)
+	}
+}
+
+func TestSessionEscReturnsOneLevelAtATime(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.sessionMode = tuiSessionModeMessageDetail
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got := updated.(tuiModel)
+	if got.sessionMode != tuiSessionModeMessages || got.focus != tuiFocusContent {
+		t.Fatalf("第一次 Esc 后 mode/focus = %v/%v, want messages/content", got.sessionMode, got.focus)
+	}
+
+	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got = updated.(tuiModel)
+	if got.sessionMode != tuiSessionModeList || got.focus != tuiFocusContent {
+		t.Fatalf("第二次 Esc 后 mode/focus = %v/%v, want list/content", got.sessionMode, got.focus)
+	}
+
+	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got = updated.(tuiModel)
+	if got.focus != tuiFocusNav {
+		t.Fatalf("第三次 Esc 后 focus = %v, want tuiFocusNav", got.focus)
 	}
 }
 

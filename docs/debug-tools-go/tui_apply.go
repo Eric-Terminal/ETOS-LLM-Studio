@@ -95,12 +95,13 @@ func (m *tuiModel) applySessions(response map[string]any) {
 		rows = append(rows, table.Row{
 			asString(session["id"]),
 			asString(session["name"]),
-			boolLabel(asBool(session["isTemporary"])),
+			sessionMessageCountText(session),
 		})
 	}
 	m.sessionRows = sessions
+	m.sessionMode = tuiSessionModeList
 	m.sessions.SetRows(rows)
-	m.setMessage(fmt.Sprintf("已加载 %d 个会话；按 Enter 再懒加载详情", len(rows)), tuiOKStyle)
+	m.setMessage(fmt.Sprintf("已加载 %d 个会话；按 Enter 查看消息", len(rows)), tuiOKStyle)
 }
 
 func (m *tuiModel) applyMemories(response map[string]any) {

@@ -50,6 +50,14 @@ const (
 	tuiFocusContent
 )
 
+type tuiSessionMode int
+
+const (
+	tuiSessionModeList tuiSessionMode = iota
+	tuiSessionModeMessages
+	tuiSessionModeMessageDetail
+)
+
 type navItem struct {
 	title string
 	desc  string
@@ -105,16 +113,20 @@ type tuiModel struct {
 	currentPath  string
 	sqlDatabase  string
 	focus        tuiFocus
+	sessionMode  tuiSessionMode
 	isLoading    bool
 	message      string
 	messageStyle lipgloss.Style
 
-	fileItems    []map[string]any
-	providerRows []map[string]any
-	settingRows  []map[string]any
-	sessionRows  []map[string]any
-	memoryRows   []map[string]any
-	captureRows  []map[string]any
+	fileItems              []map[string]any
+	providerRows           []map[string]any
+	settingRows            []map[string]any
+	sessionRows            []map[string]any
+	activeSession          map[string]any
+	sessionMessages        []map[string]any
+	selectedSessionMessage int
+	memoryRows             []map[string]any
+	captureRows            []map[string]any
 }
 
 var (
@@ -170,7 +182,7 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		filesTable:   newTUITable([]table.Column{{Title: "名称", Width: 28}, {Title: "类型", Width: 8}, {Title: "大小", Width: 10}, {Title: "修改时间", Width: 18}}),
 		providers:    newTUITable([]table.Column{{Title: "名称", Width: 24}, {Title: "格式", Width: 18}, {Title: "模型", Width: 8}, {Title: "API URL", Width: 42}}),
 		settings:     newTUITable([]table.Column{{Title: "Key", Width: 38}, {Title: "分组", Width: 14}, {Title: "类型", Width: 8}, {Title: "同步", Width: 6}, {Title: "值", Width: 42}}),
-		sessions:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "名称", Width: 32}, {Title: "临时", Width: 6}}),
+		sessions:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "名称", Width: 32}, {Title: "条数", Width: 8}}),
 		memories:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "状态", Width: 8}, {Title: "内容", Width: 54}}),
 		sqlTables:    newTUITable([]table.Column{{Title: "表", Width: 30}, {Title: "类型", Width: 8}, {Title: "字段", Width: 8}}),
 		sqlRows:      newTUITable([]table.Column{{Title: "结果", Width: 90}}),
@@ -245,6 +257,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "esc":
+			if m.active == tuiSessions && m.focus == tuiFocusContent && m.handleSessionBack() {
+				m.syncFocusedComponent()
+				m.syncContentViewport()
+				return m, tea.Batch(cmds...)
+			}
 			if m.focus == tuiFocusContent {
 				m.focus = tuiFocusNav
 				m.syncFocusedComponent()
@@ -443,7 +460,7 @@ func (m tuiModel) renderActiveView() string {
 	case tuiSettings:
 		return "设置\n\n" + m.settings.View() + "\n\n" + m.preview.Value()
 	case tuiSessions:
-		return "会话\n\n" + m.sessions.View() + "\n\n" + m.preview.Value()
+		return m.renderSessionsView()
 	case tuiMemories:
 		return "记忆\n\n" + m.memories.View() + "\n\n" + m.preview.Value()
 	case tuiSQLite:
@@ -518,7 +535,9 @@ func (m *tuiModel) syncFocusedComponent() {
 	case tuiSettings:
 		m.settings.Focus()
 	case tuiSessions:
-		m.sessions.Focus()
+		if m.sessionMode == tuiSessionModeList {
+			m.sessions.Focus()
+		}
 	case tuiMemories:
 		m.memories.Focus()
 	case tuiSQLite:
@@ -553,7 +572,7 @@ func (m tuiModel) renderHelp() string {
 	case tuiSettings:
 		return common + " | Enter 详情 | e 修改当前配置"
 	case tuiSessions:
-		return common + " | Enter 懒加载详情 | n 新建会话 | x 删除"
+		return m.renderSessionsHelp(common)
 	case tuiMemories:
 		return common + " | Enter 详情 | e 编辑 | x 归档/取消归档 | n 重嵌入全部"
 	case tuiSQLite:
@@ -587,6 +606,16 @@ func (m *tuiModel) handleContentKey(key string) tea.Cmd {
 		return m.refreshActiveView()
 	case "enter":
 		return m.enterSelected()
+	case "up", "k":
+		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessages {
+			m.selectPreviousSessionMessage()
+			return nil
+		}
+	case "down", "j":
+		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessages {
+			m.selectNextSessionMessage()
+			return nil
+		}
 	case "p":
 		if m.active == tuiFiles {
 			return m.promptFilesPath()
@@ -697,7 +726,11 @@ func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) 
 	case tuiSettings:
 		m.settings, cmd = m.settings.Update(msg)
 	case tuiSessions:
-		m.sessions, cmd = m.sessions.Update(msg)
+		if m.sessionMode == tuiSessionModeList {
+			m.sessions, cmd = m.sessions.Update(msg)
+		} else {
+			m.content, cmd = m.content.Update(msg)
+		}
 	case tuiMemories:
 		m.memories, cmd = m.memories.Update(msg)
 	case tuiSQLite:
@@ -741,6 +774,11 @@ func (m tuiModel) refreshActiveView() tea.Cmd {
 	case tuiSettings:
 		return m.loadSettings()
 	case tuiSessions:
+		if m.sessionMode != tuiSessionModeList {
+			if id := asString(m.activeSession["id"]); id != "" {
+				return m.loadSession(id)
+			}
+		}
 		return m.loadSessions()
 	case tuiMemories:
 		return m.loadMemories()
@@ -761,7 +799,7 @@ func (m tuiModel) refreshActiveViewIfConnected() tea.Cmd {
 	return m.refreshActiveView()
 }
 
-func (m tuiModel) enterSelected() tea.Cmd {
+func (m *tuiModel) enterSelected() tea.Cmd {
 	switch m.active {
 	case tuiFiles:
 		row := m.filesTable.SelectedRow()
@@ -779,7 +817,7 @@ func (m tuiModel) enterSelected() tea.Cmd {
 	case tuiSettings:
 		return m.showSelectedSetting()
 	case tuiSessions:
-		return m.loadSelectedSession()
+		return m.enterSessionSelection()
 	case tuiMemories:
 		return m.showSelectedMemory()
 	case tuiSQLite:
@@ -1254,7 +1292,11 @@ func (m tuiModel) loadSelectedSession() tea.Cmd {
 	if len(row) == 0 {
 		return nil
 	}
-	payload := map[string]any{"command": "session_get", "session_id": row[0]}
+	return m.loadSession(row[0])
+}
+
+func (m tuiModel) loadSession(sessionID string) tea.Cmd {
+	payload := map[string]any{"command": "session_get", "session_id": sessionID}
 	return m.markLoading(m.remoteCommand("sessions:get", payload, 30*time.Second))
 }
 
@@ -1505,7 +1547,7 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 	case msg.op == "sessions:list":
 		m.applySessions(msg.response)
 	case msg.op == "sessions:get":
-		m.preview.SetValue(prettyJSON(msg.response))
+		m.applySessionDetail(msg.response)
 	case msg.op == "memories:list":
 		m.applyMemories(msg.response)
 	case msg.op == "sqlite:tables":
