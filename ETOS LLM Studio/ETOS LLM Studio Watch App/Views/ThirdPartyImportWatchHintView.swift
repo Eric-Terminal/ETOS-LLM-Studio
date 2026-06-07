@@ -226,16 +226,18 @@ struct ThirdPartyImportWatchHintView: View {
                     data: data,
                     source: source
                 )
-                let (prepared, preview) = try await Task.detached(priority: .userInitiated) {
+                let tempURL = try await Task.detached(priority: .userInitiated) {
                     let tempURL = ThirdPartyImportRemoteFileHelper.makeTemporaryFileURL(fileName: fileName)
                     try data.write(to: tempURL, options: [.atomic])
-                    defer {
-                        try? FileManager.default.removeItem(at: tempURL)
-                    }
+                    return tempURL
+                }.value
+                defer {
+                    try? FileManager.default.removeItem(at: tempURL)
+                }
 
-                    let prepared = try ThirdPartyImportService.prepareImport(source: source, fileURL: tempURL)
-                    let preview = ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
-                    return (prepared, preview)
+                let prepared = try await ThirdPartyImportService.prepareImportInBackground(source: source, fileURL: tempURL)
+                let preview = await Task.detached(priority: .userInitiated) {
+                    ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
                 }.value
 
                 await MainActor.run {

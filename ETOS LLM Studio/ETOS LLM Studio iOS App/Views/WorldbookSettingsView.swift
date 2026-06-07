@@ -445,7 +445,7 @@ struct WorldbookSettingsView: View {
             importError = error.localizedDescription
         case .success(let urls):
             guard let url = urls.first else { return }
-            Task {
+            Task.detached(priority: .userInitiated) {
                 do {
                     let shouldStop = url.startAccessingSecurityScopedResource()
                     defer {
@@ -506,7 +506,9 @@ struct WorldbookSettingsView: View {
                 }
 
                 let fileName = suggestedRemoteImportFileName(from: url, response: response)
-                let report = try ChatService.shared.importWorldbook(data: data, fileName: fileName)
+                let report = try await Task.detached(priority: .userInitiated) {
+                    try ChatService.shared.importWorldbook(data: data, fileName: fileName)
+                }.value
                 await MainActor.run {
                     importReport = report
                     importError = report.failureReasons.isEmpty ? nil : report.failureReasons.joined(separator: "\n")

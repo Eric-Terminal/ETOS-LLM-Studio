@@ -518,18 +518,32 @@ struct BackupRestoreView: View {
     }
 
     private func handleSelectedSnapshot(_ fileURL: URL) {
-        do {
-            let inspection = try SnapshotRestoreService.inspectSnapshot(at: fileURL)
-            if inspection.requiresPassword {
-                pendingEncryptedSnapshotURL = fileURL
-                pendingSnapshotInspection = inspection
-                restorePassword = ""
-                isPasswordPromptPresented = true
-                return
+        isRestoringSnapshot = true
+        statusMessage = NSLocalizedString("正在检查快照…", comment: "")
+        errorMessage = nil
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                let inspection = try SnapshotRestoreService.inspectSnapshot(at: fileURL)
+                await MainActor.run {
+                    statusMessage = nil
+                    if inspection.requiresPassword {
+                        isRestoringSnapshot = false
+                        pendingEncryptedSnapshotURL = fileURL
+                        pendingSnapshotInspection = inspection
+                        restorePassword = ""
+                        isPasswordPromptPresented = true
+                        return
+                    }
+                    restoreSnapshot(from: fileURL, password: nil)
+                }
+            } catch {
+                await MainActor.run {
+                    isRestoringSnapshot = false
+                    statusMessage = nil
+                    errorMessage = error.localizedDescription
+                }
             }
-            restoreSnapshot(from: fileURL, password: nil)
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

@@ -301,13 +301,12 @@ struct ThirdPartyImportView: View {
         preparationRequestID = requestID
         Task {
             do {
-                let (prepared, preview) = try await Task.detached(priority: .userInitiated) {
-                    let prepared = try ThirdPartyImportService.prepareImport(
-                        source: source,
-                        fileURL: fileURL
-                    )
-                    let preview = ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
-                    return (prepared, preview)
+                let prepared = try await ThirdPartyImportService.prepareImportInBackground(
+                    source: source,
+                    fileURL: fileURL
+                )
+                let preview = await Task.detached(priority: .userInitiated) {
+                    ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
                 }.value
                 await MainActor.run {
                     guard preparationRequestID == requestID else { return }

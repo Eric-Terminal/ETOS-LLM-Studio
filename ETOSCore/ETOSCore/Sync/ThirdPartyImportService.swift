@@ -143,6 +143,15 @@ public enum ThirdPartyImportService {
         }
     }
 
+    public static func prepareImportInBackground(
+        source: ThirdPartyImportSource,
+        fileURL: URL
+    ) async throws -> ThirdPartyImportPreparedResult {
+        try await Task.detached(priority: .userInitiated) {
+            try prepareImport(source: source, fileURL: fileURL)
+        }.value
+    }
+
     @discardableResult
     public static func importAndApply(
         source: ThirdPartyImportSource,
@@ -151,13 +160,15 @@ public enum ThirdPartyImportService {
         memoryManager: MemoryManager? = nil,
         userDefaults: UserDefaults = .standard
     ) async throws -> ThirdPartyImportReport {
-        let prepared = try prepareImport(source: source, fileURL: fileURL)
-        let summary = await SyncEngine.apply(
-            package: prepared.package,
-            chatService: chatService,
-            memoryManager: memoryManager,
-            userDefaults: userDefaults
-        )
+        let prepared = try await prepareImportInBackground(source: source, fileURL: fileURL)
+        let summary = await Task.detached(priority: .userInitiated) {
+            await SyncEngine.apply(
+                package: prepared.package,
+                chatService: chatService,
+                memoryManager: memoryManager,
+                userDefaults: userDefaults
+            )
+        }.value
         return ThirdPartyImportReport(
             source: source,
             parsedProvidersCount: prepared.parsedProvidersCount,
