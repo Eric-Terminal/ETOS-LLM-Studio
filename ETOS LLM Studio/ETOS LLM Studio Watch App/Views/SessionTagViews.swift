@@ -223,12 +223,13 @@ struct WatchSessionTagAssignmentView: View {
     let onSetTagIDs: ([UUID]) -> Void
 
     @State private var selectedTagIDs: Set<UUID>
+    @State private var localTags: [SessionTag]
     @State private var isAddingTag = false
     @State private var draftTagName = ""
     @State private var draftTagColor: SessionTagColor? = .red
 
     private var customTags: [SessionTag] {
-        tags.filter { !$0.isSystemColorTag }
+        localTags.filter { !$0.isSystemColorTag }
     }
 
     private var systemColorTags: [SessionTag] {
@@ -254,6 +255,7 @@ struct WatchSessionTagAssignmentView: View {
         self.onDelete = onDelete
         self.onSetTagIDs = onSetTagIDs
         _selectedTagIDs = State(initialValue: Set(session.tagIDs))
+        _localTags = State(initialValue: tags)
     }
 
     var body: some View {
@@ -267,7 +269,7 @@ struct WatchSessionTagAssignmentView: View {
                             toggle(tag.id)
                         },
                         onColorChange: { color in
-                            onUpdate(tag, tag.name, color)
+                            update(tag, color: color)
                         }
                     )
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -336,8 +338,17 @@ struct WatchSessionTagAssignmentView: View {
     private func delete(_ tag: SessionTag) {
         guard !tag.isSystemColorTag else { return }
         selectedTagIDs.remove(tag.id)
+        localTags.removeAll { $0.id == tag.id }
         onDelete(tag)
         onSetTagIDs(orderedSelectedTagIDs())
+    }
+
+    private func update(_ tag: SessionTag, color: SessionTagColor?) {
+        if let index = localTags.firstIndex(where: { $0.id == tag.id }) {
+            localTags[index].color = color
+            localTags[index].updatedAt = Date()
+        }
+        onUpdate(tag, tag.name, color)
     }
 
     @discardableResult
@@ -346,12 +357,21 @@ struct WatchSessionTagAssignmentView: View {
         guard isAddingTag, !trimmedName.isEmpty else { return nil }
         guard let tag = onCreate(trimmedName, draftTagColor) else { return nil }
 
+        upsertLocalTag(tag)
         selectedTagIDs.insert(tag.id)
         isAddingTag = false
         draftTagName = ""
         draftTagColor = .red
         onSetTagIDs(orderedSelectedTagIDs())
         return tag
+    }
+
+    private func upsertLocalTag(_ tag: SessionTag) {
+        if let index = localTags.firstIndex(where: { $0.id == tag.id }) {
+            localTags[index] = tag
+        } else {
+            localTags.append(tag)
+        }
     }
 }
 
