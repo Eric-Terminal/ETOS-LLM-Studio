@@ -493,7 +493,6 @@ private struct SessionTagColorMenuButton: UIViewRepresentable {
         let button = UIButton(type: .system)
         button.showsMenuAsPrimaryAction = true
         button.changesSelectionAsPrimaryAction = false
-        button.adjustsImageWhenHighlighted = true
         button.tintColor = .label
         return button
     }
