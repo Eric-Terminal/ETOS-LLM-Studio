@@ -219,6 +219,7 @@ struct WatchSessionTagAssignmentView: View {
     let tags: [SessionTag]
     let onCreate: (String, SessionTagColor?) -> SessionTag?
     let onUpdate: (SessionTag, String, SessionTagColor?) -> Void
+    let onDelete: (SessionTag) -> Void
     let onSetTagIDs: ([UUID]) -> Void
 
     @State private var selectedTagIDs: Set<UUID>
@@ -243,12 +244,14 @@ struct WatchSessionTagAssignmentView: View {
         tags: [SessionTag],
         onCreate: @escaping (String, SessionTagColor?) -> SessionTag?,
         onUpdate: @escaping (SessionTag, String, SessionTagColor?) -> Void,
+        onDelete: @escaping (SessionTag) -> Void,
         onSetTagIDs: @escaping ([UUID]) -> Void
     ) {
         self.session = session
         self.tags = tags
         self.onCreate = onCreate
         self.onUpdate = onUpdate
+        self.onDelete = onDelete
         self.onSetTagIDs = onSetTagIDs
         _selectedTagIDs = State(initialValue: Set(session.tagIDs))
     }
@@ -267,6 +270,15 @@ struct WatchSessionTagAssignmentView: View {
                             onUpdate(tag, tag.name, color)
                         }
                     )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if !tag.isSystemColorTag {
+                            Button(role: .destructive) {
+                                delete(tag)
+                            } label: {
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                            }
+                        }
+                    }
                 }
 
                 if isAddingTag {
@@ -319,6 +331,13 @@ struct WatchSessionTagAssignmentView: View {
         draftTagName = ""
         draftTagColor = .red
         isAddingTag = true
+    }
+
+    private func delete(_ tag: SessionTag) {
+        guard !tag.isSystemColorTag else { return }
+        selectedTagIDs.remove(tag.id)
+        onDelete(tag)
+        onSetTagIDs(orderedSelectedTagIDs())
     }
 
     @discardableResult
@@ -383,11 +402,18 @@ struct WatchSessionTagDraftAssignmentRow: View {
                 .foregroundStyle(Color.accentColor)
 
             TextField(NSLocalizedString("标签名称", comment: "Session tag name field"), text: $name)
+                .textFieldStyle(.plain)
                 .submitLabel(.done)
                 .onSubmit(onCommit)
+                .lineLimit(1)
+                .frame(minWidth: 72, maxWidth: 92, alignment: .leading)
+
+            Spacer(minLength: 0)
 
             WatchSessionTagColorLink(selectedColor: $color, size: 16)
+                .frame(width: 24, height: 24)
         }
+        .buttonStyle(.plain)
     }
 }
 

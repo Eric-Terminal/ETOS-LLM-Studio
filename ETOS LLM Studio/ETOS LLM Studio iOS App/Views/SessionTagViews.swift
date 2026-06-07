@@ -249,6 +249,7 @@ struct SessionTagAssignmentView: View {
     let tags: [SessionTag]
     let onCreate: (String, SessionTagColor?) -> SessionTag?
     let onUpdate: (SessionTag, String, SessionTagColor?) -> Void
+    let onDelete: (SessionTag) -> Void
     let onSetTagIDs: ([UUID]) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -275,12 +276,14 @@ struct SessionTagAssignmentView: View {
         tags: [SessionTag],
         onCreate: @escaping (String, SessionTagColor?) -> SessionTag?,
         onUpdate: @escaping (SessionTag, String, SessionTagColor?) -> Void,
+        onDelete: @escaping (SessionTag) -> Void,
         onSetTagIDs: @escaping ([UUID]) -> Void
     ) {
         self.session = session
         self.tags = tags
         self.onCreate = onCreate
         self.onUpdate = onUpdate
+        self.onDelete = onDelete
         self.onSetTagIDs = onSetTagIDs
         _selectedTagIDs = State(initialValue: Set(session.tagIDs))
     }
@@ -300,6 +303,15 @@ struct SessionTagAssignmentView: View {
                                 onUpdate(tag, tag.name, color)
                             }
                         )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            if !tag.isSystemColorTag {
+                                Button(role: .destructive) {
+                                    delete(tag)
+                                } label: {
+                                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                                }
+                            }
+                        }
                     }
 
                     if isAddingTag {
@@ -376,6 +388,13 @@ struct SessionTagAssignmentView: View {
         draftTagName = ""
         draftTagColor = .red
         isAddingTag = true
+    }
+
+    private func delete(_ tag: SessionTag) {
+        guard !tag.isSystemColorTag else { return }
+        selectedTagIDs.remove(tag.id)
+        onDelete(tag)
+        onSetTagIDs(orderedSelectedTagIDs())
     }
 
     @discardableResult

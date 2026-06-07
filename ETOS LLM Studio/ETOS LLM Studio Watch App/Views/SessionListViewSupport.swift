@@ -428,6 +428,7 @@ struct SessionRowView: View {
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
     let createTagAction: (String, SessionTagColor?) -> SessionTag?
     let updateTagAction: (SessionTag, String, SessionTagColor?) -> Void
+    let deleteTagAction: (SessionTag) -> Void
     let setSessionTagsAction: (ChatSession, [UUID]) -> Void
 
     var body: some View {
@@ -474,6 +475,7 @@ struct SessionRowView: View {
                     },
                     onCreateTag: createTagAction,
                     onUpdateTag: updateTagAction,
+                    onDeleteTag: deleteTagAction,
                     onSetTagIDs: { tagIDs in
                         setSessionTagsAction(session, tagIDs)
                     }

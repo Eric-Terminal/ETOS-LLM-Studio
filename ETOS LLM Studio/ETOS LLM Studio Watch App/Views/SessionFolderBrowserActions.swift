@@ -100,6 +100,7 @@ extension SessionFolderBrowserView {
                 moveSessionToFolderAction: moveSessionToFolderAction,
                 createTagAction: createTagAction,
                 updateTagAction: updateTagAction,
+                deleteTagAction: deleteTagAction,
                 setSessionTagsAction: setSessionTagsAction
             )
         }

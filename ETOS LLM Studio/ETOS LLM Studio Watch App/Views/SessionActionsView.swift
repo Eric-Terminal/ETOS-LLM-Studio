@@ -30,6 +30,7 @@ struct SessionActionsView: View {
     let onMoveSessionToFolder: (UUID?) -> Void
     let onCreateTag: (String, SessionTagColor?) -> SessionTag?
     let onUpdateTag: (SessionTag, String, SessionTagColor?) -> Void
+    let onDeleteTag: (SessionTag) -> Void
     let onSetTagIDs: ([UUID]) -> Void
 
     // MARK: - 环境
@@ -70,6 +71,7 @@ struct SessionActionsView: View {
                         tags: tags,
                         onCreate: onCreateTag,
                         onUpdate: onUpdateTag,
+                        onDelete: onDeleteTag,
                         onSetTagIDs: onSetTagIDs
                     )
                 } label: {
