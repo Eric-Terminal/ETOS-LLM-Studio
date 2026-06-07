@@ -431,6 +431,8 @@ struct SessionRowView: View {
     let deleteTagAction: (SessionTag) -> Void
     let setSessionTagsAction: (ChatSession, [UUID]) -> Void
 
+    @State private var showActionsFromLongPress = false
+
     var body: some View {
         Button(action: { onSessionSelected(session, nil) }) {
             HStack(alignment: .center) {
@@ -457,29 +459,15 @@ struct SessionRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0.45) {
+            showActionsFromLongPress = true
+        }
+        .navigationDestination(isPresented: $showActionsFromLongPress) {
+            actionsView
+        }
         .swipeActions(edge: .leading) {
             NavigationLink {
-                SessionActionsView(
-                    session: session,
-                    sessionToEdit: $sessionToEdit,
-                    sessionToBranch: $sessionToBranch,
-                    showBranchOptions: $showBranchOptions,
-                    sessionToDelete: $sessionToDelete,
-                    showDeleteSessionConfirm: $showDeleteSessionConfirm,
-                    folders: $folders,
-                    tags: tags,
-                    onDeleteLastMessage: { deleteLastMessageAction(session) },
-                    onSendSessionToCompanion: { sendSessionToCompanionAction(session) },
-                    onMoveSessionToFolder: { targetFolderID in
-                        moveSessionToFolderAction(session, targetFolderID)
-                    },
-                    onCreateTag: createTagAction,
-                    onUpdateTag: updateTagAction,
-                    onDeleteTag: deleteTagAction,
-                    onSetTagIDs: { tagIDs in
-                        setSessionTagsAction(session, tagIDs)
-                    }
-                )
+                actionsView
             } label: {
                 Label(NSLocalizedString("更多", comment: ""), systemImage: "ellipsis")
             }
@@ -493,5 +481,29 @@ struct SessionRowView: View {
                 Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
             }
         }
+    }
+
+    private var actionsView: some View {
+        SessionActionsView(
+            session: session,
+            sessionToEdit: $sessionToEdit,
+            sessionToBranch: $sessionToBranch,
+            showBranchOptions: $showBranchOptions,
+            sessionToDelete: $sessionToDelete,
+            showDeleteSessionConfirm: $showDeleteSessionConfirm,
+            folders: $folders,
+            tags: tags,
+            onDeleteLastMessage: { deleteLastMessageAction(session) },
+            onSendSessionToCompanion: { sendSessionToCompanionAction(session) },
+            onMoveSessionToFolder: { targetFolderID in
+                moveSessionToFolderAction(session, targetFolderID)
+            },
+            onCreateTag: createTagAction,
+            onUpdateTag: updateTagAction,
+            onDeleteTag: deleteTagAction,
+            onSetTagIDs: { tagIDs in
+                setSessionTagsAction(session, tagIDs)
+            }
+        )
     }
 }
