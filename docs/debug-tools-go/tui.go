@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -202,8 +204,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "tab", "right":
 			m.nextView()
+			appendAction(m.refreshActiveViewIfConnected())
 		case "shift+tab", "left":
 			m.previousView()
+			appendAction(m.refreshActiveViewIfConnected())
 		case "r":
 			appendAction(m.refreshActiveView())
 		case "enter":
@@ -219,6 +223,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "d":
 			appendAction(m.downloadSelectedFile())
+		case "u":
+			if m.active == tuiFiles {
+				appendAction(m.uploadFile())
+			}
 		case "x":
 			appendAction(m.deleteSelected())
 		case "n":
@@ -414,7 +422,7 @@ func (m tuiModel) renderHelp() string {
 	common := "Tab 切换 | r 刷新 | ↑↓ 选择 | Esc 退出"
 	switch m.active {
 	case tuiFiles:
-		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | x 删除 | n 新建目录"
+		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | u 上传 | x 删除 | n 新建目录"
 	case tuiProviders:
 		return common + " | Enter 详情 | a 新增 Provider | e 编辑 Provider | m 新增模型 | M 编辑模型"
 	case tuiSettings:
@@ -470,6 +478,14 @@ func (m tuiModel) refreshActiveView() tea.Cmd {
 	default:
 		return nil
 	}
+}
+
+func (m tuiModel) refreshActiveViewIfConnected() tea.Cmd {
+	connected, _ := m.server.getConnectionStatus()
+	if !connected {
+		return nil
+	}
+	return m.refreshActiveView()
 }
 
 func (m tuiModel) enterSelected() tea.Cmd {
@@ -531,6 +547,40 @@ func (m tuiModel) downloadSelectedFile() tea.Cmd {
 		return nil
 	}
 	return m.readFile(joinDevicePath(m.currentPath, row[0]))
+}
+
+func (m tuiModel) uploadFile() tea.Cmd {
+	if m.active != tuiFiles {
+		return nil
+	}
+	return func() tea.Msg {
+		localPath := ""
+		remotePath := m.currentPath
+		form := huh.NewForm(huh.NewGroup(
+			huh.NewInput().Title("本地文件路径").Value(&localPath),
+			huh.NewInput().Title("设备目标路径").Value(&remotePath),
+		))
+		if err := form.Run(); err != nil {
+			return tuiCommandResultMsg{op: "noop", err: err}
+		}
+
+		localPath = strings.TrimSpace(localPath)
+		remotePath = strings.TrimSpace(remotePath)
+		if localPath == "" || remotePath == "" {
+			return tuiCommandResultMsg{op: "files:upload", err: fmt.Errorf("本地文件路径和设备目标路径不能为空")}
+		}
+
+		data, err := os.ReadFile(localPath)
+		if err != nil {
+			return tuiCommandResultMsg{op: "files:upload", err: fmt.Errorf("读取本地文件失败: %w", err)}
+		}
+		response, err := m.server.sendCommandWithResponse(map[string]any{
+			"command": "upload",
+			"path":    remotePath,
+			"data":    base64.StdEncoding.EncodeToString(data),
+		}, 45*time.Second)
+		return tuiCommandResultMsg{op: "files:upload", response: response, err: err}
+	}
 }
 
 func (m tuiModel) promptFilesPath() tea.Cmd {
@@ -677,6 +727,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		capabilities := "toolCalling"
 		requestBodyOverrideMode := "keyValue"
 		rawRequestBodyJSON := ""
+		requestBodyControls := "[]"
 		overrideParameters := "{}"
 		pricing := "{}"
 		form := huh.NewForm(huh.NewGroup(
@@ -688,6 +739,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 			huh.NewInput().Title("能力（逗号分隔，如 toolCalling,reasoning）").Value(&capabilities),
 			huh.NewInput().Title("请求体覆盖模式(keyValue/expression/rawJSON)").Value(&requestBodyOverrideMode),
 			huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON),
+			huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls),
 			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
 			huh.NewText().Title("Pricing JSON").Value(&pricing),
 		))
@@ -704,6 +756,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 			Capabilities:            capabilities,
 			RequestBodyOverrideMode: requestBodyOverrideMode,
 			RawRequestBodyJSON:      rawRequestBodyJSON,
+			RequestBodyControls:     requestBodyControls,
 			OverrideParameters:      overrideParameters,
 			Pricing:                 pricing,
 			IsActivated:             true,
@@ -780,6 +833,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			requestBodyOverrideMode = "keyValue"
 		}
 		rawRequestBodyJSON := asString(model["rawRequestBodyJSON"])
+		requestBodyControls := providerModelRequestBodyControlsText(model)
 		overrideParameters := providerModelOverrideText(model)
 		pricing := providerModelPricingText(model)
 		isActivated := model["isActivated"] == nil || asBool(model["isActivated"])
@@ -794,6 +848,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			huh.NewInput().Title("能力（逗号分隔，如 toolCalling,reasoning）").Value(&capabilities),
 			huh.NewInput().Title("请求体覆盖模式(keyValue/expression/rawJSON)").Value(&requestBodyOverrideMode),
 			huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON),
+			huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls),
 			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
 			huh.NewText().Title("Pricing JSON").Value(&pricing),
 		))
@@ -812,6 +867,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			Capabilities:            capabilities,
 			RequestBodyOverrideMode: requestBodyOverrideMode,
 			RawRequestBodyJSON:      rawRequestBodyJSON,
+			RequestBodyControls:     requestBodyControls,
 			OverrideParameters:      overrideParameters,
 			Pricing:                 pricing,
 			IsActivated:             isActivated,
@@ -1146,6 +1202,9 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.applyFiles(msg.response)
 	case strings.HasPrefix(msg.op, "files:read:"):
 		m.applyReadFile(strings.TrimPrefix(msg.op, "files:read:"), msg.response)
+	case msg.op == "files:upload":
+		m.preview.SetValue(prettyJSON(msg.response))
+		m.setMessage("文件已上传；按 r 可刷新目录", tuiOKStyle)
 	case msg.op == "providers:list":
 		m.applyProviders(msg.response)
 	case msg.op == "providers:save":

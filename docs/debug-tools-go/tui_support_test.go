@@ -114,6 +114,7 @@ func TestBuildProviderModelUpsertPayloadForExistingModel(t *testing.T) {
 		Capabilities:            "toolCalling, reasoning",
 		RequestBodyOverrideMode: "rawJSON",
 		RawRequestBodyJSON:      `{"model":"gpt-test"}`,
+		RequestBodyControls:     `[{"id":"thinking","title":"Thinking","kind":"toggle","isEnabled":true,"defaultIsActive":false,"payload":{"reasoning_effort":"high"},"options":[]}]`,
 		OverrideParameters:      `{"temperature":0.2}`,
 		Pricing:                 `{"inputPerMillionTokens":1.5}`,
 		IsActivated:             false,
@@ -171,12 +172,46 @@ func TestBuildProviderModelUpsertPayloadForExistingModel(t *testing.T) {
 		t.Fatalf("temperature = %v, want 0.2", override["temperature"])
 	}
 
+	requestBodyControls, ok := payload["request_body_controls"].([]any)
+	if !ok {
+		t.Fatalf("request_body_controls 类型 = %T, want []any", payload["request_body_controls"])
+	}
+	if len(requestBodyControls) != 1 {
+		t.Fatalf("request_body_controls 长度 = %d, want 1", len(requestBodyControls))
+	}
+	control, ok := requestBodyControls[0].(map[string]any)
+	if !ok {
+		t.Fatalf("request_body_controls[0] 类型 = %T, want map[string]any", requestBodyControls[0])
+	}
+	if control["id"] != "thinking" {
+		t.Fatalf("control id = %v, want thinking", control["id"])
+	}
+
 	pricing, ok := payload["pricing"].(map[string]any)
 	if !ok {
 		t.Fatalf("pricing 类型 = %T, want map[string]any", payload["pricing"])
 	}
 	if pricing["inputPerMillionTokens"] != 1.5 {
 		t.Fatalf("inputPerMillionTokens = %v, want 1.5", pricing["inputPerMillionTokens"])
+	}
+}
+
+func TestBuildProviderModelUpsertPayloadUsesEmptyRequestBodyControls(t *testing.T) {
+	payload, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
+		ProviderID:  "provider-1",
+		ModelName:   "gpt-test",
+		Kind:        "chat",
+		IsActivated: true,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderModelUpsertPayload 返回错误: %v", err)
+	}
+	controls, ok := payload["request_body_controls"].([]any)
+	if !ok {
+		t.Fatalf("request_body_controls 类型 = %T, want []any", payload["request_body_controls"])
+	}
+	if len(controls) != 0 {
+		t.Fatalf("request_body_controls = %#v, want empty", controls)
 	}
 }
 
@@ -189,6 +224,19 @@ func TestBuildProviderModelUpsertPayloadRejectsNonObjectOverride(t *testing.T) {
 		IsActivated:        true,
 	}); err == nil {
 		t.Fatal("err = nil，期望拒绝非对象 Override Parameters")
+	}
+}
+
+func TestBuildProviderModelUpsertPayloadRejectsNonArrayRequestBodyControls(t *testing.T) {
+	if _, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
+		ProviderID:          "provider-1",
+		ModelName:           "gpt-test",
+		Kind:                "chat",
+		RequestBodyControls: `{"id":"thinking"}`,
+		OverrideParameters:  "{}",
+		IsActivated:         true,
+	}); err == nil {
+		t.Fatal("err = nil，期望拒绝非数组 Request Body Controls")
 	}
 }
 

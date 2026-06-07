@@ -147,6 +147,14 @@ extension LocalDebugServer {
         if let rawRequestBodyJSON = trimmedDebugString(json["raw_request_body_json"] ?? json["rawRequestBodyJSON"]) {
             model.rawRequestBodyJSON = rawRequestBodyJSON.isEmpty ? nil : rawRequestBodyJSON
         }
+        let requestBodyControlsRaw = json["request_body_controls"] ?? json["requestBodyControls"]
+        if requestBodyControlsRaw != nil {
+            let decodedControls = decodeDebugRequestBodyControls(requestBodyControlsRaw)
+            guard decodedControls.isValid else {
+                return debugProviderError("request_body_controls 必须是合法的 ModelRequestBodyControl JSON 数组")
+            }
+            model.requestBodyControls = decodedControls.controls
+        }
         if let overrideParameters {
             model.overrideParameters = overrideParameters
         }
@@ -295,6 +303,28 @@ extension LocalDebugServer {
         }
         let normalized = decoded.normalized
         return (normalized.isEffectivelyEmpty ? nil : normalized, true)
+    }
+
+    private func decodeDebugRequestBodyControls(_ value: Any?) -> (controls: [ModelRequestBodyControl], isValid: Bool) {
+        guard let value else { return ([], true) }
+        if value is NSNull { return ([], true) }
+
+        let data: Data?
+        if let text = value as? String {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return ([], true) }
+            data = trimmed.data(using: .utf8)
+        } else if JSONSerialization.isValidJSONObject(value) {
+            data = try? JSONSerialization.data(withJSONObject: value)
+        } else {
+            data = nil
+        }
+
+        guard let data,
+              let decoded = try? makeWebConsoleJSONDecoder().decode([ModelRequestBodyControl].self, from: data) else {
+            return ([], false)
+        }
+        return (decoded, true)
     }
 
     private func debugProviderBool(_ value: Any?) -> Bool? {

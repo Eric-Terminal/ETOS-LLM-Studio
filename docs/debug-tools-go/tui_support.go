@@ -217,6 +217,7 @@ type providerModelUpsertInput struct {
 	Capabilities            string
 	RequestBodyOverrideMode string
 	RawRequestBodyJSON      string
+	RequestBodyControls     string
 	OverrideParameters      string
 	Pricing                 string
 	IsActivated             bool
@@ -237,6 +238,10 @@ func buildProviderModelUpsertPayload(input providerModelUpsertInput) (map[string
 	if err != nil {
 		return nil, err
 	}
+	requestBodyControls, err := parseOptionalJSONArray(input.RequestBodyControls, "请求体控件")
+	if err != nil {
+		return nil, err
+	}
 
 	payload := map[string]any{
 		"command":                    "provider_model_upsert",
@@ -250,6 +255,7 @@ func buildProviderModelUpsertPayload(input providerModelUpsertInput) (map[string
 		"capabilities":               splitCSV(input.Capabilities),
 		"request_body_override_mode": strings.TrimSpace(input.RequestBodyOverrideMode),
 		"raw_request_body_json":      strings.TrimSpace(input.RawRequestBodyJSON),
+		"request_body_controls":      requestBodyControls,
 		"override_parameters":        override,
 		"pricing":                    pricing,
 	}
@@ -270,6 +276,19 @@ func parseOptionalJSONObject(value, title string) (map[string]any, error) {
 		object = map[string]any{}
 	}
 	return object, nil
+}
+
+func parseOptionalJSONArray(value, title string) ([]any, error) {
+	var array []any
+	if strings.TrimSpace(value) != "" {
+		if err := json.Unmarshal([]byte(value), &array); err != nil {
+			return nil, fmt.Errorf("%s 不是合法 JSON 数组: %w", title, err)
+		}
+	}
+	if array == nil {
+		array = []any{}
+	}
+	return array, nil
 }
 
 func findProviderModelRow(models []map[string]any, modelID string) map[string]any {
@@ -308,6 +327,13 @@ func providerModelPricingText(model map[string]any) string {
 		return prettyJSON(value)
 	}
 	return "{}"
+}
+
+func providerModelRequestBodyControlsText(model map[string]any) string {
+	if value, ok := model["requestBodyControls"]; ok {
+		return prettyJSON(value)
+	}
+	return "[]"
 }
 
 func asAnySlice(v any) []any {
