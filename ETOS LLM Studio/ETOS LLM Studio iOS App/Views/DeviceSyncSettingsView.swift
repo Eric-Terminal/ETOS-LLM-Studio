@@ -14,21 +14,37 @@ struct DeviceSyncSettingsView: View {
     @EnvironmentObject private var syncManager: WatchSyncManager
     @EnvironmentObject private var cloudSyncManager: CloudSyncManager
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var isSyncIntroExpanded = false
     
     var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "同步与备份",
+                    summary: "先区分手动快照、启动保护和设备同步，再选择要执行的操作。",
+                    details: syncIntroDetails,
+                    isExpanded: $isSyncIntroExpanded
+                )
+            }
+
             Section {
                 NavigationLink {
                     BackupRestoreView()
                 } label: {
                     Label(NSLocalizedString("数据库快照", comment: ""), systemImage: "externaldrive.badge.icloud")
                 }
+            } header: {
+                Text(NSLocalizedString("手动快照", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("手动导出或恢复 .elsbackup 快照。", comment: ""))
+            }
 
+            Section {
                 Toggle(NSLocalizedString("启动时创建数据库备份点", comment: ""), isOn: $appConfig.syncBackupCreateOnLaunch)
             } header: {
-                Text(NSLocalizedString("数据库保护", comment: ""))
+                Text(NSLocalizedString("启动保护备份", comment: ""))
             } footer: {
-                Text(NSLocalizedString("手动快照用于跨设备灾难恢复；启动备份用于防止 SQLite 数据库损坏。开启启动备份后，每次启动会额外 dump 一份可恢复备份并落盘。", comment: ""))
+                Text(NSLocalizedString("只在启动时写入本机可恢复备份点。", comment: ""))
             }
 
             if syncManager.isCompanionAvailable {
@@ -53,7 +69,7 @@ struct DeviceSyncSettingsView: View {
                 } header: {
                     Text(NSLocalizedString("Apple Watch 同步", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("开启后，iPhone 与 Apple Watch 会全量漫游支持的数据；关闭后会拒绝近场同步入站数据。", comment: ""))
+                    Text(NSLocalizedString("开启后同步 iPhone 与 Apple Watch 支持的数据。", comment: ""))
                 }
 
                 Section(NSLocalizedString("Apple Watch 状态", comment: "")) {
@@ -84,7 +100,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("iCloud 同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("用于同一 Apple ID 下多台设备间漫游数据。只有一台设备使用本应用时可以保持关闭；开启后会上传本机快照并合并其他设备快照，提供商 API Key 也会在您的设备间同步。", comment: ""))
+                Text(NSLocalizedString("用于同一 Apple ID 下的多设备漫游。", comment: ""))
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
@@ -92,6 +108,48 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
+    }
+
+    private var syncIntroDetails: String {
+        NSLocalizedString("同步与备份说明正文", comment: "")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(NSLocalizedString(title, comment: "同步与备份介绍卡片标题"))
+                .etFont(.headline.weight(.semibold))
+            Text(NSLocalizedString(summary, comment: "同步与备份介绍卡片摘要"))
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: ""))
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString(title, comment: "同步与备份介绍卡片详情标题"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
     
     private var isSyncing: Bool {

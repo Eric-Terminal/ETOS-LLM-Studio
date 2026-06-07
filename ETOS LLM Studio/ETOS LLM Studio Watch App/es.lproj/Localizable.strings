@@ -3986,6 +3986,12 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "当前选择：%@" = "Selección actual: %@";
 "上传前请确认对象存储配置。" = "Confirma la configuración del almacenamiento de objetos antes de subir.";
 "恢复前请确认快照来源可信。" = "Confirma que el origen de la instantánea sea confiable antes de restaurar.";
+"先区分手动快照、启动保护和设备同步，再选择要执行的操作。" = "Distingue primero las instantáneas manuales, la protección de inicio y la sincronización de dispositivos, y luego elige la acción.";
+"手动导出或恢复 .elsbackup 快照。" = "Exporta o restaura manualmente instantáneas .elsbackup.";
+"只在启动时写入本机可恢复备份点。" = "Escribe un punto de copia recuperable local solo durante el inicio.";
+"开启后同步 iPhone 与 Apple Watch 支持的数据。" = "Al activarlo, sincroniza los datos compatibles entre iPhone y Apple Watch.";
+"用于同一 Apple ID 下的多设备漫游。" = "Se usa para itinerancia entre dispositivos con el mismo Apple ID.";
+"同步与备份说明正文" = "Las instantáneas de base de datos exportan o restauran manualmente archivos .elsbackup, útiles para cambiar de dispositivo, recuperación entre dispositivos y copias manuales.\n\nLa protección de inicio solo evita daños en la base de datos SQLite. Al activarla, cada inicio escribe en disco un punto de copia recuperable adicional.\n\nLa sincronización de Apple Watch mueve datos compatibles entre iPhone y Apple Watch.\n\nLa sincronización de iCloud mueve datos entre dispositivos con el mismo Apple ID. Al activarla, sube la instantánea de este dispositivo y fusiona instantáneas de otros dispositivos; las API Key de proveedores también se sincronizan entre tus dispositivos.";
 
 "调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
 "http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";

@@ -3987,6 +3987,12 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "当前选择：%@" = "Sélection actuelle : %@";
 "上传前请确认对象存储配置。" = "Vérifiez la configuration du stockage objet avant l’envoi.";
 "恢复前请确认快照来源可信。" = "Assurez-vous que la source du snapshot est fiable avant la restauration.";
+"先区分手动快照、启动保护和设备同步，再选择要执行的操作。" = "Distinguez d'abord les snapshots manuels, la protection au lancement et la synchronisation des appareils, puis choisissez l'action.";
+"手动导出或恢复 .elsbackup 快照。" = "Exportez ou restaurez manuellement des snapshots .elsbackup.";
+"只在启动时写入本机可恢复备份点。" = "Ecrit un point de sauvegarde local récupérable uniquement au lancement.";
+"开启后同步 iPhone 与 Apple Watch 支持的数据。" = "Une fois activé, synchronise les données prises en charge entre iPhone et Apple Watch.";
+"用于同一 Apple ID 下的多设备漫游。" = "Utilisé pour l'itinérance entre appareils avec le même Apple ID.";
+"同步与备份说明正文" = "Les snapshots de base de données servent à exporter ou restaurer manuellement des fichiers .elsbackup, utiles pour changer d'appareil, récupérer entre appareils ou faire une sauvegarde manuelle.\n\nLa protection au lancement sert uniquement à éviter la corruption de la base SQLite. Une fois activée, chaque lancement écrit un point de sauvegarde récupérable supplémentaire sur le disque.\n\nLa synchronisation Apple Watch fait circuler les données prises en charge entre l'iPhone et l'Apple Watch.\n\nLa synchronisation iCloud fait circuler les données entre les appareils du même Apple ID. Une fois activée, elle téléverse le snapshot de cet appareil et fusionne les snapshots des autres appareils ; les API Key des fournisseurs sont aussi synchronisées entre vos appareils.";
 
 "调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
 "http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";

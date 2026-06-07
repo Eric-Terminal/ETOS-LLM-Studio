@@ -3914,6 +3914,12 @@
 "当前选择：%@" = "Current selection: %@";
 "上传前请确认对象存储配置。" = "Confirm object storage settings before uploading.";
 "恢复前请确认快照来源可信。" = "Confirm the snapshot source is trusted before restoring.";
+"先区分手动快照、启动保护和设备同步，再选择要执行的操作。" = "Distinguish manual snapshots, startup protection, and device sync before choosing an action.";
+"手动导出或恢复 .elsbackup 快照。" = "Manually export or restore .elsbackup snapshots.";
+"只在启动时写入本机可恢复备份点。" = "Writes a local recoverable backup point only during launch.";
+"开启后同步 iPhone 与 Apple Watch 支持的数据。" = "Syncs supported data between iPhone and Apple Watch when enabled.";
+"用于同一 Apple ID 下的多设备漫游。" = "Used for roaming across devices under the same Apple ID.";
+"同步与备份说明正文" = "Database snapshots manually export or restore .elsbackup files, useful for moving devices, cross-device disaster recovery, and manual backups.\n\nStartup protection is only for preventing SQLite database corruption. When enabled, each launch writes an additional recoverable backup point to disk.\n\nApple Watch Sync roams supported data between iPhone and Apple Watch.\n\niCloud Sync roams data across devices under the same Apple ID. When enabled, it uploads this device's snapshot and merges snapshots from other devices; provider API keys also sync across your devices.";
 
 "调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
 "http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";
