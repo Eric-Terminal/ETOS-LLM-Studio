@@ -158,7 +158,7 @@ func (m *tuiModel) selectPreviousSessionDetail() {
 }
 
 func (m *tuiModel) selectNextSessionDetail() {
-	count := len(m.editableSessionDetailSections())
+	count := len(m.sessionDetailSections())
 	if count == 0 {
 		return
 	}
@@ -251,7 +251,7 @@ func (m *tuiModel) applySessionDetail(response map[string]any) {
 	} else {
 		m.selectedSessionMessage = minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
 	}
-	m.selectedSessionDetail = minInt(maxInt(0, m.selectedSessionDetail), maxInt(0, len(m.editableSessionDetailSections())-1))
+	m.selectedSessionDetail = minInt(maxInt(0, m.selectedSessionDetail), maxInt(0, len(m.sessionDetailSections())-1))
 	m.sessionMode = tuiSessionModeMessages
 	m.preview.SetValue("")
 	m.content.GotoTop()
@@ -324,17 +324,13 @@ func (m tuiModel) sessionMessageDetailViewElements() ([]string, []int) {
 		"",
 	}
 
-	editableIndex := 0
 	sectionElementIndexes := []int{}
-	for _, section := range m.sessionDetailSections() {
+	for index, section := range m.sessionDetailSections() {
 		if len(elements) > 0 && elements[len(elements)-1] != "" {
 			elements = append(elements, "")
 		}
-		selected := section.editable && editableIndex == m.selectedSessionDetail
-		if section.editable {
-			sectionElementIndexes = append(sectionElementIndexes, len(elements))
-			editableIndex++
-		}
+		selected := index == m.selectedSessionDetail
+		sectionElementIndexes = append(sectionElementIndexes, len(elements))
 		elements = append(elements, m.renderSessionDetailSection(section, selected))
 	}
 	return elements, sectionElementIndexes
@@ -381,17 +377,6 @@ func (m tuiModel) sessionDetailSections() []tuiSessionDetailSection {
 	return sections
 }
 
-func (m tuiModel) editableSessionDetailSections() []tuiSessionDetailSection {
-	sections := m.sessionDetailSections()
-	result := make([]tuiSessionDetailSection, 0, len(sections))
-	for _, section := range sections {
-		if section.editable {
-			result = append(result, section)
-		}
-	}
-	return result
-}
-
 func (m tuiModel) renderSessionDetailSection(section tuiSessionDetailSection, selected bool) string {
 	width := maxInt(36, minInt(100, m.content.Width-4))
 	title := section.title
@@ -436,12 +421,17 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 	if messageIndex < 0 || messageIndex >= len(m.sessionMessages) {
 		return nil
 	}
-	sections := m.editableSessionDetailSections()
+	sections := m.sessionDetailSections()
 	if len(sections) == 0 {
 		return nil
 	}
 	sectionIndex := minInt(maxInt(0, m.selectedSessionDetail), len(sections)-1)
 	section := sections[sectionIndex]
+	if !section.editable {
+		return func() tea.Msg {
+			return tuiCommandResultMsg{op: "noop", response: map[string]any{"status": "ok", "message": "当前区块仅供查看，不能编辑"}}
+		}
+	}
 	sessionID := asString(m.activeSession["id"])
 	if sessionID == "" {
 		return func() tea.Msg {
@@ -827,6 +817,8 @@ func sessionTokenUsageSummary(tokenUsage map[string]any) string {
 		{"promptTokens", "输入"},
 		{"completionTokens", "输出"},
 		{"thinkingTokens", "思考"},
+		{"cacheWriteTokens", "缓存写入"},
+		{"cacheReadTokens", "缓存命中"},
 		{"totalTokens", "总计"},
 	} {
 		if _, ok := tokenUsage[item.key]; ok {

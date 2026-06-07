@@ -336,6 +336,48 @@ func TestSessionDetailSelectionScrollsToSection(t *testing.T) {
 	}
 }
 
+func TestSessionDetailCanSelectInfoSectionAndShowsCacheTokens(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.sessionMode = tuiSessionModeMessageDetail
+	model.content.Width = 100
+	model.content.Height = 8
+	model.activeSession = map[string]any{"id": "session-1", "name": "附加信息"}
+	model.sessionMessages = []map[string]any{
+		{
+			"id":      "message-1",
+			"role":    "assistant",
+			"content": "正文",
+			"tokenUsage": map[string]any{
+				"promptTokens":     10,
+				"completionTokens": 20,
+				"thinkingTokens":   3,
+				"cacheWriteTokens": 4,
+				"cacheReadTokens":  5,
+				"totalTokens":      30,
+			},
+		},
+	}
+
+	model.selectNextSessionDetail()
+	model.selectNextSessionDetail()
+	if model.selectedSessionDetail != 2 {
+		t.Fatalf("selectedSessionDetail = %d, want 附加信息索引 2", model.selectedSessionDetail)
+	}
+	start, end, _, ok := model.selectedSessionDetailLineRange()
+	if !ok || end < start {
+		t.Fatalf("附加信息区块未参与选择范围计算: start=%d end=%d ok=%v", start, end, ok)
+	}
+	view := model.renderSessionsView()
+	if !strings.Contains(view, "▶ 附加信息") {
+		t.Fatalf("附加信息没有被高亮选中: %q", view)
+	}
+	if !strings.Contains(view, "缓存写入 4") || !strings.Contains(view, "缓存命中 5") {
+		t.Fatalf("Token 摘要缺少缓存 Token: %q", view)
+	}
+}
+
 func TestUpdateSessionMessageDetailPreservesCurrentContentVersion(t *testing.T) {
 	message := map[string]any{
 		"content":             []any{"旧版本", "当前版本", "新版本"},
