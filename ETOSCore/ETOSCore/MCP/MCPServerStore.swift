@@ -190,6 +190,7 @@ public struct MCPServerStore {
             }
             saveLegacyRecords(records)
         }
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
     public static func delete(_ server: MCPServerConfiguration) {
@@ -206,6 +207,7 @@ public struct MCPServerStore {
             saveLegacyRecords(records)
             mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
         }
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
     public static func loadMetadata(for serverID: UUID, includeTools: Bool = true) -> MCPServerMetadataCache? {

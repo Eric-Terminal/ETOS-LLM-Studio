@@ -80,6 +80,7 @@ public struct ShortcutToolStore {
         if saveToolsToSQLite(tools) {
             cleanupLegacyFileArtifacts()
             shortcutStoreLogger.info("已保存快捷指令工具到 SQLite: \(tools.count)")
+            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
 
@@ -91,6 +92,7 @@ public struct ShortcutToolStore {
             let data = try encoder.encode(envelope)
             try data.write(to: toolsFileURL, options: [.atomicWrite, .completeFileProtection])
             shortcutStoreLogger.info("已保存快捷指令工具: \(tools.count)")
+            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } catch {
             shortcutStoreLogger.error("保存快捷指令工具失败: \(error.localizedDescription, privacy: .public)")
         }

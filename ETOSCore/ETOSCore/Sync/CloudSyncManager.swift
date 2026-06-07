@@ -5,7 +5,7 @@
 //
 // 功能特性:
 // - 使用私有数据库保存每台设备的一份最新同步快照
-// - 先上传本机快照，再拉取其他设备快照并合并
+// - 拉取其他设备快照，与本机差异对比后仅在有变更时上传
 // - 若拉取后导入了远端变更，会再次上传合并后的本机状态
 // - 记录已应用快照校验值，避免重复导入相同远端数据
 // ============================================================================
@@ -86,6 +86,7 @@ public final class CloudSyncManager: ObservableObject {
     public static let enabledKey = "cloudSync.enabled"
     public static let autoSyncEnabledKey = "cloudSync.autoSyncEnabled"
 
+    private static let realtimeSyncDebounceNanoseconds: UInt64 = 5_000_000_000
     private static let deviceIdentifierKey = "cloudSync.deviceIdentifier"
     private static let appliedSnapshotChecksumsKey = "cloudSync.appliedSnapshotChecksums"
 
@@ -99,6 +100,13 @@ public final class CloudSyncManager: ObservableObject {
     private let deltaApplier: @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary
     private let now: @Sendable () -> Date
     private lazy var transport: any CloudSyncTransport = transportFactory()
+    private var hasActivatedRealtimeSync = false
+    private var realtimeSyncCancellables: Set<AnyCancellable> = []
+    private var pendingRealtimeSyncTask: Task<Void, Never>?
+    private var isPerformingSync = false
+    private var needsSyncAfterCurrentRun = false
+    private var isApplyingRemoteSnapshots = false
+    private var suppressRealtimeSyncUntil: Date?
 
     convenience init(
         userDefaults: UserDefaults = .standard,
@@ -157,6 +165,72 @@ public final class CloudSyncManager: ObservableObject {
         self.now = now
     }
 
+    public func activateRealtimeSync() {
+        guard !hasActivatedRealtimeSync else { return }
+        hasActivatedRealtimeSync = true
+
+        AppConfigStore.shared.$cloudSyncEnabled
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] enabled in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if enabled {
+                        self.scheduleRealtimeSyncIfEnabled(
+                            reason: "cloudSync.enabled",
+                            delayNanoseconds: 0
+                        )
+                    } else {
+                        self.cancelPendingRealtimeSync()
+                    }
+                }
+            }
+            .store(in: &realtimeSyncCancellables)
+
+        observeRealtimeSyncNotification(.cloudSyncLocalDataDidChange, reason: "localData")
+        observeRealtimeSyncNotification(.providerConfigurationDidChange, reason: "providers")
+        observeRealtimeSyncNotification(.conversationMemoryDidChange, reason: "memories")
+        observeRealtimeSyncNotification(.feedbackTicketsUpdated, reason: "feedback")
+        observeRealtimeSyncNotification(.syncBackgroundsUpdated, reason: "backgrounds")
+        observeRealtimeSyncNotification(.syncFontsUpdated, reason: "fonts")
+        observeRealtimeSyncNotification(.syncDailyPulseUpdated, reason: "dailyPulse")
+        observeRealtimeSyncNotification(.syncUsageStatsUpdated, reason: "usageStats")
+        observeRealtimeSyncNotification(.usageAnalyticsStoreDidChange, reason: "usageAnalytics")
+        observeRealtimeSyncNotification(.globalSystemPromptStoreDidChange, reason: "systemPrompt")
+    }
+
+    public func scheduleRealtimeSyncIfEnabled(
+        reason: String,
+        delayNanoseconds: UInt64 = CloudSyncManager.realtimeSyncDebounceNanoseconds
+    ) {
+        guard isEnabled else {
+            cancelPendingRealtimeSync()
+            return
+        }
+        if let suppressRealtimeSyncUntil {
+            if Date() < suppressRealtimeSyncUntil {
+                return
+            }
+            self.suppressRealtimeSyncUntil = nil
+        }
+        guard !isApplyingRemoteSnapshots else { return }
+
+        if isPerformingSync {
+            needsSyncAfterCurrentRun = true
+            return
+        }
+
+        pendingRealtimeSyncTask?.cancel()
+        cloudSyncLogger.debug("已安排 iCloud 漫游同步: \(reason, privacy: .public)")
+        pendingRealtimeSyncTask = Task { [weak self] in
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.performAutoSyncNowIfEnabled()
+        }
+    }
+
     public func performSync(options: SyncOptions, silent: Bool = false) async {
         guard isEnabled else {
             if !silent {
@@ -170,6 +244,20 @@ public final class CloudSyncManager: ObservableObject {
                 state = .failed(NSLocalizedString("同步范围为空，无法开始同步。", comment: ""))
             }
             return
+        }
+
+        if isPerformingSync {
+            needsSyncAfterCurrentRun = true
+            return
+        }
+
+        isPerformingSync = true
+        defer {
+            isPerformingSync = false
+            if needsSyncAfterCurrentRun {
+                needsSyncAfterCurrentRun = false
+                scheduleRealtimeSyncIfEnabled(reason: "queuedAfterCurrentSync")
+            }
         }
 
         lastSummary = .empty
@@ -192,7 +280,9 @@ public final class CloudSyncManager: ObservableObject {
                 options: localOptions,
                 remoteManifest: remoteManifest
             )
-            try await transport.upload(snapshot: initialSnapshot)
+            if containsDeltaPayload(initialSnapshot) {
+                try await transport.upload(snapshot: initialSnapshot)
+            }
             let appliedSummary = await applyRemoteSnapshotsIfNeeded(remoteSnapshots)
 
             if appliedSummary.hasAnyImportedChange {
@@ -221,6 +311,7 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     public func performAutoSyncIfEnabled() {
+        activateRealtimeSync()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             await performAutoSyncNowIfEnabled()
@@ -351,6 +442,15 @@ public final class CloudSyncManager: ObservableObject {
     }
 
     private func applyRemoteSnapshotsIfNeeded(_ snapshots: [CloudSyncRemoteSnapshot]) async -> SyncMergeSummary {
+        let shouldSuppressLocalEcho = !snapshots.isEmpty
+        isApplyingRemoteSnapshots = true
+        defer {
+            isApplyingRemoteSnapshots = false
+            if shouldSuppressLocalEcho {
+                suppressRealtimeSyncUntil = Date().addingTimeInterval(1)
+            }
+        }
+
         var aggregate = SyncMergeSummary.empty
         var appliedChecksums = loadAppliedChecksums()
 
@@ -367,6 +467,26 @@ public final class CloudSyncManager: ObservableObject {
 
         saveAppliedChecksums(appliedChecksums)
         return aggregate
+    }
+
+    private func containsDeltaPayload(_ snapshot: CloudSyncRemoteSnapshot) -> Bool {
+        !snapshot.snapshot.delta.package.options.isEmpty || !snapshot.snapshot.delta.deletions.isEmpty
+    }
+
+    private func observeRealtimeSyncNotification(_ name: Notification.Name, reason: String) {
+        NotificationCenter.default.publisher(for: name)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.scheduleRealtimeSyncIfEnabled(reason: reason)
+                }
+            }
+            .store(in: &realtimeSyncCancellables)
+    }
+
+    private func cancelPendingRealtimeSync() {
+        pendingRealtimeSyncTask?.cancel()
+        pendingRealtimeSyncTask = nil
+        needsSyncAfterCurrentRun = false
     }
 
     private func semanticChecksum(for snapshot: CloudSyncSnapshot) -> String {

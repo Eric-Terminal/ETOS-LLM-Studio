@@ -131,6 +131,7 @@ public final class WorldbookStore {
         queue.sync {
             saveWorldbooksUnlocked(worldbooks)
         }
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
     public func invalidateCache() {
@@ -151,6 +152,7 @@ public final class WorldbookStore {
             }
             saveWorldbooksUnlocked(all)
         }
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
     public func deleteWorldbook(id: UUID) {
@@ -159,6 +161,7 @@ public final class WorldbookStore {
             all.removeAll { $0.id == id }
             saveWorldbooksUnlocked(all)
         }
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
     public func assignWorldbooks(sessionID: UUID, worldbookIDs: [UUID]) {
@@ -174,7 +177,7 @@ public final class WorldbookStore {
         dedupeByContent: Bool = true,
         diagnostics: WorldbookImportDiagnostics? = nil
     ) -> WorldbookImportReport {
-        queue.sync {
+        let report = queue.sync {
             var all = loadWorldbooksUnlocked()
 
             var globalContentSet = cacheNormalizedContents
@@ -251,5 +254,9 @@ public final class WorldbookStore {
                 failureReasons: failureReasons
             )
         }
+        if report.importedBookID != nil {
+            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        }
+        return report
     }
 }

@@ -116,6 +116,9 @@ public final class AppConfigStore: ObservableObject {
     private nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
+    private nonisolated static var shouldSkipRealtimeCloudSyncForCurrentProcess: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
 
     @Published public var syncProviders: Bool { didSet { write(.syncProviders, syncProviders) } }
     @Published public var syncSessions: Bool { didSet { write(.syncSessions, syncSessions) } }
@@ -585,6 +588,12 @@ public final class AppConfigStore: ObservableObject {
             }
         }
         #endif
+        if !shouldSkipRealtimeCloudSyncForCurrentProcess,
+           key.participatesInSync {
+            Task { @MainActor in
+                CloudSyncManager.shared.scheduleRealtimeSyncIfEnabled(reason: "appConfig.\(key.rawValue)")
+            }
+        }
         return true
     }
 
@@ -1078,6 +1087,11 @@ public final class AppConfigStore: ObservableObject {
             WatchSyncManager.shared.performQuickSync(key: rawKey, value: normalizedValue.anyValue)
         }
         #endif
+        if !Self.shouldSkipRealtimeCloudSyncForCurrentProcess,
+           !isApplyingSnapshot,
+           key.participatesInSync {
+            CloudSyncManager.shared.scheduleRealtimeSyncIfEnabled(reason: "appConfig.\(rawKey)")
+        }
     }
 
     @discardableResult

@@ -3973,7 +3973,7 @@
 "只在启动时写入本机可恢复备份点。" = "Writes a local recoverable backup point only during launch.";
 "开启后同步 iPhone 与 Apple Watch 支持的数据。" = "Syncs supported data between iPhone and Apple Watch when enabled.";
 "用于同一 Apple ID 下的多设备漫游。" = "Used for roaming across devices under the same Apple ID.";
-"同步与备份说明正文" = "Database snapshots manually export or restore .elsbackup files, useful for moving devices, cross-device disaster recovery, and manual backups.\n\nStartup protection is only for preventing SQLite database corruption. When enabled, each launch writes an additional recoverable backup point to disk.\n\nApple Watch Sync roams supported data between iPhone and Apple Watch.\n\niCloud Sync roams data across devices under the same Apple ID. When enabled, it uploads this device's snapshot and merges snapshots from other devices; provider API keys also sync across your devices.";
+"同步与备份说明正文" = "Database snapshots manually export or restore .elsbackup files, useful for moving devices, cross-device disaster recovery, and manual backups.\n\nStartup protection is only for preventing SQLite database corruption. When enabled, each launch writes an additional recoverable backup point to disk.\n\nApple Watch Sync roams supported data between iPhone and Apple Watch.\n\niCloud Roaming Sync roams data across devices under the same Apple ID. When enabled, it uploads this device's snapshot and merges snapshots from other devices; provider API keys also sync across your devices.";
 "系统打开了一个数据库快照文件。确认来源可信后再恢复。" = "The system opened a database snapshot file. Restore only after confirming the source is trusted.";
 "正在检查快照…" = "Checking snapshot…";
 "正在恢复快照…" = "Restoring snapshot…";
@@ -3981,3 +3981,8 @@
 "调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
 "http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";
 "设备主动连接电脑端服务器（端口 7654），实时接收命令" = "The device actively connects to the computer server (port 7654) to receive commands in real time.";
+"启用 iCloud 漫游同步" = "Enable iCloud Roaming Sync";
+"iCloud 漫游同步" = "iCloud Roaming Sync";
+"立即同步" = "Sync Now";
+"开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "After it is enabled, supported data syncs automatically across devices signed in to the same Apple ID.";
+"iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";

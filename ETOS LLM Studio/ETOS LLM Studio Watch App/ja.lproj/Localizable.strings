@@ -3928,8 +3928,13 @@
 "只在启动时写入本机可恢复备份点。" = "起動時のみ、このデバイスに復元可能なバックアップポイントを書き込みます。";
 "开启后同步 iPhone 与 Apple Watch 支持的数据。" = "オンにすると、iPhone と Apple Watch で対応データを同期します。";
 "用于同一 Apple ID 下的多设备漫游。" = "同じ Apple ID の複数デバイスでデータをローミングします。";
-"同步与备份说明正文" = "データベーススナップショットは .elsbackup の手動書き出しや復元に使います。機種変更、デバイス間の災害復旧、手動バックアップに適しています。\n\n起動時保護は SQLite データベース破損を防ぐためだけの機能です。オンにすると、起動ごとに復元可能なバックアップポイントを追加で dump して保存します。\n\nApple Watch 同期は、iPhone と Apple Watch の間で対応データをローミングします。\n\niCloud 同期は、同じ Apple ID の複数デバイス間でデータをローミングします。オンにすると、このデバイスのスナップショットをアップロードして他のデバイスのスナップショットとマージし、プロバイダー API Key もデバイス間で同期されます。";
+"同步与备份说明正文" = "データベーススナップショットは .elsbackup の手動書き出しや復元に使います。機種変更、デバイス間の災害復旧、手動バックアップに適しています。\n\n起動時保護は SQLite データベース破損を防ぐためだけの機能です。オンにすると、起動ごとに復元可能なバックアップポイントを追加で dump して保存します。\n\nApple Watch 同期は、iPhone と Apple Watch の間で対応データをローミングします。\n\niCloud ローミング同期は、同じ Apple ID の複数デバイス間でデータをローミングします。オンにすると、このデバイスのスナップショットをアップロードして他のデバイスのスナップショットとマージし、プロバイダー API Key もデバイス間で同期されます。";
 
 "调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
 "http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";
 "设备主动连接电脑端服务器（端口 7654），实时接收命令" = "The device actively connects to the computer server (port 7654) to receive commands in real time.";
+"启用 iCloud 漫游同步" = "Enable iCloud Roaming Sync";
+"iCloud 漫游同步" = "iCloud Roaming Sync";
+"立即同步" = "Sync Now";
+"开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "After it is enabled, supported data syncs automatically across devices signed in to the same Apple ID.";
+"iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";

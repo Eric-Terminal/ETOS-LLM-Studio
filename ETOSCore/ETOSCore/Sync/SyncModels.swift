@@ -664,6 +664,8 @@ public struct SyncMergeSummary: Equatable {
 // MARK: - 通知定义
 
 public extension Notification.Name {
+    /// 本机支持云漫游的数据发生变化，供 CloudSyncManager 防抖上传。
+    static let cloudSyncLocalDataDidChange = Notification.Name("com.ETOS.cloudSync.localData.didChange")
     /// 背景图片发生变化时广播，便于各端刷新列表
     static let syncBackgroundsUpdated = Notification.Name("com.ETOS.sync.backgrounds.updated")
     /// 字体资产或字体路由发生变化时广播，便于各端刷新字体设置与预览

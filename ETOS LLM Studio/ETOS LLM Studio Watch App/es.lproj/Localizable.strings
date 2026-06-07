@@ -4006,8 +4006,13 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "只在启动时写入本机可恢复备份点。" = "Escribe un punto de copia recuperable local solo durante el inicio.";
 "开启后同步 iPhone 与 Apple Watch 支持的数据。" = "Al activarlo, sincroniza los datos compatibles entre iPhone y Apple Watch.";
 "用于同一 Apple ID 下的多设备漫游。" = "Se usa para itinerancia entre dispositivos con el mismo Apple ID.";
-"同步与备份说明正文" = "Las instantáneas de base de datos exportan o restauran manualmente archivos .elsbackup, útiles para cambiar de dispositivo, recuperación entre dispositivos y copias manuales.\n\nLa protección de inicio solo evita daños en la base de datos SQLite. Al activarla, cada inicio escribe en disco un punto de copia recuperable adicional.\n\nLa sincronización de Apple Watch mueve datos compatibles entre iPhone y Apple Watch.\n\nLa sincronización de iCloud mueve datos entre dispositivos con el mismo Apple ID. Al activarla, sube la instantánea de este dispositivo y fusiona instantáneas de otros dispositivos; las API Key de proveedores también se sincronizan entre tus dispositivos.";
+"同步与备份说明正文" = "Las instantáneas de base de datos exportan o restauran manualmente archivos .elsbackup, útiles para cambiar de dispositivo, recuperación entre dispositivos y copias manuales.\n\nLa protección de inicio solo evita daños en la base de datos SQLite. Al activarla, cada inicio escribe en disco un punto de copia recuperable adicional.\n\nLa sincronización de Apple Watch mueve datos compatibles entre iPhone y Apple Watch.\n\nLa sincronización itinerante de iCloud mueve datos entre dispositivos con el mismo Apple ID. Al activarla, sube la instantánea de este dispositivo y fusiona instantáneas de otros dispositivos; las API Key de proveedores también se sincronizan entre tus dispositivos.";
 
 "调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
 "http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";
 "设备主动连接电脑端服务器（端口 7654），实时接收命令" = "The device actively connects to the computer server (port 7654) to receive commands in real time.";
+"启用 iCloud 漫游同步" = "Enable iCloud Roaming Sync";
+"iCloud 漫游同步" = "iCloud Roaming Sync";
+"立即同步" = "Sync Now";
+"开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "After it is enabled, supported data syncs automatically across devices signed in to the same Apple ID.";
+"iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";

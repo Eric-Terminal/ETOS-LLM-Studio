@@ -275,6 +275,66 @@ struct CloudSyncManagerTests {
     }
 
     @MainActor
+    @Test("本机差异为空时不会上传云同步快照")
+    func testPerformSyncDoesNotUploadEmptyLocalDelta() async {
+        let suiteName = "com.ETOS.tests.cloudSync.emptyDelta.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let appConfigBackup = backupCloudSyncAppConfig()
+        defer { restoreCloudSyncAppConfig(appConfigBackup) }
+        AppConfigStore.shared.cloudSyncEnabled = true
+
+        let now = Date(timeIntervalSince1970: 1_730_250_000)
+        let localPackage = makeLocalProviderPackage()
+        let snapshotDefaults = UserDefaults(suiteName: suiteName)!
+        let localSnapshot = makeSnapshot(
+            package: localPackage,
+            channel: "cloud.sync.tests.emptyDelta",
+            userDefaults: snapshotDefaults,
+            generatedAt: now
+        )
+        let remoteSnapshot = makeRemoteSnapshot(
+            recordName: "snapshot.remote-device",
+            deviceID: "remote-device",
+            updatedAt: now.addingTimeInterval(-30),
+            package: SyncPackage(options: []),
+            manifest: localSnapshot.manifest
+        )
+        let transport = MockCloudSyncTransport(remoteSnapshots: [remoteSnapshot])
+        let appliedRecorder = AppliedPackageRecorder(summary: .empty)
+        let manager = CloudSyncManager(
+            transport: transport,
+            userDefaults: defaults,
+            snapshotBuilder: { _ in
+                makeSnapshot(
+                    package: localPackage,
+                    channel: "cloud.sync.tests.emptyDelta",
+                    userDefaults: snapshotDefaults,
+                    generatedAt: now
+                )
+            },
+            deltaApplier: { delta, manifest in
+                await appliedRecorder.record(delta, manifest: manifest)
+                return await appliedRecorder.summary
+            },
+            now: { now }
+        )
+
+        await manager.performSync(options: [.providers])
+
+        let uploadedSnapshots = await transport.uploadedSnapshots
+        #expect(uploadedSnapshots.isEmpty)
+        #expect(manager.lastSummary == .empty)
+    }
+
+    @MainActor
     @Test("云同步上传会使用远端清单生成删除墓碑")
     func testPerformSyncBuildsDeletionDeltaFromRemoteManifest() async {
         let suiteName = "com.ETOS.tests.cloudSync.deletion.\(UUID().uuidString)"

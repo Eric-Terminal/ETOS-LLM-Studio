@@ -78,7 +78,7 @@ struct DeviceSyncSettingsView: View {
             }
 
             Section {
-                Toggle(NSLocalizedString("启用 iCloud 同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
+                Toggle(NSLocalizedString("启用 iCloud 漫游同步", comment: ""), isOn: $appConfig.cloudSyncEnabled)
 
                 Button {
                     Task {
@@ -91,16 +91,16 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 8)
                         }
-                        Label(NSLocalizedString("同步到 iCloud", comment: ""), systemImage: "icloud")
+                        Label(NSLocalizedString("立即同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
                             .etFont(.headline)
                         Spacer()
                     }
                 }
                 .disabled(!appConfig.cloudSyncEnabled || isCloudSyncing)
             } header: {
-                Text(NSLocalizedString("iCloud 同步", comment: ""))
+                Text(NSLocalizedString("iCloud 漫游同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("用于同一 Apple ID 下的多设备漫游。", comment: ""))
+                Text(NSLocalizedString("开启后会自动在同一 Apple ID 的设备间同步支持的数据。", comment: ""))
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
@@ -207,7 +207,7 @@ struct DeviceSyncSettingsView: View {
     @ViewBuilder
     private var cloudSyncStatusView: some View {
         if !appConfig.cloudSyncEnabled {
-            Text(NSLocalizedString("iCloud 同步已关闭", comment: ""))
+            Text(NSLocalizedString("iCloud 漫游同步已关闭", comment: ""))
                 .etFont(.footnote)
                 .foregroundColor(.secondary)
         } else {

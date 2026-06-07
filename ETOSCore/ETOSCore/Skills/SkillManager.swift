@@ -250,6 +250,7 @@ public final class SkillManager: ObservableObject {
         enabledSkillNames.insert(name)
         persistEnabledSkillNames()
         lastErrorMessage = nil
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         return true
     }
 
@@ -286,6 +287,7 @@ public final class SkillManager: ObservableObject {
         enabledSkillNames.insert(skillName)
         persistEnabledSkillNames()
         lastErrorMessage = nil
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         return true
     }
 
@@ -296,6 +298,7 @@ public final class SkillManager: ObservableObject {
             enabledSkillNames.remove(name)
             persistEnabledSkillNames()
             reloadFromDisk()
+            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } else {
             lastErrorMessage = "删除技能失败。"
         }
