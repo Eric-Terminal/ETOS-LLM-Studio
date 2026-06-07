@@ -186,6 +186,7 @@ type tuiModel struct {
 	settingRows            []map[string]any
 	sessionRows            []map[string]any
 	activeSession          map[string]any
+	sessionAllMessages     []map[string]any
 	sessionMessages        []map[string]any
 	selectedSessionMessage int
 	selectedSessionDetail  int
@@ -1733,7 +1734,11 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.applySessionDetail(msg.response)
 	case msg.op == "sessions:update_messages":
 		if messages, ok := msg.response["messages"]; ok {
-			m.sessionMessages = asMapSlice(messages)
+			preferredMessageID := ""
+			if current := m.selectedSessionMessageMap(); len(current) > 0 {
+				preferredMessageID = asString(current["id"])
+			}
+			m.setSessionMessagesFromAll(asMapSlice(messages), preferredMessageID)
 		}
 		m.setMessage("会话消息已更新", tuiOKStyle)
 		m.keepSelectedSessionDetailVisible()

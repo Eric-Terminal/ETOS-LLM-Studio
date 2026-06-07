@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,6 +26,19 @@ type tuiSessionDetailSection struct {
 	content  string
 	style    lipgloss.Style
 	editable bool
+}
+
+type tuiResponseAttemptVersionInfo struct {
+	groupID          string
+	currentAttemptID string
+	currentIndex     int
+	totalCount       int
+}
+
+type tuiResponseAttemptOrder struct {
+	id            string
+	explicitIndex int
+	firstPosition int
 }
 
 var (
@@ -174,12 +188,22 @@ func (m *tuiModel) switchSelectedSessionMessageVersion(delta int) tea.Cmd {
 	if messageIndex < 0 || messageIndex >= len(m.sessionMessages) {
 		return nil
 	}
-	updatedMessages := cloneSessionMessages(m.sessionMessages)
-	if !switchSessionMessageVersion(updatedMessages[messageIndex], delta) {
+	selectedMessage := m.sessionMessages[messageIndex]
+	if info, ok := responseAttemptVersionInfo(selectedMessage, m.allSessionMessagesForEditing()); ok {
+		return m.switchSelectedResponseAttempt(info, delta)
+	}
+
+	selectedID := asString(selectedMessage["id"])
+	updatedMessages := cloneSessionMessages(m.allSessionMessagesForEditing())
+	targetIndex := sessionMessageIndexByID(updatedMessages, selectedID)
+	if targetIndex < 0 {
+		targetIndex = messageIndex
+	}
+	if targetIndex < 0 || targetIndex >= len(updatedMessages) || !switchSessionMessageVersion(updatedMessages[targetIndex], delta) {
 		m.setMessage("当前消息没有可切换的其他版本", tuiWarnStyle)
 		return nil
 	}
-	m.sessionMessages = updatedMessages
+	m.setSessionMessagesFromAll(updatedMessages, selectedID)
 	m.keepSelectedSessionDetailVisible()
 
 	sessionID := asString(m.activeSession["id"])
@@ -187,8 +211,41 @@ func (m *tuiModel) switchSelectedSessionMessageVersion(delta int) tea.Cmd {
 		m.setMessage("当前会话缺少 ID，无法保存版本切换", tuiErrStyle)
 		return nil
 	}
-	index, count := sessionMessageVersionPosition(updatedMessages[messageIndex])
+	index, count := sessionMessageVersionPosition(updatedMessages[targetIndex])
 	m.setMessage(fmt.Sprintf("已切换到版本 %d/%d，正在保存", index+1, count), tuiOKStyle)
+	return m.markLoading(func() tea.Msg {
+		response, err := m.server.sendCommandWithResponse(map[string]any{
+			"command":    "session_update_messages",
+			"session_id": sessionID,
+			"messages":   updatedMessages,
+		}, 45*time.Second)
+		if response == nil {
+			response = map[string]any{}
+		}
+		response["messages"] = updatedMessages
+		return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
+	})
+}
+
+func (m *tuiModel) switchSelectedResponseAttempt(info tuiResponseAttemptVersionInfo, delta int) tea.Cmd {
+	attempts := orderedResponseAttemptIDs(info.groupID, m.allSessionMessagesForEditing())
+	nextIndex := info.currentIndex + delta
+	if nextIndex < 0 || nextIndex >= len(attempts) {
+		m.setMessage("当前消息没有可切换的其他版本", tuiWarnStyle)
+		return nil
+	}
+
+	nextAttemptID := attempts[nextIndex]
+	updatedMessages := selectResponseAttempt(nextAttemptID, info.groupID, m.allSessionMessagesForEditing())
+	m.setSessionMessagesFromAll(updatedMessages, preferredResponseAttemptCarrierID(updatedMessages, info.groupID, nextAttemptID))
+	m.keepSelectedSessionDetailVisible()
+
+	sessionID := asString(m.activeSession["id"])
+	if sessionID == "" {
+		m.setMessage("当前会话缺少 ID，无法保存版本切换", tuiErrStyle)
+		return nil
+	}
+	m.setMessage(fmt.Sprintf("已切换到回复尝试 %d/%d，正在保存", nextIndex+1, len(attempts)), tuiOKStyle)
 	return m.markLoading(func() tea.Msg {
 		response, err := m.server.sendCommandWithResponse(map[string]any{
 			"command":    "session_update_messages",
@@ -245,17 +302,16 @@ func (m *tuiModel) applySessionDetail(response map[string]any) {
 	} else {
 		m.activeSession = map[string]any{}
 	}
-	m.sessionMessages = asMapSlice(response["messages"])
-	if len(m.sessionMessages) == 0 {
-		m.selectedSessionMessage = 0
-	} else {
-		m.selectedSessionMessage = minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
-	}
+	m.setSessionMessagesFromAll(asMapSlice(response["messages"]), "")
 	m.selectedSessionDetail = minInt(maxInt(0, m.selectedSessionDetail), maxInt(0, len(m.sessionDetailSections())-1))
 	m.sessionMode = tuiSessionModeMessages
 	m.preview.SetValue("")
 	m.content.GotoTop()
-	m.setMessage(fmt.Sprintf("已加载会话「%s」%d 条消息", sessionDisplayName(m.activeSession), len(m.sessionMessages)), tuiOKStyle)
+	if len(m.sessionMessages) == len(m.sessionAllMessages) {
+		m.setMessage(fmt.Sprintf("已加载会话「%s」%d 条消息", sessionDisplayName(m.activeSession), len(m.sessionMessages)), tuiOKStyle)
+	} else {
+		m.setMessage(fmt.Sprintf("已加载会话「%s」%d 条可见消息 / %d 条完整历史", sessionDisplayName(m.activeSession), len(m.sessionMessages), len(m.sessionAllMessages)), tuiOKStyle)
+	}
 }
 
 func (m tuiModel) renderSessionMessagesView() string {
@@ -320,7 +376,7 @@ func (m tuiModel) sessionMessageDetailViewElements() ([]string, []int) {
 
 	elements := []string{
 		fmt.Sprintf("消息详情 / %s / 第 %d 条", sessionDisplayName(m.activeSession), m.selectedSessionMessage+1),
-		tuiSessionMetaStyle.Render(sessionMessageDetailMeta(message)),
+		tuiSessionMetaStyle.Render(sessionMessageDetailMetaWithAllMessages(message, m.allSessionMessagesForEditing())),
 		"",
 	}
 
@@ -345,7 +401,7 @@ func (m tuiModel) sessionDetailSections() []tuiSessionDetailSection {
 	sections := []tuiSessionDetailSection{
 		{
 			kind:     tuiSessionDetailContent,
-			title:    sessionMessageContentTitle(message),
+			title:    m.sessionMessageContentTitle(message),
 			content:  sessionMessageDetailContent(message),
 			style:    tuiSessionDetailContentStyle,
 			editable: true,
@@ -421,6 +477,7 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 	if messageIndex < 0 || messageIndex >= len(m.sessionMessages) {
 		return nil
 	}
+	selectedMessage := m.sessionMessages[messageIndex]
 	sections := m.sessionDetailSections()
 	if len(sections) == 0 {
 		return nil
@@ -440,7 +497,7 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 	}
 
 	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
-		value := sessionDetailEditValue(m.sessionMessages[messageIndex], section.kind)
+		value := sessionDetailEditValue(selectedMessage, section.kind)
 		form := forms.Form(huh.NewGroup(
 			huh.NewText().Title(section.title).Value(&value),
 		))
@@ -448,8 +505,12 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 			return tuiFormErrorResult(err)
 		}
 
-		updatedMessages := cloneSessionMessages(m.sessionMessages)
-		updateSessionMessageDetail(updatedMessages[messageIndex], section.kind, value)
+		updatedMessages := cloneSessionMessages(m.allSessionMessagesForEditing())
+		targetIndex := sessionMessageIndexByID(updatedMessages, asString(selectedMessage["id"]))
+		if targetIndex < 0 {
+			return tuiCommandResultMsg{op: "sessions:update_messages", err: fmt.Errorf("未找到当前消息")}
+		}
+		updateSessionMessageDetail(updatedMessages[targetIndex], section.kind, value)
 		response, err := m.server.sendCommandWithResponse(map[string]any{
 			"command":    "session_update_messages",
 			"session_id": sessionID,
@@ -536,7 +597,7 @@ func cloneSessionMessages(messages []map[string]any) []map[string]any {
 func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, selected bool) string {
 	role := messageRole(message)
 	label := fmt.Sprintf("%s #%d", sessionRoleLabel(role), index+1)
-	if versionLabel := sessionMessageVersionLabel(message); versionLabel != "" {
+	if versionLabel := m.sessionMessageVersionLabel(message); versionLabel != "" {
 		label += " · " + versionLabel
 	}
 	body := label + "\n" + sessionMessagePreview(message)
@@ -563,11 +624,15 @@ func (m tuiModel) selectedSessionMessageMap() map[string]any {
 }
 
 func sessionMessageDetailMeta(message map[string]any) string {
+	return sessionMessageDetailMetaWithAllMessages(message, nil)
+}
+
+func sessionMessageDetailMetaWithAllMessages(message map[string]any, allMessages []map[string]any) string {
 	parts := []string{sessionRoleLabel(messageRole(message))}
 	if id := strings.TrimSpace(asString(message["id"])); id != "" {
 		parts = append(parts, id)
 	}
-	if versionLabel := sessionMessageVersionLabel(message); versionLabel != "" {
+	if versionLabel := sessionMessageVersionLabelWithAllMessages(message, allMessages); versionLabel != "" {
 		parts = append(parts, versionLabel)
 	}
 	return strings.Join(parts, " | ")
@@ -703,8 +768,23 @@ func sessionMessageContentTitle(message map[string]any) string {
 	return "正文"
 }
 
+func (m tuiModel) sessionMessageContentTitle(message map[string]any) string {
+	if label := m.sessionMessageVersionLabel(message); label != "" {
+		return "正文 · " + label
+	}
+	return "正文"
+}
+
 func sessionMessageVersionLabel(message map[string]any) string {
-	index, count := sessionMessageVersionPosition(message)
+	return sessionMessageVersionLabelWithAllMessages(message, nil)
+}
+
+func (m tuiModel) sessionMessageVersionLabel(message map[string]any) string {
+	return sessionMessageVersionLabelWithAllMessages(message, m.allSessionMessagesForEditing())
+}
+
+func sessionMessageVersionLabelWithAllMessages(message map[string]any, allMessages []map[string]any) string {
+	index, count := sessionMessageVersionPositionWithAllMessages(message, allMessages)
 	if count <= 1 {
 		return ""
 	}
@@ -712,6 +792,13 @@ func sessionMessageVersionLabel(message map[string]any) string {
 }
 
 func sessionMessageVersionPosition(message map[string]any) (int, int) {
+	return sessionMessageVersionPositionWithAllMessages(message, nil)
+}
+
+func sessionMessageVersionPositionWithAllMessages(message map[string]any, allMessages []map[string]any) (int, int) {
+	if info, ok := responseAttemptVersionInfo(message, allMessages); ok {
+		return info.currentIndex, info.totalCount
+	}
 	count := len(sessionContentVersions(message))
 	if count == 0 {
 		return 0, 0
@@ -731,6 +818,260 @@ func switchSessionMessageVersion(message map[string]any, delta int) bool {
 	}
 	message["currentVersionIndex"] = next
 	return true
+}
+
+func (m tuiModel) allSessionMessagesForEditing() []map[string]any {
+	if len(m.sessionAllMessages) > 0 {
+		return m.sessionAllMessages
+	}
+	return m.sessionMessages
+}
+
+func (m *tuiModel) setSessionMessagesFromAll(messages []map[string]any, preferredMessageID string) {
+	m.sessionAllMessages = messages
+	m.sessionMessages = visibleSessionMessages(messages)
+	if len(m.sessionMessages) == 0 {
+		m.selectedSessionMessage = 0
+		return
+	}
+	if preferredMessageID != "" {
+		if index := sessionMessageIndexByID(m.sessionMessages, preferredMessageID); index >= 0 {
+			m.selectedSessionMessage = index
+			return
+		}
+	}
+	m.selectedSessionMessage = minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
+}
+
+func sessionMessageIndexByID(messages []map[string]any, id string) int {
+	if strings.TrimSpace(id) == "" {
+		return -1
+	}
+	for index, message := range messages {
+		if asString(message["id"]) == id {
+			return index
+		}
+	}
+	return -1
+}
+
+func visibleSessionMessages(messages []map[string]any) []map[string]any {
+	selectedByGroup := selectedResponseAttemptIDsByGroup(messages)
+	visible := make([]map[string]any, 0, len(messages))
+	for _, message := range messages {
+		groupID := asString(message["responseGroupID"])
+		attemptID := asString(message["responseAttemptID"])
+		selectedAttemptID := selectedByGroup[groupID]
+		if groupID == "" || attemptID == "" || selectedAttemptID == "" || attemptID == selectedAttemptID {
+			visible = append(visible, message)
+		}
+	}
+	return visible
+}
+
+func responseAttemptVersionInfo(message map[string]any, messages []map[string]any) (tuiResponseAttemptVersionInfo, bool) {
+	if len(messages) == 0 || !canCarryResponseAttemptVersionInfo(message) {
+		return tuiResponseAttemptVersionInfo{}, false
+	}
+	groupID := asString(message["responseGroupID"])
+	attemptID := asString(message["responseAttemptID"])
+	if groupID == "" || attemptID == "" {
+		return tuiResponseAttemptVersionInfo{}, false
+	}
+
+	attempts := orderedResponseAttemptIDs(groupID, messages)
+	currentIndex := stringIndex(attempts, attemptID)
+	if len(attempts) <= 1 || currentIndex < 0 {
+		return tuiResponseAttemptVersionInfo{}, false
+	}
+
+	if selectedAttemptID := selectedResponseAttemptIDsByGroup(messages)[groupID]; selectedAttemptID != "" && selectedAttemptID != attemptID {
+		return tuiResponseAttemptVersionInfo{}, false
+	}
+
+	messageID := asString(message["id"])
+	lastCarrierID := ""
+	for _, candidate := range messages {
+		if asString(candidate["responseGroupID"]) == groupID &&
+			asString(candidate["responseAttemptID"]) == attemptID &&
+			canCarryResponseAttemptVersionInfo(candidate) {
+			lastCarrierID = asString(candidate["id"])
+		}
+	}
+	if lastCarrierID == "" || lastCarrierID != messageID {
+		return tuiResponseAttemptVersionInfo{}, false
+	}
+
+	return tuiResponseAttemptVersionInfo{
+		groupID:          groupID,
+		currentAttemptID: attemptID,
+		currentIndex:     currentIndex,
+		totalCount:       len(attempts),
+	}, true
+}
+
+func selectResponseAttempt(attemptID, groupID string, messages []map[string]any) []map[string]any {
+	updated := cloneSessionMessages(messages)
+	for _, message := range updated {
+		shouldStoreSelection := (asString(message["id"]) == groupID && messageRole(message) == "user") ||
+			asString(message["responseGroupID"]) == groupID
+		if shouldStoreSelection {
+			message["selectedResponseAttemptID"] = attemptID
+		}
+	}
+	return updated
+}
+
+func preferredResponseAttemptCarrierID(messages []map[string]any, groupID, attemptID string) string {
+	for index := len(messages) - 1; index >= 0; index-- {
+		message := messages[index]
+		if asString(message["responseGroupID"]) == groupID &&
+			asString(message["responseAttemptID"]) == attemptID &&
+			canCarryResponseAttemptVersionInfo(message) {
+			return asString(message["id"])
+		}
+	}
+	return ""
+}
+
+func orderedResponseAttemptIDs(groupID string, messages []map[string]any) []string {
+	orderByID := map[string]tuiResponseAttemptOrder{}
+	for position, message := range messages {
+		if asString(message["responseGroupID"]) != groupID {
+			continue
+		}
+		attemptID := asString(message["responseAttemptID"])
+		if attemptID == "" {
+			continue
+		}
+		recordResponseAttemptOrder(attemptID, sessionOptionalInt(message["responseAttemptIndex"]), position, orderByID)
+	}
+	return orderedResponseAttemptIDsFromOrder(orderByID)
+}
+
+func selectedResponseAttemptIDsByGroup(messages []map[string]any) map[string]string {
+	anchorSelectionByGroup := map[string]string{}
+	storedSelectionByGroup := map[string]string{}
+	orderByGroup := map[string]map[string]tuiResponseAttemptOrder{}
+
+	for position, message := range messages {
+		if messageRole(message) == "user" {
+			if selectedAttemptID := asString(message["selectedResponseAttemptID"]); selectedAttemptID != "" {
+				anchorSelectionByGroup[asString(message["id"])] = selectedAttemptID
+			}
+		}
+
+		groupID := asString(message["responseGroupID"])
+		if groupID == "" {
+			continue
+		}
+		if messageRole(message) == "assistant" || messageRole(message) == "error" {
+			if selectedAttemptID := asString(message["selectedResponseAttemptID"]); selectedAttemptID != "" {
+				storedSelectionByGroup[groupID] = selectedAttemptID
+			}
+		}
+
+		attemptID := asString(message["responseAttemptID"])
+		if attemptID == "" {
+			continue
+		}
+		orderByID := orderByGroup[groupID]
+		if orderByID == nil {
+			orderByID = map[string]tuiResponseAttemptOrder{}
+		}
+		recordResponseAttemptOrder(attemptID, sessionOptionalInt(message["responseAttemptIndex"]), position, orderByID)
+		orderByGroup[groupID] = orderByID
+	}
+
+	selectedByGroup := map[string]string{}
+	for groupID, attemptID := range anchorSelectionByGroup {
+		selectedByGroup[groupID] = attemptID
+	}
+	for groupID, attemptID := range storedSelectionByGroup {
+		selectedByGroup[groupID] = attemptID
+	}
+
+	for groupID, orderByID := range orderByGroup {
+		attempts := orderedResponseAttemptIDsFromOrder(orderByID)
+		if len(attempts) == 0 {
+			continue
+		}
+		selectedAttemptID := selectedByGroup[groupID]
+		if selectedAttemptID != "" && stringIndex(attempts, selectedAttemptID) >= 0 {
+			continue
+		}
+		selectedByGroup[groupID] = attempts[len(attempts)-1]
+	}
+	return selectedByGroup
+}
+
+func recordResponseAttemptOrder(attemptID string, explicitIndex *int, position int, orderByID map[string]tuiResponseAttemptOrder) {
+	normalizedIndex := maxGoInt()
+	if explicitIndex != nil {
+		normalizedIndex = *explicitIndex
+	}
+	if existing, ok := orderByID[attemptID]; ok {
+		orderByID[attemptID] = tuiResponseAttemptOrder{
+			id:            attemptID,
+			explicitIndex: minInt(existing.explicitIndex, normalizedIndex),
+			firstPosition: minInt(existing.firstPosition, position),
+		}
+		return
+	}
+	orderByID[attemptID] = tuiResponseAttemptOrder{
+		id:            attemptID,
+		explicitIndex: normalizedIndex,
+		firstPosition: position,
+	}
+}
+
+func orderedResponseAttemptIDsFromOrder(orderByID map[string]tuiResponseAttemptOrder) []string {
+	orders := make([]tuiResponseAttemptOrder, 0, len(orderByID))
+	for _, order := range orderByID {
+		orders = append(orders, order)
+	}
+	sort.Slice(orders, func(i, j int) bool {
+		if orders[i].explicitIndex != orders[j].explicitIndex {
+			return orders[i].explicitIndex < orders[j].explicitIndex
+		}
+		return orders[i].firstPosition < orders[j].firstPosition
+	})
+	attempts := make([]string, 0, len(orders))
+	for _, order := range orders {
+		attempts = append(attempts, order.id)
+	}
+	return attempts
+}
+
+func canCarryResponseAttemptVersionInfo(message map[string]any) bool {
+	switch messageRole(message) {
+	case "assistant", "tool", "system", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func sessionOptionalInt(value any) *int {
+	switch value.(type) {
+	case nil:
+		return nil
+	}
+	result := asInt(value)
+	return &result
+}
+
+func stringIndex(values []string, value string) int {
+	for index, candidate := range values {
+		if candidate == value {
+			return index
+		}
+	}
+	return -1
+}
+
+func maxGoInt() int {
+	return int(^uint(0) >> 1)
 }
 
 func sessionContentVersions(message map[string]any) []string {

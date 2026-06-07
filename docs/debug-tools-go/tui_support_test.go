@@ -267,6 +267,103 @@ func TestSessionDetailCanSwitchContentVersion(t *testing.T) {
 	}
 }
 
+func TestSessionDetailCanSwitchResponseAttemptVersion(t *testing.T) {
+	userID := "00000000-0000-4000-8000-000000000001"
+	firstAttemptID := "00000000-0000-4000-8000-000000000101"
+	secondAttemptID := "00000000-0000-4000-8000-000000000102"
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.content.Width = 100
+	model.activeSession = map[string]any{"id": "3B816F4F-1BD5-4C87-B7AD-3AE39AF0E72D", "name": "回复尝试版本"}
+	model.applySessionDetail(map[string]any{
+		"session": model.activeSession,
+		"messages": []any{
+			map[string]any{
+				"id":                        userID,
+				"role":                      "user",
+				"content":                   "需要工具的问题",
+				"selectedResponseAttemptID": secondAttemptID,
+			},
+			map[string]any{
+				"id":                   "00000000-0000-4000-8000-000000000201",
+				"role":                 "assistant",
+				"content":              "第一次工具调用",
+				"responseGroupID":      userID,
+				"responseAttemptID":    firstAttemptID,
+				"responseAttemptIndex": 0,
+			},
+			map[string]any{
+				"id":                   "00000000-0000-4000-8000-000000000202",
+				"role":                 "tool",
+				"content":              "工具结果",
+				"responseGroupID":      userID,
+				"responseAttemptID":    firstAttemptID,
+				"responseAttemptIndex": 0,
+			},
+			map[string]any{
+				"id":                   "00000000-0000-4000-8000-000000000203",
+				"role":                 "assistant",
+				"content":              "第一次最终回复",
+				"responseGroupID":      userID,
+				"responseAttemptID":    firstAttemptID,
+				"responseAttemptIndex": 0,
+			},
+			map[string]any{
+				"id":                   "00000000-0000-4000-8000-000000000204",
+				"role":                 "assistant",
+				"content":              "第二次最终回复",
+				"responseGroupID":      userID,
+				"responseAttemptID":    secondAttemptID,
+				"responseAttemptIndex": 1,
+			},
+			map[string]any{"id": "00000000-0000-4000-8000-000000000301", "role": "user", "content": "下一轮"},
+		},
+	})
+
+	if got := len(model.sessionAllMessages); got != 6 {
+		t.Fatalf("完整历史消息数 = %d, want 6", got)
+	}
+	if got := sessionContents(model.sessionMessages); strings.Join(got, "|") != "需要工具的问题|第二次最终回复|下一轮" {
+		t.Fatalf("可见消息 = %#v, want 当前回复尝试", got)
+	}
+	if label := model.sessionMessageVersionLabel(model.sessionMessages[1]); label != "版本 2/2" {
+		t.Fatalf("当前回复尝试版本标签 = %q, want 版本 2/2", label)
+	}
+
+	model.sessionMode = tuiSessionModeMessageDetail
+	model.selectedSessionMessage = 1
+	cmd := model.handleContentKey("h")
+	if cmd == nil {
+		t.Fatal("切换回复尝试未返回保存命令")
+	}
+	if got := len(model.sessionAllMessages); got != 6 {
+		t.Fatalf("切换后完整历史消息数 = %d, want 6", got)
+	}
+	if got := sessionContents(model.sessionMessages); strings.Join(got, "|") != "需要工具的问题|第一次工具调用|工具结果|第一次最终回复|下一轮" {
+		t.Fatalf("切换后可见消息 = %#v, want 第一轮完整工具链", got)
+	}
+	for _, message := range model.sessionAllMessages {
+		if asString(message["responseGroupID"]) == userID && asString(message["selectedResponseAttemptID"]) != firstAttemptID {
+			t.Fatalf("回复尝试选择未写回同组消息: %#v", message)
+		}
+	}
+	if selected := model.selectedSessionMessageMap(); asString(selected["content"]) != "第一次最终回复" {
+		t.Fatalf("切换后选中消息 = %#v, want 第一轮最终回复", selected)
+	}
+	if label := model.sessionMessageVersionLabel(model.selectedSessionMessageMap()); label != "版本 1/2" {
+		t.Fatalf("切换后版本标签 = %q, want 版本 1/2", label)
+	}
+}
+
+func sessionContents(messages []map[string]any) []string {
+	contents := make([]string, 0, len(messages))
+	for _, message := range messages {
+		contents = append(contents, asString(message["content"]))
+	}
+	return contents
+}
+
 func TestSessionUserBubbleIndentIsStable(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.content.Width = 100
