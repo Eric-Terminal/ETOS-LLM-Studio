@@ -22,6 +22,7 @@ struct ThirdPartyImportView: View {
     @State private var includeSessions: Bool = true
     @State private var importReport: ThirdPartyImportReport?
     @State private var importError: String?
+    @State private var preparationRequestID: UUID?
 
     var body: some View {
         List {
@@ -296,14 +297,20 @@ struct ThirdPartyImportView: View {
         preparedResult = nil
         conflictPreview = .empty
 
+        let requestID = UUID()
+        preparationRequestID = requestID
         Task {
             do {
-                let prepared = try ThirdPartyImportService.prepareImport(
-                    source: source,
-                    fileURL: fileURL
-                )
-                let preview = buildConflictPreview(for: prepared.package)
+                let (prepared, preview) = try await Task.detached(priority: .userInitiated) {
+                    let prepared = try ThirdPartyImportService.prepareImport(
+                        source: source,
+                        fileURL: fileURL
+                    )
+                    let preview = ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
+                    return (prepared, preview)
+                }.value
                 await MainActor.run {
+                    guard preparationRequestID == requestID else { return }
                     preparedResult = prepared
                     includeProviders = prepared.package.options.contains(.providers)
                     includeSessions = prepared.package.options.contains(.sessions)
@@ -312,6 +319,7 @@ struct ThirdPartyImportView: View {
                 }
             } catch {
                 await MainActor.run {
+                    guard preparationRequestID == requestID else { return }
                     importError = error.localizedDescription
                     isPreparing = false
                 }
@@ -331,14 +339,21 @@ struct ThirdPartyImportView: View {
             isImporting = true
             importError = nil
 
+            let package = preparedResult.package
+            let source = preparedResult.source
+            let parsedProvidersCount = preparedResult.parsedProvidersCount
+            let parsedSessionsCount = preparedResult.parsedSessionsCount
+            let warnings = preparedResult.warnings
             Task {
-                let summary = await SyncEngine.apply(package: preparedResult.package)
+                let summary = await Task.detached(priority: .userInitiated) {
+                    await SyncEngine.apply(package: package)
+                }.value
                 let report = ThirdPartyImportReport(
-                    source: preparedResult.source,
-                    parsedProvidersCount: preparedResult.parsedProvidersCount,
-                    parsedSessionsCount: preparedResult.parsedSessionsCount,
+                    source: source,
+                    parsedProvidersCount: parsedProvidersCount,
+                    parsedSessionsCount: parsedSessionsCount,
                     summary: summary,
-                    warnings: preparedResult.warnings
+                    warnings: warnings
                 )
 
                 await MainActor.run {
@@ -375,6 +390,8 @@ struct ThirdPartyImportView: View {
         isImporting = true
         importError = nil
 
+        let source = preparedResult.source
+        let warnings = preparedResult.warnings
         Task {
             let scopedPackage = SyncPackage(
                 options: options,
@@ -382,13 +399,15 @@ struct ThirdPartyImportView: View {
                 sessions: sessions
             )
 
-            let summary = await SyncEngine.apply(package: scopedPackage)
+            let summary = await Task.detached(priority: .userInitiated) {
+                await SyncEngine.apply(package: scopedPackage)
+            }.value
             let report = ThirdPartyImportReport(
-                source: preparedResult.source,
+                source: source,
                 parsedProvidersCount: providers.count,
                 parsedSessionsCount: sessions.count,
                 summary: summary,
-                warnings: preparedResult.warnings
+                warnings: warnings
             )
 
             await MainActor.run {
@@ -399,6 +418,8 @@ struct ThirdPartyImportView: View {
     }
 
     private func resetPreparedState() {
+        preparationRequestID = nil
+        isPreparing = false
         preparedResult = nil
         importReport = nil
         importError = nil
@@ -427,85 +448,6 @@ struct ThirdPartyImportView: View {
         return items.isEmpty ? NSLocalizedString("无", comment: "") : items.joined(separator: NSLocalizedString("、", comment: ""))
     }
 
-    private func buildConflictPreview(for package: SyncPackage) -> ConflictPreview {
-        let providerConflicts = estimateProviderConflicts(incoming: package.providers)
-        let providerAdds = max(0, package.providers.count - providerConflicts)
-
-        let sessionConflicts = estimateSessionConflicts(incoming: package.sessions)
-        let sessionAdds = max(0, package.sessions.count - sessionConflicts)
-
-        return ConflictPreview(
-            providerConflicts: providerConflicts,
-            sessionConflicts: sessionConflicts,
-            providerAdds: providerAdds,
-            sessionAdds: sessionAdds
-        )
-    }
-
-    private func estimateProviderConflicts(incoming: [Provider]) -> Int {
-        guard !incoming.isEmpty else { return 0 }
-        let locals = ConfigLoader.loadProviders()
-        let localSignatures = Set(locals.map(providerSignature))
-        return incoming.reduce(into: 0) { count, provider in
-            if localSignatures.contains(providerSignature(provider)) {
-                count += 1
-            }
-        }
-    }
-
-    private func estimateSessionConflicts(incoming: [SyncedSession]) -> Int {
-        guard !incoming.isEmpty else { return 0 }
-
-        let localSessions = Persistence.loadChatSessions().filter { !$0.isTemporary }
-        let localSessionIDs = Set(localSessions.map(\.id))
-
-        var localSignatures: Set<String> = []
-        localSignatures.reserveCapacity(localSessions.count)
-        for session in localSessions {
-            let messages = Persistence.loadMessages(for: session.id)
-            localSignatures.insert(sessionSignature(name: session.name, messages: messages))
-        }
-
-        return incoming.reduce(into: 0) { count, incomingSession in
-            if localSessionIDs.contains(incomingSession.session.id) {
-                count += 1
-                return
-            }
-            let signature = sessionSignature(
-                name: incomingSession.session.name,
-                messages: incomingSession.messages
-            )
-            if localSignatures.contains(signature) {
-                count += 1
-            }
-        }
-    }
-
-    private func providerSignature(_ provider: Provider) -> String {
-        [
-            provider.name.lowercased(),
-            provider.baseURL.lowercased(),
-            provider.apiFormat.lowercased(),
-            provider.models.map(\.modelName).sorted().joined(separator: ",").lowercased()
-        ].joined(separator: "|")
-    }
-
-    private func sessionSignature(name: String, messages: [ChatMessage]) -> String {
-        let first = messages.first
-        let last = messages.last
-        let firstSnippet = String((first?.content ?? "").prefix(80)).lowercased()
-        let lastSnippet = String((last?.content ?? "").prefix(80)).lowercased()
-
-        return [
-            name.lowercased(),
-            "\(messages.count)",
-            first?.role.rawValue ?? "",
-            last?.role.rawValue ?? "",
-            firstSnippet,
-            lastSnippet
-        ].joined(separator: "|")
-    }
-
     @ViewBuilder
     private func progressRow(text: String) -> some View {
         HStack(spacing: 8) {
@@ -524,6 +466,82 @@ struct ThirdPartyImportView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
+    }
+}
+
+private enum ThirdPartyImportConflictPreviewBuilder {
+    static func build(for package: SyncPackage) -> ConflictPreview {
+        let providerConflicts = estimateProviderConflicts(incoming: package.providers)
+        let providerAdds = max(0, package.providers.count - providerConflicts)
+
+        let sessionConflicts = estimateSessionConflicts(incoming: package.sessions)
+        let sessionAdds = max(0, package.sessions.count - sessionConflicts)
+
+        return ConflictPreview(
+            providerConflicts: providerConflicts,
+            sessionConflicts: sessionConflicts,
+            providerAdds: providerAdds,
+            sessionAdds: sessionAdds
+        )
+    }
+
+    private static func estimateProviderConflicts(incoming: [Provider]) -> Int {
+        guard !incoming.isEmpty else { return 0 }
+        let locals = ConfigLoader.loadProviders()
+        let localSignatures = Set(locals.map(providerSignature))
+        return incoming.reduce(into: 0) { count, provider in
+            if localSignatures.contains(providerSignature(provider)) {
+                count += 1
+            }
+        }
+    }
+
+    private static func estimateSessionConflicts(incoming: [SyncedSession]) -> Int {
+        guard !incoming.isEmpty else { return 0 }
+
+        let localSessions = Persistence.loadChatSessions().filter { !$0.isTemporary }
+        let localSessionIDs = Set(localSessions.map(\.id))
+
+        var localSignatures: Set<String> = []
+        localSignatures.reserveCapacity(localSessions.count)
+        for session in localSessions {
+            localSignatures.insert(
+                sessionPreviewSignature(
+                    name: session.name,
+                    messageCount: Persistence.loadMessageCount(for: session.id)
+                )
+            )
+        }
+
+        return incoming.reduce(into: 0) { count, incomingSession in
+            if localSessionIDs.contains(incomingSession.session.id) {
+                count += 1
+                return
+            }
+            let signature = sessionPreviewSignature(
+                name: incomingSession.session.name,
+                messageCount: incomingSession.messages.count
+            )
+            if localSignatures.contains(signature) {
+                count += 1
+            }
+        }
+    }
+
+    private static func providerSignature(_ provider: Provider) -> String {
+        [
+            provider.name.lowercased(),
+            provider.baseURL.lowercased(),
+            provider.apiFormat.lowercased(),
+            provider.models.map(\.modelName).sorted().joined(separator: ",").lowercased()
+        ].joined(separator: "|")
+    }
+
+    private static func sessionPreviewSignature(name: String, messageCount: Int) -> String {
+        return [
+            name.lowercased(),
+            "\(messageCount)"
+        ].joined(separator: "|")
     }
 }
 

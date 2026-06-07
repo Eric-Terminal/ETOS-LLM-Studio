@@ -21,6 +21,7 @@ struct ThirdPartyImportWatchHintView: View {
     @State private var includeSessions: Bool = true
     @State private var importReport: ThirdPartyImportReport?
     @State private var importError: String?
+    @State private var preparationRequestID: UUID?
 
     var body: some View {
         List {
@@ -203,6 +204,8 @@ struct ThirdPartyImportWatchHintView: View {
         preparedResult = nil
         conflictPreview = .empty
 
+        let requestID = UUID()
+        preparationRequestID = requestID
         let source = selectedSource
         Task {
             do {
@@ -217,17 +220,26 @@ struct ThirdPartyImportWatchHintView: View {
                     return
                 }
 
-                let fileName = suggestedRemoteImportFileName(from: url, response: response, data: data, source: source)
-                let tempURL = makeTemporaryFileURL(fileName: fileName)
-                try data.write(to: tempURL, options: [.atomic])
-                defer {
-                    try? FileManager.default.removeItem(at: tempURL)
-                }
+                let fileName = ThirdPartyImportRemoteFileHelper.suggestedFileName(
+                    from: url,
+                    response: response,
+                    data: data,
+                    source: source
+                )
+                let (prepared, preview) = try await Task.detached(priority: .userInitiated) {
+                    let tempURL = ThirdPartyImportRemoteFileHelper.makeTemporaryFileURL(fileName: fileName)
+                    try data.write(to: tempURL, options: [.atomic])
+                    defer {
+                        try? FileManager.default.removeItem(at: tempURL)
+                    }
 
-                let prepared = try ThirdPartyImportService.prepareImport(source: source, fileURL: tempURL)
-                let preview = buildConflictPreview(for: prepared.package)
+                    let prepared = try ThirdPartyImportService.prepareImport(source: source, fileURL: tempURL)
+                    let preview = ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
+                    return (prepared, preview)
+                }.value
 
                 await MainActor.run {
+                    guard preparationRequestID == requestID else { return }
                     selectedFileName = fileName
                     preparedResult = prepared
                     includeProviders = prepared.package.options.contains(.providers)
@@ -237,6 +249,7 @@ struct ThirdPartyImportWatchHintView: View {
                 }
             } catch {
                 await MainActor.run {
+                    guard preparationRequestID == requestID else { return }
                     importError = error.localizedDescription
                     isPreparing = false
                 }
@@ -256,14 +269,21 @@ struct ThirdPartyImportWatchHintView: View {
             isImporting = true
             importError = nil
 
+            let package = preparedResult.package
+            let source = preparedResult.source
+            let parsedProvidersCount = preparedResult.parsedProvidersCount
+            let parsedSessionsCount = preparedResult.parsedSessionsCount
+            let warnings = preparedResult.warnings
             Task {
-                let summary = await SyncEngine.apply(package: preparedResult.package)
+                let summary = await Task.detached(priority: .userInitiated) {
+                    await SyncEngine.apply(package: package)
+                }.value
                 let report = ThirdPartyImportReport(
-                    source: preparedResult.source,
-                    parsedProvidersCount: preparedResult.parsedProvidersCount,
-                    parsedSessionsCount: preparedResult.parsedSessionsCount,
+                    source: source,
+                    parsedProvidersCount: parsedProvidersCount,
+                    parsedSessionsCount: parsedSessionsCount,
                     summary: summary,
-                    warnings: preparedResult.warnings
+                    warnings: warnings
                 )
 
                 await MainActor.run {
@@ -300,6 +320,8 @@ struct ThirdPartyImportWatchHintView: View {
         isImporting = true
         importError = nil
 
+        let source = preparedResult.source
+        let warnings = preparedResult.warnings
         Task {
             let scopedPackage = SyncPackage(
                 options: options,
@@ -307,13 +329,15 @@ struct ThirdPartyImportWatchHintView: View {
                 sessions: sessions
             )
 
-            let summary = await SyncEngine.apply(package: scopedPackage)
+            let summary = await Task.detached(priority: .userInitiated) {
+                await SyncEngine.apply(package: scopedPackage)
+            }.value
             let report = ThirdPartyImportReport(
-                source: preparedResult.source,
+                source: source,
                 parsedProvidersCount: providers.count,
                 parsedSessionsCount: sessions.count,
                 summary: summary,
-                warnings: preparedResult.warnings
+                warnings: warnings
             )
 
             await MainActor.run {
@@ -324,6 +348,8 @@ struct ThirdPartyImportWatchHintView: View {
     }
 
     private func resetPreparedState() {
+        preparationRequestID = nil
+        isPreparing = false
         selectedFileName = ""
         preparedResult = nil
         importReport = nil
@@ -331,133 +357,6 @@ struct ThirdPartyImportWatchHintView: View {
         conflictPreview = .empty
         includeProviders = true
         includeSessions = true
-    }
-
-    private func makeTemporaryFileURL(fileName: String) -> URL {
-        let rawName = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sanitizedName = rawName
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .replacingOccurrences(of: "\\", with: "-")
-        return FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-\(sanitizedName)")
-    }
-
-    private func suggestedRemoteImportFileName(
-        from url: URL,
-        response: URLResponse,
-        data: Data,
-        source: ThirdPartyImportSource
-    ) -> String {
-        var fileName = response.suggestedFilename?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if fileName.isEmpty {
-            fileName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if fileName.isEmpty || fileName == "/" {
-            fileName = "import-data"
-        }
-
-        if !(fileName as NSString).pathExtension.isEmpty {
-            return fileName
-        }
-
-        if let httpResponse = response as? HTTPURLResponse,
-           let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() {
-            if contentType.contains("zip") {
-                return "\(fileName).zip"
-            }
-            if contentType.contains("json") {
-                return "\(fileName).json"
-            }
-        }
-
-        if data.starts(with: [0x50, 0x4B, 0x03, 0x04]) {
-            return "\(fileName).zip"
-        }
-
-        if source == .chatgpt || source == .etosBackup {
-            return "\(fileName).json"
-        }
-        return "\(fileName).json"
-    }
-
-    private func buildConflictPreview(for package: SyncPackage) -> ConflictPreview {
-        let providerConflicts = estimateProviderConflicts(incoming: package.providers)
-        let providerAdds = max(0, package.providers.count - providerConflicts)
-
-        let sessionConflicts = estimateSessionConflicts(incoming: package.sessions)
-        let sessionAdds = max(0, package.sessions.count - sessionConflicts)
-
-        return ConflictPreview(
-            providerConflicts: providerConflicts,
-            sessionConflicts: sessionConflicts,
-            providerAdds: providerAdds,
-            sessionAdds: sessionAdds
-        )
-    }
-
-    private func estimateProviderConflicts(incoming: [Provider]) -> Int {
-        guard !incoming.isEmpty else { return 0 }
-        let locals = ConfigLoader.loadProviders()
-        let localSignatures = Set(locals.map(providerSignature))
-        return incoming.reduce(into: 0) { count, provider in
-            if localSignatures.contains(providerSignature(provider)) {
-                count += 1
-            }
-        }
-    }
-
-    private func estimateSessionConflicts(incoming: [SyncedSession]) -> Int {
-        guard !incoming.isEmpty else { return 0 }
-
-        let localSessions = Persistence.loadChatSessions().filter { !$0.isTemporary }
-        let localSessionIDs = Set(localSessions.map(\.id))
-
-        var localSignatures: Set<String> = []
-        localSignatures.reserveCapacity(localSessions.count)
-        for session in localSessions {
-            let messages = Persistence.loadMessages(for: session.id)
-            localSignatures.insert(sessionSignature(name: session.name, messages: messages))
-        }
-
-        return incoming.reduce(into: 0) { count, incomingSession in
-            if localSessionIDs.contains(incomingSession.session.id) {
-                count += 1
-                return
-            }
-            let signature = sessionSignature(
-                name: incomingSession.session.name,
-                messages: incomingSession.messages
-            )
-            if localSignatures.contains(signature) {
-                count += 1
-            }
-        }
-    }
-
-    private func providerSignature(_ provider: Provider) -> String {
-        [
-            provider.name.lowercased(),
-            provider.baseURL.lowercased(),
-            provider.apiFormat.lowercased(),
-            provider.models.map(\.modelName).sorted().joined(separator: ",").lowercased()
-        ].joined(separator: "|")
-    }
-
-    private func sessionSignature(name: String, messages: [ChatMessage]) -> String {
-        let first = messages.first
-        let last = messages.last
-        let firstSnippet = String((first?.content ?? "").prefix(80)).lowercased()
-        let lastSnippet = String((last?.content ?? "").prefix(80)).lowercased()
-
-        return [
-            name.lowercased(),
-            "\(messages.count)",
-            first?.role.rawValue ?? "",
-            last?.role.rawValue ?? "",
-            firstSnippet,
-            lastSnippet
-        ].joined(separator: "|")
     }
 
     @ViewBuilder
@@ -498,6 +397,132 @@ struct ThirdPartyImportWatchHintView: View {
         if options.contains(.fontFiles) { items.append(NSLocalizedString("字体文件与规则", comment: "")) }
         if options.contains(.appStorage) { items.append(NSLocalizedString("软件设置", comment: "")) }
         return items.isEmpty ? NSLocalizedString("无", comment: "") : items.joined(separator: NSLocalizedString("、", comment: ""))
+    }
+}
+
+private enum ThirdPartyImportRemoteFileHelper {
+    static func makeTemporaryFileURL(fileName: String) -> URL {
+        let rawName = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedName = rawName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\\", with: "-")
+        return FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-\(sanitizedName)")
+    }
+
+    static func suggestedFileName(
+        from url: URL,
+        response: URLResponse,
+        data: Data,
+        source: ThirdPartyImportSource
+    ) -> String {
+        var fileName = response.suggestedFilename?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if fileName.isEmpty {
+            fileName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if fileName.isEmpty || fileName == "/" {
+            fileName = "import-data"
+        }
+
+        if !(fileName as NSString).pathExtension.isEmpty {
+            return fileName
+        }
+
+        if let httpResponse = response as? HTTPURLResponse,
+           let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() {
+            if contentType.contains("zip") {
+                return "\(fileName).zip"
+            }
+            if contentType.contains("json") {
+                return "\(fileName).json"
+            }
+        }
+
+        if data.starts(with: [0x50, 0x4B, 0x03, 0x04]) {
+            return "\(fileName).zip"
+        }
+
+        if source == .chatgpt || source == .etosBackup {
+            return "\(fileName).json"
+        }
+        return "\(fileName).json"
+    }
+}
+
+private enum ThirdPartyImportConflictPreviewBuilder {
+    static func build(for package: SyncPackage) -> ConflictPreview {
+        let providerConflicts = estimateProviderConflicts(incoming: package.providers)
+        let providerAdds = max(0, package.providers.count - providerConflicts)
+
+        let sessionConflicts = estimateSessionConflicts(incoming: package.sessions)
+        let sessionAdds = max(0, package.sessions.count - sessionConflicts)
+
+        return ConflictPreview(
+            providerConflicts: providerConflicts,
+            sessionConflicts: sessionConflicts,
+            providerAdds: providerAdds,
+            sessionAdds: sessionAdds
+        )
+    }
+
+    private static func estimateProviderConflicts(incoming: [Provider]) -> Int {
+        guard !incoming.isEmpty else { return 0 }
+        let locals = ConfigLoader.loadProviders()
+        let localSignatures = Set(locals.map(providerSignature))
+        return incoming.reduce(into: 0) { count, provider in
+            if localSignatures.contains(providerSignature(provider)) {
+                count += 1
+            }
+        }
+    }
+
+    private static func estimateSessionConflicts(incoming: [SyncedSession]) -> Int {
+        guard !incoming.isEmpty else { return 0 }
+
+        let localSessions = Persistence.loadChatSessions().filter { !$0.isTemporary }
+        let localSessionIDs = Set(localSessions.map(\.id))
+
+        var localSignatures: Set<String> = []
+        localSignatures.reserveCapacity(localSessions.count)
+        for session in localSessions {
+            localSignatures.insert(
+                sessionPreviewSignature(
+                    name: session.name,
+                    messageCount: Persistence.loadMessageCount(for: session.id)
+                )
+            )
+        }
+
+        return incoming.reduce(into: 0) { count, incomingSession in
+            if localSessionIDs.contains(incomingSession.session.id) {
+                count += 1
+                return
+            }
+            let signature = sessionPreviewSignature(
+                name: incomingSession.session.name,
+                messageCount: incomingSession.messages.count
+            )
+            if localSignatures.contains(signature) {
+                count += 1
+            }
+        }
+    }
+
+    private static func providerSignature(_ provider: Provider) -> String {
+        [
+            provider.name.lowercased(),
+            provider.baseURL.lowercased(),
+            provider.apiFormat.lowercased(),
+            provider.models.map(\.modelName).sorted().joined(separator: ",").lowercased()
+        ].joined(separator: "|")
+    }
+
+    private static func sessionPreviewSignature(name: String, messageCount: Int) -> String {
+        return [
+            name.lowercased(),
+            "\(messageCount)"
+        ].joined(separator: "|")
     }
 }
 

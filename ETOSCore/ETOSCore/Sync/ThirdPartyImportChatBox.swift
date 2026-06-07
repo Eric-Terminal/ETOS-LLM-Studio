@@ -226,7 +226,7 @@ extension ThirdPartyImportService {
             let fallbackModel = string(sessionSettings?["modelId"])
             record(provider: fallbackProvider, model: fallbackModel)
 
-            for message in chatBoxAllMessageMaps(in: session) {
+            forEachChatBoxMessageMap(in: session) { message in
                 record(
                     provider: string(message["aiProvider"]) ?? fallbackProvider,
                     model: string(message["model"]) ?? fallbackModel
@@ -733,10 +733,10 @@ extension ThirdPartyImportService {
             )
         }
 
-        let content = dedupeStrings(contentPieces)
+        let content = dedupeChatBoxTextPieces(contentPieces)
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let reasoning = dedupeStrings(reasoningPieces)
+        let reasoning = dedupeChatBoxTextPieces(reasoningPieces)
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (content, reasoning.isEmpty ? nil : reasoning)
@@ -830,11 +830,28 @@ extension ThirdPartyImportService {
     }
 
     static func chatBoxAllMessageMaps(in session: [String: Any]) -> [[String: Any]] {
-        var result = normalizeJSONArray(session["messages"]).compactMap(chatBoxDictionary)
+        var result: [[String: Any]] = []
+        forEachChatBoxMessageMap(in: session) { message in
+            result.append(message)
+        }
+        return result
+    }
+
+    static func forEachChatBoxMessageMap(
+        in session: [String: Any],
+        _ body: ([String: Any]) -> Void
+    ) {
+        for messageAny in normalizeJSONArray(session["messages"]) {
+            guard let message = chatBoxDictionary(messageAny) else { continue }
+            body(message)
+        }
 
         for threadAny in normalizeJSONArray(session["threads"]) {
             guard let thread = chatBoxDictionary(threadAny) else { continue }
-            result.append(contentsOf: normalizeJSONArray(thread["messages"]).compactMap(chatBoxDictionary))
+            for messageAny in normalizeJSONArray(thread["messages"]) {
+                guard let message = chatBoxDictionary(messageAny) else { continue }
+                body(message)
+            }
         }
 
         let forks = dictionary(session["messageForksHash"]) ?? [:]
@@ -842,11 +859,12 @@ extension ThirdPartyImportService {
             guard let fork = chatBoxDictionary(forkAny) else { continue }
             for listAny in normalizeJSONArray(fork["lists"]) {
                 guard let list = chatBoxDictionary(listAny) else { continue }
-                result.append(contentsOf: normalizeJSONArray(list["messages"]).compactMap(chatBoxDictionary))
+                for messageAny in normalizeJSONArray(list["messages"]) {
+                    guard let message = chatBoxDictionary(messageAny) else { continue }
+                    body(message)
+                }
             }
         }
-
-        return result
     }
 
     static func chatBoxDictionary(_ any: Any?) -> [String: Any]? {
@@ -858,6 +876,17 @@ extension ThirdPartyImportService {
             return parsed
         }
         return nil
+    }
+
+    static func dedupeChatBoxTextPieces(_ values: [String]) -> [String] {
+        var result: [String] = []
+        result.reserveCapacity(values.count)
+        for value in values {
+            if !result.contains(value) {
+                result.append(value)
+            }
+        }
+        return result
     }
 
     static func compactJSONString(_ any: Any?) -> String {
