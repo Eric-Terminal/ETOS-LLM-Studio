@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -48,8 +49,21 @@ func (s *DebugServer) bonjourTXTRecords() []string {
 	return []string{
 		"proto=etos-debug-v1",
 		"version=" + version,
+		"host=" + localHostName(),
 		"http_port=" + strconv.Itoa(s.httpPort),
 		"ws_port=" + strconv.Itoa(s.wsPort),
 		"proxy_port=" + strconv.Itoa(s.proxyPort),
 	}
+}
+
+func localHostName() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	trimmed := strings.Trim(strings.TrimSpace(hostname), ".")
+	if trimmed == "" || net.ParseIP(trimmed) != nil || strings.HasSuffix(trimmed, ".local") {
+		return trimmed
+	}
+	return trimmed + ".local"
 }

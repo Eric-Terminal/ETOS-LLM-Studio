@@ -7,8 +7,8 @@
 // ============================================================================
 
 import Combine
-import Darwin
 import Foundation
+import Network
 
 public struct LocalDebugDiscoveredServer: Identifiable, Hashable, Sendable {
     public let id: String
@@ -36,7 +36,7 @@ public struct LocalDebugDiscoveredServer: Identifiable, Hashable, Sendable {
     }
 }
 
-public final class LocalDebugServerDiscovery: NSObject, ObservableObject {
+public final class LocalDebugServerDiscovery: ObservableObject {
     public static let serviceType = "_etos-debug._tcp."
     public static let serviceTypeForInfoPlist = "_etos-debug._tcp"
 
@@ -44,26 +44,34 @@ public final class LocalDebugServerDiscovery: NSObject, ObservableObject {
     @Published public private(set) var isSearching = false
     @Published public private(set) var errorMessage: String?
 
-    private var browser: NetServiceBrowser?
-    private var resolvingServices: [String: NetService] = [:]
+    private var browser: NWBrowser?
+    private let queue = DispatchQueue(label: "com.etos.local-debug.discovery")
+
+    public init() {}
 
     public func start() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.start()
-            }
-            return
-        }
         guard browser == nil else { return }
 
-        let newBrowser = NetServiceBrowser()
-        newBrowser.delegate = self
-        newBrowser.schedule(in: .main, forMode: .common)
-        newBrowser.searchForServices(ofType: Self.serviceType, inDomain: "local.")
+        let parameters = NWParameters.tcp
+        parameters.includePeerToPeer = true
+
+        let descriptor = NWBrowser.Descriptor.bonjourWithTXTRecord(
+            type: Self.serviceTypeForInfoPlist,
+            domain: "local."
+        )
+        let newBrowser = NWBrowser(for: descriptor, using: parameters)
+
+        newBrowser.stateUpdateHandler = { [weak self] state in
+            self?.handleBrowserState(state)
+        }
+        newBrowser.browseResultsChangedHandler = { [weak self] results, _ in
+            self?.handleBrowseResults(results)
+        }
 
         browser = newBrowser
         isSearching = true
         errorMessage = nil
+        newBrowser.start(queue: queue)
     }
 
     public func restart() {
@@ -72,97 +80,104 @@ public final class LocalDebugServerDiscovery: NSObject, ObservableObject {
     }
 
     public func stop() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.stop()
-            }
-            return
-        }
-
-        browser?.stop()
-        browser?.remove(from: .main, forMode: .common)
-        browser?.delegate = nil
+        browser?.cancel()
         browser = nil
-
-        for service in resolvingServices.values {
-            service.stop()
-            service.remove(from: .main, forMode: .common)
-            service.delegate = nil
-        }
-        resolvingServices.removeAll()
         isSearching = false
     }
 
-    private func handleFoundService(_ service: NetService) {
-        let key = serviceIdentifier(service)
-        resolvingServices[key] = service
-
-        service.delegate = self
-        service.schedule(in: .main, forMode: .common)
-        service.resolve(withTimeout: 5)
+    private func handleBrowserState(_ state: NWBrowser.State) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            switch state {
+            case .ready:
+                self.isSearching = true
+                self.errorMessage = nil
+            case .failed(let error):
+                self.isSearching = false
+                self.errorMessage = String(
+                    format: NSLocalizedString("自动发现失败: %@", comment: ""),
+                    error.localizedDescription
+                )
+                self.browser?.cancel()
+                self.browser = nil
+            case .cancelled:
+                self.isSearching = false
+            case .waiting(let error):
+                self.errorMessage = String(
+                    format: NSLocalizedString("自动发现等待网络: %@", comment: ""),
+                    error.localizedDescription
+                )
+            case .setup:
+                self.isSearching = true
+            @unknown default:
+                self.isSearching = true
+            }
+        }
     }
 
-    private func handleRemovedService(_ service: NetService) {
-        let key = serviceIdentifier(service)
-        resolvingServices[key]?.stop()
-        resolvingServices[key]?.remove(from: .main, forMode: .common)
-        resolvingServices[key]?.delegate = nil
-        resolvingServices.removeValue(forKey: key)
-        discoveredServers.removeAll { $0.id == key }
+    private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
+        let servers = results.compactMap(Self.discoveredServer(from:))
+            .sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.discoveredServers = servers
+        }
     }
 
-    private func upsertResolvedService(_ service: NetService) {
-        let key = serviceIdentifier(service)
-        guard let host = Self.preferredHost(for: service) else { return }
+    private static func discoveredServer(from result: NWBrowser.Result) -> LocalDebugDiscoveredServer? {
+        guard case let .service(name, type, domain, _) = result.endpoint else { return nil }
 
-        let txt = NetService.dictionary(fromTXTRecord: service.txtRecordData() ?? Data())
-        let httpPort = Self.intValue(in: txt, keys: ["http_port", "http"]) ?? positivePort(service.port) ?? 7654
-        let webSocketPort = Self.intValue(in: txt, keys: ["ws_port", "ws"]) ?? 8765
-        let proxyPort = Self.intValue(in: txt, keys: ["proxy_port", "proxy"]) ?? 8080
-        let discovered = LocalDebugDiscoveredServer(
-            id: key,
-            name: service.name,
+        let txt = txtRecordDictionary(from: result.metadata)
+        guard let host = preferredHost(in: txt, name: name, domain: domain) else { return nil }
+        let httpPort = intValue(in: txt, keys: ["http_port", "http"]) ?? 7654
+        let webSocketPort = intValue(in: txt, keys: ["ws_port", "ws"]) ?? 8765
+        let proxyPort = intValue(in: txt, keys: ["proxy_port", "proxy"]) ?? 8080
+
+        return LocalDebugDiscoveredServer(
+            id: "\(name)|\(type)|\(domain)",
+            name: name,
             host: host,
             httpPort: httpPort,
             webSocketPort: webSocketPort,
             proxyPort: proxyPort,
             lastSeenAt: Date()
         )
-
-        if let index = discoveredServers.firstIndex(where: { $0.id == key }) {
-            discoveredServers[index] = discovered
-        } else {
-            discoveredServers.append(discovered)
-        }
-        discoveredServers.sort {
-            $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
     }
 
-    private func serviceIdentifier(_ service: NetService) -> String {
-        "\(service.name)|\(service.type)|\(service.domain)"
+    private static func txtRecordDictionary(from metadata: NWBrowser.Result.Metadata) -> [String: String] {
+        guard case let .bonjour(txtRecord) = metadata else { return [:] }
+        return txtRecord.dictionary
     }
 
-    private func positivePort(_ port: Int) -> Int? {
-        port > 0 ? port : nil
-    }
-
-    private static func preferredHost(for service: NetService) -> String? {
-        let addresses = (service.addresses ?? []).compactMap(ipAddress(from:))
-        if let ipv4Address = addresses.first(where: { !$0.contains(":") }) {
-            return ipv4Address
+    private static func preferredHost(in txt: [String: String], name: String, domain: String) -> String? {
+        for key in ["host", "hostname", "address", "ip"] {
+            if let value = txt[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            }
         }
-        if let hostName = service.hostName?.trimmingCharacters(in: CharacterSet(charactersIn: ".")),
-           !hostName.isEmpty {
-            return hostName
+
+        let trimmedDomain = domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if trimmedDomain.isEmpty {
+            let host = "\(name).local"
+            return isUsableHost(host) ? host : nil
         }
-        return nil
+        if name.hasSuffix(".\(trimmedDomain)") {
+            return isUsableHost(name) ? name : nil
+        }
+        let host = "\(name).\(trimmedDomain)"
+        return isUsableHost(host) ? host : nil
     }
 
-    private static func intValue(in txt: [String: Data], keys: [String]) -> Int? {
+    private static func isUsableHost(_ host: String) -> Bool {
+        !host.contains { $0.isWhitespace || $0 == "/" }
+    }
+
+    private static func intValue(in txt: [String: String], keys: [String]) -> Int? {
         for key in keys {
-            guard let data = txt[key],
-                  let raw = String(data: data, encoding: .utf8),
+            guard let raw = txt[key],
                   let value = Int(raw),
                   value > 0 else {
                 continue
@@ -170,77 +185,5 @@ public final class LocalDebugServerDiscovery: NSObject, ObservableObject {
             return value
         }
         return nil
-    }
-
-    private static func ipAddress(from data: Data) -> String? {
-        data.withUnsafeBytes { rawBuffer in
-            guard let baseAddress = rawBuffer.baseAddress else { return nil }
-            let socketAddress = baseAddress.assumingMemoryBound(to: sockaddr.self)
-            guard socketAddress.pointee.sa_family == sa_family_t(AF_INET) ||
-                  socketAddress.pointee.sa_family == sa_family_t(AF_INET6) else {
-                return nil
-            }
-
-            var hostBuffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            let result = getnameinfo(
-                socketAddress,
-                socklen_t(data.count),
-                &hostBuffer,
-                socklen_t(hostBuffer.count),
-                nil,
-                0,
-                NI_NUMERICHOST
-            )
-            guard result == 0 else { return nil }
-            return String(cString: hostBuffer)
-        }
-    }
-}
-
-extension LocalDebugServerDiscovery: NetServiceBrowserDelegate {
-    public func netServiceBrowserWillSearch(_ browser: NetServiceBrowser) {
-        isSearching = true
-        errorMessage = nil
-    }
-
-    public func netServiceBrowserDidStopSearch(_ browser: NetServiceBrowser) {
-        isSearching = false
-    }
-
-    public func netServiceBrowser(_ browser: NetServiceBrowser, didNotSearch errorDict: [String: NSNumber]) {
-        isSearching = false
-        errorMessage = String(
-            format: NSLocalizedString("自动发现失败: %@", comment: ""),
-            errorDict.description
-        )
-    }
-
-    public func netServiceBrowser(
-        _ browser: NetServiceBrowser,
-        didFind service: NetService,
-        moreComing: Bool
-    ) {
-        handleFoundService(service)
-    }
-
-    public func netServiceBrowser(
-        _ browser: NetServiceBrowser,
-        didRemove service: NetService,
-        moreComing: Bool
-    ) {
-        handleRemovedService(service)
-    }
-}
-
-extension LocalDebugServerDiscovery: NetServiceDelegate {
-    public func netServiceDidResolveAddress(_ sender: NetService) {
-        upsertResolvedService(sender)
-    }
-
-    public func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
-        errorMessage = String(
-            format: NSLocalizedString("自动发现解析失败: %@", comment: ""),
-            errorDict.description
-        )
     }
 }

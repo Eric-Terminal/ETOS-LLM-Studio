@@ -102,6 +102,7 @@ func TestBonjourTXTRecordsExposePorts(t *testing.T) {
 
 	for _, want := range []string{
 		"proto=etos-debug-v1",
+		"host=",
 		"http_port=7654",
 		"ws_port=8765",
 		"proxy_port=8080",
