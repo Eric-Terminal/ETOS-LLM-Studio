@@ -2682,6 +2682,12 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "MiniMax TTS 未返回可播放音频。" = "MiniMax TTS did not return playable audio.";
 "Qwen TTS 未返回可播放音频。" = "Qwen TTS did not return playable audio.";
 "S3 兼容对象存储" = "S3-Compatible Object Storage";
+"启用 S3/R2 保存" = "تمكين حفظ S3/R2";
+"S3/R2 保存设置" = "إعدادات حفظ S3/R2";
+"打开后可配置对象存储，并将快照上传到自己的 S3/R2 存储桶。" = "عند التفعيل، يمكنك إعداد تخزين الكائنات ورفع اللقطات إلى حاوية S3/R2 الخاصة بك.";
+"关闭后不会显示 S3/R2 配置与上传入口。" = "عند الإيقاف، تُخفى إعدادات S3/R2 ومدخل الرفع.";
+"对象存储配置" = "إعدادات تخزين الكائنات";
+"配置用于上传和读取远端快照。" = "تُستخدم لرفع اللقطات وقراءة اللقطات البعيدة.";
 "SQL 不能为空。" = "SQL cannot be empty.";
 "SQL 预编译失败。" = "SQL preparation failed.";
 "SQL 预编译失败：%@" = "SQL preparation failed: %@";

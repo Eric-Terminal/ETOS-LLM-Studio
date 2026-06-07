@@ -2603,6 +2603,12 @@
 "MiniMax TTS 未返回可播放音频。" = "MiniMax TTS did not return playable audio.";
 "Qwen TTS 未返回可播放音频。" = "Qwen TTS did not return playable audio.";
 "S3 兼容对象存储" = "S3-Compatible Object Storage";
+"启用 S3/R2 保存" = "S3/R2 保存を有効化";
+"S3/R2 保存设置" = "S3/R2 保存設定";
+"打开后可配置对象存储，并将快照上传到自己的 S3/R2 存储桶。" = "オンにすると、オブジェクトストレージを設定し、自分の S3/R2 バケットへスナップショットをアップロードできます。";
+"关闭后不会显示 S3/R2 配置与上传入口。" = "オフの場合、S3/R2 設定とアップロード入口は表示されません。";
+"对象存储配置" = "オブジェクトストレージ設定";
+"配置用于上传和读取远端快照。" = "スナップショットのアップロードとリモートスナップショットの読み込みに使います。";
 "SQL 不能为空。" = "SQL cannot be empty.";
 "SQL 预编译失败。" = "SQL preparation failed.";
 "SQL 预编译失败：%@" = "SQL preparation failed: %@";

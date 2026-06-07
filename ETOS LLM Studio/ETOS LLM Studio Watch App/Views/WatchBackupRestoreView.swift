@@ -122,75 +122,30 @@ struct WatchBackupRestoreView: View {
 
     private var s3UploadSection: some View {
         Section {
-            TextField(
-                NSLocalizedString("https://<account>.r2.cloudflarestorage.com", comment: ""),
-                text: $appConfig.syncBackupUploadEndpoint.watchKeyboardNewlineBinding()
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
+            Toggle(NSLocalizedString("启用 S3/R2 保存", comment: ""), isOn: $appConfig.syncBackupS3Enabled)
+                .buttonStyle(.plain)
+                .disabled(isSnapshotBusy)
 
-            TextField(
-                NSLocalizedString("auto 或 us-east-1", comment: ""),
-                text: $appConfig.syncBackupS3Region.watchKeyboardNewlineBinding()
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-
-            TextField(
-                NSLocalizedString("存储桶名称", comment: ""),
-                text: $appConfig.syncBackupS3Bucket.watchKeyboardNewlineBinding()
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-
-            TextField(
-                NSLocalizedString("备份路径前缀（可选）", comment: ""),
-                text: $appConfig.syncBackupS3KeyPrefix.watchKeyboardNewlineBinding()
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-
-            TextField(
-                NSLocalizedString("Access Key ID", comment: ""),
-                text: $appConfig.syncBackupS3AccessKeyID.watchKeyboardNewlineBinding()
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-
-            SecureField(
-                NSLocalizedString("Secret Access Key", comment: ""),
-                text: $appConfig.syncBackupS3SecretAccessKey.watchKeyboardNewlineBinding()
-            )
-            .textContentType(.password)
-
-            SecureField(
-                NSLocalizedString("Session Token（可选）", comment: ""),
-                text: $appConfig.syncBackupS3SessionToken.watchKeyboardNewlineBinding()
-            )
-            .textContentType(.password)
-
-            Button {
-                uploadSnapshotFile()
-            } label: {
-                HStack {
-                    Spacer()
-                    if isUploadingSnapshot {
-                        ProgressView()
-                            .padding(.trailing, 4)
-                    }
-                    Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
-                    Spacer()
+            if appConfig.syncBackupS3Enabled {
+                NavigationLink {
+                    WatchS3CompatibleSnapshotStorageSettingsView(
+                        isCreatingSnapshot: $isCreatingSnapshot,
+                        isUploadingSnapshot: $isUploadingSnapshot,
+                        isRestoringSnapshot: $isRestoringSnapshot,
+                        uploadProgress: $uploadProgress,
+                        uploadSnapshot: uploadSnapshotFile
+                    )
+                } label: {
+                    Label(NSLocalizedString("S3/R2 保存设置", comment: ""), systemImage: "shippingbox")
                 }
-            }
-            .disabled(isSnapshotBusy)
-
-            if let uploadProgress {
-                WatchSnapshotUploadProgressView(progress: uploadProgress)
+                .disabled(isSnapshotBusy)
             }
         } header: {
             Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
         } footer: {
-            Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
+            Text(appConfig.syncBackupS3Enabled
+                 ? NSLocalizedString("打开后可配置对象存储，并将快照上传到自己的 S3/R2 存储桶。", comment: "")
+                 : NSLocalizedString("关闭后不会显示 S3/R2 配置与上传入口。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -592,6 +547,107 @@ struct WatchBackupRestoreView: View {
         pendingEncryptedSnapshotURL = nil
         pendingSnapshotInspection = nil
         restorePassword = ""
+    }
+}
+
+private struct WatchS3CompatibleSnapshotStorageSettingsView: View {
+    @ObservedObject private var appConfig = AppConfigStore.shared
+
+    @Binding var isCreatingSnapshot: Bool
+    @Binding var isUploadingSnapshot: Bool
+    @Binding var isRestoringSnapshot: Bool
+    @Binding var uploadProgress: SyncPackageUploadProgress?
+    let uploadSnapshot: () -> Void
+
+    var body: some View {
+        List {
+            Section {
+                TextField(
+                    NSLocalizedString("https://<account>.r2.cloudflarestorage.com", comment: ""),
+                    text: $appConfig.syncBackupUploadEndpoint.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("auto 或 us-east-1", comment: ""),
+                    text: $appConfig.syncBackupS3Region.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("存储桶名称", comment: ""),
+                    text: $appConfig.syncBackupS3Bucket.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("备份路径前缀（可选）", comment: ""),
+                    text: $appConfig.syncBackupS3KeyPrefix.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                TextField(
+                    NSLocalizedString("Access Key ID", comment: ""),
+                    text: $appConfig.syncBackupS3AccessKeyID.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                SecureField(
+                    NSLocalizedString("Secret Access Key", comment: ""),
+                    text: $appConfig.syncBackupS3SecretAccessKey.watchKeyboardNewlineBinding()
+                )
+                .textContentType(.password)
+
+                SecureField(
+                    NSLocalizedString("Session Token（可选）", comment: ""),
+                    text: $appConfig.syncBackupS3SessionToken.watchKeyboardNewlineBinding()
+                )
+                .textContentType(.password)
+            } header: {
+                Text(NSLocalizedString("对象存储配置", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("配置用于上传和读取远端快照。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Button {
+                    uploadSnapshot()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isUploadingSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
+                        Spacer()
+                    }
+                }
+                .disabled(isSnapshotBusy)
+
+                if let uploadProgress {
+                    WatchSnapshotUploadProgressView(progress: uploadProgress)
+                }
+            } header: {
+                Text(NSLocalizedString("操作", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))
+    }
+
+    private var isSnapshotBusy: Bool {
+        isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot
     }
 }
 

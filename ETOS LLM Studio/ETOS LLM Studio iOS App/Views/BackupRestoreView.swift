@@ -101,69 +101,36 @@ struct BackupRestoreView: View {
             }
 
             Section {
-                TextField(NSLocalizedString("https://<account>.r2.cloudflarestorage.com", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
+                Toggle(NSLocalizedString("启用 S3/R2 保存", comment: ""), isOn: $appConfig.syncBackupS3Enabled)
+                    .buttonStyle(.plain)
+                    .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
-                TextField(NSLocalizedString("auto 或 us-east-1", comment: ""), text: $appConfig.syncBackupS3Region)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                TextField(NSLocalizedString("存储桶名称", comment: ""), text: $appConfig.syncBackupS3Bucket)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                TextField(NSLocalizedString("备份路径前缀（可选）", comment: ""), text: $appConfig.syncBackupS3KeyPrefix)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                TextField(NSLocalizedString("Access Key ID", comment: ""), text: $appConfig.syncBackupS3AccessKeyID)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                SecureField(NSLocalizedString("Secret Access Key", comment: ""), text: $appConfig.syncBackupS3SecretAccessKey)
-                    .textContentType(.password)
-
-                SecureField(NSLocalizedString("Session Token（可选）", comment: ""), text: $appConfig.syncBackupS3SessionToken)
-                    .textContentType(.password)
-
-                Button {
-                    createAndUploadSnapshot()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isUploadingSnapshot {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
-                            .etFont(.headline)
-                        Spacer()
+                if appConfig.syncBackupS3Enabled {
+                    NavigationLink {
+                        S3CompatibleSnapshotStorageSettingsView(
+                            isCreatingSnapshot: $isCreatingSnapshot,
+                            isUploadingSnapshot: $isUploadingSnapshot,
+                            isRestoringSnapshot: $isRestoringSnapshot,
+                            uploadProgress: $uploadProgress,
+                            isS3ConfigurationComplete: {
+                                isS3ConfigurationComplete
+                            },
+                            uploadSnapshot: createAndUploadSnapshot,
+                            remoteSnapshotConfiguration: {
+                                s3UploadConfiguration(reportErrors: false)
+                            }
+                        )
+                    } label: {
+                        Label(NSLocalizedString("S3/R2 保存设置", comment: ""), systemImage: "shippingbox")
                     }
-                }
-                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
-
-                NavigationLink {
-                    if let configuration = s3UploadConfiguration(reportErrors: false) {
-                        RemoteSnapshotBrowserView(configuration: configuration)
-                    } else {
-                        Text(NSLocalizedString("请先完成对象存储配置。", comment: ""))
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } label: {
-                    Label(NSLocalizedString("从 S3/R2 选择快照", comment: ""), systemImage: "tray.and.arrow.down")
-                }
-                .disabled(!isS3ConfigurationComplete || isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
-
-                if let uploadProgress {
-                    SnapshotUploadProgressView(progress: uploadProgress)
+                    .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
                 }
             } header: {
                 Text(NSLocalizedString("S3 兼容对象存储", comment: ""))
             } footer: {
-                Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
+                Text(appConfig.syncBackupS3Enabled
+                     ? NSLocalizedString("打开后可配置对象存储，并将快照上传到自己的 S3/R2 存储桶。", comment: "")
+                     : NSLocalizedString("关闭后不会显示 S3/R2 配置与上传入口。", comment: ""))
             }
 
             Section {
@@ -510,6 +477,95 @@ struct BackupRestoreView: View {
         }
     }
 
+}
+
+private struct S3CompatibleSnapshotStorageSettingsView: View {
+    @ObservedObject private var appConfig = AppConfigStore.shared
+
+    @Binding var isCreatingSnapshot: Bool
+    @Binding var isUploadingSnapshot: Bool
+    @Binding var isRestoringSnapshot: Bool
+    @Binding var uploadProgress: SyncPackageUploadProgress?
+    let isS3ConfigurationComplete: () -> Bool
+    let uploadSnapshot: () -> Void
+    let remoteSnapshotConfiguration: () -> S3CompatibleUploadConfiguration?
+
+    var body: some View {
+        List {
+            Section {
+                TextField(NSLocalizedString("https://<account>.r2.cloudflarestorage.com", comment: ""), text: $appConfig.syncBackupUploadEndpoint)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+
+                TextField(NSLocalizedString("auto 或 us-east-1", comment: ""), text: $appConfig.syncBackupS3Region)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                TextField(NSLocalizedString("存储桶名称", comment: ""), text: $appConfig.syncBackupS3Bucket)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                TextField(NSLocalizedString("备份路径前缀（可选）", comment: ""), text: $appConfig.syncBackupS3KeyPrefix)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                TextField(NSLocalizedString("Access Key ID", comment: ""), text: $appConfig.syncBackupS3AccessKeyID)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                SecureField(NSLocalizedString("Secret Access Key", comment: ""), text: $appConfig.syncBackupS3SecretAccessKey)
+                    .textContentType(.password)
+
+                SecureField(NSLocalizedString("Session Token（可选）", comment: ""), text: $appConfig.syncBackupS3SessionToken)
+                    .textContentType(.password)
+            } header: {
+                Text(NSLocalizedString("对象存储配置", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("配置用于上传和读取远端快照。", comment: ""))
+            }
+
+            Section {
+                Button {
+                    uploadSnapshot()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isUploadingSnapshot {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        Label(NSLocalizedString("上传到 S3/R2", comment: ""), systemImage: "tray.and.arrow.up")
+                            .etFont(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+
+                NavigationLink {
+                    if let configuration = remoteSnapshotConfiguration() {
+                        RemoteSnapshotBrowserView(configuration: configuration)
+                    } else {
+                        Text(NSLocalizedString("请先完成对象存储配置。", comment: ""))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } label: {
+                    Label(NSLocalizedString("从 S3/R2 选择快照", comment: ""), systemImage: "tray.and.arrow.down")
+                }
+                .disabled(!isS3ConfigurationComplete() || isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+
+                if let uploadProgress {
+                    SnapshotUploadProgressView(progress: uploadProgress)
+                }
+            } header: {
+                Text(NSLocalizedString("操作", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("上传前请确认对象存储配置。", comment: ""))
+            }
+        }
+        .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))
+    }
 }
 
 private struct SnapshotUploadProgressView: View {

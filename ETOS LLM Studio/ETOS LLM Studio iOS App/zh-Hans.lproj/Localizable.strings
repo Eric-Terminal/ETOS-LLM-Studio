@@ -2487,6 +2487,12 @@
 "Session Token（可选）" = "Session Token（可选）";
 "上传到 S3/R2" = "上传到 S3/R2";
 "S3 兼容对象存储" = "S3 兼容对象存储";
+"启用 S3/R2 保存" = "启用 S3/R2 保存";
+"S3/R2 保存设置" = "S3/R2 保存设置";
+"打开后可配置对象存储，并将快照上传到自己的 S3/R2 存储桶。" = "打开后可配置对象存储，并将快照上传到自己的 S3/R2 存储桶。";
+"关闭后不会显示 S3/R2 配置与上传入口。" = "关闭后不会显示 S3/R2 配置与上传入口。";
+"对象存储配置" = "对象存储配置";
+"配置用于上传和读取远端快照。" = "配置用于上传和读取远端快照。";
 "会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。" = "会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。";
 "请先输入对象存储 Endpoint。" = "请先输入对象存储 Endpoint。";
 "对象存储 Endpoint 必须是完整的 http/https URL。" = "对象存储 Endpoint 必须是完整的 http/https URL。";

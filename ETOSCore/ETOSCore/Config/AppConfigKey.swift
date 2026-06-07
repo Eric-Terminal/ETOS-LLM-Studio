@@ -86,6 +86,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncAutoSyncEnabled = "sync.autoSyncEnabled"
     case cloudSyncEnabled = "cloudSync.enabled"
     case cloudSyncAutoSyncEnabled = "cloudSync.autoSyncEnabled"
+    case syncBackupS3Enabled = "sync.backup.s3.enabled"
     case syncBackupUploadEndpoint = "sync.backup.uploadEndpoint"
     case syncBackupS3Region = "sync.backup.s3.region"
     case syncBackupS3Bucket = "sync.backup.s3.bucket"
@@ -228,6 +229,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .syncAutoSyncEnabled,
              .cloudSyncEnabled,
              .cloudSyncAutoSyncEnabled,
+             .syncBackupS3Enabled,
              .syncBackupCreateOnLaunch,
              .appLockEnabled,
              .appLockBiometricEnabled,

@@ -136,6 +136,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var syncAutoSyncEnabled: Bool { didSet { write(.syncAutoSyncEnabled, syncAutoSyncEnabled) } }
     @Published public var cloudSyncEnabled: Bool { didSet { write(.cloudSyncEnabled, cloudSyncEnabled) } }
     @Published public var cloudSyncAutoSyncEnabled: Bool { didSet { write(.cloudSyncAutoSyncEnabled, cloudSyncAutoSyncEnabled) } }
+    @Published public var syncBackupS3Enabled: Bool { didSet { write(.syncBackupS3Enabled, syncBackupS3Enabled) } }
     @Published public var syncBackupUploadEndpoint: String { didSet { write(.syncBackupUploadEndpoint, syncBackupUploadEndpoint) } }
     @Published public var syncBackupS3Region: String { didSet { write(.syncBackupS3Region, syncBackupS3Region) } }
     @Published public var syncBackupS3Bucket: String { didSet { write(.syncBackupS3Bucket, syncBackupS3Bucket) } }
@@ -281,6 +282,7 @@ public final class AppConfigStore: ObservableObject {
         syncAutoSyncEnabled = Self.boolValue(.syncAutoSyncEnabled, userDefaults: userDefaults)
         cloudSyncEnabled = Self.boolValue(.cloudSyncEnabled, userDefaults: userDefaults)
         cloudSyncAutoSyncEnabled = Self.boolValue(.cloudSyncAutoSyncEnabled, userDefaults: userDefaults)
+        syncBackupS3Enabled = Self.boolValue(.syncBackupS3Enabled, userDefaults: userDefaults)
         syncBackupUploadEndpoint = Self.textValue(.syncBackupUploadEndpoint, userDefaults: userDefaults)
         syncBackupS3Region = Self.textValue(.syncBackupS3Region, userDefaults: userDefaults)
         syncBackupS3Bucket = Self.textValue(.syncBackupS3Bucket, userDefaults: userDefaults)
@@ -694,6 +696,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncAutoSyncEnabled: return .bool(syncAutoSyncEnabled)
         case .cloudSyncEnabled: return .bool(cloudSyncEnabled)
         case .cloudSyncAutoSyncEnabled: return .bool(cloudSyncAutoSyncEnabled)
+        case .syncBackupS3Enabled: return .bool(syncBackupS3Enabled)
         case .syncBackupUploadEndpoint: return .text(syncBackupUploadEndpoint)
         case .syncBackupS3Region: return .text(syncBackupS3Region)
         case .syncBackupS3Bucket: return .text(syncBackupS3Bucket)
@@ -855,6 +858,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncAutoSyncEnabled: syncAutoSyncEnabled = value
         case .cloudSyncEnabled: cloudSyncEnabled = value
         case .cloudSyncAutoSyncEnabled: cloudSyncAutoSyncEnabled = value
+        case .syncBackupS3Enabled: syncBackupS3Enabled = value
         case .syncBackupCreateOnLaunch: syncBackupCreateOnLaunch = value
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
