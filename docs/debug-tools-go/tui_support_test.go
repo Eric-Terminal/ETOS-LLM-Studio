@@ -158,6 +158,51 @@ func TestSessionUserBubbleIndentIsStable(t *testing.T) {
 	}
 }
 
+func TestSessionKeyboardSelectionScrollsToRenderedBubble(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.content.Width = 100
+	model.content.Height = 12
+
+	messages := make([]any, 0, 60)
+	for index := 0; index < 60; index++ {
+		role := "assistant"
+		if index%2 == 1 {
+			role = "user"
+		}
+		messages = append(messages, map[string]any{
+			"id":      "message",
+			"role":    role,
+			"content": "第一行\n第二行\n第三行\n第四行\n第五行\n第六行",
+		})
+	}
+	model.applySessionDetail(map[string]any{
+		"session":  map[string]any{"id": "session-1", "name": "滚动测试"},
+		"messages": messages,
+	})
+	model.syncContentViewport()
+
+	for index := 0; index < 49; index++ {
+		model.selectNextSessionMessage()
+	}
+	model.content.SetYOffset(0)
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	got := updated.(tuiModel)
+	if got.selectedSessionMessage != 50 {
+		t.Fatalf("selectedSessionMessage = %d, want 50", got.selectedSessionMessage)
+	}
+
+	start, end, _, ok := got.selectedSessionMessageLineRange()
+	if !ok {
+		t.Fatal("未能计算选中气泡的行范围")
+	}
+	if got.content.YOffset > start || got.content.YOffset+got.content.Height-1 < end {
+		t.Fatalf("选中气泡未随键盘移动进入视口: offset=%d height=%d selected=%d..%d", got.content.YOffset, got.content.Height, start, end)
+	}
+}
+
 func TestSessionEscReturnsOneLevelAtATime(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.active = tuiSessions

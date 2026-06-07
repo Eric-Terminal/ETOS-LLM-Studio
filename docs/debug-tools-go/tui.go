@@ -732,6 +732,8 @@ func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) 
 	case tuiSessions:
 		if m.sessionMode == tuiSessionModeList {
 			m.sessions, cmd = m.sessions.Update(msg)
+		} else if sessionMessageNavigationKey(msg) {
+			return m, nil
 		} else {
 			m.content, cmd = m.content.Update(msg)
 		}
@@ -749,6 +751,19 @@ func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) 
 		m.content, cmd = m.content.Update(msg)
 	}
 	return m, cmd
+}
+
+func sessionMessageNavigationKey(msg tea.Msg) bool {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return false
+	}
+	switch keyMsg.String() {
+	case "up", "k", "down", "j":
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *tuiModel) setMessage(text string, style lipgloss.Style) {

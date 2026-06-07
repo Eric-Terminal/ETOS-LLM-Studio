@@ -136,8 +136,17 @@ func (m *tuiModel) keepSelectedSessionMessageVisible() {
 	if m.content.Height <= 0 {
 		return
 	}
-	// 气泡高度会随内容换行变化，这里用稳定估算让长会话里上下移动更跟手。
-	target := maxInt(0, 4+m.selectedSessionMessage*5-m.content.Height/2)
+	start, end, totalLines, ok := m.selectedSessionMessageLineRange()
+	if !ok {
+		return
+	}
+	bubbleHeight := end - start + 1
+	target := start
+	if bubbleHeight < m.content.Height {
+		target = start - (m.content.Height-bubbleHeight)/2
+	}
+	maxOffset := maxInt(0, totalLines-m.content.Height)
+	target = minInt(maxInt(0, target), maxOffset)
 	m.content.SetYOffset(target)
 }
 
@@ -160,20 +169,47 @@ func (m *tuiModel) applySessionDetail(response map[string]any) {
 }
 
 func (m tuiModel) renderSessionMessagesView() string {
-	lines := []string{
+	return strings.Join(m.sessionMessageViewElements(), "\n\n")
+}
+
+func (m tuiModel) sessionMessageViewElements() []string {
+	elements := []string{
 		fmt.Sprintf("会话 / %s", sessionDisplayName(m.activeSession)),
 		tuiSessionMetaStyle.Render(fmt.Sprintf("%s | %d 条消息", asString(m.activeSession["id"]), len(m.sessionMessages))),
 		"",
 	}
 	if len(m.sessionMessages) == 0 {
-		lines = append(lines, tuiHelpStyle.Render("这个会话还没有消息。"))
-		return strings.Join(lines, "\n")
+		elements = append(elements, tuiHelpStyle.Render("这个会话还没有消息。"))
+		return elements
 	}
 
 	for index, message := range m.sessionMessages {
-		lines = append(lines, m.renderSessionMessageBubble(message, index, index == m.selectedSessionMessage))
+		elements = append(elements, m.renderSessionMessageBubble(message, index, index == m.selectedSessionMessage))
 	}
-	return strings.Join(lines, "\n\n")
+	return elements
+}
+
+func (m tuiModel) selectedSessionMessageLineRange() (int, int, int, bool) {
+	if len(m.sessionMessages) == 0 {
+		return 0, 0, 0, false
+	}
+
+	selectedIndex := minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
+	selectedElementIndex := selectedIndex + 3
+	elements := m.sessionMessageViewElements()
+	if selectedElementIndex >= len(elements) {
+		return 0, 0, 0, false
+	}
+
+	start := 0
+	for index := 0; index < selectedElementIndex; index++ {
+		start += lineCount(elements[index]) - 1
+		start += 2
+	}
+
+	selectedLines := lineCount(elements[selectedElementIndex])
+	totalLines := lineCount(strings.Join(elements, "\n\n"))
+	return start, start + selectedLines - 1, totalLines, true
 }
 
 func (m tuiModel) renderSessionMessageDetailView() string {
@@ -439,6 +475,10 @@ func truncateRunes(value string, maxLen int) string {
 
 func runeLen(value string) int {
 	return len([]rune(value))
+}
+
+func lineCount(value string) int {
+	return strings.Count(value, "\n") + 1
 }
 
 func sessionBubbleInnerWidth(value string, maxWidth int) int {
