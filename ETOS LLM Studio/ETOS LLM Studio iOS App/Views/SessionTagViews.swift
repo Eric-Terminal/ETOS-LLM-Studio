@@ -498,7 +498,7 @@ private struct SessionTagColorMenuButton: UIViewRepresentable {
     }
 
     func updateUIView(_ button: UIButton, context: Context) {
-        button.setImage(SessionTagColorImageFactory.image(for: selectedColor, size: size), for: .normal)
+        button.setImage(SessionTagColorImageFactory.image(for: selectedColor, size: size, circleDiameter: size), for: .normal)
         button.menu = UIMenu(children: colorActions())
     }
 
@@ -512,7 +512,7 @@ private struct SessionTagColorMenuButton: UIViewRepresentable {
     private func colorAction(_ color: SessionTagColor?, title: String) -> UIAction {
         UIAction(
             title: title,
-            image: SessionTagColorImageFactory.image(for: color, size: 18),
+            image: SessionTagColorImageFactory.image(for: color, size: 18, circleDiameter: 12),
             state: selectedColor == color ? .on : .off
         ) { _ in
             selectedColor = color
@@ -521,10 +521,17 @@ private struct SessionTagColorMenuButton: UIViewRepresentable {
 }
 
 private enum SessionTagColorImageFactory {
-    static func image(for color: SessionTagColor?, size: CGFloat) -> UIImage {
+    static func image(for color: SessionTagColor?, size: CGFloat, circleDiameter: CGFloat) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
-        let inset = max(size * 0.18, 2)
-        let circleRect = CGRect(x: inset, y: inset, width: size - inset * 2, height: size - inset * 2)
+        let diameter = min(circleDiameter, size)
+        let lineWidth = max(diameter * 0.08, 1)
+        let strokedInset = color == nil ? lineWidth / 2 : 0
+        let circleRect = CGRect(
+            x: (size - diameter) / 2 + strokedInset,
+            y: (size - diameter) / 2 + strokedInset,
+            width: diameter - strokedInset * 2,
+            height: diameter - strokedInset * 2
+        )
 
         return renderer.image { context in
             if let color {
@@ -534,7 +541,7 @@ private enum SessionTagColorImageFactory {
             }
 
             UIColor.secondaryLabel.setStroke()
-            context.cgContext.setLineWidth(max(size * 0.08, 1))
+            context.cgContext.setLineWidth(lineWidth)
             context.cgContext.strokeEllipse(in: circleRect)
         }
         .withRenderingMode(.alwaysOriginal)
