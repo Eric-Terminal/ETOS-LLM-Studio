@@ -6,7 +6,9 @@
 // ChatService 的会话标签管理逻辑。
 // ============================================================================
 
+import Combine
 import Foundation
+import os.log
 
 extension ChatService {
     @discardableResult

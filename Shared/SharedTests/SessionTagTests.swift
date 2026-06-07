@@ -6,6 +6,7 @@
 // 本文件负责会话标签模型、持久化与 ChatService 绑定行为测试。
 // ============================================================================
 
+import Combine
 import Foundation
 import Testing
 @testable import Shared
