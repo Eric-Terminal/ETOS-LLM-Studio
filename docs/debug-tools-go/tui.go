@@ -31,10 +31,9 @@ const (
 	tuiSessions
 	tuiMemories
 	tuiSQLite
-	tuiCaptures
 )
 
-const tuiViewCount = 8
+const tuiViewCount = 7
 
 const (
 	tuiDefaultNavWidth      = 30
@@ -149,7 +148,6 @@ type tuiModel struct {
 	memories   table.Model
 	sqlTables  table.Model
 	sqlRows    table.Model
-	captures   table.Model
 	preview    textarea.Model
 	content    viewport.Model
 
@@ -171,7 +169,6 @@ type tuiModel struct {
 	selectedSessionMessage int
 	selectedSessionDetail  int
 	memoryRows             []map[string]any
-	captureRows            []map[string]any
 }
 
 var (
@@ -196,7 +193,6 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		navItem{"会话", "懒加载会话详情，创建与删除", tuiSessions},
 		navItem{"记忆", "编辑、归档与重嵌入", tuiMemories},
 		navItem{"SQLite", "表结构、查询与写入 SQL", tuiSQLite},
-		navItem{"捕获", "OpenAI 捕获队列保存/忽略", tuiCaptures},
 	}
 	delegate := list.NewDefaultDelegate()
 	delegate.ShowDescription = true
@@ -231,7 +227,6 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		memories:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "状态", Width: 8}, {Title: "内容", Width: 54}}),
 		sqlTables:    newTUITable([]table.Column{{Title: "表", Width: 30}, {Title: "类型", Width: 8}, {Title: "字段", Width: 8}}),
 		sqlRows:      newTUITable([]table.Column{{Title: "结果", Width: 90}}),
-		captures:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "模型", Width: 28}, {Title: "消息", Width: 8}, {Title: "时间", Width: 24}}),
 		preview:      preview,
 		content:      content,
 		currentPath:  ".",
@@ -419,7 +414,7 @@ func (m *tuiModel) layout(width, height int) {
 	m.content.Width = contentWidth
 	m.content.Height = contentHeight
 	tableHeight := maxInt(5, minInt(12, contentHeight/2))
-	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows, &m.captures} {
+	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows} {
 		t.SetHeight(tableHeight)
 	}
 	previewWidth := maxInt(38, contentWidth-2)
@@ -513,8 +508,6 @@ func (m tuiModel) renderActiveView() string {
 		return "记忆\n\n" + m.memories.View() + "\n\n" + m.preview.Value()
 	case tuiSQLite:
 		return fmt.Sprintf("数据库: %s  [1 chat / 2 config / 3 memory]\n\n表结构\n%s\n\n查询结果\n%s\n\n%s", m.sqlDatabase, m.sqlTables.View(), m.sqlRows.View(), m.preview.Value())
-	case tuiCaptures:
-		return "OpenAI 捕获队列\n\n" + m.captures.View() + "\n\n" + m.preview.Value()
 	default:
 		return ""
 	}
@@ -569,7 +562,7 @@ func (m *tuiModel) resetContentViewport() {
 }
 
 func (m *tuiModel) syncFocusedComponent() {
-	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows, &m.captures} {
+	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows} {
 		t.Blur()
 	}
 	if m.focus != tuiFocusContent {
@@ -594,8 +587,6 @@ func (m *tuiModel) syncFocusedComponent() {
 		} else {
 			m.sqlTables.Focus()
 		}
-	case tuiCaptures:
-		m.captures.Focus()
 	}
 }
 
@@ -625,8 +616,6 @@ func (m tuiModel) renderHelp() string {
 		return common + " | Enter 详情 | e 编辑 | x 归档/取消归档 | n 重嵌入全部"
 	case tuiSQLite:
 		return common + " | 1/2/3 选库 | q 查询 | w 写入"
-	case tuiCaptures:
-		return common + " | s 保存选中 | i 忽略选中"
 	default:
 		return common
 	}
@@ -741,14 +730,6 @@ func (m *tuiModel) handleContentKey(key string) tea.Cmd {
 		if m.active == tuiSQLite {
 			return m.promptSQLiteQuery(true)
 		}
-	case "s":
-		if m.active == tuiCaptures {
-			return m.resolveCapture(true)
-		}
-	case "i":
-		if m.active == tuiCaptures {
-			return m.resolveCapture(false)
-		}
 	case "pgup", "ctrl+u":
 		m.content.HalfViewUp()
 	case "pgdown", "ctrl+d":
@@ -812,8 +793,6 @@ func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) 
 		} else {
 			m.sqlTables, cmd = m.sqlTables.Update(msg)
 		}
-	case tuiCaptures:
-		m.captures, cmd = m.captures.Update(msg)
 	default:
 		m.content, cmd = m.content.Update(msg)
 	}
@@ -887,8 +866,6 @@ func (m tuiModel) refreshActiveView() tea.Cmd {
 		return m.loadMemories()
 	case tuiSQLite:
 		return m.loadSQLiteTables()
-	case tuiCaptures:
-		return m.loadCaptures()
 	default:
 		return nil
 	}
@@ -933,8 +910,6 @@ func (m *tuiModel) enterSelected() tea.Cmd {
 			sql := fmt.Sprintf("SELECT * FROM %s", quoteSQLiteIdentifierForTUI(row[0]))
 			return m.runSQLiteQuery(sql, false)
 		}
-	case tuiCaptures:
-		return m.showSelectedCapture()
 	}
 	return nil
 }
@@ -1462,29 +1437,6 @@ func (m tuiModel) runSQLiteQuery(sql string, mutating bool) tea.Cmd {
 	}, 60*time.Second))
 }
 
-func (m tuiModel) loadCaptures() tea.Cmd {
-	return m.markLoading(m.remoteCommand("captures:list", map[string]any{"command": "openai_queue_list"}, 20*time.Second))
-}
-
-func (m tuiModel) resolveCapture(save bool) tea.Cmd {
-	row := m.captures.SelectedRow()
-	if len(row) == 0 {
-		return nil
-	}
-	payload := map[string]any{"command": "openai_queue_resolve", "id": row[0], "save": save}
-	return m.markLoading(m.remoteCommand("captures:resolve", payload, 30*time.Second))
-}
-
-func (m tuiModel) showSelectedCapture() tea.Cmd {
-	row := m.captures.SelectedRow()
-	if len(row) == 0 {
-		return nil
-	}
-	return func() tea.Msg {
-		return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": strings.Join(row, "\n")}}
-	}
-}
-
 func (m tuiModel) deleteSelected() tea.Cmd {
 	switch m.active {
 	case tuiFiles:
@@ -1670,8 +1622,6 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 	case msg.op == "sqlite:mutate":
 		m.preview.SetValue(prettyJSON(msg.response))
 		m.setMessage("SQL 写入已执行", tuiOKStyle)
-	case msg.op == "captures:list":
-		m.applyCaptures(msg.response)
 	case msg.op == "preview":
 		m.preview.SetValue(asString(msg.response["preview"]))
 	default:

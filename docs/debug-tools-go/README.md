@@ -12,9 +12,9 @@
 
 - WebSocket 调试通道（推荐）
 - HTTP 轮询调试通道（备用）
-- OpenAI 请求捕获代理（`/v1/chat/completions`）
+- OpenAI 兼容请求导入代理（`/v1/chat/completions`）
 - Bonjour/mDNS 自动发现（服务类型 `_etos-debug._tcp`）
-- Bubble Tea TUI：文件、提供商、会话、记忆、SQLite、OpenAI 捕获统一操作
+- Bubble Tea TUI：文件、提供商、会话、记忆、SQLite 统一操作
 - 内置 Web GUI 控制台（同源 API，无 CORS）
 - SQLite 调试 API：列出 chat/config/memory 数据库表、执行只读查询与受保护写入
 - 与现有 iOS/watchOS 设备端协议兼容（命令字保持一致）
@@ -33,7 +33,7 @@ go run .
 - 调试服务: `7654`
 - WebUI/API/HTTP 轮询: `http://电脑IP:7654`
 - WebSocket: `ws://电脑IP:7654/ws`
-- OpenAI 捕获: `http://电脑IP:7654/v1/chat/completions`
+- OpenAI 兼容导入代理: `http://电脑IP:7654/v1/chat/completions`
 - Bonjour/mDNS: `_etos-debug._tcp`（发布同一个调试服务端口）
 
 ### Web GUI 控制台

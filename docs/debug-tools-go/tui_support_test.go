@@ -43,6 +43,31 @@ func TestTUICtrlCQuits(t *testing.T) {
 	}
 }
 
+func TestTUINavigationHidesOpenAICapture(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	items := model.nav.Items()
+	if len(items) != tuiViewCount {
+		t.Fatalf("导航项数量 = %d, want %d", len(items), tuiViewCount)
+	}
+
+	for _, item := range items {
+		nav, ok := item.(navItem)
+		if !ok {
+			t.Fatalf("导航项类型 = %T, want navItem", item)
+		}
+		if nav.Title() == "捕获" || strings.Contains(nav.Description(), "OpenAI 捕获") {
+			t.Fatalf("TUI 侧栏仍显示 OpenAI 捕获入口: %#v", nav)
+		}
+	}
+
+	for range items {
+		model.nextView()
+	}
+	if model.active != tuiDashboard {
+		t.Fatalf("Tab 循环后 active = %v, want tuiDashboard", model.active)
+	}
+}
+
 func TestTUIFormErrorResultIgnoresUserAbort(t *testing.T) {
 	result := tuiFormErrorResult(huh.ErrUserAborted)
 	if result.err != nil {

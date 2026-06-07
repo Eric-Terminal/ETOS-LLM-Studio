@@ -167,19 +167,3 @@ func (m *tuiModel) applySQLiteRows(response map[string]any) {
 	m.preview.SetValue(prettyJSON(response))
 	m.setMessage(fmt.Sprintf("查询返回 %d 行", len(rows)), tuiOKStyle)
 }
-
-func (m *tuiModel) applyCaptures(response map[string]any) {
-	queue := asMapSlice(response["queue"])
-	rows := make([]table.Row, 0, len(queue))
-	for _, item := range queue {
-		rows = append(rows, table.Row{
-			asString(item["id"]),
-			asString(item["model"]),
-			fmt.Sprintf("%d", asInt(item["message_count"])),
-			asString(item["received_at"]),
-		})
-	}
-	m.captureRows = queue
-	m.captures.SetRows(rows)
-	m.setMessage(fmt.Sprintf("捕获队列 %d 条", len(rows)), tuiOKStyle)
-}
