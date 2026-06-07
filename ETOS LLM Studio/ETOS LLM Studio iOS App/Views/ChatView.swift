@@ -43,6 +43,7 @@ struct ChatView: View {
     @State var ghostSession: ChatSession?
     @State var sessionPickerSearchText: String = ""
     @State var sessionPickerSearchHits: [UUID: SessionHistorySearchHit] = [:]
+    @State var sessionPickerFolderID: UUID?
     @State var isSessionPickerSearching: Bool = false
     @State var sessionPickerLatestSearchToken: Int = 0
     @State var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
@@ -204,11 +205,11 @@ struct ChatView: View {
         colorScheme == .dark ? Color.black.opacity(0.3) : TelegramColors.scrollButtonShadow
     }
     var totalSessionPickerCount: Int {
-        viewModel.chatSessions.count
+        sessionPickerChildFolders.count + sessionPickerDirectSessions.count
     }
     var sessionPickerSearchResults: [SessionHistorySearchResult] {
         SessionHistorySearchSupport.flattenedResults(
-            sessions: viewModel.chatSessions,
+            sessions: sessionPickerSearchSourceSessions,
             hits: sessionPickerSearchHits
         )
     }
@@ -216,7 +217,7 @@ struct ChatView: View {
         sessionPickerSearchResults.count
     }
     var hasMoreSessionPickerSessions: Bool {
-        loadedSessionPickerSessions.count < totalSessionPickerCount
+        loadedSessionPickerSessions.count < sessionPickerDirectSessions.count
     }
     var hasMoreSessionPickerSearchResults: Bool {
         loadedSessionPickerSearchResults.count < totalSessionPickerSearchResultCount
@@ -227,8 +228,8 @@ struct ChatView: View {
     func hasMoreSessionPickerItems(queryActive: Bool) -> Bool {
         queryActive ? hasMoreSessionPickerSearchResults : hasMoreSessionPickerSessions
     }
-    var pagedSessionPickerSessions: [ChatSession] {
-        loadedSessionPickerSessions
+    var pagedSessionPickerEntries: [SessionMergedEntry] {
+        sessionPickerMergedEntries
     }
     var pagedSessionPickerSearchResults: [SessionHistorySearchResult] {
         loadedSessionPickerSearchResults

@@ -29,6 +29,7 @@ extension SessionFolderBrowserView {
             BatchSelectableFolderRow(
                 folder: folder,
                 sessionCount: recursiveSessionCount(in: folder.id),
+                tags: folderTags(in: folder.id),
                 isSelected: selectedFolderIDs.contains(folder.id),
                 onToggle: {
                     toggleFolderSelection(folder.id)
@@ -117,6 +118,7 @@ extension SessionFolderBrowserView {
                 Text(String(format: NSLocalizedString("%d 个会话", comment: ""), recursiveSessionCount(in: folder.id)))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
+                WatchSessionTagInlineList(tags: folderTags(in: folder.id))
             }
         }
     }
@@ -447,10 +449,40 @@ extension SessionFolderBrowserView {
     }
 
     func sessionTags(for session: ChatSession) -> [SessionTag] {
-        let tagByID = tags.reduce(into: [UUID: SessionTag]()) { result, tag in
+        let systemTags = SessionTagColor.allCases.map {
+            SessionTag.systemColorTag(for: $0, updatedAt: Date(timeIntervalSince1970: 0))
+        }
+        let tagByID = (systemTags + tags).reduce(into: [UUID: SessionTag]()) { result, tag in
             result[tag.id] = tag
         }
         return session.tagIDs.compactMap { tagByID[$0] }
+    }
+
+    func folderTags(in folderID: UUID) -> [SessionTag] {
+        let descendants = descendantFolderIDs(rootID: folderID)
+        let systemTags = SessionTagColor.allCases.map {
+            SessionTag.systemColorTag(for: $0, updatedAt: Date(timeIntervalSince1970: 0))
+        }
+        let tagByID = (systemTags + tags).reduce(into: [UUID: SessionTag]()) { result, tag in
+            result[tag.id] = tag
+        }
+        var seen = Set<UUID>()
+        var result: [SessionTag] = []
+
+        for session in sessions {
+            guard sessionMatchesTagFilter(session),
+                  let assignedFolderID = normalizedFolderID(of: session),
+                  descendants.contains(assignedFolderID) else { continue }
+            for tagID in session.tagIDs where seen.insert(tagID).inserted {
+                guard let tag = tagByID[tagID] else { continue }
+                result.append(tag)
+                if result.count >= 4 {
+                    return result
+                }
+            }
+        }
+
+        return result
     }
 
     func sessionMatchesTagFilter(_ session: ChatSession) -> Bool {

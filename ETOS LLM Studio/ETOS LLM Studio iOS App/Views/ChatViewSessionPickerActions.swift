@@ -11,6 +11,77 @@ import SwiftUI
 import ETOSCore
 
 extension ChatView {
+    var sessionPickerFolderByID: [UUID: SessionFolder] {
+        Dictionary(uniqueKeysWithValues: viewModel.sessionFolders.map { ($0.id, $0) })
+    }
+
+    var sessionPickerCurrentFolder: SessionFolder? {
+        guard let folderID = sessionPickerFolderID else { return nil }
+        return sessionPickerFolderByID[folderID]
+    }
+
+    var sessionPickerChildFolders: [SessionFolder] {
+        viewModel.sessionFolders.filter {
+            sessionPickerNormalizedParentID(of: $0) == sessionPickerFolderID
+        }
+    }
+
+    var sessionPickerDirectSessions: [ChatSession] {
+        viewModel.chatSessions.filter {
+            sessionPickerNormalizedFolderID(of: $0) == sessionPickerFolderID
+        }
+    }
+
+    var sessionPickerSearchSourceSessions: [ChatSession] {
+        viewModel.chatSessions
+    }
+
+    var sessionPickerSessionOrderByID: [UUID: Int] {
+        Dictionary(uniqueKeysWithValues: viewModel.chatSessions.enumerated().map { ($1.id, $0) })
+    }
+
+    var sessionPickerMergedEntries: [SessionMergedEntry] {
+        let folders = sessionPickerChildFolders.map {
+            SessionMergedEntryWithRank(
+                rank: sessionPickerRecentActivityIndex(for: $0.id),
+                entry: .folder($0)
+            )
+        }
+        let sessions = loadedSessionPickerSessions.map {
+            SessionMergedEntryWithRank(
+                rank: sessionPickerSessionOrderByID[$0.id] ?? .max,
+                entry: .session($0)
+            )
+        }
+
+        return (folders + sessions)
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank {
+                    return lhs.rank < rhs.rank
+                }
+                switch (lhs.entry, rhs.entry) {
+                case (.folder(let left), .folder(let right)):
+                    return left.name.localizedStandardCompare(right.name) == .orderedAscending
+                case (.session(let left), .session(let right)):
+                    return left.name.localizedStandardCompare(right.name) == .orderedAscending
+                case (.folder, .session):
+                    return true
+                case (.session, .folder):
+                    return false
+                }
+            }
+            .map(\.entry)
+    }
+
+    var sessionPickerKnownTagByID: [UUID: SessionTag] {
+        let systemTags = SessionTagColor.allCases.map {
+            SessionTag.systemColorTag(for: $0, updatedAt: Date(timeIntervalSince1970: 0))
+        }
+        return (systemTags + viewModel.sessionTags).reduce(into: [UUID: SessionTag]()) { result, tag in
+            result[tag.id] = tag
+        }
+    }
+
     func resetSessionPickerLoadedSessions() {
         pendingLoadMoreSessionPickerSessionsTask?.cancel()
         pendingLoadMoreSessionPickerSessionsTask = nil
@@ -28,9 +99,10 @@ extension ChatView {
     }
 
     func appendInitialSessionPickerSessionsPage() {
-        let end = min(sessionPickerMaxSessionsPerPage, viewModel.chatSessions.count)
+        let source = sessionPickerDirectSessions
+        let end = min(sessionPickerMaxSessionsPerPage, source.count)
         guard end > 0 else { return }
-        loadedSessionPickerSessions = Array(viewModel.chatSessions.prefix(end))
+        loadedSessionPickerSessions = Array(source.prefix(end))
     }
 
     func appendInitialSessionPickerSearchResultsPage() {
@@ -53,10 +125,11 @@ extension ChatView {
                 return
             }
 
+            let source = sessionPickerDirectSessions
             let start = loadedSessionPickerSessions.count
-            let end = min(start + sessionPickerMaxSessionsPerPage, viewModel.chatSessions.count)
+            let end = min(start + sessionPickerMaxSessionsPerPage, source.count)
             if start < end {
-                loadedSessionPickerSessions.append(contentsOf: viewModel.chatSessions[start..<end])
+                loadedSessionPickerSessions.append(contentsOf: source[start..<end])
             }
             isLoadingMoreSessionPickerSessions = false
             pendingLoadMoreSessionPickerSessionsTask = nil
@@ -91,8 +164,9 @@ extension ChatView {
         pendingLoadMoreSessionPickerSessionsTask?.cancel()
         pendingLoadMoreSessionPickerSessionsTask = nil
         isLoadingMoreSessionPickerSessions = false
-        let loadedCount = min(max(loadedSessionPickerSessions.count, sessionPickerMaxSessionsPerPage), viewModel.chatSessions.count)
-        loadedSessionPickerSessions = Array(viewModel.chatSessions.prefix(loadedCount))
+        let source = sessionPickerDirectSessions
+        let loadedCount = min(max(loadedSessionPickerSessions.count, sessionPickerMaxSessionsPerPage), source.count)
+        loadedSessionPickerSessions = Array(source.prefix(loadedCount))
     }
 
     func syncLoadedSessionPickerSearchResultsWithSource() {
@@ -165,7 +239,7 @@ extension ChatView {
         isSessionPickerSearching = true
         sessionPickerLatestSearchToken += 1
         let searchToken = sessionPickerLatestSearchToken
-        let sessionsSnapshot = viewModel.chatSessions
+        let sessionsSnapshot = sessionPickerSearchSourceSessions
         let currentSessionIDSnapshot = viewModel.currentSession?.id
         let currentMessagesSnapshot = viewModel.allMessagesForSession
         let querySnapshot = query
@@ -193,6 +267,83 @@ extension ChatView {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 
+    func normalizeSessionPickerFolderSelection() {
+        guard let folderID = sessionPickerFolderID else { return }
+        if sessionPickerFolderByID[folderID] == nil {
+            sessionPickerFolderID = nil
+        }
+    }
+
+    func openSessionPickerFolder(_ folder: SessionFolder) {
+        editingSessionID = nil
+        sessionDraftName = ""
+        sessionPickerFolderID = folder.id
+    }
+
+    func openSessionPickerParentFolder() {
+        guard let currentFolder = sessionPickerCurrentFolder else {
+            sessionPickerFolderID = nil
+            return
+        }
+        sessionPickerFolderID = sessionPickerNormalizedParentID(of: currentFolder)
+    }
+
+    func createSessionFromPicker() {
+        viewModel.createNewSession()
+        if let folderID = sessionPickerFolderID,
+           let session = viewModel.currentSession {
+            viewModel.moveSession(session, toFolderID: folderID)
+        }
+        editingSessionID = nil
+        sessionDraftName = ""
+        dismissSessionPickerAfterSelection()
+    }
+
+    func sessionPickerEntryRow(_ entry: SessionMergedEntry) -> AnyView {
+        switch entry {
+        case .folder(let folder):
+            return AnyView(sessionPickerFolderRow(folder))
+        case .session(let session):
+            return AnyView(
+                sessionPickerRow(session)
+                    .onAppear {
+                        loadMoreSessionPickerItemsIfNeeded(currentID: session.id.uuidString, queryActive: false)
+                    }
+            )
+        }
+    }
+
+    func sessionPickerFolderRow(_ folder: SessionFolder) -> some View {
+        Button {
+            openSessionPickerFolder(folder)
+        } label: {
+            SessionRowCard(isCurrent: false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                        Text(folder.name)
+                            .etFont(.system(size: 15.5, weight: .semibold))
+                            .foregroundColor(TelegramColors.navBarText)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionPickerRecursiveSessionCount(in: folder.id)))
+                        .etFont(.system(size: 12.5))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+
+                    SessionTagInlineList(tags: sessionPickerFolderTags(in: folder.id))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     func sessionPickerRow(_ session: ChatSession) -> some View {
         let isCurrent = session.id == viewModel.currentSession?.id
         let isEditing = editingSessionID == session.id
@@ -204,6 +355,7 @@ extension ChatView {
             isEditing: isEditing,
             draftName: isEditing ? $sessionDraftName : .constant(session.name),
             searchSummary: nil,
+            tags: sessionPickerTags(for: session),
             onCommit: { newName in
                 viewModel.updateSessionName(session, newName: newName)
                 editingSessionID = nil
@@ -328,5 +480,102 @@ extension ChatView {
             return
         }
         dismissSessionPicker()
+    }
+
+    func sessionPickerNormalizedFolderID(of session: ChatSession) -> UUID? {
+        guard let folderID = session.folderID else { return nil }
+        return sessionPickerFolderByID[folderID] == nil ? nil : folderID
+    }
+
+    func sessionPickerNormalizedParentID(of folder: SessionFolder) -> UUID? {
+        guard let parentID = folder.parentID else { return nil }
+        return sessionPickerFolderByID[parentID] == nil ? nil : parentID
+    }
+
+    func sessionPickerFolderHierarchyContains(descendantFolderID: UUID, ancestorFolderID: UUID) -> Bool {
+        var cursor: UUID? = descendantFolderID
+        var visited = Set<UUID>()
+        while let current = cursor {
+            if current == ancestorFolderID {
+                return true
+            }
+            guard visited.insert(current).inserted else { return false }
+            cursor = sessionPickerFolderByID[current]?.parentID
+        }
+        return false
+    }
+
+    func sessionPickerDescendantFolderIDs(rootID: UUID) -> Set<UUID> {
+        var collected: Set<UUID> = [rootID]
+        var queue: [UUID] = [rootID]
+
+        while let current = queue.first {
+            queue.removeFirst()
+            let children = viewModel.sessionFolders.filter { sessionPickerNormalizedParentID(of: $0) == current }
+            for child in children where collected.insert(child.id).inserted {
+                queue.append(child.id)
+            }
+        }
+
+        return collected
+    }
+
+    func sessionPickerRecentActivityIndex(for folderID: UUID) -> Int {
+        for (index, session) in viewModel.chatSessions.enumerated() {
+            guard let assignedFolderID = sessionPickerNormalizedFolderID(of: session) else { continue }
+            if sessionPickerFolderHierarchyContains(descendantFolderID: assignedFolderID, ancestorFolderID: folderID) {
+                return index
+            }
+        }
+        return .max
+    }
+
+    func sessionPickerRecursiveSessionCount(in folderID: UUID) -> Int {
+        let descendants = sessionPickerDescendantFolderIDs(rootID: folderID)
+        return viewModel.chatSessions.filter { session in
+            guard let assignedFolderID = sessionPickerNormalizedFolderID(of: session) else { return false }
+            return descendants.contains(assignedFolderID)
+        }.count
+    }
+
+    func sessionPickerTags(for session: ChatSession) -> [SessionTag] {
+        let tagByID = sessionPickerKnownTagByID
+        return session.tagIDs.compactMap { tagByID[$0] }
+    }
+
+    func sessionPickerFolderTags(in folderID: UUID) -> [SessionTag] {
+        let descendants = sessionPickerDescendantFolderIDs(rootID: folderID)
+        let tagByID = sessionPickerKnownTagByID
+        var seen = Set<UUID>()
+        var result: [SessionTag] = []
+
+        for session in viewModel.chatSessions {
+            guard let assignedFolderID = sessionPickerNormalizedFolderID(of: session),
+                  descendants.contains(assignedFolderID) else { continue }
+            for tagID in session.tagIDs where seen.insert(tagID).inserted {
+                guard let tag = tagByID[tagID] else { continue }
+                result.append(tag)
+                if result.count >= 6 {
+                    return result
+                }
+            }
+        }
+
+        return result
+    }
+
+    func sessionPickerFolderPath(_ folder: SessionFolder) -> String {
+        var parts: [String] = [folder.name]
+        var cursor = folder.parentID
+        var visited = Set<UUID>()
+
+        while let current = cursor {
+            guard visited.insert(current).inserted else { break }
+            guard let parent = sessionPickerFolderByID[current] else { break }
+            parts.append(parent.name)
+            cursor = parent.parentID
+        }
+
+        return parts.reversed().joined(separator: " /")
     }
 }

@@ -82,10 +82,7 @@ extension ChatView {
             if !showsInlineCreateButton {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        viewModel.createNewSession()
-                        editingSessionID = nil
-                        sessionDraftName = ""
-                        dismissSessionPickerAfterSelection()
+                        createSessionFromPicker()
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -98,6 +95,7 @@ extension ChatView {
     func applySessionPickerLifecycle<Content: View>(to content: Content) -> some View {
         content
         .onAppear {
+            normalizeSessionPickerFolderSelection()
             resetSessionPickerLoadedSessions()
             resetSessionPickerLoadedSearchResults()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
@@ -108,8 +106,18 @@ extension ChatView {
             scheduleSessionPickerSearch(for: newValue)
         }
         .onChange(of: viewModel.chatSessionListVersion) { _, _ in
+            normalizeSessionPickerFolderSelection()
             syncLoadedSessionPickerSessionsWithSource()
             syncLoadedSessionPickerSearchResultsWithSource()
+            scheduleSessionPickerSearch(for: sessionPickerSearchText)
+        }
+        .onChange(of: viewModel.sessionFolderListVersion) { _, _ in
+            normalizeSessionPickerFolderSelection()
+            syncLoadedSessionPickerSessionsWithSource()
+        }
+        .onChange(of: sessionPickerFolderID) { _, _ in
+            resetSessionPickerLoadedSessions()
+            resetSessionPickerLoadedSearchResults()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
@@ -143,10 +151,7 @@ extension ChatView {
 
                 if showsCreateButton {
                     Button {
-                        viewModel.createNewSession()
-                        editingSessionID = nil
-                        sessionDraftName = ""
-                        dismissSessionPickerAfterSelection()
+                        createSessionFromPicker()
                     } label: {
                         Image(systemName: "plus")
                             .etFont(.system(size: 14, weight: .semibold))
@@ -159,6 +164,7 @@ extension ChatView {
                 }
             }
 
+            sessionPickerFolderHeader
             sessionPickerSearchInput
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -183,7 +189,42 @@ extension ChatView {
                 sessionPickerSearchHits.count
             )
         }
+        if let folder = sessionPickerCurrentFolder {
+            return String(format: NSLocalizedString("文件夹 • %@", comment: ""), sessionPickerFolderPath(folder))
+        }
         return NSLocalizedString("快速切换与管理", comment: "")
+    }
+
+    @ViewBuilder
+    var sessionPickerFolderHeader: some View {
+        if let folder = sessionPickerCurrentFolder {
+            HStack(spacing: 8) {
+                Button {
+                    openSessionPickerParentFolder()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .etFont(.system(size: 12, weight: .bold))
+                        .foregroundColor(TelegramColors.navBarText)
+                        .frame(width: 26, height: 26)
+                        .background(sessionPickerFooterButtonBackground)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("返回上一级", comment: "Session picker parent folder accessibility label"))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(folder.name)
+                        .etFont(.system(size: 13, weight: .semibold))
+                        .foregroundColor(TelegramColors.navBarText)
+                        .lineLimit(1)
+                    Text(sessionPickerFolderPath(folder))
+                        .etFont(.system(size: 11.5))
+                        .foregroundColor(TelegramColors.navBarSubtitle)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
     }
 
     var sessionPickerSearchInput: some View {
@@ -280,11 +321,8 @@ extension ChatView {
                                 }
                         }
                     } else {
-                        ForEach(pagedSessionPickerSessions) { session in
-                            sessionPickerRow(session)
-                                .onAppear {
-                                    loadMoreSessionPickerItemsIfNeeded(currentID: session.id.uuidString, queryActive: false)
-                                }
+                        ForEach(pagedSessionPickerEntries) { entry in
+                            sessionPickerEntryRow(entry)
                         }
                     }
 
@@ -303,7 +341,7 @@ extension ChatView {
         Text(
             queryActive
             ? (isSearching ? NSLocalizedString("正在搜索…", comment: "") : String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), displayedCount, sessionPickerSearchHits.count))
-            : String(format: NSLocalizedString("共 %d 个会话", comment: ""), viewModel.chatSessions.count)
+            : "\(String(format: NSLocalizedString("%d 个文件夹", comment: ""), sessionPickerChildFolders.count)) · \(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionPickerDirectSessions.count))"
         )
         .etFont(.system(size: 12, weight: .medium))
         .foregroundColor(TelegramColors.navBarSubtitle)

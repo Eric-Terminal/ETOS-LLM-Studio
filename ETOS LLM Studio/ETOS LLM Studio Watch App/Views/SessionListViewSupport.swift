@@ -35,6 +35,7 @@ struct SessionMoveTarget: Identifiable {
 struct BatchSelectableFolderRow: View {
     let folder: SessionFolder
     let sessionCount: Int
+    let tags: [SessionTag]
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -54,6 +55,7 @@ struct BatchSelectableFolderRow: View {
                     Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
+                    WatchSessionTagInlineList(tags: tags)
                 }
 
                 Spacer(minLength: 0)

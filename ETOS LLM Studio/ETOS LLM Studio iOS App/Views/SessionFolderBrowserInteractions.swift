@@ -385,6 +385,7 @@ extension SessionFolderBrowserView {
             BatchSelectableFolderRow(
                 folder: folder,
                 sessionCount: recursiveSessionCount(in: folder.id),
+                tags: folderTags(in: folder.id),
                 isSelected: selectedFolderIDs.contains(folder.id),
                 onToggle: {
                     toggleFolderSelection(folder.id)
@@ -589,6 +590,7 @@ extension SessionFolderBrowserView {
                 Text(String(format: NSLocalizedString("%d 个会话", comment: ""), count))
                     .etFont(.system(size: 12.5))
                     .foregroundStyle(.secondary)
+                SessionTagInlineList(tags: folderTags(in: folder.id))
             }
         }
     }

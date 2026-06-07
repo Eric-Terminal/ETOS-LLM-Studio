@@ -2248,6 +2248,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "迁移完成后会再次询问是否删除旧 JSON 文件。" = "After migration completes, you will be asked again whether to delete old JSON files.";
 "运行日志" = "Run Logs";
 "返回对话" = "Volver al chat";
+"返回上一级" = "Volver a la carpeta superior";
 "还没有 Pulse 任务。你可以把下方卡片转成待跟进任务，后续生成时也会参考这些未完成项。" = "No Pulse tasks yet. You can turn cards below into follow-up tasks; future generations will also consider unfinished items.";
 "还没有反馈历史" = "No Feedback History Yet";
 "还没有反馈历史。你对卡片点赞、降权、隐藏或保存后，这些信号会参与后续每日脉冲生成。" = "No feedback history yet. After you like, downrank, hide, or save cards, those signals are used in future Daily Pulse generations.";

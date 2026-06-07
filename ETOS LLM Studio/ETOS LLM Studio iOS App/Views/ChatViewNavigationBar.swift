@@ -232,6 +232,7 @@ extension ChatView {
         sessionPickerPendingSearchWorkItem = nil
         sessionPickerSearchText = ""
         sessionPickerSearchHits = [:]
+        sessionPickerFolderID = nil
         isSessionPickerSearching = false
         sessionPickerSearchFocused = false
         loadedSessionPickerSearchResults = []

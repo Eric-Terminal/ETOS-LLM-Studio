@@ -534,6 +534,7 @@ struct SessionPickerRow: View {
     let isEditing: Bool
     @Binding var draftName: String
     let searchSummary: String?
+    let tags: [SessionTag]
 
     let onCommit: (String) -> Void
     let onSelect: () -> Void
@@ -585,7 +586,7 @@ struct SessionPickerRow: View {
                     title: session.name,
                     subtitle: sessionPickerSubtitle,
                     footnote: nil,
-                    tags: [],
+                    tags: tags,
                     isCurrent: isCurrent,
                     isRunning: isRunning
                 )

@@ -185,11 +185,40 @@ extension SessionFolderBrowserView {
         }.count
     }
 
-    func sessionTags(for session: ChatSession) -> [SessionTag] {
-        let tagByID = viewModel.sessionTags.reduce(into: [UUID: SessionTag]()) { result, tag in
+    var knownSessionTagsByID: [UUID: SessionTag] {
+        let systemTags = SessionTagColor.allCases.map {
+            SessionTag.systemColorTag(for: $0, updatedAt: Date(timeIntervalSince1970: 0))
+        }
+        return (systemTags + viewModel.sessionTags).reduce(into: [UUID: SessionTag]()) { result, tag in
             result[tag.id] = tag
         }
+    }
+
+    func sessionTags(for session: ChatSession) -> [SessionTag] {
+        let tagByID = knownSessionTagsByID
         return session.tagIDs.compactMap { tagByID[$0] }
+    }
+
+    func folderTags(in folderID: UUID) -> [SessionTag] {
+        let descendants = descendantFolderIDs(rootID: folderID)
+        let tagByID = knownSessionTagsByID
+        var seen = Set<UUID>()
+        var result: [SessionTag] = []
+
+        for session in viewModel.chatSessions {
+            guard sessionMatchesTagFilter(session),
+                  let assignedFolderID = normalizedFolderID(of: session),
+                  descendants.contains(assignedFolderID) else { continue }
+            for tagID in session.tagIDs where seen.insert(tagID).inserted {
+                guard let tag = tagByID[tagID] else { continue }
+                result.append(tag)
+                if result.count >= 6 {
+                    return result
+                }
+            }
+        }
+
+        return result
     }
 
     func sessionMatchesTagFilter(_ session: ChatSession) -> Bool {
