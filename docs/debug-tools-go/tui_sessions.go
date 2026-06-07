@@ -41,6 +41,26 @@ var (
 					Foreground(lipgloss.Color("230")).
 					Bold(true).
 					Padding(0, 1)
+	tuiSessionDetailContentStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(lipgloss.Color("69")).
+					Foreground(lipgloss.Color("252")).
+					Padding(0, 1)
+	tuiSessionDetailReasoningStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(lipgloss.Color("214")).
+					Foreground(lipgloss.Color("246")).
+					Padding(0, 1)
+	tuiSessionDetailErrorStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(lipgloss.Color("203")).
+					Foreground(lipgloss.Color("252")).
+					Padding(0, 1)
+	tuiSessionDetailInfoStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(lipgloss.Color("105")).
+					Foreground(lipgloss.Color("246")).
+					Padding(0, 1)
 )
 
 func (m tuiModel) renderSessionsView() string {
@@ -166,23 +186,31 @@ func (m tuiModel) renderSessionMessageDetailView() string {
 		fmt.Sprintf("消息详情 / %s / 第 %d 条", sessionDisplayName(m.activeSession), m.selectedSessionMessage+1),
 		tuiSessionMetaStyle.Render(fmt.Sprintf("%s | %s", sessionRoleLabel(messageRole(message)), asString(message["id"]))),
 		"",
-		"正文",
-		sessionMessageDetailContent(message),
+		m.renderSessionDetailSection("正文", sessionMessageDetailContent(message), tuiSessionDetailContentStyle),
 	}
 
 	if reasoning := strings.TrimSpace(asString(message["reasoningContent"])); reasoning != "" {
-		lines = append(lines, "", "推理", reasoning)
+		lines = append(lines, "", m.renderSessionDetailSection("推理过程", reasoning, tuiSessionDetailReasoningStyle))
 	}
 	if fullError := strings.TrimSpace(asString(message["fullErrorContent"])); fullError != "" && fullError != sessionMessageFullContent(message) {
-		lines = append(lines, "", "完整错误", fullError)
+		lines = append(lines, "", m.renderSessionDetailSection("完整错误", fullError, tuiSessionDetailErrorStyle))
 	}
 
 	extras := sessionMessageExtraLines(message)
 	if len(extras) > 0 {
-		lines = append(lines, "", "附加信息")
-		lines = append(lines, extras...)
+		lines = append(lines, "", m.renderSessionDetailSection("附加信息", strings.Join(extras, "\n"), tuiSessionDetailInfoStyle))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m tuiModel) renderSessionDetailSection(title, content string, style lipgloss.Style) string {
+	width := maxInt(36, minInt(100, m.content.Width-4))
+	header := tuiTitleStyle.Render(title)
+	body := strings.TrimSpace(content)
+	if body == "" {
+		body = "（空）"
+	}
+	return header + "\n" + style.Width(width).Render(body)
 }
 
 func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, selected bool) string {
@@ -198,9 +226,9 @@ func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, 
 	bubble := style.Width(width).Render(body)
 
 	if role == "user" {
-		return lipgloss.PlaceHorizontal(maxInt(width, m.content.Width), lipgloss.Right, bubble)
+		return indentMultiline(bubble, maxInt(0, m.content.Width-lipgloss.Width(bubble)))
 	}
-	return lipgloss.PlaceHorizontal(maxInt(width, m.content.Width), lipgloss.Left, bubble)
+	return bubble
 }
 
 func (m tuiModel) selectedSessionMessageMap() map[string]any {
@@ -411,4 +439,16 @@ func truncateRunes(value string, maxLen int) string {
 
 func runeLen(value string) int {
 	return len([]rune(value))
+}
+
+func indentMultiline(value string, width int) string {
+	if width <= 0 {
+		return value
+	}
+	prefix := strings.Repeat(" ", width)
+	lines := strings.Split(value, "\n")
+	for index, line := range lines {
+		lines[index] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }

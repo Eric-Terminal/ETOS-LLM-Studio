@@ -92,7 +92,7 @@ func TestSessionDetailRendersBubblesAndMessageDetail(t *testing.T) {
 		"session": map[string]any{"id": "session-1", "name": "测试会话"},
 		"messages": []any{
 			map[string]any{"id": "message-1", "role": "user", "content": "你好"},
-			map[string]any{"id": "message-2", "role": "assistant", "content": "你好呀"},
+			map[string]any{"id": "message-2", "role": "assistant", "content": "你好呀", "reasoningContent": "我在思考"},
 		},
 	})
 
@@ -113,8 +113,29 @@ func TestSessionDetailRendersBubblesAndMessageDetail(t *testing.T) {
 		t.Fatalf("Enter 后 sessionMode = %v, want tuiSessionModeMessageDetail", model.sessionMode)
 	}
 	detail := model.renderSessionsView()
-	if !strings.Contains(detail, "消息详情") || !strings.Contains(detail, "你好呀") {
+	if !strings.Contains(detail, "消息详情") || !strings.Contains(detail, "你好呀") || !strings.Contains(detail, "推理过程") || !strings.Contains(detail, "我在思考") {
 		t.Fatalf("消息详情渲染异常: %q", detail)
+	}
+}
+
+func TestSessionUserBubbleIndentIsStable(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.content.Width = 100
+
+	bubble := model.renderSessionMessageBubble(
+		map[string]any{"id": "message-1", "role": "user", "content": "第一行\n第二行"},
+		0,
+		true,
+	)
+	lines := strings.Split(bubble, "\n")
+	if len(lines) < 3 {
+		t.Fatalf("气泡行数 = %d, want >= 3: %q", len(lines), bubble)
+	}
+	want := leadingSpaces(lines[0])
+	for index, line := range lines[1:] {
+		if got := leadingSpaces(line); got != want {
+			t.Fatalf("第 %d 行缩进 = %d, want %d，气泡可能被按行错位渲染: %q", index+2, got, want, bubble)
+		}
 	}
 }
 
@@ -141,6 +162,17 @@ func TestSessionEscReturnsOneLevelAtATime(t *testing.T) {
 	if got.focus != tuiFocusNav {
 		t.Fatalf("第三次 Esc 后 focus = %v, want tuiFocusNav", got.focus)
 	}
+}
+
+func leadingSpaces(value string) int {
+	count := 0
+	for _, r := range value {
+		if r != ' ' {
+			return count
+		}
+		count++
+	}
+	return count
 }
 
 func TestBuildProviderUpsertPayloadIncludesHeaderOverrides(t *testing.T) {
