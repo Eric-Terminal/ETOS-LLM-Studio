@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 
 extension ChatViewModel {
     func addMemory(content: String) async {

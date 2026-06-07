@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ChatExportFormatsView: View {
     let session: ChatSession?

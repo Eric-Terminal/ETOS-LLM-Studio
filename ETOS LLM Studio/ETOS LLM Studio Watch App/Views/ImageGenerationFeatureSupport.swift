@@ -6,7 +6,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct WatchGeneratedImageItem: Identifiable {
     let id: String

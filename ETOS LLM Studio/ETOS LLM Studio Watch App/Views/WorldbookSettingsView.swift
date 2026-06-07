@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct WorldbookSettingsView: View {
     @ObservedObject var viewModel: ChatViewModel

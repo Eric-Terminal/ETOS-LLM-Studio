@@ -9,7 +9,7 @@
 import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 struct WorldbookSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

@@ -8,7 +8,7 @@
 
 import CoreImage
 import Foundation
-import Shared
+import ETOSCore
 #if canImport(Accelerate)
 import Accelerate
 #endif

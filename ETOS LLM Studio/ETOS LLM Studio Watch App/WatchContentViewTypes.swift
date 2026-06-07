@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 
 enum WatchChatInputActionState: Equatable {
     case stop

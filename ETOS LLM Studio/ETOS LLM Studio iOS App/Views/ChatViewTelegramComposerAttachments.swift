@@ -11,7 +11,7 @@ import Foundation
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 extension TelegramMessageComposer {
     @ViewBuilder

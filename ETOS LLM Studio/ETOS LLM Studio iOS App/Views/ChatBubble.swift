@@ -10,7 +10,7 @@
 import SwiftUI
 import Foundation
 import MarkdownUI
-import Shared
+import ETOSCore
 import UIKit
 import AVFoundation
 import Combine

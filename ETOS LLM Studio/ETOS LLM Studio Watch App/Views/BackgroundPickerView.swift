@@ -9,7 +9,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 import WatchKit
 import Foundation
 

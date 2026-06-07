@@ -1,5 +1,5 @@
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct TTSFloatingController: View {
     @ObservedObject private var ttsManager = TTSManager.shared

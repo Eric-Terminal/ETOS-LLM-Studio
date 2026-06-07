@@ -9,7 +9,7 @@
 import Foundation
 import Combine
 import os.log
-import Shared
+import ETOSCore
 import WatchKit
 
 extension ChatViewModel {

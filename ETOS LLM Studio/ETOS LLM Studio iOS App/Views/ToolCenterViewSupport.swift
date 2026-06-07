@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ToolCenterSummaryRow: View {
     let title: String

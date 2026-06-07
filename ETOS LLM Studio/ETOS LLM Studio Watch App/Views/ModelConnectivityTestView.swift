@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ModelConnectivityTestView: View {
     @StateObject private var viewModel: ModelConnectivityTestViewModel

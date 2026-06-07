@@ -8,7 +8,7 @@
 
 import Foundation
 import MarkdownUI
-import Shared
+import ETOSCore
 import SwiftUI
 import AVFoundation
 

@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct DocumentsStorageBrowserView: View {
     private let rootDirectory = StorageUtility.documentsDirectory

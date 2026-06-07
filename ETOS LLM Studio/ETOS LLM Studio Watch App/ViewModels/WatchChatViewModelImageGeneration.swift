@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 
 extension ChatViewModel {
     var imageGenerationModelOptions: [RunnableModel] {

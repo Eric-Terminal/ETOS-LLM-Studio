@@ -11,7 +11,7 @@
 
 import Foundation
 import BackgroundTasks
-import Shared
+import ETOSCore
 import os.log
 
 @MainActor

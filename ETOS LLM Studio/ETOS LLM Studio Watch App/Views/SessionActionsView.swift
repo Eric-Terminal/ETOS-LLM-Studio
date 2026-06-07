@@ -8,7 +8,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct SessionActionsView: View {
 

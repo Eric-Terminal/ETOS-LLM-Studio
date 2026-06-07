@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Photos
-import Shared
+import ETOSCore
 
 extension ChatView {
     func toggleSpeaking(_ message: ChatMessage) {

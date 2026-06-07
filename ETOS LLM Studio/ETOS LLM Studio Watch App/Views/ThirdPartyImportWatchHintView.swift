@@ -7,7 +7,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ThirdPartyImportWatchHintView: View {
     @State private var selectedSource: ThirdPartyImportSource = .etosBackup

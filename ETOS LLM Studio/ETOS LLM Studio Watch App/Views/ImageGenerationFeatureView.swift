@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ImageGenerationFeatureView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

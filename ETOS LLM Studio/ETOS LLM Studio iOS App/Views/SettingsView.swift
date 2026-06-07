@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 enum SettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse

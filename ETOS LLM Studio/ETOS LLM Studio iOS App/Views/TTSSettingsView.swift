@@ -1,5 +1,5 @@
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct TTSSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

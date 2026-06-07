@@ -10,7 +10,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct DailyPulseFeedbackHistoryView: View {
     @ObservedObject private var pulseManager = DailyPulseManager.shared

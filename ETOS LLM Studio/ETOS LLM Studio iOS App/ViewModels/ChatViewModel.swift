@@ -4,7 +4,7 @@
 // ETOS LLM Studio iOS App 视图模型
 //
 // 说明:
-// - 复用 Shared.ChatService 提供的业务逻辑
+// - 复用 ETOSCore.ChatService 提供的业务逻辑
 // - 抽离 watchOS 相关实现，改用 UIKit 生命周期事件
 // - 为 iOS 界面提供消息、会话、设置等绑定数据
 // ============================================================================
@@ -14,7 +14,7 @@ import CoreImage
 import Foundation
 import SwiftUI
 @preconcurrency import MarkdownUI
-import Shared
+import ETOSCore
 import os.log
 #if canImport(Accelerate)
 import Accelerate

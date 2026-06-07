@@ -1,0 +1,69 @@
+// ============================================================================
+// WorldbookModelCompatibilityTests.swift
+// ============================================================================
+// WorldbookModelCompatibilityTests 测试文件
+// - 覆盖相关模块的行为与回归测试
+// - 保障迭代过程中的稳定性
+// ============================================================================
+
+import Testing
+import Foundation
+@testable import ETOSCore
+
+@Suite("Worldbook Model Compatibility Tests")
+struct WorldbookModelCompatibilityTests {
+
+    @Test("ChatSession decodes lorebookIds alias")
+    func testChatSessionDecodesLorebookIdsAlias() throws {
+        let id = UUID()
+        let lorebookID = UUID()
+        let json = """
+        {
+          "id": "\(id.uuidString)",
+          "name": "测试会话",
+          "lorebookIds": ["\(lorebookID.uuidString)"]
+        }
+        """
+
+        let data = try #require(json.data(using: .utf8))
+        let decoder = JSONDecoder()
+        let session = try decoder.decode(ChatSession.self, from: data)
+
+        #expect(session.id == id)
+        #expect(session.lorebookIDs == [lorebookID])
+    }
+
+    @Test("ChatSession encodes lorebookIDs and worldbookIDs for compatibility")
+    func testChatSessionEncodeCompatibilityKeys() throws {
+        let lorebookID = UUID()
+        let session = ChatSession(id: UUID(), name: "测试", lorebookIDs: [lorebookID])
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(session)
+        let payload = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        let lorebookIDs = payload["lorebookIDs"] as? [String]
+        let worldbookIDs = payload["worldbookIDs"] as? [String]
+        #expect(lorebookIDs == [lorebookID.uuidString])
+        #expect(worldbookIDs == [lorebookID.uuidString])
+    }
+
+    @Test("ChatSession decodes worldbook context isolation switch")
+    func testChatSessionDecodesWorldbookContextIsolationSwitch() throws {
+        let id = UUID()
+        let json = """
+        {
+          "id": "\(id.uuidString)",
+          "name": "RP 会话",
+          "worldbookContextIsolationEnabled": true
+        }
+        """
+
+        let data = try #require(json.data(using: .utf8))
+        let session = try JSONDecoder().decode(ChatSession.self, from: data)
+
+        #expect(session.id == id)
+        #expect(session.worldbookContextIsolationEnabled == true)
+        #expect(session.isWorldbookContextIsolationActive == false)
+    }
+}

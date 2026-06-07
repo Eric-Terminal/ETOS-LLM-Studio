@@ -10,7 +10,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 import Network
 import os.log
 

@@ -10,7 +10,7 @@ import SwiftUI
 import Foundation
 import PhotosUI
 import UIKit
-import Shared
+import ETOSCore
 
 struct MessageComposerView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

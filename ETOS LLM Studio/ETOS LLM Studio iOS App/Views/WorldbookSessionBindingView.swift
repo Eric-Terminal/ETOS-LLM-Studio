@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct WorldbookSessionBindingView: View {
     private enum InjectionBindingTab: String, CaseIterable, Identifiable {

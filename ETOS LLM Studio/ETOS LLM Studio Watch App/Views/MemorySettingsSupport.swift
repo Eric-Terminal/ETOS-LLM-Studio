@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct EmbeddingModelSelectionView: View {
     @Environment(\.dismiss) private var dismiss

@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ExtendedFeaturesView: View {
     @ObservedObject private var achievementCenter = AchievementCenter.shared

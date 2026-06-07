@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ModelConnectivityTestView: View {
     @Environment(\.dismiss) private var dismiss

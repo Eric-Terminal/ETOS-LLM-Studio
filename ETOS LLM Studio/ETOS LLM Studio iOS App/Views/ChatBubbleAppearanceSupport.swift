@@ -9,7 +9,7 @@
 import Foundation
 import SwiftUI
 import UIKit
-import Shared
+import ETOSCore
 
 extension ChatBubble {
     var telegramBlue: Color {

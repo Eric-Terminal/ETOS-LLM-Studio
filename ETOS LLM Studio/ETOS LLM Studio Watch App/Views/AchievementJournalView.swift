@@ -9,7 +9,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct AchievementJournalView: View {
     @ObservedObject private var achievementCenter = AchievementCenter.shared

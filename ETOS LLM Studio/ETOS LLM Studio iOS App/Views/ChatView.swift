@@ -12,7 +12,7 @@
 import SwiftUI
 import Foundation
 import MarkdownUI
-import Shared
+import ETOSCore
 import UIKit
 import PhotosUI
 import Photos

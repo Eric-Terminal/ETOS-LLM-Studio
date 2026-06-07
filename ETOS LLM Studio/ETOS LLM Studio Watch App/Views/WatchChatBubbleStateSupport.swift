@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 extension ChatBubble {
     var messageActionBarConfiguration: MessageActionBarConfiguration {

@@ -9,7 +9,7 @@
 
 import Foundation
 @preconcurrency import MarkdownUI
-import Shared
+import ETOSCore
 
 struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String

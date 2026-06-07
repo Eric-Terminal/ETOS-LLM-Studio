@@ -8,7 +8,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 public struct ExtendedFeaturesView: View {
     @EnvironmentObject var viewModel: ChatViewModel

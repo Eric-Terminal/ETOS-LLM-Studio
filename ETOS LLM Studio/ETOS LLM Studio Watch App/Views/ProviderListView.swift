@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

@@ -8,7 +8,7 @@
 
 import Foundation
 import SwiftUI
-import Shared
+import ETOSCore
 
 extension ChatBubble {
     struct ToolCallDetailSheetItem: Identifiable, Equatable {

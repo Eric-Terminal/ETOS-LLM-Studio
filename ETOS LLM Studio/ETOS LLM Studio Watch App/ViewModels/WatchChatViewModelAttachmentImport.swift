@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 import UniformTypeIdentifiers
 
 enum WatchAttachmentImportKind: Equatable, Sendable {

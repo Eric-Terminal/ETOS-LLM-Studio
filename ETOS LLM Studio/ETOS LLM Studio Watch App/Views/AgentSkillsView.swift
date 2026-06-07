@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct AgentSkillsView: View {
     @StateObject private var manager = SkillManager.shared

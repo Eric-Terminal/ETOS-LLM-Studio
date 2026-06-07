@@ -11,7 +11,7 @@
 
 import SwiftUI
 import MarkdownUI
-import Shared
+import ETOSCore
 
 struct DailyPulseView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

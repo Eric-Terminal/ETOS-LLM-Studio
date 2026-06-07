@@ -6,7 +6,7 @@
 // 会话标签的 Apple 风格固定色板、标签展示与管理界面。
 // ============================================================================
 
-import Shared
+import ETOSCore
 import SwiftUI
 import UIKit
 

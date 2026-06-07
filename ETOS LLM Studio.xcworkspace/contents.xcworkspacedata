@@ -5,6 +5,6 @@
       location = "group:ETOS LLM Studio/ETOS LLM Studio.xcodeproj">
    </FileRef>
    <FileRef
-      location = "group:Shared/Shared.xcodeproj">
+      location = "group:ETOSCore/ETOSCore.xcodeproj">
    </FileRef>
 </Workspace>

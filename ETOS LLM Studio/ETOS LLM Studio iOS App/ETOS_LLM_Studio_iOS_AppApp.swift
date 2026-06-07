@@ -12,7 +12,7 @@
 
 import SwiftUI
 import BackgroundTasks
-import Shared
+import ETOSCore
 #if canImport(UIKit)
 import UIKit
 #endif

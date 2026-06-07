@@ -1,6 +1,6 @@
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct GlobalProxySettingsView: View {
     @ObservedObject private var proxyStore = NetworkProxySettingsStore.shared

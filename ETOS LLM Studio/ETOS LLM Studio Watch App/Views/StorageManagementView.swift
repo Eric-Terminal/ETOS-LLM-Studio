@@ -11,7 +11,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 public struct StorageManagementView: View {
     @State private var storageBreakdown = StorageBreakdown()

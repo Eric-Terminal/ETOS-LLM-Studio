@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct MessageRegexRulesView: View {
     @ObservedObject private var store = MessageRegexRuleStore.shared

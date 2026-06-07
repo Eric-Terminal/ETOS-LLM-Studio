@@ -11,7 +11,7 @@ import SwiftUI
 import WatchKit
 import Foundation
 import MarkdownUI
-import Shared
+import ETOSCore
 import AVFoundation
 import Combine
 

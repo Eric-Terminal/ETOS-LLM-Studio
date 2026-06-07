@@ -8,7 +8,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 
 extension ChatViewModel {
     var embeddingModelOptions: [RunnableModel] {

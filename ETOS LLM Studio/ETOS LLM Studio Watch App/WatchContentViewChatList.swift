@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 extension ContentView {
     func chatList(proxy: ScrollViewProxy) -> some View {

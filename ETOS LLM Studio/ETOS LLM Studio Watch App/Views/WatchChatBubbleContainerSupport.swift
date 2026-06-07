@@ -6,7 +6,7 @@
 // 本文件收纳 watchOS 聊天气泡的外壳、回退样式与时间线承载容器。
 // ============================================================================
 
-import Shared
+import ETOSCore
 import SwiftUI
 
 extension ChatBubble {

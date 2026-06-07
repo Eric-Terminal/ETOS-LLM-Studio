@@ -9,7 +9,7 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 struct LocalModelManagementView: View {
     @ObservedObject private var store = LocalModelStore.shared

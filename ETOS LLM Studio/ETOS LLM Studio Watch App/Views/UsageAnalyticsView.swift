@@ -1,5 +1,5 @@
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct UsageAnalyticsView: View {
     @StateObject private var viewModel = UsageAnalyticsDashboardViewModel()

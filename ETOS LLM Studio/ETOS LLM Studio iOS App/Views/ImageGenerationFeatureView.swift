@@ -8,7 +8,7 @@
 
 import Foundation
 import PhotosUI
-import Shared
+import ETOSCore
 import SwiftUI
 
 struct ImageGenerationFeatureView: View {

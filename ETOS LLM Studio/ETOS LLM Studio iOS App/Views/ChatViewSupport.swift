@@ -10,7 +10,7 @@ import SwiftUI
 import UIKit
 import Photos
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 enum TelegramColors {
     static let navBarText = Color.primary

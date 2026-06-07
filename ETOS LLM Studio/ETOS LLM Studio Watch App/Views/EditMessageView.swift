@@ -9,7 +9,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 /// 用于编辑单条消息内容的视图
 struct EditMessageView: View {

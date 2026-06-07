@@ -6,7 +6,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ModelPricingSettingsView: View {
     @Binding var pricing: ModelPricing?

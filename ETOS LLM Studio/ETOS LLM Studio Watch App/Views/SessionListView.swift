@@ -10,7 +10,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 import SwiftUI
 
 /// 会话历史列表视图

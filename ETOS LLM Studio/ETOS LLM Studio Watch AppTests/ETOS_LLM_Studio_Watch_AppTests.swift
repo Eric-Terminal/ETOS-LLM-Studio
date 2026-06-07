@@ -16,7 +16,7 @@
 import Foundation
 import CoreGraphics
 import Testing
-import Shared
+import ETOSCore
 @testable import ETOS_LLM_Studio_Watch_App
 
 struct ETOS_LLM_Studio_Watch_AppTests {

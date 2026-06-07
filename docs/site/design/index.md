@@ -93,7 +93,7 @@ iPhone 和 Apple Watch **不是同一个界面缩放一下**。
 | iPhone | 提供商配置、工具治理、世界书编辑、记忆管理、导入导出、调试与反馈 |
 | Apple Watch | 查看提醒、快速发起会话、继续 Daily Pulse、语音或短文本输入 |
 
-这也是为什么 ETOS 把很多复杂策略**下沉到共享层**（`Shared/Shared/`），而不是写死在某个页面里——共享层在两端各取所需。
+这也是为什么 ETOS 把很多复杂策略**下沉到 ETOSCore 层**（`ETOSCore/ETOSCore/`），而不是写死在某个页面里——ETOSCore 在两端各取所需。
 
 ## 数据流总览
 

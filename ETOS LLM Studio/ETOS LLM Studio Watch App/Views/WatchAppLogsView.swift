@@ -10,7 +10,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct WatchAppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared

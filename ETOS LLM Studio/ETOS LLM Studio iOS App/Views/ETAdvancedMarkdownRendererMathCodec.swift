@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 
 #if canImport(SwiftMath)
 import SwiftMath

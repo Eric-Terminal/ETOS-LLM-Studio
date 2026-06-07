@@ -7,7 +7,7 @@
 
 import Foundation
 import Photos
-import Shared
+import ETOSCore
 import SwiftUI
 import UIKit
 

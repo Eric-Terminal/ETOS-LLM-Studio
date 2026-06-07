@@ -9,7 +9,7 @@
 import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 func worldbookPositionLabel(_ position: WorldbookPosition) -> String {
     switch position {

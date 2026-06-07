@@ -10,7 +10,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 /// 偏好设置视图
 struct ModelAdvancedSettingsView: View {

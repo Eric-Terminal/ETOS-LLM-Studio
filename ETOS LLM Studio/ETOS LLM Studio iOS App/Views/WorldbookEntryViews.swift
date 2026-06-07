@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct WorldbookEntryDetailView: View {
     @State private var entry: WorldbookEntry

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 #if canImport(CepheusKeyboardKit)
 import CepheusKeyboardKit
 #endif

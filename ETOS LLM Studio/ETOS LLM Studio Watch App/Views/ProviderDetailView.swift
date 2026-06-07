@@ -11,7 +11,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ProviderDetailView: View {
     private let sourceProvider: Provider

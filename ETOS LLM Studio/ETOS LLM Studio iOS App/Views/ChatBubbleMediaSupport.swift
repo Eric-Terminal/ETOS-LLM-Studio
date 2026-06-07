@@ -9,7 +9,7 @@
 import Foundation
 import SwiftUI
 import UIKit
-import Shared
+import ETOSCore
 
 struct ImagePreviewWrapper: Identifiable {
     let id = UUID()

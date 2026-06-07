@@ -9,7 +9,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 /// 公告详情视图
 struct AnnouncementDetailView: View {

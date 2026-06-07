@@ -9,7 +9,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ModelSettingsView: View {
     @Binding var model: Model

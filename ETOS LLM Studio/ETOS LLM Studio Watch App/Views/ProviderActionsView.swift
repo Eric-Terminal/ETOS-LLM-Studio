@@ -10,7 +10,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ProviderActionsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel

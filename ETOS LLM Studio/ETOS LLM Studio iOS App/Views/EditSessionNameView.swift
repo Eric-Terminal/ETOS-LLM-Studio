@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct EditSessionNameView: View {
     @Binding var session: ChatSession

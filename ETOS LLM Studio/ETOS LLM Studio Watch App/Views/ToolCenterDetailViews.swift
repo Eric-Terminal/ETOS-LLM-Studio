@@ -8,7 +8,7 @@
 
 import Foundation
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct WatchAppToolCenterDetailView: View {
     let kind: AppToolKind

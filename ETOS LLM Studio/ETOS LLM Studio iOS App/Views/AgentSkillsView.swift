@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 import UniformTypeIdentifiers
 
 struct AgentSkillsView: View {

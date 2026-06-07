@@ -8,7 +8,7 @@
 
 import Foundation
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct ETMathWebShellConfiguration: Equatable {
         let enableMarkdown: Bool

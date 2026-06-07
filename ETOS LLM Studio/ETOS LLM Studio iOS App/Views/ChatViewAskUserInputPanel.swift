@@ -8,7 +8,7 @@
 
 import SwiftUI
 import UIKit
-import Shared
+import ETOSCore
 
 struct AskUserInputComposerPanel: View {
     let request: AppToolAskUserInputRequest

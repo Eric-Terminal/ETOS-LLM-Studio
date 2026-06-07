@@ -8,7 +8,7 @@
 
 import SwiftUI
 import UIKit
-import Shared
+import ETOSCore
 
 extension ChatView {
     func applyPresentationModifiers<Content: View>(to content: Content) -> some View {

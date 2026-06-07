@@ -5,7 +5,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct RewriteMessageView: View {
     let message: ChatMessage

@@ -9,7 +9,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct SpeechInputSettingsView: View {
     @Binding var enableSpeechInput: Bool

@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct LocalModelManagementView: View {
     @ObservedObject private var store = LocalModelStore.shared

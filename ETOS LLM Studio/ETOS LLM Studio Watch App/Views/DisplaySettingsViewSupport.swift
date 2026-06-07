@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 func displaySettingsProfileDisplayName(_ profile: ChatAppearanceProfile) -> String {
     if profile.isDefaultProfile && profile.name == ChatAppearanceProfile.defaultProfileID {

@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct WatchMessageActionBarSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared

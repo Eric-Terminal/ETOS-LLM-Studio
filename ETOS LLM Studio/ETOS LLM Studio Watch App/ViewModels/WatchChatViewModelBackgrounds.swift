@@ -9,7 +9,7 @@
 import Foundation
 import SwiftUI
 import WatchKit
-import Shared
+import ETOSCore
 import os.log
 #if canImport(CoreImage)
 import CoreImage

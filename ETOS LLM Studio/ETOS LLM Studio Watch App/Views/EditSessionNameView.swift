@@ -9,7 +9,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 /// 用于编辑会话名称的视图
 struct EditSessionNameView: View {

@@ -11,7 +11,7 @@ import Foundation
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 /// Telegram 风格的消息输入框
 struct TelegramMessageComposer: View {

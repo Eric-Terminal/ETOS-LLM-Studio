@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct UpdateTimelineView: View {
     @ObservedObject private var manager = UpdateTimelineManager.shared

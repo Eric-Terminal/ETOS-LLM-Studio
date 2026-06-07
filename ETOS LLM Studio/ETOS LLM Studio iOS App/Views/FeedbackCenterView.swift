@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct FeedbackCenterView: View {
     @ObservedObject private var service = FeedbackService.shared

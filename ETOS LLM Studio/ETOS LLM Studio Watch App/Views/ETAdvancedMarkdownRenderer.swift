@@ -9,7 +9,7 @@
 import Foundation
 import SwiftUI
 import MarkdownUI
-import Shared
+import ETOSCore
 
 struct ETAdvancedMarkdownRenderer: View {
     let content: String

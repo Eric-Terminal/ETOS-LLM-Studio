@@ -93,7 +93,7 @@ iPhone and Apple Watch are **not the same UI shrunk down**.
 | iPhone | Provider config, tool governance, worldbook editing, memory management, import/export, debug/feedback |
 | Apple Watch | Receive alerts, quick session start, follow up on Daily Pulse, voice or short text input |
 
-That's why ETOS pushes complex policy down to the **shared layer** (`Shared/Shared/`) rather than hard-coding it into a specific screen — the shared layer lets each device take what it needs.
+That's why ETOS pushes complex policy down to the **ETOSCore layer** (`ETOSCore/ETOSCore/`) rather than hard-coding it into a specific screen — ETOSCore lets each device take what it needs.
 
 ## Data-Flow Overview
 

@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct WatchInputBubbleView: View {
     @ObservedObject var viewModel: ChatViewModel

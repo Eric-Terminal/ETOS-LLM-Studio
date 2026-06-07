@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 public struct LocalDebugView: View {
     @StateObject private var server = LocalDebugServer()

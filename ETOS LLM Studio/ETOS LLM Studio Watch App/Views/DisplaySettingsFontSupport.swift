@@ -6,7 +6,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct WatchFontSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared

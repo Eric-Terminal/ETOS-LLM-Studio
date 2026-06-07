@@ -15,7 +15,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct MCPIntegrationView: View {
     @StateObject var manager = MCPManager.shared

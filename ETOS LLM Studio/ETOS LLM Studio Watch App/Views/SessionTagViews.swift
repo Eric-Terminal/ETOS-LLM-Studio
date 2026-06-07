@@ -6,7 +6,7 @@
 // watchOS 会话标签的固定色板、展示与管理界面。
 // ============================================================================
 
-import Shared
+import ETOSCore
 import SwiftUI
 
 extension SessionTagColor {

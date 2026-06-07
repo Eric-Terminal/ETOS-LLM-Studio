@@ -8,7 +8,7 @@
 
 import SwiftUI
 import MarkdownUI
-import Shared
+import ETOSCore
 
 extension View {
     @ViewBuilder

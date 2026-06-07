@@ -9,7 +9,7 @@
 import SwiftUI
 import Foundation
 import AVFoundation
-import Shared
+import ETOSCore
 
 struct AudioRecorderSheet: View {
     enum Mode {

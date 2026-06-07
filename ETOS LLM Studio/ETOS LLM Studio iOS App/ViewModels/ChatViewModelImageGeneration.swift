@@ -8,7 +8,7 @@
 
 import Foundation
 import SwiftUI
-import Shared
+import ETOSCore
 
 extension ChatViewModel {
     var imageGenerationModelOptions: [RunnableModel] {

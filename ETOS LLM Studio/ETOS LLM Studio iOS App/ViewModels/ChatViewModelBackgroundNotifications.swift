@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 #if canImport(UIKit)
 import UIKit
 #endif

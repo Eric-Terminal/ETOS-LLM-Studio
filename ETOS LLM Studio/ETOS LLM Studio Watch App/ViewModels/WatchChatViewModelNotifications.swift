@@ -8,7 +8,7 @@
 
 import Foundation
 import WatchKit
-import Shared
+import ETOSCore
 #if canImport(UserNotifications)
 import UserNotifications
 #endif

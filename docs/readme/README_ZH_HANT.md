@@ -141,10 +141,10 @@
 
 ## 🏗️ 專案架構
 
-專案採用雙層結構：平台無關的 Shared 框架 + 各平台獨立的視圖層。最近一輪重構引入了 `Config/AppConfigStore` 設定中心，全面取代 `@AppStorage`，並新增 `LocalLLM` / `LocalLLMBridge` 把本機 GGUF 推理接入既有聊天生命週期；當前最大的 Swift 檔案約 1,365 行（`Config/AppConfigStore.swift`），本地模型管理頁和生成參數映射也屬於後續繼續拆分的重型模組。
+專案採用雙層結構：平台無關的 ETOSCore 框架 + 各平台獨立的視圖層。最近一輪重構引入了 `Config/AppConfigStore` 設定中心，全面取代 `@AppStorage`，並新增 `LocalLLM` / `LocalLLMBridge` 把本機 GGUF 推理接入既有聊天生命週期；當前最大的 Swift 檔案約 1,365 行（`Config/AppConfigStore.swift`），本地模型管理頁和生成參數映射也屬於後續繼續拆分的重型模組。
 
 ```
-Shared/Shared/                         ← 平台無關業務邏輯（278 個 Swift 原始碼檔案）
+ETOSCore/ETOSCore/                         ← 平台無關業務邏輯（278 個 Swift 原始碼檔案）
 ├── AppTool/                            ← 本地工具、ask_user_input、SQLite 與沙盒檔案工具
 ├── Attachments/                        ← 檔案附件文字抽取
 ├── Chat/                               ← 聊天模型、訊息版本、匯出、渲染狀態
@@ -178,10 +178,10 @@ Shared/Shared/                         ← 平台無關業務邏輯（278 個 Sw
 
 ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 視圖層（130 個 Swift 原始碼檔案）
 ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 視圖層（109 個 Swift 原始碼檔案）
-Shared/SharedTests/                         ← Shared 層測試（96 個 Swift 原始碼檔案）
+ETOSCore/ETOSCoreTests/                         ← ETOSCore 層測試（96 個 Swift 原始碼檔案）
 ```
 
-雲端模型資料流：`View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`。本地模型資料流：`View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`。會話、工具、記憶、世界書、用量統計與同步資料皆透過 Shared 層服務和 GRDB / SQLite 儲存統一治理。
+雲端模型資料流：`View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`。本地模型資料流：`View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`。會話、工具、記憶、世界書、用量統計與同步資料皆透過 ETOSCore 層服務和 GRDB / SQLite 儲存統一治理。
 
 ---
 
@@ -200,7 +200,7 @@ Shared/SharedTests/                         ← Shared 層測試（96 個 Swift 
     *   CMake（如果沒有，先 `brew install cmake`）
     *   （如果環境對不上，你可以自行調整相容性）
 3.  **編譯前第一步：先生成 llama.cpp 靜態庫**:
-    Xcode 現在不會在構建階段反覆編譯 llama.cpp，Shared 只會連結已經生成好的 `libetos-llama.a`。如果你要跑真機 / Release，先執行：
+    Xcode 現在不會在構建階段反覆編譯 llama.cpp，ETOSCore 只會連結已經生成好的 `libetos-llama.a`。如果你要跑真機 / Release，先執行：
     ```bash
     CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh
     CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS=arm64_32 scripts/build-llama-static-library.sh

@@ -8,7 +8,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
-import Shared
+import ETOSCore
 
 struct ThirdPartyImportView: View {
     @State private var selectedSource: ThirdPartyImportSource = .etosBackup

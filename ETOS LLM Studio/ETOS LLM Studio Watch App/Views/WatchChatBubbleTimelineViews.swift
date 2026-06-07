@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct WatchAssistantTimelineStepShell<Content: View>: View {
     let iconName: String

@@ -10,7 +10,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 enum WatchSettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse

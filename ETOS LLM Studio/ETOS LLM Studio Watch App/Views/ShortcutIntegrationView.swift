@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct ShortcutIntegrationView: View {
     @Environment(\.openURL) private var openURL

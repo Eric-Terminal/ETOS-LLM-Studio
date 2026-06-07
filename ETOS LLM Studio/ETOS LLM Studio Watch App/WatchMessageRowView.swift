@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 struct WatchMessageRowView: View {
     @ObservedObject var viewModel: ChatViewModel

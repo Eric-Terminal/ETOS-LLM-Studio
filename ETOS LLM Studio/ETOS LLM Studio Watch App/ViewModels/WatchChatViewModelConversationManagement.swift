@@ -9,7 +9,7 @@
 import Foundation
 import Combine
 import os.log
-import Shared
+import ETOSCore
 
 extension ChatViewModel {
     func deleteMessage(at offsets: IndexSet) {

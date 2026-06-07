@@ -9,7 +9,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 public struct MemorySettingsView: View {
     @EnvironmentObject var viewModel: ChatViewModel

@@ -8,7 +8,7 @@
 
 import SwiftUI
 import Foundation
-import Shared
+import ETOSCore
 
 struct MCPServerDetailView: View {
     let server: MCPServerConfiguration

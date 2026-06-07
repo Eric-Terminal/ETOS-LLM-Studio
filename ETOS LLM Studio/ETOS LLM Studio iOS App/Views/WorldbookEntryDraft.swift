@@ -7,7 +7,7 @@
 // ============================================================================
 
 import Foundation
-import Shared
+import ETOSCore
 
 struct WorldbookEntryDraft: Identifiable {
     let id: UUID

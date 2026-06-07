@@ -15,7 +15,7 @@ import SwiftUI
 import WatchKit
 import os.log
 import Combine
-import Shared
+import ETOSCore
 import AVFoundation
 import AVFAudio
 #if canImport(UniformTypeIdentifiers)

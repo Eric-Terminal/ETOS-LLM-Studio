@@ -8,7 +8,7 @@
 
 import Foundation
 import Combine
-import Shared
+import ETOSCore
 import os.log
 
 extension ChatViewModel {

@@ -141,10 +141,10 @@ Technology should be shared. I do not want a small price barrier to block someon
 
 ## 🏗️ Project Architecture
 
-The project uses a two-layer structure: a platform-independent Shared framework plus platform-specific view layers. The latest round of refactoring introduced the `Config/AppConfigStore` configuration hub, fully replaced `@AppStorage`, and added `LocalLLM` / `LocalLLMBridge` to route on-device GGUF inference into the existing chat lifecycle. The largest single Swift file is about 1,365 lines (`Config/AppConfigStore.swift`); the local model management views and generation-parameter mapping are the next heavier modules to keep trimming over time.
+The project uses a two-layer structure: a platform-independent ETOSCore framework plus platform-specific view layers. The latest round of refactoring introduced the `Config/AppConfigStore` configuration hub, fully replaced `@AppStorage`, and added `LocalLLM` / `LocalLLMBridge` to route on-device GGUF inference into the existing chat lifecycle. The largest single Swift file is about 1,365 lines (`Config/AppConfigStore.swift`); the local model management views and generation-parameter mapping are the next heavier modules to keep trimming over time.
 
 ```
-Shared/Shared/                         ← Platform-agnostic business logic (278 Swift source files)
+ETOSCore/ETOSCore/                         ← Platform-agnostic business logic (278 Swift source files)
 ├── AppTool/                            ← Local tools, ask_user_input, SQLite and sandbox file tools
 ├── Attachments/                        ← File attachment text extraction
 ├── Chat/                               ← Chat models, message versions, export, render state
@@ -178,10 +178,10 @@ Shared/Shared/                         ← Platform-agnostic business logic (278
 
 ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (130 Swift source files)
 ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (109 Swift source files)
-Shared/SharedTests/                         ← Shared-layer tests (96 Swift source files)
+ETOSCore/ETOSCoreTests/                         ← ETOSCore-layer tests (96 Swift source files)
 ```
 
-Cloud-model data flow: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Local-model data flow: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Sessions, tools, memory, worldbooks, usage analytics, and sync data are all governed through Shared-layer services and GRDB / SQLite storage.
+Cloud-model data flow: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Local-model data flow: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Sessions, tools, memory, worldbooks, usage analytics, and sync data are all governed through ETOSCore-layer services and GRDB / SQLite storage.
 
 ---
 
@@ -200,7 +200,7 @@ If you want to build it yourself:
     *   CMake (if missing, run `brew install cmake`)
     *   (If your environment does not match exactly, you can adjust compatibility yourself.)
 3.  **First build step: generate the llama.cpp static library**:
-    Xcode no longer rebuilds llama.cpp during every app build. Shared links against the prebuilt `libetos-llama.a`. For device / Release builds, run:
+    Xcode no longer rebuilds llama.cpp during every app build. ETOSCore links against the prebuilt `libetos-llama.a`. For device / Release builds, run:
     ```bash
     CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh
     CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS=arm64_32 scripts/build-llama-static-library.sh

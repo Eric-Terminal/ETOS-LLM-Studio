@@ -7,7 +7,7 @@
 // ============================================================================
 
 import SwiftUI
-import Shared
+import ETOSCore
 
 private enum ModelAdvancedSettingsTab: Hashable {
     case promptInjection

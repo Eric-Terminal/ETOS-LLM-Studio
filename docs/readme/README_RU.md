@@ -139,10 +139,10 @@
 
 ## 🏗️ Архитектура проекта
 
-Проект разделён на два уровня: платформенно‑независимый Shared и отдельные UI‑слои для каждой платформы. В последнем рефакторинге появился настроечный хаб `Config/AppConfigStore`, полностью заменивший `@AppStorage`, а новые `LocalLLM` / `LocalLLMBridge` подключили локальный GGUF inference к существующему жизненному циклу чата. Самый большой Swift‑файл сейчас занимает около 1 365 строк (`Config/AppConfigStore.swift`); экраны управления локальными моделями и маппинг параметров генерации остаются тяжёлыми модулями, которые стоит дальше постепенно разгружать.
+Проект разделён на два уровня: платформенно‑независимый ETOSCore и отдельные UI‑слои для каждой платформы. В последнем рефакторинге появился настроечный хаб `Config/AppConfigStore`, полностью заменивший `@AppStorage`, а новые `LocalLLM` / `LocalLLMBridge` подключили локальный GGUF inference к существующему жизненному циклу чата. Самый большой Swift‑файл сейчас занимает около 1 365 строк (`Config/AppConfigStore.swift`); экраны управления локальными моделями и маппинг параметров генерации остаются тяжёлыми модулями, которые стоит дальше постепенно разгружать.
 
 ```
-Shared/Shared/                         ← Общая бизнес-логика (278 Swift-файлов)
+ETOSCore/ETOSCore/                         ← Общая бизнес-логика (278 Swift-файлов)
 ├── AppTool/                            ← Локальные инструменты, ask_user_input, утилиты для SQLite и sandbox-файлов
 ├── Attachments/                        ← Извлечение текста из файловых вложений
 ├── Chat/                               ← Модели чата, версии сообщений, экспорт, состояние рендера
@@ -176,10 +176,10 @@ Shared/Shared/                         ← Общая бизнес-логика 
 
 ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (130 Swift-файлов)
 ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (109 Swift-файлов)
-Shared/SharedTests/                         ← Тесты Shared-слоя (96 Swift-файлов)
+ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя (96 Swift-файлов)
 ```
 
-Поток данных для облачных моделей: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Поток данных для локальных моделей: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Сессии, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами слоя Shared и хранилищем GRDB / SQLite.
+Поток данных для облачных моделей: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Поток данных для локальных моделей: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Сессии, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами слоя ETOSCore и хранилищем GRDB / SQLite.
 
 ---
 
@@ -195,7 +195,7 @@ Shared/SharedTests/                         ← Тесты Shared-слоя (96 S
     *   watchOS 26.0+ SDK
     *   CMake (если его нет, выполните `brew install cmake`)
 3.  **Первый шаг перед сборкой: соберите статическую библиотеку llama.cpp**:
-    Xcode больше не пересобирает llama.cpp на каждом app build. Shared линкуется с заранее созданным `libetos-llama.a`. Для device / Release выполните:
+    Xcode больше не пересобирает llama.cpp на каждом app build. ETOSCore линкуется с заранее созданным `libetos-llama.a`. Для device / Release выполните:
     ```bash
     CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh
     CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS=arm64_32 scripts/build-llama-static-library.sh
