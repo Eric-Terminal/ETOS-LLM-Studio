@@ -3,14 +3,20 @@ package main
 import "testing"
 
 func TestBuildProviderUpsertPayloadIncludesHeaderOverrides(t *testing.T) {
-	payload, err := buildProviderUpsertPayload(
-		" provider-1 ",
-		" 示例 Provider ",
-		" https://api.example.com/v1 ",
-		" openai-compatible ",
-		"sk-test",
-		`{"X-Test":"on"}`,
-	)
+	payload, err := buildProviderUpsertPayload(providerUpsertInput{
+		ProviderID:      " provider-1 ",
+		Name:            " 示例 Provider ",
+		BaseURL:         " https://api.example.com/v1 ",
+		APIFormat:       " openai-compatible ",
+		APIKey:          "sk-test",
+		HeaderOverrides: `{"X-Test":"on"}`,
+		ProxyMode:       "enabled",
+		ProxyType:       "socks5",
+		ProxyHost:       "127.0.0.1",
+		ProxyPort:       "1080",
+		ProxyUsername:   "eric",
+		ProxyPassword:   "secret",
+	})
 	if err != nil {
 		t.Fatalf("buildProviderUpsertPayload 返回错误: %v", err)
 	}
@@ -41,11 +47,58 @@ func TestBuildProviderUpsertPayloadIncludesHeaderOverrides(t *testing.T) {
 	if headers["X-Test"] != "on" {
 		t.Fatalf("X-Test = %v, want on", headers["X-Test"])
 	}
+
+	proxy, ok := payload["proxy_configuration"].(map[string]any)
+	if !ok {
+		t.Fatalf("proxy_configuration 类型 = %T, want map[string]any", payload["proxy_configuration"])
+	}
+	if proxy["isEnabled"] != true {
+		t.Fatalf("isEnabled = %v, want true", proxy["isEnabled"])
+	}
+	if proxy["type"] != "socks5" {
+		t.Fatalf("type = %v, want socks5", proxy["type"])
+	}
+	if proxy["host"] != "127.0.0.1" {
+		t.Fatalf("host = %v, want 127.0.0.1", proxy["host"])
+	}
+	if proxy["port"] != 1080 {
+		t.Fatalf("port = %v, want 1080", proxy["port"])
+	}
 }
 
 func TestBuildProviderUpsertPayloadRejectsNonStringHeaders(t *testing.T) {
-	if _, err := buildProviderUpsertPayload("", "Provider", "", "openai-compatible", "", `{"X-Test":1}`); err == nil {
+	if _, err := buildProviderUpsertPayload(providerUpsertInput{
+		Name:            "Provider",
+		APIFormat:       "openai-compatible",
+		HeaderOverrides: `{"X-Test":1}`,
+	}); err == nil {
 		t.Fatal("err = nil，期望拒绝非字符串 Header Overrides")
+	}
+}
+
+func TestBuildProviderUpsertPayloadUsesNilProxyForGlobalInheritance(t *testing.T) {
+	payload, err := buildProviderUpsertPayload(providerUpsertInput{
+		Name:            "Provider",
+		APIFormat:       "openai-compatible",
+		HeaderOverrides: "{}",
+		ProxyMode:       "inherit",
+	})
+	if err != nil {
+		t.Fatalf("buildProviderUpsertPayload 返回错误: %v", err)
+	}
+	if payload["proxy_configuration"] != nil {
+		t.Fatalf("proxy_configuration = %v, want nil", payload["proxy_configuration"])
+	}
+}
+
+func TestBuildProviderUpsertPayloadRejectsEnabledProxyWithoutHost(t *testing.T) {
+	if _, err := buildProviderUpsertPayload(providerUpsertInput{
+		Name:            "Provider",
+		APIFormat:       "openai-compatible",
+		HeaderOverrides: "{}",
+		ProxyMode:       "enabled",
+	}); err == nil {
+		t.Fatal("err = nil，期望拒绝未填写主机的启用代理")
 	}
 }
 

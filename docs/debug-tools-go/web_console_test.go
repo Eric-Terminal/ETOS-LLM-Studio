@@ -317,7 +317,7 @@ func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/providers/upsert",
-		strings.NewReader(`{"name":"示例 Provider","base_url":"https://api.example.com/v1","api_key":"sk-test","api_format":"openai-compatible","header_overrides":{"X-Test":"on"}}`),
+		strings.NewReader(`{"name":"示例 Provider","base_url":"https://api.example.com/v1","api_key":"sk-test","api_format":"openai-compatible","header_overrides":{"X-Test":"on"},"proxy_configuration":{"isEnabled":true,"type":"http","host":"127.0.0.1","port":8080,"username":"eric","password":"secret"}}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -363,6 +363,16 @@ func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
 	}
 	if headerOverrides["X-Test"] != "on" {
 		t.Fatalf("X-Test = %v, want on", headerOverrides["X-Test"])
+	}
+	proxyConfiguration, ok := command["proxy_configuration"].(map[string]any)
+	if !ok {
+		t.Fatalf("proxy_configuration 类型 = %T, want map[string]any", command["proxy_configuration"])
+	}
+	if proxyConfiguration["host"] != "127.0.0.1" {
+		t.Fatalf("host = %v, want 127.0.0.1", proxyConfiguration["host"])
+	}
+	if asInt(proxyConfiguration["port"]) != 8080 {
+		t.Fatalf("port = %v, want 8080", proxyConfiguration["port"])
 	}
 }
 

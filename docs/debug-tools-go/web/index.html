@@ -396,6 +396,21 @@
           </select>
           <div>API Key</div><input id="providerAPIKey" type="password" placeholder="留空则不修改已有 Key" />
           <div>Header Overrides</div><textarea id="providerHeaders" class="mono" style="min-height:90px;" spellcheck="false">{}</textarea>
+          <div>代理模式</div>
+          <select id="providerProxyMode">
+            <option value="inherit">inherit</option>
+            <option value="disabled">disabled</option>
+            <option value="enabled">enabled</option>
+          </select>
+          <div>代理类型</div>
+          <select id="providerProxyType">
+            <option value="http">http</option>
+            <option value="socks5">socks5</option>
+          </select>
+          <div>代理主机</div><input id="providerProxyHost" class="mono" />
+          <div>代理端口</div><input id="providerProxyPort" class="mono" type="number" min="1" max="65535" value="8080" />
+          <div>代理用户名</div><input id="providerProxyUsername" />
+          <div>代理密码</div><input id="providerProxyPassword" type="password" />
         </div>
         <div class="actions" style="margin-bottom:12px;">
           <button id="btnProviderNew">新建 Provider</button>
@@ -1152,6 +1167,13 @@
     el('providerFormat').value = provider?.apiFormat || 'openai-compatible'
     el('providerAPIKey').value = ''
     el('providerHeaders').value = JSON.stringify(provider?.headerOverrides || {}, null, 2)
+    const proxy = provider?.proxyConfiguration || null
+    el('providerProxyMode').value = proxy ? (proxy.isEnabled ? 'enabled' : 'disabled') : 'inherit'
+    el('providerProxyType').value = proxy?.type || 'http'
+    el('providerProxyHost').value = proxy?.host || ''
+    el('providerProxyPort').value = String(proxy?.port || 8080)
+    el('providerProxyUsername').value = proxy?.username || ''
+    el('providerProxyPassword').value = proxy?.password || ''
     renderProviderModelSelect()
     syncProviderModelForm()
   }
@@ -1226,6 +1248,7 @@
 
   async function saveProviderForm() {
     let headerOverrides = {}
+    let proxyConfiguration = null
     try {
       headerOverrides = JSON.parse(el('providerHeaders').value || '{}')
       if (!headerOverrides || Array.isArray(headerOverrides) || typeof headerOverrides !== 'object') {
@@ -1240,12 +1263,36 @@
       alert(`Header Overrides 格式错误：${error.message}`)
       return
     }
+    try {
+      const proxyMode = el('providerProxyMode').value
+      const proxyPort = Number(el('providerProxyPort').value || 8080)
+      if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
+        throw new Error('代理端口必须是 1-65535 的整数')
+      }
+      if (proxyMode === 'enabled' && !el('providerProxyHost').value.trim()) {
+        throw new Error('启用代理需要填写主机')
+      }
+      if (proxyMode !== 'inherit') {
+        proxyConfiguration = {
+          isEnabled: proxyMode === 'enabled',
+          type: el('providerProxyType').value,
+          host: el('providerProxyHost').value.trim(),
+          port: proxyPort,
+          username: el('providerProxyUsername').value.trim(),
+          password: el('providerProxyPassword').value
+        }
+      }
+    } catch (error) {
+      alert(`代理配置错误：${error.message}`)
+      return
+    }
     const payload = {
       provider_id: el('providerID').value.trim() || undefined,
       name: el('providerName').value.trim(),
       base_url: el('providerBaseURL').value.trim(),
       api_format: el('providerFormat').value,
-      header_overrides: headerOverrides
+      header_overrides: headerOverrides,
+      proxy_configuration: proxyConfiguration
     }
     const apiKey = el('providerAPIKey').value.trim()
     if (apiKey) payload.api_key = apiKey

@@ -45,6 +45,14 @@ extension LocalDebugServer {
         if let headerOverrides = debugStringDictionary(json["header_overrides"] ?? json["headerOverrides"]) {
             provider.headerOverrides = headerOverrides
         }
+        let proxyConfigurationRaw = json["proxy_configuration"] ?? json["proxyConfiguration"]
+        if proxyConfigurationRaw != nil {
+            let decodedProxy = decodeDebugNetworkProxyConfiguration(proxyConfigurationRaw)
+            guard decodedProxy.isValid else {
+                return debugProviderError("proxy_configuration 必须是合法的 NetworkProxyConfiguration JSON 对象")
+            }
+            provider.proxyConfiguration = decodedProxy.configuration
+        }
 
         if let existingIndex {
             providers[existingIndex] = provider
@@ -209,6 +217,28 @@ extension LocalDebugServer {
         return dictionary.reduce(into: [String: String]()) { result, item in
             result[item.key] = "\(item.value)"
         }
+    }
+
+    private func decodeDebugNetworkProxyConfiguration(_ value: Any?) -> (configuration: NetworkProxyConfiguration?, isValid: Bool) {
+        guard let value else { return (nil, true) }
+        if value is NSNull { return (nil, true) }
+
+        let data: Data?
+        if let text = value as? String {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return (nil, true) }
+            data = trimmed.data(using: .utf8)
+        } else if JSONSerialization.isValidJSONObject(value) {
+            data = try? JSONSerialization.data(withJSONObject: value)
+        } else {
+            data = nil
+        }
+
+        guard let data,
+              let decoded = try? makeWebConsoleJSONDecoder().decode(NetworkProxyConfiguration.self, from: data) else {
+            return (nil, false)
+        }
+        return (decoded, true)
     }
 
     private func debugModelModalities(_ value: Any?, outputOnly: Bool) -> [ModelModality]? {

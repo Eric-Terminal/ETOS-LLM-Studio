@@ -369,7 +369,7 @@ func (s *DebugServer) handleAPIProviderUpsert(w http.ResponseWriter, r *http.Req
 		return
 	}
 	command := map[string]any{"command": "provider_upsert"}
-	for _, key := range []string{"provider_id", "name", "base_url", "api_key", "api_keys", "api_format", "header_overrides"} {
+	for _, key := range []string{"provider_id", "name", "base_url", "api_key", "api_keys", "api_format", "header_overrides", "proxy_configuration"} {
 		if value, ok := payload[key]; ok {
 			command[key] = value
 		}

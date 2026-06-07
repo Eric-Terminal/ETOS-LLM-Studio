@@ -562,17 +562,41 @@ func (m tuiModel) addProvider() tea.Cmd {
 		apiKey := ""
 		apiFormat := "openai-compatible"
 		headerOverrides := "{}"
+		proxyMode := "inherit"
+		proxyType := "http"
+		proxyHost := ""
+		proxyPort := "8080"
+		proxyUsername := ""
+		proxyPassword := ""
 		form := huh.NewForm(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API Key").EchoMode(huh.EchoModePassword).Value(&apiKey),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
 			huh.NewText().Title("Header Overrides JSON").Value(&headerOverrides),
+			huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
+			huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
+			huh.NewInput().Title("代理主机").Value(&proxyHost),
+			huh.NewInput().Title("代理端口").Value(&proxyPort),
+			huh.NewInput().Title("代理用户名").Value(&proxyUsername),
+			huh.NewInput().Title("代理密码").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
 		))
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		payload, err := buildProviderUpsertPayload("", name, baseURL, apiFormat, apiKey, headerOverrides)
+		payload, err := buildProviderUpsertPayload(providerUpsertInput{
+			Name:            name,
+			BaseURL:         baseURL,
+			APIFormat:       apiFormat,
+			APIKey:          apiKey,
+			HeaderOverrides: headerOverrides,
+			ProxyMode:       proxyMode,
+			ProxyType:       proxyType,
+			ProxyHost:       proxyHost,
+			ProxyPort:       proxyPort,
+			ProxyUsername:   proxyUsername,
+			ProxyPassword:   proxyPassword,
+		})
 		if err != nil {
 			return tuiCommandResultMsg{op: "providers:upsert", err: err}
 		}
@@ -594,17 +618,42 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		apiFormat := asString(provider["apiFormat"])
 		apiKey := ""
 		headerOverrides := providerHeaderOverridesText(provider)
+		proxyMode := providerProxyMode(provider)
+		proxyType := providerProxyField(provider, "type", "http")
+		proxyHost := providerProxyField(provider, "host", "")
+		proxyPort := providerProxyField(provider, "port", "8080")
+		proxyUsername := providerProxyField(provider, "username", "")
+		proxyPassword := providerProxyField(provider, "password", "")
 		form := huh.NewForm(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
 			huh.NewInput().Title("API Key（留空则不修改）").EchoMode(huh.EchoModePassword).Value(&apiKey),
 			huh.NewText().Title("Header Overrides JSON").Value(&headerOverrides),
+			huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
+			huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
+			huh.NewInput().Title("代理主机").Value(&proxyHost),
+			huh.NewInput().Title("代理端口").Value(&proxyPort),
+			huh.NewInput().Title("代理用户名").Value(&proxyUsername),
+			huh.NewInput().Title("代理密码（留空则清除）").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
 		))
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		payload, err := buildProviderUpsertPayload(providerID, name, baseURL, apiFormat, apiKey, headerOverrides)
+		payload, err := buildProviderUpsertPayload(providerUpsertInput{
+			ProviderID:      providerID,
+			Name:            name,
+			BaseURL:         baseURL,
+			APIFormat:       apiFormat,
+			APIKey:          apiKey,
+			HeaderOverrides: headerOverrides,
+			ProxyMode:       proxyMode,
+			ProxyType:       proxyType,
+			ProxyHost:       proxyHost,
+			ProxyPort:       proxyPort,
+			ProxyUsername:   proxyUsername,
+			ProxyPassword:   proxyPassword,
+		})
 		if err != nil {
 			return tuiCommandResultMsg{op: "providers:upsert", err: err}
 		}

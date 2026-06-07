@@ -79,10 +79,25 @@ func splitCSV(value string) []string {
 	return result
 }
 
-func buildProviderUpsertPayload(providerID, name, baseURL, apiFormat, apiKey, headerOverrides string) (map[string]any, error) {
+type providerUpsertInput struct {
+	ProviderID      string
+	Name            string
+	BaseURL         string
+	APIFormat       string
+	APIKey          string
+	HeaderOverrides string
+	ProxyMode       string
+	ProxyType       string
+	ProxyHost       string
+	ProxyPort       string
+	ProxyUsername   string
+	ProxyPassword   string
+}
+
+func buildProviderUpsertPayload(input providerUpsertInput) (map[string]any, error) {
 	var headers map[string]string
-	if strings.TrimSpace(headerOverrides) != "" {
-		if err := json.Unmarshal([]byte(headerOverrides), &headers); err != nil {
+	if strings.TrimSpace(input.HeaderOverrides) != "" {
+		if err := json.Unmarshal([]byte(input.HeaderOverrides), &headers); err != nil {
 			return nil, fmt.Errorf("Header Overrides 不是合法 JSON 对象: %w", err)
 		}
 	}
@@ -90,20 +105,75 @@ func buildProviderUpsertPayload(providerID, name, baseURL, apiFormat, apiKey, he
 		headers = map[string]string{}
 	}
 
-	payload := map[string]any{
-		"command":          "provider_upsert",
-		"name":             strings.TrimSpace(name),
-		"base_url":         strings.TrimSpace(baseURL),
-		"api_format":       strings.TrimSpace(apiFormat),
-		"header_overrides": headers,
+	proxyConfiguration, err := buildProxyConfigurationPayload(input)
+	if err != nil {
+		return nil, err
 	}
-	if trimmedProviderID := strings.TrimSpace(providerID); trimmedProviderID != "" {
+
+	payload := map[string]any{
+		"command":             "provider_upsert",
+		"name":                strings.TrimSpace(input.Name),
+		"base_url":            strings.TrimSpace(input.BaseURL),
+		"api_format":          strings.TrimSpace(input.APIFormat),
+		"header_overrides":    headers,
+		"proxy_configuration": proxyConfiguration,
+	}
+	if trimmedProviderID := strings.TrimSpace(input.ProviderID); trimmedProviderID != "" {
 		payload["provider_id"] = trimmedProviderID
 	}
-	if strings.TrimSpace(apiKey) != "" {
-		payload["api_key"] = apiKey
+	if strings.TrimSpace(input.APIKey) != "" {
+		payload["api_key"] = input.APIKey
 	}
 	return payload, nil
+}
+
+func buildProxyConfigurationPayload(input providerUpsertInput) (any, error) {
+	mode := strings.TrimSpace(strings.ToLower(input.ProxyMode))
+	switch mode {
+	case "", "inherit":
+		return nil, nil
+	case "disabled", "disable", "off":
+		return map[string]any{
+			"isEnabled": false,
+			"type":      normalizedProxyType(input.ProxyType),
+			"host":      strings.TrimSpace(input.ProxyHost),
+			"port":      normalizedProxyPort(input.ProxyPort),
+			"username":  strings.TrimSpace(input.ProxyUsername),
+			"password":  strings.TrimSpace(input.ProxyPassword),
+		}, nil
+	case "enabled", "enable", "on":
+		host := strings.TrimSpace(input.ProxyHost)
+		if host == "" {
+			return nil, fmt.Errorf("启用 Provider 代理需要填写主机")
+		}
+		return map[string]any{
+			"isEnabled": true,
+			"type":      normalizedProxyType(input.ProxyType),
+			"host":      host,
+			"port":      normalizedProxyPort(input.ProxyPort),
+			"username":  strings.TrimSpace(input.ProxyUsername),
+			"password":  strings.TrimSpace(input.ProxyPassword),
+		}, nil
+	default:
+		return nil, fmt.Errorf("代理模式必须是 inherit、disabled 或 enabled")
+	}
+}
+
+func normalizedProxyType(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "socks5":
+		return "socks5"
+	default:
+		return "http"
+	}
+}
+
+func normalizedProxyPort(value string) int {
+	port := asInt(strings.TrimSpace(value))
+	if port < 1 || port > 65535 {
+		return 8080
+	}
+	return port
 }
 
 func providerHeaderOverridesText(provider map[string]any) string {
@@ -111,6 +181,29 @@ func providerHeaderOverridesText(provider map[string]any) string {
 		return prettyJSON(value)
 	}
 	return "{}"
+}
+
+func providerProxyMode(provider map[string]any) string {
+	proxy, ok := provider["proxyConfiguration"].(map[string]any)
+	if !ok {
+		return "inherit"
+	}
+	if asBool(proxy["isEnabled"]) {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+func providerProxyField(provider map[string]any, key, fallback string) string {
+	proxy, ok := provider["proxyConfiguration"].(map[string]any)
+	if !ok {
+		return fallback
+	}
+	value := asString(proxy[key])
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 type providerModelUpsertInput struct {
