@@ -26,7 +26,7 @@ cd docs/debug-tools-go
 go run .
 ```
 
-启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。
+启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、`m` 新增模型、`M` 选择并编辑已有模型参数。
 
 默认端口：
 
@@ -46,7 +46,7 @@ http://127.0.0.1:7654/
 GUI 主要功能：
 
 - Finder 风格文件浏览（左侧目录树 + 中间目录列表 + 右侧预览区）、文本/JSON/图片预览、上传/下载/删除
-- 提供商配置 JSON 可视化编辑（含快捷新增）
+- 提供商配置表单化编辑（Provider、API Key、模型类型、能力与 Override Parameters），也保留 JSON 高级编辑入口
 - 会话列表、会话元数据编辑、消息表单/JSON 双模式高级编辑
 - 记忆列表编辑与重嵌入触发
 - SQLite 表结构浏览、查询与写入 API
@@ -116,6 +116,7 @@ go test ./...
 - `/api/*` 错误码推断与 HTTP 状态码映射
 - 典型接口参数校验（如文件读取缺少 path）
 - app_config 设置接口参数校验与命令转发
+- Provider 与模型 upsert 接口参数校验、命令转发，以及 TUI 模型编辑 payload 生成
 - SQLite API 参数校验与命令转发
 
 ## Release 下载（CI）

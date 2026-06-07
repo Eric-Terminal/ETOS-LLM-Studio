@@ -79,6 +79,64 @@ func splitCSV(value string) []string {
 	return result
 }
 
+func buildProviderModelUpsertPayload(providerID, modelID, modelName, displayName, kind, capabilities, overrideParameters string, isActivated bool) (map[string]any, error) {
+	var override map[string]any
+	if strings.TrimSpace(overrideParameters) != "" {
+		if err := json.Unmarshal([]byte(overrideParameters), &override); err != nil {
+			return nil, fmt.Errorf("Override Parameters 不是合法 JSON 对象: %w", err)
+		}
+	}
+	if override == nil {
+		override = map[string]any{}
+	}
+
+	payload := map[string]any{
+		"command":             "provider_model_upsert",
+		"provider_id":         strings.TrimSpace(providerID),
+		"model_name":          strings.TrimSpace(modelName),
+		"display_name":        strings.TrimSpace(displayName),
+		"is_activated":        isActivated,
+		"kind":                strings.TrimSpace(kind),
+		"capabilities":        splitCSV(capabilities),
+		"override_parameters": override,
+	}
+	if trimmedModelID := strings.TrimSpace(modelID); trimmedModelID != "" {
+		payload["model_id"] = trimmedModelID
+	}
+	return payload, nil
+}
+
+func findProviderModelRow(models []map[string]any, modelID string) map[string]any {
+	for _, model := range models {
+		if asString(model["id"]) == modelID {
+			return model
+		}
+	}
+	return map[string]any{}
+}
+
+func providerModelOptionLabel(model map[string]any, index int) string {
+	name := asString(model["modelName"])
+	displayName := asString(model["displayName"])
+	if displayName == "" {
+		displayName = name
+	}
+	if name == "" {
+		name = asString(model["id"])
+	}
+	if displayName == name || name == "" {
+		return fmt.Sprintf("%d. %s", index+1, displayName)
+	}
+	return fmt.Sprintf("%d. %s · %s", index+1, displayName, name)
+}
+
+func providerModelOverrideText(model map[string]any) string {
+	if value, ok := model["overrideParameters"]; ok {
+		return prettyJSON(value)
+	}
+	return "{}"
+}
+
 func asAnySlice(v any) []any {
 	switch t := v.(type) {
 	case []any:
@@ -96,6 +154,13 @@ func asAnySlice(v any) []any {
 
 func maxInt(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

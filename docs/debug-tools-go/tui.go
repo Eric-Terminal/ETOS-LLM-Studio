@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -232,6 +231,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.active == tuiProviders {
 				appendAction(m.addProviderModel())
 			}
+		case "M", "shift+m":
+			if m.active == tuiProviders {
+				appendAction(m.editSelectedProviderModel())
+			}
 		case "e":
 			if m.active == tuiProviders {
 				appendAction(m.editSelectedProvider())
@@ -413,7 +416,7 @@ func (m tuiModel) renderHelp() string {
 	case tuiFiles:
 		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | x 删除 | n 新建目录"
 	case tuiProviders:
-		return common + " | Enter 详情 | a 新增 Provider | e 编辑 Provider | m 给选中 Provider 加模型"
+		return common + " | Enter 详情 | a 新增 Provider | e 编辑 Provider | m 新增模型 | M 编辑模型"
 	case tuiSettings:
 		return common + " | Enter 详情 | e 修改当前配置"
 	case tuiSessions:
@@ -639,24 +642,84 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		var override map[string]any
-		if strings.TrimSpace(overrideParameters) != "" {
-			if err := json.Unmarshal([]byte(overrideParameters), &override); err != nil {
-				return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("Override Parameters 不是合法 JSON 对象: %w", err)}
+		payload, err := buildProviderModelUpsertPayload(providerID, "", modelName, displayName, kind, capabilities, overrideParameters, true)
+		if err != nil {
+			return tuiCommandResultMsg{op: "providers:model", err: err}
+		}
+		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
+		return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
+	}
+}
+
+func (m tuiModel) editSelectedProviderModel() tea.Cmd {
+	row := m.providers.SelectedRow()
+	if len(row) == 0 {
+		return nil
+	}
+	providerID := row[0]
+	provider := m.findProviderRow(providerID)
+	models := asMapSlice(provider["models"])
+	if len(models) == 0 {
+		return func() tea.Msg {
+			return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("当前 Provider 没有可编辑模型")}
+		}
+	}
+
+	return func() tea.Msg {
+		modelID := asString(models[0]["id"])
+		options := make([]huh.Option[string], 0, len(models))
+		for index, model := range models {
+			id := asString(model["id"])
+			if id == "" {
+				continue
 			}
+			options = append(options, huh.NewOption(providerModelOptionLabel(model, index), id))
 		}
-		if override == nil {
-			override = map[string]any{}
+		if len(options) == 0 {
+			return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("当前 Provider 的模型缺少 ID，无法编辑")}
 		}
-		payload := map[string]any{
-			"command":             "provider_model_upsert",
-			"provider_id":         providerID,
-			"model_name":          strings.TrimSpace(modelName),
-			"display_name":        strings.TrimSpace(displayName),
-			"is_activated":        true,
-			"kind":                strings.TrimSpace(kind),
-			"capabilities":        splitCSV(capabilities),
-			"override_parameters": override,
+
+		selectForm := huh.NewForm(huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("选择要编辑的模型").
+				Options(options...).
+				Value(&modelID).
+				Height(maxInt(4, minInt(len(options), 12))),
+		))
+		if err := selectForm.Run(); err != nil {
+			return tuiCommandResultMsg{op: "noop", err: err}
+		}
+
+		model := findProviderModelRow(models, modelID)
+		if len(model) == 0 {
+			return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("未找到模型")}
+		}
+
+		modelName := asString(model["modelName"])
+		displayName := asString(model["displayName"])
+		kind := asString(model["kind"])
+		if kind == "" {
+			kind = "chat"
+		}
+		capabilities := strings.Join(asStringSlice(model["capabilities"]), ",")
+		overrideParameters := providerModelOverrideText(model)
+		isActivated := model["isActivated"] == nil || asBool(model["isActivated"])
+
+		editForm := huh.NewForm(huh.NewGroup(
+			huh.NewInput().Title("模型 ID").Value(&modelName),
+			huh.NewInput().Title("显示名称").Value(&displayName),
+			huh.NewConfirm().Title("启用模型").Affirmative("启用").Negative("停用").Value(&isActivated),
+			huh.NewInput().Title("类型(chat/image/embedding/rerank/speechToText/textToSpeech)").Value(&kind),
+			huh.NewInput().Title("能力（逗号分隔，如 toolCalling,reasoning）").Value(&capabilities),
+			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
+		))
+		if err := editForm.Run(); err != nil {
+			return tuiCommandResultMsg{op: "noop", err: err}
+		}
+
+		payload, err := buildProviderModelUpsertPayload(providerID, modelID, modelName, displayName, kind, capabilities, overrideParameters, isActivated)
+		if err != nil {
+			return tuiCommandResultMsg{op: "providers:model", err: err}
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
