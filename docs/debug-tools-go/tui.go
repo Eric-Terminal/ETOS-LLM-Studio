@@ -925,6 +925,109 @@ func newTUIForm(groups ...*huh.Group) *huh.Form {
 	return huh.NewForm(groups...).WithKeyMap(keymap).WithShowHelp(false)
 }
 
+func tuiSelectOptionsWithCurrent(options []huh.Option[string], current string) []huh.Option[string] {
+	result := append([]huh.Option[string](nil), options...)
+	current = strings.TrimSpace(current)
+	if current == "" {
+		return result
+	}
+	for _, option := range result {
+		if option.Value == current {
+			return result
+		}
+	}
+	return append(result, huh.NewOption("当前自定义: "+current, current))
+}
+
+func tuiProviderAPIFormatOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("OpenAI 兼容 (openai-compatible)", "openai-compatible"),
+		huh.NewOption("OpenAI Responses (openai-responses)", "openai-responses"),
+		huh.NewOption("Gemini (gemini)", "gemini"),
+		huh.NewOption("Anthropic (anthropic)", "anthropic"),
+	}
+}
+
+func tuiProviderProxyModeOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("继承全局 (inherit)", "inherit"),
+		huh.NewOption("禁用 (disabled)", "disabled"),
+		huh.NewOption("启用 (enabled)", "enabled"),
+	}
+}
+
+func tuiProviderProxyTypeOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("HTTP (http)", "http"),
+		huh.NewOption("SOCKS5 (socks5)", "socks5"),
+	}
+}
+
+func tuiModelKindOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("聊天 (chat)", "chat"),
+		huh.NewOption("图片生成 (image)", "image"),
+		huh.NewOption("嵌入 (embedding)", "embedding"),
+		huh.NewOption("重排 (rerank)", "rerank"),
+		huh.NewOption("语音转文字 (speechToText)", "speechToText"),
+		huh.NewOption("文字转语音 (textToSpeech)", "textToSpeech"),
+	}
+}
+
+func tuiInputModalityOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("文本 (text)", "text"),
+		huh.NewOption("图像 (image)", "image"),
+		huh.NewOption("音频 (audio)", "audio"),
+		huh.NewOption("文件 (file)", "file"),
+	}
+}
+
+func tuiOutputModalityOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("文本 (text)", "text"),
+		huh.NewOption("图像 (image)", "image"),
+		huh.NewOption("音频 (audio)", "audio"),
+	}
+}
+
+func tuiModelCapabilityOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("工具调用 (toolCalling)", "toolCalling"),
+		huh.NewOption("推理 (reasoning)", "reasoning"),
+		huh.NewOption("流式输出 (streaming)", "streaming"),
+		huh.NewOption("JSON 模式 (jsonMode)", "jsonMode"),
+		huh.NewOption("嵌入 (embedding)", "embedding"),
+		huh.NewOption("语音转文字 (speechToText)", "speechToText"),
+		huh.NewOption("文字转语音 (textToSpeech)", "textToSpeech"),
+	}
+}
+
+func tuiRequestBodyOverrideModeOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("键值覆盖 (keyValue)", "keyValue"),
+		huh.NewOption("表达式 (expression)", "expression"),
+		huh.NewOption("原始 JSON (rawJSON)", "rawJSON"),
+	}
+}
+
+func tuiSelectionValues(values []string, fallback []string) []string {
+	result := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return result
+}
+
 func tuiBlockingFormCommand(run func(tuiFormRunner) tea.Msg) tea.Cmd {
 	command := &tuiBlockingCommand{run: run}
 	return tea.Exec(command, func(err error) tea.Msg {
@@ -1118,7 +1221,11 @@ func (m tuiModel) addProvider() tea.Cmd {
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API Key").EchoMode(huh.EchoModePassword).Value(&apiKey),
-			huh.NewInput().Title("API 格式").Value(&apiFormat),
+			huh.NewSelect[string]().
+				Title("API 格式").
+				Options(tuiProviderAPIFormatOptions()...).
+				Value(&apiFormat).
+				Height(4),
 			huh.NewInput().Title("Header Overrides JSON").Value(&headerOverrides),
 			huh.NewConfirm().Title("编辑代理高级配置").Affirmative("编辑").Negative("跳过").Value(&editProxy),
 		))
@@ -1127,8 +1234,16 @@ func (m tuiModel) addProvider() tea.Cmd {
 		}
 		if editProxy {
 			proxyForm := forms.Form(huh.NewGroup(
-				huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
-				huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
+				huh.NewSelect[string]().
+					Title("代理模式").
+					Options(tuiProviderProxyModeOptions()...).
+					Value(&proxyMode).
+					Height(3),
+				huh.NewSelect[string]().
+					Title("代理类型").
+					Options(tuiProviderProxyTypeOptions()...).
+					Value(&proxyType).
+					Height(2),
 				huh.NewInput().Title("代理主机").Value(&proxyHost),
 				huh.NewInput().Title("代理端口").Value(&proxyPort),
 				huh.NewInput().Title("代理用户名").Value(&proxyUsername),
@@ -1182,7 +1297,11 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
-			huh.NewInput().Title("API 格式").Value(&apiFormat),
+			huh.NewSelect[string]().
+				Title("API 格式").
+				Options(tuiSelectOptionsWithCurrent(tuiProviderAPIFormatOptions(), apiFormat)...).
+				Value(&apiFormat).
+				Height(5),
 			huh.NewInput().Title("API Key（留空则不修改）").EchoMode(huh.EchoModePassword).Value(&apiKey),
 			huh.NewInput().Title("Header Overrides JSON").Value(&headerOverrides),
 			huh.NewConfirm().Title("编辑代理高级配置").Affirmative("编辑").Negative("跳过").Value(&editProxy),
@@ -1192,8 +1311,16 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		}
 		if editProxy {
 			proxyForm := forms.Form(huh.NewGroup(
-				huh.NewInput().Title("代理模式(inherit/disabled/enabled)").Value(&proxyMode),
-				huh.NewInput().Title("代理类型(http/socks5)").Value(&proxyType),
+				huh.NewSelect[string]().
+					Title("代理模式").
+					Options(tuiProviderProxyModeOptions()...).
+					Value(&proxyMode).
+					Height(3),
+				huh.NewSelect[string]().
+					Title("代理类型").
+					Options(tuiProviderProxyTypeOptions()...).
+					Value(&proxyType).
+					Height(2),
 				huh.NewInput().Title("代理主机").Value(&proxyHost),
 				huh.NewInput().Title("代理端口").Value(&proxyPort),
 				huh.NewInput().Title("代理用户名").Value(&proxyUsername),
@@ -1235,9 +1362,9 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		modelName := ""
 		displayName := ""
 		kind := "chat"
-		inputModalities := "text"
-		outputModalities := "text"
-		capabilities := "toolCalling"
+		inputModalities := []string{"text"}
+		outputModalities := []string{"text"}
+		capabilities := []string{"toolCalling"}
 		requestBodyOverrideMode := "keyValue"
 		rawRequestBodyJSON := ""
 		requestBodyControls := "[]"
@@ -1246,11 +1373,31 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
-			huh.NewInput().Title("类型(chat/image/embedding/rerank/speechToText/textToSpeech)").Value(&kind),
-			huh.NewInput().Title("输入模态（逗号分隔：text,image,audio,file）").Value(&inputModalities),
-			huh.NewInput().Title("输出模态（逗号分隔：text,image,audio）").Value(&outputModalities),
-			huh.NewInput().Title("能力（逗号分隔，如 toolCalling,reasoning）").Value(&capabilities),
-			huh.NewInput().Title("请求体覆盖模式(keyValue/expression/rawJSON)").Value(&requestBodyOverrideMode),
+			huh.NewSelect[string]().
+				Title("类型").
+				Options(tuiModelKindOptions()...).
+				Value(&kind).
+				Height(6),
+			huh.NewMultiSelect[string]().
+				Title("输入模态").
+				Options(tuiInputModalityOptions()...).
+				Value(&inputModalities).
+				Height(4),
+			huh.NewMultiSelect[string]().
+				Title("输出模态").
+				Options(tuiOutputModalityOptions()...).
+				Value(&outputModalities).
+				Height(3),
+			huh.NewMultiSelect[string]().
+				Title("能力").
+				Options(tuiModelCapabilityOptions()...).
+				Value(&capabilities).
+				Height(7),
+			huh.NewSelect[string]().
+				Title("请求体覆盖模式").
+				Options(tuiRequestBodyOverrideModeOptions()...).
+				Value(&requestBodyOverrideMode).
+				Height(3),
 			huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON),
 			huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls),
 			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
@@ -1264,9 +1411,9 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 			ModelName:               modelName,
 			DisplayName:             displayName,
 			Kind:                    kind,
-			InputModalities:         inputModalities,
-			OutputModalities:        outputModalities,
-			Capabilities:            capabilities,
+			InputModalities:         strings.Join(inputModalities, ","),
+			OutputModalities:        strings.Join(outputModalities, ","),
+			Capabilities:            strings.Join(capabilities, ","),
 			RequestBodyOverrideMode: requestBodyOverrideMode,
 			RawRequestBodyJSON:      rawRequestBodyJSON,
 			RequestBodyControls:     requestBodyControls,
@@ -1331,15 +1478,9 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 		if kind == "" {
 			kind = "chat"
 		}
-		inputModalities := strings.Join(asStringSlice(model["inputModalities"]), ",")
-		if inputModalities == "" {
-			inputModalities = "text"
-		}
-		outputModalities := strings.Join(asStringSlice(model["outputModalities"]), ",")
-		if outputModalities == "" {
-			outputModalities = "text"
-		}
-		capabilities := strings.Join(asStringSlice(model["capabilities"]), ",")
+		inputModalities := tuiSelectionValues(asStringSlice(model["inputModalities"]), []string{"text"})
+		outputModalities := tuiSelectionValues(asStringSlice(model["outputModalities"]), []string{"text"})
+		capabilities := tuiSelectionValues(asStringSlice(model["capabilities"]), nil)
 		requestBodyOverrideMode := asString(model["requestBodyOverrideMode"])
 		if requestBodyOverrideMode == "" {
 			requestBodyOverrideMode = "keyValue"
@@ -1354,11 +1495,31 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
 			huh.NewConfirm().Title("启用模型").Affirmative("启用").Negative("停用").Value(&isActivated),
-			huh.NewInput().Title("类型(chat/image/embedding/rerank/speechToText/textToSpeech)").Value(&kind),
-			huh.NewInput().Title("输入模态（逗号分隔：text,image,audio,file）").Value(&inputModalities),
-			huh.NewInput().Title("输出模态（逗号分隔：text,image,audio）").Value(&outputModalities),
-			huh.NewInput().Title("能力（逗号分隔，如 toolCalling,reasoning）").Value(&capabilities),
-			huh.NewInput().Title("请求体覆盖模式(keyValue/expression/rawJSON)").Value(&requestBodyOverrideMode),
+			huh.NewSelect[string]().
+				Title("类型").
+				Options(tuiSelectOptionsWithCurrent(tuiModelKindOptions(), kind)...).
+				Value(&kind).
+				Height(6),
+			huh.NewMultiSelect[string]().
+				Title("输入模态").
+				Options(tuiInputModalityOptions()...).
+				Value(&inputModalities).
+				Height(4),
+			huh.NewMultiSelect[string]().
+				Title("输出模态").
+				Options(tuiOutputModalityOptions()...).
+				Value(&outputModalities).
+				Height(3),
+			huh.NewMultiSelect[string]().
+				Title("能力").
+				Options(tuiModelCapabilityOptions()...).
+				Value(&capabilities).
+				Height(7),
+			huh.NewSelect[string]().
+				Title("请求体覆盖模式").
+				Options(tuiSelectOptionsWithCurrent(tuiRequestBodyOverrideModeOptions(), requestBodyOverrideMode)...).
+				Value(&requestBodyOverrideMode).
+				Height(4),
 			huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON),
 			huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls),
 			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
@@ -1374,9 +1535,9 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			ModelName:               modelName,
 			DisplayName:             displayName,
 			Kind:                    kind,
-			InputModalities:         inputModalities,
-			OutputModalities:        outputModalities,
-			Capabilities:            capabilities,
+			InputModalities:         strings.Join(inputModalities, ","),
+			OutputModalities:        strings.Join(outputModalities, ","),
+			Capabilities:            strings.Join(capabilities, ","),
 			RequestBodyOverrideMode: requestBodyOverrideMode,
 			RawRequestBodyJSON:      rawRequestBodyJSON,
 			RequestBodyControls:     requestBodyControls,

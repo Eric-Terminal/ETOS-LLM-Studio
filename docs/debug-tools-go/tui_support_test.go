@@ -743,6 +743,30 @@ func TestTUIProviderDetailFocusScrollsWithDownKey(t *testing.T) {
 	}
 }
 
+func TestTUISelectOptionsPreserveCurrentCustomValue(t *testing.T) {
+	options := tuiSelectOptionsWithCurrent(tuiProviderAPIFormatOptions(), "minimax")
+	if options[len(options)-1].Value != "minimax" || !strings.Contains(options[len(options)-1].Key, "当前自定义") {
+		t.Fatalf("自定义选项未被保留: %#v", options)
+	}
+
+	options = tuiSelectOptionsWithCurrent(tuiProviderAPIFormatOptions(), "gemini")
+	if options[len(options)-1].Value == "gemini" && strings.Contains(options[len(options)-1].Key, "当前自定义") {
+		t.Fatalf("已知选项不应重复追加自定义值: %#v", options)
+	}
+}
+
+func TestTUISelectionValuesDeduplicatesAndFallsBack(t *testing.T) {
+	got := tuiSelectionValues([]string{" text ", "image", "text", ""}, []string{"audio"})
+	if strings.Join(got, ",") != "text,image" {
+		t.Fatalf("选择值清洗结果 = %#v, want text/image", got)
+	}
+
+	got = tuiSelectionValues([]string{" ", ""}, []string{"text"})
+	if strings.Join(got, ",") != "text" {
+		t.Fatalf("空选择没有回退默认值: %#v", got)
+	}
+}
+
 func TestTUIReadablePreviewsAvoidRawJSON(t *testing.T) {
 	previews := []string{
 		settingPreview(map[string]any{
