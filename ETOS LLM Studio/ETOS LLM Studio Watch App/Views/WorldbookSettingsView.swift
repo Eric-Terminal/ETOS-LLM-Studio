@@ -18,6 +18,7 @@ struct WorldbookSettingsView: View {
     @State private var worldbookToDelete: Worldbook?
     @State private var importURLText: String = ""
     @State private var isImportingFromURL = false
+    @State private var importDownloadProgress: SyncPackageDownloadProgress?
     @State private var importError: String?
     @State private var importReport: WorldbookImportReport?
     @State private var isShowingIntroDetails = false
@@ -124,7 +125,7 @@ struct WorldbookSettingsView: View {
                 .disabled(isImportingFromURL)
 
                 if isImportingFromURL {
-                    ProgressView()
+                    WorldbookDownloadProgressView(progress: importDownloadProgress)
                 }
 
                 Text(NSLocalizedString("支持 http/https 的 JSON 或 PNG 链接。", comment: "Supported URL formats"))
@@ -306,12 +307,21 @@ struct WorldbookSettingsView: View {
 
         importError = nil
         isImportingFromURL = true
+        importDownloadProgress = nil
 
         Task {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 45
-                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            importDownloadProgress = progress
+                        }
+                    }
+                )
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
                         importError = String(
@@ -319,10 +329,20 @@ struct WorldbookSettingsView: View {
                             httpResponse.statusCode
                         )
                         isImportingFromURL = false
+                        importDownloadProgress = nil
                     }
                     return
                 }
 
+                let data = try await Task.detached(priority: .utility) {
+                    try Data(contentsOf: downloadedURL)
+                }.value
+                await MainActor.run {
+                    importDownloadProgress = SyncPackageDownloadProgress(
+                        bytesReceived: Int64(data.count),
+                        totalBytes: Int64(data.count)
+                    )
+                }
                 let fileName = suggestedRemoteImportFileName(from: url, response: response)
                 let report = try await Task.detached(priority: .userInitiated) {
                     try ChatService.shared.importWorldbook(data: data, fileName: fileName)
@@ -332,12 +352,14 @@ struct WorldbookSettingsView: View {
                     importError = report.failureReasons.isEmpty ? nil : report.failureReasons.joined(separator: "\n")
                     importURLText = ""
                     isImportingFromURL = false
+                    importDownloadProgress = nil
                     load()
                 }
             } catch {
                 await MainActor.run {
                     importError = error.localizedDescription
                     isImportingFromURL = false
+                    importDownloadProgress = nil
                 }
             }
         }
@@ -366,4 +388,42 @@ struct WorldbookSettingsView: View {
         return "\(fileName).json"
     }
 
+}
+
+private struct WorldbookDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
+                Spacer()
+                if let progress, progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                }
+            }
+            .etFont(.caption2)
+
+            if let progress, progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
 }

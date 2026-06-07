@@ -35,6 +35,10 @@ struct WatchInputBubbleView: View {
             || !viewModel.pendingFileAttachments.isEmpty
     }
 
+    private var hasAttachmentImportProgress: Bool {
+        viewModel.attachmentImportProgress != nil || viewModel.attachmentImportInProgress
+    }
+
     private var transparentInputField: some View {
         ZStack(alignment: .leading) {
             inputDisplayText
@@ -94,6 +98,10 @@ struct WatchInputBubbleView: View {
     @ViewBuilder
     private var pendingAttachmentPreview: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let progress = viewModel.attachmentImportProgress {
+                attachmentImportProgressRow(progress)
+            }
+
             if !viewModel.pendingImageAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 8) {
@@ -178,6 +186,58 @@ struct WatchInputBubbleView: View {
         .cornerRadius(8)
     }
 
+    private func attachmentImportProgressRow(_ progress: WatchAttachmentImportProgress) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down.circle")
+                    .etFont(.system(size: 12))
+                    .foregroundStyle(.blue)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(NSLocalizedString("正在下载附件", comment: "Watch attachment import progress title"))
+                        .etFont(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(progress.sourceName)
+                        .etFont(.system(size: 10))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                }
+
+                Spacer()
+
+                if progress.isDeterminate {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .etFont(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.blue)
+                } else {
+                    ProgressView()
+                }
+            }
+
+            if progress.isDeterminate {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: "Watch attachment import downloaded bytes"),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.system(size: 9))
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(white: 0.2))
+        .cornerRadius(8)
+    }
+
     var body: some View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let canSend = hasTrimmedText || hasPendingAttachments
@@ -190,7 +250,7 @@ struct WatchInputBubbleView: View {
 
         let coreBubble = Group {
             VStack(spacing: 6) {
-                if hasPendingAttachments {
+                if hasPendingAttachments || hasAttachmentImportProgress {
                     pendingAttachmentPreview
                 }
 
@@ -209,7 +269,7 @@ struct WatchInputBubbleView: View {
                             }
                             .buttonStyle(.plain)
                             .glassEffect(.clear, in: Circle())
-                            .disabled(inputActionState.isDisabled)
+                            .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
                         } else {
                             ZStack {
                                 Capsule()
@@ -233,7 +293,7 @@ struct WatchInputBubbleView: View {
                                 Circle()
                                     .stroke(inputStrokeColor, lineWidth: 0.8)
                             )
-                            .disabled(inputActionState.isDisabled)
+                            .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
                         }
                     }
                     .frame(height: inputControlHeight)
@@ -264,7 +324,7 @@ struct WatchInputBubbleView: View {
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
                         )
-                        .disabled(inputActionState.isDisabled)
+                        .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
                     }
                     .frame(height: inputControlHeight)
                     .padding(.horizontal, 10)

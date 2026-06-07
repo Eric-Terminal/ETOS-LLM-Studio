@@ -86,6 +86,25 @@ public struct SyncPackageUploadProgress: Equatable, Sendable {
     }
 }
 
+public struct SyncPackageDownloadProgress: Equatable, Sendable {
+    public let bytesReceived: Int64
+    public let totalBytes: Int64
+
+    public init(bytesReceived: Int64, totalBytes: Int64) {
+        let normalizedTotalBytes = max(0, totalBytes)
+        let normalizedBytesReceived = max(0, bytesReceived)
+        self.totalBytes = normalizedTotalBytes
+        self.bytesReceived = normalizedTotalBytes > 0
+            ? min(normalizedBytesReceived, normalizedTotalBytes)
+            : normalizedBytesReceived
+    }
+
+    public var fractionCompleted: Double {
+        guard totalBytes > 0 else { return 0 }
+        return min(max(Double(bytesReceived) / Double(totalBytes), 0), 1)
+    }
+}
+
 public enum SyncPackageUploadError: LocalizedError {
     case invalidHTTPResponse
     case unexpectedStatusCode(Int, String?)
@@ -122,6 +141,7 @@ public enum SyncPackageUploadService {
     public typealias RequestTransport = (_ request: URLRequest) async throws -> (Data, URLResponse)
     public typealias DownloadTransport = (_ request: URLRequest) async throws -> (URL, URLResponse)
     public typealias ProgressHandler = @Sendable (SyncPackageUploadProgress) -> Void
+    public typealias DownloadProgressHandler = @Sendable (SyncPackageDownloadProgress) -> Void
 
     /// 直接上传导出数据。
     public static func upload(
@@ -339,7 +359,8 @@ public enum SyncPackageUploadService {
         destinationDirectory: URL = FileManager.default.temporaryDirectory,
         timeout: TimeInterval = 180,
         now: Date = Date(),
-        transport: DownloadTransport? = nil
+        transport: DownloadTransport? = nil,
+        progress: DownloadProgressHandler? = nil
     ) async throws -> URL {
         let request = try makeS3GetObjectRequest(
             objectKey: objectKey,
@@ -348,7 +369,7 @@ public enum SyncPackageUploadService {
             now: now
         )
         let downloader = transport ?? { request in
-            try await NetworkSessionConfiguration.shared.download(for: request)
+            try await downloadTemporaryFile(request: request, progress: progress)
         }
         let (downloadedURL, response) = try await downloader(request)
 
@@ -360,6 +381,7 @@ public enum SyncPackageUploadService {
             throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, nil)
         }
 
+        reportCompletedDownloadProgress(for: downloadedURL, response: response, progress: progress)
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         let fileName = normalizedSnapshotFileName(for: objectKey)
@@ -370,6 +392,13 @@ public enum SyncPackageUploadService {
         }
         try fileManager.moveItem(at: downloadedURL, to: destinationURL)
         return destinationURL
+    }
+
+    public static func downloadTemporaryFile(
+        request: URLRequest,
+        progress: DownloadProgressHandler? = nil
+    ) async throws -> (URL, URLResponse) {
+        try await downloadFile(request: request, progress: progress)
     }
 }
 
@@ -392,6 +421,17 @@ private extension SyncPackageUploadService {
         )
     }
 
+    static func downloadFile(
+        request: URLRequest,
+        progress: DownloadProgressHandler?
+    ) async throws -> (URL, URLResponse) {
+        let delegate = DownloadProgressDelegate(progress: progress)
+        return try await NetworkSessionConfiguration.shared.download(
+            for: request,
+            delegate: delegate
+        )
+    }
+
     static func reportInitialProgress(for fileURL: URL, progress: ProgressHandler?) {
         guard let progress else { return }
         progress(SyncPackageUploadProgress(bytesSent: 0, totalBytes: fileSizeInBytes(at: fileURL)))
@@ -406,6 +446,19 @@ private extension SyncPackageUploadService {
     static func fileSizeInBytes(at fileURL: URL) -> Int64 {
         let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
         return Int64(values?.fileSize ?? 0)
+    }
+
+    static func reportCompletedDownloadProgress(
+        for fileURL: URL,
+        response: URLResponse,
+        progress: DownloadProgressHandler?
+    ) {
+        guard let progress else { return }
+        let receivedBytes = fileSizeInBytes(at: fileURL)
+        let expectedBytes = response.expectedContentLength > 0
+            ? response.expectedContentLength
+            : receivedBytes
+        progress(SyncPackageDownloadProgress(bytesReceived: receivedBytes, totalBytes: expectedBytes))
     }
 
     static func makeUploadRequest(
@@ -884,6 +937,25 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
     ) {
         let expectedBytes = totalBytesExpectedToSend > 0 ? totalBytesExpectedToSend : totalBytes
         progress?(SyncPackageUploadProgress(bytesSent: totalBytesSent, totalBytes: expectedBytes))
+    }
+}
+
+private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    private let progress: SyncPackageUploadService.DownloadProgressHandler?
+
+    init(progress: SyncPackageUploadService.DownloadProgressHandler?) {
+        self.progress = progress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        let expectedBytes = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : 0
+        progress?(SyncPackageDownloadProgress(bytesReceived: totalBytesWritten, totalBytes: expectedBytes))
     }
 }
 

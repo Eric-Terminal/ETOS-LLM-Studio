@@ -123,6 +123,7 @@ class ChatViewModel: ObservableObject {
     @Published var pendingImageAttachments: [ImageAttachment] = []
     @Published var pendingFileAttachments: [FileAttachment] = []
     @Published var attachmentImportInProgress: Bool = false
+    @Published var attachmentImportProgress: WatchAttachmentImportProgress?
     @Published var attachmentImportErrorMessage: String?
     @Published var showAttachmentImportErrorAlert: Bool = false
     @Published var latestAssistantMessageID: UUID?

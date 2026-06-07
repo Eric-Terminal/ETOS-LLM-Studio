@@ -432,7 +432,10 @@ public final class SkillManager: ObservableObject {
         }
     }
 
-    public func importSkillFromURL(urlString: String) async -> (success: Bool, message: String) {
+    public func importSkillFromURL(
+        urlString: String,
+        progress: SyncPackageUploadService.DownloadProgressHandler? = nil
+    ) async -> (success: Bool, message: String) {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             let message = NSLocalizedString("链接不能为空。", comment: "")
@@ -453,7 +456,12 @@ public final class SkillManager: ObservableObject {
         do {
             var request = URLRequest(url: url)
             request.timeoutInterval = 45
-            let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+            progress?(SyncPackageDownloadProgress(bytesReceived: 0, totalBytes: 0))
+            let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                request: request,
+                progress: progress
+            )
+            defer { try? FileManager.default.removeItem(at: downloadedURL) }
             if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                 let message = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
                 lastErrorMessage = message
@@ -464,6 +472,11 @@ public final class SkillManager: ObservableObject {
             let shouldUseSourcePath = suggestedFilename?.isEmpty != false
                 || suggestedFilename?.caseInsensitiveCompare(SkillStore.defaultSkillFileName) == .orderedSame
             let fileName = shouldUseSourcePath ? url.path : suggestedFilename!
+            let data = try await Task.detached(priority: .utility) {
+                try Data(contentsOf: downloadedURL)
+            }.value
+            let completedBytes = Int64(data.count)
+            progress?(SyncPackageDownloadProgress(bytesReceived: completedBytes, totalBytes: completedBytes))
             let result = try await Task.detached(priority: .utility) {
                 try SkillBundleImporter.importSkill(fromDownloadedData: data, suggestedFileName: fileName)
             }.value

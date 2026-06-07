@@ -15,6 +15,7 @@ struct LocalModelManagementView: View {
     @State private var downloadURLText = ""
     @State private var displayName = ""
     @State private var isDownloading = false
+    @State private var downloadProgress: SyncPackageDownloadProgress?
     @State private var statusMessage: String?
 
     var body: some View {
@@ -41,6 +42,10 @@ struct LocalModelManagementView: View {
                     }
                 }
                 .disabled(isDownloading || normalizedURL == nil)
+
+                if let downloadProgress {
+                    LocalModelDownloadProgressView(progress: downloadProgress)
+                }
             } footer: {
                 Text(NSLocalizedString("下载后的模型只保存在当前手表。", comment: "Watch local model download footer"))
                     .etFont(.caption2)
@@ -95,18 +100,33 @@ struct LocalModelManagementView: View {
         guard let url = normalizedURL else { return }
         let requestedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         isDownloading = true
+        downloadProgress = nil
         statusMessage = nil
         Task {
             do {
-                let (downloadedURL, response) = try await URLSession.shared.download(from: url)
+                var request = URLRequest(url: url)
+                request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            downloadProgress = progress
+                        }
+                    }
+                )
                 defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 try validateDownloadResponse(response)
                 let suggestedName = url.lastPathComponent.isEmpty ? "model.gguf" : url.lastPathComponent
+                let completedSize = downloadedFileSize(at: downloadedURL)
                 try await MainActor.run {
                     _ = try store.registerDownloadedModel(
                         fileAt: downloadedURL,
                         suggestedFileName: suggestedName,
                         displayName: requestedDisplayName.isEmpty ? nil : requestedDisplayName
+                    )
+                    downloadProgress = SyncPackageDownloadProgress(
+                        bytesReceived: completedSize,
+                        totalBytes: completedSize
                     )
                     downloadURLText = ""
                     displayName = ""
@@ -117,6 +137,7 @@ struct LocalModelManagementView: View {
                 await MainActor.run {
                     statusMessage = error.localizedDescription
                     isDownloading = false
+                    downloadProgress = nil
                 }
             }
         }
@@ -133,6 +154,47 @@ struct LocalModelManagementView: View {
                 httpResponse.statusCode
             )
         ])
+    }
+
+    private func downloadedFileSize(at url: URL) -> Int64 {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values?.fileSize ?? 0)
+    }
+}
+
+private struct LocalModelDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(NSLocalizedString("下载进度", comment: ""))
+                Spacer()
+                if progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                }
+            }
+            .etFont(.caption2)
+
+            if progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

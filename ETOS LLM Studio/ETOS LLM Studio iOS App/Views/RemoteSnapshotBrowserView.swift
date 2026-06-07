@@ -119,6 +119,7 @@ private struct RemoteSnapshotDetailView: View {
     let configuration: S3CompatibleUploadConfiguration
 
     @State private var isDownloading = false
+    @State private var downloadProgress: SyncPackageDownloadProgress?
     @State private var errorMessage: String?
     @State private var restorePayload: IncomingSnapshotRestorePayload?
 
@@ -167,6 +168,10 @@ private struct RemoteSnapshotDetailView: View {
                     }
                 }
                 .disabled(isDownloading)
+
+                if let downloadProgress {
+                    SnapshotDownloadProgressView(progress: downloadProgress)
+                }
             }
         }
         .navigationTitle(snapshot.fileName)
@@ -192,16 +197,67 @@ private struct RemoteSnapshotDetailView: View {
     private func download() async {
         isDownloading = true
         errorMessage = nil
+        if let byteSize = snapshot.byteSize {
+            downloadProgress = SyncPackageDownloadProgress(bytesReceived: 0, totalBytes: byteSize)
+        } else {
+            downloadProgress = nil
+        }
         do {
             let fileURL = try await SyncPackageUploadService.downloadRemoteSnapshot(
                 objectKey: snapshot.key,
-                s3: configuration
+                s3: configuration,
+                progress: { progress in
+                    Task { @MainActor in
+                        downloadProgress = progress
+                    }
+                }
             )
             isDownloading = false
             restorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
         } catch {
             isDownloading = false
+            downloadProgress = nil
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct SnapshotDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(NSLocalizedString("下载进度", comment: ""))
+                Spacer()
+                if progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                }
+            }
+            .etFont(.footnote)
+
+            if progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                Text(progressText)
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                Text(NSLocalizedString("正在下载快照…", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var progressText: String {
+        String(
+            format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+            StorageUtility.formatSize(progress.bytesReceived),
+            StorageUtility.formatSize(progress.totalBytes)
+        )
     }
 }

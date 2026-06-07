@@ -26,6 +26,7 @@ struct WorldbookSettingsView: View {
     @State private var isURLImportSheetPresented = false
     @State private var importURLText: String = ""
     @State private var isImportingFromURL = false
+    @State private var importDownloadProgress: SyncPackageDownloadProgress?
     @State private var isShowingIntroDetails = false
 
     var body: some View {
@@ -92,12 +93,7 @@ struct WorldbookSettingsView: View {
                 }
 
                 if isImportingFromURL {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
-                            .etFont(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    WorldbookDownloadProgressView(progress: importDownloadProgress)
                 }
             }
 
@@ -222,7 +218,7 @@ struct WorldbookSettingsView: View {
 
                     if isImportingFromURL {
                         Section {
-                            ProgressView(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
+                            WorldbookDownloadProgressView(progress: importDownloadProgress)
                         }
                     }
                 }
@@ -488,12 +484,21 @@ struct WorldbookSettingsView: View {
 
         importError = nil
         isImportingFromURL = true
+        importDownloadProgress = nil
 
         Task {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 45
-                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            importDownloadProgress = progress
+                        }
+                    }
+                )
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
                         importError = String(
@@ -501,10 +506,20 @@ struct WorldbookSettingsView: View {
                             httpResponse.statusCode
                         )
                         isImportingFromURL = false
+                        importDownloadProgress = nil
                     }
                     return
                 }
 
+                let data = try await Task.detached(priority: .utility) {
+                    try Data(contentsOf: downloadedURL)
+                }.value
+                await MainActor.run {
+                    importDownloadProgress = SyncPackageDownloadProgress(
+                        bytesReceived: Int64(data.count),
+                        totalBytes: Int64(data.count)
+                    )
+                }
                 let fileName = suggestedRemoteImportFileName(from: url, response: response)
                 let report = try await Task.detached(priority: .userInitiated) {
                     try ChatService.shared.importWorldbook(data: data, fileName: fileName)
@@ -516,12 +531,14 @@ struct WorldbookSettingsView: View {
                     reloadWorldbooks()
                     importURLText = ""
                     isImportingFromURL = false
+                    importDownloadProgress = nil
                     isURLImportSheetPresented = false
                 }
             } catch {
                 await MainActor.run {
                     importError = error.localizedDescription
                     isImportingFromURL = false
+                    importDownloadProgress = nil
                 }
             }
         }
@@ -562,5 +579,42 @@ struct WorldbookSettingsView: View {
             lines.append(contentsOf: report.failureReasons)
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+private struct WorldbookDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress?
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
+                Spacer()
+                if let progress, progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                }
+            }
+            .etFont(.footnote)
+
+            if let progress, progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }

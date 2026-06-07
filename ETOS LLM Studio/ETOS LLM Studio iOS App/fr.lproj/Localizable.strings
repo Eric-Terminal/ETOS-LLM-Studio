@@ -4100,3 +4100,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "将保留%@的%@。" = "Will keep %@ for %@.";
 "iPhone" = "iPhone";
 "Apple Watch" = "Apple Watch";
+"下载进度" = "Progression du téléchargement";
+"已下载 %@ / %@" = "Téléchargé %@ / %@";

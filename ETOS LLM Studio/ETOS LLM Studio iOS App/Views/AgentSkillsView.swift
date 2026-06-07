@@ -419,6 +419,7 @@ private struct ImportSkillFromURLSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var fileURLText = ""
     @State private var isImporting = false
+    @State private var importDownloadProgress: SyncPackageDownloadProgress?
     @State private var localError: String?
 
     var body: some View {
@@ -437,12 +438,7 @@ private struct ImportSkillFromURLSheet: View {
 
                 if isImporting {
                     Section {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text(NSLocalizedString("正在导入，请稍候…", comment: ""))
-                                .etFont(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
+                        SkillImportDownloadProgressView(progress: importDownloadProgress)
                     }
                 }
 
@@ -472,12 +468,18 @@ private struct ImportSkillFromURLSheet: View {
 
     private func startImportFromURL() {
         isImporting = true
+        importDownloadProgress = SyncPackageDownloadProgress(bytesReceived: 0, totalBytes: 0)
         localError = nil
 
         Task {
-            let result = await manager.importSkillFromURL(urlString: fileURLText)
+            let result = await manager.importSkillFromURL(urlString: fileURLText) { progress in
+                Task { @MainActor in
+                    importDownloadProgress = progress
+                }
+            }
             await MainActor.run {
                 isImporting = false
+                importDownloadProgress = nil
                 if result.success {
                     dismiss()
                 } else {
@@ -485,6 +487,43 @@ private struct ImportSkillFromURLSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct SkillImportDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress?
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(NSLocalizedString("正在导入，请稍候…", comment: ""))
+                Spacer()
+                if let progress, progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                }
+            }
+            .etFont(.footnote)
+
+            if let progress, progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

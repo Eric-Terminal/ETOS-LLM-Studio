@@ -22,6 +22,7 @@ struct ThirdPartyImportWatchHintView: View {
     @State private var importReport: ThirdPartyImportReport?
     @State private var importError: String?
     @State private var preparationRequestID: UUID?
+    @State private var preparationDownloadProgress: SyncPackageDownloadProgress?
 
     var body: some View {
         List {
@@ -56,7 +57,7 @@ struct ThirdPartyImportWatchHintView: View {
                 }
 
                 if isPreparing {
-                    progressRow(text: "正在下载并解析...")
+                    progressRow(text: "正在下载并解析...", downloadProgress: preparationDownloadProgress)
                 }
 
                 if isImporting {
@@ -199,6 +200,7 @@ struct ThirdPartyImportWatchHintView: View {
         }
 
         isPreparing = true
+        preparationDownloadProgress = nil
         importError = nil
         importReport = nil
         preparedResult = nil
@@ -211,15 +213,35 @@ struct ThirdPartyImportWatchHintView: View {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 45
-                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            guard preparationRequestID == requestID else { return }
+                            preparationDownloadProgress = progress
+                        }
+                    }
+                )
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
                         importError = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
                         isPreparing = false
+                        preparationDownloadProgress = nil
                     }
                     return
                 }
 
+                let data = try await Task.detached(priority: .utility) {
+                    try Data(contentsOf: downloadedURL)
+                }.value
+                await MainActor.run {
+                    guard preparationRequestID == requestID else { return }
+                    preparationDownloadProgress = SyncPackageDownloadProgress(
+                        bytesReceived: Int64(data.count),
+                        totalBytes: Int64(data.count)
+                    )
+                }
                 let fileName = ThirdPartyImportRemoteFileHelper.suggestedFileName(
                     from: url,
                     response: response,
@@ -248,12 +270,14 @@ struct ThirdPartyImportWatchHintView: View {
                     includeSessions = prepared.package.options.contains(.sessions)
                     conflictPreview = preview
                     isPreparing = false
+                    preparationDownloadProgress = nil
                 }
             } catch {
                 await MainActor.run {
                     guard preparationRequestID == requestID else { return }
                     importError = error.localizedDescription
                     isPreparing = false
+                    preparationDownloadProgress = nil
                 }
             }
         }
@@ -351,6 +375,7 @@ struct ThirdPartyImportWatchHintView: View {
 
     private func resetPreparedState() {
         preparationRequestID = nil
+        preparationDownloadProgress = nil
         isPreparing = false
         selectedFileName = ""
         preparedResult = nil
@@ -362,12 +387,36 @@ struct ThirdPartyImportWatchHintView: View {
     }
 
     @ViewBuilder
-    private func progressRow(text: String) -> some View {
-        HStack(spacing: 8) {
-            ProgressView()
-            Text(NSLocalizedString(text, comment: "导入进度文本"))
+    private func progressRow(text: String, downloadProgress: SyncPackageDownloadProgress? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                if downloadProgress?.totalBytes ?? 0 <= 0 {
+                    ProgressView()
+                }
+                Text(NSLocalizedString(text, comment: "导入进度文本"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let downloadProgress, downloadProgress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", downloadProgress.fractionCompleted * 100))
+                        .etFont(.caption2)
+                        .monospacedDigit()
+                }
+            }
+
+            if let downloadProgress, downloadProgress.totalBytes > 0 {
+                ProgressView(value: downloadProgress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(downloadProgress.bytesReceived),
+                        StorageUtility.formatSize(downloadProgress.totalBytes)
+                    )
+                )
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
+            }
         }
     }
 

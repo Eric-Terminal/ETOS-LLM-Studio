@@ -21,6 +21,7 @@ struct ChatExportFormatsView: View {
     @State private var includeReasoning: Bool = true
     @State private var uploadURLText: String = ""
     @State private var uploadingFormat: ChatTranscriptExportFormat?
+    @State private var uploadProgress: SyncPackageUploadProgress?
     @State private var uploadMessage: String?
     @State private var uploadError: String?
 
@@ -63,13 +64,7 @@ struct ChatExportFormatsView: View {
                 Section(format.displayName) {
                     if let url = fileURLs[format] {
                         if uploadingFormat == format {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                Text(NSLocalizedString("上传进度", comment: ""))
-                                    .etFont(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            ChatExportUploadProgressView(progress: uploadProgress)
                         } else {
                             Button {
                                 upload(format: format, fileURL: url)
@@ -175,6 +170,7 @@ struct ChatExportFormatsView: View {
         }
 
         uploadingFormat = format
+        uploadProgress = SyncPackageUploadProgress(bytesSent: 0, totalBytes: fileSize(at: fileURL))
         uploadError = nil
         uploadMessage = nil
 
@@ -188,7 +184,19 @@ struct ChatExportFormatsView: View {
                 request.setValue(suggestedFileNames[format] ?? fileURL.lastPathComponent, forHTTPHeaderField: "X-ETOS-Export-FileName")
                 request.setValue(format.fileExtension, forHTTPHeaderField: "X-ETOS-Export-Format")
 
-                let (data, response) = try await NetworkSessionConfiguration.shared.upload(for: request, fromFile: fileURL)
+                let delegate = ChatExportUploadProgressDelegate(
+                    totalBytes: fileSize(at: fileURL),
+                    progress: { progress in
+                        Task { @MainActor in
+                            uploadProgress = progress
+                        }
+                    }
+                )
+                let (data, response) = try await NetworkSessionConfiguration.shared.upload(
+                    for: request,
+                    fromFile: fileURL,
+                    delegate: delegate
+                )
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw URLError(.badServerResponse)
@@ -203,14 +211,18 @@ struct ChatExportFormatsView: View {
                     }
                     uploadMessage = nil
                     uploadingFormat = nil
+                    uploadProgress = nil
                     return
                 }
 
+                let completedBytes = fileSize(at: fileURL)
+                uploadProgress = SyncPackageUploadProgress(bytesSent: completedBytes, totalBytes: completedBytes)
                 uploadMessage = String(format: NSLocalizedString("上传成功（HTTP %d）", comment: ""), httpResponse.statusCode)
                 uploadError = nil
             } catch {
                 uploadMessage = nil
                 uploadError = error.localizedDescription
+                uploadProgress = nil
             }
 
             uploadingFormat = nil
@@ -237,5 +249,70 @@ struct ChatExportFormatsView: View {
         case .text:
             return "doc.plaintext"
         }
+    }
+
+    private func fileSize(at url: URL) -> Int64 {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values?.fileSize ?? 0)
+    }
+}
+
+private struct ChatExportUploadProgressView: View {
+    let progress: SyncPackageUploadProgress?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(NSLocalizedString("上传进度", comment: ""))
+                Spacer()
+                if let progress, progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+            .etFont(.caption)
+
+            if let progress, progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已上传 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesSent),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private final class ChatExportUploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let totalBytes: Int64
+    private let progress: @Sendable (SyncPackageUploadProgress) -> Void
+
+    init(totalBytes: Int64, progress: @escaping @Sendable (SyncPackageUploadProgress) -> Void) {
+        self.totalBytes = totalBytes
+        self.progress = progress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        let expectedBytes = totalBytesExpectedToSend > 0 ? totalBytesExpectedToSend : totalBytes
+        progress(SyncPackageUploadProgress(bytesSent: totalBytesSent, totalBytes: expectedBytes))
     }
 }

@@ -3984,3 +3984,7 @@
 "将保留%@的%@。" = "Will keep %@ for %@.";
 "iPhone" = "iPhone";
 "Apple Watch" = "Apple Watch";
+"下载进度" = "Download Progress";
+"已下载 %@ / %@" = "Downloaded %@ / %@";
+"正在下载附件" = "Downloading attachment";
+"正在下载并解析..." = "Downloading and parsing...";

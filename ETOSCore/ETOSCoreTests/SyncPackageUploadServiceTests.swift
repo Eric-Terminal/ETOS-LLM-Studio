@@ -152,6 +152,15 @@ struct SyncPackageUploadServiceTests {
         #expect(progress.fractionCompleted == 1)
     }
 
+    @Test("下载进度会限制在总大小范围内")
+    func testDownloadProgressClampsValues() {
+        let progress = SyncPackageDownloadProgress(bytesReceived: 2048, totalBytes: 1024)
+
+        #expect(progress.bytesReceived == 1024)
+        #expect(progress.totalBytes == 1024)
+        #expect(progress.fractionCompleted == 1)
+    }
+
     @Test("S3 兼容快照上传会生成 SigV4 PUT 请求")
     func testS3UploadSnapshotBuildsSignedPutRequest() async throws {
         let endpoint = try #require(URL(string: "https://abc123.r2.cloudflarestorage.com"))
@@ -319,6 +328,7 @@ struct SyncPackageUploadServiceTests {
         }
 
         var capturedRequest: URLRequest?
+        let progressEvents = DownloadProgressRecorder()
         let downloadedURL = try await SyncPackageUploadService.downloadRemoteSnapshot(
             objectKey: "mobile backups/ETOS-Snapshot-a.elsbackup",
             s3: configuration,
@@ -327,9 +337,14 @@ struct SyncPackageUploadServiceTests {
             transport: { request in
                 capturedRequest = request
                 let response = try #require(
-                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: [
+                        "Content-Length": "8"
+                    ])
                 )
                 return (sourceURL, response)
+            },
+            progress: { progress in
+                progressEvents.append(progress)
             }
         )
 
@@ -340,6 +355,7 @@ struct SyncPackageUploadServiceTests {
         #expect(authorization.contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date"))
         #expect(try Data(contentsOf: downloadedURL) == Data("snapshot".utf8))
         #expect(downloadedURL.lastPathComponent.hasSuffix("ETOS-Snapshot-a.elsbackup"))
+        #expect(progressEvents.events.last == SyncPackageDownloadProgress(bytesReceived: 8, totalBytes: 8))
     }
 
     @Test("非 2xx 响应会抛出状态码错误")
@@ -412,6 +428,23 @@ private final class UploadProgressRecorder: @unchecked Sendable {
     }
 
     func append(_ progress: SyncPackageUploadProgress) {
+        lock.lock()
+        recordedEvents.append(progress)
+        lock.unlock()
+    }
+}
+
+private final class DownloadProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedEvents: [SyncPackageDownloadProgress] = []
+
+    var events: [SyncPackageDownloadProgress] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedEvents
+    }
+
+    func append(_ progress: SyncPackageDownloadProgress) {
         lock.lock()
         recordedEvents.append(progress)
         lock.unlock()

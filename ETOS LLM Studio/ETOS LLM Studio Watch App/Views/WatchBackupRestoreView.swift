@@ -25,6 +25,7 @@ struct WatchBackupRestoreView: View {
     @State private var snapshotPasswordConfirmation = ""
     @State private var snapshotRestoreDownloadURL = ""
     @State private var isRestoringSnapshot = false
+    @State private var restoreDownloadProgress: SyncPackageDownloadProgress?
     @State private var restorePassword = ""
     @State private var pendingEncryptedSnapshotURL: URL?
     @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
@@ -201,6 +202,10 @@ struct WatchBackupRestoreView: View {
                 }
             }
             .disabled(isSnapshotBusy || snapshotRestoreDownloadURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            if let restoreDownloadProgress {
+                WatchSnapshotDownloadProgressView(progress: restoreDownloadProgress)
+            }
 
             if pendingEncryptedSnapshotURL != nil {
                 Text(snapshotPasswordPromptMessage)
@@ -462,6 +467,7 @@ struct WatchBackupRestoreView: View {
         }
 
         isRestoringSnapshot = true
+        restoreDownloadProgress = nil
         snapshotErrorMessage = nil
         snapshotStatusMessage = NSLocalizedString("正在下载快照…", comment: "")
         clearPendingEncryptedSnapshot()
@@ -469,12 +475,20 @@ struct WatchBackupRestoreView: View {
         Task.detached(priority: .userInitiated) {
             var stagedSnapshotURL: URL?
             do {
-                let stagedURL = try await WatchSnapshotFileWriter.downloadSnapshotForRestore(from: url)
+                let stagedURL = try await WatchSnapshotFileWriter.downloadSnapshotForRestore(
+                    from: url,
+                    progress: { progress in
+                        Task { @MainActor in
+                            restoreDownloadProgress = progress
+                        }
+                    }
+                )
                 stagedSnapshotURL = stagedURL
                 let inspection = try SnapshotRestoreService.inspectSnapshot(at: stagedURL)
 
                 await MainActor.run {
                     isRestoringSnapshot = false
+                    restoreDownloadProgress = nil
                     if inspection.requiresPassword {
                         pendingEncryptedSnapshotURL = stagedURL
                         pendingSnapshotInspection = inspection
@@ -490,6 +504,7 @@ struct WatchBackupRestoreView: View {
                 }
                 await MainActor.run {
                     isRestoringSnapshot = false
+                    restoreDownloadProgress = nil
                     snapshotErrorMessage = error.localizedDescription
                 }
             }
@@ -511,6 +526,7 @@ struct WatchBackupRestoreView: View {
         removeWhenFinished: Bool
     ) {
         isRestoringSnapshot = true
+        restoreDownloadProgress = nil
         snapshotErrorMessage = nil
         snapshotStatusMessage = nil
 
@@ -574,6 +590,46 @@ struct WatchBackupRestoreView: View {
         pendingEncryptedSnapshotURL = nil
         pendingSnapshotInspection = nil
         restorePassword = ""
+    }
+}
+
+private struct WatchSnapshotDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(NSLocalizedString("下载进度", comment: ""))
+                Spacer()
+                if progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                }
+            }
+            .etFont(.caption2)
+
+            if progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                Text(progressText)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                Text(NSLocalizedString("正在下载快照…", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var progressText: String {
+        String(
+            format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+            StorageUtility.formatSize(progress.bytesReceived),
+            StorageUtility.formatSize(progress.totalBytes)
+        )
     }
 }
 
@@ -703,8 +759,17 @@ private enum WatchSnapshotFileWriter {
         return destinationURL
     }
 
-    nonisolated static func downloadSnapshotForRestore(from sourceURL: URL) async throws -> URL {
-        let (downloadedURL, response) = try await URLSession.shared.download(from: sourceURL)
+    nonisolated static func downloadSnapshotForRestore(
+        from sourceURL: URL,
+        progress: SyncPackageUploadService.DownloadProgressHandler? = nil
+    ) async throws -> URL {
+        var request = URLRequest(url: sourceURL)
+        request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
+        let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+            request: request,
+            progress: progress
+        )
+        defer { try? FileManager.default.removeItem(at: downloadedURL) }
         if let httpResponse = response as? HTTPURLResponse,
            !(200..<300).contains(httpResponse.statusCode) {
             throw NSError(domain: "ETOSWatchSnapshotRestore", code: httpResponse.statusCode, userInfo: [

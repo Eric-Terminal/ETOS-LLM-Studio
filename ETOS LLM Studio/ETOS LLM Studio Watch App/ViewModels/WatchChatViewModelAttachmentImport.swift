@@ -29,6 +29,31 @@ struct WatchAttachmentImportPayload: Equatable, Sendable {
     let audioFormat: String
 }
 
+struct WatchAttachmentImportProgress: Equatable, Sendable {
+    let sourceName: String
+    let bytesReceived: Int64
+    let totalBytes: Int64
+
+    init(sourceName: String, bytesReceived: Int64, totalBytes: Int64) {
+        let normalizedTotalBytes = max(0, totalBytes)
+        let normalizedBytesReceived = max(0, bytesReceived)
+        self.sourceName = sourceName
+        self.totalBytes = normalizedTotalBytes
+        self.bytesReceived = normalizedTotalBytes > 0
+            ? min(normalizedBytesReceived, normalizedTotalBytes)
+            : normalizedBytesReceived
+    }
+
+    var isDeterminate: Bool {
+        totalBytes > 0
+    }
+
+    var fractionCompleted: Double {
+        guard totalBytes > 0 else { return 0 }
+        return min(max(Double(bytesReceived) / Double(totalBytes), 0), 1)
+    }
+}
+
 private enum WatchAttachmentImportError: LocalizedError {
     case emptySource
     case unsupportedScheme
@@ -68,6 +93,11 @@ extension ChatViewModel {
     func importAttachment(from source: String) {
         guard !attachmentImportInProgress else { return }
         attachmentImportInProgress = true
+        attachmentImportProgress = WatchAttachmentImportProgress(
+            sourceName: Self.attachmentImportDisplayName(for: source),
+            bytesReceived: 0,
+            totalBytes: 0
+        )
         attachmentImportErrorMessage = nil
         let documentsDirectory = Self.documentsDirectory()
 
@@ -75,7 +105,12 @@ extension ChatViewModel {
             let result = await Task.detached(priority: .userInitiated) {
                 try await Self.loadAttachmentImportPayload(
                     from: source,
-                    documentsDirectory: documentsDirectory
+                    documentsDirectory: documentsDirectory,
+                    progress: { [weak self] progress in
+                        Task { @MainActor [weak self] in
+                            self?.attachmentImportProgress = progress
+                        }
+                    }
                 )
             }.result
 
@@ -86,6 +121,7 @@ extension ChatViewModel {
                 presentAttachmentImportError(error.localizedDescription)
             }
             attachmentImportInProgress = false
+            attachmentImportProgress = nil
         }
     }
 
@@ -231,24 +267,62 @@ extension ChatViewModel {
 
     nonisolated static func loadAttachmentImportPayload(
         from rawSource: String,
-        documentsDirectory: URL = ChatViewModel.documentsDirectory()
+        documentsDirectory: URL = ChatViewModel.documentsDirectory(),
+        progress: (@Sendable (WatchAttachmentImportProgress) -> Void)? = nil
     ) async throws -> WatchAttachmentImportPayload {
         let resolution = try resolveAttachmentSource(rawSource, documentsDirectory: documentsDirectory)
         switch resolution {
         case .remote(let url):
             var request = URLRequest(url: url)
             request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
-            let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+            let sourceName = attachmentImportDisplayName(for: rawSource)
+            progress?(WatchAttachmentImportProgress(sourceName: sourceName, bytesReceived: 0, totalBytes: 0))
+            let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                request: request,
+                progress: { downloadProgress in
+                    progress?(
+                        WatchAttachmentImportProgress(
+                            sourceName: sourceName,
+                            bytesReceived: downloadProgress.bytesReceived,
+                            totalBytes: downloadProgress.totalBytes
+                        )
+                    )
+                }
+            )
+            defer { try? FileManager.default.removeItem(at: downloadedURL) }
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
                 throw WatchAttachmentImportError.invalidHTTPStatus(httpResponse.statusCode)
             }
+            let data = try await readAttachmentData(at: downloadedURL)
+            progress?(
+                WatchAttachmentImportProgress(
+                    sourceName: sourceName,
+                    bytesReceived: Int64(data.count),
+                    totalBytes: Int64(data.count)
+                )
+            )
             let fileName = resolvedRemoteFileName(url: url, response: response)
             let mimeType = resolvedAttachmentMimeType(fileName: fileName, responseMimeType: response.mimeType)
             return try makeAttachmentImportPayload(data: data, mimeType: mimeType, fileName: fileName)
         case .local(let url):
             do {
-                let data = try Data(contentsOf: url)
+                let totalBytes = localFileSize(at: url)
+                progress?(
+                    WatchAttachmentImportProgress(
+                        sourceName: url.lastPathComponent,
+                        bytesReceived: 0,
+                        totalBytes: totalBytes
+                    )
+                )
+                let data = try await readAttachmentData(at: url)
+                progress?(
+                    WatchAttachmentImportProgress(
+                        sourceName: url.lastPathComponent,
+                        bytesReceived: Int64(data.count),
+                        totalBytes: totalBytes > 0 ? totalBytes : Int64(data.count)
+                    )
+                )
                 let fileName = normalizedAttachmentFileName(url.lastPathComponent, mimeType: resolvedAttachmentMimeType(fileName: url.lastPathComponent))
                 let mimeType = resolvedAttachmentMimeType(fileName: fileName)
                 return try makeAttachmentImportPayload(data: data, mimeType: mimeType, fileName: fileName)
@@ -258,6 +332,25 @@ extension ChatViewModel {
                 throw WatchAttachmentImportError.readFailed(error.localizedDescription)
             }
         }
+    }
+
+    nonisolated static func attachmentImportDisplayName(for rawSource: String) -> String {
+        let source = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty else {
+            return NSLocalizedString("附件", comment: "Attachment import fallback name")
+        }
+        if let url = URL(string: source), let scheme = url.scheme?.lowercased() {
+            let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { return name }
+            if scheme == "http" || scheme == "https", let host = url.host, !host.isEmpty {
+                return host
+            }
+        }
+        let localName = URL(fileURLWithPath: source).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return localName.isEmpty
+            ? NSLocalizedString("附件", comment: "Attachment import fallback name")
+            : localName
     }
 
     nonisolated private static func validatedLocalAttachmentURL(_ url: URL) throws -> WatchAttachmentSourceResolution {
@@ -276,6 +369,17 @@ extension ChatViewModel {
         let rootPath = root.path
         let candidatePath = url.path
         return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
+    }
+
+    nonisolated private static func localFileSize(at url: URL) -> Int64 {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values?.fileSize ?? 0)
+    }
+
+    nonisolated private static func readAttachmentData(at url: URL) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            try Data(contentsOf: url)
+        }.value
     }
 
     nonisolated private static func resolvedRemoteFileName(url: URL, response: URLResponse) -> String {

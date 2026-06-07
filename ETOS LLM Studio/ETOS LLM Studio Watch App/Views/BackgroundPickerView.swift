@@ -30,6 +30,7 @@ struct BackgroundPickerView: View {
     @State private var isShowingImportSheet = false
     @State private var importSourceText = ""
     @State private var isImportingBackground = false
+    @State private var importDownloadProgress: SyncPackageDownloadProgress?
     @State private var importErrorMessage: String?
     @State private var backgroundSourceHistory: [String] = []
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -56,28 +57,36 @@ struct BackgroundPickerView: View {
                 GridItem(.fixed(itemWidth), spacing: gridSpacing)
             ]
             
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: gridSpacing) {
-                    ForEach(backgrounds, id: \.self) { bgName in
-                        Button(action: {
-                            selectedBackground = bgName
-                        }) {
-                            FileImage(filename: bgName)
-                                .aspectRatio(previewAspectRatio, contentMode: .fill)
-                                .frame(width: itemWidth, height: itemHeight)
-                                .clipped()
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(selectedBackground == bgName ? Color.accentColor : .clear, lineWidth: 3)
-                                }
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(spacing: 8) {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: gridSpacing) {
+                        ForEach(backgrounds, id: \.self) { bgName in
+                            Button(action: {
+                                selectedBackground = bgName
+                            }) {
+                                FileImage(filename: bgName)
+                                    .aspectRatio(previewAspectRatio, contentMode: .fill)
+                                    .frame(width: itemWidth, height: itemHeight)
+                                    .clipped()
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(selectedBackground == bgName ? Color.accentColor : .clear, lineWidth: 3)
+                                    }
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, gridPadding)
+                    .padding(.top, gridPadding)
+                    .padding(.bottom, gridPadding)
                 }
-                .padding(.horizontal, gridPadding)
-                .padding(.top, gridPadding)
-                .padding(.bottom, gridPadding)
+
+                if isImportingBackground || importDownloadProgress != nil {
+                    WatchBackgroundDownloadProgressView(progress: importDownloadProgress)
+                        .padding(.horizontal)
+                        .padding(.bottom, 4)
+                }
             }
         }
         .navigationTitle(NSLocalizedString("选择背景", comment: ""))
@@ -233,11 +242,19 @@ struct BackgroundPickerView: View {
     private func importBackground(from source: String) {
         guard !isImportingBackground else { return }
         isImportingBackground = true
+        importDownloadProgress = nil
         importErrorMessage = nil
 
         Task {
             let result = await Task.detached(priority: .userInitiated) {
-                try await WatchBackgroundImporter.loadRemoteBackground(from: source)
+                try await WatchBackgroundImporter.loadRemoteBackground(
+                    from: source,
+                    progress: { progress in
+                        Task { @MainActor in
+                            importDownloadProgress = progress
+                        }
+                    }
+                )
             }.result
 
             switch result {
@@ -247,6 +264,7 @@ struct BackgroundPickerView: View {
                 }.value
                 await MainActor.run {
                     isImportingBackground = false
+                    importDownloadProgress = nil
                     selectedBackground = fileName
                     backgrounds = updated
                     NotificationCenter.default.post(name: .syncBackgroundsUpdated, object: nil)
@@ -255,6 +273,7 @@ struct BackgroundPickerView: View {
             case .failure(let error):
                 await MainActor.run {
                     isImportingBackground = false
+                    importDownloadProgress = nil
                     importErrorMessage = error.localizedDescription
                 }
             }
@@ -282,8 +301,49 @@ struct BackgroundPickerView: View {
     }
 }
 
+private struct WatchBackgroundDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(NSLocalizedString("正在下载并导入...", comment: ""))
+                Spacer()
+                if let progress, progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                }
+            }
+            .etFont(.caption2)
+
+            if let progress, progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private enum WatchBackgroundImporter {
-    static func loadRemoteBackground(from rawSource: String) async throws -> String {
+    static func loadRemoteBackground(
+        from rawSource: String,
+        progress: SyncPackageUploadService.DownloadProgressHandler? = nil
+    ) async throws -> String {
         let source = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty else { throw WatchBackgroundImportError.emptySource }
         guard let url = URL(string: source), let scheme = url.scheme?.lowercased(), url.host?.isEmpty == false else {
@@ -295,11 +355,24 @@ private enum WatchBackgroundImporter {
 
         var request = URLRequest(url: url)
         request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
-        let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+        let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+            request: request,
+            progress: progress
+        )
+        defer { try? FileManager.default.removeItem(at: downloadedURL) }
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {
             throw WatchBackgroundImportError.invalidHTTPStatus(httpResponse.statusCode)
         }
+        let data = try await Task.detached(priority: .utility) {
+            try Data(contentsOf: downloadedURL)
+        }.value
+        progress?(
+            SyncPackageDownloadProgress(
+                bytesReceived: Int64(data.count),
+                totalBytes: Int64(data.count)
+            )
+        )
         guard let image = UIImage(data: data) else {
             throw WatchBackgroundImportError.invalidImage
         }

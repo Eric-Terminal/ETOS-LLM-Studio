@@ -4098,3 +4098,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "将保留%@的%@。" = "Will keep %@ for %@.";
 "iPhone" = "iPhone";
 "Apple Watch" = "Apple Watch";
+"下载进度" = "Progreso de descarga";
+"已下载 %@ / %@" = "Descargado %@ / %@";

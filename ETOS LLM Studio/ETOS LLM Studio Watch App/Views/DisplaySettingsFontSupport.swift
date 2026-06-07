@@ -17,6 +17,7 @@ struct WatchFontSettingsView: View {
     @State private var showAddAssetDialog = false
     @State private var importURLText: String = ""
     @State private var isImportingFromURL: Bool = false
+    @State private var importDownloadProgress: SyncPackageDownloadProgress?
     @State private var importErrorMessage: String?
 
     private var isCustomFontEnabled: Bool {
@@ -91,12 +92,7 @@ struct WatchFontSettingsView: View {
                 .disabled(isImportingFromURL || importURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 if isImportingFromURL {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text(NSLocalizedString("正在下载并导入...", comment: ""))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    WatchFontDownloadProgressView(progress: importDownloadProgress)
                 }
 
                 Text(NSLocalizedString("支持 http/https 的 TTF / OTF / TTC / WOFF / WOFF2 链接。", comment: ""))
@@ -390,20 +386,39 @@ struct WatchFontSettingsView: View {
 
         importErrorMessage = nil
         isImportingFromURL = true
+        importDownloadProgress = nil
 
         Task {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 45
-                let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            importDownloadProgress = progress
+                        }
+                    }
+                )
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
                         importErrorMessage = String(format: NSLocalizedString("下载失败：HTTP %d", comment: ""), httpResponse.statusCode)
                         isImportingFromURL = false
+                        importDownloadProgress = nil
                     }
                     return
                 }
 
+                let data = try await Task.detached(priority: .utility) {
+                    try Data(contentsOf: downloadedURL)
+                }.value
+                await MainActor.run {
+                    importDownloadProgress = SyncPackageDownloadProgress(
+                        bytesReceived: Int64(data.count),
+                        totalBytes: Int64(data.count)
+                    )
+                }
                 let fileName = suggestedRemoteFontFileName(from: url, response: response, data: data)
                 _ = try FontLibrary.importFont(data: data, fileName: fileName)
 
@@ -414,11 +429,13 @@ struct WatchFontSettingsView: View {
                     importURLText = ""
                     importErrorMessage = nil
                     isImportingFromURL = false
+                    importDownloadProgress = nil
                 }
             } catch {
                 await MainActor.run {
                     importErrorMessage = error.localizedDescription
                     isImportingFromURL = false
+                    importDownloadProgress = nil
                 }
             }
         }
@@ -461,6 +478,44 @@ struct WatchFontSettingsView: View {
         if header == [0x4F, 0x54, 0x54, 0x4F] { return "otf" } // OTTO
         if header == [0x00, 0x01, 0x00, 0x00] { return "ttf" }
         return nil
+    }
+}
+
+private struct WatchFontDownloadProgressView: View {
+    let progress: SyncPackageDownloadProgress?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(NSLocalizedString("正在下载并导入...", comment: ""))
+                Spacer()
+                if let progress, progress.totalBytes > 0 {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                }
+            }
+            .etFont(.caption2)
+
+            if let progress, progress.totalBytes > 0 {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: ""),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -4098,3 +4098,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "将保留%@的%@。" = "Will keep %@ for %@.";
 "iPhone" = "iPhone";
 "Apple Watch" = "Apple Watch";
+"下载进度" = "تقدم التنزيل";
+"已下载 %@ / %@" = "تم تنزيل %@ / %@";

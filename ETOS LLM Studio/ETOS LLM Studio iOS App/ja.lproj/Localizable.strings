@@ -4021,3 +4021,5 @@
 "将保留%@的%@。" = "Will keep %@ for %@.";
 "iPhone" = "iPhone";
 "Apple Watch" = "Apple Watch";
+"下载进度" = "ダウンロード進捗";
+"已下载 %@ / %@" = "ダウンロード済み %@ / %@";
