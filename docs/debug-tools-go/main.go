@@ -115,10 +115,6 @@ func (s *DebugServer) run(ctx context.Context) error {
 
 func (s *DebugServer) shutdown(ctx context.Context) error {
 	var errs []error
-	if s.bonjourShutdown != nil {
-		s.bonjourShutdown()
-		s.bonjourShutdown = nil
-	}
 	if s.pollHTTPServer != nil {
 		if err := s.pollHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs = append(errs, err)
@@ -132,6 +128,20 @@ func (s *DebugServer) shutdown(ctx context.Context) error {
 	if s.wsHTTPServer != nil {
 		if err := s.wsHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs = append(errs, err)
+		}
+	}
+	if s.bonjourShutdown != nil {
+		shutdownBonjour := s.bonjourShutdown
+		s.bonjourShutdown = nil
+		done := make(chan struct{})
+		go func() {
+			shutdownBonjour()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			errs = append(errs, fmt.Errorf("Bonjour 自动发现关闭超时: %w", ctx.Err()))
 		}
 	}
 

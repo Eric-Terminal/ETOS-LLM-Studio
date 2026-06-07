@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -31,6 +33,21 @@ const (
 
 const tuiViewCount = 8
 
+const (
+	tuiDefaultNavWidth      = 30
+	tuiMinNavWidth          = 22
+	tuiMinContentWidth      = 24
+	tuiPanelHorizontalFrame = 4
+	tuiPanelGapWidth        = 1
+)
+
+type tuiFocus int
+
+const (
+	tuiFocusNav tuiFocus = iota
+	tuiFocusContent
+)
+
 type navItem struct {
 	title string
 	desc  string
@@ -42,6 +59,8 @@ func (i navItem) Description() string { return i.desc }
 func (i navItem) FilterValue() string { return i.title + " " + i.desc }
 
 type tuiTickMsg time.Time
+
+type tuiExternalQuitMsg struct{}
 
 type tuiCommandResultMsg struct {
 	op       string
@@ -76,10 +95,12 @@ type tuiModel struct {
 	sqlRows    table.Model
 	captures   table.Model
 	preview    textarea.Model
+	content    viewport.Model
 
 	status       tuiStatus
 	currentPath  string
 	sqlDatabase  string
+	focus        tuiFocus
 	isLoading    bool
 	message      string
 	messageStyle lipgloss.Style
@@ -98,10 +119,11 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("240")).
 			Padding(0, 1)
-	tuiHelpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	tuiOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	tuiWarnStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	tuiErrStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	tuiFocusBoxStyle = tuiBoxStyle.Copy().BorderForeground(lipgloss.Color("75"))
+	tuiHelpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	tuiOKStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	tuiWarnStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	tuiErrStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 )
 
 func newTUIModel(server *DebugServer, localIP string) tuiModel {
@@ -132,6 +154,10 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 	preview.SetHeight(14)
 	preview.SetWidth(80)
 
+	content := viewport.New(80, 18)
+	content.MouseWheelEnabled = true
+	content.MouseWheelDelta = 4
+
 	model := tuiModel{
 		server:       server,
 		localIP:      localIP,
@@ -146,11 +172,15 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		sqlRows:      newTUITable([]table.Column{{Title: "结果", Width: 90}}),
 		captures:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "模型", Width: 28}, {Title: "消息", Width: 8}, {Title: "时间", Width: 24}}),
 		preview:      preview,
+		content:      content,
 		currentPath:  ".",
 		sqlDatabase:  "chat",
+		focus:        tuiFocusNav,
 		messageStyle: tuiHelpStyle,
 	}
 	model.refreshStatus()
+	model.syncFocusedComponent()
+	model.syncContentViewport()
 	return model
 }
 
@@ -180,9 +210,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.layout(msg.Width, msg.Height)
+		m.syncContentViewport()
 	case tuiTickMsg:
 		m.refreshStatus()
+		if m.active == tuiDashboard {
+			m.syncContentViewport()
+		}
 		cmds = append(cmds, tuiTick())
+	case tuiExternalQuitMsg:
+		return m, tea.Quit
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -190,6 +226,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tuiCommandResultMsg:
 		m.isLoading = false
 		m.applyCommandResult(msg)
+		m.syncContentViewport()
 	case tea.KeyMsg:
 		key := msg.String()
 		appendAction := func(cmd tea.Cmd) {
@@ -199,108 +236,65 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isLoading = true
 			cmds = append(cmds, cmd)
 		}
+
 		switch key {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
-		case "tab", "right":
+		case "left":
+			m.focus = tuiFocusNav
+			m.syncFocusedComponent()
+			m.syncContentViewport()
+			return m, tea.Batch(cmds...)
+		case "right":
+			m.focus = tuiFocusContent
+			m.syncFocusedComponent()
+			m.syncContentViewport()
+			return m, tea.Batch(cmds...)
+		case "tab":
 			m.nextView()
+			m.focus = tuiFocusContent
+			m.syncFocusedComponent()
+			m.syncContentViewport()
 			appendAction(m.refreshActiveViewIfConnected())
-		case "shift+tab", "left":
+			return m, tea.Batch(cmds...)
+		case "shift+tab":
 			m.previousView()
+			m.focus = tuiFocusContent
+			m.syncFocusedComponent()
+			m.syncContentViewport()
 			appendAction(m.refreshActiveViewIfConnected())
-		case "r":
-			appendAction(m.refreshActiveView())
-		case "enter":
-			appendAction(m.enterSelected())
-		case "p":
-			if m.active == tuiFiles {
-				appendAction(m.promptFilesPath())
+			return m, tea.Batch(cmds...)
+		}
+
+		if m.focus == tuiFocusNav {
+			previous := m.active
+			var cmd tea.Cmd
+			m.nav, cmd = m.nav.Update(msg)
+			cmds = append(cmds, cmd)
+			m.syncActiveViewFromNav()
+			if previous != m.active {
+				m.syncFocusedComponent()
+				m.resetContentViewport()
+				appendAction(m.refreshActiveViewIfConnected())
 			}
-		case "b":
-			if m.active == tuiFiles {
-				m.currentPath = parentDevicePath(m.currentPath)
-				appendAction(m.loadFiles(m.currentPath))
+			if key == "enter" {
+				m.focus = tuiFocusContent
+				m.syncFocusedComponent()
 			}
-		case "d":
-			appendAction(m.downloadSelectedFile())
-		case "u":
-			if m.active == tuiFiles {
-				appendAction(m.uploadFile())
-			}
-		case "x":
-			appendAction(m.deleteSelected())
-		case "n":
-			appendAction(m.createSelectedKind())
-		case "a":
-			if m.active == tuiProviders {
-				appendAction(m.addProvider())
-			}
-		case "m":
-			if m.active == tuiProviders {
-				appendAction(m.addProviderModel())
-			}
-		case "M", "shift+m":
-			if m.active == tuiProviders {
-				appendAction(m.editSelectedProviderModel())
-			}
-		case "e":
-			if m.active == tuiProviders {
-				appendAction(m.editSelectedProvider())
-			}
-			if m.active == tuiSettings {
-				appendAction(m.editSelectedSetting())
-			}
-			if m.active == tuiMemories {
-				appendAction(m.editSelectedMemory())
-			}
-		case "1", "2", "3":
-			if m.active == tuiSQLite {
-				m.setSQLDatabase(key)
-				appendAction(m.loadSQLiteTables())
-			}
-		case "q":
-			if m.active == tuiSQLite {
-				appendAction(m.promptSQLiteQuery(false))
-			}
-		case "w":
-			if m.active == tuiSQLite {
-				appendAction(m.promptSQLiteQuery(true))
-			}
-		case "s":
-			if m.active == tuiCaptures {
-				appendAction(m.resolveCapture(true))
-			}
-		case "i":
-			if m.active == tuiCaptures {
-				appendAction(m.resolveCapture(false))
-			}
+		} else {
+			appendAction(m.handleContentKey(key))
+			var cmd tea.Cmd
+			m, cmd = m.updateActiveContentComponent(msg)
+			cmds = append(cmds, cmd)
+			m.syncContentViewport()
+		}
+	case tea.MouseMsg:
+		if m.focus == tuiFocusContent {
+			cmd := m.handleContentMouse(msg)
+			cmds = append(cmds, cmd)
 		}
 	}
 
-	var cmd tea.Cmd
-	switch m.active {
-	case tuiDashboard:
-		m.nav, cmd = m.nav.Update(msg)
-	case tuiFiles:
-		m.filesTable, cmd = m.filesTable.Update(msg)
-	case tuiProviders:
-		m.providers, cmd = m.providers.Update(msg)
-	case tuiSettings:
-		m.settings, cmd = m.settings.Update(msg)
-	case tuiSessions:
-		m.sessions, cmd = m.sessions.Update(msg)
-	case tuiMemories:
-		m.memories, cmd = m.memories.Update(msg)
-	case tuiSQLite:
-		if len(m.sqlRows.Rows()) > 0 {
-			m.sqlRows, cmd = m.sqlRows.Update(msg)
-		} else {
-			m.sqlTables, cmd = m.sqlTables.Update(msg)
-		}
-	case tuiCaptures:
-		m.captures, cmd = m.captures.Update(msg)
-	}
-	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -311,16 +305,25 @@ func (m tuiModel) View() string {
 	}
 
 	status := m.renderStatusLine()
-	content := m.renderActiveView()
+	content := m.content.View()
 	help := tuiHelpStyle.Render(m.renderHelp())
 	message := ""
 	if m.message != "" {
 		message = "\n" + m.messageStyle.Render(m.message)
 	}
 
-	left := tuiBoxStyle.Width(30).Render(m.nav.View())
-	rightWidth := maxInt(56, m.width-36)
-	right := tuiBoxStyle.Width(rightWidth).Render(content + "\n\n" + help + message)
+	boxHeight := m.boxHeight()
+	leftStyle := tuiBoxStyle
+	rightStyle := tuiBoxStyle
+	if m.focus == tuiFocusNav {
+		leftStyle = tuiFocusBoxStyle
+	} else {
+		rightStyle = tuiFocusBoxStyle
+	}
+	leftWidth := m.navContentWidth()
+	left := leftStyle.Width(leftWidth).Height(boxHeight).Render(m.nav.View())
+	rightWidth := m.rightContentWidth()
+	right := rightStyle.Width(rightWidth).Height(boxHeight).Render(content + "\n\n" + help + message)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -331,15 +334,49 @@ func (m tuiModel) View() string {
 }
 
 func (m *tuiModel) layout(width, height int) {
-	navHeight := maxInt(12, height-8)
-	m.nav.SetSize(30, navHeight)
-	tableHeight := maxInt(8, height-14)
+	boxHeight := m.boxHeight()
+	navWidth := m.navContentWidth()
+	navHeight := maxInt(8, boxHeight-2)
+	m.nav.SetSize(navWidth, navHeight)
+	contentHeight := maxInt(5, boxHeight-8)
+	contentWidth := m.rightContentWidth()
+	m.content.Width = contentWidth
+	m.content.Height = contentHeight
+	tableHeight := maxInt(5, minInt(12, contentHeight/2))
 	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows, &m.captures} {
 		t.SetHeight(tableHeight)
 	}
-	previewWidth := maxInt(50, width-42)
+	previewWidth := maxInt(38, contentWidth-2)
 	m.preview.SetWidth(previewWidth)
-	m.preview.SetHeight(maxInt(8, height-20))
+	m.preview.SetHeight(maxInt(4, contentHeight-tableHeight-5))
+}
+
+func (m tuiModel) boxHeight() int {
+	if m.height <= 0 {
+		return 22
+	}
+	return maxInt(10, m.height-5)
+}
+
+func (m tuiModel) navContentWidth() int {
+	if m.width <= 0 {
+		return tuiDefaultNavWidth
+	}
+	if m.width >= 80 {
+		return tuiDefaultNavWidth
+	}
+	available := m.width / 3
+	return minInt(tuiDefaultNavWidth, maxInt(tuiMinNavWidth, available))
+}
+
+func (m tuiModel) rightContentWidth() int {
+	if m.width <= 0 {
+		return 80
+	}
+	usedByNav := m.navContentWidth() + tuiPanelHorizontalFrame
+	usedByRightFrame := tuiPanelHorizontalFrame
+	available := m.width - usedByNav - tuiPanelGapWidth - usedByRightFrame
+	return maxInt(tuiMinContentWidth, available)
 }
 
 func (m *tuiModel) refreshStatus() {
@@ -418,8 +455,60 @@ func (m tuiModel) renderDashboard() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m *tuiModel) syncContentViewport() {
+	m.content.SetContent(m.renderActiveView())
+	if m.content.PastBottom() {
+		m.content.GotoBottom()
+	}
+}
+
+func (m *tuiModel) resetContentViewport() {
+	m.content.SetContent(m.renderActiveView())
+	m.content.GotoTop()
+}
+
+func (m *tuiModel) syncFocusedComponent() {
+	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows, &m.captures} {
+		t.Blur()
+	}
+	if m.focus != tuiFocusContent {
+		return
+	}
+	switch m.active {
+	case tuiFiles:
+		m.filesTable.Focus()
+	case tuiProviders:
+		m.providers.Focus()
+	case tuiSettings:
+		m.settings.Focus()
+	case tuiSessions:
+		m.sessions.Focus()
+	case tuiMemories:
+		m.memories.Focus()
+	case tuiSQLite:
+		if len(m.sqlRows.Rows()) > 0 {
+			m.sqlRows.Focus()
+		} else {
+			m.sqlTables.Focus()
+		}
+	case tuiCaptures:
+		m.captures.Focus()
+	}
+}
+
+func (m *tuiModel) syncActiveViewFromNav() {
+	item, ok := m.nav.SelectedItem().(navItem)
+	if !ok {
+		return
+	}
+	m.active = item.view
+}
+
 func (m tuiModel) renderHelp() string {
-	common := "Tab 切换 | r 刷新 | ↑↓ 选择 | Esc 退出"
+	common := "← 侧栏 | → 内容 | Tab 快速切页 | r 刷新 | Esc/Ctrl+C 退出"
+	if m.focus == tuiFocusNav {
+		return common + " | ↑↓ 选择页面 | Enter 进入内容"
+	}
 	switch m.active {
 	case tuiFiles:
 		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | u 上传 | x 删除 | n 新建目录"
@@ -443,6 +532,7 @@ func (m tuiModel) renderHelp() string {
 func (m *tuiModel) nextView() {
 	m.active = tuiView((int(m.active) + 1) % tuiViewCount)
 	m.nav.Select(int(m.active))
+	m.resetContentViewport()
 }
 
 func (m *tuiModel) previousView() {
@@ -452,6 +542,140 @@ func (m *tuiModel) previousView() {
 	}
 	m.active = tuiView(next)
 	m.nav.Select(next)
+	m.resetContentViewport()
+}
+
+func (m *tuiModel) handleContentKey(key string) tea.Cmd {
+	switch key {
+	case "r":
+		return m.refreshActiveView()
+	case "enter":
+		return m.enterSelected()
+	case "p":
+		if m.active == tuiFiles {
+			return m.promptFilesPath()
+		}
+	case "b":
+		if m.active == tuiFiles {
+			m.currentPath = parentDevicePath(m.currentPath)
+			return m.loadFiles(m.currentPath)
+		}
+	case "d":
+		return m.downloadSelectedFile()
+	case "u":
+		if m.active == tuiFiles {
+			return m.uploadFile()
+		}
+	case "x":
+		return m.deleteSelected()
+	case "n":
+		return m.createSelectedKind()
+	case "a":
+		if m.active == tuiProviders {
+			return m.addProvider()
+		}
+	case "m":
+		if m.active == tuiProviders {
+			return m.addProviderModel()
+		}
+	case "M", "shift+m":
+		if m.active == tuiProviders {
+			return m.editSelectedProviderModel()
+		}
+	case "e":
+		if m.active == tuiProviders {
+			return m.editSelectedProvider()
+		}
+		if m.active == tuiSettings {
+			return m.editSelectedSetting()
+		}
+		if m.active == tuiMemories {
+			return m.editSelectedMemory()
+		}
+	case "1", "2", "3":
+		if m.active == tuiSQLite {
+			m.setSQLDatabase(key)
+			return m.loadSQLiteTables()
+		}
+	case "q":
+		if m.active == tuiSQLite {
+			return m.promptSQLiteQuery(false)
+		}
+	case "w":
+		if m.active == tuiSQLite {
+			return m.promptSQLiteQuery(true)
+		}
+	case "s":
+		if m.active == tuiCaptures {
+			return m.resolveCapture(true)
+		}
+	case "i":
+		if m.active == tuiCaptures {
+			return m.resolveCapture(false)
+		}
+	case "pgup", "ctrl+u":
+		m.content.HalfViewUp()
+	case "pgdown", "ctrl+d":
+		m.content.HalfViewDown()
+	case "home":
+		m.content.GotoTop()
+	case "end":
+		m.content.GotoBottom()
+	}
+	return nil
+}
+
+func (m *tuiModel) handleContentMouse(msg tea.MouseMsg) tea.Cmd {
+	var cmd tea.Cmd
+	m.content, cmd = m.content.Update(msg)
+	if msg.Action != tea.MouseActionMotion || !m.mouseInContentViewport(msg) {
+		return cmd
+	}
+
+	top := 4
+	bottom := top + m.content.Height - 1
+	if msg.Y <= top+1 {
+		m.content.ScrollUp(m.content.MouseWheelDelta)
+	} else if msg.Y >= bottom-1 {
+		m.content.ScrollDown(m.content.MouseWheelDelta)
+	}
+	return cmd
+}
+
+func (m tuiModel) mouseInContentViewport(msg tea.MouseMsg) bool {
+	top := 4
+	bottom := top + m.content.Height - 1
+	rightOuterLeft := m.navContentWidth() + tuiPanelHorizontalFrame + tuiPanelGapWidth + 1
+	contentLeft := rightOuterLeft + 2
+	contentRight := contentLeft + m.content.Width - 1
+	return msg.X >= contentLeft && msg.X <= contentRight && msg.Y >= top && msg.Y <= bottom
+}
+
+func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) {
+	var cmd tea.Cmd
+	switch m.active {
+	case tuiFiles:
+		m.filesTable, cmd = m.filesTable.Update(msg)
+	case tuiProviders:
+		m.providers, cmd = m.providers.Update(msg)
+	case tuiSettings:
+		m.settings, cmd = m.settings.Update(msg)
+	case tuiSessions:
+		m.sessions, cmd = m.sessions.Update(msg)
+	case tuiMemories:
+		m.memories, cmd = m.memories.Update(msg)
+	case tuiSQLite:
+		if len(m.sqlRows.Rows()) > 0 {
+			m.sqlRows, cmd = m.sqlRows.Update(msg)
+		} else {
+			m.sqlTables, cmd = m.sqlTables.Update(msg)
+		}
+	case tuiCaptures:
+		m.captures, cmd = m.captures.Update(msg)
+	default:
+		m.content, cmd = m.content.Update(msg)
+	}
+	return m, cmd
 }
 
 func (m *tuiModel) setMessage(text string, style lipgloss.Style) {
@@ -1260,17 +1484,23 @@ func tuiTick() tea.Cmd {
 
 func runTUI(ctxDone <-chan struct{}, server *DebugServer, localIP string) error {
 	model := newTUIModel(server, localIP)
-	program := tea.NewProgram(model, tea.WithAltScreen())
-	done := make(chan error, 1)
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseAllMotion(), tea.WithoutSignalHandler())
+	relayDone := make(chan struct{})
 	go func() {
-		_, err := program.Run()
-		done <- err
+		select {
+		case <-ctxDone:
+			program.Send(tuiExternalQuitMsg{})
+		case <-relayDone:
+		}
 	}()
-	select {
-	case <-ctxDone:
-		program.Quit()
-		return <-done
-	case err := <-done:
-		return err
+	_, err := program.Run()
+	close(relayDone)
+	if err == nil {
+		select {
+		case <-ctxDone:
+			return context.Canceled
+		default:
+		}
 	}
+	return err
 }
