@@ -129,7 +129,7 @@ func TestSessionDetailRendersBubblesAndMessageDetail(t *testing.T) {
 		t.Fatalf("Enter 后 sessionMode = %v, want tuiSessionModeMessageDetail", model.sessionMode)
 	}
 	detail := model.renderSessionsView()
-	if !strings.Contains(detail, "消息详情") || !strings.Contains(detail, "你好呀") || !strings.Contains(detail, "推理过程") || !strings.Contains(detail, "我在思考") {
+	if !strings.Contains(detail, "消息详情") || !strings.Contains(detail, "你好呀") || !strings.Contains(detail, "思考内容") || !strings.Contains(detail, "我在思考") {
 		t.Fatalf("消息详情渲染异常: %q", detail)
 	}
 }
@@ -200,6 +200,58 @@ func TestSessionKeyboardSelectionScrollsToRenderedBubble(t *testing.T) {
 	}
 	if got.content.YOffset > start || got.content.YOffset+got.content.Height-1 < end {
 		t.Fatalf("选中气泡未随键盘移动进入视口: offset=%d height=%d selected=%d..%d", got.content.YOffset, got.content.Height, start, end)
+	}
+}
+
+func TestSessionDetailSelectionScrollsToSection(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.sessionMode = tuiSessionModeMessageDetail
+	model.content.Width = 100
+	model.content.Height = 8
+	model.activeSession = map[string]any{"id": "session-1", "name": "详情滚动"}
+	model.sessionMessages = []map[string]any{
+		{
+			"id":               "message-1",
+			"role":             "assistant",
+			"content":          strings.Repeat("正文很多\n", 16),
+			"reasoningContent": strings.Repeat("思考很多\n", 16),
+		},
+	}
+
+	model.selectNextSessionDetail()
+	if model.selectedSessionDetail != 1 {
+		t.Fatalf("selectedSessionDetail = %d, want 1", model.selectedSessionDetail)
+	}
+	start, end, _, ok := model.selectedSessionDetailLineRange()
+	if !ok {
+		t.Fatal("未能计算选中详情区块的行范围")
+	}
+	if model.content.YOffset > start || (model.content.YOffset+model.content.Height-1 < end && end-start+1 <= model.content.Height) {
+		t.Fatalf("选中详情区块未进入视口: offset=%d height=%d selected=%d..%d", model.content.YOffset, model.content.Height, start, end)
+	}
+}
+
+func TestUpdateSessionMessageDetailPreservesCurrentContentVersion(t *testing.T) {
+	message := map[string]any{
+		"content":             []any{"旧版本", "当前版本", "新版本"},
+		"currentVersionIndex": 1,
+		"reasoningContent":    "旧思考",
+	}
+
+	updateSessionMessageDetail(message, tuiSessionDetailContent, "改后的当前版本")
+	versions := asAnySlice(message["content"])
+	if got := asString(versions[1]); got != "改后的当前版本" {
+		t.Fatalf("当前正文版本 = %q, want 改后的当前版本", got)
+	}
+	if got := asString(versions[0]); got != "旧版本" {
+		t.Fatalf("非当前正文版本被修改 = %q", got)
+	}
+
+	updateSessionMessageDetail(message, tuiSessionDetailReasoning, "")
+	if _, ok := message["reasoningContent"]; ok {
+		t.Fatal("清空思考内容后 reasoningContent 应被移除")
 	}
 }
 

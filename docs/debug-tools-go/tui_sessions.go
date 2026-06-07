@@ -3,10 +3,29 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
+
+type tuiSessionDetailKind string
+
+const (
+	tuiSessionDetailContent   tuiSessionDetailKind = "content"
+	tuiSessionDetailReasoning tuiSessionDetailKind = "reasoning"
+	tuiSessionDetailError     tuiSessionDetailKind = "error"
+	tuiSessionDetailInfo      tuiSessionDetailKind = "info"
+)
+
+type tuiSessionDetailSection struct {
+	kind     tuiSessionDetailKind
+	title    string
+	content  string
+	style    lipgloss.Style
+	editable bool
+}
 
 var (
 	tuiSessionMetaStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
@@ -79,7 +98,7 @@ func (m tuiModel) renderSessionsHelp(common string) string {
 	case tuiSessionModeMessages:
 		return common + " | ↑↓ 选择气泡 | Enter 更多 | r 刷新当前会话"
 	case tuiSessionModeMessageDetail:
-		return common + " | ↑↓/PgUp/PgDn 滚动 | Esc 返回气泡列表"
+		return common + " | ↑↓ 选择正文/思考 | e 编辑 | PgUp/PgDn 滚动 | Esc 返回气泡列表"
 	default:
 		return common + " | Enter 查看消息 | n 新建会话 | x 删除"
 	}
@@ -107,6 +126,7 @@ func (m *tuiModel) enterSessionSelection() tea.Cmd {
 			return nil
 		}
 		m.sessionMode = tuiSessionModeMessageDetail
+		m.selectedSessionDetail = 0
 		m.content.GotoTop()
 		return nil
 	case tuiSessionModeMessageDetail:
@@ -132,6 +152,20 @@ func (m *tuiModel) selectNextSessionMessage() {
 	m.keepSelectedSessionMessageVisible()
 }
 
+func (m *tuiModel) selectPreviousSessionDetail() {
+	m.selectedSessionDetail = maxInt(0, m.selectedSessionDetail-1)
+	m.keepSelectedSessionDetailVisible()
+}
+
+func (m *tuiModel) selectNextSessionDetail() {
+	count := len(m.editableSessionDetailSections())
+	if count == 0 {
+		return
+	}
+	m.selectedSessionDetail = minInt(count-1, m.selectedSessionDetail+1)
+	m.keepSelectedSessionDetailVisible()
+}
+
 func (m *tuiModel) keepSelectedSessionMessageVisible() {
 	if m.content.Height <= 0 {
 		return
@@ -150,6 +184,24 @@ func (m *tuiModel) keepSelectedSessionMessageVisible() {
 	m.content.SetYOffset(target)
 }
 
+func (m *tuiModel) keepSelectedSessionDetailVisible() {
+	if m.content.Height <= 0 {
+		return
+	}
+	start, end, totalLines, ok := m.selectedSessionDetailLineRange()
+	if !ok {
+		return
+	}
+	sectionHeight := end - start + 1
+	target := start
+	if sectionHeight < m.content.Height {
+		target = start - (m.content.Height-sectionHeight)/2
+	}
+	maxOffset := maxInt(0, totalLines-m.content.Height)
+	target = minInt(maxInt(0, target), maxOffset)
+	m.content.SetYOffset(target)
+}
+
 func (m *tuiModel) applySessionDetail(response map[string]any) {
 	if session, ok := response["session"].(map[string]any); ok {
 		m.activeSession = session
@@ -162,6 +214,7 @@ func (m *tuiModel) applySessionDetail(response map[string]any) {
 	} else {
 		m.selectedSessionMessage = minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
 	}
+	m.selectedSessionDetail = minInt(maxInt(0, m.selectedSessionDetail), maxInt(0, len(m.editableSessionDetailSections())-1))
 	m.sessionMode = tuiSessionModeMessages
 	m.preview.SetValue("")
 	m.content.GotoTop()
@@ -218,35 +271,239 @@ func (m tuiModel) renderSessionMessageDetailView() string {
 		return "消息详情\n\n没有可查看的消息。"
 	}
 
-	lines := []string{
+	elements, _ := m.sessionMessageDetailViewElements()
+	return strings.Join(elements, "\n")
+}
+
+func (m tuiModel) sessionMessageDetailViewElements() ([]string, []int) {
+	message := m.selectedSessionMessageMap()
+	if len(message) == 0 {
+		return []string{"消息详情", "", "没有可查看的消息。"}, nil
+	}
+
+	elements := []string{
 		fmt.Sprintf("消息详情 / %s / 第 %d 条", sessionDisplayName(m.activeSession), m.selectedSessionMessage+1),
 		tuiSessionMetaStyle.Render(fmt.Sprintf("%s | %s", sessionRoleLabel(messageRole(message)), asString(message["id"]))),
 		"",
-		m.renderSessionDetailSection("正文", sessionMessageDetailContent(message), tuiSessionDetailContentStyle),
 	}
 
-	if reasoning := strings.TrimSpace(asString(message["reasoningContent"])); reasoning != "" {
-		lines = append(lines, "", m.renderSessionDetailSection("推理过程", reasoning, tuiSessionDetailReasoningStyle))
+	editableIndex := 0
+	sectionElementIndexes := []int{}
+	for _, section := range m.sessionDetailSections() {
+		if len(elements) > 0 && elements[len(elements)-1] != "" {
+			elements = append(elements, "")
+		}
+		selected := section.editable && editableIndex == m.selectedSessionDetail
+		if section.editable {
+			sectionElementIndexes = append(sectionElementIndexes, len(elements))
+			editableIndex++
+		}
+		elements = append(elements, m.renderSessionDetailSection(section, selected))
 	}
-	if fullError := strings.TrimSpace(asString(message["fullErrorContent"])); fullError != "" && fullError != sessionMessageFullContent(message) {
-		lines = append(lines, "", m.renderSessionDetailSection("完整错误", fullError, tuiSessionDetailErrorStyle))
-	}
-
-	extras := sessionMessageExtraLines(message)
-	if len(extras) > 0 {
-		lines = append(lines, "", m.renderSessionDetailSection("附加信息", strings.Join(extras, "\n"), tuiSessionDetailInfoStyle))
-	}
-	return strings.Join(lines, "\n")
+	return elements, sectionElementIndexes
 }
 
-func (m tuiModel) renderSessionDetailSection(title, content string, style lipgloss.Style) string {
+func (m tuiModel) sessionDetailSections() []tuiSessionDetailSection {
+	message := m.selectedSessionMessageMap()
+	if len(message) == 0 {
+		return nil
+	}
+
+	sections := []tuiSessionDetailSection{
+		{
+			kind:     tuiSessionDetailContent,
+			title:    "正文",
+			content:  sessionMessageDetailContent(message),
+			style:    tuiSessionDetailContentStyle,
+			editable: true,
+		},
+		{
+			kind:     tuiSessionDetailReasoning,
+			title:    "思考内容",
+			content:  asString(message["reasoningContent"]),
+			style:    tuiSessionDetailReasoningStyle,
+			editable: true,
+		},
+	}
+	if fullError := strings.TrimSpace(asString(message["fullErrorContent"])); fullError != "" && fullError != sessionMessageFullContent(message) {
+		sections = append(sections, tuiSessionDetailSection{
+			kind:    tuiSessionDetailError,
+			title:   "完整错误",
+			content: fullError,
+			style:   tuiSessionDetailErrorStyle,
+		})
+	}
+	if extras := sessionMessageExtraLines(message); len(extras) > 0 {
+		sections = append(sections, tuiSessionDetailSection{
+			kind:    tuiSessionDetailInfo,
+			title:   "附加信息",
+			content: strings.Join(extras, "\n"),
+			style:   tuiSessionDetailInfoStyle,
+		})
+	}
+	return sections
+}
+
+func (m tuiModel) editableSessionDetailSections() []tuiSessionDetailSection {
+	sections := m.sessionDetailSections()
+	result := make([]tuiSessionDetailSection, 0, len(sections))
+	for _, section := range sections {
+		if section.editable {
+			result = append(result, section)
+		}
+	}
+	return result
+}
+
+func (m tuiModel) renderSessionDetailSection(section tuiSessionDetailSection, selected bool) string {
 	width := maxInt(36, minInt(100, m.content.Width-4))
+	title := section.title
+	style := section.style
+	if selected {
+		title = "▶ " + title
+		style = style.Copy().
+			Border(lipgloss.ThickBorder()).
+			BorderForeground(lipgloss.Color("219")).
+			Bold(true)
+	}
 	header := tuiTitleStyle.Render(title)
-	body := strings.TrimSpace(content)
+	body := strings.TrimSpace(section.content)
 	if body == "" {
 		body = "（空）"
 	}
 	return header + "\n" + style.Width(width).Render(body)
+}
+
+func (m tuiModel) selectedSessionDetailLineRange() (int, int, int, bool) {
+	elements, sectionElementIndexes := m.sessionMessageDetailViewElements()
+	if len(sectionElementIndexes) == 0 {
+		return 0, 0, 0, false
+	}
+	selected := minInt(maxInt(0, m.selectedSessionDetail), len(sectionElementIndexes)-1)
+	elementIndex := sectionElementIndexes[selected]
+
+	start := 0
+	for index := 0; index < elementIndex; index++ {
+		start += lineCount(elements[index])
+	}
+	selectedLines := lineCount(elements[elementIndex])
+	totalLines := lineCount(strings.Join(elements, "\n"))
+	return start, start + selectedLines - 1, totalLines, true
+}
+
+func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
+	if m.sessionMode != tuiSessionModeMessageDetail {
+		return nil
+	}
+	messageIndex := minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
+	if messageIndex < 0 || messageIndex >= len(m.sessionMessages) {
+		return nil
+	}
+	sections := m.editableSessionDetailSections()
+	if len(sections) == 0 {
+		return nil
+	}
+	sectionIndex := minInt(maxInt(0, m.selectedSessionDetail), len(sections)-1)
+	section := sections[sectionIndex]
+	sessionID := asString(m.activeSession["id"])
+	if sessionID == "" {
+		return func() tea.Msg {
+			return tuiCommandResultMsg{op: "sessions:update_messages", err: fmt.Errorf("当前会话缺少 ID")}
+		}
+	}
+
+	return func() tea.Msg {
+		value := sessionDetailEditValue(m.sessionMessages[messageIndex], section.kind)
+		form := newTUIForm(huh.NewGroup(
+			huh.NewText().Title(section.title).Value(&value),
+		))
+		if err := form.Run(); err != nil {
+			return tuiFormErrorResult(err)
+		}
+
+		updatedMessages := cloneSessionMessages(m.sessionMessages)
+		updateSessionMessageDetail(updatedMessages[messageIndex], section.kind, value)
+		response, err := m.server.sendCommandWithResponse(map[string]any{
+			"command":    "session_update_messages",
+			"session_id": sessionID,
+			"messages":   updatedMessages,
+		}, 45*time.Second)
+		if response == nil {
+			response = map[string]any{}
+		}
+		response["messages"] = updatedMessages
+		return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
+	}
+}
+
+func sessionDetailEditValue(message map[string]any, kind tuiSessionDetailKind) string {
+	switch kind {
+	case tuiSessionDetailReasoning:
+		return asString(message["reasoningContent"])
+	default:
+		return sessionMessageFullContent(message)
+	}
+}
+
+func updateSessionMessageDetail(message map[string]any, kind tuiSessionDetailKind, value string) {
+	switch kind {
+	case tuiSessionDetailReasoning:
+		if strings.TrimSpace(value) == "" {
+			delete(message, "reasoningContent")
+		} else {
+			message["reasoningContent"] = value
+		}
+	default:
+		setSessionMessageContent(message, value)
+	}
+}
+
+func setSessionMessageContent(message map[string]any, value string) {
+	switch content := message["content"].(type) {
+	case []any:
+		versions := append([]any(nil), content...)
+		index := minInt(maxInt(0, asInt(message["currentVersionIndex"])), maxInt(0, len(versions)-1))
+		if len(versions) == 0 {
+			versions = []any{value}
+			index = 0
+		} else {
+			versions[index] = value
+		}
+		message["content"] = versions
+		message["currentVersionIndex"] = index
+	case []string:
+		versions := append([]string(nil), content...)
+		index := minInt(maxInt(0, asInt(message["currentVersionIndex"])), maxInt(0, len(versions)-1))
+		if len(versions) == 0 {
+			versions = []string{value}
+			index = 0
+		} else {
+			versions[index] = value
+		}
+		message["content"] = versions
+		message["currentVersionIndex"] = index
+	default:
+		message["content"] = value
+	}
+}
+
+func cloneSessionMessages(messages []map[string]any) []map[string]any {
+	result := make([]map[string]any, 0, len(messages))
+	for _, message := range messages {
+		cloned := make(map[string]any, len(message))
+		for key, value := range message {
+			switch typed := value.(type) {
+			case []any:
+				cloned[key] = append([]any(nil), typed...)
+			case []string:
+				cloned[key] = append([]string(nil), typed...)
+			default:
+				cloned[key] = value
+			}
+		}
+		result = append(result, cloned)
+	}
+	return result
 }
 
 func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, selected bool) string {

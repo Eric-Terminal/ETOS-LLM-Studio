@@ -126,6 +126,7 @@ type tuiModel struct {
 	activeSession          map[string]any
 	sessionMessages        []map[string]any
 	selectedSessionMessage int
+	selectedSessionDetail  int
 	memoryRows             []map[string]any
 	captureRows            []map[string]any
 }
@@ -611,14 +612,26 @@ func (m *tuiModel) handleContentKey(key string) tea.Cmd {
 	case "enter":
 		return m.enterSelected()
 	case "up", "k":
-		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessages {
-			m.selectPreviousSessionMessage()
-			return nil
+		if m.active == tuiSessions {
+			switch m.sessionMode {
+			case tuiSessionModeMessages:
+				m.selectPreviousSessionMessage()
+				return nil
+			case tuiSessionModeMessageDetail:
+				m.selectPreviousSessionDetail()
+				return nil
+			}
 		}
 	case "down", "j":
-		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessages {
-			m.selectNextSessionMessage()
-			return nil
+		if m.active == tuiSessions {
+			switch m.sessionMode {
+			case tuiSessionModeMessages:
+				m.selectNextSessionMessage()
+				return nil
+			case tuiSessionModeMessageDetail:
+				m.selectNextSessionDetail()
+				return nil
+			}
 		}
 	case "p":
 		if m.active == tuiFiles {
@@ -660,6 +673,9 @@ func (m *tuiModel) handleContentKey(key string) tea.Cmd {
 		}
 		if m.active == tuiMemories {
 			return m.editSelectedMemory()
+		}
+		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessageDetail {
+			return m.editSelectedSessionDetail()
 		}
 	case "1", "2", "3":
 		if m.active == tuiSQLite {
@@ -1567,6 +1583,12 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.applySessions(msg.response)
 	case msg.op == "sessions:get":
 		m.applySessionDetail(msg.response)
+	case msg.op == "sessions:update_messages":
+		if messages, ok := msg.response["messages"]; ok {
+			m.sessionMessages = asMapSlice(messages)
+		}
+		m.setMessage("会话消息已更新", tuiOKStyle)
+		m.keepSelectedSessionDetailVisible()
 	case msg.op == "memories:list":
 		m.applyMemories(msg.response)
 	case msg.op == "sqlite:tables":
