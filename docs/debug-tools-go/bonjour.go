@@ -30,11 +30,15 @@ func (s *DebugServer) startBonjourAdvertisement() {
 		nil,
 	)
 	if err != nil {
-		fmt.Printf("\n[WARN] Bonjour 自动发现发布失败: %v\n", err)
+		if debugMode {
+			fmt.Printf("\n[WARN] Bonjour 自动发现发布失败: %v\n", err)
+		}
 		return
 	}
 
-	s.bonjourShutdown = server.Shutdown
+	if !s.setBonjourShutdown(server.Shutdown) {
+		server.Shutdown()
+	}
 }
 
 func bonjourInstanceName(hostname string) string {

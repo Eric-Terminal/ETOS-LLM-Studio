@@ -26,7 +26,7 @@ cd docs/debug-tools-go
 go run .
 ```
 
-启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、Header Overrides 与独立代理、`m` 新增模型、`M` 选择并编辑已有模型参数。
+启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 返回侧栏或取消输入，按 `Ctrl+C` 退出。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、Header Overrides 与独立代理、`m` 新增模型、`M` 选择并编辑已有模型参数。
 
 默认只监听一个端口：
 

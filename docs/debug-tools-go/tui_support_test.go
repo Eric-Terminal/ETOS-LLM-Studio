@@ -1,6 +1,54 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+)
+
+func TestTUIEscReturnsToNavigationWithoutQuit(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.focus = tuiFocusContent
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal("Esc 触发了 tea.Quit，期望只返回侧栏或取消输入")
+		}
+	}
+
+	got, ok := updated.(tuiModel)
+	if !ok {
+		t.Fatalf("Update 返回类型 = %T, want tuiModel", updated)
+	}
+	if got.focus != tuiFocusNav {
+		t.Fatalf("focus = %v, want tuiFocusNav", got.focus)
+	}
+}
+
+func TestTUICtrlCQuits(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("Ctrl+C 未返回退出命令")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("Ctrl+C 返回命令消息 = %T, want tea.QuitMsg", msg)
+	}
+}
+
+func TestTUIFormErrorResultIgnoresUserAbort(t *testing.T) {
+	result := tuiFormErrorResult(huh.ErrUserAborted)
+	if result.err != nil {
+		t.Fatalf("用户取消表单后 err = %v, want nil", result.err)
+	}
+	if result.op != "noop" {
+		t.Fatalf("op = %q, want noop", result.op)
+	}
+}
 
 func TestBuildProviderUpsertPayloadIncludesHeaderOverrides(t *testing.T) {
 	payload, err := buildProviderUpsertPayload(providerUpsertInput{

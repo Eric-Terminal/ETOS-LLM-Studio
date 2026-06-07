@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -240,8 +242,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch key {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			if m.focus == tuiFocusContent {
+				m.focus = tuiFocusNav
+				m.syncFocusedComponent()
+				m.syncContentViewport()
+			}
+			return m, tea.Batch(cmds...)
 		case "left":
 			m.focus = tuiFocusNav
 			m.syncFocusedComponent()
@@ -532,7 +541,7 @@ func (m *tuiModel) syncActiveViewFromNav() {
 }
 
 func (m tuiModel) renderHelp() string {
-	common := "← 侧栏 | → 内容 | Tab 快速切页 | r 刷新 | Esc/Ctrl+C 退出"
+	common := "← 侧栏 | → 内容 | Tab 快速切页 | r 刷新 | Esc 返回/取消输入 | Ctrl+C 退出"
 	if m.focus == tuiFocusNav {
 		return common + " | ↑↓ 选择页面 | Enter 进入内容"
 	}
@@ -710,6 +719,19 @@ func (m *tuiModel) setMessage(text string, style lipgloss.Style) {
 	m.messageStyle = style
 }
 
+func newTUIForm(groups ...*huh.Group) *huh.Form {
+	keymap := huh.NewDefaultKeyMap()
+	keymap.Quit = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "取消"))
+	return huh.NewForm(groups...).WithKeyMap(keymap)
+}
+
+func tuiFormErrorResult(err error) tuiCommandResultMsg {
+	if errors.Is(err, huh.ErrUserAborted) {
+		return tuiCommandResultMsg{op: "noop"}
+	}
+	return tuiCommandResultMsg{op: "noop", err: err}
+}
+
 func (m tuiModel) refreshActiveView() tea.Cmd {
 	switch m.active {
 	case tuiFiles:
@@ -807,12 +829,12 @@ func (m tuiModel) uploadFile() tea.Cmd {
 	return func() tea.Msg {
 		localPath := ""
 		remotePath := m.currentPath
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("本地文件路径").Value(&localPath),
 			huh.NewInput().Title("设备目标路径").Value(&remotePath),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 
 		localPath = strings.TrimSpace(localPath)
@@ -837,11 +859,11 @@ func (m tuiModel) uploadFile() tea.Cmd {
 func (m tuiModel) promptFilesPath() tea.Cmd {
 	return func() tea.Msg {
 		path := m.currentPath
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("设备路径").Value(&path),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		path = strings.TrimSpace(path)
 		if path == "" {
@@ -869,7 +891,7 @@ func (m tuiModel) addProvider() tea.Cmd {
 		proxyPort := "8080"
 		proxyUsername := ""
 		proxyPassword := ""
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API Key").EchoMode(huh.EchoModePassword).Value(&apiKey),
@@ -883,7 +905,7 @@ func (m tuiModel) addProvider() tea.Cmd {
 			huh.NewInput().Title("代理密码").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		payload, err := buildProviderUpsertPayload(providerUpsertInput{
 			Name:            name,
@@ -925,7 +947,7 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		proxyPort := providerProxyField(provider, "port", "8080")
 		proxyUsername := providerProxyField(provider, "username", "")
 		proxyPassword := providerProxyField(provider, "password", "")
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
@@ -939,7 +961,7 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 			huh.NewInput().Title("代理密码（留空则清除）").EchoMode(huh.EchoModePassword).Value(&proxyPassword),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		payload, err := buildProviderUpsertPayload(providerUpsertInput{
 			ProviderID:      providerID,
@@ -981,7 +1003,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		requestBodyControls := "[]"
 		overrideParameters := "{}"
 		pricing := "{}"
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
 			huh.NewInput().Title("类型(chat/image/embedding/rerank/speechToText/textToSpeech)").Value(&kind),
@@ -995,7 +1017,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 			huh.NewText().Title("Pricing JSON").Value(&pricing),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		payload, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
 			ProviderID:              providerID,
@@ -1048,7 +1070,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("当前 Provider 的模型缺少 ID，无法编辑")}
 		}
 
-		selectForm := huh.NewForm(huh.NewGroup(
+		selectForm := newTUIForm(huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("选择要编辑的模型").
 				Options(options...).
@@ -1056,7 +1078,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 				Height(maxInt(4, minInt(len(options), 12))),
 		))
 		if err := selectForm.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 
 		model := findProviderModelRow(models, modelID)
@@ -1089,7 +1111,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 		pricing := providerModelPricingText(model)
 		isActivated := model["isActivated"] == nil || asBool(model["isActivated"])
 
-		editForm := huh.NewForm(huh.NewGroup(
+		editForm := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
 			huh.NewConfirm().Title("启用模型").Affirmative("启用").Negative("停用").Value(&isActivated),
@@ -1104,7 +1126,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			huh.NewText().Title("Pricing JSON").Value(&pricing),
 		))
 		if err := editForm.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 
 		payload, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
@@ -1205,14 +1227,14 @@ func (m tuiModel) editSelectedSetting() tea.Cmd {
 	}
 	return func() tea.Msg {
 		value := currentValue
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewInput().
 				Title(fmt.Sprintf("%s (%s)", key, settingType)).
 				Description("布尔值可填 true/false，数字按原类型解析，文本保持原样。").
 				Value(&value),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		response, err := m.server.sendCommandWithResponse(map[string]any{
 			"command": "app_config_set",
@@ -1251,11 +1273,11 @@ func (m tuiModel) promptSQLiteQuery(mutating bool) tea.Cmd {
 		if mutating {
 			sql = "UPDATE table_name SET column_name = ? WHERE id = ?"
 		}
-		form := huh.NewForm(huh.NewGroup(
+		form := newTUIForm(huh.NewGroup(
 			huh.NewText().Title("SQL").Value(&sql),
 		))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		op := "sqlite:query"
 		command := "query_sqlite"
@@ -1349,9 +1371,9 @@ func (m tuiModel) createSelectedKind() tea.Cmd {
 	case tuiFiles:
 		return func() tea.Msg {
 			path := m.currentPath
-			form := huh.NewForm(huh.NewGroup(huh.NewInput().Title("新目录路径").Value(&path)))
+			form := newTUIForm(huh.NewGroup(huh.NewInput().Title("新目录路径").Value(&path)))
 			if err := form.Run(); err != nil {
-				return tuiCommandResultMsg{op: "noop", err: err}
+				return tuiFormErrorResult(err)
 			}
 			response, err := m.server.sendCommandWithResponse(map[string]any{"command": "mkdir", "path": strings.TrimSpace(path)}, 30*time.Second)
 			return tuiCommandResultMsg{op: "files:mkdir", response: response, err: err}
@@ -1359,9 +1381,9 @@ func (m tuiModel) createSelectedKind() tea.Cmd {
 	case tuiSessions:
 		return func() tea.Msg {
 			name := "新的对话"
-			form := huh.NewForm(huh.NewGroup(huh.NewInput().Title("会话名称").Value(&name)))
+			form := newTUIForm(huh.NewGroup(huh.NewInput().Title("会话名称").Value(&name)))
 			if err := form.Run(); err != nil {
-				return tuiCommandResultMsg{op: "noop", err: err}
+				return tuiFormErrorResult(err)
 			}
 			response, err := m.server.sendCommandWithResponse(map[string]any{"command": "session_create", "name": strings.TrimSpace(name)}, 30*time.Second)
 			return tuiCommandResultMsg{op: "sessions:create", response: response, err: err}
@@ -1381,9 +1403,9 @@ func (m tuiModel) editSelectedMemory() tea.Cmd {
 	current := row[2]
 	return func() tea.Msg {
 		content := current
-		form := huh.NewForm(huh.NewGroup(huh.NewText().Title("记忆内容").Value(&content)))
+		form := newTUIForm(huh.NewGroup(huh.NewText().Title("记忆内容").Value(&content)))
 		if err := form.Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+			return tuiFormErrorResult(err)
 		}
 		response, err := m.server.sendCommandWithResponse(map[string]any{"command": "memory_update", "memory_id": memoryID, "content": content}, 45*time.Second)
 		return tuiCommandResultMsg{op: "memories:update", response: response, err: err}
@@ -1403,8 +1425,9 @@ func (m tuiModel) showSelectedMemory() tea.Cmd {
 func (m tuiModel) confirmAndRun(title, op string, payload map[string]any, timeout time.Duration) tea.Cmd {
 	return func() tea.Msg {
 		ok := false
-		if err := huh.NewConfirm().Title(title).Value(&ok).Run(); err != nil {
-			return tuiCommandResultMsg{op: "noop", err: err}
+		form := newTUIForm(huh.NewGroup(huh.NewConfirm().Title(title).Value(&ok)))
+		if err := form.Run(); err != nil {
+			return tuiFormErrorResult(err)
 		}
 		if !ok {
 			return tuiCommandResultMsg{op: "noop", response: map[string]any{"status": "ok", "message": "已取消"}}

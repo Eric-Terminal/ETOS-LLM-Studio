@@ -63,6 +63,7 @@ type DebugServer struct {
 
 	httpServer      *http.Server
 	bonjourShutdown func()
+	shuttingDown    bool
 	serviceStarted  bool
 	serviceError    string
 }
@@ -79,7 +80,11 @@ func NewDebugServer(host string, port int) *DebugServer {
 }
 
 func getLocalIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "udp", "8.8.8.8:80")
 	if err != nil {
 		return "无法获取IP"
 	}
@@ -95,14 +100,14 @@ func getLocalIP() string {
 func (s *DebugServer) run(ctx context.Context) error {
 	localIP := getLocalIP()
 	if s.startHTTPServer() {
-		s.startBonjourAdvertisement()
+		go s.startBonjourAdvertisement()
 	}
 
 	if err := runTUI(ctx.Done(), s, localIP); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Printf("\nTUI 运行错误: %v\n", err)
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
 	defer cancel()
 	_ = s.shutdown(shutdownCtx)
 	return nil
@@ -110,14 +115,14 @@ func (s *DebugServer) run(ctx context.Context) error {
 
 func (s *DebugServer) shutdown(ctx context.Context) error {
 	var errs []error
+	shutdownBonjour := s.takeBonjourShutdown()
 	if s.httpServer != nil {
-		if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// TUI 退出是交互路径，直接关闭连接可以避免长请求拖慢 Ctrl+C。
+		if err := s.httpServer.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs = append(errs, err)
 		}
 	}
-	if s.bonjourShutdown != nil {
-		shutdownBonjour := s.bonjourShutdown
-		s.bonjourShutdown = nil
+	if shutdownBonjour != nil {
 		done := make(chan struct{})
 		go func() {
 			shutdownBonjour()
@@ -134,6 +139,25 @@ func (s *DebugServer) shutdown(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("关闭服务失败: %v", errs)
+}
+
+func (s *DebugServer) setBonjourShutdown(shutdown func()) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.shuttingDown {
+		return false
+	}
+	s.bonjourShutdown = shutdown
+	return true
+}
+
+func (s *DebugServer) takeBonjourShutdown() func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.shuttingDown = true
+	shutdown := s.bonjourShutdown
+	s.bonjourShutdown = nil
+	return shutdown
 }
 
 func (s *DebugServer) startHTTPServer() bool {
