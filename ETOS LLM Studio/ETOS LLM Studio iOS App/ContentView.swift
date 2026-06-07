@@ -31,6 +31,7 @@ struct ContentView: View {
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @State private var isNativeSettingsPresented: Bool = false
+    @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
     
     var body: some View {
         contentWithMigrationOverlays
@@ -100,6 +101,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
             openUpdateTimelineFromNotification()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore)) { notification in
+            guard let fileURL = notification.object as? URL else { return }
+            incomingSnapshotRestorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
             Task { @MainActor in
                 openDailyPulseContinuationIfNeeded()
@@ -131,6 +136,13 @@ struct ContentView: View {
                         announcementManager.dismissAlert()
                     }
                 )
+            }
+        }
+        .sheet(item: $incomingSnapshotRestorePayload) { payload in
+            NavigationStack {
+                IncomingSnapshotRestoreView(fileURL: payload.fileURL) {
+                    incomingSnapshotRestorePayload = nil
+                }
             }
         }
     }

@@ -42,6 +42,18 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>ETOS Snapshot Backup</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.ericterminal.els.snapshot-backup</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Chat Attachment</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -76,6 +88,28 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>gguf</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/octet-stream</string>
+			</dict>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ETOS Snapshot Backup</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.ericterminal.els.snapshot-backup</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>elsbackup</string>
 				</array>
 				<key>public.mime-type</key>
 				<string>application/octet-stream</string>

@@ -3941,3 +3941,6 @@
 "当前选择：%@" = "Current selection: %@";
 "上传前请确认对象存储配置。" = "Confirm object storage settings before uploading.";
 "恢复前请确认快照来源可信。" = "Confirm the snapshot source is trusted before restoring.";
+"系统打开了一个数据库快照文件。确认来源可信后再恢复。" = "The system opened a database snapshot file. Restore only after confirming the source is trusted.";
+"正在检查快照…" = "Checking snapshot…";
+"正在恢复快照…" = "Restoring snapshot…";

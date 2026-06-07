@@ -81,7 +81,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     Task { @MainActor in
                         let handledByShortcutRouter = await ShortcutURLRouter.shared.handleIncomingURL(url)
                         if !handledByShortcutRouter {
-                            viewModel.handleIncomingDocumentURL(url)
+                            if IncomingSnapshotRestoreSupport.isSnapshotURL(url) {
+                                NotificationCenter.default.post(name: .requestIncomingSnapshotRestore, object: url)
+                            } else {
+                                viewModel.handleIncomingDocumentURL(url)
+                            }
                         }
                     }
                 }

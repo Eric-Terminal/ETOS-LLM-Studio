@@ -4013,3 +4013,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "当前选择：%@" = "Selección actual: %@";
 "上传前请确认对象存储配置。" = "Confirma la configuración del almacenamiento de objetos antes de subir.";
 "恢复前请确认快照来源可信。" = "Confirma que el origen de la instantánea sea confiable antes de restaurar.";
+"系统打开了一个数据库快照文件。确认来源可信后再恢复。" = "El sistema abrió un archivo de snapshot de base de datos. Restáuralo solo después de confirmar que la fuente es confiable.";
+"正在检查快照…" = "Comprobando snapshot…";
+"正在恢复快照…" = "Restaurando snapshot…";
