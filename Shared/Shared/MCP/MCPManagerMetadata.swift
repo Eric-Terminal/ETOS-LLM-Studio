@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 负责 MCP 服务器工具、资源、资源模板、提示词和 roots 的元数据刷新。
+// 负责 MCP 服务器工具、资源、资源模板和提示词的元数据刷新。
 // ============================================================================
 
 import Foundation
@@ -35,7 +35,8 @@ extension MCPManager {
             let resources = try await listResourcesIfSupported(client: client)
             let resourceTemplates = try await listResourceTemplatesIfSupported(client: client)
             let prompts = try await listPromptsIfSupported(client: client)
-            let roots = try await listRootsIfSupported(client: client)
+            // roots/list 是服务器向客户端发起的请求，不属于可主动拉取的服务器元数据。
+            let roots: [MCPRoot] = []
             if let server = servers.first(where: { $0.id == serverID }) {
                 mcpManagerLogger.info("MCP 元数据加载完成：\(server.displayName, privacy: .public)，tools=\(tools.count)，resources=\(resources.count)，resourceTemplates=\(resourceTemplates.count)，prompts=\(prompts.count)，roots=\(roots.count)")
             } else {
@@ -130,11 +131,4 @@ extension MCPManager {
         }
     }
 
-    private func listRootsIfSupported(client: MCPClient) async throws -> [MCPRoot] {
-        do {
-            return try await client.listRoots()
-        } catch let MCPClientError.rpcError(error) where error.code == -32601 || error.code == -32602 {
-            return []
-        }
-    }
 }
