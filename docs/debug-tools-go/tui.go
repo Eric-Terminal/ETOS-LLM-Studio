@@ -41,6 +41,8 @@ const (
 	tuiMinContentWidth      = 24
 	tuiPanelHorizontalFrame = 4
 	tuiPanelGapWidth        = 1
+	tuiEnterFormScreen      = "\x1b[?1049h\x1b[2J\x1b[H"
+	tuiExitFormScreen       = "\x1b[?1049l"
 )
 
 type tuiFocus int
@@ -108,7 +110,18 @@ type tuiBlockingCommand struct {
 	msg    tea.Msg
 }
 
-func (c *tuiBlockingCommand) Run() error {
+func (c *tuiBlockingCommand) Run() (err error) {
+	if output := c.terminalOutput(); output != nil {
+		if _, err = io.WriteString(output, tuiEnterFormScreen); err != nil {
+			return err
+		}
+		defer func() {
+			if _, exitErr := io.WriteString(output, tuiExitFormScreen); err == nil {
+				err = exitErr
+			}
+		}()
+	}
+
 	c.msg = c.run(tuiFormRunner{
 		stdin:  c.stdin,
 		stdout: c.stdout,
@@ -120,6 +133,13 @@ func (c *tuiBlockingCommand) Run() error {
 func (c *tuiBlockingCommand) SetStdin(r io.Reader)  { c.stdin = r }
 func (c *tuiBlockingCommand) SetStdout(w io.Writer) { c.stdout = w }
 func (c *tuiBlockingCommand) SetStderr(w io.Writer) { c.stderr = w }
+
+func (c *tuiBlockingCommand) terminalOutput() io.Writer {
+	if c.stdout != nil {
+		return c.stdout
+	}
+	return c.stderr
+}
 
 type tuiStatus struct {
 	connected       bool

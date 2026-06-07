@@ -122,6 +122,10 @@ func TestTUIBlockingCommandPassesTerminalIOToFormRunner(t *testing.T) {
 	if result, ok := command.msg.(tuiCommandResultMsg); !ok || result.op != "noop" {
 		t.Fatalf("msg = %#v, want noop result", command.msg)
 	}
+	rendered := output.String()
+	if !strings.Contains(rendered, tuiEnterFormScreen) || !strings.Contains(rendered, tuiExitFormScreen) {
+		t.Fatalf("表单命令没有隔离到独立屏幕，输出 = %q", rendered)
+	}
 }
 
 func TestApplyFilesKeepsDirectoryMetadataForNavigation(t *testing.T) {
