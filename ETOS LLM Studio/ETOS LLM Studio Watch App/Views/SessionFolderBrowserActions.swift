@@ -58,6 +58,7 @@ extension SessionFolderBrowserView {
                     updateTagAction: updateTagAction,
                     deleteTagAction: deleteTagAction,
                     setSessionTagsAction: setSessionTagsAction,
+                    toggleSessionColorMarkerAction: toggleSessionColorMarkerAction,
                     createConversationAction: createConversationAction,
                     isRoot: false
                 )
@@ -98,7 +99,8 @@ extension SessionFolderBrowserView {
                 },
                 deleteLastMessageAction: deleteLastMessageAction,
                 sendSessionToCompanionAction: sendSessionToCompanionAction,
-                moveSessionToFolderAction: moveSessionToFolderAction
+                moveSessionToFolderAction: moveSessionToFolderAction,
+                toggleSessionColorMarkerAction: toggleSessionColorMarkerAction
             )
         }
     }

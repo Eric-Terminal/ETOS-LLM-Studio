@@ -534,6 +534,9 @@ extension SessionFolderBrowserView {
                 onEditTags: {
                     sessionForTagEditing = session
                 },
+                onToggleQuickColor: { color in
+                    viewModel.toggleSessionColorMarker(for: session, color: color)
+                },
                 onSendToCompanion: {
                     syncManager.sendSessionToCompanion(sessionID: session.id)
                 }

@@ -37,7 +37,10 @@ extension SyncEngine {
             if let existingIndex = local.firstIndex(where: { $0.id == tag.id }) {
                 idMapping[tag.id] = local[existingIndex].id
                 if shouldAdoptIncomingSessionTag(local: local[existingIndex], incoming: tag),
-                   !local.contains(where: { $0.id != tag.id && normalizedSessionTagName($0.name) == normalizedSessionTagName(tag.name) }) {
+                   !local.contains(where: { candidate in
+                       candidate.id != tag.id
+                           && shouldMergeSessionTagsByName(candidate, tag)
+                   }) {
                     local[existingIndex].name = tag.name
                     local[existingIndex].color = tag.color
                     local[existingIndex].updatedAt = tag.updatedAt
@@ -49,7 +52,7 @@ extension SyncEngine {
                 continue
             }
 
-            if let sameNameIndex = local.firstIndex(where: { normalizedSessionTagName($0.name) == normalizedSessionTagName(tag.name) }) {
+            if let sameNameIndex = local.firstIndex(where: { shouldMergeSessionTagsByName($0, tag) }) {
                 idMapping[tag.id] = local[sameNameIndex].id
                 if shouldAdoptIncomingSessionTag(local: local[sameNameIndex], incoming: tag) {
                     local[sameNameIndex].color = tag.color
@@ -102,6 +105,11 @@ extension SyncEngine {
     static func shouldAdoptIncomingSessionTag(local: SessionTag, incoming: SessionTag) -> Bool {
         guard incoming.updatedAt > local.updatedAt else { return false }
         return local.name != incoming.name || local.color != incoming.color
+    }
+
+    static func shouldMergeSessionTagsByName(_ local: SessionTag, _ incoming: SessionTag) -> Bool {
+        local.isSystemColorTag == incoming.isSystemColorTag
+            && normalizedSessionTagName(local.name) == normalizedSessionTagName(incoming.name)
     }
 
     static func normalizedSessionTagName(_ name: String) -> String {

@@ -176,6 +176,10 @@ extension ChatViewModel {
         chatService.setSessionTags(sessionID: session.id, tagIDs: tagIDs)
     }
 
+    func toggleSessionColorMarker(for session: ChatSession, color: SessionTagColor?) {
+        chatService.toggleSessionColorMarker(sessionID: session.id, color: color)
+    }
+
     func commitEditedMessage(_ updatedMessage: ChatMessage) {
         chatService.updateMessage(updatedMessage)
         messageToEdit = nil

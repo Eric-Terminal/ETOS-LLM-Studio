@@ -57,3 +57,46 @@ public struct SessionTag: Identifiable, Codable, Hashable, Sendable {
         self.updatedAt = updatedAt
     }
 }
+
+public extension SessionTag {
+    static func systemColorTagID(for color: SessionTagColor) -> UUID {
+        switch color {
+        case .red:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        case .orange:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        case .yellow:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000003")!
+        case .green:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000004")!
+        case .blue:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000005")!
+        case .purple:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000006")!
+        case .gray:
+            return UUID(uuidString: "00000000-0000-4000-8000-000000000007")!
+        }
+    }
+
+    static var systemColorTagIDs: Set<UUID> {
+        Set(SessionTagColor.allCases.map { systemColorTagID(for: $0) })
+    }
+
+    static func systemColorTag(for color: SessionTagColor, updatedAt: Date = Date()) -> SessionTag {
+        SessionTag(
+            id: systemColorTagID(for: color),
+            name: color.localizedName,
+            color: color,
+            updatedAt: updatedAt
+        )
+    }
+
+    var systemColor: SessionTagColor? {
+        guard let color, id == Self.systemColorTagID(for: color) else { return nil }
+        return color
+    }
+
+    var isSystemColorTag: Bool {
+        systemColor != nil
+    }
+}

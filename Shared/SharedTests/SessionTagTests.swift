@@ -185,4 +185,41 @@ extension ChatServiceTests {
         #expect(chatService.chatSessionsSubject.value.first(where: { $0.id == session.id })?.tagIDs.isEmpty == true)
         #expect(Persistence.loadChatSessions().first(where: { $0.id == session.id })?.tagIDs.isEmpty == true)
     }
+
+    @Test("快捷颜色标记会复用系统标签并保留自定义标签")
+    func testQuickColorMarkerUsesSystemTagsAndPreservesCustomTags() async throws {
+        await cleanup()
+        Persistence.saveSessionTags([])
+        chatService.sessionTagsSubject.send([])
+        defer {
+            Persistence.saveSessionTags([])
+        }
+
+        let customTag = try #require(chatService.createSessionTag(name: "发票", color: .red))
+        let session = chatService.createSavedSession(name: "快捷颜色标记会话")
+        defer {
+            chatService.deleteSessions([session])
+        }
+        chatService.setSessionTags(sessionID: session.id, tagIDs: [customTag.id])
+
+        chatService.toggleSessionColorMarker(sessionID: session.id, color: .red)
+
+        let systemRedID = SessionTag.systemColorTagID(for: .red)
+        let taggedSession = try #require(chatService.chatSessionsSubject.value.first(where: { $0.id == session.id }))
+        #expect(taggedSession.tagIDs.contains(customTag.id))
+        #expect(taggedSession.tagIDs.contains(systemRedID))
+        #expect(chatService.sessionTagsSubject.value.contains(where: { $0.id == systemRedID && $0.isSystemColorTag }))
+
+        let sameNameCustomTag = try #require(chatService.createSessionTag(
+            name: SessionTag.systemColorTag(for: .red).name,
+            color: .gray
+        ))
+        #expect(!sameNameCustomTag.isSystemColorTag)
+        #expect(!SyncEngine.shouldMergeSessionTagsByName(SessionTag.systemColorTag(for: .red), sameNameCustomTag))
+
+        chatService.toggleSessionColorMarker(sessionID: session.id, color: nil)
+
+        let clearedSession = try #require(chatService.chatSessionsSubject.value.first(where: { $0.id == session.id }))
+        #expect(clearedSession.tagIDs == [customTag.id])
+    }
 }

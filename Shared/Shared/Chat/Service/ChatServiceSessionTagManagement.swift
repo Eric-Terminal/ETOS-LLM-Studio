@@ -17,7 +17,7 @@ extension ChatService {
         guard !trimmedName.isEmpty else { return nil }
 
         var tags = sessionTagsSubject.value
-        guard !tags.contains(where: { normalizedSessionTagName($0.name) == normalizedSessionTagName(trimmedName) }) else {
+        guard !tags.contains(where: { !$0.isSystemColorTag && normalizedSessionTagName($0.name) == normalizedSessionTagName(trimmedName) }) else {
             return nil
         }
 
@@ -37,7 +37,11 @@ extension ChatService {
         var tags = sessionTagsSubject.value
         guard let index = tags.firstIndex(where: { $0.id == tag.id }) else { return }
         let normalizedName = normalizedSessionTagName(trimmedName)
-        guard !tags.contains(where: { $0.id != tag.id && normalizedSessionTagName($0.name) == normalizedName }) else {
+        guard !tags.contains(where: { candidate in
+            candidate.id != tag.id
+                && !candidate.isSystemColorTag
+                && normalizedSessionTagName(candidate.name) == normalizedName
+        }) else {
             return
         }
 
@@ -101,6 +105,28 @@ extension ChatService {
         logger.info("已更新会话标签绑定。")
     }
 
+    public func toggleSessionColorMarker(sessionID: UUID, color: SessionTagColor?) {
+        let systemColorTagIDs = SessionTag.systemColorTagIDs
+        let currentTagIDs = chatSessionsSubject.value.first(where: { $0.id == sessionID })?.tagIDs ?? []
+
+        guard let color else {
+            setSessionTags(
+                sessionID: sessionID,
+                tagIDs: currentTagIDs.filter { !systemColorTagIDs.contains($0) }
+            )
+            return
+        }
+
+        let tag = ensureSystemColorTag(for: color)
+        let updatedTagIDs: [UUID]
+        if currentTagIDs.contains(tag.id) {
+            updatedTagIDs = currentTagIDs.filter { $0 != tag.id }
+        } else {
+            updatedTagIDs = currentTagIDs + [tag.id]
+        }
+        setSessionTags(sessionID: sessionID, tagIDs: updatedTagIDs)
+    }
+
     public func toggleSessionTag(sessionID: UUID, tagID: UUID) {
         guard sessionTagsSubject.value.contains(where: { $0.id == tagID }) else { return }
         let currentTagIDs = chatSessionsSubject.value.first(where: { $0.id == sessionID })?.tagIDs ?? []
@@ -109,6 +135,29 @@ extension ChatService {
         } else {
             setSessionTags(sessionID: sessionID, tagIDs: currentTagIDs + [tagID])
         }
+    }
+
+    private func ensureSystemColorTag(for color: SessionTagColor) -> SessionTag {
+        var tags = sessionTagsSubject.value
+        let systemTag = SessionTag.systemColorTag(for: color)
+        if let index = tags.firstIndex(where: { $0.id == systemTag.id }) {
+            if tags[index].name != systemTag.name || tags[index].color != color {
+                tags[index].name = systemTag.name
+                tags[index].color = color
+                tags[index].updatedAt = Date()
+                tags = normalizedSessionTags(tags)
+                sessionTagsSubject.send(tags)
+                Persistence.saveSessionTags(tags)
+            }
+            return tags.first(where: { $0.id == systemTag.id }) ?? systemTag
+        }
+
+        tags.append(systemTag)
+        tags = normalizedSessionTags(tags)
+        sessionTagsSubject.send(tags)
+        Persistence.saveSessionTags(tags)
+        logger.info("已创建系统颜色标签: \(systemTag.name)")
+        return systemTag
     }
 
     private func normalizedSessionTags(_ tags: [SessionTag]) -> [SessionTag] {

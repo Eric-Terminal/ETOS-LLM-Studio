@@ -28,6 +28,7 @@ struct SessionActionsView: View {
     let onDeleteLastMessage: () -> Void
     let onSendSessionToCompanion: () -> Void
     let onMoveSessionToFolder: (UUID?) -> Void
+    let onToggleQuickColor: (SessionTagColor?) -> Void
     let onEditTags: () -> Void
 
     // MARK: - 环境
@@ -55,6 +56,11 @@ struct SessionActionsView: View {
     var body: some View {
         Form {
             Section {
+                WatchSessionTagQuickColorPalette(
+                    selectedColors: Set(sessionTags.compactMap(\.systemColor)),
+                    onSelect: onToggleQuickColor
+                )
+
                 Button {
                     sessionToEdit = session
                     dismiss()

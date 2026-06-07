@@ -427,6 +427,7 @@ struct SessionRowView: View {
     let deleteLastMessageAction: (ChatSession) -> Void
     let sendSessionToCompanionAction: (ChatSession) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
+    let toggleSessionColorMarkerAction: (ChatSession, SessionTagColor?) -> Void
 
     var body: some View {
         Button(action: { onSessionSelected(session, nil) }) {
@@ -469,6 +470,9 @@ struct SessionRowView: View {
                     onSendSessionToCompanion: { sendSessionToCompanionAction(session) },
                     onMoveSessionToFolder: { targetFolderID in
                         moveSessionToFolderAction(session, targetFolderID)
+                    },
+                    onToggleQuickColor: { color in
+                        toggleSessionColorMarkerAction(session, color)
                     },
                     onEditTags: {
                         sessionForTagEditing = session

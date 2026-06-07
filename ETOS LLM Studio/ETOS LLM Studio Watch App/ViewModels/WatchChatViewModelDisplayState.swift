@@ -172,6 +172,10 @@ extension ChatViewModel {
         chatService.setSessionTags(sessionID: session.id, tagIDs: tagIDs)
     }
 
+    func toggleSessionColorMarker(for session: ChatSession, color: SessionTagColor?) {
+        chatService.toggleSessionColorMarker(sessionID: session.id, color: color)
+    }
+
     func canRetry(message: ChatMessage) -> Bool {
         if isSendingMessage {
             guard let lastMessage = allMessagesForSession.last else { return false }

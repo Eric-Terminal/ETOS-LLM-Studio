@@ -202,9 +202,14 @@ struct SessionRow: View {
     let onCancelRename: () -> Void
     let onInfo: () -> Void
     let onEditTags: () -> Void
+    let onToggleQuickColor: (SessionTagColor?) -> Void
     let onSendToCompanion: () -> Void
 
     @FocusState private var focused: Bool
+
+    private var quickColorMarkers: Set<SessionTagColor> {
+        Set(tags.compactMap(\.systemColor))
+    }
 
     var body: some View {
         SessionRowCard(isCurrent: isCurrent) {
@@ -275,6 +280,15 @@ struct SessionRow: View {
         } label: {
             Label(NSLocalizedString("编辑标签", comment: "Edit session tags action"), systemImage: "tag")
         }
+
+        Divider()
+
+        SessionTagQuickColorPalette(
+            selectedColors: quickColorMarkers,
+            onSelect: onToggleQuickColor
+        )
+
+        Divider()
 
         Menu {
             Button {

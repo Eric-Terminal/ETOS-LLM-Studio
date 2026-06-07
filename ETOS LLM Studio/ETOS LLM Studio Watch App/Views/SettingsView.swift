@@ -180,6 +180,9 @@ struct SettingsView: View {
                         },
                         setSessionTagsAction: { session, tagIDs in
                             viewModel.setSessionTags(for: session, tagIDs: tagIDs)
+                        },
+                        toggleSessionColorMarkerAction: { session, color in
+                            viewModel.toggleSessionColorMarker(for: session, color: color)
                         }
                     )) {
                         settingsNavigationLabel("历史会话管理", icon: .sessionHistory)
