@@ -465,13 +465,13 @@ struct SessionRowView: View {
                     showDeleteSessionConfirm: $showDeleteSessionConfirm,
                     folders: $folders,
                     tags: tags,
-                    onEditTags: {
-                        sessionForTagEditing = session
-                    },
                     onDeleteLastMessage: { deleteLastMessageAction(session) },
                     onSendSessionToCompanion: { sendSessionToCompanionAction(session) },
                     onMoveSessionToFolder: { targetFolderID in
                         moveSessionToFolderAction(session, targetFolderID)
+                    },
+                    onEditTags: {
+                        sessionForTagEditing = session
                     }
                 )
             } label: {
