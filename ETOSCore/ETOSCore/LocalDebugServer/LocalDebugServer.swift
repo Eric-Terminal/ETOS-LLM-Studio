@@ -73,7 +73,8 @@ public class LocalDebugServer: ObservableObject {
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?
-    let httpPollingInterval: TimeInterval = 1.0
+    /// 电脑端调试追求跟手操作，HTTP 轮询以高频短请求承载命令通道。
+    let httpPollingInterval: TimeInterval = 0.2
     var httpFailureCount: Int = 0
     let maxHTTPFailures: Int = 5
 

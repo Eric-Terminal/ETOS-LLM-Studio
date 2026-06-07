@@ -117,3 +117,90 @@ func TestHandleAPIStatusUsesHTTPPollingWhenWSDisconnected(t *testing.T) {
 		t.Fatalf("mode = %v, want http_polling", payload["mode"])
 	}
 }
+
+func TestHandleAPISQLiteTablesRequiresDatabase(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(http.MethodPost, "/api/sqlite/tables", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.handleAPISQLiteTables(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "error" {
+		t.Fatalf("status = %v, want error", payload["status"])
+	}
+}
+
+func TestHandleAPISQLiteQueryRequiresDatabaseAndSQL(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(http.MethodPost, "/api/sqlite/query", strings.NewReader(`{"database":"chat"}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.handleAPISQLiteQuery(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "error" {
+		t.Fatalf("status = %v, want error", payload["status"])
+	}
+}
+
+func TestHandleAPISQLiteQueryForwardsToDeviceCommand(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/sqlite/query",
+		strings.NewReader(`{"database":"chat","sql":"SELECT 1","max_rows":5}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	go func() {
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			server.mu.RLock()
+			var requestID string
+			for id := range server.pendingResponses {
+				requestID = id
+				break
+			}
+			server.mu.RUnlock()
+			if requestID != "" {
+				_ = server.resolvePendingResponse(requestID, map[string]any{
+					"status":   "ok",
+					"database": "chat",
+					"columns":  []any{"one"},
+					"rows":     []any{map[string]any{"one": 1}},
+				})
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+
+	server.handleAPISQLiteQuery(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d, want %d, body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "ok" {
+		t.Fatalf("status = %v, want ok", payload["status"])
+	}
+
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+	if len(server.commandQueue) != 1 {
+		t.Fatalf("commandQueue 长度 = %d, want 1", len(server.commandQueue))
+	}
+	if server.commandQueue[0]["command"] != "query_sqlite" {
+		t.Fatalf("command = %v, want query_sqlite", server.commandQueue[0]["command"])
+	}
+}

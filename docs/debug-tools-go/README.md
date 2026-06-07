@@ -1,6 +1,6 @@
 # ETOS LLM Studio 调试工具（Go 版）
 
-这是 `docs/debug-tools/debug_server.py` 的 Go 可执行版。
+这是面向电脑端精细化调试的 Go 版工具，启动后默认进入 Bubble Tea TUI，同时保留同源 WebUI。
 
 ## 为什么要有 Go 版
 
@@ -13,8 +13,9 @@
 - WebSocket 调试通道（推荐）
 - HTTP 轮询调试通道（备用）
 - OpenAI 请求捕获代理（`/v1/chat/completions`）
-- 交互式菜单：列目录、上传、下载、删除、批量同步
+- Bubble Tea TUI：文件、提供商、会话、记忆、SQLite、OpenAI 捕获统一操作
 - 内置 Web GUI 控制台（同源 API，无 CORS）
+- SQLite 调试 API：列出 chat/config/memory 数据库表、执行只读查询与受保护写入
 - 与现有 iOS/watchOS 设备端协议兼容（命令字保持一致）
 
 ## 本地运行
@@ -23,6 +24,8 @@
 cd docs/debug-tools-go
 go run .
 ```
+
+启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。
 
 默认端口：
 
@@ -44,6 +47,7 @@ GUI 主要功能：
 - 提供商配置 JSON 可视化编辑（含快捷新增）
 - 会话列表、会话元数据编辑、消息表单/JSON 双模式高级编辑
 - 记忆列表编辑与重嵌入触发
+- SQLite 表结构浏览、查询与写入 API
 - OpenAI 捕获队列查看与保存/忽略
 - 关键写操作默认二次确认（删除、覆盖保存、会话/记忆保存等）
 - `/api/*` 错误响应统一带 `error_code`（如 `INVALID_ARGS`、`NOT_FOUND`、`TIMEOUT`、`DEVICE_DISCONNECTED`）
@@ -66,11 +70,21 @@ go run . 8765 7654 8080
 
 ### 调试日志开关
 
-默认开启详细日志，可用环境变量关闭：
+默认关闭详细日志，避免后台连接日志打乱 TUI。需要排查协议时可用环境变量开启：
 
 ```bash
-ETOS_DEBUG_MODE=false go run .
+ETOS_DEBUG_MODE=true go run .
 ```
+
+## HTTP API
+
+WebUI 和 TUI 共用同一组服务端能力。常用 SQLite API：
+
+- `POST /api/sqlite/tables`：参数 `database` 为 `chat`、`config` 或 `memory`，可选 `include_internal`、`include_create_sql`
+- `POST /api/sqlite/query`：参数 `database`、`sql`，可选 `parameters`、`max_rows`
+- `POST /api/sqlite/mutate`：参数 `database`、`sql`，可选 `parameters`、`allow_without_where`、`returning_max_rows`
+
+写入 SQL 默认只允许 `INSERT/UPDATE/DELETE/REPLACE`，且 `UPDATE/DELETE` 必须带 `WHERE`，除非显式传入 `allow_without_where=true`。
 
 ## 构建二进制
 
@@ -78,6 +92,8 @@ ETOS_DEBUG_MODE=false go run .
 cd docs/debug-tools-go
 go build -o etos-debug-server-go
 ```
+
+当前 Charmbracelet TUI 依赖要求 Go 1.24.2 或更新版本；Release CI 会按 `go.mod` 自动安装对应 Go 版本。
 
 ## 回归测试
 
@@ -92,6 +108,7 @@ go test ./...
 - `sendCommandWithResponse` 的 request_id 关联、超时清理
 - `/api/*` 错误码推断与 HTTP 状态码映射
 - 典型接口参数校验（如文件读取缺少 path）
+- SQLite API 参数校验与命令转发
 
 ## Release 下载（CI）
 

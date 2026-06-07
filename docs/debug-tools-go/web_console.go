@@ -50,6 +50,10 @@ func (s *DebugServer) registerWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/memories/update", s.handleAPIMemoryUpdate)
 	mux.HandleFunc("/api/memories/reembed_all", s.handleAPIMemoriesReembedAll)
 
+	mux.HandleFunc("/api/sqlite/tables", s.handleAPISQLiteTables)
+	mux.HandleFunc("/api/sqlite/query", s.handleAPISQLiteQuery)
+	mux.HandleFunc("/api/sqlite/mutate", s.handleAPISQLiteMutate)
+
 	mux.HandleFunc("/api/openai-captures", s.handleAPIOpenAICaptures)
 	mux.HandleFunc("/api/openai-captures/resolve", s.handleAPIOpenAICapturesResolve)
 
@@ -495,6 +499,80 @@ func (s *DebugServer) handleAPIMemoriesReembedAll(w http.ResponseWriter, r *http
 		return
 	}
 	s.executeAPICommand(w, map[string]any{"command": "memories_reembed_all"}, 15*time.Minute)
+}
+
+func (s *DebugServer) handleAPISQLiteTables(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
+		return
+	}
+	payload, err := decodeRequestMap(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": err.Error()})
+		return
+	}
+	database := asString(payload["database"])
+	if database == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 database 参数"})
+		return
+	}
+	s.executeAPICommand(w, map[string]any{
+		"command":            "list_sqlite_tables",
+		"database":           database,
+		"include_internal":   payload["include_internal"],
+		"include_create_sql": payload["include_create_sql"],
+	}, 30*time.Second)
+}
+
+func (s *DebugServer) handleAPISQLiteQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
+		return
+	}
+	payload, err := decodeRequestMap(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": err.Error()})
+		return
+	}
+	database := asString(payload["database"])
+	sql := asString(payload["sql"])
+	if database == "" || sql == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 database 或 sql 参数"})
+		return
+	}
+	s.executeAPICommand(w, map[string]any{
+		"command":    "query_sqlite",
+		"database":   database,
+		"sql":        sql,
+		"parameters": payload["parameters"],
+		"max_rows":   payload["max_rows"],
+	}, 45*time.Second)
+}
+
+func (s *DebugServer) handleAPISQLiteMutate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
+		return
+	}
+	payload, err := decodeRequestMap(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": err.Error()})
+		return
+	}
+	database := asString(payload["database"])
+	sql := asString(payload["sql"])
+	if database == "" || sql == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 database 或 sql 参数"})
+		return
+	}
+	s.executeAPICommand(w, map[string]any{
+		"command":             "mutate_sqlite",
+		"database":            database,
+		"sql":                 sql,
+		"parameters":          payload["parameters"],
+		"allow_without_where": payload["allow_without_where"],
+		"returning_max_rows":  payload["returning_max_rows"],
+	}, 60*time.Second)
 }
 
 func (s *DebugServer) handleAPIOpenAICaptures(w http.ResponseWriter, r *http.Request) {

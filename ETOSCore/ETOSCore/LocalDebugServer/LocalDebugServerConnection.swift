@@ -512,6 +512,15 @@ extension LocalDebugServer {
             case "memories_reembed_all":
                 let response = await handleMemoriesReembedAll()
                 sendResponse(response, requestID: requestID)
+            case "list_sqlite_tables":
+                let response = await handleSQLiteListTables(json)
+                sendResponse(response, requestID: requestID)
+            case "query_sqlite":
+                let response = await handleSQLiteQuery(json)
+                sendResponse(response, requestID: requestID)
+            case "mutate_sqlite":
+                let response = await handleSQLiteMutate(json)
+                sendResponse(response, requestID: requestID)
             case "openai_queue_list":
                 let response = await handleOpenAIQueueList()
                 sendResponse(response, requestID: requestID)

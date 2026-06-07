@@ -26,8 +26,8 @@ var (
 	// 在 CI 中可通过 -ldflags 注入
 	version = "dev"
 
-	// 默认开启详细日志，保持与 Python 工具一致
-	debugMode = true
+	// TUI 模式默认保持终端安静，避免后台传输日志打乱界面。
+	debugMode = false
 )
 
 const (
@@ -99,45 +99,11 @@ func getLocalIP() string {
 
 func (s *DebugServer) run(ctx context.Context) error {
 	localIP := getLocalIP()
-	fmt.Printf(`
-╔══════════════════════════════════════════════════════════════╗
-║  ETOS LLM Studio - Go 版反向探针调试服务器                  ║
-╚══════════════════════════════════════════════════════════════╝
-
-🖥️  本机局域网IP: %s
-📡 WebSocket 服务器: ws://%s:%d (推荐)
-🌐 HTTP 轮询服务器: http://%s:%d (备用)
-🌐 HTTP 代理服务器: http://%s:%d
-🧩 Web GUI 控制台: http://%s:%d/
-
-💡 使用说明:
-  1. 在设备上输入主机: %s
-  2. WebSocket 端口: %d (模拟器首选)
-  3. HTTP 轮询端口: %d (真机备用)
-  4. 设备连接后会自动进入操作菜单
-  5. OpenAI API 设置为: http://%s:%d
-
-⚙️  调试模式: %s
-🔖 版本: %s
-
-⏳ 等待设备连接...
-`, localIP, localIP, s.wsPort, localIP, s.httpPort, localIP, s.proxyPort, localIP, s.httpPort, localIP, s.wsPort, s.httpPort, localIP, s.proxyPort, boolToCN(debugMode), version)
-
 	s.startHTTPServers()
 	s.startWebSocketServer()
 
-	menuDone := make(chan error, 1)
-	go func() {
-		menuDone <- s.interactiveMenu(ctx)
-	}()
-
-	select {
-	case <-ctx.Done():
-		fmt.Println("\n\n👋 收到退出信号，正在关闭服务器...")
-	case err := <-menuDone:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Printf("\n❌ 菜单运行错误: %v\n", err)
-		}
+	if err := runTUI(ctx.Done(), s, localIP); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Printf("\nTUI 运行错误: %v\n", err)
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
