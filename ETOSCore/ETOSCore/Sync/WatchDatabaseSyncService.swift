@@ -218,6 +218,19 @@ public enum WatchDatabaseSyncService {
         )
     }
 
+    static func resolvedUpdatedAt(metadata: Date?, fallback: Date?) -> Date? {
+        switch (metadata, fallback) {
+        case let (metadata?, fallback?):
+            return max(metadata, fallback)
+        case let (metadata?, nil):
+            return metadata
+        case let (nil, fallback?):
+            return fallback
+        case (nil, nil):
+            return nil
+        }
+    }
+
     @discardableResult
     public static func installArchive(at archiveURL: URL, replacing kinds: Set<WatchSyncDatabaseKind>) throws -> SyncMergeSummary {
         let fileManager = FileManager.default
@@ -272,14 +285,24 @@ private extension WatchDatabaseSyncService {
         switch kind {
         case .chat:
             guard let store = Persistence.activeGRDBStore() else { return nil }
-            return try? store.readSyncMetadataDate() ?? store.readFallbackSyncDate()
+            do {
+                let metadata = try store.readSyncMetadataDate()
+                let fallback = try store.readFallbackSyncDate()
+                return resolvedUpdatedAt(metadata: metadata, fallback: fallback)
+            } catch {
+                return nil
+            }
         case .config:
             return Persistence.withConfigDatabaseRead { db in
-                try readSyncMetadataDate(in: db) ?? readConfigFallbackDate(in: db)
+                let metadata = try readSyncMetadataDate(in: db)
+                let fallback = try readConfigFallbackDate(in: db)
+                return resolvedUpdatedAt(metadata: metadata, fallback: fallback)
             } ?? nil
         case .memory:
             return Persistence.withMemoryDatabaseRead { db in
-                try readSyncMetadataDate(in: db) ?? readMemoryFallbackDate(in: db)
+                let metadata = try readSyncMetadataDate(in: db)
+                let fallback = try readMemoryFallbackDate(in: db)
+                return resolvedUpdatedAt(metadata: metadata, fallback: fallback)
             } ?? nil
         }
     }

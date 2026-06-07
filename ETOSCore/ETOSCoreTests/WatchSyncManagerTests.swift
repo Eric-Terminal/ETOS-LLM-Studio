@@ -97,6 +97,17 @@ struct WatchSyncManagerTests {
         #expect(summary.importedProviders == 0)
     }
 
+    @Test("Watch 库级覆盖更新时间取元数据与业务表较新值")
+    func testWatchDatabaseResolvedUpdatedAtUsesLatestDate() {
+        let olderDate = Date(timeIntervalSince1970: 100)
+        let newerDate = Date(timeIntervalSince1970: 200)
+
+        #expect(WatchDatabaseSyncService.resolvedUpdatedAt(metadata: olderDate, fallback: newerDate) == newerDate)
+        #expect(WatchDatabaseSyncService.resolvedUpdatedAt(metadata: newerDate, fallback: olderDate) == newerDate)
+        #expect(WatchDatabaseSyncService.resolvedUpdatedAt(metadata: nil, fallback: olderDate) == olderDate)
+        #expect(WatchDatabaseSyncService.resolvedUpdatedAt(metadata: olderDate, fallback: nil) == olderDate)
+    }
+
     @Test("接收的同步文件会先复制到稳定位置")
     func testStageIncomingSyncExchangeFile() throws {
         let sandbox = FileManager.default.temporaryDirectory
