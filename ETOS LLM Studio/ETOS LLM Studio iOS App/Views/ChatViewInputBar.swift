@@ -48,8 +48,16 @@ extension ChatView {
                 },
                 focus: $composerFocused
             )
+            .onReceive(viewModel.$userInput) { newValue in
+                guard draftText != newValue else { return }
+                draftText = newValue
+            }
             .onAppear {
-                viewModel.userInput = draftText
+                if viewModel.userInput.isEmpty {
+                    viewModel.userInput = draftText
+                } else if draftText != viewModel.userInput {
+                    draftText = viewModel.userInput
+                }
             }
             .padding(.bottom, -tabBarCompensation)
         }
