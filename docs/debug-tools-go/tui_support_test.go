@@ -49,6 +49,21 @@ func TestTUIFormErrorResultIgnoresUserAbort(t *testing.T) {
 	if result.op != "noop" {
 		t.Fatalf("op = %q, want noop", result.op)
 	}
+	if !result.clearScreen {
+		t.Fatal("用户取消表单后未请求清屏，容易留下输入框残影")
+	}
+}
+
+func TestNewTUIFormHidesDefaultHelp(t *testing.T) {
+	value := "SELECT 1"
+	form := newTUIForm(huh.NewGroup(huh.NewText().Title("SQL").Value(&value)))
+	_ = form.Init()
+	_, _ = form.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := form.View()
+	if strings.Contains(view, "alt+enter") || strings.Contains(view, "open editor") || strings.Contains(view, "enter submit") {
+		t.Fatalf("表单渲染了 huh 默认英文帮助，容易和 TUI 底部提示重叠: %q", view)
+	}
 }
 
 func TestApplySessionsUsesInfoColumn(t *testing.T) {

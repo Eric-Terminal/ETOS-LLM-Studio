@@ -73,9 +73,10 @@ type tuiTickMsg time.Time
 type tuiExternalQuitMsg struct{}
 
 type tuiCommandResultMsg struct {
-	op       string
-	response map[string]any
-	err      error
+	op          string
+	response    map[string]any
+	err         error
+	clearScreen bool
 }
 
 type tuiStatus struct {
@@ -243,6 +244,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		m.applyCommandResult(msg)
 		m.syncContentViewport()
+		if msg.clearScreen {
+			cmds = append(cmds, tea.ClearScreen)
+		}
 	case tea.KeyMsg:
 		key := msg.String()
 		appendAction := func(cmd tea.Cmd) {
@@ -755,14 +759,14 @@ func (m *tuiModel) setMessage(text string, style lipgloss.Style) {
 func newTUIForm(groups ...*huh.Group) *huh.Form {
 	keymap := huh.NewDefaultKeyMap()
 	keymap.Quit = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "取消"))
-	return huh.NewForm(groups...).WithKeyMap(keymap)
+	return huh.NewForm(groups...).WithKeyMap(keymap).WithShowHelp(false)
 }
 
 func tuiFormErrorResult(err error) tuiCommandResultMsg {
 	if errors.Is(err, huh.ErrUserAborted) {
-		return tuiCommandResultMsg{op: "noop"}
+		return tuiCommandResultMsg{op: "noop", clearScreen: true}
 	}
-	return tuiCommandResultMsg{op: "noop", err: err}
+	return tuiCommandResultMsg{op: "noop", err: err, clearScreen: true}
 }
 
 func (m tuiModel) refreshActiveView() tea.Cmd {
