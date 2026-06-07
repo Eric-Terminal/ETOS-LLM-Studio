@@ -118,9 +118,7 @@ struct TelegramMessageComposer: View {
                     }
                 }
 
-                if !isExpandedComposer {
-                    actionControlButton(size: controlSize)
-                }
+                actionControlButton(size: isExpandedComposer ? expandedControlSize : controlSize)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
