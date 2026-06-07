@@ -204,3 +204,75 @@ func TestHandleAPISQLiteQueryForwardsToDeviceCommand(t *testing.T) {
 		t.Fatalf("command = %v, want query_sqlite", server.commandQueue[0]["command"])
 	}
 }
+
+func TestHandleAPIAppConfigSetRequiresKey(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(http.MethodPost, "/api/app-config/set", strings.NewReader(`{"value":"true"}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.handleAPIAppConfigSet(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "error" {
+		t.Fatalf("status = %v, want error", payload["status"])
+	}
+}
+
+func TestHandleAPIAppConfigSetForwardsToDeviceCommand(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/app-config/set",
+		strings.NewReader(`{"key":"enableStreaming","value":"false"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	go func() {
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			server.mu.RLock()
+			var requestID string
+			for id := range server.pendingResponses {
+				requestID = id
+				break
+			}
+			server.mu.RUnlock()
+			if requestID != "" {
+				_ = server.resolvePendingResponse(requestID, map[string]any{
+					"status":  "ok",
+					"message": "配置已保存",
+					"setting": map[string]any{"key": "enableStreaming", "value_text": "false"},
+				})
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+
+	server.handleAPIAppConfigSet(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d, want %d, body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "ok" {
+		t.Fatalf("status = %v, want ok", payload["status"])
+	}
+
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+	if len(server.commandQueue) != 1 {
+		t.Fatalf("commandQueue 长度 = %d, want 1", len(server.commandQueue))
+	}
+	if server.commandQueue[0]["command"] != "app_config_set" {
+		t.Fatalf("command = %v, want app_config_set", server.commandQueue[0]["command"])
+	}
+	if server.commandQueue[0]["key"] != "enableStreaming" {
+		t.Fatalf("key = %v, want enableStreaming", server.commandQueue[0]["key"])
+	}
+}

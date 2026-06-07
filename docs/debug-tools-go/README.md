@@ -83,6 +83,8 @@ ETOS_DEBUG_MODE=true go run .
 
 WebUI 和 TUI 共用同一组服务端能力。常用 SQLite API：
 
+- `GET /api/app-config?query=...`：列出 `app_config` 配置键、类型、当前值、默认值与同步属性
+- `POST /api/app-config/set`：参数 `key`、`value`，按配置原始类型写入单项设置
 - `POST /api/sqlite/tables`：参数 `database` 为 `chat`、`config` 或 `memory`，可选 `include_internal`、`include_create_sql`
 - `POST /api/sqlite/query`：参数 `database`、`sql`，可选 `parameters`、`max_rows`
 - `POST /api/sqlite/mutate`：参数 `database`、`sql`，可选 `parameters`、`allow_without_where`、`returning_max_rows`
@@ -111,6 +113,7 @@ go test ./...
 - `sendCommandWithResponse` 的 request_id 关联、超时清理
 - `/api/*` 错误码推断与 HTTP 状态码映射
 - 典型接口参数校验（如文件读取缺少 path）
+- app_config 设置接口参数校验与命令转发
 - SQLite API 参数校验与命令转发
 
 ## Release 下载（CI）

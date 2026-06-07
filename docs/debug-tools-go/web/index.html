@@ -300,6 +300,7 @@
     <button class="tab-btn active" data-tab="overview">总览</button>
     <button class="tab-btn" data-tab="files">文件管理</button>
     <button class="tab-btn" data-tab="providers">提供商</button>
+    <button class="tab-btn" data-tab="settings">设置</button>
     <button class="tab-btn" data-tab="sessions">会话</button>
     <button class="tab-btn" data-tab="memories">记忆</button>
     <button class="tab-btn" data-tab="sqlite">SQLite</button>
@@ -384,6 +385,36 @@
     </div>
 
     <textarea id="providersJSON" class="mono" style="min-height:420px;" placeholder="[]"></textarea>
+  </section>
+
+  <section id="panel-settings" class="panel">
+    <div class="toolbar">
+      <input id="settingsQuery" placeholder="搜索 key / 分组 / 值" style="min-width:280px;" />
+      <button id="btnSettingsLoad" class="primary">加载设置</button>
+      <button id="btnSettingsSave">保存当前设置</button>
+    </div>
+    <div class="split two">
+      <div class="card">
+        <div class="muted">app_config</div>
+        <div class="list">
+          <table>
+            <thead><tr><th>Key</th><th>类型</th><th>同步</th></tr></thead>
+            <tbody id="settingsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="kv" style="margin-bottom:8px;">
+          <div>Key</div><input id="settingKey" class="mono" readonly />
+          <div>分组</div><input id="settingGroup" readonly />
+          <div>类型</div><input id="settingType" readonly />
+          <div>参与同步</div><input id="settingSync" readonly />
+          <div>当前值</div><textarea id="settingValue" class="mono" style="min-height:120px;"></textarea>
+          <div>默认值</div><textarea id="settingDefaultValue" class="mono" style="min-height:90px;" readonly></textarea>
+        </div>
+        <pre id="settingRawJSON" class="preview mono raw-json">{}</pre>
+      </div>
+    </div>
   </section>
 
   <section id="panel-sessions" class="panel">
@@ -558,6 +589,8 @@
     selectedFileBase64: null,
     dirTreeRoot: null,
     providers: [],
+    settings: [],
+    selectedSetting: null,
     sessions: [],
     selectedSession: null,
     sessionMessages: [],
@@ -998,6 +1031,81 @@
       headerOverrides: {}
     })
     el('providersJSON').value = JSON.stringify(current, null, 2)
+  }
+
+  function renderSettings() {
+    const tbody = el('settingsTableBody')
+    tbody.innerHTML = ''
+    if (!state.settings.length) {
+      const tr = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.colSpan = 3
+      cell.className = 'muted'
+      cell.textContent = '暂无设置数据'
+      tr.appendChild(cell)
+      tbody.appendChild(tr)
+      return
+    }
+
+    state.settings.forEach(setting => {
+      const tr = document.createElement('tr')
+      if (state.selectedSetting?.key === setting.key) tr.classList.add('selected')
+      appendTextCell(tr, setting.key, 'mono')
+      appendTextCell(tr, setting.type || '-')
+      appendTextCell(tr, setting.participates_in_sync ? '是' : '否')
+      tr.addEventListener('click', () => selectSetting(setting))
+      tbody.appendChild(tr)
+    })
+  }
+
+  function selectSetting(setting) {
+    state.selectedSetting = setting
+    el('settingKey').value = setting.key || ''
+    el('settingGroup').value = setting.group || ''
+    el('settingType').value = setting.type || ''
+    el('settingSync').value = setting.participates_in_sync ? '是' : '否'
+    el('settingValue').value = setting.value_text ?? ''
+    el('settingDefaultValue').value = setting.default_value_text ?? ''
+    el('settingRawJSON').textContent = prettyJSON(setting)
+    renderSettings()
+  }
+
+  async function loadSettings() {
+    const query = el('settingsQuery').value.trim()
+    const url = query ? `/api/app-config?query=${encodeURIComponent(query)}` : '/api/app-config'
+    const data = await api(url)
+    state.settings = Array.isArray(data.settings) ? data.settings : []
+    const previousKey = state.selectedSetting?.key
+    state.selectedSetting = state.settings.find(setting => setting.key === previousKey) || state.settings[0] || null
+    renderSettings()
+    if (state.selectedSetting) {
+      selectSetting(state.selectedSetting)
+    } else {
+      el('settingKey').value = ''
+      el('settingGroup').value = ''
+      el('settingType').value = ''
+      el('settingSync').value = ''
+      el('settingValue').value = ''
+      el('settingDefaultValue').value = ''
+      el('settingRawJSON').textContent = '{}'
+    }
+  }
+
+  async function saveSelectedSetting() {
+    const setting = state.selectedSetting
+    if (!setting?.key) {
+      alert('请先选择设置')
+      return
+    }
+    const value = el('settingValue').value
+    if (!confirm(`确认保存设置？\n${setting.key}`)) return
+    const data = await api('/api/app-config/set', 'POST', { key: setting.key, value })
+    const updated = data.setting
+    if (updated?.key) {
+      state.settings = state.settings.map(item => item.key === updated.key ? updated : item)
+      selectSetting(updated)
+    }
+    alert(data.message || '保存成功')
   }
 
   function normalizeSessionMessageRole(role) {
@@ -1639,6 +1747,12 @@
     el('btnProvidersSave').addEventListener('click', () => saveProviders().catch(showError))
     el('btnQuickAddProvider').addEventListener('click', quickAddProvider)
 
+    el('btnSettingsLoad').addEventListener('click', () => loadSettings().catch(showError))
+    el('btnSettingsSave').addEventListener('click', () => saveSelectedSetting().catch(showError))
+    el('settingsQuery').addEventListener('keydown', event => {
+      if (event.key === 'Enter') loadSettings().catch(showError)
+    })
+
     el('btnSessionsLoad').addEventListener('click', () => loadSessions().catch(showError))
     el('btnSessionCreate').addEventListener('click', () => createSession().catch(showError))
     el('btnSessionDelete').addEventListener('click', () => deleteSession().catch(showError))
@@ -1678,6 +1792,7 @@
     updateSessionMessagesModeUI()
     renderSQLiteTables()
     renderSQLiteTableDetail()
+    renderSettings()
     await refreshDirTree({ reset: true, focusPath: '.' }).catch(() => {})
     await refreshStatus()
     setInterval(refreshStatus, 2000)

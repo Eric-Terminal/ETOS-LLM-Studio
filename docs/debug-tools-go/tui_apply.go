@@ -71,6 +71,23 @@ func (m *tuiModel) applyProviders(response map[string]any) {
 	m.setMessage(fmt.Sprintf("已加载 %d 个提供商", len(rows)), tuiOKStyle)
 }
 
+func (m *tuiModel) applySettings(response map[string]any) {
+	settings := asMapSlice(response["settings"])
+	rows := make([]table.Row, 0, len(settings))
+	for _, setting := range settings {
+		rows = append(rows, table.Row{
+			asString(setting["key"]),
+			asString(setting["group"]),
+			asString(setting["type"]),
+			boolLabel(asBool(setting["participates_in_sync"])),
+			truncateLine(asString(setting["value_text"]), 72),
+		})
+	}
+	m.settingRows = settings
+	m.settings.SetRows(rows)
+	m.setMessage(fmt.Sprintf("已加载 %d 项配置", len(rows)), tuiOKStyle)
+}
+
 func (m *tuiModel) applySessions(response map[string]any) {
 	sessions := asMapSlice(response["sessions"])
 	rows := make([]table.Row, 0, len(sessions))

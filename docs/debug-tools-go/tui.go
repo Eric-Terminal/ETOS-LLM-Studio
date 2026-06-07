@@ -20,11 +20,14 @@ const (
 	tuiDashboard tuiView = iota
 	tuiFiles
 	tuiProviders
+	tuiSettings
 	tuiSessions
 	tuiMemories
 	tuiSQLite
 	tuiCaptures
 )
+
+const tuiViewCount = 8
 
 type navItem struct {
 	title string
@@ -64,6 +67,7 @@ type tuiModel struct {
 	spinner    spinner.Model
 	filesTable table.Model
 	providers  table.Model
+	settings   table.Model
 	sessions   table.Model
 	memories   table.Model
 	sqlTables  table.Model
@@ -80,6 +84,7 @@ type tuiModel struct {
 
 	fileItems    []map[string]any
 	providerRows []map[string]any
+	settingRows  []map[string]any
 	sessionRows  []map[string]any
 	memoryRows   []map[string]any
 	captureRows  []map[string]any
@@ -102,6 +107,7 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		navItem{"总览", "连接状态、端口与操作提示", tuiDashboard},
 		navItem{"文件", "浏览、下载、删除、创建目录", tuiFiles},
 		navItem{"提供商", "查看提供商，新增 API 与模型", tuiProviders},
+		navItem{"设置", "查看与修改 app_config 配置", tuiSettings},
 		navItem{"会话", "懒加载会话详情，创建与删除", tuiSessions},
 		navItem{"记忆", "编辑、归档与重嵌入", tuiMemories},
 		navItem{"SQLite", "表结构、查询与写入 SQL", tuiSQLite},
@@ -131,6 +137,7 @@ func newTUIModel(server *DebugServer, localIP string) tuiModel {
 		spinner:      spin,
 		filesTable:   newTUITable([]table.Column{{Title: "名称", Width: 28}, {Title: "类型", Width: 8}, {Title: "大小", Width: 10}, {Title: "修改时间", Width: 18}}),
 		providers:    newTUITable([]table.Column{{Title: "名称", Width: 24}, {Title: "格式", Width: 18}, {Title: "模型", Width: 8}, {Title: "API URL", Width: 42}}),
+		settings:     newTUITable([]table.Column{{Title: "Key", Width: 38}, {Title: "分组", Width: 14}, {Title: "类型", Width: 8}, {Title: "同步", Width: 6}, {Title: "值", Width: 42}}),
 		sessions:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "名称", Width: 32}, {Title: "临时", Width: 6}}),
 		memories:     newTUITable([]table.Column{{Title: "ID", Width: 36}, {Title: "状态", Width: 8}, {Title: "内容", Width: 54}}),
 		sqlTables:    newTUITable([]table.Column{{Title: "表", Width: 30}, {Title: "类型", Width: 8}, {Title: "字段", Width: 8}}),
@@ -225,6 +232,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				appendAction(m.addProviderModel())
 			}
 		case "e":
+			if m.active == tuiSettings {
+				appendAction(m.editSelectedSetting())
+			}
 			if m.active == tuiMemories {
 				appendAction(m.editSelectedMemory())
 			}
@@ -260,6 +270,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesTable, cmd = m.filesTable.Update(msg)
 	case tuiProviders:
 		m.providers, cmd = m.providers.Update(msg)
+	case tuiSettings:
+		m.settings, cmd = m.settings.Update(msg)
 	case tuiSessions:
 		m.sessions, cmd = m.sessions.Update(msg)
 	case tuiMemories:
@@ -307,7 +319,7 @@ func (m *tuiModel) layout(width, height int) {
 	navHeight := maxInt(12, height-8)
 	m.nav.SetSize(30, navHeight)
 	tableHeight := maxInt(8, height-14)
-	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows, &m.captures} {
+	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows, &m.captures} {
 		t.SetHeight(tableHeight)
 	}
 	previewWidth := maxInt(50, width-42)
@@ -355,6 +367,8 @@ func (m tuiModel) renderActiveView() string {
 		return fmt.Sprintf("路径: %s\n\n%s\n\n%s", m.currentPath, m.filesTable.View(), m.preview.Value())
 	case tuiProviders:
 		return "提供商\n\n" + m.providers.View() + "\n\n" + m.preview.Value()
+	case tuiSettings:
+		return "设置\n\n" + m.settings.View() + "\n\n" + m.preview.Value()
 	case tuiSessions:
 		return "会话\n\n" + m.sessions.View() + "\n\n" + m.preview.Value()
 	case tuiMemories:
@@ -396,6 +410,8 @@ func (m tuiModel) renderHelp() string {
 		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | x 删除 | n 新建目录"
 	case tuiProviders:
 		return common + " | Enter 详情 | a 新增 Provider | m 给选中 Provider 加模型"
+	case tuiSettings:
+		return common + " | Enter 详情 | e 修改当前配置"
 	case tuiSessions:
 		return common + " | Enter 懒加载详情 | n 新建会话 | x 删除"
 	case tuiMemories:
@@ -410,14 +426,14 @@ func (m tuiModel) renderHelp() string {
 }
 
 func (m *tuiModel) nextView() {
-	m.active = tuiView((int(m.active) + 1) % 7)
+	m.active = tuiView((int(m.active) + 1) % tuiViewCount)
 	m.nav.Select(int(m.active))
 }
 
 func (m *tuiModel) previousView() {
 	next := int(m.active) - 1
 	if next < 0 {
-		next = 6
+		next = tuiViewCount - 1
 	}
 	m.active = tuiView(next)
 	m.nav.Select(next)
@@ -434,6 +450,8 @@ func (m tuiModel) refreshActiveView() tea.Cmd {
 		return m.loadFiles(m.currentPath)
 	case tuiProviders:
 		return m.loadProviders()
+	case tuiSettings:
+		return m.loadSettings()
 	case tuiSessions:
 		return m.loadSessions()
 	case tuiMemories:
@@ -462,6 +480,8 @@ func (m tuiModel) enterSelected() tea.Cmd {
 		return m.readFile(path)
 	case tuiProviders:
 		return m.showSelectedProvider()
+	case tuiSettings:
+		return m.showSelectedSetting()
 	case tuiSessions:
 		return m.loadSelectedSession()
 	case tuiMemories:
@@ -628,6 +648,61 @@ func (m tuiModel) showSelectedProvider() tea.Cmd {
 			}
 		}
 		return tuiCommandResultMsg{op: "preview", err: fmt.Errorf("未找到提供商")}
+	}
+}
+
+func (m tuiModel) loadSettings() tea.Cmd {
+	return m.markLoading(m.remoteCommand("settings:list", map[string]any{"command": "app_config_list"}, 25*time.Second))
+}
+
+func (m tuiModel) showSelectedSetting() tea.Cmd {
+	row := m.settings.SelectedRow()
+	if len(row) == 0 {
+		return nil
+	}
+	key := row[0]
+	return func() tea.Msg {
+		for _, setting := range m.settingRows {
+			if asString(setting["key"]) == key {
+				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": prettyJSON(setting)}}
+			}
+		}
+		return tuiCommandResultMsg{op: "preview", err: fmt.Errorf("未找到配置")}
+	}
+}
+
+func (m tuiModel) editSelectedSetting() tea.Cmd {
+	row := m.settings.SelectedRow()
+	if len(row) == 0 {
+		return nil
+	}
+	key := row[0]
+	settingType := row[2]
+	currentValue := row[4]
+	for _, setting := range m.settingRows {
+		if asString(setting["key"]) == key {
+			settingType = asString(setting["type"])
+			currentValue = asString(setting["value_text"])
+			break
+		}
+	}
+	return func() tea.Msg {
+		value := currentValue
+		form := huh.NewForm(huh.NewGroup(
+			huh.NewInput().
+				Title(fmt.Sprintf("%s (%s)", key, settingType)).
+				Description("布尔值可填 true/false，数字按原类型解析，文本保持原样。").
+				Value(&value),
+		))
+		if err := form.Run(); err != nil {
+			return tuiCommandResultMsg{op: "noop", err: err}
+		}
+		response, err := m.server.sendCommandWithResponse(map[string]any{
+			"command": "app_config_set",
+			"key":     key,
+			"value":   strings.TrimSpace(value),
+		}, 25*time.Second)
+		return tuiCommandResultMsg{op: "settings:set", response: response, err: err}
 	}
 }
 
@@ -865,6 +940,15 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.applyProviders(msg.response)
 	case msg.op == "providers:save":
 		m.setMessage("提供商已保存", tuiOKStyle)
+	case msg.op == "settings:list":
+		m.applySettings(msg.response)
+	case msg.op == "settings:set":
+		if setting, ok := msg.response["setting"].(map[string]any); ok {
+			m.preview.SetValue(prettyJSON(setting))
+		} else {
+			m.preview.SetValue(prettyJSON(msg.response))
+		}
+		m.setMessage("配置已保存；按 r 可刷新列表", tuiOKStyle)
 	case msg.op == "sessions:list":
 		m.applySessions(msg.response)
 	case msg.op == "sessions:get":

@@ -39,6 +39,9 @@ func (s *DebugServer) registerWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/providers", s.handleAPIProviders)
 	mux.HandleFunc("/api/providers/save", s.handleAPIProvidersSave)
 
+	mux.HandleFunc("/api/app-config", s.handleAPIAppConfig)
+	mux.HandleFunc("/api/app-config/set", s.handleAPIAppConfigSet)
+
 	mux.HandleFunc("/api/sessions", s.handleAPISessions)
 	mux.HandleFunc("/api/sessions/get", s.handleAPISessionGet)
 	mux.HandleFunc("/api/sessions/create", s.handleAPISessionCreate)
@@ -347,6 +350,45 @@ func (s *DebugServer) handleAPIProvidersSave(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.executeAPICommand(w, map[string]any{"command": "providers_save", "providers": providers}, 45*time.Second)
+}
+
+func (s *DebugServer) handleAPIAppConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 GET"})
+		return
+	}
+
+	command := map[string]any{
+		"command":            "app_config_list",
+		"include_local_only": true,
+	}
+	if query := strings.TrimSpace(r.URL.Query().Get("query")); query != "" {
+		command["query"] = query
+	}
+	s.executeAPICommand(w, command, 25*time.Second)
+}
+
+func (s *DebugServer) handleAPIAppConfigSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
+		return
+	}
+	payload, err := decodeRequestMap(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": err.Error()})
+		return
+	}
+	key := asString(payload["key"])
+	if strings.TrimSpace(key) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 key 参数"})
+		return
+	}
+	value, ok := payload["value"]
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 value 参数"})
+		return
+	}
+	s.executeAPICommand(w, map[string]any{"command": "app_config_set", "key": key, "value": value}, 25*time.Second)
 }
 
 func (s *DebugServer) handleAPISessions(w http.ResponseWriter, r *http.Request) {
