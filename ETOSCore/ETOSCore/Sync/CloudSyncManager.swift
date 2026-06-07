@@ -201,7 +201,7 @@ public final class CloudSyncManager: ObservableObject {
 
     public func scheduleRealtimeSyncIfEnabled(
         reason: String,
-        delayNanoseconds: UInt64 = CloudSyncManager.realtimeSyncDebounceNanoseconds
+        delayNanoseconds: UInt64? = nil
     ) {
         guard isEnabled else {
             cancelPendingRealtimeSync()
@@ -221,10 +221,11 @@ public final class CloudSyncManager: ObservableObject {
         }
 
         pendingRealtimeSyncTask?.cancel()
+        let effectiveDelayNanoseconds = delayNanoseconds ?? Self.realtimeSyncDebounceNanoseconds
         cloudSyncLogger.debug("已安排 iCloud 漫游同步: \(reason, privacy: .public)")
         pendingRealtimeSyncTask = Task { [weak self] in
-            if delayNanoseconds > 0 {
-                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            if effectiveDelayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: effectiveDelayNanoseconds)
             }
             guard !Task.isCancelled else { return }
             await self?.performAutoSyncNowIfEnabled()

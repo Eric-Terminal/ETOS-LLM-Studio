@@ -957,6 +957,12 @@ private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelega
         let expectedBytes = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : 0
         progress?(SyncPackageDownloadProgress(bytesReceived: totalBytesWritten, totalBytes: expectedBytes))
     }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {}
 }
 
 private final class S3ListObjectsV2Parser: NSObject, XMLParserDelegate {
