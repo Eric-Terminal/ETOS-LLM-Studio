@@ -337,14 +337,35 @@ struct SessionTagQuickColorMenuItems: View {
         return Button {
             onSelect(color)
         } label: {
-            Label {
-                Text(title)
-            } icon: {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle.fill")
-                    .foregroundStyle(color?.uiColor ?? Color.secondary)
-            }
+            Text(menuTitle(color: color, title: title, isSelected: isSelected))
         }
         .accessibilityLabel(title)
+    }
+
+    private func menuTitle(color: SessionTagColor?, title: String, isSelected: Bool) -> String {
+        let marker = color?.menuMarker ?? "○"
+        return "\(isSelected ? "✓ " : "")\(marker) \(title)"
+    }
+}
+
+private extension SessionTagColor {
+    var menuMarker: String {
+        switch self {
+        case .red:
+            return "🔴"
+        case .orange:
+            return "🟠"
+        case .yellow:
+            return "🟡"
+        case .green:
+            return "🟢"
+        case .blue:
+            return "🔵"
+        case .purple:
+            return "🟣"
+        case .gray:
+            return "🔘"
+        }
     }
 }
 

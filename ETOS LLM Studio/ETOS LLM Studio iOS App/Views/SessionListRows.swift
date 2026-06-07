@@ -281,15 +281,6 @@ struct SessionRow: View {
             Label(NSLocalizedString("编辑标签", comment: "Edit session tags action"), systemImage: "tag")
         }
 
-        Divider()
-
-        SessionTagQuickColorMenuItems(
-            selectedColors: quickColorMarkers,
-            onSelect: onToggleQuickColor
-        )
-
-        Divider()
-
         Menu {
             Button {
                 onMoveToFolder(nil)
@@ -347,6 +338,13 @@ struct SessionRow: View {
         } label: {
             Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
         }
+
+        Divider()
+
+        SessionTagQuickColorMenuItems(
+            selectedColors: quickColorMarkers,
+            onSelect: onToggleQuickColor
+        )
     }
 
     private func commit() {
