@@ -109,6 +109,13 @@ struct TelegramMessageComposer: View {
                             .preference(key: InputWidthKey.self, value: proxy.size.width)
                     }
                 }
+                .overlay(alignment: .bottomTrailing) {
+                    if isExpandedComposer {
+                        actionControlButton(size: expandedControlSize)
+                            .padding(.trailing, 8)
+                            .padding(.bottom, 8)
+                    }
+                }
                 .onPreferenceChange(InputWidthKey.self) { width in
                     if abs(width - inputAvailableWidth) > 0.5 {
                         inputAvailableWidth = width
@@ -118,7 +125,9 @@ struct TelegramMessageComposer: View {
                     }
                 }
 
-                actionControlButton(size: isExpandedComposer ? expandedControlSize : controlSize)
+                if !isExpandedComposer {
+                    actionControlButton(size: controlSize)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -292,7 +301,8 @@ struct TelegramMessageComposer: View {
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(!isExpandedComposer)
                 .padding(.vertical, verticalPadding)
-                .padding(.horizontal, textHorizontalPadding)
+                .padding(.leading, textHorizontalPadding)
+                .padding(.trailing, expandedActionTrailingInset)
 
             if text.isEmpty {
                 inputPlaceholder
@@ -318,6 +328,10 @@ struct TelegramMessageComposer: View {
 
     private var inputPlaceholderText: String {
         return NSLocalizedString("Message", comment: "聊天输入框占位文本")
+    }
+
+    private var expandedActionTrailingInset: CGFloat {
+        textHorizontalPadding + (isExpandedComposer ? expandedControlSize + 16 : 0)
     }
 
     private var recorderMode: AudioRecorderSheet.Mode {
