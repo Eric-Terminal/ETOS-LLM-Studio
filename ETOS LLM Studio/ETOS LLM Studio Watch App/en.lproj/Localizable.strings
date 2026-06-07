@@ -3860,6 +3860,7 @@
 "新建标签" = "New Tag";
 "标签名称" = "Tag Name";
 "添加标签" = "Add Tag";
+"添加新标签..." = "Add New Tag...";
 "管理标签" = "Manage Tags";
 "编辑标签" = "Edit Tags";
 "编辑会话标签" = "Edit Session Tags";

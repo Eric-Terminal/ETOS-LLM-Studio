@@ -8,6 +8,7 @@
 
 import Shared
 import SwiftUI
+import UIKit
 
 extension SessionTagColor {
     var uiColor: Color {
@@ -246,10 +247,16 @@ struct SessionTagEditView: View {
 struct SessionTagAssignmentView: View {
     let session: ChatSession
     let tags: [SessionTag]
+    let onCreate: (String, SessionTagColor?) -> SessionTag?
+    let onUpdate: (SessionTag, String, SessionTagColor?) -> Void
     let onSetTagIDs: ([UUID]) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTagIDs: Set<UUID>
+    @State private var isAddingTag = false
+    @State private var draftTagName = ""
+    @State private var draftTagColor: SessionTagColor? = .red
+    @FocusState private var isDraftFocused: Bool
 
     private var customTags: [SessionTag] {
         tags.filter { !$0.isSystemColorTag }
@@ -266,10 +273,14 @@ struct SessionTagAssignmentView: View {
     init(
         session: ChatSession,
         tags: [SessionTag],
+        onCreate: @escaping (String, SessionTagColor?) -> SessionTag?,
+        onUpdate: @escaping (SessionTag, String, SessionTagColor?) -> Void,
         onSetTagIDs: @escaping ([UUID]) -> Void
     ) {
         self.session = session
         self.tags = tags
+        self.onCreate = onCreate
+        self.onUpdate = onUpdate
         self.onSetTagIDs = onSetTagIDs
         _selectedTagIDs = State(initialValue: Set(session.tagIDs))
     }
@@ -284,9 +295,33 @@ struct SessionTagAssignmentView: View {
                             isSelected: selectedTagIDs.contains(tag.id),
                             onToggle: {
                                 toggle(tag.id)
+                            },
+                            onColorChange: { color in
+                                onUpdate(tag, tag.name, color)
                             }
                         )
                     }
+
+                    if isAddingTag {
+                        SessionTagDraftAssignmentRow(
+                            name: $draftTagName,
+                            color: $draftTagColor,
+                            isFocused: $isDraftFocused,
+                            onCommit: {
+                                commitDraftTagIfNeeded()
+                            }
+                        )
+                    }
+                }
+
+                Section {
+                    Button {
+                        beginAddingTag()
+                    } label: {
+                        Label(NSLocalizedString("添加新标签...", comment: "Add a new session tag from assignment sheet"), systemImage: "plus.circle.fill")
+                            .foregroundStyle(.primary, .green)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .navigationTitle(NSLocalizedString("标签", comment: "Session tag assignment title"))
@@ -294,6 +329,7 @@ struct SessionTagAssignmentView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        commitDraftTagIfNeeded()
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -302,9 +338,19 @@ struct SessionTagAssignmentView: View {
                 }
             }
         }
+        .onDisappear {
+            commitDraftTagIfNeeded()
+        }
+        .onChange(of: isAddingTag) { _, isAdding in
+            guard isAdding else { return }
+            DispatchQueue.main.async {
+                isDraftFocused = true
+            }
+        }
     }
 
     private func toggle(_ tagID: UUID) {
+        commitDraftTagIfNeeded()
         if selectedTagIDs.contains(tagID) {
             selectedTagIDs.remove(tagID)
         } else {
@@ -314,7 +360,36 @@ struct SessionTagAssignmentView: View {
     }
 
     private func orderedSelectedTagIDs() -> [UUID] {
-        assignmentTags.map(\.id).filter { selectedTagIDs.contains($0) }
+        let orderedKnownIDs = assignmentTags.map(\.id).filter { selectedTagIDs.contains($0) }
+        let knownIDs = Set(assignmentTags.map(\.id))
+        let trailingIDs = selectedTagIDs
+            .filter { !knownIDs.contains($0) }
+            .sorted { $0.uuidString < $1.uuidString }
+        return orderedKnownIDs + trailingIDs
+    }
+
+    private func beginAddingTag() {
+        if isAddingTag {
+            isDraftFocused = true
+            return
+        }
+        draftTagName = ""
+        draftTagColor = .red
+        isAddingTag = true
+    }
+
+    @discardableResult
+    private func commitDraftTagIfNeeded() -> SessionTag? {
+        let trimmedName = draftTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isAddingTag, !trimmedName.isEmpty else { return nil }
+        guard let tag = onCreate(trimmedName, draftTagColor) else { return nil }
+
+        selectedTagIDs.insert(tag.id)
+        isAddingTag = false
+        draftTagName = ""
+        draftTagColor = .red
+        onSetTagIDs(orderedSelectedTagIDs())
+        return tag
     }
 }
 
@@ -322,26 +397,142 @@ struct SessionTagAssignmentRow: View {
     let tag: SessionTag
     let isSelected: Bool
     let onToggle: () -> Void
+    let onColorChange: (SessionTagColor?) -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 12) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
+        HStack(spacing: 12) {
+            Button(action: onToggle) {
+                HStack(spacing: 12) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
 
-                Text(tag.name)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    Text(tag.name)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                Spacer()
-
-                SessionTagColorDot(color: tag.color, size: tag.isSystemColorTag ? 28 : 24)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            if tag.isSystemColorTag {
+                SessionTagColorDot(color: tag.color, size: 28)
+            } else {
+                SessionTagColorMenu(selectedColor: Binding(
+                    get: { tag.color },
+                    set: { onColorChange($0) }
+                ), size: 28)
+            }
+        }
+        .accessibilityLabel(tag.name)
+    }
+}
+
+struct SessionTagDraftAssignmentRow: View {
+    @Binding var name: String
+    @Binding var color: SessionTagColor?
+    let isFocused: FocusState<Bool>.Binding
+    let onCommit: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+
+            TextField(NSLocalizedString("标签名称", comment: "Session tag name field"), text: $name)
+                .focused(isFocused)
+                .textFieldStyle(.plain)
+                .submitLabel(.done)
+                .onSubmit(onCommit)
+
+            Spacer()
+
+            SessionTagColorMenu(selectedColor: $color, size: 28)
+        }
+    }
+}
+
+struct SessionTagColorMenu: View {
+    @Binding var selectedColor: SessionTagColor?
+    var size: CGFloat
+
+    var body: some View {
+        Menu {
+            colorButton(nil, title: NSLocalizedString("无", comment: "No color option"))
+            ForEach(SessionTagColor.allCases) { color in
+                colorButton(color, title: color.localizedName)
+            }
+        } label: {
+            SessionTagColorDot(color: selectedColor, size: size)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(tag.name)
+        .accessibilityLabel(NSLocalizedString("颜色", comment: "Session tag color menu"))
+    }
+
+    private func colorButton(_ color: SessionTagColor?, title: String) -> some View {
+        Button {
+            selectedColor = color
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark")
+                    .opacity(selectedColor == color ? 1 : 0)
+
+                SessionTagMenuColorIcon(color: color)
+
+                Text(title)
+            }
+        }
+    }
+}
+
+private struct SessionTagMenuColorIcon: View {
+    let color: SessionTagColor?
+
+    var body: some View {
+        Image(uiImage: Self.image(for: color))
+            .renderingMode(.original)
+    }
+
+    private static func image(for color: SessionTagColor?) -> UIImage {
+        let size = CGSize(width: 18, height: 18)
+        let renderer = UIGraphicsImageRenderer(size: size)
+
+        return renderer.image { context in
+            let circleRect = CGRect(x: 3, y: 3, width: 12, height: 12)
+            if let color {
+                color.menuUIColor.setFill()
+                context.cgContext.fillEllipse(in: circleRect)
+            } else {
+                UIColor.secondaryLabel.setStroke()
+                context.cgContext.setLineWidth(1.5)
+                context.cgContext.strokeEllipse(in: circleRect)
+            }
+        }
+        .withRenderingMode(.alwaysOriginal)
+    }
+}
+
+private extension SessionTagColor {
+    var menuUIColor: UIColor {
+        switch self {
+        case .red:
+            return .systemRed
+        case .orange:
+            return .systemOrange
+        case .yellow:
+            return .systemYellow
+        case .green:
+            return .systemGreen
+        case .blue:
+            return .systemBlue
+        case .purple:
+            return .systemPurple
+        case .gray:
+            return .systemGray
+        }
     }
 }
 

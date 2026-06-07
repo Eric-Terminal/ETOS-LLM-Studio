@@ -98,6 +98,8 @@ extension SessionFolderBrowserView {
                 deleteLastMessageAction: deleteLastMessageAction,
                 sendSessionToCompanionAction: sendSessionToCompanionAction,
                 moveSessionToFolderAction: moveSessionToFolderAction,
+                createTagAction: createTagAction,
+                updateTagAction: updateTagAction,
                 setSessionTagsAction: setSessionTagsAction
             )
         }

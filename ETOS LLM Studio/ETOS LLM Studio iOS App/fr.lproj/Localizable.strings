@@ -3961,6 +3961,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "新建标签" = "Nouvelle étiquette";
 "标签名称" = "Nom de l’étiquette";
 "添加标签" = "Ajouter l’étiquette";
+"添加新标签..." = "Ajouter une nouvelle étiquette...";
 "管理标签" = "Gérer les étiquettes";
 "编辑标签" = "Modifier les étiquettes";
 "编辑会话标签" = "Modifier les étiquettes de session";

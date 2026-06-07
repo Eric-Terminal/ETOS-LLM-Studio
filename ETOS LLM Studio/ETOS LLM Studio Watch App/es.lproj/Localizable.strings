@@ -3932,6 +3932,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "新建标签" = "Nueva etiqueta";
 "标签名称" = "Nombre de etiqueta";
 "添加标签" = "Añadir etiqueta";
+"添加新标签..." = "Añadir nueva etiqueta...";
 "管理标签" = "Gestionar etiquetas";
 "编辑标签" = "Editar etiquetas";
 "编辑会话标签" = "Editar etiquetas de sesión";

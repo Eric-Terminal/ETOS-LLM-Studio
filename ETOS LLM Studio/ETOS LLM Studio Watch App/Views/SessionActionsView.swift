@@ -28,6 +28,8 @@ struct SessionActionsView: View {
     let onDeleteLastMessage: () -> Void
     let onSendSessionToCompanion: () -> Void
     let onMoveSessionToFolder: (UUID?) -> Void
+    let onCreateTag: (String, SessionTagColor?) -> SessionTag?
+    let onUpdateTag: (SessionTag, String, SessionTagColor?) -> Void
     let onSetTagIDs: ([UUID]) -> Void
 
     // MARK: - 环境
@@ -66,6 +68,8 @@ struct SessionActionsView: View {
                     WatchSessionTagAssignmentView(
                         session: session,
                         tags: tags,
+                        onCreate: onCreateTag,
+                        onUpdate: onUpdateTag,
                         onSetTagIDs: onSetTagIDs
                     )
                 } label: {

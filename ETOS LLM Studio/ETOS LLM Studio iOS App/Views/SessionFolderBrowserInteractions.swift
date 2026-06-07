@@ -215,6 +215,12 @@ extension SessionFolderBrowserView {
                 SessionTagAssignmentView(
                     session: session,
                     tags: viewModel.sessionTags,
+                    onCreate: { name, color in
+                        viewModel.createSessionTag(name: name, color: color)
+                    },
+                    onUpdate: { tag, name, color in
+                        viewModel.updateSessionTag(tag, name: name, color: color)
+                    },
                     onSetTagIDs: { tagIDs in
                         viewModel.setSessionTags(for: session, tagIDs: tagIDs)
                     }
