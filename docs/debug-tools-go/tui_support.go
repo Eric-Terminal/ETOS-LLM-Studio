@@ -316,12 +316,8 @@ func providerModelSummary(provider map[string]any) []string {
 		return []string{"  无"}
 	}
 
-	lines := make([]string, 0, minInt(len(models), 12)+1)
+	lines := make([]string, 0, len(models))
 	for index, model := range models {
-		if index >= 12 {
-			lines = append(lines, fmt.Sprintf("  还有 %d 个模型未显示", len(models)-index))
-			break
-		}
 		name := firstNonEmpty(asString(model["displayName"]), asString(model["modelName"]), asString(model["id"]))
 		kind := firstNonEmpty(asString(model["kind"]), "chat")
 		status := "启用"

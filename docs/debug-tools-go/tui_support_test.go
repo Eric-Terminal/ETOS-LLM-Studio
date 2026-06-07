@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -566,6 +567,82 @@ func TestProviderPreviewUsesReadableSummary(t *testing.T) {
 	}
 	if strings.HasPrefix(strings.TrimSpace(preview), "{") {
 		t.Fatalf("Provider 预览仍像 JSON: %s", preview)
+	}
+}
+
+func TestProviderPreviewShowsAllModels(t *testing.T) {
+	models := make([]any, 0, 15)
+	for index := 1; index <= 15; index++ {
+		models = append(models, map[string]any{
+			"modelName":   fmt.Sprintf("model-%02d", index),
+			"kind":        "chat",
+			"isActivated": true,
+		})
+	}
+
+	preview := providerPreview(map[string]any{"models": models})
+	if strings.Contains(preview, "未显示") {
+		t.Fatalf("Provider 预览仍截断模型列表: %q", preview)
+	}
+	if !strings.Contains(preview, "15. model-15 · chat · 启用") {
+		t.Fatalf("Provider 预览缺少最后一个模型: %q", preview)
+	}
+}
+
+func TestTUIProviderDetailFocusScrollsWithDownKey(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiProviders
+	model.focus = tuiFocusContent
+	model.content.Width = 100
+	model.content.Height = 8
+
+	models := make([]any, 0, 40)
+	for index := 1; index <= 40; index++ {
+		models = append(models, map[string]any{
+			"modelName":   fmt.Sprintf("model-%02d", index),
+			"kind":        "chat",
+			"isActivated": true,
+		})
+	}
+	provider := map[string]any{
+		"id":        "provider-1",
+		"name":      "Long Provider",
+		"baseURL":   "https://api.example.com/v1",
+		"apiFormat": "openai-compatible",
+		"models":    models,
+	}
+	model.applyProviders(map[string]any{"providers": []any{provider}})
+	model.applyCommandResult(tuiCommandResultMsg{
+		op: "preview",
+		response: map[string]any{
+			"status":       "ok",
+			"preview":      providerPreview(provider),
+			"focus_detail": true,
+		},
+	})
+
+	if model.focus != tuiFocusDetail {
+		t.Fatalf("focus = %v, want tuiFocusDetail", model.focus)
+	}
+	if model.content.YOffset != model.previewStartYOffset() {
+		t.Fatalf("详情焦点没有定位到详情起点: offset=%d want=%d", model.content.YOffset, model.previewStartYOffset())
+	}
+
+	beforeOffset := model.content.YOffset
+	beforeCursor := model.providers.Cursor()
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	got := updated.(tuiModel)
+	if got.content.YOffset <= beforeOffset {
+		t.Fatalf("详情焦点下 ↓ 没有滚动详情: before=%d after=%d", beforeOffset, got.content.YOffset)
+	}
+	if got.providers.Cursor() != beforeCursor {
+		t.Fatalf("详情焦点下 ↓ 移动了表格光标: before=%d after=%d", beforeCursor, got.providers.Cursor())
+	}
+
+	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got = updated.(tuiModel)
+	if got.focus != tuiFocusContent {
+		t.Fatalf("详情焦点下 Esc 后 focus = %v, want tuiFocusContent", got.focus)
 	}
 }
 

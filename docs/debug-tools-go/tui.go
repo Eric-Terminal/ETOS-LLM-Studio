@@ -50,6 +50,7 @@ type tuiFocus int
 const (
 	tuiFocusNav tuiFocus = iota
 	tuiFocusContent
+	tuiFocusDetail
 )
 
 type tuiSessionMode int
@@ -199,6 +200,7 @@ var (
 			Padding(0, 1)
 	tuiFocusBoxStyle = tuiBoxStyle.Copy().BorderForeground(lipgloss.Color("75"))
 	tuiHelpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	tuiDetailStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("219")).Bold(true)
 	tuiOKStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	tuiWarnStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	tuiErrStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
@@ -320,6 +322,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "esc":
+			if m.focus == tuiFocusDetail {
+				m.focus = tuiFocusContent
+				m.syncFocusedComponent()
+				m.syncContentViewport()
+				return m, tea.Batch(cmds...)
+			}
 			if m.active == tuiSessions && m.focus == tuiFocusContent && m.handleSessionBack() {
 				m.syncFocusedComponent()
 				m.syncContentViewport()
@@ -380,7 +388,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncContentViewport()
 		}
 	case tea.MouseMsg:
-		if m.focus == tuiFocusContent {
+		if m.focus != tuiFocusNav {
 			cmd := m.handleContentMouse(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -517,20 +525,61 @@ func (m tuiModel) renderActiveView() string {
 	case tuiDashboard:
 		return m.renderDashboard()
 	case tuiFiles:
-		return fmt.Sprintf("路径: %s\n\n%s\n\n%s", m.currentPath, m.filesTable.View(), m.preview.Value())
+		return fmt.Sprintf("路径: %s\n\n%s\n\n%s", m.currentPath, m.filesTable.View(), m.renderPreviewBlock())
 	case tuiProviders:
-		return "提供商\n\n" + m.providers.View() + "\n\n" + m.preview.Value()
+		return "提供商\n\n" + m.providers.View() + "\n\n" + m.renderPreviewBlock()
 	case tuiSettings:
-		return "设置\n\n" + m.settings.View() + "\n\n" + m.preview.Value()
+		return "设置\n\n" + m.settings.View() + "\n\n" + m.renderPreviewBlock()
 	case tuiSessions:
 		return m.renderSessionsView()
 	case tuiMemories:
-		return "记忆\n\n" + m.memories.View() + "\n\n" + m.preview.Value()
+		return "记忆\n\n" + m.memories.View() + "\n\n" + m.renderPreviewBlock()
 	case tuiSQLite:
-		return fmt.Sprintf("数据库: %s  [1 chat / 2 config / 3 memory]\n\n表结构\n%s\n\n查询结果\n%s\n\n%s", m.sqlDatabase, m.sqlTables.View(), m.sqlRows.View(), m.preview.Value())
+		return fmt.Sprintf("数据库: %s  [1 chat / 2 config / 3 memory]\n\n表结构\n%s\n\n查询结果\n%s\n\n%s", m.sqlDatabase, m.sqlTables.View(), m.sqlRows.View(), m.renderPreviewBlock())
 	default:
 		return ""
 	}
+}
+
+func (m tuiModel) renderPreviewBlock() string {
+	value := strings.TrimRight(m.preview.Value(), "\n")
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	title := "  详情"
+	if m.focus == tuiFocusDetail {
+		title = "▶ 详情"
+	}
+	return tuiDetailStyle.Render(title) + "\n" + value
+}
+
+func (m tuiModel) previewStartYOffset() int {
+	prefix := ""
+	switch m.active {
+	case tuiFiles:
+		prefix = fmt.Sprintf("路径: %s\n\n%s\n\n", m.currentPath, m.filesTable.View())
+	case tuiProviders:
+		prefix = "提供商\n\n" + m.providers.View() + "\n\n"
+	case tuiSettings:
+		prefix = "设置\n\n" + m.settings.View() + "\n\n"
+	case tuiMemories:
+		prefix = "记忆\n\n" + m.memories.View() + "\n\n"
+	case tuiSQLite:
+		prefix = fmt.Sprintf("数据库: %s  [1 chat / 2 config / 3 memory]\n\n表结构\n%s\n\n查询结果\n%s\n\n", m.sqlDatabase, m.sqlTables.View(), m.sqlRows.View())
+	default:
+		return 0
+	}
+	return strings.Count(prefix, "\n")
+}
+
+func (m *tuiModel) focusDetailPreview() {
+	if strings.TrimSpace(m.preview.Value()) == "" {
+		return
+	}
+	m.focus = tuiFocusDetail
+	m.syncFocusedComponent()
+	m.content.SetContent(m.renderActiveView())
+	m.content.SetYOffset(m.previewStartYOffset())
 }
 
 func (m tuiModel) renderDashboard() string {
@@ -623,6 +672,9 @@ func (m tuiModel) renderHelp() string {
 	if m.focus == tuiFocusNav {
 		return common + " | ↑↓ 选择页面 | Enter 进入内容"
 	}
+	if m.focus == tuiFocusDetail {
+		return common + " | ↑↓/j/k 滚动详情 | PgUp/PgDn 半页 | Home/End 首尾 | Esc 回表格"
+	}
 	switch m.active {
 	case tuiFiles:
 		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | u 上传 | x 删除 | n 新建目录"
@@ -658,6 +710,9 @@ func (m *tuiModel) previousView() {
 }
 
 func (m *tuiModel) handleContentKey(key string) tea.Cmd {
+	if m.focus == tuiFocusDetail {
+		return m.handleDetailKey(key)
+	}
 	switch key {
 	case "r":
 		return m.refreshActiveView()
@@ -762,6 +817,29 @@ func (m *tuiModel) handleContentKey(key string) tea.Cmd {
 	return nil
 }
 
+func (m *tuiModel) handleDetailKey(key string) tea.Cmd {
+	switch key {
+	case "r":
+		return m.refreshActiveView()
+	case "up", "k":
+		m.content.ScrollUp(1)
+	case "down", "j":
+		m.content.ScrollDown(1)
+	case "pgup", "ctrl+u":
+		m.content.HalfViewUp()
+	case "pgdown", "ctrl+d":
+		m.content.HalfViewDown()
+	case "home":
+		m.content.GotoTop()
+	case "end":
+		m.content.GotoBottom()
+	case "enter":
+		m.focus = tuiFocusContent
+		m.syncFocusedComponent()
+	}
+	return nil
+}
+
 func (m *tuiModel) handleContentMouse(msg tea.MouseMsg) tea.Cmd {
 	var cmd tea.Cmd
 	m.content, cmd = m.content.Update(msg)
@@ -790,6 +868,9 @@ func (m tuiModel) mouseInContentViewport(msg tea.MouseMsg) bool {
 
 func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) {
 	var cmd tea.Cmd
+	if m.focus == tuiFocusDetail {
+		return m, nil
+	}
 	switch m.active {
 	case tuiFiles:
 		m.filesTable, cmd = m.filesTable.Update(msg)
@@ -1340,7 +1421,7 @@ func (m tuiModel) showSelectedProvider() tea.Cmd {
 		}
 		for _, provider := range providers {
 			if asString(provider["id"]) == id {
-				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": providerPreview(provider)}}
+				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": providerPreview(provider), "focus_detail": true}}
 			}
 		}
 		return tuiCommandResultMsg{op: "preview", err: fmt.Errorf("未找到提供商")}
@@ -1360,7 +1441,7 @@ func (m tuiModel) showSelectedSetting() tea.Cmd {
 	return func() tea.Msg {
 		for _, setting := range m.settingRows {
 			if asString(setting["key"]) == key {
-				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": settingPreview(setting)}}
+				return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": settingPreview(setting), "focus_detail": true}}
 			}
 		}
 		return tuiCommandResultMsg{op: "preview", err: fmt.Errorf("未找到配置")}
@@ -1556,7 +1637,7 @@ func (m tuiModel) showSelectedMemory() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": fmt.Sprintf("%s\n\n%s", row[1], row[2])}}
+		return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": fmt.Sprintf("%s\n\n%s", row[1], row[2]), "focus_detail": true}}
 	}
 }
 
@@ -1667,6 +1748,9 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.setMessage("SQL 写入已执行", tuiOKStyle)
 	case msg.op == "preview":
 		m.preview.SetValue(asString(msg.response["preview"]))
+		if asBool(msg.response["focus_detail"]) {
+			m.focusDetailPreview()
+		}
 	default:
 		if message := asString(msg.response["message"]); message != "" {
 			m.setMessage(message, tuiOKStyle)
