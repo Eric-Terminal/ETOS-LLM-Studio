@@ -329,7 +329,7 @@ extension ContentView {
                 canRewrite: viewModel.canRewrite(message: message),
                 onCopy: {
                     viewModel.applyToolInputDraftRequest(
-                        AppToolInputDraftRequest(text: message.content, mode: .replace)
+                        AppToolInputDraftRequest(text: message.content, mode: .append)
                     )
                 },
                 onEdit: {
