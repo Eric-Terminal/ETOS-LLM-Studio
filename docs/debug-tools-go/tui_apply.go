@@ -15,13 +15,15 @@ func (m *tuiModel) applyFiles(response map[string]any) {
 	rows := make([]table.Row, 0, len(items))
 	for _, item := range items {
 		kind := "文件"
-		if asBool(item["isDirectory"]) {
+		size := formatSize(int64(asInt(item["size"])))
+		if fileItemIsDirectory(item) {
 			kind = "目录"
+			size = "-"
 		}
 		rows = append(rows, table.Row{
 			asString(item["name"]),
 			kind,
-			formatSize(int64(asInt(item["size"]))),
+			size,
 			time.Unix(int64(asFloat64(item["modificationDate"])), 0).Format("2006-01-02 15:04"),
 		})
 	}

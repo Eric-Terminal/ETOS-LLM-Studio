@@ -676,6 +676,14 @@ func (m *tuiModel) handleContentKey(key string) tea.Cmd {
 				return nil
 			}
 		}
+	case "h", "[":
+		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessageDetail {
+			return m.switchSelectedSessionMessageVersion(-1)
+		}
+	case "l", "]":
+		if m.active == tuiSessions && m.sessionMode == tuiSessionModeMessageDetail {
+			return m.switchSelectedSessionMessageVersion(1)
+		}
 	case "p":
 		if m.active == tuiFiles {
 			return m.promptFilesPath()
@@ -901,9 +909,13 @@ func (m *tuiModel) enterSelected() tea.Cmd {
 		if len(row) == 0 {
 			return nil
 		}
+		item := m.selectedFileItem()
 		name := row[0]
+		if itemName := asString(item["name"]); itemName != "" {
+			name = itemName
+		}
 		path := joinDevicePath(m.currentPath, name)
-		if row[1] == "目录" {
+		if fileItemIsDirectory(item) || row[1] == "目录" {
 			return m.loadFiles(path)
 		}
 		return m.readFile(path)
@@ -949,7 +961,7 @@ func (m tuiModel) downloadSelectedFile() tea.Cmd {
 		return nil
 	}
 	row := m.filesTable.SelectedRow()
-	if len(row) == 0 || row[1] == "目录" {
+	if len(row) == 0 || row[1] == "目录" || fileItemIsDirectory(m.selectedFileItem()) {
 		return nil
 	}
 	return m.readFile(joinDevicePath(m.currentPath, row[0]))

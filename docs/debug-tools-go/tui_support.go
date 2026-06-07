@@ -26,6 +26,55 @@ func parentDevicePath(path string) string {
 	return parent
 }
 
+func (m tuiModel) selectedFileItem() map[string]any {
+	row := m.filesTable.SelectedRow()
+	if len(row) == 0 {
+		return nil
+	}
+	rows := m.filesTable.Rows()
+	if len(rows) == len(m.fileItems) {
+		for index, candidate := range rows {
+			if tableRowsEqual(candidate, row) {
+				return m.fileItems[index]
+			}
+		}
+	}
+	for _, item := range m.fileItems {
+		if asString(item["name"]) == row[0] {
+			return item
+		}
+	}
+	return nil
+}
+
+func tableRowsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for index := range a {
+		if a[index] != b[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func fileItemIsDirectory(item map[string]any) bool {
+	if len(item) == 0 {
+		return false
+	}
+	if asBool(item["isDirectory"]) {
+		return true
+	}
+	for _, key := range []string{"type", "kind", "fileType"} {
+		switch strings.ToLower(strings.TrimSpace(asString(item[key]))) {
+		case "directory", "dir", "folder", "目录":
+			return true
+		}
+	}
+	return false
+}
+
 func quoteSQLiteIdentifierForTUI(identifier string) string {
 	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
 }

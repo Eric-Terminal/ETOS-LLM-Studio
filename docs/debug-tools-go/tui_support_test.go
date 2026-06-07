@@ -99,6 +99,27 @@ func TestTUIBlockingCommandPassesTerminalIOToFormRunner(t *testing.T) {
 	}
 }
 
+func TestApplyFilesKeepsDirectoryMetadataForNavigation(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.applyFiles(map[string]any{
+		"items": []any{
+			map[string]any{"name": "Nested", "type": "directory", "size": 4096, "modificationDate": 0},
+			map[string]any{"name": "note.txt", "isDirectory": false, "size": 12, "modificationDate": 0},
+		},
+	})
+
+	rows := model.filesTable.Rows()
+	if len(rows) != 2 {
+		t.Fatalf("文件行数 = %d, want 2", len(rows))
+	}
+	if rows[0][1] != "目录" || rows[0][2] != "-" {
+		t.Fatalf("目录行 = %#v, want 类型目录且大小为 -", rows[0])
+	}
+	if !fileItemIsDirectory(model.selectedFileItem()) {
+		t.Fatal("选中的原始文件项没有被识别为目录，Enter 会无法进入二级文件夹")
+	}
+}
+
 func TestApplySessionsUsesInfoColumn(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.applySessions(map[string]any{
@@ -163,6 +184,56 @@ func TestSessionDetailRendersBubblesAndMessageDetail(t *testing.T) {
 	detail := model.renderSessionsView()
 	if !strings.Contains(detail, "消息详情") || !strings.Contains(detail, "你好呀") || !strings.Contains(detail, "思考内容") || !strings.Contains(detail, "我在思考") {
 		t.Fatalf("消息详情渲染异常: %q", detail)
+	}
+}
+
+func TestSessionMessageUsesCurrentContentVersion(t *testing.T) {
+	message := map[string]any{
+		"id":                  "message-1",
+		"role":                "assistant",
+		"content":             []any{"旧版本正文", map[string]any{"content": "当前版本正文"}, "新版本正文"},
+		"currentVersionIndex": 1,
+	}
+
+	if got := sessionMessageFullContent(message); got != "当前版本正文" {
+		t.Fatalf("当前正文 = %q, want 当前版本正文", got)
+	}
+
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.content.Width = 100
+	bubble := model.renderSessionMessageBubble(message, 0, true)
+	if strings.Contains(bubble, "旧版本正文") || strings.Contains(bubble, "新版本正文") {
+		t.Fatalf("气泡显示了非当前版本: %q", bubble)
+	}
+	if !strings.Contains(bubble, "版本 2/3") {
+		t.Fatalf("多版本气泡缺少当前版本标记: %q", bubble)
+	}
+}
+
+func TestSessionDetailCanSwitchContentVersion(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.sessionMode = tuiSessionModeMessageDetail
+	model.activeSession = map[string]any{"id": "3B816F4F-1BD5-4C87-B7AD-3AE39AF0E72D", "name": "版本测试"}
+	model.sessionMessages = []map[string]any{
+		{
+			"id":                  "message-1",
+			"role":                "assistant",
+			"content":             []any{"版本一", "版本二"},
+			"currentVersionIndex": 0,
+		},
+	}
+
+	cmd := model.handleContentKey("l")
+	if cmd == nil {
+		t.Fatal("切换版本未返回保存命令")
+	}
+	if got := asInt(model.sessionMessages[0]["currentVersionIndex"]); got != 1 {
+		t.Fatalf("currentVersionIndex = %d, want 1", got)
+	}
+	if got := sessionMessageFullContent(model.sessionMessages[0]); got != "版本二" {
+		t.Fatalf("切换后的正文 = %q, want 版本二", got)
 	}
 }
 

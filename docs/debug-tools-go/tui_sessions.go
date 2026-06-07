@@ -98,7 +98,7 @@ func (m tuiModel) renderSessionsHelp(common string) string {
 	case tuiSessionModeMessages:
 		return common + " | ↑↓ 选择气泡 | Enter 更多 | r 刷新当前会话"
 	case tuiSessionModeMessageDetail:
-		return common + " | ↑↓ 选择正文/思考 | e 编辑 | PgUp/PgDn 滚动 | Esc 返回气泡列表"
+		return common + " | ↑↓ 选择正文/思考 | h/l 版本 | e 编辑 | PgUp/PgDn 滚动 | Esc 返回"
 	default:
 		return common + " | Enter 查看消息 | n 新建会话 | x 删除"
 	}
@@ -164,6 +164,43 @@ func (m *tuiModel) selectNextSessionDetail() {
 	}
 	m.selectedSessionDetail = minInt(count-1, m.selectedSessionDetail+1)
 	m.keepSelectedSessionDetailVisible()
+}
+
+func (m *tuiModel) switchSelectedSessionMessageVersion(delta int) tea.Cmd {
+	if m.sessionMode != tuiSessionModeMessageDetail || delta == 0 {
+		return nil
+	}
+	messageIndex := minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
+	if messageIndex < 0 || messageIndex >= len(m.sessionMessages) {
+		return nil
+	}
+	updatedMessages := cloneSessionMessages(m.sessionMessages)
+	if !switchSessionMessageVersion(updatedMessages[messageIndex], delta) {
+		m.setMessage("当前消息没有可切换的其他版本", tuiWarnStyle)
+		return nil
+	}
+	m.sessionMessages = updatedMessages
+	m.keepSelectedSessionDetailVisible()
+
+	sessionID := asString(m.activeSession["id"])
+	if sessionID == "" {
+		m.setMessage("当前会话缺少 ID，无法保存版本切换", tuiErrStyle)
+		return nil
+	}
+	index, count := sessionMessageVersionPosition(updatedMessages[messageIndex])
+	m.setMessage(fmt.Sprintf("已切换到版本 %d/%d，正在保存", index+1, count), tuiOKStyle)
+	return m.markLoading(func() tea.Msg {
+		response, err := m.server.sendCommandWithResponse(map[string]any{
+			"command":    "session_update_messages",
+			"session_id": sessionID,
+			"messages":   updatedMessages,
+		}, 45*time.Second)
+		if response == nil {
+			response = map[string]any{}
+		}
+		response["messages"] = updatedMessages
+		return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
+	})
 }
 
 func (m *tuiModel) keepSelectedSessionMessageVisible() {
@@ -283,7 +320,7 @@ func (m tuiModel) sessionMessageDetailViewElements() ([]string, []int) {
 
 	elements := []string{
 		fmt.Sprintf("消息详情 / %s / 第 %d 条", sessionDisplayName(m.activeSession), m.selectedSessionMessage+1),
-		tuiSessionMetaStyle.Render(fmt.Sprintf("%s | %s", sessionRoleLabel(messageRole(message)), asString(message["id"]))),
+		tuiSessionMetaStyle.Render(sessionMessageDetailMeta(message)),
 		"",
 	}
 
@@ -312,7 +349,7 @@ func (m tuiModel) sessionDetailSections() []tuiSessionDetailSection {
 	sections := []tuiSessionDetailSection{
 		{
 			kind:     tuiSessionDetailContent,
-			title:    "正文",
+			title:    sessionMessageContentTitle(message),
 			content:  sessionMessageDetailContent(message),
 			style:    tuiSessionDetailContentStyle,
 			editable: true,
@@ -509,6 +546,9 @@ func cloneSessionMessages(messages []map[string]any) []map[string]any {
 func (m tuiModel) renderSessionMessageBubble(message map[string]any, index int, selected bool) string {
 	role := messageRole(message)
 	label := fmt.Sprintf("%s #%d", sessionRoleLabel(role), index+1)
+	if versionLabel := sessionMessageVersionLabel(message); versionLabel != "" {
+		label += " · " + versionLabel
+	}
 	body := label + "\n" + sessionMessagePreview(message)
 
 	width := sessionBubbleInnerWidth(body, maxInt(18, minInt(76, m.content.Width-10)))
@@ -530,6 +570,17 @@ func (m tuiModel) selectedSessionMessageMap() map[string]any {
 	}
 	index := minInt(maxInt(0, m.selectedSessionMessage), len(m.sessionMessages)-1)
 	return m.sessionMessages[index]
+}
+
+func sessionMessageDetailMeta(message map[string]any) string {
+	parts := []string{sessionRoleLabel(messageRole(message))}
+	if id := strings.TrimSpace(asString(message["id"])); id != "" {
+		parts = append(parts, id)
+	}
+	if versionLabel := sessionMessageVersionLabel(message); versionLabel != "" {
+		parts = append(parts, versionLabel)
+	}
+	return strings.Join(parts, " | ")
 }
 
 func sessionBubbleStyle(role string) lipgloss.Style {
@@ -642,20 +693,9 @@ func sessionMessagePreview(message map[string]any) string {
 }
 
 func sessionMessageFullContent(message map[string]any) string {
-	switch content := message["content"].(type) {
-	case string:
-		return content
-	case []string:
-		return sessionContentVersion(content, asInt(message["currentVersionIndex"]))
-	case []any:
-		versions := make([]string, 0, len(content))
-		for _, item := range content {
-			versions = append(versions, asString(item))
-		}
-		return sessionContentVersion(versions, asInt(message["currentVersionIndex"]))
-	default:
-		return asString(message["content"])
-	}
+	versions := sessionContentVersions(message)
+	index, _ := sessionMessageVersionPosition(message)
+	return sessionContentVersion(versions, index)
 }
 
 func sessionMessageDetailContent(message map[string]any) string {
@@ -664,6 +704,80 @@ func sessionMessageDetailContent(message map[string]any) string {
 		return "（空消息）"
 	}
 	return content
+}
+
+func sessionMessageContentTitle(message map[string]any) string {
+	if label := sessionMessageVersionLabel(message); label != "" {
+		return "正文 · " + label
+	}
+	return "正文"
+}
+
+func sessionMessageVersionLabel(message map[string]any) string {
+	index, count := sessionMessageVersionPosition(message)
+	if count <= 1 {
+		return ""
+	}
+	return fmt.Sprintf("版本 %d/%d", index+1, count)
+}
+
+func sessionMessageVersionPosition(message map[string]any) (int, int) {
+	count := len(sessionContentVersions(message))
+	if count == 0 {
+		return 0, 0
+	}
+	index := minInt(maxInt(0, asInt(message["currentVersionIndex"])), count-1)
+	return index, count
+}
+
+func switchSessionMessageVersion(message map[string]any, delta int) bool {
+	index, count := sessionMessageVersionPosition(message)
+	if count <= 1 {
+		return false
+	}
+	next := minInt(maxInt(0, index+delta), count-1)
+	if next == index {
+		return false
+	}
+	message["currentVersionIndex"] = next
+	return true
+}
+
+func sessionContentVersions(message map[string]any) []string {
+	switch content := message["content"].(type) {
+	case string:
+		return []string{content}
+	case []string:
+		return append([]string(nil), content...)
+	case []any:
+		versions := make([]string, 0, len(content))
+		for _, item := range content {
+			versions = append(versions, sessionContentValueString(item))
+		}
+		return versions
+	default:
+		text := sessionContentValueString(content)
+		if text == "" {
+			return nil
+		}
+		return []string{text}
+	}
+}
+
+func sessionContentValueString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case map[string]any:
+		for _, key := range []string{"content", "text", "value"} {
+			if text, ok := typed[key].(string); ok {
+				return text
+			}
+		}
+		return prettyJSON(typed)
+	default:
+		return asString(value)
+	}
 }
 
 func sessionContentVersion(versions []string, index int) string {
