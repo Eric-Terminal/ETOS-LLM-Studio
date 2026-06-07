@@ -217,6 +217,12 @@ extension ChatServiceTests {
         #expect(!sameNameCustomTag.isSystemColorTag)
         #expect(!SyncEngine.shouldMergeSessionTagsByName(SessionTag.systemColorTag(for: .red), sameNameCustomTag))
 
+        let systemBlueID = SessionTag.systemColorTagID(for: .blue)
+        chatService.setSessionTags(sessionID: session.id, tagIDs: [customTag.id, systemBlueID])
+        let blueTaggedSession = try #require(chatService.chatSessionsSubject.value.first(where: { $0.id == session.id }))
+        #expect(blueTaggedSession.tagIDs == [customTag.id, systemBlueID])
+        #expect(chatService.sessionTagsSubject.value.contains(where: { $0.id == systemBlueID && $0.isSystemColorTag }))
+
         chatService.toggleSessionColorMarker(sessionID: session.id, color: nil)
 
         let clearedSession = try #require(chatService.chatSessionsSubject.value.first(where: { $0.id == session.id }))

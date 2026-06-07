@@ -67,17 +67,6 @@ extension SessionFolderBrowserView {
                     )
                 }
             }
-            .sheet(item: $sessionForTagEditing) { session in
-                NavigationStack {
-                    WatchSessionTagAssignmentView(
-                        session: session,
-                        tags: tags,
-                        onSetTagIDs: { tagIDs in
-                            setSessionTagsAction(session, tagIDs)
-                        }
-                    )
-                }
-            }
     }
 
     func applyDialogs<Content: View>(to content: Content) -> some View {

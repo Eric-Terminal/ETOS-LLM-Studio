@@ -28,8 +28,7 @@ struct SessionActionsView: View {
     let onDeleteLastMessage: () -> Void
     let onSendSessionToCompanion: () -> Void
     let onMoveSessionToFolder: (UUID?) -> Void
-    let onToggleQuickColor: (SessionTagColor?) -> Void
-    let onEditTags: () -> Void
+    let onSetTagIDs: ([UUID]) -> Void
 
     // MARK: - 环境
 
@@ -56,11 +55,6 @@ struct SessionActionsView: View {
     var body: some View {
         Form {
             Section {
-                WatchSessionTagQuickColorPalette(
-                    selectedColors: Set(sessionTags.compactMap(\.systemColor)),
-                    onSelect: onToggleQuickColor
-                )
-
                 Button {
                     sessionToEdit = session
                     dismiss()
@@ -68,11 +62,14 @@ struct SessionActionsView: View {
                     Label(NSLocalizedString("编辑话题", comment: ""), systemImage: "pencil")
                 }
 
-                Button {
-                    onEditTags()
-                    dismiss()
+                NavigationLink {
+                    WatchSessionTagAssignmentView(
+                        session: session,
+                        tags: tags,
+                        onSetTagIDs: onSetTagIDs
+                    )
                 } label: {
-                    Label(NSLocalizedString("编辑标签", comment: "Edit session tags action"), systemImage: "tag")
+                    Label(NSLocalizedString("标签", comment: "Session tags action"), systemImage: "tag")
                 }
 
                 Button {

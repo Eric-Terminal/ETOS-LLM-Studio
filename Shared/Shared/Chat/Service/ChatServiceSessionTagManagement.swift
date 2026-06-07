@@ -86,6 +86,10 @@ extension ChatService {
     }
 
     public func setSessionTags(sessionID: UUID, tagIDs: [UUID]) {
+        for color in systemColors(in: tagIDs) {
+            _ = ensureSystemColorTag(for: color)
+        }
+
         let validTagIDs = Set(sessionTagsSubject.value.map(\.id))
         var seen = Set<UUID>()
         let normalizedTagIDs = tagIDs.filter { tagID in
@@ -158,6 +162,12 @@ extension ChatService {
         Persistence.saveSessionTags(tags)
         logger.info("已创建系统颜色标签: \(systemTag.name)")
         return systemTag
+    }
+
+    private func systemColors(in tagIDs: [UUID]) -> [SessionTagColor] {
+        SessionTagColor.allCases.filter { color in
+            tagIDs.contains(SessionTag.systemColorTagID(for: color))
+        }
     }
 
     private func normalizedSessionTags(_ tags: [SessionTag]) -> [SessionTag] {

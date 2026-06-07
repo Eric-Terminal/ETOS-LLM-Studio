@@ -32,7 +32,6 @@ struct SessionFolderBrowserView: View {
     let updateTagAction: (SessionTag, String, SessionTagColor?) -> Void
     let deleteTagAction: (SessionTag) -> Void
     let setSessionTagsAction: (ChatSession, [UUID]) -> Void
-    let toggleSessionColorMarkerAction: (ChatSession, SessionTagColor?) -> Void
     let createConversationAction: (() -> Void)?
     let isRoot: Bool
 
@@ -57,7 +56,6 @@ struct SessionFolderBrowserView: View {
     @State var showBatchDeleteConfirm = false
     @State var showSessionSearch = false
     @State var showTagManagement = false
-    @State var sessionForTagEditing: ChatSession?
     @State var selectedTagFilterIDs: Set<UUID> = []
     @State var loadedDirectSessions: [ChatSession] = []
     @State var isLoadingMoreSessions = false

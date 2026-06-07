@@ -417,7 +417,6 @@ struct SessionRowView: View {
     let tags: [SessionTag]
     let sessionTags: [SessionTag]
     @Binding var sessionToEdit: ChatSession?
-    @Binding var sessionForTagEditing: ChatSession?
     @Binding var sessionToBranch: ChatSession?
     @Binding var showBranchOptions: Bool
     @Binding var sessionToDelete: ChatSession?
@@ -427,7 +426,7 @@ struct SessionRowView: View {
     let deleteLastMessageAction: (ChatSession) -> Void
     let sendSessionToCompanionAction: (ChatSession) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
-    let toggleSessionColorMarkerAction: (ChatSession, SessionTagColor?) -> Void
+    let setSessionTagsAction: (ChatSession, [UUID]) -> Void
 
     var body: some View {
         Button(action: { onSessionSelected(session, nil) }) {
@@ -471,11 +470,8 @@ struct SessionRowView: View {
                     onMoveSessionToFolder: { targetFolderID in
                         moveSessionToFolderAction(session, targetFolderID)
                     },
-                    onToggleQuickColor: { color in
-                        toggleSessionColorMarkerAction(session, color)
-                    },
-                    onEditTags: {
-                        sessionForTagEditing = session
+                    onSetTagIDs: { tagIDs in
+                        setSessionTagsAction(session, tagIDs)
                     }
                 )
             } label: {

@@ -41,7 +41,6 @@ struct SessionListView: View {
     let updateTagAction: (SessionTag, String, SessionTagColor?) -> Void
     let deleteTagAction: (SessionTag) -> Void
     let setSessionTagsAction: (ChatSession, [UUID]) -> Void
-    let toggleSessionColorMarkerAction: (ChatSession, SessionTagColor?) -> Void
     var createConversationAction: (() -> Void)? = nil
 
     var body: some View {
@@ -67,7 +66,6 @@ struct SessionListView: View {
             updateTagAction: updateTagAction,
             deleteTagAction: deleteTagAction,
             setSessionTagsAction: setSessionTagsAction,
-            toggleSessionColorMarkerAction: toggleSessionColorMarkerAction,
             createConversationAction: createConversationAction,
             isRoot: true
         )

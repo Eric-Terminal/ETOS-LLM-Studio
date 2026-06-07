@@ -259,9 +259,6 @@ extension ContentView {
             setSessionTagsAction: { session, tagIDs in
                 viewModel.setSessionTags(for: session, tagIDs: tagIDs)
             },
-            toggleSessionColorMarkerAction: { session, color in
-                viewModel.toggleSessionColorMarker(for: session, color: color)
-            },
             createConversationAction: {
                 viewModel.createNewSession()
                 isSessionListPresented = false

@@ -219,16 +219,18 @@ struct WatchSessionTagAssignmentView: View {
     let tags: [SessionTag]
     let onSetTagIDs: ([UUID]) -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var selectedTagIDs: Set<UUID>
 
-    private var editableTags: [SessionTag] {
+    private var customTags: [SessionTag] {
         tags.filter { !$0.isSystemColorTag }
     }
 
-    private var preservedSystemTagIDs: [UUID] {
-        let systemTagIDs = Set(tags.filter(\.isSystemColorTag).map(\.id))
-        return session.tagIDs.filter { systemTagIDs.contains($0) }
+    private var systemColorTags: [SessionTag] {
+        SessionTagColor.allCases.map { SessionTag.systemColorTag(for: $0) }
+    }
+
+    private var assignmentTags: [SessionTag] {
+        systemColorTags + customTags
     }
 
     init(
@@ -245,83 +247,57 @@ struct WatchSessionTagAssignmentView: View {
     var body: some View {
         List {
             Section(header: Text(NSLocalizedString("标签", comment: "Session tag assignment section"))) {
-                if editableTags.isEmpty {
-                    Text(NSLocalizedString("暂无标签", comment: "No session tags"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(editableTags) { tag in
-                        Toggle(isOn: binding(for: tag.id)) {
-                            WatchSessionTagRowLabel(tag: tag)
+                ForEach(assignmentTags) { tag in
+                    WatchSessionTagAssignmentRow(
+                        tag: tag,
+                        isSelected: selectedTagIDs.contains(tag.id),
+                        onToggle: {
+                            toggle(tag.id)
                         }
-                        .buttonStyle(.plain)
-                    }
+                    )
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("编辑标签", comment: "Edit session tag title"))
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("完成", comment: "")) {
-                    onSetTagIDs(orderedSelectedTagIDs())
-                    dismiss()
-                }
-            }
-        }
+        .navigationTitle(NSLocalizedString("标签", comment: "Session tag assignment title"))
     }
 
-    private func binding(for tagID: UUID) -> Binding<Bool> {
-        Binding(
-            get: { selectedTagIDs.contains(tagID) },
-            set: { isSelected in
-                if isSelected {
-                    selectedTagIDs.insert(tagID)
-                } else {
-                    selectedTagIDs.remove(tagID)
-                }
-            }
-        )
+    private func toggle(_ tagID: UUID) {
+        if selectedTagIDs.contains(tagID) {
+            selectedTagIDs.remove(tagID)
+        } else {
+            selectedTagIDs.insert(tagID)
+        }
+        onSetTagIDs(orderedSelectedTagIDs())
     }
 
     private func orderedSelectedTagIDs() -> [UUID] {
-        preservedSystemTagIDs + editableTags.map(\.id).filter { selectedTagIDs.contains($0) }
+        assignmentTags.map(\.id).filter { selectedTagIDs.contains($0) }
     }
 }
 
-struct WatchSessionTagQuickColorPalette: View {
-    let selectedColors: Set<SessionTagColor>
-    let onSelect: (SessionTagColor?) -> Void
+struct WatchSessionTagAssignmentRow: View {
+    let tag: SessionTag
+    let isSelected: Bool
+    let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            colorButton(nil, title: NSLocalizedString("无颜色", comment: "No session tag color"))
-            ForEach(SessionTagColor.allCases) { color in
-                colorButton(color, title: color.localizedName)
+        Button(action: onToggle) {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+
+                Text(tag.name)
+                    .etFont(.body)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                WatchSessionTagDot(color: tag.color, size: tag.isSystemColorTag ? 16 : 13)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 2)
-    }
-
-    private func colorButton(_ color: SessionTagColor?, title: String) -> some View {
-        let isSelected = color.map { selectedColors.contains($0) } ?? selectedColors.isEmpty
-        return Button {
-            onSelect(color)
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(color?.watchColor ?? Color.clear)
-                Circle()
-                    .strokeBorder(color == nil ? Color.secondary : Color.primary.opacity(0.2), lineWidth: color == nil ? 1.2 : 0.7)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(color == nil ? Color.primary : Color.white)
-                }
-            }
-            .frame(width: 18, height: 18)
-            .contentShape(Circle())
-        }
-        .accessibilityLabel(title)
+        .accessibilityLabel(tag.name)
     }
 }
 
