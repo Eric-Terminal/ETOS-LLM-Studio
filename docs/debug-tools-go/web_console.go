@@ -38,6 +38,8 @@ func (s *DebugServer) registerWebRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/providers", s.handleAPIProviders)
 	mux.HandleFunc("/api/providers/save", s.handleAPIProvidersSave)
+	mux.HandleFunc("/api/providers/upsert", s.handleAPIProviderUpsert)
+	mux.HandleFunc("/api/providers/models/upsert", s.handleAPIProviderModelUpsert)
 
 	mux.HandleFunc("/api/app-config", s.handleAPIAppConfig)
 	mux.HandleFunc("/api/app-config/set", s.handleAPIAppConfigSet)
@@ -350,6 +352,56 @@ func (s *DebugServer) handleAPIProvidersSave(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.executeAPICommand(w, map[string]any{"command": "providers_save", "providers": providers}, 45*time.Second)
+}
+
+func (s *DebugServer) handleAPIProviderUpsert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
+		return
+	}
+	payload, err := decodeRequestMap(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": err.Error()})
+		return
+	}
+	if asString(payload["provider_id"]) == "" && strings.TrimSpace(asString(payload["name"])) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "新增 Provider 需要 name"})
+		return
+	}
+	command := map[string]any{"command": "provider_upsert"}
+	for _, key := range []string{"provider_id", "name", "base_url", "api_key", "api_keys", "api_format", "header_overrides"} {
+		if value, ok := payload[key]; ok {
+			command[key] = value
+		}
+	}
+	s.executeAPICommand(w, command, 35*time.Second)
+}
+
+func (s *DebugServer) handleAPIProviderModelUpsert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"status": "error", "message": "仅支持 POST"})
+		return
+	}
+	payload, err := decodeRequestMap(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": err.Error()})
+		return
+	}
+	if strings.TrimSpace(asString(payload["provider_id"])) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "缺少 provider_id 参数"})
+		return
+	}
+	if asString(payload["model_id"]) == "" && strings.TrimSpace(asString(payload["model_name"])) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "message": "新增模型需要 model_name"})
+		return
+	}
+	command := map[string]any{"command": "provider_model_upsert"}
+	for _, key := range []string{"provider_id", "model_id", "model_name", "display_name", "is_activated", "kind", "capabilities", "override_parameters"} {
+		if value, ok := payload[key]; ok {
+			command[key] = value
+		}
+	}
+	s.executeAPICommand(w, command, 35*time.Second)
 }
 
 func (s *DebugServer) handleAPIAppConfig(w http.ResponseWriter, r *http.Request) {

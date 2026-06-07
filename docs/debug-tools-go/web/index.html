@@ -125,6 +125,7 @@
     }
     .split.two { grid-template-columns: 300px 1fr; }
     .split.files { grid-template-columns: 260px 1fr 1fr; }
+    .split.providers { grid-template-columns: 360px 1fr; }
     .split.sqlite { grid-template-columns: 340px 1fr; align-items: start; }
     .card {
       border: 1px solid var(--border);
@@ -280,6 +281,7 @@
     }
     @media (max-width: 1180px) {
       .split.files { grid-template-columns: 1fr; }
+      .split.providers { grid-template-columns: 1fr; }
       .split.sqlite { grid-template-columns: 1fr; }
     }
     .hidden { display: none !important; }
@@ -369,6 +371,61 @@
       <button id="btnProvidersSave">保存提供商配置</button>
     </div>
 
+    <div class="split providers">
+      <div class="card">
+        <div class="muted">提供商列表</div>
+        <div class="list">
+          <table>
+            <thead><tr><th>名称</th><th>格式</th><th>模型</th></tr></thead>
+            <tbody id="providersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="kv" style="margin-bottom:8px;">
+          <div>Provider ID</div><input id="providerID" class="mono" readonly />
+          <div>名称</div><input id="providerName" />
+          <div>Base URL</div><input id="providerBaseURL" class="mono" />
+          <div>API 格式</div>
+          <select id="providerFormat">
+            <option value="openai-compatible">openai-compatible</option>
+            <option value="openai-responses">openai-responses</option>
+            <option value="anthropic">anthropic</option>
+            <option value="gemini">gemini</option>
+          </select>
+          <div>API Key</div><input id="providerAPIKey" type="password" placeholder="留空则不修改已有 Key" />
+        </div>
+        <div class="actions" style="margin-bottom:12px;">
+          <button id="btnProviderNew">新建 Provider</button>
+          <button id="btnProviderSave" class="primary">保存 Provider</button>
+        </div>
+
+        <div class="toolbar">
+          <select id="providerModelSelect" style="min-width:260px;"></select>
+          <button id="btnProviderModelNew">新建模型</button>
+          <button id="btnProviderModelSave" class="primary">保存模型</button>
+        </div>
+        <div class="kv">
+          <div>Model ID</div><input id="modelID" class="mono" readonly />
+          <div>模型名</div><input id="modelName" class="mono" />
+          <div>显示名</div><input id="modelDisplayName" />
+          <div>类型</div>
+          <select id="modelKind">
+            <option value="chat">chat</option>
+            <option value="image">image</option>
+            <option value="embedding">embedding</option>
+            <option value="rerank">rerank</option>
+            <option value="speechToText">speechToText</option>
+            <option value="textToSpeech">textToSpeech</option>
+          </select>
+          <div>启用</div><label class="checkbox-row"><input id="modelActivated" type="checkbox" checked />启用模型</label>
+          <div>能力</div><input id="modelCapabilities" class="mono" placeholder="toolCalling,reasoning" />
+          <div>Override Parameters</div><textarea id="modelOverrideParameters" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
+        </div>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:10px;">
       <div class="muted">快捷添加（会追加到下方 JSON）</div>
       <div class="toolbar">
@@ -384,7 +441,7 @@
       </div>
     </div>
 
-    <textarea id="providersJSON" class="mono" style="min-height:420px;" placeholder="[]"></textarea>
+    <textarea id="providersJSON" class="mono" style="min-height:260px;" placeholder="[]"></textarea>
   </section>
 
   <section id="panel-settings" class="panel">
@@ -589,6 +646,8 @@
     selectedFileBase64: null,
     dirTreeRoot: null,
     providers: [],
+    selectedProvider: null,
+    selectedProviderModel: null,
     settings: [],
     selectedSetting: null,
     sessions: [],
@@ -982,12 +1041,19 @@
 
   function renderProviders() {
     el('providersJSON').value = JSON.stringify(state.providers, null, 2)
+    renderProvidersTable()
   }
 
   async function loadProviders() {
     const data = await api('/api/providers')
     state.providers = Array.isArray(data.providers) ? data.providers : []
+    const previousID = state.selectedProvider?.id
+    const previousModelID = state.selectedProviderModel?.id
+    state.selectedProvider = state.providers.find(provider => provider.id === previousID) || state.providers[0] || null
+    const models = Array.isArray(state.selectedProvider?.models) ? state.selectedProvider.models : []
+    state.selectedProviderModel = models.find(model => model.id === previousModelID) || models[0] || null
     renderProviders()
+    syncProviderForm()
   }
 
   async function saveProviders() {
@@ -1003,6 +1069,10 @@
     const data = await api('/api/providers/save', 'POST', { providers: parsed })
     alert(data.message || '保存成功')
     state.providers = parsed
+    state.selectedProvider = state.providers.find(provider => provider.id === state.selectedProvider?.id) || state.providers[0] || null
+    state.selectedProviderModel = state.selectedProvider?.models?.find(model => model.id === state.selectedProviderModel?.id) || state.selectedProvider?.models?.[0] || null
+    renderProviders()
+    syncProviderForm()
   }
 
   function quickAddProvider() {
@@ -1031,6 +1101,168 @@
       headerOverrides: {}
     })
     el('providersJSON').value = JSON.stringify(current, null, 2)
+  }
+
+  function renderProvidersTable() {
+    const tbody = el('providersTableBody')
+    tbody.innerHTML = ''
+    if (!state.providers.length) {
+      const tr = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.colSpan = 3
+      cell.className = 'muted'
+      cell.textContent = '暂无提供商'
+      tr.appendChild(cell)
+      tbody.appendChild(tr)
+      return
+    }
+
+    state.providers.forEach(provider => {
+      const tr = document.createElement('tr')
+      if (state.selectedProvider?.id === provider.id) tr.classList.add('selected')
+      appendTextCell(tr, provider.name || '-')
+      appendTextCell(tr, provider.apiFormat || '-')
+      appendTextCell(tr, Array.isArray(provider.models) ? provider.models.length : 0)
+      tr.addEventListener('click', () => {
+        state.selectedProvider = provider
+        state.selectedProviderModel = Array.isArray(provider.models) ? provider.models[0] || null : null
+        renderProviders()
+        syncProviderForm()
+      })
+      tbody.appendChild(tr)
+    })
+  }
+
+  function syncProviderForm() {
+    const provider = state.selectedProvider
+    el('providerID').value = provider?.id || ''
+    el('providerName').value = provider?.name || ''
+    el('providerBaseURL').value = provider?.baseURL || ''
+    el('providerFormat').value = provider?.apiFormat || 'openai-compatible'
+    el('providerAPIKey').value = ''
+    renderProviderModelSelect()
+    syncProviderModelForm()
+  }
+
+  function clearProviderForm() {
+    state.selectedProvider = null
+    state.selectedProviderModel = null
+    syncProviderForm()
+  }
+
+  function renderProviderModelSelect() {
+    const select = el('providerModelSelect')
+    select.innerHTML = ''
+    const models = Array.isArray(state.selectedProvider?.models) ? state.selectedProvider.models : []
+    if (!models.length) {
+      const option = document.createElement('option')
+      option.value = ''
+      option.textContent = '暂无模型'
+      select.appendChild(option)
+      return
+    }
+    models.forEach(model => {
+      const option = document.createElement('option')
+      option.value = model.id || ''
+      option.textContent = `${model.displayName || model.modelName || '-'} · ${model.modelName || '-'}`
+      select.appendChild(option)
+    })
+    if (state.selectedProviderModel?.id) {
+      select.value = state.selectedProviderModel.id
+    }
+  }
+
+  function syncProviderModelForm() {
+    const model = state.selectedProviderModel
+    el('modelID').value = model?.id || ''
+    el('modelName').value = model?.modelName || ''
+    el('modelDisplayName').value = model?.displayName || ''
+    el('modelKind').value = model?.kind || 'chat'
+    el('modelActivated').checked = model?.isActivated !== false
+    el('modelCapabilities').value = Array.isArray(model?.capabilities) ? model.capabilities.join(',') : 'toolCalling'
+    el('modelOverrideParameters').value = JSON.stringify(model?.overrideParameters || {}, null, 2)
+  }
+
+  function clearProviderModelForm() {
+    state.selectedProviderModel = null
+    syncProviderModelForm()
+  }
+
+  function selectProviderModel(modelID) {
+    const models = Array.isArray(state.selectedProvider?.models) ? state.selectedProvider.models : []
+    state.selectedProviderModel = models.find(model => model.id === modelID) || null
+    syncProviderModelForm()
+  }
+
+  function replaceProvider(updatedProvider) {
+    if (!updatedProvider?.id) return
+    const index = state.providers.findIndex(provider => provider.id === updatedProvider.id)
+    if (index >= 0) {
+      state.providers[index] = updatedProvider
+    } else {
+      state.providers.push(updatedProvider)
+    }
+    state.selectedProvider = updatedProvider
+    renderProviders()
+    syncProviderForm()
+  }
+
+  async function saveProviderForm() {
+    const payload = {
+      provider_id: el('providerID').value.trim() || undefined,
+      name: el('providerName').value.trim(),
+      base_url: el('providerBaseURL').value.trim(),
+      api_format: el('providerFormat').value
+    }
+    const apiKey = el('providerAPIKey').value.trim()
+    if (apiKey) payload.api_key = apiKey
+    if (!payload.provider_id && !payload.name) {
+      alert('请填写 Provider 名称')
+      return
+    }
+    const data = await api('/api/providers/upsert', 'POST', payload)
+    replaceProvider(data.provider)
+    alert(data.message || '保存成功')
+  }
+
+  async function saveProviderModelForm() {
+    const provider = state.selectedProvider
+    if (!provider?.id) {
+      alert('请先选择或保存 Provider')
+      return
+    }
+    let overrideParameters = {}
+    try {
+      overrideParameters = JSON.parse(el('modelOverrideParameters').value || '{}')
+      if (!overrideParameters || Array.isArray(overrideParameters) || typeof overrideParameters !== 'object') {
+        throw new Error('Override Parameters 必须是 JSON 对象')
+      }
+    } catch (error) {
+      alert(`Override Parameters 格式错误：${error.message}`)
+      return
+    }
+    const payload = {
+      provider_id: provider.id,
+      model_id: el('modelID').value.trim() || undefined,
+      model_name: el('modelName').value.trim(),
+      display_name: el('modelDisplayName').value.trim(),
+      kind: el('modelKind').value,
+      is_activated: el('modelActivated').checked,
+      capabilities: el('modelCapabilities').value.split(',').map(item => item.trim()).filter(Boolean),
+      override_parameters: overrideParameters
+    }
+    if (!payload.model_id && !payload.model_name) {
+      alert('请填写模型名')
+      return
+    }
+    const data = await api('/api/providers/models/upsert', 'POST', payload)
+    replaceProvider(data.provider)
+    if (data.model?.id) {
+      state.selectedProviderModel = data.model
+      renderProviderModelSelect()
+      syncProviderModelForm()
+    }
+    alert(data.message || '保存成功')
   }
 
   function renderSettings() {
@@ -1746,6 +1978,11 @@
     el('btnProvidersLoad').addEventListener('click', () => loadProviders().catch(showError))
     el('btnProvidersSave').addEventListener('click', () => saveProviders().catch(showError))
     el('btnQuickAddProvider').addEventListener('click', quickAddProvider)
+    el('btnProviderNew').addEventListener('click', clearProviderForm)
+    el('btnProviderSave').addEventListener('click', () => saveProviderForm().catch(showError))
+    el('providerModelSelect').addEventListener('change', event => selectProviderModel(event.target.value))
+    el('btnProviderModelNew').addEventListener('click', clearProviderModelForm)
+    el('btnProviderModelSave').addEventListener('click', () => saveProviderModelForm().catch(showError))
 
     el('btnSettingsLoad').addEventListener('click', () => loadSettings().catch(showError))
     el('btnSettingsSave').addEventListener('click', () => saveSelectedSetting().catch(showError))

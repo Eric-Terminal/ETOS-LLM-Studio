@@ -479,6 +479,12 @@ extension LocalDebugServer {
             case "providers_save":
                 let response = await handleProvidersSave(json)
                 sendResponse(response, requestID: requestID)
+            case "provider_upsert":
+                let response = await handleProviderUpsert(json)
+                sendResponse(response, requestID: requestID)
+            case "provider_model_upsert":
+                let response = await handleProviderModelUpsert(json)
+                sendResponse(response, requestID: requestID)
             case "app_config_list":
                 let response = await handleAppConfigList(json)
                 sendResponse(response, requestID: requestID)

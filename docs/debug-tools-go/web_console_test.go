@@ -18,6 +18,24 @@ func decodeJSONBody(t *testing.T, recorder *httptest.ResponseRecorder) map[strin
 	return payload
 }
 
+func resolveNextPendingResponse(server *DebugServer, response map[string]any) {
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		server.mu.RLock()
+		var requestID string
+		for id := range server.pendingResponses {
+			requestID = id
+			break
+		}
+		server.mu.RUnlock()
+		if requestID != "" {
+			_ = server.resolvePendingResponse(requestID, response)
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestInferAPIErrorCode(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -274,5 +292,138 @@ func TestHandleAPIAppConfigSetForwardsToDeviceCommand(t *testing.T) {
 	}
 	if server.commandQueue[0]["key"] != "enableStreaming" {
 		t.Fatalf("key = %v, want enableStreaming", server.commandQueue[0]["key"])
+	}
+}
+
+func TestHandleAPIProviderUpsertRequiresNameWhenCreating(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(http.MethodPost, "/api/providers/upsert", strings.NewReader(`{"base_url":"https://api.example.com/v1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.handleAPIProviderUpsert(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "error" {
+		t.Fatalf("status = %v, want error", payload["status"])
+	}
+}
+
+func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/providers/upsert",
+		strings.NewReader(`{"name":"示例 Provider","base_url":"https://api.example.com/v1","api_key":"sk-test","api_format":"openai-compatible"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	go resolveNextPendingResponse(server, map[string]any{
+		"status": "ok",
+		"provider": map[string]any{
+			"id":        "11111111-1111-4111-8111-111111111111",
+			"name":      "示例 Provider",
+			"baseURL":   "https://api.example.com/v1",
+			"apiFormat": "openai-compatible",
+		},
+	})
+
+	server.handleAPIProviderUpsert(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d, want %d, body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "ok" {
+		t.Fatalf("status = %v, want ok", payload["status"])
+	}
+
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+	if len(server.commandQueue) != 1 {
+		t.Fatalf("commandQueue 长度 = %d, want 1", len(server.commandQueue))
+	}
+	command := server.commandQueue[0]
+	if command["command"] != "provider_upsert" {
+		t.Fatalf("command = %v, want provider_upsert", command["command"])
+	}
+	if command["name"] != "示例 Provider" {
+		t.Fatalf("name = %v, want 示例 Provider", command["name"])
+	}
+	if command["api_key"] != "sk-test" {
+		t.Fatalf("api_key = %v, want sk-test", command["api_key"])
+	}
+}
+
+func TestHandleAPIProviderModelUpsertRequiresProviderID(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(http.MethodPost, "/api/providers/models/upsert", strings.NewReader(`{"model_name":"gpt-test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	server.handleAPIProviderModelUpsert(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "error" {
+		t.Fatalf("status = %v, want error", payload["status"])
+	}
+}
+
+func TestHandleAPIProviderModelUpsertForwardsToDeviceCommand(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/providers/models/upsert",
+		strings.NewReader(`{"provider_id":"22222222-2222-4222-8222-222222222222","model_name":"gpt-test","display_name":"GPT Test","is_activated":false,"kind":"chat","capabilities":["toolCalling"],"override_parameters":{"temperature":0.2}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	go resolveNextPendingResponse(server, map[string]any{
+		"status": "ok",
+		"provider": map[string]any{
+			"id":   "22222222-2222-4222-8222-222222222222",
+			"name": "示例 Provider",
+		},
+		"model": map[string]any{
+			"id":        "33333333-3333-4333-8333-333333333333",
+			"modelName": "gpt-test",
+		},
+	})
+
+	server.handleAPIProviderModelUpsert(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d, want %d, body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := decodeJSONBody(t, recorder)
+	if payload["status"] != "ok" {
+		t.Fatalf("status = %v, want ok", payload["status"])
+	}
+
+	server.mu.RLock()
+	defer server.mu.RUnlock()
+	if len(server.commandQueue) != 1 {
+		t.Fatalf("commandQueue 长度 = %d, want 1", len(server.commandQueue))
+	}
+	command := server.commandQueue[0]
+	if command["command"] != "provider_model_upsert" {
+		t.Fatalf("command = %v, want provider_model_upsert", command["command"])
+	}
+	if command["provider_id"] != "22222222-2222-4222-8222-222222222222" {
+		t.Fatalf("provider_id = %v, want 22222222-2222-4222-8222-222222222222", command["provider_id"])
+	}
+	if command["model_name"] != "gpt-test" {
+		t.Fatalf("model_name = %v, want gpt-test", command["model_name"])
+	}
+	if command["is_activated"] != false {
+		t.Fatalf("is_activated = %v, want false", command["is_activated"])
 	}
 }

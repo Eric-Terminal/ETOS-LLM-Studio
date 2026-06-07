@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 func joinDevicePath(base, name string) string {
@@ -68,6 +67,18 @@ func boolLabel(value bool) string {
 	return "否"
 }
 
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
 func asAnySlice(v any) []any {
 	switch t := v.(type) {
 	case []any:
@@ -81,11 +92,6 @@ func asAnySlice(v any) []any {
 	default:
 		return nil
 	}
-}
-
-func newUUIDLikeString() string {
-	now := time.Now().UnixNano()
-	return fmt.Sprintf("00000000-0000-4000-8000-%012x", now&0xffffffffffff)
 }
 
 func maxInt(a, b int) int {

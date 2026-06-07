@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -232,6 +233,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				appendAction(m.addProviderModel())
 			}
 		case "e":
+			if m.active == tuiProviders {
+				appendAction(m.editSelectedProvider())
+			}
 			if m.active == tuiSettings {
 				appendAction(m.editSelectedSetting())
 			}
@@ -409,7 +413,7 @@ func (m tuiModel) renderHelp() string {
 	case tuiFiles:
 		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | x 删除 | n 新建目录"
 	case tuiProviders:
-		return common + " | Enter 详情 | a 新增 Provider | m 给选中 Provider 加模型"
+		return common + " | Enter 详情 | a 新增 Provider | e 编辑 Provider | m 给选中 Provider 加模型"
 	case tuiSettings:
 		return common + " | Enter 详情 | e 修改当前配置"
 	case tuiSessions:
@@ -563,20 +567,53 @@ func (m tuiModel) addProvider() tea.Cmd {
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		providers, err := m.fetchProviderList()
-		if err != nil {
-			return tuiCommandResultMsg{op: "providers:add", err: err}
+		payload := map[string]any{
+			"command":    "provider_upsert",
+			"name":       strings.TrimSpace(name),
+			"base_url":   strings.TrimSpace(baseURL),
+			"api_format": strings.TrimSpace(apiFormat),
 		}
-		providers = append(providers, map[string]any{
-			"id":        newUUIDLikeString(),
-			"name":      strings.TrimSpace(name),
-			"baseURL":   strings.TrimSpace(baseURL),
-			"apiKeys":   []any{apiKey},
-			"apiFormat": strings.TrimSpace(apiFormat),
-			"models":    []any{},
-		})
-		response, err := m.server.sendCommandWithResponse(map[string]any{"command": "providers_save", "providers": providers}, 45*time.Second)
-		return tuiCommandResultMsg{op: "providers:save", response: response, err: err}
+		if strings.TrimSpace(apiKey) != "" {
+			payload["api_key"] = apiKey
+		}
+		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
+		return tuiCommandResultMsg{op: "providers:upsert", response: response, err: err}
+	}
+}
+
+func (m tuiModel) editSelectedProvider() tea.Cmd {
+	row := m.providers.SelectedRow()
+	if len(row) == 0 {
+		return nil
+	}
+	providerID := row[0]
+	provider := m.findProviderRow(providerID)
+	return func() tea.Msg {
+		name := asString(provider["name"])
+		baseURL := asString(provider["baseURL"])
+		apiFormat := asString(provider["apiFormat"])
+		apiKey := ""
+		form := huh.NewForm(huh.NewGroup(
+			huh.NewInput().Title("名称").Value(&name),
+			huh.NewInput().Title("API URL").Value(&baseURL),
+			huh.NewInput().Title("API 格式").Value(&apiFormat),
+			huh.NewInput().Title("API Key（留空则不修改）").EchoMode(huh.EchoModePassword).Value(&apiKey),
+		))
+		if err := form.Run(); err != nil {
+			return tuiCommandResultMsg{op: "noop", err: err}
+		}
+		payload := map[string]any{
+			"command":     "provider_upsert",
+			"provider_id": providerID,
+			"name":        strings.TrimSpace(name),
+			"base_url":    strings.TrimSpace(baseURL),
+			"api_format":  strings.TrimSpace(apiFormat),
+		}
+		if strings.TrimSpace(apiKey) != "" {
+			payload["api_key"] = apiKey
+		}
+		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
+		return tuiCommandResultMsg{op: "providers:upsert", response: response, err: err}
 	}
 }
 
@@ -589,38 +626,50 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 	return func() tea.Msg {
 		modelName := ""
 		displayName := ""
+		kind := "chat"
+		capabilities := "toolCalling"
+		overrideParameters := "{}"
 		form := huh.NewForm(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
+			huh.NewInput().Title("类型(chat/image/embedding/rerank/speechToText/textToSpeech)").Value(&kind),
+			huh.NewInput().Title("能力（逗号分隔，如 toolCalling,reasoning）").Value(&capabilities),
+			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
 		))
 		if err := form.Run(); err != nil {
 			return tuiCommandResultMsg{op: "noop", err: err}
 		}
-		providers, err := m.fetchProviderList()
-		if err != nil {
-			return tuiCommandResultMsg{op: "providers:model", err: err}
+		var override map[string]any
+		if strings.TrimSpace(overrideParameters) != "" {
+			if err := json.Unmarshal([]byte(overrideParameters), &override); err != nil {
+				return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("Override Parameters 不是合法 JSON 对象: %w", err)}
+			}
 		}
-		for _, provider := range providers {
-			if asString(provider["id"]) != providerID {
-				continue
-			}
-			model := map[string]any{
-				"id":          newUUIDLikeString(),
-				"modelName":   strings.TrimSpace(modelName),
-				"displayName": strings.TrimSpace(displayName),
-				"isActivated": true,
-			}
-			if model["displayName"] == "" {
-				model["displayName"] = model["modelName"]
-			}
-			models := asAnySlice(provider["models"])
-			models = append(models, model)
-			provider["models"] = models
-			break
+		if override == nil {
+			override = map[string]any{}
 		}
-		response, err := m.server.sendCommandWithResponse(map[string]any{"command": "providers_save", "providers": providers}, 45*time.Second)
-		return tuiCommandResultMsg{op: "providers:save", response: response, err: err}
+		payload := map[string]any{
+			"command":             "provider_model_upsert",
+			"provider_id":         providerID,
+			"model_name":          strings.TrimSpace(modelName),
+			"display_name":        strings.TrimSpace(displayName),
+			"is_activated":        true,
+			"kind":                strings.TrimSpace(kind),
+			"capabilities":        splitCSV(capabilities),
+			"override_parameters": override,
+		}
+		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
+		return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
 	}
+}
+
+func (m tuiModel) findProviderRow(providerID string) map[string]any {
+	for _, provider := range m.providerRows {
+		if asString(provider["id"]) == providerID {
+			return provider
+		}
+	}
+	return map[string]any{}
 }
 
 func (m tuiModel) fetchProviderList() ([]map[string]any, error) {
@@ -940,6 +989,16 @@ func (m *tuiModel) applyCommandResult(msg tuiCommandResultMsg) {
 		m.applyProviders(msg.response)
 	case msg.op == "providers:save":
 		m.setMessage("提供商已保存", tuiOKStyle)
+	case msg.op == "providers:upsert":
+		if provider, ok := msg.response["provider"].(map[string]any); ok {
+			m.preview.SetValue(prettyJSON(provider))
+		} else {
+			m.preview.SetValue(prettyJSON(msg.response))
+		}
+		m.setMessage("Provider 已保存；按 r 可刷新列表", tuiOKStyle)
+	case msg.op == "providers:model_upsert":
+		m.preview.SetValue(prettyJSON(msg.response))
+		m.setMessage("模型已保存；按 r 可刷新列表", tuiOKStyle)
 	case msg.op == "settings:list":
 		m.applySettings(msg.response)
 	case msg.op == "settings:set":

@@ -85,6 +85,8 @@ WebUI 和 TUI 共用同一组服务端能力。常用 SQLite API：
 
 - `GET /api/app-config?query=...`：列出 `app_config` 配置键、类型、当前值、默认值与同步属性
 - `POST /api/app-config/set`：参数 `key`、`value`，按配置原始类型写入单项设置
+- `POST /api/providers/upsert`：按 `provider_id` 更新或按 `name` 新增 Provider，可写入 `base_url`、`api_key`、`api_format` 等字段
+- `POST /api/providers/models/upsert`：按 `provider_id` 为指定 Provider 新增或更新模型，可写入 `model_name`、`display_name`、`kind`、`capabilities` 与 `override_parameters`
 - `POST /api/sqlite/tables`：参数 `database` 为 `chat`、`config` 或 `memory`，可选 `include_internal`、`include_create_sql`
 - `POST /api/sqlite/query`：参数 `database`、`sql`，可选 `parameters`、`max_rows`
 - `POST /api/sqlite/mutate`：参数 `database`、`sql`，可选 `parameters`、`allow_without_where`、`returning_max_rows`
