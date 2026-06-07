@@ -95,7 +95,7 @@ struct LocalDebugView: View {
                 }
                 
                 Section {
-                    TextField(NSLocalizedString("输入地址", comment: ""), text: $serverURL, prompt: Text(server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"))
+                    TextField(NSLocalizedString("输入地址", comment: ""), text: $serverURL, prompt: Text("192.168.1.100:7654"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
@@ -108,7 +108,7 @@ struct LocalDebugView: View {
                 } header: {
                     Text(NSLocalizedString("服务器地址", comment: ""))
                 } footer: {
-                    Text(server.useHTTP ? NSLocalizedString("HTTP 默认端口: 7654", comment: "") : NSLocalizedString("WebSocket 默认端口: 8765（可用 host:wsPort:httpPort 显式指定回退端口）", comment: ""))
+                    Text(NSLocalizedString("调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）", comment: ""))
                 }
             } else {
                 Section(NSLocalizedString("连接信息", comment: "")) {
@@ -433,7 +433,7 @@ private struct DocumentationView: View {
                         .etFont(.subheadline)
                         .foregroundStyle(.secondary)
                     
-                    Text(NSLocalizedString("http://电脑IP:8080", comment: ""))
+                    Text(NSLocalizedString("http://电脑IP:7654/v1", comment: ""))
                         .etFont(.body.monospaced())
                         .foregroundStyle(.blue)
                         .padding(8)

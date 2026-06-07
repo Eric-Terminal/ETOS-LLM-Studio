@@ -3986,3 +3986,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "当前选择：%@" = "Selección actual: %@";
 "上传前请确认对象存储配置。" = "Confirma la configuración del almacenamiento de objetos antes de subir.";
 "恢复前请确认快照来源可信。" = "Confirma que el origen de la instantánea sea confiable antes de restaurar.";
+
+"调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
+"http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";
+"设备主动连接电脑端服务器（端口 7654），实时接收命令" = "The device actively connects to the computer server (port 7654) to receive commands in real time.";

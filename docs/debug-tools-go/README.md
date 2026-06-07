@@ -28,12 +28,13 @@ go run .
 
 启动后会直接进入 TUI。按 `Tab` 切换模块，按 `r` 刷新当前模块，按 `Esc` 退出。Provider 页支持 `a` 新增 Provider、`e` 编辑 Provider、Header Overrides 与独立代理、`m` 新增模型、`M` 选择并编辑已有模型参数。
 
-默认端口：
+默认只监听一个端口：
 
-- WebSocket: `8765`
-- HTTP 轮询: `7654`
-- HTTP 代理: `8080`
-- Bonjour/mDNS: `_etos-debug._tcp`（发布 HTTP 端口，并在 TXT 中附带 WebSocket 与代理端口）
+- 调试服务: `7654`
+- WebUI/API/HTTP 轮询: `http://电脑IP:7654`
+- WebSocket: `ws://电脑IP:7654/ws`
+- OpenAI 捕获: `http://电脑IP:7654/v1/chat/completions`
+- Bonjour/mDNS: `_etos-debug._tcp`（发布同一个调试服务端口）
 
 ### Web GUI 控制台
 
@@ -57,18 +58,18 @@ GUI 主要功能：
 连接策略：
 
 - 设备端会优先通过 Bonjour 自动发现电脑端服务并询问是否填入地址；仍可手动输入 IP。
-- 设备端可优先走 WebSocket，若连接失败会自动回退 HTTP 轮询（默认端口 `7654`，也支持 `host:wsPort:httpPort` 双端口地址格式）。
+- 设备端可优先走 WebSocket，若连接失败会自动回退 HTTP 轮询；两种模式共用 `7654` 端口。
 
 ### 自定义端口
 
 ```bash
-go run . <ws_port> <http_poll_port> <proxy_port>
+go run . <port>
 ```
 
 例如：
 
 ```bash
-go run . 8765 7654 8080
+go run . 7654
 ```
 
 ### 调试日志开关

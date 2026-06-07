@@ -25,7 +25,7 @@ func (s *DebugServer) startBonjourAdvertisement() {
 		bonjourInstanceName(hostname),
 		bonjourServiceType,
 		bonjourServiceDomain,
-		s.httpPort,
+		s.port,
 		s.bonjourTXTRecords(),
 		nil,
 	)
@@ -50,9 +50,10 @@ func (s *DebugServer) bonjourTXTRecords() []string {
 		"proto=etos-debug-v1",
 		"version=" + version,
 		"host=" + localHostName(),
-		"http_port=" + strconv.Itoa(s.httpPort),
-		"ws_port=" + strconv.Itoa(s.wsPort),
-		"proxy_port=" + strconv.Itoa(s.proxyPort),
+		"port=" + strconv.Itoa(s.port),
+		"http_port=" + strconv.Itoa(s.port),
+		"ws_path=" + wsPath,
+		"openai_path=/v1/chat/completions",
 	}
 }
 

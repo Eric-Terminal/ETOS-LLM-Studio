@@ -18,15 +18,14 @@ import UIKit
 extension LocalDebugServer {
     struct ParsedDebugAddress {
         let host: String
-        let wsPort: String
-        let httpPort: String
+        let port: String
     }
 
     /// 解析调试服务器地址
     /// 支持格式：
     /// - host
-    /// - host:port（useHTTP=true 时按 HTTP 端口解释；否则按 WS 端口解释）
-    /// - host:wsPort:httpPort（显式声明双端口）
+    /// - host:port
+    /// - host:legacyWsPort:port（旧双端口格式会取最后一个端口）
     func parseDebugAddress(_ raw: String) -> ParsedDebugAddress {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let withoutScheme: String
@@ -39,43 +38,37 @@ extension LocalDebugServer {
         let parts = hostPortOnly.split(separator: ":").map(String.init).filter { !$0.isEmpty }
 
         let host = parts.first ?? hostPortOnly
-        let defaultWSPort = "8765"
-        let defaultHTTPPort = "7654"
+        let defaultPort = "7654"
 
         if parts.count >= 3 {
-            return ParsedDebugAddress(host: host, wsPort: parts[1], httpPort: parts[2])
+            return ParsedDebugAddress(host: host, port: parts[2])
         }
 
         if parts.count == 2 {
-            let port = parts[1]
-            if useHTTP {
-                return ParsedDebugAddress(host: host, wsPort: defaultWSPort, httpPort: port)
-            }
-            let inferredHTTPPort = (port == defaultWSPort) ? defaultHTTPPort : port
-            return ParsedDebugAddress(host: host, wsPort: port, httpPort: inferredHTTPPort)
+            return ParsedDebugAddress(host: host, port: parts[1])
         }
 
-        return ParsedDebugAddress(host: host, wsPort: defaultWSPort, httpPort: defaultHTTPPort)
+        return ParsedDebugAddress(host: host, port: defaultPort)
     }
 
     /// 连接到电脑端服务器
-    /// - Parameter url: 服务器地址，格式: "192.168.1.100:8765"、"192.168.1.100:8765:7654" 或 "192.168.1.100"
+    /// - Parameter url: 服务器地址，格式: "192.168.1.100:7654" 或 "192.168.1.100"
     @MainActor
     public func connect(to url: String) {
         guard !isRunning else { return }
 
         let parsed = parseDebugAddress(url)
         wsAutoFallbackEnabled = false
-        wsFallbackHTTPPort = parsed.httpPort
+        wsFallbackPort = parsed.port
 
         if useHTTP {
             logger.info("使用 HTTP 轮询模式")
-            serverURL = "\(parsed.host):\(parsed.httpPort)"
-            performHTTPConnection(host: parsed.host, port: parsed.httpPort)
+            serverURL = "\(parsed.host):\(parsed.port)"
+            performHTTPConnection(host: parsed.host, port: parsed.port)
         } else {
             wsAutoFallbackEnabled = true
-            serverURL = "\(parsed.host):\(parsed.wsPort)"
-            performConnection(host: parsed.host, port: parsed.wsPort)
+            serverURL = "\(parsed.host):\(parsed.port)"
+            performConnection(host: parsed.host, port: parsed.port)
         }
     }
 
@@ -84,7 +77,7 @@ extension LocalDebugServer {
     func performConnection(host: String, port: String) {
         logger.info("开始建立WebSocket连接到 \(host):\(port)")
 
-        let urlString = "ws://\(host):\(port)/"
+        let urlString = "ws://\(host):\(port)/ws"
         guard let wsURL = URL(string: urlString) else {
             self.errorMessage = NSLocalizedString("无效的服务器地址", comment: "")
             self.connectionStatus = NSLocalizedString("连接失败", comment: "")
@@ -122,11 +115,11 @@ extension LocalDebugServer {
                     if self.wsAutoFallbackEnabled {
                         self.wsAutoFallbackEnabled = false
                         self.useHTTP = true
-                        self.serverURL = "\(host):\(self.wsFallbackHTTPPort)"
+                        self.serverURL = "\(host):\(self.wsFallbackPort)"
                         self.connectionStatus = NSLocalizedString("WebSocket 失败，回退到 HTTP 轮询...", comment: "")
                         self.errorMessage = NSLocalizedString("WebSocket 连接失败，已自动切换到 HTTP 轮询", comment: "")
                         self.logger.error("WebSocket 连接失败，准备回退 HTTP: \(error.localizedDescription)")
-                        self.performHTTPConnection(host: host, port: self.wsFallbackHTTPPort)
+                        self.performHTTPConnection(host: host, port: self.wsFallbackPort)
                         return
                     }
 

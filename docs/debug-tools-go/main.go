@@ -30,17 +30,14 @@ var (
 )
 
 const (
-	defaultHost      = "0.0.0.0"
-	defaultWSPort    = 8765
-	defaultHTTPPort  = 7654
-	defaultProxyPort = 8080
+	defaultHost = "0.0.0.0"
+	defaultPort = 7654
+	wsPath      = "/ws"
 )
 
 type DebugServer struct {
-	host      string
-	wsPort    int
-	httpPort  int
-	proxyPort int
+	host string
+	port int
 
 	mu        sync.RWMutex
 	wsWriteMu sync.Mutex
@@ -64,18 +61,14 @@ type DebugServer struct {
 	compatibleFileList           []string
 	compatibleDownloadEvent      chan struct{}
 
-	pollHTTPServer  *http.Server
-	proxyHTTPServer *http.Server
-	wsHTTPServer    *http.Server
+	httpServer      *http.Server
 	bonjourShutdown func()
 }
 
-func NewDebugServer(host string, wsPort, httpPort, proxyPort int) *DebugServer {
+func NewDebugServer(host string, port int) *DebugServer {
 	return &DebugServer{
 		host:             host,
-		wsPort:           wsPort,
-		httpPort:         httpPort,
-		proxyPort:        proxyPort,
+		port:             port,
 		deviceName:       "未知设备",
 		uploadFileQueue:  map[string]string{},
 		commandQueue:     make([]map[string]any, 0, 8),
@@ -99,8 +92,7 @@ func getLocalIP() string {
 
 func (s *DebugServer) run(ctx context.Context) error {
 	localIP := getLocalIP()
-	s.startHTTPServers()
-	s.startWebSocketServer()
+	s.startHTTPServer()
 	s.startBonjourAdvertisement()
 
 	if err := runTUI(ctx.Done(), s, localIP); err != nil && !errors.Is(err, context.Canceled) {
@@ -115,18 +107,8 @@ func (s *DebugServer) run(ctx context.Context) error {
 
 func (s *DebugServer) shutdown(ctx context.Context) error {
 	var errs []error
-	if s.pollHTTPServer != nil {
-		if err := s.pollHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errs = append(errs, err)
-		}
-	}
-	if s.proxyHTTPServer != nil {
-		if err := s.proxyHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errs = append(errs, err)
-		}
-	}
-	if s.wsHTTPServer != nil {
-		if err := s.wsHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if s.httpServer != nil {
+		if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs = append(errs, err)
 		}
 	}
@@ -151,53 +133,26 @@ func (s *DebugServer) shutdown(ctx context.Context) error {
 	return fmt.Errorf("关闭服务失败: %v", errs)
 }
 
-func (s *DebugServer) startHTTPServers() {
-	pollMux := http.NewServeMux()
-	pollMux.HandleFunc("/ping", s.handleHTTPPing)
-	pollMux.HandleFunc("/poll", s.handleHTTPPoll)
-	pollMux.HandleFunc("/response", s.handleHTTPResponse)
-	pollMux.HandleFunc("/fetch_file", s.handleHTTPFetchFile)
-	s.registerWebRoutes(pollMux)
-
-	s.pollHTTPServer = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", s.host, s.httpPort),
-		Handler: pollMux,
-	}
-
-	go func() {
-		if err := s.pollHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("\n[ERROR] HTTP 轮询服务器启动失败: %v\n", err)
-		}
-	}()
-
-	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/v1/chat/completions", s.handleOpenAIProxy)
-	proxyMux.HandleFunc("/", s.handleOpenAIPing)
-
-	s.proxyHTTPServer = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", s.host, s.proxyPort),
-		Handler: proxyMux,
-	}
-
-	go func() {
-		if err := s.proxyHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("\n[ERROR] HTTP 代理服务器启动失败: %v\n", err)
-		}
-	}()
-}
-
-func (s *DebugServer) startWebSocketServer() {
+func (s *DebugServer) startHTTPServer() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleWebSocketUpgrade)
+	mux.HandleFunc("/ping", s.handleHTTPPing)
+	mux.HandleFunc("/poll", s.handleHTTPPoll)
+	mux.HandleFunc("/response", s.handleHTTPResponse)
+	mux.HandleFunc("/fetch_file", s.handleHTTPFetchFile)
+	mux.HandleFunc(wsPath, s.handleWebSocketUpgrade)
+	mux.HandleFunc("/v1/chat/completions", s.handleOpenAIProxy)
+	mux.HandleFunc("/v1", s.handleOpenAIPing)
+	mux.HandleFunc("/v1/", s.handleOpenAIPing)
+	s.registerWebRoutes(mux)
 
-	s.wsHTTPServer = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", s.host, s.wsPort),
+	s.httpServer = &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", s.host, s.port),
 		Handler: mux,
 	}
 
 	go func() {
-		if err := s.wsHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("\n[ERROR] WebSocket 服务器启动失败: %v\n", err)
+		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Printf("\n[ERROR] 调试服务启动失败: %v\n", err)
 		}
 	}()
 }
@@ -1316,45 +1271,31 @@ func applyDebugModeFromEnv() {
 	debugMode = !(v == "0" || v == "false" || v == "off" || v == "no")
 }
 
-func parsePortsFromArgs(args []string) (int, int, int, error) {
-	wsPort := defaultWSPort
-	httpPort := defaultHTTPPort
-	proxyPort := defaultProxyPort
-
+func parsePortFromArgs(args []string) (int, error) {
+	port := defaultPort
+	if len(args) > 2 {
+		return 0, fmt.Errorf("现在只需要一个调试服务端口，例如: go run . 7654")
+	}
 	if len(args) > 1 {
 		v, err := strconv.Atoi(args[1])
 		if err != nil {
-			return 0, 0, 0, fmt.Errorf("WebSocket 端口无效: %w", err)
+			return 0, fmt.Errorf("调试服务端口无效: %w", err)
 		}
-		wsPort = v
+		port = v
 	}
-	if len(args) > 2 {
-		v, err := strconv.Atoi(args[2])
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("HTTP 轮询端口无效: %w", err)
-		}
-		httpPort = v
-	}
-	if len(args) > 3 {
-		v, err := strconv.Atoi(args[3])
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("HTTP 代理端口无效: %w", err)
-		}
-		proxyPort = v
-	}
-	return wsPort, httpPort, proxyPort, nil
+	return port, nil
 }
 
 func main() {
 	applyDebugModeFromEnv()
 
-	wsPort, httpPort, proxyPort, err := parsePortsFromArgs(os.Args)
+	port, err := parsePortFromArgs(os.Args)
 	if err != nil {
 		fmt.Printf("[ERROR] %v\n", err)
 		os.Exit(1)
 	}
 
-	server := NewDebugServer(defaultHost, wsPort, httpPort, proxyPort)
+	server := NewDebugServer(defaultHost, port)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

@@ -78,7 +78,7 @@ public class LocalDebugServer: ObservableObject {
     let maxHTTPFailures: Int = 5
 
     var wsAutoFallbackEnabled = false
-    var wsFallbackHTTPPort = "7654"
+    var wsFallbackPort = "7654"
 
     let maxLogEntries = 100
 

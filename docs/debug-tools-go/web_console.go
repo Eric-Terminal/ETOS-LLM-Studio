@@ -141,9 +141,12 @@ func (s *DebugServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		"queue_size":         queueSize,
 		"pending_requests":   pendingCount,
 		"http_polling_alive": httpPollingAlive,
-		"ws_port":            s.wsPort,
-		"http_port":          s.httpPort,
-		"proxy_port":         s.proxyPort,
+		"port":               s.port,
+		"http_port":          s.port,
+		"ws_port":            s.port,
+		"proxy_port":         s.port,
+		"ws_path":            wsPath,
+		"openai_path":        "/v1/chat/completions",
 	})
 }
 

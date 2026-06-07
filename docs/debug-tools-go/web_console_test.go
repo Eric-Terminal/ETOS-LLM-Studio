@@ -78,7 +78,7 @@ func TestInferAPIHTTPStatus(t *testing.T) {
 }
 
 func TestExecuteAPICommandTimeoutReturnsStructuredError(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	recorder := httptest.NewRecorder()
 
 	server.executeAPICommand(recorder, map[string]any{"command": "list", "path": "."}, 30*time.Millisecond)
@@ -97,7 +97,7 @@ func TestExecuteAPICommandTimeoutReturnsStructuredError(t *testing.T) {
 }
 
 func TestHandleAPIFilesReadRequiresPath(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(http.MethodPost, "/api/files/read", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -114,7 +114,7 @@ func TestHandleAPIFilesReadRequiresPath(t *testing.T) {
 }
 
 func TestHandleAPIStatusUsesHTTPPollingWhenWSDisconnected(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	server.mu.Lock()
 	server.lastPollTime = time.Now()
 	server.mu.Unlock()
@@ -134,19 +134,28 @@ func TestHandleAPIStatusUsesHTTPPollingWhenWSDisconnected(t *testing.T) {
 	if payload["mode"] != "http_polling" {
 		t.Fatalf("mode = %v, want http_polling", payload["mode"])
 	}
-	if asInt(payload["ws_port"]) != 8765 {
-		t.Fatalf("ws_port = %v, want 8765", payload["ws_port"])
+	if asInt(payload["port"]) != 7654 {
+		t.Fatalf("port = %v, want 7654", payload["port"])
+	}
+	if asInt(payload["ws_port"]) != 7654 {
+		t.Fatalf("ws_port = %v, want 7654", payload["ws_port"])
 	}
 	if asInt(payload["http_port"]) != 7654 {
 		t.Fatalf("http_port = %v, want 7654", payload["http_port"])
 	}
-	if asInt(payload["proxy_port"]) != 8080 {
-		t.Fatalf("proxy_port = %v, want 8080", payload["proxy_port"])
+	if asInt(payload["proxy_port"]) != 7654 {
+		t.Fatalf("proxy_port = %v, want 7654", payload["proxy_port"])
+	}
+	if payload["ws_path"] != "/ws" {
+		t.Fatalf("ws_path = %v, want /ws", payload["ws_path"])
+	}
+	if payload["openai_path"] != "/v1/chat/completions" {
+		t.Fatalf("openai_path = %v, want /v1/chat/completions", payload["openai_path"])
 	}
 }
 
 func TestHandleAPISQLiteTablesRequiresDatabase(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(http.MethodPost, "/api/sqlite/tables", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -163,7 +172,7 @@ func TestHandleAPISQLiteTablesRequiresDatabase(t *testing.T) {
 }
 
 func TestHandleAPISQLiteQueryRequiresDatabaseAndSQL(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(http.MethodPost, "/api/sqlite/query", strings.NewReader(`{"database":"chat"}`))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -180,7 +189,7 @@ func TestHandleAPISQLiteQueryRequiresDatabaseAndSQL(t *testing.T) {
 }
 
 func TestHandleAPISQLiteQueryForwardsToDeviceCommand(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/sqlite/query",
@@ -233,7 +242,7 @@ func TestHandleAPISQLiteQueryForwardsToDeviceCommand(t *testing.T) {
 }
 
 func TestHandleAPIAppConfigSetRequiresKey(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(http.MethodPost, "/api/app-config/set", strings.NewReader(`{"value":"true"}`))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -250,7 +259,7 @@ func TestHandleAPIAppConfigSetRequiresKey(t *testing.T) {
 }
 
 func TestHandleAPIAppConfigSetForwardsToDeviceCommand(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/app-config/set",
@@ -305,7 +314,7 @@ func TestHandleAPIAppConfigSetForwardsToDeviceCommand(t *testing.T) {
 }
 
 func TestHandleAPIProviderUpsertRequiresNameWhenCreating(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(http.MethodPost, "/api/providers/upsert", strings.NewReader(`{"base_url":"https://api.example.com/v1"}`))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -322,7 +331,7 @@ func TestHandleAPIProviderUpsertRequiresNameWhenCreating(t *testing.T) {
 }
 
 func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/providers/upsert",
@@ -386,7 +395,7 @@ func TestHandleAPIProviderUpsertForwardsToDeviceCommand(t *testing.T) {
 }
 
 func TestHandleAPIProviderModelUpsertRequiresProviderID(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(http.MethodPost, "/api/providers/models/upsert", strings.NewReader(`{"model_name":"gpt-test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -403,7 +412,7 @@ func TestHandleAPIProviderModelUpsertRequiresProviderID(t *testing.T) {
 }
 
 func TestHandleAPIProviderModelUpsertForwardsToDeviceCommand(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/providers/models/upsert",

@@ -283,7 +283,7 @@ public struct LocalDebugView: View {
     }
 
     private var serverAddressPlaceholder: String {
-        server.useHTTP ? "192.168.1.100:7654" : "192.168.1.100:8765"
+        "192.168.1.100:7654"
     }
 
     private var hasPendingOpenAIRequest: Bool {
@@ -370,7 +370,7 @@ private struct WatchDocumentationView: View {
                     Text(NSLocalizedString("WebSocket 模式", comment: ""))
                         .etFont(.caption)
                         .fontWeight(.semibold)
-                    Text(NSLocalizedString("设备主动连接电脑端服务器（端口 8765），实时接收命令", comment: ""))
+                    Text(NSLocalizedString("设备主动连接电脑端服务器（端口 7654），实时接收命令", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                     
@@ -414,7 +414,7 @@ private struct WatchDocumentationView: View {
             Section(NSLocalizedString("API 代理", comment: "")) {
                 Text(NSLocalizedString("设置 API Base URL 为:", comment: ""))
                     .etFont(.caption2)
-                Text(NSLocalizedString("http://电脑IP:8080", comment: ""))
+                Text(NSLocalizedString("http://电脑IP:7654/v1", comment: ""))
                     .etFont(.system(size: 10).monospaced())
                     .foregroundStyle(.blue)
                 Text(NSLocalizedString("请求将重定向至调试端进行记录。", comment: ""))

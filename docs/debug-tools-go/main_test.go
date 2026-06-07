@@ -7,7 +7,7 @@ import (
 )
 
 func TestSendCommandFallbackToQueueWhenNoWebSocket(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 
 	ok := server.sendCommand(map[string]any{"command": "ping"})
 	if !ok {
@@ -19,7 +19,7 @@ func TestSendCommandFallbackToQueueWhenNoWebSocket(t *testing.T) {
 }
 
 func TestSendCommandWithResponseCanResolveByRequestID(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	requestID := "req_test_ok"
 	resultCh := make(chan struct {
 		resp map[string]any
@@ -69,7 +69,7 @@ func TestSendCommandWithResponseCanResolveByRequestID(t *testing.T) {
 }
 
 func TestSendCommandWithResponseTimeout(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	requestID := "req_timeout"
 
 	resp, err := server.sendCommandWithResponse(map[string]any{
@@ -97,15 +97,16 @@ func TestSendCommandWithResponseTimeout(t *testing.T) {
 }
 
 func TestBonjourTXTRecordsExposePorts(t *testing.T) {
-	server := NewDebugServer("127.0.0.1", 8765, 7654, 8080)
+	server := NewDebugServer("127.0.0.1", 7654)
 	records := strings.Join(server.bonjourTXTRecords(), "\n")
 
 	for _, want := range []string{
 		"proto=etos-debug-v1",
 		"host=",
+		"port=7654",
 		"http_port=7654",
-		"ws_port=8765",
-		"proxy_port=8080",
+		"ws_path=/ws",
+		"openai_path=/v1/chat/completions",
 	} {
 		if !strings.Contains(records, want) {
 			t.Fatalf("Bonjour TXT 缺少 %q，当前记录: %v", want, records)
@@ -119,5 +120,19 @@ func TestBonjourInstanceNameFallback(t *testing.T) {
 	}
 	if got := bonjourInstanceName("MacBook"); got != "ETOS Debug MacBook" {
 		t.Fatalf("实例名 = %q, want ETOS Debug MacBook", got)
+	}
+}
+
+func TestParsePortFromArgsUsesSingleDebugPort(t *testing.T) {
+	port, err := parsePortFromArgs([]string{"etos-debug", "7655"})
+	if err != nil {
+		t.Fatalf("parsePortFromArgs 返回错误: %v", err)
+	}
+	if port != 7655 {
+		t.Fatalf("port = %d, want 7655", port)
+	}
+
+	if _, err := parsePortFromArgs([]string{"etos-debug", "8765", "7654", "8080"}); err == nil {
+		t.Fatal("旧三端口参数未返回错误")
 	}
 }

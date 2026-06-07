@@ -14,25 +14,15 @@ public struct LocalDebugDiscoveredServer: Identifiable, Hashable, Sendable {
     public let id: String
     public let name: String
     public let host: String
-    public let httpPort: Int
-    public let webSocketPort: Int
-    public let proxyPort: Int
+    public let port: Int
     public let lastSeenAt: Date
 
-    public var httpAddress: String {
-        "\(host):\(httpPort)"
+    public var address: String {
+        "\(host):\(port)"
     }
 
-    public var webSocketAddress: String {
-        "\(host):\(webSocketPort):\(httpPort)"
-    }
-
-    public var proxyAddress: String {
-        "\(host):\(proxyPort)"
-    }
-
-    public func connectionAddress(useHTTP: Bool) -> String {
-        useHTTP ? httpAddress : webSocketAddress
+    public func connectionAddress(useHTTP _: Bool) -> String {
+        address
     }
 }
 
@@ -131,17 +121,13 @@ public final class LocalDebugServerDiscovery: ObservableObject {
 
         let txt = txtRecordDictionary(from: result.metadata)
         guard let host = preferredHost(in: txt, name: name, domain: domain) else { return nil }
-        let httpPort = intValue(in: txt, keys: ["http_port", "http"]) ?? 7654
-        let webSocketPort = intValue(in: txt, keys: ["ws_port", "ws"]) ?? 8765
-        let proxyPort = intValue(in: txt, keys: ["proxy_port", "proxy"]) ?? 8080
+        let port = intValue(in: txt, keys: ["port", "http_port", "http"]) ?? 7654
 
         return LocalDebugDiscoveredServer(
             id: "\(name)|\(type)|\(domain)",
             name: name,
             host: host,
-            httpPort: httpPort,
-            webSocketPort: webSocketPort,
-            proxyPort: proxyPort,
+            port: port,
             lastSeenAt: Date()
         )
     }

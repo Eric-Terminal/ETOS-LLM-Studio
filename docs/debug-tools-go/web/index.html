@@ -638,9 +638,9 @@
           <div>连接模式</div><div id="ovMode">-</div>
           <div>命令队列</div><div id="ovQueue">-</div>
           <div>挂起请求</div><div id="ovPending">-</div>
-          <div>WebSocket 端口</div><div id="ovWSPort">-</div>
-          <div>WebUI 端口</div><div id="ovHTTPPort">-</div>
-          <div>代理端口</div><div id="ovProxyPort">-</div>
+          <div>服务端口</div><div id="ovPort">-</div>
+          <div>WebSocket 路径</div><div id="ovWSPath">-</div>
+          <div>OpenAI 捕获</div><div id="ovOpenAIPath">-</div>
         </div>
         <div class="footer-note">设备需要先在 App 的高级诊断中连接当前电脑，支持 WebSocket 或 HTTP 轮询。</div>
       </div>
@@ -1128,9 +1128,9 @@
       el('ovMode').textContent = status.mode || '-'
       el('ovQueue').textContent = String(status.queue_size ?? '-')
       el('ovPending').textContent = String(status.pending_requests ?? '-')
-      el('ovWSPort').textContent = String(status.ws_port ?? '-')
-      el('ovHTTPPort').textContent = String(status.http_port ?? '-')
-      el('ovProxyPort').textContent = String(status.proxy_port ?? '-')
+      el('ovPort').textContent = String(status.port ?? status.http_port ?? '-')
+      el('ovWSPath').textContent = String(status.ws_path ?? '/ws')
+      el('ovOpenAIPath').textContent = String(status.openai_path ?? '/v1/chat/completions')
     } catch (error) {
       el('connDot').classList.remove('ok')
       el('connText').textContent = `状态查询失败：${error.message}`

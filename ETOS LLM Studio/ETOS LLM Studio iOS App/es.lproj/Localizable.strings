@@ -4016,3 +4016,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "系统打开了一个数据库快照文件。确认来源可信后再恢复。" = "El sistema abrió un archivo de snapshot de base de datos. Restáuralo solo después de confirmar que la fuente es confiable.";
 "正在检查快照…" = "Comprobando snapshot…";
 "正在恢复快照…" = "Restaurando snapshot…";
+
+"调试服务默认端口: 7654（HTTP、WebSocket 与 OpenAI 捕获共用）" = "Debug service default port: 7654 (shared by HTTP, WebSocket, and OpenAI capture)";
+"http://电脑IP:7654/v1" = "http://computer-ip:7654/v1";
+"设备主动连接电脑端服务器（端口 7654），实时接收命令" = "The device actively connects to the computer server (port 7654) to receive commands in real time.";

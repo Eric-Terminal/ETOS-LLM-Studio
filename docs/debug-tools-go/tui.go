@@ -398,16 +398,13 @@ func (m tuiModel) renderStatusLine() string {
 		dot = tuiOKStyle.Render("●")
 	}
 	return fmt.Sprintf(
-		"%s %s | %s | WS %s:%d | HTTP/Web %s:%d | Proxy %s:%d",
+		"%s %s | %s | %s:%d | WS %s | OpenAI /v1",
 		dot,
 		m.status.mode,
 		m.status.deviceName,
 		m.localIP,
-		m.server.wsPort,
-		m.localIP,
-		m.server.httpPort,
-		m.localIP,
-		m.server.proxyPort,
+		m.server.port,
+		wsPath,
 	)
 }
 
@@ -437,20 +434,17 @@ func (m tuiModel) renderActiveView() string {
 func (m tuiModel) renderDashboard() string {
 	lines := []string{
 		"连接",
-		fmt.Sprintf("  设备: %s", m.status.deviceName),
-		fmt.Sprintf("  模式: %s", m.status.mode),
-		fmt.Sprintf("  待发命令: %d", m.status.queueSize),
-		fmt.Sprintf("  等待响应: %d", m.status.pendingRequests),
+		fmt.Sprintf("  设备/模式: %s / %s", m.status.deviceName, m.status.mode),
+		fmt.Sprintf("  队列/等待: %d / %d", m.status.queueSize, m.status.pendingRequests),
 		"",
 		"地址",
-		fmt.Sprintf("  WebSocket: ws://%s:%d", m.localIP, m.server.wsPort),
-		fmt.Sprintf("  HTTP/Web: http://%s:%d", m.localIP, m.server.httpPort),
-		fmt.Sprintf("  OpenAI 代理: http://%s:%d/v1/chat/completions", m.localIP, m.server.proxyPort),
-		fmt.Sprintf("  Bonjour: %s -> HTTP %d", bonjourServiceType, m.server.httpPort),
+		fmt.Sprintf("  HTTP/WebUI: http://%s:%d", m.localIP, m.server.port),
+		fmt.Sprintf("  WebSocket: ws://%s:%d%s", m.localIP, m.server.port, wsPath),
+		fmt.Sprintf("  OpenAI: http://%s:%d/v1", m.localIP, m.server.port),
+		fmt.Sprintf("  Bonjour: %s -> %d", bonjourServiceType, m.server.port),
 		"",
 		"快速开始",
-		"  设备端可自动发现 Bonjour 服务；也可以手动填入上方地址。",
-		"  WebUI 与 TUI 共用同一组 /api/* 接口。",
+		"  设备端可自动发现，也可以手动填入地址。",
 	}
 	return strings.Join(lines, "\n")
 }
