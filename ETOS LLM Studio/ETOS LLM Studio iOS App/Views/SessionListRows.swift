@@ -283,7 +283,7 @@ struct SessionRow: View {
 
         Divider()
 
-        SessionTagQuickColorPalette(
+        SessionTagQuickColorMenuItems(
             selectedColors: quickColorMarkers,
             onSelect: onToggleQuickColor
         )

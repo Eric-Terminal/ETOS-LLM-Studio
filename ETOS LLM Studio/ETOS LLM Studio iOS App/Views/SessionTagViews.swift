@@ -321,19 +321,15 @@ struct SessionTagAssignmentView: View {
     }
 }
 
-struct SessionTagQuickColorPalette: View {
+struct SessionTagQuickColorMenuItems: View {
     let selectedColors: Set<SessionTagColor>
     let onSelect: (SessionTagColor?) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            colorButton(nil, title: NSLocalizedString("无颜色", comment: "No session tag color"))
-            ForEach(SessionTagColor.allCases) { color in
-                colorButton(color, title: color.localizedName)
-            }
+        colorButton(nil, title: NSLocalizedString("无颜色", comment: "No session tag color"))
+        ForEach(SessionTagColor.allCases) { color in
+            colorButton(color, title: color.localizedName)
         }
-        .buttonStyle(.plain)
-        .padding(.vertical, 2)
     }
 
     private func colorButton(_ color: SessionTagColor?, title: String) -> some View {
@@ -341,19 +337,12 @@ struct SessionTagQuickColorPalette: View {
         return Button {
             onSelect(color)
         } label: {
-            ZStack {
-                Circle()
-                    .fill(color?.uiColor ?? Color.clear)
-                Circle()
-                    .strokeBorder(color == nil ? Color.secondary : Color.primary.opacity(0.2), lineWidth: color == nil ? 1.4 : 0.8)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(color == nil ? Color.primary : Color.white)
-                }
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle.fill")
+                    .foregroundStyle(color?.uiColor ?? Color.secondary)
             }
-            .frame(width: 22, height: 22)
-            .contentShape(Circle())
         }
         .accessibilityLabel(title)
     }
