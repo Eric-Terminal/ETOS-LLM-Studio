@@ -69,7 +69,6 @@ public class LocalDebugServer: ObservableObject {
     var wsConnection: NWConnection?
     let queue = DispatchQueue(label: "com.etos.localdebug", qos: .userInitiated)
     var pendingOpenAIRequests: [PendingOpenAIRequest] = []
-    var permissionProbeConnection: NWConnection?
 
     var httpPollingTimer: Timer?
     var httpSession: URLSession?

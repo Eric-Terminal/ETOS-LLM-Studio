@@ -15,6 +15,7 @@ extension LocalDebugServer {
     @MainActor
     func performHTTPConnection(host: String, port: String) {
         logger.info("开始 HTTP 轮询模式，目标: \(host):\(port)")
+        connectionStatus = NSLocalizedString("连接中...", comment: "")
 
         let config = NetworkSessionConfiguration.makeConfiguration()
         config.httpMaximumConnectionsPerHost = 4

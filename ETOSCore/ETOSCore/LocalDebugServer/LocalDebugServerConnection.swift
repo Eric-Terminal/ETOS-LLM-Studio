@@ -3,202 +3,23 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件负责本地调试客户端的地址解析、本地网络权限探测、
-// WebSocket 连接生命周期，以及调试命令的统一分发。
+// 本文件负责本地调试客户端的地址解析、连接生命周期，以及调试命令的统一分发。
 // ============================================================================
 
 import Foundation
 import Network
 import os.log
-#if os(iOS)
-import UIKit
-#elseif os(watchOS)
+#if os(watchOS)
 import WatchKit
+#elseif os(iOS)
+import UIKit
 #endif
 
-private extension NSLock {
-    func debugServerWithLock<T>(_ block: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try block()
-    }
-}
-
 extension LocalDebugServer {
-    /// 用于线程安全的权限探测状态管理
-    final class PermissionProbeState: @unchecked Sendable {
-        private let lock = NSLock()
-        private var _hasCompleted = false
-        private var _permissionGranted = false
-
-        var hasCompleted: Bool {
-            get { lock.debugServerWithLock { _hasCompleted } }
-            set { lock.debugServerWithLock { _hasCompleted = newValue } }
-        }
-
-        var permissionGranted: Bool {
-            get { lock.debugServerWithLock { _permissionGranted } }
-            set { lock.debugServerWithLock { _permissionGranted = newValue } }
-        }
-
-        /// 原子性地检查并设置完成状态，返回是否是第一次完成
-        func tryComplete() -> Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            if _hasCompleted {
-                return false
-            }
-            _hasCompleted = true
-            return true
-        }
-    }
-
     struct ParsedDebugAddress {
         let host: String
         let wsPort: String
         let httpPort: String
-    }
-
-    /// 触发本地网络权限请求
-    /// 只在真机上执行，模拟器会直接跳过（避免 "Network is down" 错误）
-    func triggerLocalNetworkPermission(host: String, completion: @escaping @Sendable () -> Void) {
-        #if targetEnvironment(simulator)
-        logger.info("检测到模拟器环境，跳过权限检查")
-        completion()
-        return
-        #else
-        logger.info("真机环境：触发本地网络权限请求...")
-
-        // 使用目标端口而不是端口 1；watchOS 需要实际尝试连接真实服务端口才会触发权限。
-        let targetPort: UInt16
-        if let portNum = UInt16(host.components(separatedBy: ":").last ?? "8765") {
-            targetPort = portNum
-        } else {
-            targetPort = 8765
-        }
-
-        let actualHost = host.components(separatedBy: ":").first ?? host
-        logger.info("尝试连接到 \(actualHost):\(targetPort) 以触发权限")
-
-        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(actualHost), port: NWEndpoint.Port(rawValue: targetPort)!)
-        let params = NWParameters.tcp
-        params.prohibitedInterfaceTypes = [.cellular]
-        params.serviceClass = .responsiveData
-
-        #if os(watchOS)
-        params.requiredInterfaceType = .wifi
-        #endif
-
-        let probeConnection = NWConnection(to: endpoint, using: params)
-
-        Task { @MainActor [weak self] in
-            self?.permissionProbeConnection = probeConnection
-        }
-
-        let probeState = PermissionProbeState()
-
-        probeConnection.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-
-            let logMessage = "权限探测状态: \(String(describing: state))"
-            Task { @MainActor in
-                self.logger.info("\(logMessage)")
-            }
-
-            switch state {
-            case .ready:
-                guard probeState.tryComplete() else { return }
-                probeState.permissionGranted = true
-                Task { @MainActor in
-                    self.logger.info("权限探测成功，连接已建立")
-                }
-                probeConnection.cancel()
-                Task { @MainActor [weak self] in
-                    self?.permissionProbeConnection = nil
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    completion()
-                }
-
-            case .failed(let error):
-                guard probeState.tryComplete() else { return }
-                let errorDesc = error.localizedDescription.lowercased()
-
-                if errorDesc.contains("connection refused") || errorDesc.contains("拒绝") {
-                    probeState.permissionGranted = true
-                    Task { @MainActor in
-                        self.logger.info("权限已授予（连接被拒绝是正常的）")
-                    }
-                } else if errorDesc.contains("timed out") || errorDesc.contains("超时") {
-                    probeState.permissionGranted = true
-                    Task { @MainActor in
-                        self.logger.info("探测超时，假设权限已授予")
-                    }
-                } else {
-                    Task { @MainActor in
-                        self.logger.warning("探测失败: \(error.localizedDescription)")
-                    }
-                }
-
-                probeConnection.cancel()
-                Task { @MainActor [weak self] in
-                    self?.permissionProbeConnection = nil
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    completion()
-                }
-
-            case .waiting(let error):
-                Task { @MainActor in
-                    self.logger.info("等待网络（可能是权限弹窗）: \(error.localizedDescription)")
-                }
-
-            case .preparing:
-                Task { @MainActor in
-                    self.logger.info("准备连接...")
-                }
-
-            case .setup:
-                Task { @MainActor in
-                    self.logger.info("设置连接...")
-                }
-
-            case .cancelled:
-                guard probeState.tryComplete() else { return }
-                Task { @MainActor in
-                    self.logger.info("探测被取消")
-                }
-                completion()
-
-            @unknown default:
-                Task { @MainActor in
-                    self.logger.warning("未知状态: \(String(describing: state))")
-                }
-            }
-        }
-
-        probeConnection.start(queue: queue)
-
-        DispatchQueue.global().asyncAfter(deadline: .now() + 10.0) { [weak self] in
-            guard probeState.tryComplete() else { return }
-
-            if probeState.permissionGranted {
-                Task { @MainActor in
-                    self?.logger.info("权限检查完成（已授予）")
-                }
-            } else {
-                Task { @MainActor in
-                    self?.logger.warning("权限检查超时，强制继续")
-                }
-            }
-
-            probeConnection.cancel()
-            Task { @MainActor [weak self] in
-                self?.permissionProbeConnection = nil
-            }
-            completion()
-        }
-        #endif
     }
 
     /// 解析调试服务器地址
@@ -250,23 +71,11 @@ extension LocalDebugServer {
         if useHTTP {
             logger.info("使用 HTTP 轮询模式")
             serverURL = "\(parsed.host):\(parsed.httpPort)"
-            connectionStatus = NSLocalizedString("正在请求权限...", comment: "")
-            triggerLocalNetworkPermission(host: "\(parsed.host):\(parsed.httpPort)") { [weak self] in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.performHTTPConnection(host: parsed.host, port: parsed.httpPort)
-                }
-            }
+            performHTTPConnection(host: parsed.host, port: parsed.httpPort)
         } else {
             wsAutoFallbackEnabled = true
             serverURL = "\(parsed.host):\(parsed.wsPort)"
-            connectionStatus = NSLocalizedString("正在请求权限...", comment: "")
-            triggerLocalNetworkPermission(host: "\(parsed.host):\(parsed.wsPort)") { [weak self] in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.performConnection(host: parsed.host, port: parsed.wsPort)
-                }
-            }
+            performConnection(host: parsed.host, port: parsed.wsPort)
         }
     }
 
@@ -359,9 +168,6 @@ extension LocalDebugServer {
     /// 断开连接
     @MainActor
     public func disconnect() {
-        permissionProbeConnection?.cancel()
-        permissionProbeConnection = nil
-
         httpPollingTimer?.invalidate()
         httpPollingTimer = nil
         httpFailureCount = 0
