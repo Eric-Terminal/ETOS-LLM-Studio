@@ -60,6 +60,43 @@ struct WatchSyncManagerTests {
         #expect(AppConfigKey.syncAutoSyncEnabled.participatesInSync == false)
     }
 
+    @Test("Watch 库级覆盖默认推荐更新时间较新的平台")
+    func testWatchDatabasePlanRecommendsLatestPlatform() {
+        let localDate = Date(timeIntervalSince1970: 100)
+        let remoteDate = Date(timeIntervalSince1970: 200)
+        let plan = WatchSyncDatabasePlan(
+            local: WatchSyncDatabaseMetadataPacket(
+                sourcePlatform: "iOS",
+                databases: [
+                    WatchSyncDatabaseMetadata(kind: .chat, sourcePlatform: "iOS", updatedAt: localDate, byteSize: 1),
+                    WatchSyncDatabaseMetadata(kind: .config, sourcePlatform: "iOS", updatedAt: remoteDate, byteSize: 1),
+                    WatchSyncDatabaseMetadata(kind: .memory, sourcePlatform: "iOS", updatedAt: localDate, byteSize: 1)
+                ]
+            ),
+            remote: WatchSyncDatabaseMetadataPacket(
+                sourcePlatform: "watchOS",
+                databases: [
+                    WatchSyncDatabaseMetadata(kind: .chat, sourcePlatform: "watchOS", updatedAt: remoteDate, byteSize: 1),
+                    WatchSyncDatabaseMetadata(kind: .config, sourcePlatform: "watchOS", updatedAt: localDate, byteSize: 1),
+                    WatchSyncDatabaseMetadata(kind: .memory, sourcePlatform: "watchOS", updatedAt: nil, byteSize: 1)
+                ]
+            )
+        )
+
+        #expect(plan.recommendedSourcePlatform(for: .chat) == "watchOS")
+        #expect(plan.recommendedSourcePlatform(for: .config) == "iOS")
+        #expect(plan.recommendedSourcePlatform(for: .memory) == "iOS")
+    }
+
+    @Test("Watch 库级覆盖摘要反映被替换的分库")
+    func testWatchDatabaseOverwriteSummaryReflectsSelectedKinds() {
+        let summary = WatchDatabaseSyncService.summary(for: [.chat, .memory])
+
+        #expect(summary.importedSessions == 1)
+        #expect(summary.importedMemories == 1)
+        #expect(summary.importedProviders == 0)
+    }
+
     @Test("接收的同步文件会先复制到稳定位置")
     func testStageIncomingSyncExchangeFile() throws {
         let sandbox = FileManager.default.temporaryDirectory

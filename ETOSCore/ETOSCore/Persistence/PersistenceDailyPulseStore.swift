@@ -16,6 +16,7 @@ extension Persistence {
     public static func saveDailyPulseRuns(_ runs: [DailyPulseRun]) {
         if let store = activeGRDBStore() {
             store.saveDailyPulseRuns(runs)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
@@ -28,6 +29,7 @@ extension Persistence {
         do {
             let data = try encoder.encode(runs)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } catch {
             logger.error("保存每日脉冲记录失败: \(error.localizedDescription)")
@@ -59,6 +61,7 @@ extension Persistence {
     public static func saveDailyPulseFeedbackHistory(_ history: [DailyPulseFeedbackEvent]) {
         if let store = activeGRDBStore() {
             store.saveDailyPulseFeedbackHistory(history)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
@@ -71,6 +74,7 @@ extension Persistence {
         do {
             let data = try encoder.encode(history)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } catch {
             logger.error("保存每日脉冲反馈历史失败: \(error.localizedDescription)")
@@ -102,6 +106,7 @@ extension Persistence {
     public static func saveDailyPulsePendingCuration(_ note: DailyPulseCurationNote?) {
         if let store = activeGRDBStore() {
             store.saveDailyPulsePendingCuration(note)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
@@ -110,6 +115,7 @@ extension Persistence {
 
         guard let note else {
             try? removeItemIfExists(at: fileURL)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
@@ -121,6 +127,7 @@ extension Persistence {
         do {
             let data = try encoder.encode(note)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } catch {
             logger.error("保存每日脉冲策展输入失败: \(error.localizedDescription)")
@@ -152,6 +159,7 @@ extension Persistence {
     public static func saveDailyPulseExternalSignals(_ signals: [DailyPulseExternalSignal]) {
         if let store = activeGRDBStore() {
             store.saveDailyPulseExternalSignals(signals)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
@@ -164,6 +172,7 @@ extension Persistence {
         do {
             let data = try encoder.encode(signals)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } catch {
             logger.error("保存每日脉冲外部信号历史失败: \(error.localizedDescription)")
@@ -195,6 +204,7 @@ extension Persistence {
     public static func saveDailyPulseTasks(_ tasks: [DailyPulseTask]) {
         if let store = activeGRDBStore() {
             store.saveDailyPulseTasks(tasks)
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
             return
         }
@@ -207,6 +217,7 @@ extension Persistence {
         do {
             let data = try encoder.encode(tasks)
             try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+            WatchDatabaseSyncService.markDatabaseChanged(.chat)
             NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
         } catch {
             logger.error("保存每日脉冲任务失败: \(error.localizedDescription)")

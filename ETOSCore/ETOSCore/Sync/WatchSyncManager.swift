@@ -2,10 +2,9 @@
 // WatchSyncManager.swift
 // ============================================================================
 // 利用 WatchConnectivity 在 iPhone 与 Apple Watch 之间同步应用数据
-// - 支持双向同步：双方比较差异后合并
+// - 默认通过库级覆盖解决分叉数据；旧双向合并仅作为用户确认后的风险选项
 // - 小载荷优先使用 sendMessage，较大载荷继续使用文件传输
-// - 在接收端应用 SyncEngine 合并数据，并自动回传
-// - 支持启动时自动同步，静默处理失败，成功发送通知
+// - 支持单个会话发送，方便用户在覆盖前手动保留重要对话
 // ============================================================================
 
 import Foundation
@@ -72,6 +71,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private static let inlineExchangeKind = "com.ETOS.watchSync.exchange.inline.v1"
     private static let quickAppConfigKind = "com.ETOS.watchSync.appConfig.quick.v1"
     private static let cloudSyncRemoteChangeKind = "com.ETOS.watchSync.cloudSync.remoteChange.v1"
+    private static let databaseMetadataRequestKind = "com.ETOS.watchSync.database.metadata.request.v1"
+    private static let databaseArchiveRequestKind = "com.ETOS.watchSync.database.archive.request.v1"
+    private static let databaseArchiveKind = "com.ETOS.watchSync.database.archive.v1"
     private static let senderSyncEnabledKey = "senderSyncEnabled"
     private static let inlineExchangePayloadLimit = 60 * 1024
     
@@ -88,17 +90,30 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         return WCSession.default
     }
     
+    private enum PendingTransferKind {
+        case syncExchange
+        case databaseArchive
+    }
+
     private struct PendingTransferContext {
         let expectsResponse: Bool
         let operationID: UUID?
         let isSilent: Bool
         let marksSuccessWhenFinished: Bool
         let fileURL: URL?
+        let transferKind: PendingTransferKind
     }
 
     private struct ActiveSyncOperation {
         let id: UUID
         var isSilent: Bool
+    }
+
+    private struct ActiveDatabaseSyncOperation {
+        let id: UUID
+        var waitingForOutboundArchive: Bool
+        var waitingForIncomingArchive: Bool
+        var summary: SyncMergeSummary
     }
 
     private struct SyncExchangePacket: Codable {
@@ -119,6 +134,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private var pendingTransfers: [ObjectIdentifier: PendingTransferContext] = [:]
     private let syncChannel = "watch.connectivity"
     private var activeSyncOperation: ActiveSyncOperation?
+    private var activeDatabaseSyncOperation: ActiveDatabaseSyncOperation?
     private static var shouldSkipUserNotificationsForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -134,7 +150,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     
     // MARK: - Public API
     
-    /// 执行双向同步：发送本地数据并接收对端数据
+    /// 旧双向合并同步：仅在用户明确确认风险后调用。
     public func performSync(options: SyncOptions, silent: Bool = false) {
         guard validateSessionBeforeTransfer(options: options, silent: silent) != nil else { return }
 
@@ -200,6 +216,105 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             await MainActor.run { [weak self] in
                 self?.sendExchange(payload: payload)
             }
+        }
+    }
+
+    /// 读取双方三处分库的更新时间，用于让用户选择保留哪一端。
+    public func fetchDatabaseSyncPlan() async throws -> WatchSyncDatabasePlan {
+        guard let session = validateSessionBeforeTransfer(options: .fullSync, silent: false) else {
+            throw makeWatchSyncError(NSLocalizedString("无法连接到配对设备。", comment: ""))
+        }
+        guard session.isReachable else {
+            let message = NSLocalizedString("请保持 iPhone 与 Apple Watch 当前在线后再选择库级覆盖。", comment: "")
+            state = .failed(message)
+            throw makeWatchSyncError(message)
+        }
+
+        let remoteReply = try await sendReachableMessage([
+            "kind": Self.databaseMetadataRequestKind,
+            Self.senderSyncEnabledKey: isWatchConnectivitySyncEnabled(),
+            "timestamp": Date().timeIntervalSince1970
+        ])
+        guard let accepted = remoteReply["accepted"] as? Bool, accepted,
+              let metadataData = remoteReply["metadata"] as? Data else {
+            let message = NSLocalizedString("对端未返回数据库同步信息。", comment: "")
+            state = .failed(message)
+            throw makeWatchSyncError(message)
+        }
+
+        let remotePacket = try JSONDecoder().decode(WatchSyncDatabaseMetadataPacket.self, from: metadataData)
+        let localPacket = try await Task.detached(priority: .userInitiated) {
+            WatchDatabaseSyncService.localMetadataPacket()
+        }.value
+        return WatchSyncDatabasePlan(local: localPacket, remote: remotePacket)
+    }
+
+    /// 按用户选择的库级策略覆盖对端或本机数据库。
+    public func performDatabaseOverwriteSync(resolutions: [WatchSyncDatabaseResolution]) {
+        guard let session = validateSessionBeforeTransfer(options: .fullSync, silent: false) else { return }
+        guard session.isReachable else {
+            state = .failed(NSLocalizedString("请保持 iPhone 与 Apple Watch 当前在线后再开始库级覆盖。", comment: ""))
+            return
+        }
+        guard activeDatabaseSyncOperation == nil else { return }
+
+        guard let operationID = beginSyncOperation(
+            silent: false,
+            allowReuseExisting: false,
+            stateMessage: NSLocalizedString("正在准备库级覆盖…", comment: "")
+        ) else { return }
+
+        let localPlatform = SyncEngine.currentPlatformName
+        let localKinds = Set(resolutions.compactMap { resolution in
+            resolution.sourcePlatform == localPlatform ? resolution.kind : nil
+        })
+        let remoteKinds = Set(resolutions.compactMap { resolution in
+            resolution.sourcePlatform == localPlatform ? nil : resolution.kind
+        })
+
+        activeDatabaseSyncOperation = ActiveDatabaseSyncOperation(
+            id: operationID,
+            waitingForOutboundArchive: !localKinds.isEmpty,
+            waitingForIncomingArchive: !remoteKinds.isEmpty,
+            summary: WatchDatabaseSyncService.summary(for: localKinds)
+        )
+
+        if localKinds.isEmpty && remoteKinds.isEmpty {
+            finishDatabaseSyncStep(operationID: operationID, outboundFinished: false, incomingSummary: .empty)
+            return
+        }
+
+        if !localKinds.isEmpty {
+            Task.detached(priority: .userInitiated) {
+                do {
+                    await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                    MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                    let archiveURL = try WatchDatabaseSyncService.buildArchive(for: localKinds)
+                    await MainActor.run { [weak self] in
+                        self?.sendDatabaseArchive(
+                            archiveURL,
+                            replacing: localKinds,
+                            requestID: operationID.uuidString,
+                            silent: false
+                        )
+                    }
+                } catch {
+                    await MainActor.run { [weak self] in
+                        self?.failSyncOperation(
+                            operationID: operationID,
+                            fallbackSilent: false,
+                            message: String(
+                                format: NSLocalizedString("准备库级覆盖失败：%@", comment: ""),
+                                error.localizedDescription
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        if !remoteKinds.isEmpty {
+            requestRemoteDatabaseArchive(replacing: remoteKinds, requestID: operationID.uuidString, silent: false)
         }
     }
 
@@ -276,32 +391,18 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    /// 启动时自动同步（静默模式）
+    /// 旧版启动静默全量合并已停用，避免在无确认时复活对端已删除的数据。
     public func performAutoSyncIfEnabled() {
-        Task { @MainActor in
-            let appConfig = AppConfigStore.shared
-            await appConfig.waitForPersistentStoreLoaded()
-            guard appConfig.syncAutoSyncEnabled else { return }
-            guard isCompanionAvailable else { return }
-
-            let options = buildSyncOptionsFromSettings()
-            guard !options.isEmpty else { return }
-
-            // 延迟一小段时间确保 WCSession 已激活
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            performSync(options: options, silent: true)
-        }
+        activateSessionIfNeeded()
+        refreshCompanionAvailability()
     }
 
-    /// 通过近场在线通道广播单个 AppConfig 键，失败时回退到静默设置同步。
+    /// 通过近场在线通道广播单个 AppConfig 键；不可达时跳过，避免无确认触发旧合并。
     public func performQuickSync(key: String, value: Any) {
         guard watchConnectivitySyncOptions().contains(.appStorage) else { return }
         guard SyncEngine.isPropertyListEncodableValue(value) else { return }
         guard let session = validateSessionBeforeTransfer(options: [.appStorage], silent: true) else { return }
-        guard session.isReachable else {
-            performSync(options: [.appStorage], silent: true)
-            return
-        }
+        guard session.isReachable else { return }
 
         let message: [String: Any] = [
             "kind": Self.quickAppConfigKind,
@@ -310,11 +411,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             Self.senderSyncEnabledKey: isWatchConnectivitySyncEnabled(),
             "timestamp": Date().timeIntervalSince1970
         ]
-        session.sendMessage(message, replyHandler: nil, errorHandler: { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.performSync(options: [.appStorage], silent: true)
-            }
-        })
+        session.sendMessage(message, replyHandler: nil, errorHandler: nil)
     }
 
     /// 将 iCloud 远端变化信号转发给配对端，让 watchOS 在无 APNs 入口时也能拉取云端变更。
@@ -334,6 +431,84 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     /// 从用户设置构建同步选项
     private func buildSyncOptionsFromSettings() -> SyncOptions {
         watchConnectivitySyncOptions()
+    }
+
+    private func sendReachableMessage(_ message: [String: Any]) async throws -> [String: Any] {
+        guard let session else {
+            throw makeWatchSyncError(NSLocalizedString("此设备不支持 WatchConnectivity。", comment: ""))
+        }
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String: Any], Error>) in
+            session.sendMessage(message, replyHandler: { reply in
+                continuation.resume(returning: reply)
+            }, errorHandler: { error in
+                continuation.resume(throwing: error)
+            })
+        }
+    }
+
+    private func requestRemoteDatabaseArchive(
+        replacing kinds: Set<WatchSyncDatabaseKind>,
+        requestID: String,
+        silent: Bool
+    ) {
+        guard let session else { return }
+        let message: [String: Any] = [
+            "kind": Self.databaseArchiveRequestKind,
+            "databaseKinds": kinds.map(\.rawValue),
+            "requestID": requestID,
+            "silent": silent,
+            Self.senderSyncEnabledKey: isWatchConnectivitySyncEnabled(),
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        session.sendMessage(message, replyHandler: { [weak self] reply in
+            guard (reply["accepted"] as? Bool) != false else {
+                Task { @MainActor [weak self] in
+                    self?.failSyncOperation(
+                        operationID: UUID(uuidString: requestID),
+                        fallbackSilent: silent,
+                        message: NSLocalizedString("对端已拒绝发送数据库归档。", comment: "")
+                    )
+                }
+                return
+            }
+        }, errorHandler: { [weak self] error in
+            Task { @MainActor [weak self] in
+                self?.failSyncOperation(
+                    operationID: UUID(uuidString: requestID),
+                    fallbackSilent: silent,
+                    message: String(
+                        format: NSLocalizedString("请求对端数据库失败：%@", comment: ""),
+                        error.localizedDescription
+                    )
+                )
+            }
+        })
+    }
+
+    private func sendDatabaseArchive(
+        _ archiveURL: URL,
+        replacing kinds: Set<WatchSyncDatabaseKind>,
+        requestID: String?,
+        silent: Bool
+    ) {
+        guard let session else { return }
+        let metadata: [String: Any] = [
+            "kind": Self.databaseArchiveKind,
+            "databaseKinds": kinds.map(\.rawValue),
+            "requestID": requestID ?? "",
+            "silent": silent,
+            Self.senderSyncEnabledKey: isWatchConnectivitySyncEnabled(),
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        let transfer = session.transferFile(archiveURL, metadata: metadata)
+        pendingTransfers[ObjectIdentifier(transfer)] = PendingTransferContext(
+            expectsResponse: false,
+            operationID: requestID.flatMap(UUID.init(uuidString:)),
+            isSilent: silent,
+            marksSuccessWhenFinished: false,
+            fileURL: archiveURL,
+            transferKind: .databaseArchive
+        )
     }
 
     private func validateSessionBeforeTransfer(options: SyncOptions, silent: Bool) -> WCSession? {
@@ -375,6 +550,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
 #endif
 
         return session
+    }
+
+    private func makeWatchSyncError(_ message: String) -> NSError {
+        NSError(domain: "WatchSyncManager", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
     
     // MARK: - Notifications
@@ -472,7 +651,8 @@ public final class WatchSyncManager: NSObject, ObservableObject {
             operationID: payload.requestID.flatMap(UUID.init(uuidString:)),
             isSilent: payload.isSilent,
             marksSuccessWhenFinished: payload.marksSuccessWhenFinished,
-            fileURL: payload.fileURL
+            fileURL: payload.fileURL,
+            transferKind: .syncExchange
         )
 
         if session.isReachable,
@@ -546,6 +726,11 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         error: Error?,
         removeFile: Bool
     ) {
+        if context?.transferKind == .databaseArchive {
+            handleDatabaseArchiveOutboundFinished(context: context, error: error, removeFile: removeFile)
+            return
+        }
+
         defer {
             if removeFile, let fileURL = context?.fileURL {
                 try? FileManager.default.removeItem(at: fileURL)
@@ -582,6 +767,37 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
 
+    private func handleDatabaseArchiveOutboundFinished(
+        context: PendingTransferContext?,
+        error: Error?,
+        removeFile: Bool
+    ) {
+        defer {
+            if removeFile, let fileURL = context?.fileURL {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
+
+        if let error {
+            failSyncOperation(
+                operationID: context?.operationID,
+                fallbackSilent: context?.isSilent ?? false,
+                message: String(
+                    format: NSLocalizedString("发送数据库归档失败：%@", comment: ""),
+                    error.localizedDescription
+                )
+            )
+            return
+        }
+
+        guard let context else { return }
+        finishDatabaseSyncStep(
+            operationID: context.operationID,
+            outboundFinished: true,
+            incomingSummary: nil
+        )
+    }
+
     private func isSyncSilent(operationID: UUID?, fallback: Bool) -> Bool {
         guard let operationID,
               let activeSyncOperation,
@@ -594,6 +810,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private func failSyncOperation(operationID: UUID?, fallbackSilent: Bool, message: String) {
         if !isSyncSilent(operationID: operationID, fallback: fallbackSilent) {
             state = .failed(message)
+        }
+        if let operationID, activeDatabaseSyncOperation?.id == operationID {
+            activeDatabaseSyncOperation = nil
         }
         completeSyncOperationIfNeeded(operationID: operationID)
     }
@@ -624,6 +843,75 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     private func completeSyncOperationIfNeeded(operationID: UUID?) {
         guard let operationID, activeSyncOperation?.id == operationID else { return }
         activeSyncOperation = nil
+    }
+
+    private func finishDatabaseSyncStep(
+        operationID: UUID?,
+        outboundFinished: Bool,
+        incomingSummary: SyncMergeSummary?
+    ) {
+        guard let operationID,
+              var databaseOperation = activeDatabaseSyncOperation,
+              databaseOperation.id == operationID else {
+            return
+        }
+
+        if outboundFinished {
+            databaseOperation.waitingForOutboundArchive = false
+        }
+        if let incomingSummary {
+            databaseOperation.waitingForIncomingArchive = false
+            databaseOperation.summary = combinedSummary(databaseOperation.summary, incomingSummary)
+        }
+        activeDatabaseSyncOperation = databaseOperation
+
+        guard !databaseOperation.waitingForOutboundArchive,
+              !databaseOperation.waitingForIncomingArchive else {
+            return
+        }
+
+        lastSummary = databaseOperation.summary
+        lastUpdatedAt = Date()
+        state = .success(databaseOperation.summary)
+        activeDatabaseSyncOperation = nil
+        completeSyncOperationIfNeeded(operationID: operationID)
+    }
+
+    private func combinedSummary(_ lhs: SyncMergeSummary, _ rhs: SyncMergeSummary) -> SyncMergeSummary {
+        SyncMergeSummary(
+            importedProviders: lhs.importedProviders + rhs.importedProviders,
+            skippedProviders: lhs.skippedProviders + rhs.skippedProviders,
+            importedSessions: lhs.importedSessions + rhs.importedSessions,
+            skippedSessions: lhs.skippedSessions + rhs.skippedSessions,
+            importedBackgrounds: lhs.importedBackgrounds + rhs.importedBackgrounds,
+            skippedBackgrounds: lhs.skippedBackgrounds + rhs.skippedBackgrounds,
+            importedMemories: lhs.importedMemories + rhs.importedMemories,
+            skippedMemories: lhs.skippedMemories + rhs.skippedMemories,
+            importedMCPServers: lhs.importedMCPServers + rhs.importedMCPServers,
+            skippedMCPServers: lhs.skippedMCPServers + rhs.skippedMCPServers,
+            importedAudioFiles: lhs.importedAudioFiles + rhs.importedAudioFiles,
+            skippedAudioFiles: lhs.skippedAudioFiles + rhs.skippedAudioFiles,
+            importedImageFiles: lhs.importedImageFiles + rhs.importedImageFiles,
+            skippedImageFiles: lhs.skippedImageFiles + rhs.skippedImageFiles,
+            importedSkills: lhs.importedSkills + rhs.importedSkills,
+            skippedSkills: lhs.skippedSkills + rhs.skippedSkills,
+            importedShortcutTools: lhs.importedShortcutTools + rhs.importedShortcutTools,
+            skippedShortcutTools: lhs.skippedShortcutTools + rhs.skippedShortcutTools,
+            importedWorldbooks: lhs.importedWorldbooks + rhs.importedWorldbooks,
+            skippedWorldbooks: lhs.skippedWorldbooks + rhs.skippedWorldbooks,
+            importedFeedbackTickets: lhs.importedFeedbackTickets + rhs.importedFeedbackTickets,
+            skippedFeedbackTickets: lhs.skippedFeedbackTickets + rhs.skippedFeedbackTickets,
+            importedDailyPulseRuns: lhs.importedDailyPulseRuns + rhs.importedDailyPulseRuns,
+            skippedDailyPulseRuns: lhs.skippedDailyPulseRuns + rhs.skippedDailyPulseRuns,
+            importedUsageEvents: lhs.importedUsageEvents + rhs.importedUsageEvents,
+            skippedUsageEvents: lhs.skippedUsageEvents + rhs.skippedUsageEvents,
+            importedFontFiles: lhs.importedFontFiles + rhs.importedFontFiles,
+            skippedFontFiles: lhs.skippedFontFiles + rhs.skippedFontFiles,
+            importedFontRouteConfigurations: lhs.importedFontRouteConfigurations + rhs.importedFontRouteConfigurations,
+            skippedFontRouteConfigurations: lhs.skippedFontRouteConfigurations + rhs.skippedFontRouteConfigurations,
+            importedAppStorageValues: lhs.importedAppStorageValues + rhs.importedAppStorageValues,
+            skippedAppStorageValues: lhs.skippedAppStorageValues + rhs.skippedAppStorageValues
+        )
     }
     
     private func applyExchange(
@@ -739,6 +1027,120 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 )
             )
         }
+    }
+
+    private func applyDatabaseArchive(
+        from url: URL,
+        replacing kinds: Set<WatchSyncDatabaseKind>,
+        requestID: String?,
+        silent: Bool
+    ) async {
+        let operationID = requestID.flatMap(UUID.init(uuidString:))
+        let effectiveSilent = isSyncSilent(operationID: operationID, fallback: silent)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let summary = try await Task.detached(priority: .userInitiated) {
+                try WatchDatabaseSyncService.installArchive(at: url, replacing: kinds)
+            }.value
+
+            lastSummary = summary
+            lastUpdatedAt = Date()
+
+            if let operationID, activeDatabaseSyncOperation?.id == operationID {
+                finishDatabaseSyncStep(
+                    operationID: operationID,
+                    outboundFinished: false,
+                    incomingSummary: summary
+                )
+            } else if !effectiveSilent {
+                state = .success(summary)
+            }
+            sendSyncSuccessNotification(summary: summary, silent: effectiveSilent)
+        } catch {
+            failSyncOperation(
+                operationID: operationID,
+                fallbackSilent: effectiveSilent,
+                message: String(
+                    format: NSLocalizedString("应用数据库覆盖失败：%@", comment: ""),
+                    error.localizedDescription
+                )
+            )
+        }
+    }
+
+    private func handleIncomingDatabaseMetadataRequest(
+        _ message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) -> Bool {
+        guard message["kind"] as? String == Self.databaseMetadataRequestKind else { return false }
+        guard isWatchConnectivitySyncEnabled(),
+              message[Self.senderSyncEnabledKey] as? Bool == true else {
+            replyHandler(["accepted": false, "reason": "syncDisabled"])
+            return true
+        }
+
+        Task.detached(priority: .userInitiated) {
+            let packet = WatchDatabaseSyncService.localMetadataPacket()
+            let data = try? JSONEncoder().encode(packet)
+            await MainActor.run {
+                if let data {
+                    replyHandler(["accepted": true, "metadata": data])
+                } else {
+                    replyHandler(["accepted": false])
+                }
+            }
+        }
+        return true
+    }
+
+    private func handleIncomingDatabaseArchiveRequest(
+        _ message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) -> Bool {
+        guard message["kind"] as? String == Self.databaseArchiveRequestKind else { return false }
+        let requestID = message["requestID"] as? String
+        let silent = (message["silent"] as? Bool) ?? false
+        guard isWatchConnectivitySyncEnabled(),
+              message[Self.senderSyncEnabledKey] as? Bool == true else {
+            replyHandler(["accepted": false, "reason": "syncDisabled"])
+            return true
+        }
+        let rawKinds = message["databaseKinds"] as? [String] ?? []
+        let kinds = Set(rawKinds.compactMap(WatchSyncDatabaseKind.init(rawValue:)))
+        guard !kinds.isEmpty else {
+            replyHandler(["accepted": false])
+            return true
+        }
+
+        replyHandler(["accepted": true])
+        Task.detached(priority: .userInitiated) {
+            do {
+                await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
+                MemoryManager.flushCurrentInstancePersistenceWritesForSnapshot()
+                let archiveURL = try WatchDatabaseSyncService.buildArchive(for: kinds)
+                await MainActor.run { [weak self] in
+                    self?.sendDatabaseArchive(
+                        archiveURL,
+                        replacing: kinds,
+                        requestID: requestID,
+                        silent: silent
+                    )
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.failSyncOperation(
+                        operationID: requestID.flatMap(UUID.init(uuidString:)),
+                        fallbackSilent: silent,
+                        message: String(
+                            format: NSLocalizedString("准备对端数据库归档失败：%@", comment: ""),
+                            error.localizedDescription
+                        )
+                    )
+                }
+            }
+        }
+        return true
     }
 
     private func handleIncomingInlineExchangeMessage(
@@ -890,6 +1292,7 @@ extension WatchSyncManager: WCSessionDelegate {
         _ session: WCSession,
         didReceive file: WCSessionFile
     ) {
+        let transferKind = file.metadata?["kind"] as? String
         let isResponse = (file.metadata?["response"] as? Bool) ?? false
         let requestID = file.metadata?["requestID"] as? String
         let expectsResponse = (file.metadata?["expectsResponse"] as? Bool) ?? true
@@ -936,6 +1339,26 @@ extension WatchSyncManager: WCSessionDelegate {
                 return
             }
             let effectiveSilent = self.isSyncSilent(operationID: operationID, fallback: silent)
+            if transferKind == Self.databaseArchiveKind {
+                let rawKinds = file.metadata?["databaseKinds"] as? [String] ?? []
+                let kinds = Set(rawKinds.compactMap(WatchSyncDatabaseKind.init(rawValue:)))
+                guard !kinds.isEmpty else {
+                    self.failSyncOperation(
+                        operationID: operationID,
+                        fallbackSilent: effectiveSilent,
+                        message: NSLocalizedString("数据库覆盖文件缺少库选择。", comment: "")
+                    )
+                    try? FileManager.default.removeItem(at: stagedFileURL)
+                    return
+                }
+                await self.applyDatabaseArchive(
+                    from: stagedFileURL,
+                    replacing: kinds,
+                    requestID: requestID,
+                    silent: effectiveSilent
+                )
+                return
+            }
             await self.applyExchange(
                 from: stagedFileURL,
                 isResponse: isResponse,
@@ -971,6 +1394,12 @@ extension WatchSyncManager: WCSessionDelegate {
             }
             if self.handleIncomingCloudSyncSignal(message) {
                 replyHandler(["accepted": true])
+                return
+            }
+            if self.handleIncomingDatabaseMetadataRequest(message, replyHandler: replyHandler) {
+                return
+            }
+            if self.handleIncomingDatabaseArchiveRequest(message, replyHandler: replyHandler) {
                 return
             }
             if self.handleIncomingInlineExchangeMessage(message, replyHandler: replyHandler) {

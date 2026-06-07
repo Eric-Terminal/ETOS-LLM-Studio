@@ -119,6 +119,26 @@ public final class AppConfigStore: ObservableObject {
     private nonisolated static var shouldSkipRealtimeCloudSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
+    private nonisolated static func shouldTouchWatchConfigDatabase(for key: AppConfigKey) -> Bool {
+        guard key.participatesInSync else { return false }
+        let rawKey = key.rawValue
+        guard !rawKey.hasPrefix("sync."),
+              !rawKey.hasPrefix("cloudSync.") else {
+            return false
+        }
+        switch key {
+        case .chatComposerDraft,
+             .lastActiveSessionID,
+             .appLockEnabled,
+             .appLockTimeoutSeconds,
+             .appLockBiometricEnabled,
+             .databaseEncryptionEnabled,
+             .localDebugLastServerAddress:
+            return false
+        default:
+            return true
+        }
+    }
 
     @Published public var syncProviders: Bool { didSet { write(.syncProviders, syncProviders) } }
     @Published public var syncSessions: Bool { didSet { write(.syncSessions, syncSessions) } }
@@ -579,6 +599,9 @@ public final class AppConfigStore: ObservableObject {
         let normalizedValue = normalizedAppConfigValue(value, for: key)
         guard persist(normalizedValue, for: key) else { return false }
         snapshotCache.set(normalizedValue.anyValue, for: key)
+        if shouldTouchWatchConfigDatabase(for: key) {
+            WatchDatabaseSyncService.markDatabaseChanged(.config)
+        }
         #if canImport(WatchConnectivity)
         if quickSync,
            !shouldSkipQuickSyncForCurrentProcess,
@@ -1058,6 +1081,9 @@ public final class AppConfigStore: ObservableObject {
                 guard shouldWrite else { return }
                 let didWrite = await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
                 if didWrite {
+                    if Self.shouldTouchWatchConfigDatabase(for: key) {
+                        WatchDatabaseSyncService.markDatabaseChanged(.config)
+                    }
                     await MainActor.run {
                         self?.markChatComposerDraftPersisted(normalizedValue)
                     }
@@ -1065,7 +1091,10 @@ public final class AppConfigStore: ObservableObject {
             }
         } else {
             task = Task(priority: .utility) {
-                await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+                let didWrite = await AppConfigPersistenceWorker.shared.write(key: rawKey, value: normalizedValue)
+                if didWrite, Self.shouldTouchWatchConfigDatabase(for: key) {
+                    WatchDatabaseSyncService.markDatabaseChanged(.config)
+                }
             }
         }
         pendingWriteTasks[writeID] = task

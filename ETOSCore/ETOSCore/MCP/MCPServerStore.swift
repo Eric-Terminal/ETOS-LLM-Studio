@@ -190,6 +190,7 @@ public struct MCPServerStore {
             }
             saveLegacyRecords(records)
         }
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -207,6 +208,7 @@ public struct MCPServerStore {
             saveLegacyRecords(records)
             mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
         }
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 

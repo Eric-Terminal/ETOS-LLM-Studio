@@ -131,6 +131,7 @@ public final class WorldbookStore {
         queue.sync {
             saveWorldbooksUnlocked(worldbooks)
         }
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -152,6 +153,7 @@ public final class WorldbookStore {
             }
             saveWorldbooksUnlocked(all)
         }
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -161,6 +163,7 @@ public final class WorldbookStore {
             all.removeAll { $0.id == id }
             saveWorldbooksUnlocked(all)
         }
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
 
@@ -245,6 +248,7 @@ public final class WorldbookStore {
 
             all.append(candidate)
             saveWorldbooksUnlocked(all)
+            WatchDatabaseSyncService.markDatabaseChanged(.config)
 
             return WorldbookImportReport(
                 importedBookID: candidate.id,

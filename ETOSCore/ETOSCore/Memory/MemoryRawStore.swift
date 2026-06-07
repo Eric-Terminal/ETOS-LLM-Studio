@@ -196,6 +196,7 @@ struct MemoryRawStore {
 
         if didSave {
             removeLegacyMemoryBlobs()
+            WatchDatabaseSyncService.markDatabaseChanged(.memory)
         }
         return didSave
     }

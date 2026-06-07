@@ -316,6 +316,7 @@ extension ConfigLoader {
         }
         cleanupLegacyProviderFiles()
         logger.info("已保存提供商 \(persistedProvider.name) 到 SQLite。")
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
 
         let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
         let action = previousProvider == nil
@@ -360,6 +361,7 @@ extension ConfigLoader {
         }
         cleanupLegacyProviderFiles()
         logger.info("已从 SQLite 删除提供商 \(provider.name)。")
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
         _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
         logger.info("  - 删除成功。")
         let payload: [String: String] = [

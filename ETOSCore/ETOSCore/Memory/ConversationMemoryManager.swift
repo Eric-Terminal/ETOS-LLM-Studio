@@ -217,6 +217,7 @@ private struct ConversationUserProfileStore {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 try? FileManager.default.removeItem(at: fileURL)
             }
+            WatchDatabaseSyncService.markDatabaseChanged(.memory)
             return
         }
 
@@ -224,16 +225,19 @@ private struct ConversationUserProfileStore {
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
         let data = try encoder.encode(profile)
         try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        WatchDatabaseSyncService.markDatabaseChanged(.memory)
     }
 
     func clearProfile() throws {
         if canUseGRDB {
             _ = clearProfileFromSQLite()
             removeLegacyProfileBlobs()
+            WatchDatabaseSyncService.markDatabaseChanged(.memory)
         }
         let fileURL = MemoryStoragePaths.userProfileFileURL(rootDirectory: rootDirectory)
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         try FileManager.default.removeItem(at: fileURL)
+        WatchDatabaseSyncService.markDatabaseChanged(.memory)
     }
 
     private var canUseGRDB: Bool {
