@@ -474,7 +474,7 @@ struct ThirdPartyImportView: View {
 }
 
 private enum ThirdPartyImportConflictPreviewBuilder {
-    static func build(for package: SyncPackage) -> ConflictPreview {
+    nonisolated static func build(for package: SyncPackage) -> ConflictPreview {
         let providerConflicts = estimateProviderConflicts(incoming: package.providers)
         let providerAdds = max(0, package.providers.count - providerConflicts)
 
@@ -489,7 +489,7 @@ private enum ThirdPartyImportConflictPreviewBuilder {
         )
     }
 
-    private static func estimateProviderConflicts(incoming: [Provider]) -> Int {
+    nonisolated private static func estimateProviderConflicts(incoming: [Provider]) -> Int {
         guard !incoming.isEmpty else { return 0 }
         let locals = ConfigLoader.loadProviders()
         let localSignatures = Set(locals.map(providerSignature))
@@ -500,7 +500,7 @@ private enum ThirdPartyImportConflictPreviewBuilder {
         }
     }
 
-    private static func estimateSessionConflicts(incoming: [SyncedSession]) -> Int {
+    nonisolated private static func estimateSessionConflicts(incoming: [SyncedSession]) -> Int {
         guard !incoming.isEmpty else { return 0 }
 
         let localSessions = Persistence.loadChatSessions().filter { !$0.isTemporary }
@@ -532,7 +532,7 @@ private enum ThirdPartyImportConflictPreviewBuilder {
         }
     }
 
-    private static func providerSignature(_ provider: Provider) -> String {
+    nonisolated private static func providerSignature(_ provider: Provider) -> String {
         [
             provider.name.lowercased(),
             provider.baseURL.lowercased(),
@@ -541,7 +541,7 @@ private enum ThirdPartyImportConflictPreviewBuilder {
         ].joined(separator: "|")
     }
 
-    private static func sessionPreviewSignature(name: String, messageCount: Int) -> String {
+    nonisolated private static func sessionPreviewSignature(name: String, messageCount: Int) -> String {
         return [
             name.lowercased(),
             "\(messageCount)"
@@ -554,6 +554,18 @@ private struct ConflictPreview {
     var sessionConflicts: Int
     var providerAdds: Int
     var sessionAdds: Int
+
+    nonisolated init(
+        providerConflicts: Int,
+        sessionConflicts: Int,
+        providerAdds: Int,
+        sessionAdds: Int
+    ) {
+        self.providerConflicts = providerConflicts
+        self.sessionConflicts = sessionConflicts
+        self.providerAdds = providerAdds
+        self.sessionAdds = sessionAdds
+    }
 
     static let empty = ConflictPreview(
         providerConflicts: 0,
