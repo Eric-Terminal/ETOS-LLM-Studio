@@ -412,9 +412,9 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 		}
 	}
 
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		value := sessionDetailEditValue(m.sessionMessages[messageIndex], section.kind)
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewText().Title(section.title).Value(&value),
 		))
 		if err := form.Run(); err != nil {
@@ -433,7 +433,7 @@ func (m tuiModel) editSelectedSessionDetail() tea.Cmd {
 		}
 		response["messages"] = updatedMessages
 		return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
-	}
+	})
 }
 
 func sessionDetailEditValue(message map[string]any, kind tuiSessionDetailKind) string {

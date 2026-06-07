@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -78,6 +79,48 @@ type tuiCommandResultMsg struct {
 	err         error
 	clearScreen bool
 }
+
+type tuiFormRunner struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (r tuiFormRunner) Form(groups ...*huh.Group) *huh.Form {
+	form := newTUIForm(groups...)
+	if r.stdin != nil {
+		form.WithInput(r.stdin)
+	}
+	output := r.stdout
+	if output == nil {
+		output = r.stderr
+	}
+	if output != nil {
+		form.WithOutput(output)
+	}
+	return form
+}
+
+type tuiBlockingCommand struct {
+	run    func(tuiFormRunner) tea.Msg
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+	msg    tea.Msg
+}
+
+func (c *tuiBlockingCommand) Run() error {
+	c.msg = c.run(tuiFormRunner{
+		stdin:  c.stdin,
+		stdout: c.stdout,
+		stderr: c.stderr,
+	})
+	return nil
+}
+
+func (c *tuiBlockingCommand) SetStdin(r io.Reader)  { c.stdin = r }
+func (c *tuiBlockingCommand) SetStdout(w io.Writer) { c.stdout = w }
+func (c *tuiBlockingCommand) SetStderr(w io.Writer) { c.stderr = w }
 
 type tuiStatus struct {
 	connected       bool
@@ -793,6 +836,23 @@ func newTUIForm(groups ...*huh.Group) *huh.Form {
 	return huh.NewForm(groups...).WithKeyMap(keymap).WithShowHelp(false)
 }
 
+func tuiBlockingFormCommand(run func(tuiFormRunner) tea.Msg) tea.Cmd {
+	command := &tuiBlockingCommand{run: run}
+	return tea.Exec(command, func(err error) tea.Msg {
+		if err != nil {
+			return tuiCommandResultMsg{op: "noop", err: err, clearScreen: true}
+		}
+		if command.msg == nil {
+			return tuiCommandResultMsg{op: "noop", clearScreen: true}
+		}
+		if result, ok := command.msg.(tuiCommandResultMsg); ok {
+			result.clearScreen = true
+			return result
+		}
+		return command.msg
+	})
+}
+
 func tuiFormErrorResult(err error) tuiCommandResultMsg {
 	if errors.Is(err, huh.ErrUserAborted) {
 		return tuiCommandResultMsg{op: "noop", clearScreen: true}
@@ -899,10 +959,10 @@ func (m tuiModel) uploadFile() tea.Cmd {
 	if m.active != tuiFiles {
 		return nil
 	}
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		localPath := ""
 		remotePath := m.currentPath
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("本地文件路径").Value(&localPath),
 			huh.NewInput().Title("设备目标路径").Value(&remotePath),
 		))
@@ -926,13 +986,13 @@ func (m tuiModel) uploadFile() tea.Cmd {
 			"data":    base64.StdEncoding.EncodeToString(data),
 		}, 45*time.Second)
 		return tuiCommandResultMsg{op: "files:upload", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) promptFilesPath() tea.Cmd {
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		path := m.currentPath
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("设备路径").Value(&path),
 		))
 		if err := form.Run(); err != nil {
@@ -944,7 +1004,7 @@ func (m tuiModel) promptFilesPath() tea.Cmd {
 		}
 		response, err := m.server.sendCommandWithResponse(map[string]any{"command": "list", "path": path}, 20*time.Second)
 		return tuiCommandResultMsg{op: "files:list:" + path, response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) loadProviders() tea.Cmd {
@@ -952,7 +1012,7 @@ func (m tuiModel) loadProviders() tea.Cmd {
 }
 
 func (m tuiModel) addProvider() tea.Cmd {
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		name := ""
 		baseURL := ""
 		apiKey := ""
@@ -964,7 +1024,7 @@ func (m tuiModel) addProvider() tea.Cmd {
 		proxyPort := "8080"
 		proxyUsername := ""
 		proxyPassword := ""
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API Key").EchoMode(huh.EchoModePassword).Value(&apiKey),
@@ -998,7 +1058,7 @@ func (m tuiModel) addProvider() tea.Cmd {
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:upsert", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) editSelectedProvider() tea.Cmd {
@@ -1008,7 +1068,7 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 	}
 	providerID := row[0]
 	provider := m.findProviderRow(providerID)
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		name := asString(provider["name"])
 		baseURL := asString(provider["baseURL"])
 		apiFormat := asString(provider["apiFormat"])
@@ -1020,7 +1080,7 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		proxyPort := providerProxyField(provider, "port", "8080")
 		proxyUsername := providerProxyField(provider, "username", "")
 		proxyPassword := providerProxyField(provider, "password", "")
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("名称").Value(&name),
 			huh.NewInput().Title("API URL").Value(&baseURL),
 			huh.NewInput().Title("API 格式").Value(&apiFormat),
@@ -1055,7 +1115,7 @@ func (m tuiModel) editSelectedProvider() tea.Cmd {
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:upsert", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) addProviderModel() tea.Cmd {
@@ -1064,7 +1124,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		return nil
 	}
 	providerID := row[0]
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		modelName := ""
 		displayName := ""
 		kind := "chat"
@@ -1076,7 +1136,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		requestBodyControls := "[]"
 		overrideParameters := "{}"
 		pricing := "{}"
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
 			huh.NewInput().Title("类型(chat/image/embedding/rerank/speechToText/textToSpeech)").Value(&kind),
@@ -1112,7 +1172,7 @@ func (m tuiModel) addProviderModel() tea.Cmd {
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) editSelectedProviderModel() tea.Cmd {
@@ -1129,7 +1189,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 		}
 	}
 
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		modelID := asString(models[0]["id"])
 		options := make([]huh.Option[string], 0, len(models))
 		for index, model := range models {
@@ -1143,7 +1203,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 			return tuiCommandResultMsg{op: "providers:model", err: fmt.Errorf("当前 Provider 的模型缺少 ID，无法编辑")}
 		}
 
-		selectForm := newTUIForm(huh.NewGroup(
+		selectForm := forms.Form(huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("选择要编辑的模型").
 				Options(options...).
@@ -1184,7 +1244,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 		pricing := providerModelPricingText(model)
 		isActivated := model["isActivated"] == nil || asBool(model["isActivated"])
 
-		editForm := newTUIForm(huh.NewGroup(
+		editForm := forms.Form(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
 			huh.NewInput().Title("显示名称").Value(&displayName),
 			huh.NewConfirm().Title("启用模型").Affirmative("启用").Negative("停用").Value(&isActivated),
@@ -1223,7 +1283,7 @@ func (m tuiModel) editSelectedProviderModel() tea.Cmd {
 		}
 		response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 		return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) findProviderRow(providerID string) map[string]any {
@@ -1298,9 +1358,9 @@ func (m tuiModel) editSelectedSetting() tea.Cmd {
 			break
 		}
 	}
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		value := currentValue
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewInput().
 				Title(fmt.Sprintf("%s (%s)", key, settingType)).
 				Description("布尔值可填 true/false，数字按原类型解析，文本保持原样。").
@@ -1315,7 +1375,7 @@ func (m tuiModel) editSelectedSetting() tea.Cmd {
 			"value":   strings.TrimSpace(value),
 		}, 25*time.Second)
 		return tuiCommandResultMsg{op: "settings:set", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) loadSessions() tea.Cmd {
@@ -1345,12 +1405,12 @@ func (m tuiModel) loadSQLiteTables() tea.Cmd {
 }
 
 func (m tuiModel) promptSQLiteQuery(mutating bool) tea.Cmd {
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		sql := "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')"
 		if mutating {
 			sql = "UPDATE table_name SET column_name = ? WHERE id = ?"
 		}
-		form := newTUIForm(huh.NewGroup(
+		form := forms.Form(huh.NewGroup(
 			huh.NewText().Title("SQL").Value(&sql),
 		))
 		if err := form.Run(); err != nil {
@@ -1372,7 +1432,7 @@ func (m tuiModel) promptSQLiteQuery(mutating bool) tea.Cmd {
 			"parameters":          []any{},
 		}, 60*time.Second)
 		return tuiCommandResultMsg{op: op, response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) runSQLiteQuery(sql string, mutating bool) tea.Cmd {
@@ -1446,25 +1506,25 @@ func (m tuiModel) deleteSelected() tea.Cmd {
 func (m tuiModel) createSelectedKind() tea.Cmd {
 	switch m.active {
 	case tuiFiles:
-		return func() tea.Msg {
+		return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 			path := m.currentPath
-			form := newTUIForm(huh.NewGroup(huh.NewInput().Title("新目录路径").Value(&path)))
+			form := forms.Form(huh.NewGroup(huh.NewInput().Title("新目录路径").Value(&path)))
 			if err := form.Run(); err != nil {
 				return tuiFormErrorResult(err)
 			}
 			response, err := m.server.sendCommandWithResponse(map[string]any{"command": "mkdir", "path": strings.TrimSpace(path)}, 30*time.Second)
 			return tuiCommandResultMsg{op: "files:mkdir", response: response, err: err}
-		}
+		})
 	case tuiSessions:
-		return func() tea.Msg {
+		return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 			name := "新的对话"
-			form := newTUIForm(huh.NewGroup(huh.NewInput().Title("会话名称").Value(&name)))
+			form := forms.Form(huh.NewGroup(huh.NewInput().Title("会话名称").Value(&name)))
 			if err := form.Run(); err != nil {
 				return tuiFormErrorResult(err)
 			}
 			response, err := m.server.sendCommandWithResponse(map[string]any{"command": "session_create", "name": strings.TrimSpace(name)}, 30*time.Second)
 			return tuiCommandResultMsg{op: "sessions:create", response: response, err: err}
-		}
+		})
 	case tuiMemories:
 		return m.confirmAndRun("确认重嵌入全部记忆？", "memories:reembed", map[string]any{"command": "memories_reembed_all"}, 15*time.Minute)
 	}
@@ -1478,15 +1538,15 @@ func (m tuiModel) editSelectedMemory() tea.Cmd {
 	}
 	memoryID := row[0]
 	current := row[2]
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		content := current
-		form := newTUIForm(huh.NewGroup(huh.NewText().Title("记忆内容").Value(&content)))
+		form := forms.Form(huh.NewGroup(huh.NewText().Title("记忆内容").Value(&content)))
 		if err := form.Run(); err != nil {
 			return tuiFormErrorResult(err)
 		}
 		response, err := m.server.sendCommandWithResponse(map[string]any{"command": "memory_update", "memory_id": memoryID, "content": content}, 45*time.Second)
 		return tuiCommandResultMsg{op: "memories:update", response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) showSelectedMemory() tea.Cmd {
@@ -1500,9 +1560,9 @@ func (m tuiModel) showSelectedMemory() tea.Cmd {
 }
 
 func (m tuiModel) confirmAndRun(title, op string, payload map[string]any, timeout time.Duration) tea.Cmd {
-	return func() tea.Msg {
+	return tuiBlockingFormCommand(func(forms tuiFormRunner) tea.Msg {
 		ok := false
-		form := newTUIForm(huh.NewGroup(huh.NewConfirm().Title(title).Value(&ok)))
+		form := forms.Form(huh.NewGroup(huh.NewConfirm().Title(title).Value(&ok)))
 		if err := form.Run(); err != nil {
 			return tuiFormErrorResult(err)
 		}
@@ -1511,7 +1571,7 @@ func (m tuiModel) confirmAndRun(title, op string, payload map[string]any, timeou
 		}
 		response, err := m.server.sendCommandWithResponse(payload, timeout)
 		return tuiCommandResultMsg{op: op, response: response, err: err}
-	}
+	})
 }
 
 func (m tuiModel) markLoading(cmd tea.Cmd) tea.Cmd {

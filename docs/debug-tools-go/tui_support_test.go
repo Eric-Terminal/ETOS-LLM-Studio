@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -64,6 +65,37 @@ func TestNewTUIFormHidesDefaultHelp(t *testing.T) {
 	view := form.View()
 	if strings.Contains(view, "alt+enter") || strings.Contains(view, "open editor") || strings.Contains(view, "enter submit") {
 		t.Fatalf("表单渲染了 huh 默认英文帮助，容易和 TUI 底部提示重叠: %q", view)
+	}
+}
+
+func TestTUIBlockingCommandPassesTerminalIOToFormRunner(t *testing.T) {
+	input := strings.NewReader("")
+	var output bytes.Buffer
+	var stderr bytes.Buffer
+	command := &tuiBlockingCommand{
+		run: func(forms tuiFormRunner) tea.Msg {
+			if forms.stdin != input {
+				t.Fatalf("stdin 未传给表单运行器")
+			}
+			if forms.stdout != &output {
+				t.Fatalf("stdout 未传给表单运行器")
+			}
+			if forms.stderr != &stderr {
+				t.Fatalf("stderr 未传给表单运行器")
+			}
+			return tuiCommandResultMsg{op: "noop"}
+		},
+	}
+
+	command.SetStdin(input)
+	command.SetStdout(&output)
+	command.SetStderr(&stderr)
+
+	if err := command.Run(); err != nil {
+		t.Fatalf("Run 返回错误: %v", err)
+	}
+	if result, ok := command.msg.(tuiCommandResultMsg); !ok || result.op != "noop" {
+		t.Fatalf("msg = %#v, want noop result", command.msg)
 	}
 }
 
