@@ -37,6 +37,8 @@ extension ChatService {
         var latestTokenUsage: MessageTokenUsage?
         var trailingUnparsedResponseBody = ""
         var trailingUnparsedHTTPStatusCode: Int?
+        var messages = messagesSnapshot(for: currentSessionID)
+        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
         do {
             let bytes = try await streamData(for: request, provider: provider)
 
@@ -56,7 +58,6 @@ extension ChatService {
             var inlineReasoningMayStartAtContentStart = true
             var inlineReasoningDetectionTail = ""
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
-            var messages = messagesSnapshot(for: currentSessionID)
             var finalResponseCompletedAtForLog: Date?
 
             for try await line in bytes.lines {
@@ -71,6 +72,7 @@ extension ChatService {
                 trailingUnparsedResponseBody = ""
                 trailingUnparsedHTTPStatusCode = nil
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    let previousStreamingMessage = messages[index]
                     let partReceivedAt = Date()
                     lastStreamPartReceivedAt = partReceivedAt
                     if let usage = part.tokenUsage {
@@ -83,12 +85,16 @@ extension ChatService {
                     }
                     var didReceiveTextDelta = false
                     var didReceiveGeneratedDelta = false
+                    var shouldForceStreamingPublish = false
                     if let contentPart = part.content {
                         messages[index].content += contentPart
                         if !contentPart.isEmpty {
                             accumulatedOutputText += contentPart
                             didReceiveTextDelta = true
                             didReceiveGeneratedDelta = true
+                            if previousStreamingMessage.content.isEmpty {
+                                shouldForceStreamingPublish = true
+                            }
                             updateReasoningTimingFromInlineThoughtTags(
                                 in: contentPart,
                                 receivedAt: partReceivedAt,
@@ -107,6 +113,7 @@ extension ChatService {
                             let trimmedContent = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
                             if !trimmedContent.isEmpty {
                                 messages[index].role = .assistant
+                                shouldForceStreamingPublish = true
                             }
                         }
                     }
@@ -118,6 +125,9 @@ extension ChatService {
                             didReceiveTextDelta = true
                             didReceiveGeneratedDelta = true
                             receivedDedicatedReasoning = true
+                            if (previousStreamingMessage.reasoningContent ?? "").isEmpty {
+                                shouldForceStreamingPublish = true
+                            }
                             if reasoningStartedAt == nil {
                                 reasoningStartedAt = partReceivedAt
                             }
@@ -128,6 +138,7 @@ extension ChatService {
                             let trimmedReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             if !trimmedReasoning.isEmpty {
                                 messages[index].role = .assistant
+                                shouldForceStreamingPublish = true
                             }
                         }
                     }
@@ -182,6 +193,11 @@ extension ChatService {
                                 messages[index].toolCallsPlacement = inferredToolCallsPlacement(from: messages[index].content)
                             }
                             messages[index].toolCalls = partialToolCalls
+                            let previousToolSignature = (previousStreamingMessage.toolCalls ?? []).map { "\($0.id)|\($0.toolName)" }
+                            let currentToolSignature = partialToolCalls.map { "\($0.id)|\($0.toolName)" }
+                            if previousToolSignature != currentToolSignature {
+                                shouldForceStreamingPublish = true
+                            }
                             if receivedDedicatedReasoning && reasoningCompletedAt == nil {
                                 reasoningCompletedAt = reasoningLastDeltaAt
                             }
@@ -229,7 +245,9 @@ extension ChatService {
                     messages = publishStreamingMessages(
                         messages,
                         loadingMessageID: loadingMessageID,
-                        sessionID: currentSessionID
+                        sessionID: currentSessionID,
+                        coalescer: &streamingPublishCoalescer,
+                        force: shouldForceStreamingPublish
                     )
                 }
             }
@@ -238,6 +256,12 @@ extension ChatService {
                 body: trailingUnparsedResponseBody,
                 fallbackHTTPStatusCode: trailingUnparsedHTTPStatusCode
             ) {
+                messages = flushPendingStreamingMessages(
+                    messages,
+                    loadingMessageID: loadingMessageID,
+                    sessionID: currentSessionID,
+                    coalescer: &streamingPublishCoalescer
+                )
                 addErrorMessage(
                     unparsedError.body,
                     sessionID: currentSessionID,
@@ -386,6 +410,12 @@ extension ChatService {
             }
         } catch is CancellationError {
             logger.info("流式请求在处理中被取消。")
+            messages = flushPendingStreamingMessages(
+                messages,
+                loadingMessageID: loadingMessageID,
+                sessionID: currentSessionID,
+                coalescer: &streamingPublishCoalescer
+            )
             finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
@@ -406,6 +436,12 @@ extension ChatService {
             } else {
                 bodySnippet = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
+            messages = flushPendingStreamingMessages(
+                messages,
+                loadingMessageID: loadingMessageID,
+                sessionID: currentSessionID,
+                coalescer: &streamingPublishCoalescer
+            )
             addErrorMessage(bodySnippet, sessionID: currentSessionID, httpStatusCode: code)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
@@ -419,6 +455,12 @@ extension ChatService {
         } catch {
             if isCancellationError(error) {
                 logger.info("流式请求在处理中被取消 (URLError)。")
+                messages = flushPendingStreamingMessages(
+                    messages,
+                    loadingMessageID: loadingMessageID,
+                    sessionID: currentSessionID,
+                    coalescer: &streamingPublishCoalescer
+                )
                 finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
@@ -432,6 +474,12 @@ extension ChatService {
                     body: trailingUnparsedResponseBody,
                     fallbackHTTPStatusCode: trailingUnparsedHTTPStatusCode
                 ) {
+                    messages = flushPendingStreamingMessages(
+                        messages,
+                        loadingMessageID: loadingMessageID,
+                        sessionID: currentSessionID,
+                        coalescer: &streamingPublishCoalescer
+                    )
                     addErrorMessage(
                         unparsedError.body,
                         sessionID: currentSessionID,
@@ -447,6 +495,12 @@ extension ChatService {
                         errorKind: "streaming_unparsed_error_response"
                     )
                 } else {
+                    messages = flushPendingStreamingMessages(
+                        messages,
+                        loadingMessageID: loadingMessageID,
+                        sessionID: currentSessionID,
+                        coalescer: &streamingPublishCoalescer
+                    )
                     addErrorMessage(String(
                         format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
                         error.localizedDescription

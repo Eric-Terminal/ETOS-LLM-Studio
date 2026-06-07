@@ -84,6 +84,41 @@ extension ChatService {
         return merged
     }
 
+    func publishStreamingMessages(
+        _ messages: [ChatMessage],
+        loadingMessageID: UUID,
+        sessionID: UUID,
+        coalescer: inout StreamingUIPublishCoalescer,
+        force: Bool = false
+    ) -> [ChatMessage] {
+        let merged = messagesByMergingStreamingUpdate(
+            messages,
+            loadingMessageID: loadingMessageID,
+            sessionID: sessionID
+        )
+        if coalescer.shouldPublish(force: force) {
+            publishMessagesIfCurrentSession(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
+        }
+        return merged
+    }
+
+    func flushPendingStreamingMessages(
+        _ messages: [ChatMessage],
+        loadingMessageID: UUID,
+        sessionID: UUID,
+        coalescer: inout StreamingUIPublishCoalescer
+    ) -> [ChatMessage] {
+        let merged = messagesByMergingStreamingUpdate(
+            messages,
+            loadingMessageID: loadingMessageID,
+            sessionID: sessionID
+        )
+        if coalescer.shouldFlushPending() {
+            publishMessagesIfCurrentSession(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
+        }
+        return merged
+    }
+
     func persistAndPublishStreamingMessages(
         _ messages: [ChatMessage],
         loadingMessageID: UUID,

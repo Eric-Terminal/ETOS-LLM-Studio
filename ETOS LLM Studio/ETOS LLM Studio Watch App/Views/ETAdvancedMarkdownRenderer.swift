@@ -19,6 +19,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
     let customTextColor: Color?
+    let isStreaming: Bool
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -32,6 +33,7 @@ struct ETAdvancedMarkdownRenderer: View {
         enableAdvancedRenderer: Bool,
         enableMathRendering: Bool,
         customTextColor: Color? = nil,
+        isStreaming: Bool = false,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
         self.content = content
@@ -41,6 +43,7 @@ struct ETAdvancedMarkdownRenderer: View {
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
         self.customTextColor = customTextColor
+        self.isStreaming = isStreaming
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
     }
 
@@ -71,6 +74,8 @@ struct ETAdvancedMarkdownRenderer: View {
                         fontScale: fontScale
                     )
                 }
+            } else if isStreaming {
+                plainTextView(content, textColor: textColor)
             } else {
                 markdownTextView(
                     markdownContent: MarkdownContent(content),
@@ -107,6 +112,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
                 fontScale: fontScale,
+                codeHighlightLimit: isStreaming ? 4_096 : 12_000,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
             .sheet(item: $imagePreviewItem) { item in
@@ -210,6 +216,7 @@ private extension View {
         prefersDarkPalette: Bool,
         sampleText: String,
         fontScale: Double,
+        codeHighlightLimit: Int = 12_000,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -237,7 +244,8 @@ private extension View {
                 ETCodeSyntaxHighlighter(
                     baseColor: textColor,
                     isOutgoing: isOutgoing,
-                    prefersDarkPalette: prefersDarkPalette
+                    prefersDarkPalette: prefersDarkPalette,
+                    maxHighlightedLength: codeHighlightLimit
                 )
             )
             .etFont(.body, sampleText: sampleText)

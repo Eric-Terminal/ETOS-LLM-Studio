@@ -17,7 +17,8 @@ extension View {
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
         sampleText: String,
-        fontScale: Double
+        fontScale: Double,
+        codeHighlightLimit: Int = 12_000
     ) -> some View {
         let codeBlockBackground = isOutgoing
             ? Color.white.opacity(0.16)
@@ -44,7 +45,8 @@ extension View {
                 ETCodeSyntaxHighlighter(
                     baseColor: textColor,
                     isOutgoing: isOutgoing,
-                    prefersDarkPalette: prefersDarkPalette
+                    prefersDarkPalette: prefersDarkPalette,
+                    maxHighlightedLength: codeHighlightLimit
                 )
             )
             .etFont(.body, sampleText: sampleText)

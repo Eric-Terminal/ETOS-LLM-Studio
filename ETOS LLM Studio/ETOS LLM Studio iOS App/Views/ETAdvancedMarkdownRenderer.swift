@@ -19,6 +19,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
     let customTextColor: Color?
+    var isStreaming: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
 
@@ -52,6 +53,8 @@ struct ETAdvancedMarkdownRenderer: View {
                         fontScale: fontScale
                     )
                 }
+            } else if isStreaming {
+                plainTextView(content, textColor: textColor)
             } else {
                 markdownTextView(
                     markdownContent: MarkdownContent(content),
@@ -102,7 +105,8 @@ struct ETAdvancedMarkdownRenderer: View {
                 isOutgoing: isOutgoing,
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
-                fontScale: fontScale
+                fontScale: fontScale,
+                codeHighlightLimit: isStreaming ? 4_096 : 12_000
             )
     }
 

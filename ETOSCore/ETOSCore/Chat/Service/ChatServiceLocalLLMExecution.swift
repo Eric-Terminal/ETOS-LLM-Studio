@@ -141,6 +141,9 @@ extension ChatService {
             return
         }
 
+        var messages = messagesSnapshot(for: currentSessionID)
+        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
+
         do {
             let overrides = runnableModel.effectiveOverrideParameters
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
@@ -185,7 +188,6 @@ extension ChatService {
             var reasoningLastDeltaAt: Date?
             var reasoningCompletedAt: Date?
             var speedSamples: [MessageResponseMetrics.SpeedSample] = []
-            var messages = messagesSnapshot(for: currentSessionID)
 
             for try await parsedStreamingOutput in stream {
                 guard !parsedStreamingOutput.content.isEmpty ||
@@ -216,6 +218,16 @@ extension ChatService {
                 }
 
                 if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    let previousStreamingMessage = messages[index]
+                    var shouldForceStreamingPublish = previousStreamingMessage.role != .assistant
+                    if previousStreamingMessage.content.isEmpty, !parsedStreamingOutput.content.isEmpty {
+                        shouldForceStreamingPublish = true
+                    }
+                    if (previousStreamingMessage.reasoningContent ?? "").isEmpty,
+                       parsedStreamingOutput.reasoningContent?.isEmpty == false {
+                        shouldForceStreamingPublish = true
+                    }
+
                     messages[index].role = .assistant
                     messages[index].content = parsedStreamingOutput.content
                     messages[index].reasoningContent = parsedStreamingOutput.reasoningContent
@@ -227,6 +239,11 @@ extension ChatService {
                         if messages[index].toolCallsPlacement == nil {
                             messages[index].toolCallsPlacement = inferredToolCallsPlacement(from: parsedStreamingOutput.content)
                         }
+                    }
+                    let previousToolSignature = (previousStreamingMessage.toolCalls ?? []).map { "\($0.id)|\($0.toolName)" }
+                    let currentToolSignature = parsedStreamingOutput.toolCalls.map { "\($0.id)|\($0.toolName)" }
+                    if previousToolSignature != currentToolSignature {
+                        shouldForceStreamingPublish = true
                     }
                     messages[index].modelReference = requestLogContext.modelReference
                     if enableResponseSpeedMetrics || reasoningStartedAt != nil {
@@ -263,7 +280,9 @@ extension ChatService {
                     messages = publishStreamingMessages(
                         messages,
                         loadingMessageID: loadingMessageID,
-                        sessionID: currentSessionID
+                        sessionID: currentSessionID,
+                        coalescer: &streamingPublishCoalescer,
+                        force: shouldForceStreamingPublish
                     )
                 }
             }
@@ -343,6 +362,12 @@ extension ChatService {
             )
         } catch is CancellationError {
             logger.info("本地推理请求已取消。")
+            messages = flushPendingStreamingMessages(
+                messages,
+                loadingMessageID: loadingMessageID,
+                sessionID: currentSessionID,
+                coalescer: &streamingPublishCoalescer
+            )
             finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
             emitSessionRequestStatus(.cancelled, sessionID: currentSessionID)
             persistRequestLog(
@@ -354,6 +379,12 @@ extension ChatService {
             )
         } catch {
             logger.error("本地推理失败: \(error.localizedDescription, privacy: .public)")
+            messages = flushPendingStreamingMessages(
+                messages,
+                loadingMessageID: loadingMessageID,
+                sessionID: currentSessionID,
+                coalescer: &streamingPublishCoalescer
+            )
             addErrorMessage(String(
                 format: NSLocalizedString("本地推理失败: %@", comment: "Local LLM generation failed"),
                 error.localizedDescription

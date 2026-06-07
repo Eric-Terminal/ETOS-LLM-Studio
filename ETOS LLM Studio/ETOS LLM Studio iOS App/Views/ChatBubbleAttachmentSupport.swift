@@ -136,7 +136,8 @@ extension ChatBubble {
             isOutgoing: shouldRenderAsOutgoing,
             enableAdvancedRenderer: enableAdvancedRenderer,
             enableMathRendering: enableMathRendering,
-            customTextColor: customTextColorOverride
+            customTextColor: customTextColorOverride,
+            isStreaming: showsStreamingIndicators
         )
     }
 

@@ -235,12 +235,13 @@ struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
     let baseColor: Color
     let isOutgoing: Bool
     let prefersDarkPalette: Bool
+    let maxHighlightedLength: Int
 
     func highlightCode(_ code: String, language: String?) -> Text {
         guard !code.isEmpty else { return Text("") }
 
         let length = code.utf16.count
-        guard length > 0, length <= 12_000 else {
+        guard length > 0, length <= max(0, maxHighlightedLength) else {
             return Text(code).foregroundColor(baseColor)
         }
 
