@@ -50,16 +50,21 @@ func TestBuildProviderUpsertPayloadRejectsNonStringHeaders(t *testing.T) {
 }
 
 func TestBuildProviderModelUpsertPayloadForExistingModel(t *testing.T) {
-	payload, err := buildProviderModelUpsertPayload(
-		" provider-1 ",
-		" model-1 ",
-		" gpt-test ",
-		" GPT Test ",
-		" chat ",
-		"toolCalling, reasoning",
-		`{"temperature":0.2}`,
-		false,
-	)
+	payload, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
+		ProviderID:              " provider-1 ",
+		ModelID:                 " model-1 ",
+		ModelName:               " gpt-test ",
+		DisplayName:             " GPT Test ",
+		Kind:                    " chat ",
+		InputModalities:         "text, image",
+		OutputModalities:        "text",
+		Capabilities:            "toolCalling, reasoning",
+		RequestBodyOverrideMode: "rawJSON",
+		RawRequestBodyJSON:      `{"model":"gpt-test"}`,
+		OverrideParameters:      `{"temperature":0.2}`,
+		Pricing:                 `{"inputPerMillionTokens":1.5}`,
+		IsActivated:             false,
+	})
 	if err != nil {
 		t.Fatalf("buildProviderModelUpsertPayload 返回错误: %v", err)
 	}
@@ -82,6 +87,20 @@ func TestBuildProviderModelUpsertPayloadForExistingModel(t *testing.T) {
 	if payload["is_activated"] != false {
 		t.Fatalf("is_activated = %v, want false", payload["is_activated"])
 	}
+	if payload["request_body_override_mode"] != "rawJSON" {
+		t.Fatalf("request_body_override_mode = %v, want rawJSON", payload["request_body_override_mode"])
+	}
+	if payload["raw_request_body_json"] != `{"model":"gpt-test"}` {
+		t.Fatalf("raw_request_body_json = %v, want raw JSON", payload["raw_request_body_json"])
+	}
+
+	inputModalities, ok := payload["input_modalities"].([]string)
+	if !ok {
+		t.Fatalf("input_modalities 类型 = %T, want []string", payload["input_modalities"])
+	}
+	if len(inputModalities) != 2 || inputModalities[0] != "text" || inputModalities[1] != "image" {
+		t.Fatalf("input_modalities = %#v, want text/image", inputModalities)
+	}
 
 	capabilities, ok := payload["capabilities"].([]string)
 	if !ok {
@@ -98,11 +117,37 @@ func TestBuildProviderModelUpsertPayloadForExistingModel(t *testing.T) {
 	if override["temperature"] != 0.2 {
 		t.Fatalf("temperature = %v, want 0.2", override["temperature"])
 	}
+
+	pricing, ok := payload["pricing"].(map[string]any)
+	if !ok {
+		t.Fatalf("pricing 类型 = %T, want map[string]any", payload["pricing"])
+	}
+	if pricing["inputPerMillionTokens"] != 1.5 {
+		t.Fatalf("inputPerMillionTokens = %v, want 1.5", pricing["inputPerMillionTokens"])
+	}
 }
 
 func TestBuildProviderModelUpsertPayloadRejectsNonObjectOverride(t *testing.T) {
-	if _, err := buildProviderModelUpsertPayload("provider-1", "", "gpt-test", "", "chat", "", `[1,2]`, true); err == nil {
+	if _, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
+		ProviderID:         "provider-1",
+		ModelName:          "gpt-test",
+		Kind:               "chat",
+		OverrideParameters: `[1,2]`,
+		IsActivated:        true,
+	}); err == nil {
 		t.Fatal("err = nil，期望拒绝非对象 Override Parameters")
+	}
+}
+
+func TestBuildProviderModelUpsertPayloadRejectsNonObjectPricing(t *testing.T) {
+	if _, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
+		ProviderID:  "provider-1",
+		ModelName:   "gpt-test",
+		Kind:        "chat",
+		Pricing:     `[1,2]`,
+		IsActivated: true,
+	}); err == nil {
+		t.Fatal("err = nil，期望拒绝非对象 Pricing")
 	}
 }
 

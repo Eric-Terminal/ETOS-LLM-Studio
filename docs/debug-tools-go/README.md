@@ -46,7 +46,7 @@ http://127.0.0.1:7654/
 GUI 主要功能：
 
 - Finder 风格文件浏览（左侧目录树 + 中间目录列表 + 右侧预览区）、文本/JSON/图片预览、上传/下载/删除
-- 提供商配置表单化编辑（Provider、API Key、Header Overrides、模型类型、能力与 Override Parameters），也保留 JSON 高级编辑入口
+- 提供商配置表单化编辑（Provider、API Key、Header Overrides、模型类型、模态、能力、请求体覆盖、Override Parameters 与 Pricing），也保留 JSON 高级编辑入口
 - 会话列表、会话元数据编辑、消息表单/JSON 双模式高级编辑
 - 记忆列表编辑与重嵌入触发
 - SQLite 表结构浏览、查询与写入 API
@@ -86,7 +86,7 @@ WebUI 和 TUI 共用同一组服务端能力。常用 SQLite API：
 - `GET /api/app-config?query=...`：列出 `app_config` 配置键、类型、当前值、默认值与同步属性
 - `POST /api/app-config/set`：参数 `key`、`value`，按配置原始类型写入单项设置
 - `POST /api/providers/upsert`：按 `provider_id` 更新或按 `name` 新增 Provider，可写入 `base_url`、`api_key`、`api_format`、`header_overrides` 等字段
-- `POST /api/providers/models/upsert`：按 `provider_id` 为指定 Provider 新增或更新模型，可写入 `model_name`、`display_name`、`kind`、`capabilities` 与 `override_parameters`
+- `POST /api/providers/models/upsert`：按 `provider_id` 为指定 Provider 新增或更新模型，可写入 `model_name`、`display_name`、`kind`、`input_modalities`、`output_modalities`、`capabilities`、`request_body_override_mode`、`raw_request_body_json`、`override_parameters` 与 `pricing`
 - `POST /api/sqlite/tables`：参数 `database` 为 `chat`、`config` 或 `memory`，可选 `include_internal`、`include_create_sql`
 - `POST /api/sqlite/query`：参数 `database`、`sql`，可选 `parameters`、`max_rows`
 - `POST /api/sqlite/mutate`：参数 `database`、`sql`，可选 `parameters`、`allow_without_where`、`returning_max_rows`
@@ -116,7 +116,7 @@ go test ./...
 - `/api/*` 错误码推断与 HTTP 状态码映射
 - 典型接口参数校验（如文件读取缺少 path）
 - app_config 设置接口参数校验与命令转发
-- Provider 与模型 upsert 接口参数校验、命令转发，以及 TUI 模型编辑 payload 生成
+- Provider 与模型 upsert 接口参数校验、命令转发，以及 TUI 模型高级编辑 payload 生成
 - SQLite API 参数校验与命令转发
 
 ## Release 下载（CI）

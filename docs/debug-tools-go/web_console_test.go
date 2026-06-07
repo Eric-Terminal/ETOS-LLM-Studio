@@ -388,7 +388,7 @@ func TestHandleAPIProviderModelUpsertForwardsToDeviceCommand(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/providers/models/upsert",
-		strings.NewReader(`{"provider_id":"22222222-2222-4222-8222-222222222222","model_name":"gpt-test","display_name":"GPT Test","is_activated":false,"kind":"chat","capabilities":["toolCalling"],"override_parameters":{"temperature":0.2}}`),
+		strings.NewReader(`{"provider_id":"22222222-2222-4222-8222-222222222222","model_name":"gpt-test","display_name":"GPT Test","is_activated":false,"kind":"chat","input_modalities":["text","image"],"output_modalities":["text"],"capabilities":["toolCalling"],"request_body_override_mode":"rawJSON","raw_request_body_json":"{\"model\":\"gpt-test\"}","override_parameters":{"temperature":0.2},"pricing":{"inputPerMillionTokens":1.5,"outputPerMillionTokens":2.5}}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -432,5 +432,18 @@ func TestHandleAPIProviderModelUpsertForwardsToDeviceCommand(t *testing.T) {
 	}
 	if command["is_activated"] != false {
 		t.Fatalf("is_activated = %v, want false", command["is_activated"])
+	}
+	if command["request_body_override_mode"] != "rawJSON" {
+		t.Fatalf("request_body_override_mode = %v, want rawJSON", command["request_body_override_mode"])
+	}
+	if command["raw_request_body_json"] != `{"model":"gpt-test"}` {
+		t.Fatalf("raw_request_body_json = %v, want raw JSON", command["raw_request_body_json"])
+	}
+	pricing, ok := command["pricing"].(map[string]any)
+	if !ok {
+		t.Fatalf("pricing 类型 = %T, want map[string]any", command["pricing"])
+	}
+	if asFloat64(pricing["inputPerMillionTokens"]) != 1.5 {
+		t.Fatalf("inputPerMillionTokens = %v, want 1.5", pricing["inputPerMillionTokens"])
 	}
 }

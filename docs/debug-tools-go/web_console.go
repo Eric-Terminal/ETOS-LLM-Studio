@@ -396,7 +396,21 @@ func (s *DebugServer) handleAPIProviderModelUpsert(w http.ResponseWriter, r *htt
 		return
 	}
 	command := map[string]any{"command": "provider_model_upsert"}
-	for _, key := range []string{"provider_id", "model_id", "model_name", "display_name", "is_activated", "kind", "capabilities", "override_parameters"} {
+	for _, key := range []string{
+		"provider_id",
+		"model_id",
+		"model_name",
+		"display_name",
+		"is_activated",
+		"kind",
+		"input_modalities",
+		"output_modalities",
+		"capabilities",
+		"request_body_override_mode",
+		"raw_request_body_json",
+		"override_parameters",
+		"pricing",
+	} {
 		if value, ok := payload[key]; ok {
 			command[key] = value
 		}

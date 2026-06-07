@@ -113,10 +113,26 @@ func providerHeaderOverridesText(provider map[string]any) string {
 	return "{}"
 }
 
-func buildProviderModelUpsertPayload(providerID, modelID, modelName, displayName, kind, capabilities, overrideParameters string, isActivated bool) (map[string]any, error) {
+type providerModelUpsertInput struct {
+	ProviderID              string
+	ModelID                 string
+	ModelName               string
+	DisplayName             string
+	Kind                    string
+	InputModalities         string
+	OutputModalities        string
+	Capabilities            string
+	RequestBodyOverrideMode string
+	RawRequestBodyJSON      string
+	OverrideParameters      string
+	Pricing                 string
+	IsActivated             bool
+}
+
+func buildProviderModelUpsertPayload(input providerModelUpsertInput) (map[string]any, error) {
 	var override map[string]any
-	if strings.TrimSpace(overrideParameters) != "" {
-		if err := json.Unmarshal([]byte(overrideParameters), &override); err != nil {
+	if strings.TrimSpace(input.OverrideParameters) != "" {
+		if err := json.Unmarshal([]byte(input.OverrideParameters), &override); err != nil {
 			return nil, fmt.Errorf("Override Parameters 不是合法 JSON 对象: %w", err)
 		}
 	}
@@ -124,20 +140,43 @@ func buildProviderModelUpsertPayload(providerID, modelID, modelName, displayName
 		override = map[string]any{}
 	}
 
-	payload := map[string]any{
-		"command":             "provider_model_upsert",
-		"provider_id":         strings.TrimSpace(providerID),
-		"model_name":          strings.TrimSpace(modelName),
-		"display_name":        strings.TrimSpace(displayName),
-		"is_activated":        isActivated,
-		"kind":                strings.TrimSpace(kind),
-		"capabilities":        splitCSV(capabilities),
-		"override_parameters": override,
+	pricing, err := parseOptionalJSONObject(input.Pricing, "Pricing")
+	if err != nil {
+		return nil, err
 	}
-	if trimmedModelID := strings.TrimSpace(modelID); trimmedModelID != "" {
+
+	payload := map[string]any{
+		"command":                    "provider_model_upsert",
+		"provider_id":                strings.TrimSpace(input.ProviderID),
+		"model_name":                 strings.TrimSpace(input.ModelName),
+		"display_name":               strings.TrimSpace(input.DisplayName),
+		"is_activated":               input.IsActivated,
+		"kind":                       strings.TrimSpace(input.Kind),
+		"input_modalities":           splitCSV(input.InputModalities),
+		"output_modalities":          splitCSV(input.OutputModalities),
+		"capabilities":               splitCSV(input.Capabilities),
+		"request_body_override_mode": strings.TrimSpace(input.RequestBodyOverrideMode),
+		"raw_request_body_json":      strings.TrimSpace(input.RawRequestBodyJSON),
+		"override_parameters":        override,
+		"pricing":                    pricing,
+	}
+	if trimmedModelID := strings.TrimSpace(input.ModelID); trimmedModelID != "" {
 		payload["model_id"] = trimmedModelID
 	}
 	return payload, nil
+}
+
+func parseOptionalJSONObject(value, title string) (map[string]any, error) {
+	var object map[string]any
+	if strings.TrimSpace(value) != "" {
+		if err := json.Unmarshal([]byte(value), &object); err != nil {
+			return nil, fmt.Errorf("%s 不是合法 JSON 对象: %w", title, err)
+		}
+	}
+	if object == nil {
+		object = map[string]any{}
+	}
+	return object, nil
 }
 
 func findProviderModelRow(models []map[string]any, modelID string) map[string]any {
@@ -166,6 +205,13 @@ func providerModelOptionLabel(model map[string]any, index int) string {
 
 func providerModelOverrideText(model map[string]any) string {
 	if value, ok := model["overrideParameters"]; ok {
+		return prettyJSON(value)
+	}
+	return "{}"
+}
+
+func providerModelPricingText(model map[string]any) string {
+	if value, ok := model["pricing"]; ok {
 		return prettyJSON(value)
 	}
 	return "{}"

@@ -111,12 +111,44 @@ extension LocalDebugServer {
            let kind = ModelKind(rawValue: kindRaw) {
             model.kind = kind
         }
+        let inputModalitiesRaw = json["input_modalities"] ?? json["inputModalities"]
+        if inputModalitiesRaw != nil {
+            guard let inputModalities = debugModelModalities(inputModalitiesRaw, outputOnly: false) else {
+                return debugProviderError("input_modalities 包含无效模态")
+            }
+            model.inputModalities = Model.orderedModalities(inputModalities)
+        }
+        let outputModalitiesRaw = json["output_modalities"] ?? json["outputModalities"]
+        if outputModalitiesRaw != nil {
+            guard let outputModalities = debugModelModalities(outputModalitiesRaw, outputOnly: true) else {
+                return debugProviderError("output_modalities 包含无效模态")
+            }
+            model.outputModalities = Model.orderedOutputModalities(outputModalities)
+        }
         if let capabilityValues = debugStringArray(json["capabilities"]) {
             let capabilities = capabilityValues.compactMap(ModelCapability.init(rawValue:))
             model.capabilities = Model.orderedCapabilities(capabilities)
         }
+        if let requestBodyOverrideModeRaw = trimmedDebugString(json["request_body_override_mode"] ?? json["requestBodyOverrideMode"]),
+           !requestBodyOverrideModeRaw.isEmpty {
+            guard let requestBodyOverrideMode = Model.RequestBodyOverrideMode(rawValue: requestBodyOverrideModeRaw) else {
+                return debugProviderError("request_body_override_mode 无效")
+            }
+            model.requestBodyOverrideMode = requestBodyOverrideMode
+        }
+        if let rawRequestBodyJSON = trimmedDebugString(json["raw_request_body_json"] ?? json["rawRequestBodyJSON"]) {
+            model.rawRequestBodyJSON = rawRequestBodyJSON.isEmpty ? nil : rawRequestBodyJSON
+        }
         if let overrideParameters {
             model.overrideParameters = overrideParameters
+        }
+        let pricingRaw = json["pricing"]
+        if pricingRaw != nil {
+            let decodedPricing = decodeDebugModelPricing(pricingRaw)
+            guard decodedPricing.isValid else {
+                return debugProviderError("pricing 必须是合法的 ModelPricing JSON 对象")
+            }
+            model.pricing = decodedPricing.pricing
         }
 
         if let existingIndex {
@@ -179,6 +211,20 @@ extension LocalDebugServer {
         }
     }
 
+    private func debugModelModalities(_ value: Any?, outputOnly: Bool) -> [ModelModality]? {
+        guard let rawValues = debugStringArray(value) else { return nil }
+        var modalities: [ModelModality] = []
+        for rawValue in rawValues {
+            guard !rawValue.isEmpty else { continue }
+            guard let modality = ModelModality(rawValue: rawValue) else { return nil }
+            if outputOnly && !ModelModality.outputCases.contains(modality) {
+                return nil
+            }
+            modalities.append(modality)
+        }
+        return modalities
+    }
+
     private func tryDecodeDebugJSONValueDictionary(_ value: Any?) -> [String: JSONValue]? {
         guard let value else { return nil }
         if value is NSNull { return [:] }
@@ -196,6 +242,29 @@ extension LocalDebugServer {
             return nil
         }
         return try? makeWebConsoleJSONDecoder().decode([String: JSONValue].self, from: data)
+    }
+
+    private func decodeDebugModelPricing(_ value: Any?) -> (pricing: ModelPricing?, isValid: Bool) {
+        guard let value else { return (nil, true) }
+        if value is NSNull { return (nil, true) }
+
+        let data: Data?
+        if let text = value as? String {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return (nil, true) }
+            data = trimmed.data(using: .utf8)
+        } else if JSONSerialization.isValidJSONObject(value) {
+            data = try? JSONSerialization.data(withJSONObject: value)
+        } else {
+            data = nil
+        }
+
+        guard let data,
+              let decoded = try? makeWebConsoleJSONDecoder().decode(ModelPricing.self, from: data) else {
+            return (nil, false)
+        }
+        let normalized = decoded.normalized
+        return (normalized.isEffectivelyEmpty ? nil : normalized, true)
     }
 
     private func debugProviderBool(_ value: Any?) -> Bool? {

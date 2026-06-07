@@ -421,8 +421,18 @@
             <option value="textToSpeech">textToSpeech</option>
           </select>
           <div>启用</div><label class="checkbox-row"><input id="modelActivated" type="checkbox" checked />启用模型</label>
+          <div>输入模态</div><input id="modelInputModalities" class="mono" placeholder="text,image" />
+          <div>输出模态</div><input id="modelOutputModalities" class="mono" placeholder="text" />
           <div>能力</div><input id="modelCapabilities" class="mono" placeholder="toolCalling,reasoning" />
+          <div>请求体覆盖模式</div>
+          <select id="modelRequestBodyOverrideMode">
+            <option value="keyValue">keyValue</option>
+            <option value="expression">expression</option>
+            <option value="rawJSON">rawJSON</option>
+          </select>
+          <div>Raw Request Body JSON</div><textarea id="modelRawRequestBodyJSON" class="mono" style="min-height:90px;" spellcheck="false"></textarea>
           <div>Override Parameters</div><textarea id="modelOverrideParameters" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
+          <div>Pricing</div><textarea id="modelPricing" class="mono" style="min-height:110px;" spellcheck="false">{}</textarea>
         </div>
       </div>
     </div>
@@ -1181,8 +1191,13 @@
     el('modelDisplayName').value = model?.displayName || ''
     el('modelKind').value = model?.kind || 'chat'
     el('modelActivated').checked = model?.isActivated !== false
+    el('modelInputModalities').value = Array.isArray(model?.inputModalities) ? model.inputModalities.join(',') : 'text'
+    el('modelOutputModalities').value = Array.isArray(model?.outputModalities) ? model.outputModalities.join(',') : 'text'
     el('modelCapabilities').value = Array.isArray(model?.capabilities) ? model.capabilities.join(',') : 'toolCalling'
+    el('modelRequestBodyOverrideMode').value = model?.requestBodyOverrideMode || 'keyValue'
+    el('modelRawRequestBodyJSON').value = model?.rawRequestBodyJSON || ''
     el('modelOverrideParameters').value = JSON.stringify(model?.overrideParameters || {}, null, 2)
+    el('modelPricing').value = JSON.stringify(model?.pricing || {}, null, 2)
   }
 
   function clearProviderModelForm() {
@@ -1250,6 +1265,7 @@
       return
     }
     let overrideParameters = {}
+    let pricing = {}
     try {
       overrideParameters = JSON.parse(el('modelOverrideParameters').value || '{}')
       if (!overrideParameters || Array.isArray(overrideParameters) || typeof overrideParameters !== 'object') {
@@ -1259,6 +1275,15 @@
       alert(`Override Parameters 格式错误：${error.message}`)
       return
     }
+    try {
+      pricing = JSON.parse(el('modelPricing').value || '{}')
+      if (!pricing || Array.isArray(pricing) || typeof pricing !== 'object') {
+        throw new Error('Pricing 必须是 JSON 对象')
+      }
+    } catch (error) {
+      alert(`Pricing 格式错误：${error.message}`)
+      return
+    }
     const payload = {
       provider_id: provider.id,
       model_id: el('modelID').value.trim() || undefined,
@@ -1266,8 +1291,13 @@
       display_name: el('modelDisplayName').value.trim(),
       kind: el('modelKind').value,
       is_activated: el('modelActivated').checked,
+      input_modalities: el('modelInputModalities').value.split(',').map(item => item.trim()).filter(Boolean),
+      output_modalities: el('modelOutputModalities').value.split(',').map(item => item.trim()).filter(Boolean),
       capabilities: el('modelCapabilities').value.split(',').map(item => item.trim()).filter(Boolean),
-      override_parameters: overrideParameters
+      request_body_override_mode: el('modelRequestBodyOverrideMode').value,
+      raw_request_body_json: el('modelRawRequestBodyJSON').value.trim(),
+      override_parameters: overrideParameters,
+      pricing
     }
     if (!payload.model_id && !payload.model_name) {
       alert('请填写模型名')
