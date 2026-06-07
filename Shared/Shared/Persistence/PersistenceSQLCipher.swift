@@ -105,9 +105,9 @@ extension Persistence {
 
         let isEncrypted = databaseEncryptionHasStoredPassphrase()
         if isEncrypted {
-            let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration(readonly: true))
+            let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration())
             defer { try? source.close() }
-            try source.read { db in
+            try source.writeWithoutTransaction { db in
                 try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted")
                 try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
                 try db.execute(sql: "DETACH DATABASE encrypted")
@@ -489,13 +489,13 @@ private extension Persistence {
         removeSQLiteSidecars(at: destinationURL)
 
         let sourceConfiguration = databaseEncryptionHasStoredPassphrase()
-            ? makeEncryptedDatabaseConfiguration(readonly: true)
-            : makePlainDatabaseConfiguration(readonly: true)
+            ? makeEncryptedDatabaseConfiguration()
+            : makePlainDatabaseConfiguration()
         let source = try DatabaseQueue(path: sourceURL.path, configuration: sourceConfiguration)
         defer { try? source.close() }
 
         let passphrase = newPassphrase.map { Data($0.utf8) }
-        try source.read { db in
+        try source.writeWithoutTransaction { db in
             if let passphrase {
                 try attachDatabase(db, path: destinationURL.path, schema: "encrypted", key: passphrase)
             } else {
@@ -535,9 +535,9 @@ private extension Persistence {
         try removeItemIfExists(at: destinationURL)
         removeSQLiteSidecars(at: destinationURL)
 
-        let source = try DatabaseQueue(path: sourceURL.path, configuration: makePlainDatabaseConfiguration(readonly: true))
+        let source = try DatabaseQueue(path: sourceURL.path, configuration: makePlainDatabaseConfiguration())
         defer { try? source.close() }
-        try source.read { db in
+        try source.writeWithoutTransaction { db in
             try attachCurrentPassphraseDatabase(db, path: destinationURL.path, schema: "encrypted")
             try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
             try db.execute(sql: "DETACH DATABASE encrypted")
@@ -564,9 +564,9 @@ private extension Persistence {
         try removeItemIfExists(at: destinationURL)
         removeSQLiteSidecars(at: destinationURL)
 
-        let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration(readonly: true))
+        let source = try DatabaseQueue(path: sourceURL.path, configuration: makeEncryptedDatabaseConfiguration())
         defer { try? source.close() }
-        try source.read { db in
+        try source.writeWithoutTransaction { db in
             try db.execute(
                 sql: """
                 ATTACH DATABASE ? AS plaintext KEY '';

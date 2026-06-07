@@ -123,11 +123,21 @@ public struct AppLockSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var requestedDestination: AppLockSettingsDestination?
     @State private var successMessage: String?
+    @State private var isShowingIntroDetails = false
 
     public init() {}
 
     public var body: some View {
         List {
+            Section {
+                settingsIntroCard(
+                    title: "应用锁",
+                    summary: "保护本机界面，也可选择加密本机数据库文件。",
+                    details: appLockIntroDetails,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section {
                 Toggle(NSLocalizedString("应用锁", comment: ""), isOn: appLockEnabledBinding)
 
@@ -149,7 +159,7 @@ public struct AppLockSettingsView: View {
             } header: {
                 Text(NSLocalizedString("应用锁", comment: ""))
             } footer: {
-                Text(NSLocalizedString("应用锁只保护本机界面，不会随同步发送到其他设备。", comment: ""))
+                Text(NSLocalizedString("只影响这台设备，不随同步发送。", comment: ""))
             }
 
             if lockManager.isEnabled {
@@ -173,7 +183,7 @@ public struct AppLockSettingsView: View {
                 } header: {
                     Text(NSLocalizedString("自动锁定", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("应用进入后台并超过所选时间后，回到前台会要求重新输入应用锁密码。", comment: ""))
+                    Text(NSLocalizedString("离开后台超过所选时间后重新验证。", comment: ""))
                 }
             }
 
@@ -192,7 +202,7 @@ public struct AppLockSettingsView: View {
             } header: {
                 Text(NSLocalizedString("数据库物理加密", comment: ""))
             } footer: {
-                Text(NSLocalizedString("启用后，三处分库会使用独立主密码通过 SQLCipher 加密；主密码会保存在本机 Keychain 中，用于应用启动时透明解锁。它主要防止数据库文件被离线提取；若要防范已解锁设备上的直接访问，请同时启用应用锁。快照导出仍使用单独的快照密码。", comment: ""))
+                Text(NSLocalizedString("用于保护被离线提取的数据库文件。", comment: ""))
             }
 
             if let successMessage {
@@ -257,6 +267,52 @@ public struct AppLockSettingsView: View {
         appConfig.databaseEncryptionEnabled || DatabaseEncryptionManager.shared.hasStoredPassphrase
     }
 
+    private var appLockIntroDetails: String {
+        [
+            NSLocalizedString("应用锁用于保护已经解锁设备上的 App 界面。开启后，回到前台或手动锁定时，需要输入应用锁密码；iOS 上可额外开启 Face ID / Touch ID，失败后仍能回退到密码。", comment: ""),
+            NSLocalizedString("自动锁定只在应用进入后台后计时。选择“立即”会在每次离开后重新验证；选择更长时间则适合频繁切换应用的场景。", comment: ""),
+            NSLocalizedString("数据库物理加密是另一层保护：它会把聊天、配置和记忆三处分库迁移为 SQLCipher 加密文件，主密码保存在本机 Keychain 中，用于启动时透明解锁。", comment: ""),
+            NSLocalizedString("两者保护的对象不同：应用锁防止别人直接打开界面，数据库物理加密防止数据库文件被离线提取后读取。快照导出仍使用单独的导出密码，不会复用数据库主密码。", comment: ""),
+            NSLocalizedString("应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。", comment: "")
+        ].joined(separator: "\n\n")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading) {
+            Text(NSLocalizedString(title, comment: "设置介绍卡片标题"))
+                .font(.headline)
+            Text(NSLocalizedString(summary, comment: "设置介绍卡片摘要"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: "设置介绍卡片展开按钮"))
+                    .font(.footnote.weight(.medium))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString(title, comment: "设置介绍卡片详情标题"))
+            }
+        }
+    }
+
     private var timeoutBinding: Binding<Int> {
         Binding(
             get: { lockManager.timeoutSeconds },
@@ -274,9 +330,9 @@ public struct AppLockSettingsView: View {
 
     private var biometricFooterText: String {
         if lockManager.canEvaluateBiometrics() {
-            return NSLocalizedString("开启后可使用 Face ID、Touch ID 或设备支持的生物识别解锁；失败后仍可输入应用锁密码。", comment: "")
+            return NSLocalizedString("失败后仍可输入应用锁密码。", comment: "")
         }
-        return NSLocalizedString("当前设备未启用或不支持生物识别，请继续使用应用锁密码。", comment: "")
+        return NSLocalizedString("当前设备不可用生物识别。", comment: "")
     }
     #endif
 

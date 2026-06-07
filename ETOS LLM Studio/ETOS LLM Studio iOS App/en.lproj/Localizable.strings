@@ -3868,3 +3868,14 @@
 "最近一次重新嵌入成功。" = "The latest re-embedding completed successfully.";
 "如果当前页面有未保存更改，会先保存再重新嵌入。" = "If this page has unsaved changes, they will be saved before re-embedding.";
 "未找到这条记忆，无法重新嵌入。" = "This memory was not found, so it could not be re-embedded.";
+"保护本机界面，也可选择加密本机数据库文件。" = "Protect the local app interface, with optional encryption for local database files.";
+"只影响这台设备，不随同步发送。" = "Only affects this device and is not sent through sync.";
+"离开后台超过所选时间后重新验证。" = "Re-authenticate after the app stays in the background longer than the selected time.";
+"用于保护被离线提取的数据库文件。" = "Protects database files if they are extracted offline.";
+"应用锁用于保护已经解锁设备上的 App 界面。开启后，回到前台或手动锁定时，需要输入应用锁密码；iOS 上可额外开启 Face ID / Touch ID，失败后仍能回退到密码。" = "App Lock protects the app interface on an already unlocked device. After it is enabled, returning to the foreground or locking manually requires the App Lock password; on iOS, Face ID / Touch ID can also be enabled, with password fallback.";
+"自动锁定只在应用进入后台后计时。选择“立即”会在每次离开后重新验证；选择更长时间则适合频繁切换应用的场景。" = "Auto-lock starts counting only after the app enters the background. Choose Immediately to verify every time you leave; choose a longer delay when switching between apps frequently.";
+"数据库物理加密是另一层保护：它会把聊天、配置和记忆三处分库迁移为 SQLCipher 加密文件，主密码保存在本机 Keychain 中，用于启动时透明解锁。" = "Database encryption is a separate layer: it migrates the chat, configuration, and memory databases into SQLCipher-encrypted files. The master password is stored in the local Keychain for transparent unlock on launch.";
+"两者保护的对象不同：应用锁防止别人直接打开界面，数据库物理加密防止数据库文件被离线提取后读取。快照导出仍使用单独的导出密码，不会复用数据库主密码。" = "They protect different things: App Lock prevents direct access to the interface, while database encryption prevents offline reading of extracted database files. Snapshot exports still use a separate export password and do not reuse the database master password.";
+"应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。" = "App Lock and the database master password are stored only on this device. They are not synced to other devices through CloudKit, WatchConnectivity, or backups. Set them up again on a new device.";
+"失败后仍可输入应用锁密码。" = "If it fails, you can still enter the App Lock password.";
+"保护本机界面与离线数据库文件。" = "Protect the local interface and offline database files.";
