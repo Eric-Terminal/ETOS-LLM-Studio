@@ -63,6 +63,8 @@ type DebugServer struct {
 
 	httpServer      *http.Server
 	bonjourShutdown func()
+	serviceStarted  bool
+	serviceError    string
 }
 
 func NewDebugServer(host string, port int) *DebugServer {
@@ -92,8 +94,9 @@ func getLocalIP() string {
 
 func (s *DebugServer) run(ctx context.Context) error {
 	localIP := getLocalIP()
-	s.startHTTPServer()
-	s.startBonjourAdvertisement()
+	if s.startHTTPServer() {
+		s.startBonjourAdvertisement()
+	}
 
 	if err := runTUI(ctx.Done(), s, localIP); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Printf("\nTUI 运行错误: %v\n", err)
@@ -133,7 +136,7 @@ func (s *DebugServer) shutdown(ctx context.Context) error {
 	return fmt.Errorf("关闭服务失败: %v", errs)
 }
 
-func (s *DebugServer) startHTTPServer() {
+func (s *DebugServer) startHTTPServer() bool {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", s.handleHTTPPing)
 	mux.HandleFunc("/poll", s.handleHTTPPoll)
@@ -145,16 +148,53 @@ func (s *DebugServer) startHTTPServer() {
 	mux.HandleFunc("/v1/", s.handleOpenAIPing)
 	s.registerWebRoutes(mux)
 
-	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", s.host, s.port),
-		Handler: mux,
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	listener, err := net.Listen(s.listenNetwork(), addr)
+	if err != nil {
+		s.setServiceStatus(false, formatServiceListenError(s.port, err))
+		return false
 	}
 
+	s.httpServer = &http.Server{Handler: mux}
+	s.setServiceStatus(true, "")
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("\n[ERROR] 调试服务启动失败: %v\n", err)
+		if err := s.httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.setServiceStatus(false, fmt.Sprintf("调试服务运行中断: %v", err))
 		}
 	}()
+	return true
+}
+
+func (s *DebugServer) listenNetwork() string {
+	ip := net.ParseIP(s.host)
+	if s.host == defaultHost || ip == nil || ip.To4() != nil {
+		return "tcp4"
+	}
+	return "tcp"
+}
+
+func formatServiceListenError(port int, err error) string {
+	text := strings.ToLower(err.Error())
+	if strings.Contains(text, "address already in use") || strings.Contains(text, "bind: address already in use") {
+		return fmt.Sprintf("端口 %d 已被占用，调试服务未启动", port)
+	}
+	if strings.Contains(text, "permission denied") {
+		return fmt.Sprintf("没有权限监听端口 %d，调试服务未启动", port)
+	}
+	return fmt.Sprintf("调试服务启动失败: %v", err)
+}
+
+func (s *DebugServer) setServiceStatus(started bool, message string) {
+	s.mu.Lock()
+	s.serviceStarted = started
+	s.serviceError = message
+	s.mu.Unlock()
+}
+
+func (s *DebugServer) getServiceStatus() (bool, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.serviceStarted, s.serviceError
 }
 
 var websocketUpgrader = websocket.Upgrader{

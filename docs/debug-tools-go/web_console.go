@@ -123,6 +123,8 @@ func (s *DebugServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	lastPoll := s.lastPollTime
 	queueSize := len(s.commandQueue)
 	pendingCount := len(s.pendingResponses)
+	serviceStarted := s.serviceStarted
+	serviceError := s.serviceError
 	s.mu.RUnlock()
 
 	httpPollingAlive := !lastPoll.IsZero() && time.Since(lastPoll) <= 15*time.Second
@@ -147,6 +149,8 @@ func (s *DebugServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		"proxy_port":         s.port,
 		"ws_path":            wsPath,
 		"openai_path":        "/v1/chat/completions",
+		"service_started":    serviceStarted,
+		"service_error":      serviceError,
 	})
 }
 

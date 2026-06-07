@@ -74,6 +74,8 @@ type tuiStatus struct {
 	deviceName      string
 	queueSize       int
 	pendingRequests int
+	serviceStarted  bool
+	serviceError    string
 }
 
 type tuiModel struct {
@@ -381,6 +383,7 @@ func (m tuiModel) rightContentWidth() int {
 
 func (m *tuiModel) refreshStatus() {
 	connected, mode := m.server.getConnectionStatus()
+	serviceStarted, serviceError := m.server.getServiceStatus()
 	m.server.mu.RLock()
 	m.status = tuiStatus{
 		connected:       connected,
@@ -388,11 +391,23 @@ func (m *tuiModel) refreshStatus() {
 		deviceName:      m.server.deviceName,
 		queueSize:       len(m.server.commandQueue),
 		pendingRequests: len(m.server.pendingResponses),
+		serviceStarted:  serviceStarted,
+		serviceError:    serviceError,
 	}
 	m.server.mu.RUnlock()
 }
 
 func (m tuiModel) renderStatusLine() string {
+	if m.status.serviceError != "" {
+		return fmt.Sprintf(
+			"%s 服务启动失败 | %s:%d | %s",
+			tuiErrStyle.Render("●"),
+			m.localIP,
+			m.server.port,
+			m.status.serviceError,
+		)
+	}
+
 	dot := tuiErrStyle.Render("●")
 	if m.status.connected {
 		dot = tuiOKStyle.Render("●")
@@ -437,16 +452,34 @@ func (m tuiModel) renderDashboard() string {
 		fmt.Sprintf("  设备/模式: %s / %s", m.status.deviceName, m.status.mode),
 		fmt.Sprintf("  队列/等待: %d / %d", m.status.queueSize, m.status.pendingRequests),
 		"",
+	}
+	if m.status.serviceError != "" {
+		lines = append(lines,
+			"服务",
+			"  状态: 启动失败",
+			"  错误: "+m.status.serviceError,
+			"  处理: 关闭占用进程，或改用 go run . 7655",
+			"",
+		)
+	}
+	lines = append(lines,
 		"地址",
 		fmt.Sprintf("  HTTP/WebUI: http://%s:%d", m.localIP, m.server.port),
 		fmt.Sprintf("  WebSocket: ws://%s:%d%s", m.localIP, m.server.port, wsPath),
 		fmt.Sprintf("  OpenAI: http://%s:%d/v1", m.localIP, m.server.port),
-		fmt.Sprintf("  Bonjour: %s -> %d", bonjourServiceType, m.server.port),
+		m.renderBonjourLine(),
 		"",
 		"快速开始",
 		"  设备端可自动发现，也可以手动填入地址。",
-	}
+	)
 	return strings.Join(lines, "\n")
+}
+
+func (m tuiModel) renderBonjourLine() string {
+	if m.status.serviceError != "" {
+		return "  Bonjour: 未发布"
+	}
+	return fmt.Sprintf("  Bonjour: %s -> %d", bonjourServiceType, m.server.port)
 }
 
 func (m *tuiModel) syncContentViewport() {

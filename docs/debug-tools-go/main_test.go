@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -134,5 +135,27 @@ func TestParsePortFromArgsUsesSingleDebugPort(t *testing.T) {
 
 	if _, err := parsePortFromArgs([]string{"etos-debug", "8765", "7654", "8080"}); err == nil {
 		t.Fatal("旧三端口参数未返回错误")
+	}
+}
+
+func TestStartHTTPServerReportsOccupiedPort(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("占用临时端口失败: %v", err)
+	}
+	defer listener.Close()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	server := NewDebugServer("127.0.0.1", port)
+	if server.startHTTPServer() {
+		t.Fatal("端口被占用时 startHTTPServer 返回 true")
+	}
+
+	started, message := server.getServiceStatus()
+	if started {
+		t.Fatal("端口被占用时 serviceStarted = true")
+	}
+	if !strings.Contains(message, "已被占用") {
+		t.Fatalf("serviceError = %q, want 包含“已被占用”", message)
 	}
 }
