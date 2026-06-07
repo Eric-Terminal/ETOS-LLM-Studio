@@ -352,7 +352,7 @@ private struct WatchDatabaseOverwriteSelectionView: View {
                 }
 
                 ForEach(WatchSyncDatabaseKind.allCases) { kind in
-                    Section(kind.localizedTitle) {
+                    Section {
                         Picker(NSLocalizedString("保留平台", comment: ""), selection: selectionBinding(for: kind)) {
                             Text(platformName(plan.local.sourcePlatform)).tag(plan.local.sourcePlatform)
                             Text(platformName(plan.remote.sourcePlatform)).tag(plan.remote.sourcePlatform)
@@ -360,6 +360,8 @@ private struct WatchDatabaseOverwriteSelectionView: View {
 
                         databaseMetadataRow(kind: kind, sourcePlatform: plan.local.sourcePlatform)
                         databaseMetadataRow(kind: kind, sourcePlatform: plan.remote.sourcePlatform)
+                    } header: {
+                        Text(kind.localizedTitle)
                     }
                 }
 

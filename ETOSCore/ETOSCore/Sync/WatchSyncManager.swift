@@ -245,7 +245,7 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
 
         let remotePacket = try JSONDecoder().decode(WatchSyncDatabaseMetadataPacket.self, from: metadataData)
-        let localPacket = try await Task.detached(priority: .userInitiated) {
+        let localPacket = await Task.detached(priority: .userInitiated) {
             WatchDatabaseSyncService.localMetadataPacket()
         }.value
         return WatchSyncDatabasePlan(local: localPacket, remote: remotePacket)
