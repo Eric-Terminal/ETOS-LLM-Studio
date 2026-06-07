@@ -47,7 +47,6 @@ struct BackupRestoreView: View {
                     Text(NSLocalizedString("完整快照", comment: ""))
                         .tag(SnapshotBuilder.BackupKind.full)
                 }
-                .pickerStyle(.segmented)
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
                 Button {
