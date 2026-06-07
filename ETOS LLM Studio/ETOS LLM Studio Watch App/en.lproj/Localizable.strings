@@ -2619,6 +2619,9 @@
 "请填写 Secret Access Key。" = "Enter the Secret Access Key.";
 "无法生成对象存储上传地址。" = "Unable to create the object storage upload URL.";
 "对象存储 Endpoint 必须包含主机名。" = "The object storage endpoint must include a host name.";
+"远端快照列表解析失败。" = "Failed to parse the remote snapshot list.";
+"无法生成对象存储列表地址。" = "Could not generate the object storage list URL.";
+"远端快照路径为空。" = "The remote snapshot path is empty.";
 
 /* Message regex rules */
 "消息规则" = "Message Rules";

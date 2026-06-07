@@ -241,6 +241,107 @@ struct SyncPackageUploadServiceTests {
         }
     }
 
+    @Test("S3 兼容远端快照列表会生成 SigV4 ListObjectsV2 请求")
+    func testS3ListRemoteSnapshotsBuildsSignedListRequest() async throws {
+        let endpoint = try #require(URL(string: "https://abc123.r2.cloudflarestorage.com"))
+        let configuration = S3CompatibleUploadConfiguration(
+            endpoint: endpoint,
+            region: "auto",
+            bucket: "etos-bucket",
+            keyPrefix: "mobile backups",
+            accessKeyID: "test-access",
+            secretAccessKey: "test-secret",
+            sessionToken: "test-session-token"
+        )
+        let now = try #require(ISO8601DateFormatter().date(from: "2024-05-15T12:34:56Z"))
+        var capturedRequest: URLRequest?
+        let responseXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult>
+          <Contents>
+            <Key>mobile backups/ETOS-Snapshot-a.elsbackup</Key>
+            <LastModified>2024-05-15T12:34:56.000Z</LastModified>
+            <Size>2048</Size>
+          </Contents>
+          <Contents>
+            <Key>mobile backups/readme.txt</Key>
+            <LastModified>2024-05-15T12:00:00.000Z</LastModified>
+            <Size>12</Size>
+          </Contents>
+        </ListBucketResult>
+        """
+
+        let snapshots = try await SyncPackageUploadService.listRemoteSnapshots(
+            s3: configuration,
+            now: now,
+            transport: { request in
+                capturedRequest = request
+                let response = try #require(
+                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (Data(responseXML.utf8), response)
+            }
+        )
+
+        #expect(snapshots.count == 1)
+        #expect(snapshots.first?.key == "mobile backups/ETOS-Snapshot-a.elsbackup")
+        #expect(snapshots.first?.fileName == "ETOS-Snapshot-a.elsbackup")
+        #expect(snapshots.first?.byteSize == 2048)
+        #expect(capturedRequest?.url?.absoluteString == "https://abc123.r2.cloudflarestorage.com/etos-bucket?list-type=2&max-keys=1000&prefix=mobile%20backups%2F")
+        #expect(capturedRequest?.httpMethod == "GET")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "x-amz-date") == "20240515T123456Z")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "x-amz-security-token") == "test-session-token")
+        let authorization = try #require(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
+        #expect(authorization.contains("AWS4-HMAC-SHA256 Credential=test-access/20240515/auto/s3/aws4_request"))
+        #expect(authorization.contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token"))
+    }
+
+    @Test("S3 兼容远端快照下载会生成 SigV4 GET 请求并写入临时文件")
+    func testS3DownloadRemoteSnapshotBuildsSignedGetRequest() async throws {
+        let endpoint = try #require(URL(string: "https://abc123.r2.cloudflarestorage.com"))
+        let configuration = S3CompatibleUploadConfiguration(
+            endpoint: endpoint,
+            region: "auto",
+            bucket: "etos-bucket",
+            keyPrefix: "mobile backups",
+            accessKeyID: "test-access",
+            secretAccessKey: "test-secret"
+        )
+        let now = try #require(ISO8601DateFormatter().date(from: "2024-05-15T12:34:56Z"))
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("s3-download-source-\(UUID().uuidString).elsbackup")
+        let destinationDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("s3-download-destination-\(UUID().uuidString)", isDirectory: true)
+        try Data("snapshot".utf8).write(to: sourceURL)
+        defer {
+            try? FileManager.default.removeItem(at: sourceURL)
+            try? FileManager.default.removeItem(at: destinationDirectory)
+        }
+
+        var capturedRequest: URLRequest?
+        let downloadedURL = try await SyncPackageUploadService.downloadRemoteSnapshot(
+            objectKey: "mobile backups/ETOS-Snapshot-a.elsbackup",
+            s3: configuration,
+            destinationDirectory: destinationDirectory,
+            now: now,
+            transport: { request in
+                capturedRequest = request
+                let response = try #require(
+                    HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (sourceURL, response)
+            }
+        )
+
+        #expect(capturedRequest?.url?.absoluteString == "https://abc123.r2.cloudflarestorage.com/etos-bucket/mobile%20backups/ETOS-Snapshot-a.elsbackup")
+        #expect(capturedRequest?.httpMethod == "GET")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "x-amz-date") == "20240515T123456Z")
+        let authorization = try #require(capturedRequest?.value(forHTTPHeaderField: "Authorization"))
+        #expect(authorization.contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date"))
+        #expect(try Data(contentsOf: downloadedURL) == Data("snapshot".utf8))
+        #expect(downloadedURL.lastPathComponent.hasSuffix("ETOS-Snapshot-a.elsbackup"))
+    }
+
     @Test("非 2xx 响应会抛出状态码错误")
     func testUploadThrowsForUnexpectedStatusCode() async throws {
         let endpoint = try #require(URL(string: "https://example.com/backup"))

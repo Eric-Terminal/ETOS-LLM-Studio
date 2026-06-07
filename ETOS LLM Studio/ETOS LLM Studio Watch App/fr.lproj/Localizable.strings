@@ -2388,6 +2388,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "请填写 Secret Access Key。" = "Saisissez la Secret Access Key.";
 "无法生成对象存储上传地址。" = "Impossible de créer l’URL d’envoi du stockage d’objets.";
 "对象存储 Endpoint 必须包含主机名。" = "L’endpoint du stockage d’objets doit inclure un nom d’hôte.";
+"远端快照列表解析失败。" = "Impossible d'analyser la liste des snapshots distants.";
+"无法生成对象存储列表地址。" = "Impossible de générer l'URL de liste du stockage objet.";
+"远端快照路径为空。" = "Le chemin du snapshot distant est vide.";
 
 /* Message regex rules */
 "消息规则" = "Règles de message";

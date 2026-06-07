@@ -9,6 +9,9 @@
 
 import Foundation
 import CryptoKit
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 
 public struct S3CompatibleUploadConfiguration: Equatable, Sendable {
     public let endpoint: URL
@@ -35,6 +38,22 @@ public struct S3CompatibleUploadConfiguration: Equatable, Sendable {
         self.accessKeyID = accessKeyID
         self.secretAccessKey = secretAccessKey
         self.sessionToken = sessionToken
+    }
+}
+
+public struct S3CompatibleRemoteSnapshot: Equatable, Identifiable, Sendable {
+    public let key: String
+    public let fileName: String
+    public let byteSize: Int64?
+    public let lastModified: Date?
+
+    public var id: String { key }
+
+    public init(key: String, fileName: String, byteSize: Int64?, lastModified: Date?) {
+        self.key = key
+        self.fileName = fileName
+        self.byteSize = byteSize
+        self.lastModified = lastModified
     }
 }
 
@@ -71,6 +90,7 @@ public enum SyncPackageUploadError: LocalizedError {
     case invalidHTTPResponse
     case unexpectedStatusCode(Int, String?)
     case invalidS3Configuration(String)
+    case invalidS3ListResponse
     case fileHashFailed(String)
 
     public var errorDescription: String? {
@@ -88,6 +108,8 @@ public enum SyncPackageUploadError: LocalizedError {
             return String(format: NSLocalizedString("上传失败：HTTP %d。", comment: ""), statusCode)
         case .invalidS3Configuration(let reason):
             return reason
+        case .invalidS3ListResponse:
+            return NSLocalizedString("远端快照列表解析失败。", comment: "")
         case .fileHashFailed(let reason):
             return String(format: NSLocalizedString("计算备份文件校验值失败：%@", comment: ""), reason)
         }
@@ -97,6 +119,8 @@ public enum SyncPackageUploadError: LocalizedError {
 public enum SyncPackageUploadService {
     public typealias Transport = (_ request: URLRequest, _ body: Data) async throws -> (Data, URLResponse)
     public typealias FileTransport = (_ request: URLRequest, _ fileURL: URL) async throws -> (Data, URLResponse)
+    public typealias RequestTransport = (_ request: URLRequest) async throws -> (Data, URLResponse)
+    public typealias DownloadTransport = (_ request: URLRequest) async throws -> (URL, URLResponse)
     public typealias ProgressHandler = @Sendable (SyncPackageUploadProgress) -> Void
 
     /// 直接上传导出数据。
@@ -280,6 +304,73 @@ public enum SyncPackageUploadService {
             responseBodyPreview: preview
         )
     }
+
+    public static func listRemoteSnapshots(
+        s3 configuration: S3CompatibleUploadConfiguration,
+        timeout: TimeInterval = 30,
+        now: Date = Date(),
+        transport: RequestTransport? = nil
+    ) async throws -> [S3CompatibleRemoteSnapshot] {
+        let request = try makeS3ListObjectsRequest(
+            configuration: configuration,
+            timeout: timeout,
+            now: now
+        )
+        let sender = transport ?? { request in
+            try await NetworkSessionConfiguration.shared.data(for: request)
+        }
+        let (responseData, response) = try await sender(request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncPackageUploadError.invalidHTTPResponse
+        }
+
+        let preview = responsePreview(from: responseData)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
+        }
+
+        return try parseS3RemoteSnapshots(from: responseData)
+    }
+
+    public static func downloadRemoteSnapshot(
+        objectKey: String,
+        s3 configuration: S3CompatibleUploadConfiguration,
+        destinationDirectory: URL = FileManager.default.temporaryDirectory,
+        timeout: TimeInterval = 180,
+        now: Date = Date(),
+        transport: DownloadTransport? = nil
+    ) async throws -> URL {
+        let request = try makeS3GetObjectRequest(
+            objectKey: objectKey,
+            configuration: configuration,
+            timeout: timeout,
+            now: now
+        )
+        let downloader = transport ?? { request in
+            try await NetworkSessionConfiguration.shared.download(for: request)
+        }
+        let (downloadedURL, response) = try await downloader(request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncPackageUploadError.invalidHTTPResponse
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, nil)
+        }
+
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+        let fileName = normalizedSnapshotFileName(for: objectKey)
+        let destinationURL = destinationDirectory
+            .appendingPathComponent("Remote-\(UUID().uuidString)-\(fileName)", isDirectory: false)
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+        try fileManager.moveItem(at: downloadedURL, to: destinationURL)
+        return destinationURL
+    }
 }
 
 private extension SyncPackageUploadService {
@@ -368,11 +459,112 @@ private extension SyncPackageUploadService {
         let authorization = try s3AuthorizationHeader(
             method: "PUT",
             url: uploadURL,
-            contentType: contentType,
             payloadHash: payloadHash,
             amzDate: amzDate,
             dateStamp: dateStamp,
-            configuration: normalized
+            configuration: normalized,
+            signedHeaderValues: ["content-type": contentType]
+        )
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    static func makeS3ListObjectsRequest(
+        configuration: S3CompatibleUploadConfiguration,
+        timeout: TimeInterval,
+        now: Date
+    ) throws -> URLRequest {
+        let normalized = try normalizedS3Configuration(configuration)
+        var listURL = try makeS3PathStyleURL(
+            endpoint: normalized.endpoint,
+            bucket: normalized.bucket,
+            objectKey: ""
+        )
+        guard var components = URLComponents(url: listURL, resolvingAgainstBaseURL: false) else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("无法生成对象存储列表地址。", comment: "")
+            )
+        }
+        let prefix = normalized.keyPrefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        var queryItems = [
+            ("list-type", "2"),
+            ("max-keys", "1000")
+        ]
+        if !prefix.isEmpty {
+            queryItems.append(("prefix", prefix + "/"))
+        }
+        components.percentEncodedQuery = queryItems
+            .sorted { $0.0 < $1.0 }
+            .map { "\(s3URIEncode($0.0))=\(s3URIEncode($0.1))" }
+            .joined(separator: "&")
+        guard let url = components.url else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("无法生成对象存储列表地址。", comment: "")
+            )
+        }
+        listURL = url
+        return try makeS3SignedRequest(
+            method: "GET",
+            url: listURL,
+            timeout: timeout,
+            configuration: normalized,
+            now: now
+        )
+    }
+
+    static func makeS3GetObjectRequest(
+        objectKey: String,
+        configuration: S3CompatibleUploadConfiguration,
+        timeout: TimeInterval,
+        now: Date
+    ) throws -> URLRequest {
+        let normalized = try normalizedS3Configuration(configuration)
+        let cleanedObjectKey = objectKey.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !cleanedObjectKey.isEmpty else {
+            throw SyncPackageUploadError.invalidS3Configuration(
+                NSLocalizedString("远端快照路径为空。", comment: "")
+            )
+        }
+        let objectURL = try makeS3PathStyleURL(
+            endpoint: normalized.endpoint,
+            bucket: normalized.bucket,
+            objectKey: cleanedObjectKey
+        )
+        return try makeS3SignedRequest(
+            method: "GET",
+            url: objectURL,
+            timeout: timeout,
+            configuration: normalized,
+            now: now
+        )
+    }
+
+    static func makeS3SignedRequest(
+        method: String,
+        url: URL,
+        timeout: TimeInterval,
+        configuration: S3CompatibleUploadConfiguration,
+        now: Date
+    ) throws -> URLRequest {
+        let payloadHash = sha256Hex(Data())
+        let amzDate = s3Timestamp(from: now)
+        let dateStamp = s3DateStamp(from: now)
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = timeout
+        request.setValue(payloadHash, forHTTPHeaderField: "x-amz-content-sha256")
+        request.setValue(amzDate, forHTTPHeaderField: "x-amz-date")
+        if let sessionToken = configuration.sessionToken {
+            request.setValue(sessionToken, forHTTPHeaderField: "x-amz-security-token")
+        }
+        let authorization = try s3AuthorizationHeader(
+            method: method,
+            url: url,
+            payloadHash: payloadHash,
+            amzDate: amzDate,
+            dateStamp: dateStamp,
+            configuration: configuration,
+            signedHeaderValues: [:]
         )
         request.setValue(authorization, forHTTPHeaderField: "Authorization")
         return request
@@ -473,19 +665,21 @@ private extension SyncPackageUploadService {
     static func s3AuthorizationHeader(
         method: String,
         url: URL,
-        contentType: String,
         payloadHash: String,
         amzDate: String,
         dateStamp: String,
-        configuration: S3CompatibleUploadConfiguration
+        configuration: S3CompatibleUploadConfiguration,
+        signedHeaderValues: [String: String]
     ) throws -> String {
         let credentialScope = "\(dateStamp)/\(configuration.region)/\(s3Service)/\(s3RequestTerminator)"
-        var headers = [
-            "content-type": contentType,
+        var headers = signedHeaderValues.reduce(into: [String: String]()) { partialResult, item in
+            partialResult[item.key.lowercased()] = item.value
+        }
+        headers.merge([
             "host": try hostHeaderValue(for: url),
             "x-amz-content-sha256": payloadHash,
             "x-amz-date": amzDate
-        ]
+        ]) { _, newValue in newValue }
         if let sessionToken = configuration.sessionToken {
             headers["x-amz-security-token"] = sessionToken
         }
@@ -601,6 +795,41 @@ private extension SyncPackageUploadService {
         return host
     }
 
+    static func parseS3RemoteSnapshots(from data: Data) throws -> [S3CompatibleRemoteSnapshot] {
+        let parserDelegate = S3ListObjectsV2Parser()
+        let parser = XMLParser(data: data)
+        parser.delegate = parserDelegate
+        guard parser.parse() else {
+            throw SyncPackageUploadError.invalidS3ListResponse
+        }
+        return parserDelegate.objects
+            .filter { $0.key.pathExtensionCaseInsensitive == SnapshotBuilder.fileExtension }
+            .sorted { lhs, rhs in
+                switch (lhs.lastModified, rhs.lastModified) {
+                case let (lhsDate?, rhsDate?):
+                    return lhsDate > rhsDate
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    return lhs.key > rhs.key
+                }
+            }
+    }
+
+    static func normalizedSnapshotFileName(for objectKey: String) -> String {
+        let fileName = URL(fileURLWithPath: objectKey).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fileName.isEmpty else {
+            return "Remote-Snapshot.\(SnapshotBuilder.fileExtension)"
+        }
+        guard fileName.pathExtensionCaseInsensitive == SnapshotBuilder.fileExtension else {
+            return fileName.appending(".\(SnapshotBuilder.fileExtension)")
+        }
+        return fileName
+    }
+
     static func normalizedHeaderValue(_ value: String) -> String {
         value
             .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" })
@@ -658,8 +887,89 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
     }
 }
 
+private final class S3ListObjectsV2Parser: NSObject, XMLParserDelegate {
+    struct PartialObject {
+        var key = ""
+        var byteSize: Int64?
+        var lastModified: Date?
+    }
+
+    private(set) var objects: [S3CompatibleRemoteSnapshot] = []
+    private var currentObject: PartialObject?
+    private var currentElement = ""
+    private var currentText = ""
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        currentElement = elementName
+        currentText = ""
+        if elementName == "Contents" {
+            currentObject = PartialObject()
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        currentText += string
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch elementName {
+        case "Key":
+            currentObject?.key = text
+        case "Size":
+            currentObject?.byteSize = Int64(text)
+        case "LastModified":
+            currentObject?.lastModified = Self.lastModifiedFormatter.date(from: text)
+                ?? Self.lastModifiedFormatterWithoutFractions.date(from: text)
+        case "Contents":
+            if let object = currentObject, !object.key.isEmpty {
+                objects.append(
+                    S3CompatibleRemoteSnapshot(
+                        key: object.key,
+                        fileName: SyncPackageUploadService.normalizedSnapshotFileName(for: object.key),
+                        byteSize: object.byteSize,
+                        lastModified: object.lastModified
+                    )
+                )
+            }
+            currentObject = nil
+        default:
+            break
+        }
+        currentElement = ""
+        currentText = ""
+    }
+
+    private static let lastModifiedFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let lastModifiedFormatterWithoutFractions: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+}
+
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+
+    var pathExtensionCaseInsensitive: String {
+        URL(fileURLWithPath: self).pathExtension.lowercased()
     }
 }

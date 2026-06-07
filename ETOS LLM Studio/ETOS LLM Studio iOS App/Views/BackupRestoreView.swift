@@ -144,6 +144,19 @@ struct BackupRestoreView: View {
                 }
                 .disabled(isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
 
+                NavigationLink {
+                    if let configuration = s3UploadConfiguration(reportErrors: false) {
+                        RemoteSnapshotBrowserView(configuration: configuration)
+                    } else {
+                        Text(NSLocalizedString("请先完成对象存储配置。", comment: ""))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } label: {
+                    Label(NSLocalizedString("从 S3/R2 选择快照", comment: ""), systemImage: "tray.and.arrow.down")
+                }
+                .disabled(!isS3ConfigurationComplete || isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
+
                 if let uploadProgress {
                     SnapshotUploadProgressView(progress: uploadProgress)
                 }
@@ -333,16 +346,33 @@ struct BackupRestoreView: View {
         return true
     }
 
-    private func s3UploadConfiguration() -> S3CompatibleUploadConfiguration? {
+    private var isS3ConfigurationComplete: Bool {
+        let endpointText = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let endpoint = URL(string: endpointText),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return false
+        }
+        return !appConfig.syncBackupS3Region.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appConfig.syncBackupS3Bucket.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appConfig.syncBackupS3AccessKeyID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appConfig.syncBackupS3SecretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func s3UploadConfiguration(reportErrors: Bool = true) -> S3CompatibleUploadConfiguration? {
         let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            errorMessage = NSLocalizedString("请先输入对象存储 Endpoint。", comment: "")
+            if reportErrors {
+                errorMessage = NSLocalizedString("请先输入对象存储 Endpoint。", comment: "")
+            }
             return nil
         }
         guard let endpoint = URL(string: trimmed),
               let scheme = endpoint.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
-            errorMessage = NSLocalizedString("对象存储 Endpoint 必须是完整的 http/https URL。", comment: "")
+            if reportErrors {
+                errorMessage = NSLocalizedString("对象存储 Endpoint 必须是完整的 http/https URL。", comment: "")
+            }
             return nil
         }
         return S3CompatibleUploadConfiguration(
