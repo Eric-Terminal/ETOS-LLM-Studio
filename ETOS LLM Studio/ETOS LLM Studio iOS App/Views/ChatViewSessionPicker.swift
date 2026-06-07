@@ -52,8 +52,7 @@ extension ChatView {
 
             sessionPickerList(
                 queryActive: queryActive,
-                isSearching: isSessionPickerSearching,
-                includesSearchInput: false
+                isSearching: isSessionPickerSearching
             )
 
             if showsFooter && showsFooterDivider {
@@ -76,7 +75,7 @@ extension ChatView {
             if showsCloseButton {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("完成", comment: "")) {
-                        dismissSessionPickerPanel()
+                        dismissSessionPicker()
                     }
                 }
             }
@@ -99,7 +98,6 @@ extension ChatView {
     func applySessionPickerLifecycle<Content: View>(to content: Content) -> some View {
         content
         .onAppear {
-            showSessionPickerSearchInput = false
             resetSessionPickerLoadedSessions()
             resetSessionPickerLoadedSearchResults()
             scheduleSessionPickerSearch(for: sessionPickerSearchText)
@@ -188,139 +186,6 @@ extension ChatView {
         return NSLocalizedString("快速切换与管理", comment: "")
     }
 
-    var sessionPickerOverlay: some View {
-        let normalizedQuery = SessionHistorySearchSupport.normalizedQuery(sessionPickerSearchText)
-        let queryActive = !normalizedQuery.isEmpty
-        let displayedSessionCount = queryActive ? totalSessionPickerSearchResultCount : totalSessionPickerCount
-
-        return GeometryReader { proxy in
-            let panelHeight = proxy.size.height * sessionPickerHeightRatio
-            ZStack(alignment: .top) {
-                Color.black.opacity(colorScheme == .dark ? 0.35 : 0.2)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        dismissSessionPickerPanel()
-                    }
-                    .transition(.opacity)
-
-                VStack(spacing: 12) {
-                    sessionPickerHeader(
-                        queryActive: queryActive,
-                        displayedCount: displayedSessionCount,
-                        isSearching: isSessionPickerSearching
-                    )
-
-                    sessionPickerList(
-                        queryActive: queryActive,
-                        isSearching: isSessionPickerSearching
-                    )
-
-                    sessionPickerFooter(
-                        queryActive: queryActive,
-                        displayedCount: displayedSessionCount,
-                        isSearching: isSessionPickerSearching
-                    )
-                }
-                .frame(width: proxy.size.width, height: panelHeight, alignment: .top)
-                .background(sessionPickerPanelBackground)
-                .clipShape(RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: sessionPickerCornerRadius, style: .continuous)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 0.6)
-                )
-                .shadow(color: .black.opacity(0.2), radius: 22, x: 0, y: 12)
-                .offset(y: navBarHeight + 6)
-                .transition(
-                    .move(edge: .top)
-                    .combined(with: .opacity)
-                    .combined(with: .scale(scale: 0.96, anchor: .top))
-                )
-            }
-        }
-        .onAppear {
-            resetSessionPickerLoadedSessions()
-            resetSessionPickerLoadedSearchResults()
-            scheduleSessionPickerSearch(for: sessionPickerSearchText)
-        }
-        .onChange(of: sessionPickerSearchText) { _, newValue in
-            isLoadingMoreSessionPickerSearchResults = false
-            loadedSessionPickerSearchResults = []
-            scheduleSessionPickerSearch(for: newValue)
-        }
-        .onChange(of: viewModel.chatSessionListVersion) { _, _ in
-            syncLoadedSessionPickerSessionsWithSource()
-            syncLoadedSessionPickerSearchResultsWithSource()
-            scheduleSessionPickerSearch(for: sessionPickerSearchText)
-        }
-        .onChange(of: viewModel.currentSession?.id) { _, _ in
-            scheduleSessionPickerSearch(for: sessionPickerSearchText)
-        }
-        .onChange(of: viewModel.allMessageIdentityVersion) { _, _ in
-            scheduleSessionPickerSearch(for: sessionPickerSearchText)
-        }
-        .onDisappear {
-            cancelSessionPickerPagingTasks()
-            sessionPickerPendingSearchWorkItem?.cancel()
-            sessionPickerPendingSearchWorkItem = nil
-        }
-    }
-
-    func sessionPickerHeader(queryActive: Bool, displayedCount: Int, isSearching: Bool) -> some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(NSLocalizedString("会话", comment: ""))
-                    .etFont(.system(size: 16, weight: .semibold))
-                    .foregroundColor(TelegramColors.navBarText)
-                if queryActive {
-                    Text(
-                        isSearching
-                        ? NSLocalizedString("正在搜索历史会话…", comment: "")
-                        : String(format: NSLocalizedString("匹配 %d 条结果 / %d 个会话", comment: ""), displayedCount, sessionPickerSearchHits.count)
-                    )
-                    .etFont(.system(size: 12))
-                    .foregroundColor(TelegramColors.navBarSubtitle)
-                } else {
-                    Text(NSLocalizedString("快速切换与管理", comment: ""))
-                        .etFont(.system(size: 12))
-                        .foregroundColor(TelegramColors.navBarSubtitle)
-                }
-            }
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                pickerHeaderActionButton(
-                    systemName: "magnifyingglass",
-                    accessibilityLabel: "搜索会话"
-                ) {
-                    showSessionPickerSearchInput = true
-                    DispatchQueue.main.async {
-                        sessionPickerSearchFocused = true
-                    }
-                }
-
-                pickerHeaderActionButton(
-                    systemName: "plus",
-                    accessibilityLabel: "开启新对话"
-                ) {
-                    viewModel.createNewSession()
-                    editingSessionID = nil
-                    sessionDraftName = ""
-                    dismissSessionPickerAfterSelection()
-                }
-
-                pickerHeaderActionButton(
-                    systemName: "xmark",
-                    accessibilityLabel: "关闭"
-                ) {
-                    dismissSessionPickerPanel()
-                }
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
-    }
-
     var sessionPickerSearchInput: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
@@ -396,16 +261,10 @@ extension ChatView {
     func sessionPickerList(
         queryActive: Bool,
         isSearching: Bool,
-        includesSearchInput: Bool = true,
         bottomContentPadding: CGFloat = 16
     ) -> some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                if includesSearchInput && showSessionPickerSearchInput {
-                    sessionPickerSearchInput
-                        .id("session-picker-search-input")
-                }
-
                 if queryActive && isSearching {
                     sessionPickerSearchingState
                 } else if queryActive && totalSessionPickerSearchResultCount == 0 {
@@ -475,45 +334,5 @@ extension ChatView {
             Circle()
                 .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
         }
-    }
-
-    func pickerHeaderActionButton(
-        systemName: String,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .etFont(.system(size: 14, weight: .semibold))
-                .foregroundColor(TelegramColors.navBarText)
-                .frame(width: 32, height: 32)
-                .background(
-                    Group {
-                        if isLiquidGlassEnabled {
-                            if #available(iOS 26.0, *) {
-                                Circle()
-                                    .fill(Color.clear)
-                                    .glassEffect(.clear, in: Circle())
-                                    .overlay(
-                                        Circle()
-                                            .fill(navBarGlassOverlayColor)
-                                    )
-                            } else {
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                                    .overlay(
-                                        Circle()
-                                            .fill(navBarGlassOverlayColor)
-                                    )
-                            }
-                        } else {
-                            Circle()
-                                .fill(Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
-                        }
-                    }
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: "会话与模型选择器按钮无障碍标签"))
     }
 }

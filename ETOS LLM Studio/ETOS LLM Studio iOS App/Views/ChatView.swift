@@ -35,8 +35,6 @@ struct ChatView: View {
     @State var messageVersionToDelete: MessageVersionDeletePayload?
     @State var messageActionSheetPayload: MessageActionSheetPayload?
     @State var fullErrorContent: FullErrorContentPayload?
-    @State var showModelPickerPanel = false
-    @State var showSessionPickerPanel = false
     @State var editingSessionID: UUID?
     @State var sessionDraftName: String = ""
     @State var sessionToDelete: ChatSession?
@@ -48,7 +46,6 @@ struct ChatView: View {
     @State var isSessionPickerSearching: Bool = false
     @State var sessionPickerLatestSearchToken: Int = 0
     @State var sessionPickerPendingSearchWorkItem: DispatchWorkItem?
-    @State var showSessionPickerSearchInput: Bool = false
     @State var loadedSessionPickerSessions: [ChatSession] = []
     @State var loadedSessionPickerSearchResults: [SessionHistorySearchResult] = []
     @State var isLoadingMoreSessionPickerSessions: Bool = false
@@ -61,8 +58,6 @@ struct ChatView: View {
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var isChatLayoutLandscape = false
     @State var isLandscapeSessionSidebarPresented = true
-    @State var modelPickerRequestControl: ModelRequestBodyControl?
-    @State var showAllModelsInPicker = false
     @State var bottomSafeAreaInset: CGFloat = 0
     @State var isKeyboardVisible = false
     @State var chatInputBarHeight: CGFloat = 0
@@ -77,17 +72,10 @@ struct ChatView: View {
     @State var localResourceUsagePanelOffset: CGSize = .zero
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
-    @Namespace var modelPickerNamespace
-    @Namespace var sessionPickerNamespace
 
     var draftText: String {
         get { appConfig.chatComposerDraft }
         nonmutating set { appConfig.chatComposerDraft = newValue }
-    }
-
-    var chatPickerPresentationStyleRawValue: String {
-        get { appConfig.chatPickerPresentationStyle }
-        nonmutating set { appConfig.chatPickerPresentationStyle = newValue }
     }
 
     let navBarTitleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
@@ -98,14 +86,8 @@ struct ChatView: View {
     let navBarBlurFadeMinHeight: CGFloat = 44
     let navBarBlurFadeMaxHeight: CGFloat = 96
     let navBarBlurFadeHeightRatio: CGFloat = 0.06
-    let modelPickerHeightRatio: CGFloat = 0.4
-    let modelPickerCornerRadius: CGFloat = 24
-    let modelPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
+    let chatPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
-    let modelPickerMorphID = "modelPickerMorph"
-    let sessionPickerMorphID = "sessionPickerMorph"
-    let sessionPickerHeightRatio: CGFloat = 0.6
-    let sessionPickerCornerRadius: CGFloat = 26
     let landscapeSessionSidebarMinWidth: CGFloat = 220
     let landscapeSessionSidebarMaxWidth: CGFloat = 300
     let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
@@ -139,23 +121,14 @@ struct ChatView: View {
     var usesLandscapeSessionSidebar: Bool {
         isChatLayoutLandscape
     }
-    var isOverlayPanelPresented: Bool {
-        !usesLandscapeSessionSidebar && !usesBottomSheetPickerStyle && (showModelPickerPanel || showSessionPickerPanel)
-    }
-    var chatPickerPresentationStyle: ChatPickerPresentationStyle {
-        ChatPickerPresentationStyle.resolvedStyle(rawValue: chatPickerPresentationStyleRawValue)
-    }
-    var usesBottomSheetPickerStyle: Bool {
-        chatPickerPresentationStyle == .bottomSheet
-    }
     var isModelPickerPresented: Bool {
-        usesBottomSheetPickerStyle ? activeChatPickerSheet == .model : showModelPickerPanel
+        activeChatPickerSheet == .model
     }
     var isSessionPickerPresented: Bool {
         if usesLandscapeSessionSidebar {
             return isLandscapeSessionSidebarPresented
         }
-        return usesBottomSheetPickerStyle ? activeChatPickerSheet == .session : showSessionPickerPanel
+        return activeChatPickerSheet == .session
     }
     var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
@@ -166,7 +139,6 @@ struct ChatView: View {
     var shouldShowLocalResourceUsageFloatingPanel: Bool {
         appConfig.localModelPerformanceMonitorEnabled
             && LocalModelProviderBridge.isLocalRunnableModel(viewModel.selectedModel)
-            && !isOverlayPanelPresented
     }
     var messageDeleteAlertPresented: Binding<Bool> {
         Binding(
@@ -212,9 +184,6 @@ struct ChatView: View {
     }
     var navBarGlassOverlayColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
-    }
-    var modelPickerPanelBaseTint: Color {
-        colorScheme == .dark ? Color.black.opacity(0.45) : Color.white.opacity(0.78)
     }
     var scrollToBottomButtonFillColor: Color {
         colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
@@ -827,7 +796,6 @@ extension ChatView {
                         .transition(.scale.combined(with: .opacity))
                     }
                 }
-                .allowsHitTesting(!isOverlayPanelPresented)
 
                 if shouldShowLocalResourceUsageFloatingPanel {
                     LocalResourceUsageFloatingPanel(
@@ -846,14 +814,6 @@ extension ChatView {
                     TTSFloatingController()
                 }
                 .animation(.easeInOut(duration: 0.2), value: ttsManager.isSpeaking)
-
-                if !usesBottomSheetPickerStyle && showModelPickerPanel {
-                    modelPickerOverlay
-                }
-
-                if !usesLandscapeSessionSidebar && !usesBottomSheetPickerStyle && showSessionPickerPanel {
-                    sessionPickerOverlay
-                }
 
                 if let notice = viewModel.memoryRetryStoppedNoticeMessage {
                     VStack {
@@ -890,12 +850,6 @@ extension ChatView {
                 pendingHistoryResetWorkItem = nil
                 pendingBottomSnapTask?.cancel()
                 pendingBottomSnapTask = nil
-            }
-            .onChange(of: chatPickerPresentationStyleRawValue) { _, _ in
-                showModelPickerPanel = false
-                showSessionPickerPanel = false
-                activeChatPickerSheet = nil
-                resetSessionPickerSearchState()
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)

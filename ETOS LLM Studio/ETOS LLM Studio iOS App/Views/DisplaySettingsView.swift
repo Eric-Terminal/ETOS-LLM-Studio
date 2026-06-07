@@ -136,13 +136,6 @@ struct DisplaySettingsView: View {
 
             // MARK: - Tab 4：界面与交互
             Form {
-                Section(footer: Text(NSLocalizedString("设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。", comment: ""))) {
-                    Picker(NSLocalizedString("会话/模型弹出方式", comment: ""), selection: chatPickerPresentationStyleBinding) {
-                        Text(NSLocalizedString("悬浮面板", comment: "")).tag(ChatPickerPresentationStyle.legacyOverlay)
-                        Text(NSLocalizedString("底部抽屉", comment: "")).tag(ChatPickerPresentationStyle.bottomSheet)
-                    }
-                }
-
                 Section {
                     Picker(NSLocalizedString("App 语言", comment: ""), selection: appLanguageBinding) {
                         ForEach(AppLanguagePreference.allCases) { language in
@@ -164,25 +157,6 @@ struct DisplaySettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
-        .onAppear {
-            // 迁移：将旧版「悬浮面板」默认值更新为「底部抽屉」
-            let hasMigratedPickerStyle = AppConfigStore.boolValue(
-                for: .chatPickerStyleMigratedToBottomSheet,
-                legacyUserDefaultsKey: "chatPickerStyleMigratedToBottomSheet"
-            )
-            if ChatPickerPresentationStyle.resolvedStyle(rawValue: appConfig.chatPickerPresentationStyle) == .legacyOverlay,
-               !hasMigratedPickerStyle {
-                appConfig.chatPickerPresentationStyle = ChatPickerPresentationStyle.bottomSheet.rawValue
-                AppConfigStore.persistSynchronously(.bool(true), for: .chatPickerStyleMigratedToBottomSheet)
-            }
-        }
-    }
-
-    private var chatPickerPresentationStyleBinding: Binding<ChatPickerPresentationStyle> {
-        Binding(
-            get: { ChatPickerPresentationStyle.resolvedStyle(rawValue: appConfig.chatPickerPresentationStyle) },
-            set: { appConfig.chatPickerPresentationStyle = $0.rawValue }
-        )
     }
 
     private var appLanguageBinding: Binding<String> {

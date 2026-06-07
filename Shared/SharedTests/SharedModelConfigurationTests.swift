@@ -3,31 +3,13 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件负责聊天界面偏好、模型提示词、模型排序与请求体覆盖配置测试。
+// 本文件负责模型提示词、模型排序与请求体覆盖配置测试。
 // ============================================================================
 
 import Testing
 import Foundation
 import SwiftUI
 @testable import Shared
-
-@Suite("聊天选择器呈现样式测试")
-struct ChatPickerPresentationStyleTests {
-    @Test("默认使用底部抽屉")
-    func defaultStyleUsesBottomSheet() {
-        #expect(ChatPickerPresentationStyle.defaultStyle == .bottomSheet)
-    }
-
-    @Test("底部抽屉配置可正确解析")
-    func bottomSheetResolvesToBottomSheet() {
-        #expect(ChatPickerPresentationStyle.resolvedStyle(rawValue: ChatPickerPresentationStyle.bottomSheet.rawValue) == .bottomSheet)
-    }
-
-    @Test("未知配置回退到保留现状")
-    func unknownStyleFallsBackToDefault() {
-        #expect(ChatPickerPresentationStyle.resolvedStyle(rawValue: "unknown") == .bottomSheet)
-    }
-}
 
 @Suite("模型提示词语言适配测试")
 struct ModelPromptLanguageTests {

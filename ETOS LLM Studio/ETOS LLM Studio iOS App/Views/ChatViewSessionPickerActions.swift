@@ -327,6 +327,6 @@ extension ChatView {
         if usesLandscapeSessionSidebar {
             return
         }
-        dismissSessionPickerPanel()
+        dismissSessionPicker()
     }
 }

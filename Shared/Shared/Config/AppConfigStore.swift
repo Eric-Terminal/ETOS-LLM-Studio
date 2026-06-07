@@ -232,7 +232,6 @@ public final class AppConfigStore: ObservableObject {
     @Published public var watchBackgroundSourceHistory: String { didSet { write(.watchBackgroundSourceHistory, watchBackgroundSourceHistory) } }
     @Published public var watchUseThirdPartyKeyboard: Bool { didSet { write(.watchUseThirdPartyKeyboard, watchUseThirdPartyKeyboard) } }
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
-    @Published public var chatPickerPresentationStyle: String { didSet { write(.chatPickerPresentationStyle, chatPickerPresentationStyle) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
     @Published public var providerDetailGroupByMainstream: Bool { didSet { write(.providerDetailGroupByMainstream, providerDetailGroupByMainstream) } }
@@ -366,7 +365,6 @@ public final class AppConfigStore: ObservableObject {
         watchBackgroundSourceHistory = Self.textValue(.watchBackgroundSourceHistory, userDefaults: userDefaults)
         watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
-        chatPickerPresentationStyle = Self.textValue(.chatPickerPresentationStyle, userDefaults: userDefaults)
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
@@ -794,9 +792,6 @@ public final class AppConfigStore: ObservableObject {
         case .watchBackgroundSourceHistory: return .text(watchBackgroundSourceHistory)
         case .watchUseThirdPartyKeyboard: return .bool(watchUseThirdPartyKeyboard)
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
-        case .chatPickerPresentationStyle: return .text(chatPickerPresentationStyle)
-        case .chatPickerStyleMigratedToBottomSheet:
-            return Self.cachedValue(for: key) ?? key.defaultValue
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
         case .providerDetailGroupByMainstream: return .bool(providerDetailGroupByMainstream)
@@ -863,8 +858,7 @@ public final class AppConfigStore: ObservableObject {
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,
-             .shortcutChatToolsEnabled,
-             .chatPickerStyleMigratedToBottomSheet:
+             .shortcutChatToolsEnabled:
             Self.persistSynchronously(.bool(value), for: key, quickSync: false)
         case .appLockEnabled: appLockEnabled = value
         case .appLockBiometricEnabled: appLockBiometricEnabled = value
@@ -984,7 +978,6 @@ public final class AppConfigStore: ObservableObject {
         case .watchAttachmentSourceHistory: watchAttachmentSourceHistory = value
         case .watchBackgroundLastSource: watchBackgroundLastSource = value
         case .watchBackgroundSourceHistory: watchBackgroundSourceHistory = value
-        case .chatPickerPresentationStyle: chatPickerPresentationStyle = value
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
         case .shortcutBridgeShortcutName: shortcutBridgeShortcutName = value

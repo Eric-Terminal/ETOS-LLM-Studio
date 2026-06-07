@@ -19,7 +19,7 @@ extension ChatView {
             Spacer(minLength: 12)
 
             Button {
-                toggleModelPickerPanel()
+                presentModelPickerSheet()
             } label: {
                 navBarCenterPill
             }
@@ -40,7 +40,7 @@ extension ChatView {
 
     var navBarSessionButton: some View {
         Button {
-            toggleSessionPickerPanel()
+            presentSessionPicker()
         } label: {
             navBarSessionLabel
         }
@@ -144,16 +144,32 @@ extension ChatView {
 
     @ViewBuilder
     var navBarPillBackground: some View {
-        modelPickerMorphBackground(isExpanded: false, isSource: !showModelPickerPanel)
-    }
-
-    var sessionPickerButtonBackground: some View {
-        sessionPickerMorphBackground(isExpanded: false, isSource: usesLandscapeSessionSidebar ? true : !showSessionPickerPanel)
+        if isLiquidGlassEnabled {
+            if #available(iOS 26.0, *) {
+                Capsule()
+                    .fill(Color.clear)
+                    .glassEffect(.clear, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
+            } else {
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(navBarGlassOverlayColor)
+                    )
+            }
+        } else {
+            Capsule()
+                .fill(.ultraThinMaterial)
+        }
     }
 
     @ViewBuilder
-    var sessionPickerPanelBackground: some View {
-        sessionPickerMorphBackground(isExpanded: true, isSource: showSessionPickerPanel)
+    var sessionPickerButtonBackground: some View {
+        navBarIconBackground
     }
 
     var modelSubtitle: String {
@@ -177,38 +193,18 @@ extension ChatView {
             : NSLocalizedString("显示会话列表", comment: "")
     }
 
-    func toggleModelPickerPanel() {
-        guard !usesBottomSheetPickerStyle else {
-            showSessionPickerPanel = false
-            showModelPickerPanel = false
-            activeChatPickerSheet = .model
-            return
-        }
-        withAnimation(modelPickerAnimation) {
-            if showSessionPickerPanel {
-                showSessionPickerPanel = false
-            }
-            showModelPickerPanel.toggle()
-        }
+    func presentModelPickerSheet() {
+        activeChatPickerSheet = .model
     }
 
-    func dismissModelPickerPanel() {
-        modelPickerRequestControl = nil
-        showAllModelsInPicker = false
-        if usesBottomSheetPickerStyle {
-            activeChatPickerSheet = nil
-            return
-        }
-        withAnimation(modelPickerAnimation) {
-            showModelPickerPanel = false
-        }
+    func dismissModelPickerSheet() {
+        activeChatPickerSheet = nil
     }
 
-    func toggleSessionPickerPanel() {
+    func presentSessionPicker() {
         guard !usesLandscapeSessionSidebar else {
-            showModelPickerPanel = false
             activeChatPickerSheet = nil
-            withAnimation(modelPickerAnimation) {
+            withAnimation(chatPickerAnimation) {
                 isLandscapeSessionSidebarPresented.toggle()
                 if !isLandscapeSessionSidebarPresented {
                     resetSessionPickerSearchState()
@@ -216,40 +212,19 @@ extension ChatView {
             }
             return
         }
-        guard !usesBottomSheetPickerStyle else {
-            showModelPickerPanel = false
-            showSessionPickerPanel = false
-            activeChatPickerSheet = .session
-            return
-        }
-        withAnimation(modelPickerAnimation) {
-            if showModelPickerPanel {
-                showModelPickerPanel = false
-            }
-            if showSessionPickerPanel {
-                resetSessionPickerSearchState()
-            }
-            showSessionPickerPanel.toggle()
-        }
+        activeChatPickerSheet = .session
     }
 
-    func dismissSessionPickerPanel() {
+    func dismissSessionPicker() {
         if usesLandscapeSessionSidebar {
-            withAnimation(modelPickerAnimation) {
+            withAnimation(chatPickerAnimation) {
                 isLandscapeSessionSidebarPresented = false
                 resetSessionPickerSearchState()
             }
             return
         }
-        if usesBottomSheetPickerStyle {
-            activeChatPickerSheet = nil
-            resetSessionPickerSearchState()
-            return
-        }
-        withAnimation(modelPickerAnimation) {
-            showSessionPickerPanel = false
-            resetSessionPickerSearchState()
-        }
+        activeChatPickerSheet = nil
+        resetSessionPickerSearchState()
     }
 
     func resetSessionPickerSearchState() {
@@ -258,7 +233,6 @@ extension ChatView {
         sessionPickerSearchText = ""
         sessionPickerSearchHits = [:]
         isSessionPickerSearching = false
-        showSessionPickerSearchInput = false
         sessionPickerSearchFocused = false
         loadedSessionPickerSearchResults = []
         isLoadingMoreSessionPickerSessions = false
@@ -277,7 +251,6 @@ extension ChatView {
                 activeChatPickerSheet = nil
             }
             isLandscapeSessionSidebarPresented = true
-            showSessionPickerPanel = false
             return
         }
         isLandscapeSessionSidebarPresented = false

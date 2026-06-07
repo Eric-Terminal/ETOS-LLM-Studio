@@ -183,8 +183,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchBackgroundSourceHistory = "watch.background.sourceHistory"
     case watchUseThirdPartyKeyboard = "watch.keyboard.useThirdPartyKeyboard"
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
-    case chatPickerPresentationStyle = "ui.chatPickerPresentationStyle"
-    case chatPickerStyleMigratedToBottomSheet = "chatPickerStyleMigratedToBottomSheet"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case providerDetailGroupByMainstream = "providerDetail.groupByMainstream"
@@ -405,10 +403,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #else
             return .bool(true)
             #endif
-        case .chatPickerPresentationStyle:
-            return .text("bottomSheet")
-        case .chatPickerStyleMigratedToBottomSheet:
-            return .bool(false)
         case .restoreLastSessionOnLaunch:
             return .bool(false)
         case .providerDetailGroupByMainstream:
@@ -459,7 +453,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,
              .feedbackAPIBaseURL,
-             .chatPickerStyleMigratedToBottomSheet,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .updateTimelineAutoCheckEnabled,

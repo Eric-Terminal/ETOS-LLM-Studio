@@ -1654,10 +1654,6 @@
 "沉浸视窗" = "Immersive Window";
 "独立页面" = "Standalone Page";
 "「沉浸视窗」如轻纱般覆于当前对话之上，让您时刻感知聊天背景；「独立页面」则以利落的滑动展开全新视图，带来更纯粹的视觉体验。" = "\"Immersive Window\" drapes lightly over the current chat so the background stays present; \"Standalone Page\" opens a fresh view with a crisp slide for a cleaner visual experience.";
-"会话/模型弹出方式" = "Session/model picker style";
-"悬浮面板" = "Floating Panel";
-"底部抽屉" = "Bottom Sheet";
-"设定呼出菜单的呈现方式。「悬浮面板」带来视觉聚焦的居中体验；「底部抽屉」则顺应自然的拇指手势，让每一次切换都如丝般顺滑。" = "Set how the picker menu appears. \"Floating Panel\" offers a centered, visually focused experience; \"Bottom Sheet\" follows the natural thumb gesture so every switch feels silky smooth.";
 "消息操作" = "Message Actions";
 "关闭助手气泡" = "Hide Assistant Bubbles";
 "开启后会隐藏助手消息气泡背景，并自动放宽助手消息文本宽度。" = "When enabled, assistant message backgrounds are hidden and assistant text can use a wider layout.";
