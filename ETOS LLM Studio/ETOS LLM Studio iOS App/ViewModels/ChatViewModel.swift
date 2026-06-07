@@ -13,6 +13,7 @@ import Combine
 import CoreImage
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 @preconcurrency import MarkdownUI
 import ETOSCore
 import os.log
@@ -106,6 +107,7 @@ final class ChatViewModel: ObservableObject {
     @Published var memoryRetryStoppedNoticeMessage: String?
     @Published var memoryEmbeddingProgress: MemoryEmbeddingProgress?
     @Published var activeAskUserInputRequest: AppToolAskUserInputRequest?
+    @Published var externalDocumentImportErrorMessage: String?
     
     // MARK: - User Preferences (AppConfig)
 
@@ -499,6 +501,58 @@ final class ChatViewModel: ObservableObject {
     func addFileAttachment(_ attachment: FileAttachment) {
         pendingFileAttachments.append(attachment)
     }
+
+    /// 处理系统“用其他 App 打开”交给 ELS 的外部文件。
+    func handleIncomingDocumentURL(_ url: URL) {
+        guard url.isFileURL else { return }
+
+        Task {
+            do {
+                let payload = try await IncomingDocumentImportCoordinator.preparePayload(from: url)
+                try applyIncomingDocumentPayload(payload)
+            } catch {
+                externalDocumentImportErrorMessage = String(
+                    format: NSLocalizedString("无法加载文件: %@", comment: ""),
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func applyIncomingDocumentPayload(_ payload: IncomingDocumentImportPayload) throws {
+        switch payload {
+        case .localModel(let tempFileURL, let suggestedFileName, let displayName):
+            do {
+                _ = try LocalModelStore.shared.registerDownloadedModel(
+                    fileAt: tempFileURL,
+                    suggestedFileName: suggestedFileName,
+                    displayName: displayName
+                )
+            } catch {
+                try? FileManager.default.removeItem(at: tempFileURL)
+                throw error
+            }
+        case .image(let data, let mimeType, let fileName):
+            pendingImageAttachments.append(ImageAttachment(
+                data: data,
+                mimeType: mimeType,
+                fileName: fileName
+            ))
+        case .audio(let data, let mimeType, let format, let fileName):
+            setAudioAttachment(AudioAttachment(
+                data: data,
+                mimeType: mimeType,
+                format: format,
+                fileName: fileName
+            ))
+        case .file(let data, let mimeType, let fileName):
+            addFileAttachment(FileAttachment(
+                data: data,
+                mimeType: mimeType,
+                fileName: fileName
+            ))
+        }
+    }
     
     /// 设置音频附件
     func setAudioAttachment(_ attachment: AudioAttachment) {
@@ -710,4 +764,106 @@ final class ChatViewModel: ObservableObject {
         }
     }
     
+}
+
+private enum IncomingDocumentImportPayload: Sendable {
+    case localModel(tempFileURL: URL, suggestedFileName: String, displayName: String)
+    case image(data: Data, mimeType: String, fileName: String)
+    case audio(data: Data, mimeType: String, format: String, fileName: String)
+    case file(data: Data, mimeType: String, fileName: String)
+}
+
+nonisolated private enum IncomingDocumentImportCoordinator {
+    static func preparePayload(from url: URL) async throws -> IncomingDocumentImportPayload {
+        try await Task.detached(priority: .utility) {
+            let didStartSecurityScope = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartSecurityScope {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let fileName = normalizedFileName(for: url)
+            if isGGUFModel(url) {
+                let tempURL = try copyToTemporaryFile(url, fileName: fileName)
+                return .localModel(
+                    tempFileURL: tempURL,
+                    suggestedFileName: fileName,
+                    displayName: url.deletingPathExtension().lastPathComponent
+                )
+            }
+
+            let data = try Data(contentsOf: url)
+            let mimeType = resolvedMimeType(for: url)
+            if isImage(url) {
+                return .image(data: data, mimeType: mimeType, fileName: fileName)
+            }
+            if isAudio(url) {
+                return .audio(
+                    data: data,
+                    mimeType: resolvedAudioMimeType(for: url),
+                    format: resolvedAudioFormat(for: url),
+                    fileName: fileName
+                )
+            }
+            return .file(data: data, mimeType: mimeType, fileName: fileName)
+        }.value
+    }
+
+    private static func normalizedFileName(for url: URL) -> String {
+        let trimmedFileName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedFileName.isEmpty ? "ImportedFile" : trimmedFileName
+    }
+
+    private static func copyToTemporaryFile(_ sourceURL: URL, fileName: String) throws -> URL {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("IncomingDocuments", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let destinationURL = tempDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(fileName, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
+
+    private static func isGGUFModel(_ url: URL) -> Bool {
+        url.pathExtension.caseInsensitiveCompare("gguf") == .orderedSame
+    }
+
+    private static func isImage(_ url: URL) -> Bool {
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .image)
+    }
+
+    private static func isAudio(_ url: URL) -> Bool {
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .audio)
+    }
+
+    private static func resolvedMimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext),
+           let mimeType = type.preferredMIMEType {
+            return mimeType
+        }
+        return "application/octet-stream"
+    }
+
+    private static func resolvedAudioMimeType(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext),
+           let mimeType = type.preferredMIMEType {
+            return mimeType
+        }
+        return ext.isEmpty ? "audio/m4a" : "audio/\(ext)"
+    }
+
+    private static func resolvedAudioFormat(for url: URL) -> String {
+        let ext = url.pathExtension.lowercased()
+        return ext.isEmpty ? AudioRecordingFormat.aac.fileExtension : ext
+    }
 }

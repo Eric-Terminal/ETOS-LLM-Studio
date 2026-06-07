@@ -115,6 +115,13 @@ struct ContentView: View {
         } message: {
             Text(launchRecoveryNoticeMessage ?? "")
         }
+        .alert(NSLocalizedString("导入失败", comment: ""), isPresented: externalDocumentImportErrorPresented) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
+                viewModel.externalDocumentImportErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.externalDocumentImportErrorMessage ?? "")
+        }
         // MARK: - 公告弹窗
         .sheet(isPresented: $announcementManager.shouldShowAlert) {
             if let announcement = announcementManager.currentAnnouncement {
@@ -196,6 +203,17 @@ struct ContentView: View {
             set: { newValue in
                 if !newValue {
                     launchRecoveryNoticeMessage = nil
+                }
+            }
+        )
+    }
+
+    private var externalDocumentImportErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.externalDocumentImportErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.externalDocumentImportErrorMessage = nil
                 }
             }
         )

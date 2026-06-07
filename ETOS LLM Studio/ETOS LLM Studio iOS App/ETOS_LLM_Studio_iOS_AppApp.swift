@@ -78,8 +78,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 .environmentObject(syncManager)
                 .environmentObject(cloudSyncManager)
                 .onOpenURL { url in
-                    Task {
-                        _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
+                    Task { @MainActor in
+                        let handledByShortcutRouter = await ShortcutURLRouter.shared.handleIncomingURL(url)
+                        if !handledByShortcutRouter {
+                            viewModel.handleIncomingDocumentURL(url)
+                        }
                     }
                 }
                 .onAppear {
