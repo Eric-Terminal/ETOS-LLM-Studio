@@ -35,6 +35,15 @@ struct MCPIntegrationView: View {
         }
     }
 
+    @ViewBuilder
+    private var autoApproveFooter: some View {
+        if toolPermissionCenter.autoApproveEnabled {
+            Text(NSLocalizedString("倒计时范围 1-30 秒，超出会自动修正。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -125,9 +134,7 @@ struct MCPIntegrationView: View {
 
             Section(
                 header: Text(NSLocalizedString("审批自动化", comment: "")),
-                footer: Text(NSLocalizedString("倒计时范围 1-30 秒，超出会自动修正。", comment: ""))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                footer: autoApproveFooter
             ) {
                 Toggle(NSLocalizedString("自动批准", comment: ""),
                     isOn: Binding(
@@ -136,20 +143,21 @@ struct MCPIntegrationView: View {
                     )
                 )
 
-                HStack {
-                    Text(NSLocalizedString("倒计时秒数", comment: ""))
-                    Spacer()
-                    TextField(NSLocalizedString("数量", comment: ""),
-                        value: Binding(
-                            get: { toolPermissionCenter.autoApproveCountdownSeconds },
-                            set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
-                        ),
-                        formatter: countdownNumberFormatter
-                    )
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 52)
+                if toolPermissionCenter.autoApproveEnabled {
+                    HStack {
+                        Text(NSLocalizedString("倒计时秒数", comment: ""))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: ""),
+                            value: Binding(
+                                get: { toolPermissionCenter.autoApproveCountdownSeconds },
+                                set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
+                            ),
+                            formatter: countdownNumberFormatter
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 52)
+                    }
                 }
-                .disabled(!toolPermissionCenter.autoApproveEnabled)
             }
 
             Section(NSLocalizedString("治理日志", comment: "")) {

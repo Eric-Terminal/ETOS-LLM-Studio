@@ -151,23 +151,26 @@ extension MCPIntegrationView {
                     set: { toolPermissionCenter.setAutoApproveEnabled($0) }
                 )
             )
-            Stepper(
-                value: Binding(
-                    get: { toolPermissionCenter.autoApproveCountdownSeconds },
-                    set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
-                ),
-                in: 1...30
-            ) {
-                Text(String(format: NSLocalizedString("倒计时：%ds", comment: ""), toolPermissionCenter.autoApproveCountdownSeconds))
-            }
-            .disabled(!toolPermissionCenter.autoApproveEnabled)
-            let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
-            Text(String(format: NSLocalizedString("已禁用自动批准工具：%d", comment: ""), disabledCount))
-                .etFont(.caption)
-                .foregroundStyle(.secondary)
-            if disabledCount > 0 {
-                Button(NSLocalizedString("清空禁用列表", comment: ""), role: .destructive) {
-                    toolPermissionCenter.clearDisabledAutoApproveTools()
+
+            if toolPermissionCenter.autoApproveEnabled {
+                Stepper(
+                    value: Binding(
+                        get: { toolPermissionCenter.autoApproveCountdownSeconds },
+                        set: { toolPermissionCenter.setAutoApproveCountdownSeconds($0) }
+                    ),
+                    in: 1...30
+                ) {
+                    Text(String(format: NSLocalizedString("倒计时：%ds", comment: ""), toolPermissionCenter.autoApproveCountdownSeconds))
+                }
+
+                let disabledCount = toolPermissionCenter.disabledAutoApproveTools.count
+                Text(String(format: NSLocalizedString("已禁用自动批准工具：%d", comment: ""), disabledCount))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                if disabledCount > 0 {
+                    Button(NSLocalizedString("清空禁用列表", comment: ""), role: .destructive) {
+                        toolPermissionCenter.clearDisabledAutoApproveTools()
+                    }
                 }
             }
         }
