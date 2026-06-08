@@ -22,6 +22,7 @@ struct ToolCenterView: View {
     @State var searchText: String = ""
     @State var showEnabledOnly: Bool = false
     @State var isShowingIntroDetails = false
+    @State var isShowingBuiltInIntroDetails = false
 
     var currentSessionIsolationActive: Bool {
         viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
@@ -117,13 +118,37 @@ struct ToolCenterView: View {
     }
 
     var filteredBuiltInStates: [ToolCatalogBuiltInToolState] {
-        builtInStates.filter { state in
-            guard matchesSearch(for: builtInKeywords(for: state.kind)) else { return false }
+        let matchesGroup = matchesSearch(
+            for: [
+                NSLocalizedString("内置工具", comment: "Built-in tools section title"),
+                NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
+                NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆能力、网页卡片渲染能力与结构化问答能力。", comment: "Built-in tools footer")
+            ]
+        )
+        return builtInStates.filter { state in
+            guard matchesGroup || matchesSearch(for: builtInKeywords(for: state.kind)) else { return false }
             if showEnabledOnly {
                 return state.isConfiguredEnabled
             }
             return true
         }
+    }
+
+    var isBuiltInSectionVisible: Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            return true
+        }
+        if !filteredBuiltInStates.isEmpty {
+            return true
+        }
+        return matchesSearch(
+            for: [
+                NSLocalizedString("内置工具", comment: "Built-in tools section title"),
+                NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
+                NSLocalizedString("内置工具会直接影响聊天时是否向模型暴露记忆能力、网页卡片渲染能力与结构化问答能力。", comment: "Built-in tools footer")
+            ]
+        )
     }
 
     var mcpCatalogTools: [MCPAvailableTool] {
@@ -281,7 +306,7 @@ struct ToolCenterView: View {
     }
 
     var hasVisibleTools: Bool {
-        !filteredBuiltInStates.isEmpty
+        isBuiltInSectionVisible
         || isAppToolSectionVisible
         || isMCPSectionVisible
         || isSkillsSectionVisible
@@ -301,7 +326,9 @@ struct ToolCenterView: View {
 
             overviewSection
             filterSection
-            builtInSection
+            if isBuiltInSectionVisible {
+                builtInSection
+            }
             if isAppToolSectionVisible {
                 appToolSection
             }

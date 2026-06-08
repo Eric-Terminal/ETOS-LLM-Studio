@@ -266,28 +266,31 @@ struct ToolCenterView: View {
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
-                Toggle(
-                    NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                    isOn: $viewModel.enableMemory
-                )
-
-                ForEach(filteredBuiltInStates) { state in
-                    NavigationLink {
-                        WatchBuiltInToolDetailView(
-                            kind: state.kind,
-                            currentSessionIsolationActive: currentSessionIsolationActive,
-                            enableMemory: $viewModel.enableMemory,
-                            enableMemoryWrite: $viewModel.enableMemoryWrite,
-                            enableMemoryActiveRetrieval: $viewModel.enableMemoryActiveRetrieval,
-                            memoryTopK: $appConfig.memoryTopK
+                NavigationLink {
+                    builtInToolCategoryDetailView()
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
+                        Text(
+                            String(
+                                format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                                ToolCatalogSupport.configuredEnabledCount(for: builtInStates),
+                                builtInStates.count
+                            )
                         )
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(builtInTitle(for: state.kind))
-                            Text(builtInStatusText(for: state))
-                                .etFont(.caption2)
-                                .foregroundStyle(state.isAvailableInCurrentSession ? .green : .secondary)
-                        }
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        Text(builtInCategoryStatusText)
+                            .etFont(.caption2)
+                            .foregroundStyle(builtInCategoryStatusColor)
+                        Text(
+                            String(
+                                format: NSLocalizedString("工具 %d 个", comment: "Tool count"),
+                                builtInStates.count
+                            )
+                        )
+                        .etFont(.caption2)
+                        .foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -501,6 +504,59 @@ struct ToolCenterView: View {
         }
     }
 
+    private func builtInToolCategoryDetailView() -> some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
+                    Text(NSLocalizedString("系统自带能力集中在这里，按单项调整记忆、网页卡片、问答与时间工具。", comment: "Built-in tools intro summary"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("记忆系统", comment: "Memory system section title")),
+                footer: Text(NSLocalizedString("启用记忆系统后，记忆写入与主动检索工具才可能参与聊天。", comment: "Built-in memory system footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
+                    isOn: $viewModel.enableMemory
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("工具", comment: "Tools section title"))) {
+                if filteredBuiltInStates.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredBuiltInStates) { state in
+                        NavigationLink {
+                            WatchBuiltInToolDetailView(
+                                kind: state.kind,
+                                currentSessionIsolationActive: currentSessionIsolationActive,
+                                enableMemory: $viewModel.enableMemory,
+                                enableMemoryWrite: $viewModel.enableMemoryWrite,
+                                enableMemoryActiveRetrieval: $viewModel.enableMemoryActiveRetrieval,
+                                memoryTopK: $appConfig.memoryTopK
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(builtInTitle(for: state.kind))
+                                Text(builtInStatusText(for: state))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(state.isAvailableInCurrentSession ? .green : .secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
+    }
+
     private func builtInTitle(for kind: ToolCatalogBuiltInToolKind) -> String {
         switch kind {
         case .memoryWrite:
@@ -591,6 +647,24 @@ struct ToolCenterView: View {
         @unknown default:
             return NSLocalizedString("该工具当前状态未知。", comment: "Built-in tool unknown kind fallback")
         }
+    }
+
+    private var builtInCategoryStatusText: String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            ToolCatalogSupport.availableCount(for: builtInStates),
+            builtInStates.count
+        )
+    }
+
+    private var builtInCategoryStatusColor: Color {
+        if currentSessionIsolationActive || ToolCatalogSupport.availableCount(for: builtInStates) == 0 {
+            return .secondary
+        }
+        return .green
     }
 
     private var mcpCategoryStatusText: String {

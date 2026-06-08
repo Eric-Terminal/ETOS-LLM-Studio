@@ -4130,3 +4130,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "把已导入的 Siri 快捷指令作为聊天工具使用。" = "Use imported Siri Shortcuts as chat tools.";
 "快捷指令工具说明正文" = "Shortcut tools are useful for system automation, cross-app actions, or workflows you have already organized in Shortcuts.\n\nHere you can manage chat exposure, individual enablement, run mode, and tool descriptions. Calls still go through tool approval, which keeps higher-risk automation behind user confirmation.";
 "先按用途选择分类，再进入具体工具。" = "Choose a category by purpose first, then open a specific tool.";
+"系统自带能力集中在这里，按单项调整记忆、网页卡片、问答与时间工具。" = "System-provided capabilities live here. Adjust memory, web cards, Q&A, and time tools one by one.";
+"内置工具说明正文" = "Built-in tools are provided directly by the app. They control core capabilities such as memory writing, active retrieval, web cards, structured Q&A, and system time.\n\nRecommendations\n• Check the Memory System switch first, then adjust memory writing and active retrieval.\n• Web cards, user questions, and system time are lightweight capabilities you can enable individually.\n• If the current session uses worldbook isolation, these settings are kept but not actually exposed during chat.";
+"启用记忆系统后，记忆写入与主动检索工具才可能参与聊天。" = "After the Memory System is enabled, memory writing and active retrieval tools can participate in chat.";

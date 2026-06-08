@@ -234,31 +234,78 @@ extension ToolCenterView {
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         ) {
-            Toggle(
-                NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
-                isOn: $viewModel.enableMemory
-            )
+            NavigationLink {
+                builtInToolCategoryDetailView()
+            } label: {
+                ToolCenterStatusRow(
+                    title: NSLocalizedString("内置工具", comment: "Built-in tools section title"),
+                    subtitle: String(
+                        format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                        configuredBuiltInCount,
+                        builtInStates.count
+                    ),
+                    detail: builtInCategoryStatusText,
+                    auxiliary: String(
+                        format: NSLocalizedString("工具 %d 个", comment: "Tool count"),
+                        builtInStates.count
+                    ),
+                    color: builtInCategoryStatusColor
+                )
+            }
+        }
+    }
 
-            ForEach(filteredBuiltInStates) { state in
-                NavigationLink {
-                    BuiltInToolDetailView(
-                        kind: state.kind,
-                        currentSessionIsolationActive: currentSessionIsolationActive,
-                        enableMemory: $viewModel.enableMemory,
-                        enableMemoryWrite: $viewModel.enableMemoryWrite,
-                        enableMemoryActiveRetrieval: $viewModel.enableMemoryActiveRetrieval,
-                        memoryTopK: $appConfig.memoryTopK
-                    )
-                } label: {
-                    ToolCenterStatusRow(
-                        title: builtInTitle(for: state.kind),
-                        subtitle: builtInSubtitle(for: state.kind),
-                        detail: builtInStatusText(for: state),
-                        color: builtInStatusColor(for: state)
-                    )
+    func builtInToolCategoryDetailView() -> some View {
+        List {
+            Section {
+                ToolCenterIntroCard(
+                    title: "内置工具",
+                    summary: "系统自带能力集中在这里，按单项调整记忆、网页卡片、问答与时间工具。",
+                    details: "内置工具说明正文",
+                    isExpanded: $isShowingBuiltInIntroDetails
+                )
+            }
+
+            Section(
+                header: Text(NSLocalizedString("记忆系统", comment: "Memory system section title")),
+                footer: Text(NSLocalizedString("启用记忆系统后，记忆写入与主动检索工具才可能参与聊天。", comment: "Built-in memory system footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("启用记忆系统", comment: "Enable long-term memory"),
+                    isOn: $viewModel.enableMemory
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("工具", comment: "Tools section title"))) {
+                if filteredBuiltInStates.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredBuiltInStates) { state in
+                        NavigationLink {
+                            BuiltInToolDetailView(
+                                kind: state.kind,
+                                currentSessionIsolationActive: currentSessionIsolationActive,
+                                enableMemory: $viewModel.enableMemory,
+                                enableMemoryWrite: $viewModel.enableMemoryWrite,
+                                enableMemoryActiveRetrieval: $viewModel.enableMemoryActiveRetrieval,
+                                memoryTopK: $appConfig.memoryTopK
+                            )
+                        } label: {
+                            ToolCenterStatusRow(
+                                title: builtInTitle(for: state.kind),
+                                subtitle: builtInSubtitle(for: state.kind),
+                                detail: builtInStatusText(for: state),
+                                color: builtInStatusColor(for: state)
+                            )
+                        }
+                    }
                 }
             }
         }
+        .navigationTitle(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
     }
 
     var mcpSection: some View {
@@ -491,6 +538,24 @@ extension ToolCenterView {
 
     func builtInStatusColor(for state: ToolCatalogBuiltInToolState) -> Color {
         state.isAvailableInCurrentSession ? .green : .secondary
+    }
+
+    var builtInCategoryStatusText: String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            availableBuiltInCount,
+            builtInStates.count
+        )
+    }
+
+    var builtInCategoryStatusColor: Color {
+        if currentSessionIsolationActive || availableBuiltInCount == 0 {
+            return .secondary
+        }
+        return .green
     }
 
     var mcpCategoryStatusText: String {
