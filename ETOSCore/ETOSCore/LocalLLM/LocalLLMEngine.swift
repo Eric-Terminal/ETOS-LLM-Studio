@@ -30,6 +30,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var grammar: String
     public var ignoreEOS: Bool
     public var samplerKinds: [LocalLLMSamplerKind]
+    public var chatTemplateKwargs: [String: JSONValue]
     public var advancedArguments: String
 
     public init(
@@ -53,6 +54,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         grammar: String = LocalModelRecord.defaultGrammar,
         ignoreEOS: Bool = LocalModelRecord.defaultIgnoreEOS,
         samplerKinds: [LocalLLMSamplerKind] = LocalLLMSamplerKind.defaultChain,
+        chatTemplateKwargs: [String: JSONValue] = [:],
         advancedArguments: String = LocalModelRecord.defaultAdvancedArguments
     ) {
         self.contextSize = contextSize.clamped(to: 1...1_048_576)
@@ -76,6 +78,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         self.ignoreEOS = ignoreEOS
         let uniqueSamplerKinds = LocalLLMSamplerKind.unique(samplerKinds)
         self.samplerKinds = uniqueSamplerKinds.isEmpty ? LocalLLMSamplerKind.defaultChain : uniqueSamplerKinds
+        self.chatTemplateKwargs = chatTemplateKwargs
         self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
@@ -728,6 +731,9 @@ private struct ETOSLocalLLMGenerationConfig {
     var adaptiveDecay: Float
     var grammar: UnsafePointer<CChar>?
     var ignoreEOS: Int32
+    var chatTemplateKwargKeys: UnsafePointer<UnsafePointer<CChar>?>?
+    var chatTemplateKwargValues: UnsafePointer<UnsafePointer<CChar>?>?
+    var chatTemplateKwargCount: Int32
 }
 
 private final class PreparedLocalLLMGenerationConfig {
@@ -735,16 +741,27 @@ private final class PreparedLocalLLMGenerationConfig {
     private let bridgedDrySequenceBreakers: [UnsafePointer<CChar>?]
     private let bridgedSamplerKinds: [Int32]
     private let grammarPointer: UnsafeMutablePointer<CChar>
+    private let chatTemplateKwargKeyPointers: [UnsafeMutablePointer<CChar>]
+    private let chatTemplateKwargValuePointers: [UnsafeMutablePointer<CChar>]
+    private let bridgedChatTemplateKwargKeys: [UnsafePointer<CChar>?]
+    private let bridgedChatTemplateKwargValues: [UnsafePointer<CChar>?]
     private var bridgedConfig: ETOSLocalLLMGenerationConfig
 
     init(_ config: LocalLLMGenerationConfig) throws {
         let drySequenceBreakerPointers = try config.drySequenceBreakers.map(Self.duplicate)
         let grammarPointer = try Self.duplicate(config.grammar)
+        let chatTemplateKwargs = try Self.encodedChatTemplateKwargs(config.chatTemplateKwargs)
+        let chatTemplateKwargKeyPointers = try chatTemplateKwargs.map { try Self.duplicate($0.key) }
+        let chatTemplateKwargValuePointers = try chatTemplateKwargs.map { try Self.duplicate($0.value) }
 
         self.drySequenceBreakerPointers = drySequenceBreakerPointers
         self.bridgedDrySequenceBreakers = drySequenceBreakerPointers.map { UnsafePointer($0) }
         self.bridgedSamplerKinds = config.samplerKinds.map(\.rawValue)
         self.grammarPointer = grammarPointer
+        self.chatTemplateKwargKeyPointers = chatTemplateKwargKeyPointers
+        self.chatTemplateKwargValuePointers = chatTemplateKwargValuePointers
+        self.bridgedChatTemplateKwargKeys = chatTemplateKwargKeyPointers.map { UnsafePointer($0) }
+        self.bridgedChatTemplateKwargValues = chatTemplateKwargValuePointers.map { UnsafePointer($0) }
         self.bridgedConfig = ETOSLocalLLMGenerationConfig(
             contextSize: config.contextSize,
             maxOutputTokens: config.maxOutputTokens,
@@ -784,13 +801,18 @@ private final class PreparedLocalLLMGenerationConfig {
             adaptiveTarget: config.adaptiveTarget,
             adaptiveDecay: config.adaptiveDecay,
             grammar: UnsafePointer(grammarPointer),
-            ignoreEOS: config.ignoreEOS ? 1 : 0
+            ignoreEOS: config.ignoreEOS ? 1 : 0,
+            chatTemplateKwargKeys: nil,
+            chatTemplateKwargValues: nil,
+            chatTemplateKwargCount: Int32(chatTemplateKwargs.count)
         )
     }
 
     deinit {
         drySequenceBreakerPointers.forEach { free($0) }
         free(grammarPointer)
+        chatTemplateKwargKeyPointers.forEach { free($0) }
+        chatTemplateKwargValuePointers.forEach { free($0) }
     }
 
     func withUnsafePointer<Result>(
@@ -798,13 +820,41 @@ private final class PreparedLocalLLMGenerationConfig {
     ) rethrows -> Result {
         try bridgedDrySequenceBreakers.withUnsafeBufferPointer { breakersPointer in
             try bridgedSamplerKinds.withUnsafeBufferPointer { samplerPointer in
-                bridgedConfig.drySequenceBreakers = breakersPointer.baseAddress
-                bridgedConfig.drySequenceBreakerCount = Int32(breakersPointer.count)
-                bridgedConfig.samplerKinds = samplerPointer.baseAddress
-                bridgedConfig.samplerKindCount = Int32(samplerPointer.count)
-                return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+                try bridgedChatTemplateKwargKeys.withUnsafeBufferPointer { kwargKeysPointer in
+                    try bridgedChatTemplateKwargValues.withUnsafeBufferPointer { kwargValuesPointer in
+                        bridgedConfig.drySequenceBreakers = breakersPointer.baseAddress
+                        bridgedConfig.drySequenceBreakerCount = Int32(breakersPointer.count)
+                        bridgedConfig.samplerKinds = samplerPointer.baseAddress
+                        bridgedConfig.samplerKindCount = Int32(samplerPointer.count)
+                        bridgedConfig.chatTemplateKwargKeys = kwargKeysPointer.baseAddress
+                        bridgedConfig.chatTemplateKwargValues = kwargValuesPointer.baseAddress
+                        bridgedConfig.chatTemplateKwargCount = Int32(kwargKeysPointer.count)
+                        return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+                    }
+                }
             }
         }
+    }
+
+    private static func encodedChatTemplateKwargs(_ kwargs: [String: JSONValue]) throws -> [(key: String, value: String)] {
+        try kwargs
+            .map { key, value -> (key: String, value: String) in
+                let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedKey.isEmpty else {
+                    throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话模板参数 key 不能为空。", comment: "Local LLM empty chat template kwarg key"))
+                }
+                let encodedValue = try encodeJSONValue(value)
+                return (trimmedKey, encodedValue)
+            }
+            .sorted(by: { $0.key < $1.key })
+    }
+
+    private static func encodeJSONValue(_ value: JSONValue) throws -> String {
+        let data = try JSONEncoder().encode(value)
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话模板参数不是有效 UTF-8。", comment: "Local LLM chat template kwarg invalid UTF-8"))
+        }
+        return string
     }
 
     private static func duplicate(_ value: String) throws -> UnsafeMutablePointer<CChar> {

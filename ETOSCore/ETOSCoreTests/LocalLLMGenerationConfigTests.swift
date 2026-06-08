@@ -31,6 +31,7 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.flashAttention == .auto)
         #expect(config.useModelCache)
         #expect(config.samplerKinds == [.temperature])
+        #expect(config.chatTemplateKwargs.isEmpty)
     }
 
     @Test("高级参数会映射到结构化采样配置")
@@ -111,7 +112,11 @@ struct LocalLLMGenerationConfigTests {
             presencePenalty: 0.1,
             grammar: "root ::= \"ok\"",
             ignoreEOS: true,
-            samplerKinds: [.penalties, .topK, .topP, .temperature]
+            samplerKinds: [.penalties, .topK, .topP, .temperature],
+            chatTemplateKwargs: [
+                "enable_thinking": .bool(false),
+                "reasoning_budget": .int(0)
+            ]
         )
 
         let config = try LocalLLMGenerationConfig(options: options)
@@ -136,6 +141,8 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.grammar == "root ::= \"ok\"")
         #expect(config.ignoreEOS)
         #expect(config.samplerKinds == [.penalties, .topK, .topP, .temperature])
+        #expect(config.chatTemplateKwargs["enable_thinking"] == .bool(false))
+        #expect(config.chatTemplateKwargs["reasoning_budget"] == .int(0))
     }
 
     @Test("llama.cpp-style 导入会收集应用、不支持和出错参数")

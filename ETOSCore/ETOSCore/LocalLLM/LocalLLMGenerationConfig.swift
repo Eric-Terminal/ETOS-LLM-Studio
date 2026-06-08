@@ -46,6 +46,7 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
     var adaptiveDecay: Float
     var grammar: String
     var ignoreEOS: Bool
+    var chatTemplateKwargs: [String: JSONValue]
 
     init(options: LocalLLMGenerationOptions) throws {
         self.contextSize = Int32(clamping: options.contextSize.clamped(to: 1...1_048_576))
@@ -85,6 +86,7 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
         self.adaptiveDecay = 0.9
         self.grammar = options.grammar.trimmingCharacters(in: .whitespacesAndNewlines)
         self.ignoreEOS = options.ignoreEOS
+        self.chatTemplateKwargs = options.chatTemplateKwargs
 
         try applyAdvancedArguments(options.advancedArguments)
     }

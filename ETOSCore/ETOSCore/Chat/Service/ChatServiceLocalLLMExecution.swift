@@ -67,6 +67,7 @@ extension ChatService {
                     grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
                     ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
+                    chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )
@@ -176,6 +177,7 @@ extension ChatService {
                     grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
                     ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
+                    chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
                 )
             )
@@ -536,5 +538,13 @@ private extension Dictionary where Key == String, Value == JSONValue {
         default:
             return nil
         }
+    }
+
+    func localChatTemplateKwargsValue() throws -> [String: JSONValue] {
+        guard let value = self["chat_template_kwargs"] else { return [:] }
+        guard case .dictionary(let kwargs) = value else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地对话模板参数 chat_template_kwargs 必须是 JSON 对象。", comment: "Local LLM chat template kwargs object required"))
+        }
+        return kwargs
     }
 }

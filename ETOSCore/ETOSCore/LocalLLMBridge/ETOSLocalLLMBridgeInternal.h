@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -118,6 +119,7 @@ struct local_generation_params {
     std::string generation_prompt;
     std::vector<std::string> additional_stops;
     bool ignore_eos = false;
+    std::map<std::string, std::string> chat_template_kwargs;
 };
 
 struct local_chat_parser_state {
@@ -171,6 +173,7 @@ local_chat_template_result apply_chat_template(
     const llama_model * model,
     const char * messages_json,
     const char * tools_json,
+    const std::map<std::string, std::string> & chat_template_kwargs,
     char ** error_message
 );
 

@@ -322,6 +322,35 @@ struct RequestBodyOverrideModeTests {
         #expect(rebuilt == parameters)
     }
 
+    @Test("结构化控制可写入本地对话模板参数")
+    func testRequestBodyControlCanSetLocalChatTemplateKwargs() {
+        let control = ModelRequestBodyControl(
+            id: "thinking",
+            title: "思考",
+            kind: .toggle,
+            isEnabled: true,
+            defaultIsActive: true,
+            payload: [
+                "chat_template_kwargs": .dictionary([
+                    "enable_thinking": .bool(false)
+                ])
+            ]
+        )
+
+        let parameters = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: ["temperature": .double(0.7)],
+            controls: [control],
+            state: ModelRequestBodyControlState()
+        )
+
+        #expect(parameters["temperature"] == .double(0.7))
+        guard case .dictionary(let kwargs)? = parameters["chat_template_kwargs"] else {
+            Issue.record("chat_template_kwargs 未按预期合并为对象")
+            return
+        }
+        #expect(kwargs["enable_thinking"] == .bool(false))
+    }
+
     @Test("Model 编解码保留请求体编辑模式和原始 JSON 文本")
     func testModelCodingPreservesRequestBodyMode() throws {
         let source = Model(

@@ -193,6 +193,18 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
     }
     params.grammar = config.grammar ? config.grammar : "";
     params.ignore_eos = config.ignore_eos != 0;
+    params.chat_template_kwargs.clear();
+    for (int32_t index = 0;
+         config.chat_template_kwarg_keys
+            && config.chat_template_kwarg_values
+            && index < config.chat_template_kwarg_count;
+         ++index) {
+        const char * key = config.chat_template_kwarg_keys[index];
+        const char * value = config.chat_template_kwarg_values[index];
+        if (key && key[0] != '\0' && value) {
+            params.chat_template_kwargs[key] = value;
+        }
+    }
     return params;
 }
 

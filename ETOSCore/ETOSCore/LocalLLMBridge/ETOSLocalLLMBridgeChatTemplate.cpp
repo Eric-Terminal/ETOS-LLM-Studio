@@ -66,6 +66,7 @@ local_chat_template_result apply_chat_template(
     const llama_model * model,
     const char * messages_json,
     const char * tools_json,
+    const std::map<std::string, std::string> & chat_template_kwargs,
     char ** error_message
 ) {
     if (!messages_json || messages_json[0] == '\0') {
@@ -93,6 +94,15 @@ local_chat_template_result apply_chat_template(
         common_chat_templates_inputs inputs;
         inputs.messages = common_chat_msgs_parse_oaicompat(chat_messages);
         inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+        inputs.chat_template_kwargs = chat_template_kwargs;
+        if (const auto found = chat_template_kwargs.find("enable_thinking"); found != chat_template_kwargs.end()) {
+            const json enable_thinking = json::parse(found->second);
+            if (!enable_thinking.is_boolean()) {
+                fail("本地对话模板参数 enable_thinking 必须是 JSON 布尔值。", error_message);
+                return {};
+            }
+            inputs.enable_thinking = enable_thinking.get<bool>();
+        }
         if (!tool_definitions.empty()) {
             inputs.tools = common_chat_tools_parse_oaicompat(tool_definitions);
             inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
@@ -150,6 +160,7 @@ int32_t parse_chat_response(
         model.get(),
         messages_json,
         tools_json,
+        {},
         error_message
     );
     if (chat_template.prompt.empty()) {

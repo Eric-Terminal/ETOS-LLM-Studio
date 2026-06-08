@@ -72,6 +72,9 @@ typedef struct etos_local_llm_generation_config {
     float adaptive_decay;
     const char * grammar;
     int32_t ignore_eos;
+    const char * const * chat_template_kwarg_keys;
+    const char * const * chat_template_kwarg_values;
+    int32_t chat_template_kwarg_count;
 } etos_local_llm_generation_config;
 
 int32_t etos_local_llm_generate(

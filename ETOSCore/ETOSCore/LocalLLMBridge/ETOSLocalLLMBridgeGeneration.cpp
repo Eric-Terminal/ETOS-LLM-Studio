@@ -168,6 +168,7 @@ int32_t generate(
             model.get(),
             messages_json,
             tools_json,
+            generation_params.chat_template_kwargs,
             error_message
         );
         if (chat_template.prompt.empty()) {
