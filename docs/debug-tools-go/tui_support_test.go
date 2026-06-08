@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestTUIEscReturnsToNavigationWithoutQuit(t *testing.T) {
@@ -801,6 +802,94 @@ func TestTUIProviderDetailFocusScrollsWithDownKey(t *testing.T) {
 	}
 }
 
+func TestTUITouchHelpButtonOpensFilesPathForm(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.layout(150, 42)
+	model.active = tuiFiles
+	model.focus = tuiFocusContent
+	model.syncFocusedComponent()
+	model.syncContentViewport()
+
+	updated, _ := model.Update(tuiMousePressForHelpLabel(t, model, "p路径"))
+	got := updated.(tuiModel)
+	if got.activeForm == nil {
+		t.Fatal("点击 [p路径] 后没有打开内嵌表单")
+	}
+	if got.activeForm.title != "跳转设备路径" {
+		t.Fatalf("activeForm.title = %q, want 跳转设备路径", got.activeForm.title)
+	}
+}
+
+func TestTUINavMouseClickSwitchesPage(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.layout(150, 42)
+	model.syncContentViewport()
+
+	updated, _ := model.Update(tuiMousePressForText(t, model, "MCP"))
+	got := updated.(tuiModel)
+	if got.active != tuiMCP {
+		t.Fatalf("active = %v, want tuiMCP", got.active)
+	}
+	if got.focus != tuiFocusContent {
+		t.Fatalf("focus = %v, want tuiFocusContent", got.focus)
+	}
+}
+
+func TestTUITableMouseClickSelectsRow(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.layout(150, 42)
+	model.active = tuiProviders
+	model.focus = tuiFocusContent
+	model.applyProviders(map[string]any{"providers": []any{
+		map[string]any{"id": "provider-1", "name": "Provider One", "apiFormat": "openai-compatible"},
+		map[string]any{"id": "provider-2", "name": "Provider Two", "apiFormat": "gemini"},
+	}})
+	model.syncFocusedComponent()
+	model.syncContentViewport()
+
+	rect := model.contentViewportRect()
+	updated, _ := model.Update(tea.MouseMsg{
+		X:      rect.left + 2,
+		Y:      rect.top + 4,
+		Type:   tea.MouseLeft,
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonLeft,
+	})
+	got := updated.(tuiModel)
+	if got.providers.Cursor() != 1 {
+		t.Fatalf("providers cursor = %d, want 1", got.providers.Cursor())
+	}
+}
+
+func TestTUISessionMessageMouseClickSelectsBubble(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.layout(150, 42)
+	model.active = tuiSessions
+	model.focus = tuiFocusContent
+	model.sessionMode = tuiSessionModeMessages
+	model.activeSession = map[string]any{"id": "session-1", "name": "测试会话"}
+	model.sessionMessages = []map[string]any{
+		{"id": "message-1", "role": "user", "content": "第一条"},
+		{"id": "message-2", "role": "assistant", "content": "第二条"},
+	}
+	model.syncFocusedComponent()
+	model.syncContentViewport()
+
+	line := sessionMessageElementStartLine(model, 1)
+	rect := model.contentViewportRect()
+	updated, _ := model.Update(tea.MouseMsg{
+		X:      rect.left + 2,
+		Y:      rect.top + line,
+		Type:   tea.MouseLeft,
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonLeft,
+	})
+	got := updated.(tuiModel)
+	if got.selectedSessionMessage != 1 {
+		t.Fatalf("selectedSessionMessage = %d, want 1", got.selectedSessionMessage)
+	}
+}
+
 func TestTUISelectOptionsPreserveCurrentCustomValue(t *testing.T) {
 	options := tuiSelectOptionsWithCurrent(tuiProviderAPIFormatOptions(), "minimax")
 	if options[len(options)-1].Value != "minimax" || !strings.Contains(options[len(options)-1].Key, "当前自定义") {
@@ -1071,4 +1160,39 @@ func TestProviderModelOptionLabel(t *testing.T) {
 	if label != "3. GPT Test · gpt-test" {
 		t.Fatalf("label = %q, want %q", label, "3. GPT Test · gpt-test")
 	}
+}
+
+func tuiMousePressForHelpLabel(t *testing.T, model tuiModel, label string) tea.MouseMsg {
+	t.Helper()
+	return tuiMousePressForText(t, model, "["+label+"]")
+}
+
+func tuiMousePressForText(t *testing.T, model tuiModel, text string) tea.MouseMsg {
+	t.Helper()
+	lines := strings.Split(ansi.Strip(model.View()), "\n")
+	for y, line := range lines {
+		start, end, ok := tuiCellRangeOfSubstring(line, text)
+		if ok {
+			return tea.MouseMsg{
+				X:      start + maxInt(0, (end-start)/2),
+				Y:      y,
+				Type:   tea.MouseLeft,
+				Action: tea.MouseActionPress,
+				Button: tea.MouseButtonLeft,
+			}
+		}
+	}
+	t.Fatalf("没有在渲染结果中找到可点击文本 %q", text)
+	return tea.MouseMsg{}
+}
+
+func sessionMessageElementStartLine(model tuiModel, messageIndex int) int {
+	elementIndex := messageIndex + 3
+	elements := model.sessionMessageViewElements()
+	start := 0
+	for index := 0; index < elementIndex; index++ {
+		start += lineCount(elements[index]) - 1
+		start += 2
+	}
+	return start
 }

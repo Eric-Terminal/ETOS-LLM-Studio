@@ -107,17 +107,6 @@ func (m tuiModel) renderSessionsView() string {
 	}
 }
 
-func (m tuiModel) renderSessionsHelp(common string) string {
-	switch m.sessionMode {
-	case tuiSessionModeMessages:
-		return common + " | ↑↓ 选择气泡 | Enter 更多 | r 刷新当前会话"
-	case tuiSessionModeMessageDetail:
-		return common + " | ↑↓ 选择正文/思考 | h/l 版本 | e 编辑 | PgUp/PgDn 滚动 | Esc 返回"
-	default:
-		return common + " | Enter 查看消息 | n 新建会话 | x 删除"
-	}
-}
-
 func (m *tuiModel) handleSessionBack() bool {
 	switch m.sessionMode {
 	case tuiSessionModeMessageDetail:

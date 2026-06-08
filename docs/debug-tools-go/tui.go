@@ -351,8 +351,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.updateActiveForm(msg)...)
 			return m, tea.Batch(cmds...)
 		}
-		if m.focus != tuiFocusNav {
-			cmd := m.handleContentMouse(msg)
+		if cmd := m.handleMouse(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	default:
@@ -774,31 +773,7 @@ func (m *tuiModel) syncActiveViewFromNav() {
 }
 
 func (m tuiModel) renderHelp() string {
-	common := "← 侧栏 | → 内容 | Tab 快速切页 | r 刷新 | Esc 返回/取消输入 | Ctrl+C 退出"
-	if m.focus == tuiFocusNav {
-		return common + " | ↑↓ 选择页面 | Enter 进入内容"
-	}
-	if m.focus == tuiFocusDetail {
-		return common + " | ↑↓/j/k 滚动详情 | PgUp/PgDn 半页 | Home/End 首尾 | Esc 回表格"
-	}
-	switch m.active {
-	case tuiFiles:
-		return common + " | p 路径 | Enter 打开/预览 | b 上级 | d 下载 | u 上传 | x 删除 | n 新建目录"
-	case tuiProviders:
-		return common + " | Enter 详情 | a 新增 Provider | e 编辑 Provider | m 新增模型 | M 编辑模型"
-	case tuiSettings:
-		return common + " | Enter 详情 | e 修改当前配置"
-	case tuiMCP:
-		return common + " | Enter 详情 | a 新增 | e 编辑 | x 删除 | t 聊天开关 | P 工具策略 | p JSON策略 | g 总开关"
-	case tuiSessions:
-		return m.renderSessionsHelp(common)
-	case tuiMemories:
-		return common + " | Enter 详情 | e 编辑 | x 归档/取消归档 | n 重嵌入全部"
-	case tuiSQLite:
-		return common + " | 1/2/3 选库 | q 查询 | w 写入"
-	default:
-		return common
-	}
+	return tuiRenderTouchActions(m.touchHelpActions(), m.rightContentWidth())
 }
 
 func (m *tuiModel) nextView() {
@@ -967,32 +942,6 @@ func (m *tuiModel) handleDetailKey(key string) tea.Cmd {
 		m.syncFocusedComponent()
 	}
 	return nil
-}
-
-func (m *tuiModel) handleContentMouse(msg tea.MouseMsg) tea.Cmd {
-	var cmd tea.Cmd
-	m.content, cmd = m.content.Update(msg)
-	if msg.Action != tea.MouseActionMotion || !m.mouseInContentViewport(msg) {
-		return cmd
-	}
-
-	top := 4
-	bottom := top + m.content.Height - 1
-	if msg.Y <= top+1 {
-		m.content.ScrollUp(m.content.MouseWheelDelta)
-	} else if msg.Y >= bottom-1 {
-		m.content.ScrollDown(m.content.MouseWheelDelta)
-	}
-	return cmd
-}
-
-func (m tuiModel) mouseInContentViewport(msg tea.MouseMsg) bool {
-	top := 4
-	bottom := top + m.content.Height - 1
-	rightOuterLeft := m.navContentWidth() + tuiPanelHorizontalFrame + tuiPanelGapWidth + 1
-	contentLeft := rightOuterLeft + 2
-	contentRight := contentLeft + m.content.Width - 1
-	return msg.X >= contentLeft && msg.X <= contentRight && msg.Y >= top && msg.Y <= bottom
 }
 
 func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) {
