@@ -24,11 +24,17 @@ struct SpeechInputSettingsView: View {
             Section {
                 settingsIntroCard(
                     title: "语音输入模式",
-                    summary: "录音后可先转写到输入框，也可在模型支持音频输入时作为音频附件发送。",
+                    summary: "录音可用系统内建识别或 OpenAI Audio Transcriptions 兼容模型转写，也可在聊天模型支持音频时直发。",
                     details: """
                     语音转写
                     • 关闭“模型支持时发送音频”时，录音会先发送给语音识别模型转写。
                     • 识别结果会自动补到输入框，方便发送前确认和修改。
+                    • 模型列表里包含系统内建的 SFSpeechRecognizer，可直接使用系统语音识别。
+
+                    语音识别模型格式
+                    • 第三方语音识别模型需要兼容 OpenAI Audio Transcriptions 接口：POST /audio/transcriptions，multipart/form-data 上传 file 和 model，并返回 text 字段。
+                    • 因为添加模型的界面不适合再增加专门协议开关，App 不会在模型能力里单独标记这个格式；请按提供商文档或自测结果判断是否支持。
+                    • FunAudioLLM/SenseVoiceSmall 这类服务如果已经兼容该接口，就可以作为语音识别模型使用。
 
                     音频直发
                     • 开启“模型支持时发送音频”时，录音会作为音频附件发送给当前聊天模型。
