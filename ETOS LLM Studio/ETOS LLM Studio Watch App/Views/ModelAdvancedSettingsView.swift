@@ -203,30 +203,20 @@ struct ModelAdvancedSettingsView: View {
 
                 Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                 if aiTemperatureEnabled {
-                    Stepper(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep) {
-                        Text(
-                            String(
-                                format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
-                                temperatureBinding.wrappedValue
-                            )
-                        )
-                    }
-
-                    Slider(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep)
+                    samplingParameterSlider(
+                        title: NSLocalizedString("温度", comment: "Temperature sampling parameter title"),
+                        value: temperatureBinding,
+                        range: temperatureRange
+                    )
                 }
 
                 Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
                 if aiTopPEnabled {
-                    Stepper(value: topPBinding, in: topPRange, step: samplingParameterStep) {
-                        Text(
-                            String(
-                                format: NSLocalizedString("核采样 (Top P): %.2f", comment: ""),
-                                topPBinding.wrappedValue
-                            )
-                        )
-                    }
-
-                    Slider(value: topPBinding, in: topPRange, step: samplingParameterStep)
+                    samplingParameterSlider(
+                        title: NSLocalizedString("Top-P", comment: "Top P sampling parameter title"),
+                        value: topPBinding,
+                        range: topPRange
+                    )
                 }
             }
 
@@ -239,6 +229,25 @@ struct ModelAdvancedSettingsView: View {
         .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
         .onAppear {
             normalizeSamplingParametersIfNeeded()
+        }
+    }
+
+    private func samplingParameterSlider(title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+        VStack(alignment: .leading) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer()
+                Text(String(format: "%.2f", value.wrappedValue))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            // watchOS 的 Stepper 会把长标签放大成整屏控件，这里保留紧凑 Slider 交互。
+            Slider(value: value, in: range, step: samplingParameterStep)
+                .accessibilityLabel(Text(title))
         }
     }
 
