@@ -192,11 +192,7 @@ struct ChatExportFormatsView: View {
                         }
                     }
                 )
-                let (data, response) = try await NetworkSessionConfiguration.shared.upload(
-                    for: request,
-                    fromFile: fileURL,
-                    delegate: delegate
-                )
+                let (data, response) = try await delegate.upload(request: request, fileURL: fileURL)
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw URLError(.badServerResponse)
@@ -296,13 +292,33 @@ private struct ChatExportUploadProgressView: View {
     }
 }
 
-private final class ChatExportUploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+private final class ChatExportUploadProgressDelegate: NSObject, URLSessionDataDelegate {
     private let totalBytes: Int64
     private let progress: @Sendable (SyncPackageUploadProgress) -> Void
+    private let lock = NSLock()
+    private var session: URLSession?
+    private var responseData = Data()
+    private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
 
     init(totalBytes: Int64, progress: @escaping @Sendable (SyncPackageUploadProgress) -> Void) {
         self.totalBytes = totalBytes
         self.progress = progress
+    }
+
+    func upload(request: URLRequest, fileURL: URL) async throws -> (Data, URLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            self.continuation = continuation
+            let session = URLSession(
+                configuration: NetworkSessionConfiguration.makeConfiguration(),
+                delegate: self,
+                delegateQueue: nil
+            )
+            self.session = session
+            lock.unlock()
+
+            session.uploadTask(with: request, fromFile: fileURL).resume()
+        }
     }
 
     func urlSession(
@@ -314,5 +330,42 @@ private final class ChatExportUploadProgressDelegate: NSObject, URLSessionTaskDe
     ) {
         let expectedBytes = totalBytesExpectedToSend > 0 ? totalBytesExpectedToSend : totalBytes
         progress(SyncPackageUploadProgress(bytesSent: totalBytesSent, totalBytes: expectedBytes))
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        responseData.append(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure(error))
+            return
+        }
+
+        guard let response = task.response else {
+            finish(.failure(URLError(.badServerResponse)))
+            return
+        }
+
+        finish(.success((responseData, response)))
+    }
+
+    private func finish(_ result: Result<(Data, URLResponse), Error>) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        let session = self.session
+        self.session = nil
+        lock.unlock()
+
+        guard let continuation else { return }
+        session?.finishTasksAndInvalidate()
+
+        switch result {
+        case .success(let value):
+            continuation.resume(returning: value)
+        case .failure(let error):
+            continuation.resume(throwing: error)
+        }
     }
 }

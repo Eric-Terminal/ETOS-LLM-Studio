@@ -414,11 +414,7 @@ private extension SyncPackageUploadService {
     ) async throws -> (Data, URLResponse) {
         let totalBytes = fileSizeInBytes(at: fileURL)
         let delegate = UploadProgressDelegate(totalBytes: totalBytes, progress: progress)
-        return try await NetworkSessionConfiguration.shared.upload(
-            for: request,
-            fromFile: fileURL,
-            delegate: delegate
-        )
+        return try await delegate.upload(request: request, fileURL: fileURL)
     }
 
     static func downloadFile(
@@ -426,10 +422,7 @@ private extension SyncPackageUploadService {
         progress: DownloadProgressHandler?
     ) async throws -> (URL, URLResponse) {
         let delegate = DownloadProgressDelegate(progress: progress)
-        return try await NetworkSessionConfiguration.shared.download(
-            for: request,
-            delegate: delegate
-        )
+        return try await delegate.download(request: request)
     }
 
     static func reportInitialProgress(for fileURL: URL, progress: ProgressHandler?) {
@@ -919,13 +912,33 @@ private extension SyncPackageUploadService {
     }
 }
 
-private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+private final class UploadProgressDelegate: NSObject, URLSessionDataDelegate {
     private let totalBytes: Int64
     private let progress: SyncPackageUploadService.ProgressHandler?
+    private let lock = NSLock()
+    private var session: URLSession?
+    private var responseData = Data()
+    private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
 
     init(totalBytes: Int64, progress: SyncPackageUploadService.ProgressHandler?) {
         self.totalBytes = totalBytes
         self.progress = progress
+    }
+
+    func upload(request: URLRequest, fileURL: URL) async throws -> (Data, URLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            self.continuation = continuation
+            let session = URLSession(
+                configuration: NetworkSessionConfiguration.makeConfiguration(),
+                delegate: self,
+                delegateQueue: nil
+            )
+            self.session = session
+            lock.unlock()
+
+            session.uploadTask(with: request, fromFile: fileURL).resume()
+        }
     }
 
     func urlSession(
@@ -938,13 +951,70 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
         let expectedBytes = totalBytesExpectedToSend > 0 ? totalBytesExpectedToSend : totalBytes
         progress?(SyncPackageUploadProgress(bytesSent: totalBytesSent, totalBytes: expectedBytes))
     }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        responseData.append(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure(error))
+            return
+        }
+
+        guard let response = task.response else {
+            finish(.failure(SyncPackageUploadError.invalidHTTPResponse))
+            return
+        }
+
+        finish(.success((responseData, response)))
+    }
+
+    private func finish(_ result: Result<(Data, URLResponse), Error>) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        let session = self.session
+        self.session = nil
+        lock.unlock()
+
+        guard let continuation else { return }
+        session?.finishTasksAndInvalidate()
+
+        switch result {
+        case .success(let value):
+            continuation.resume(returning: value)
+        case .failure(let error):
+            continuation.resume(throwing: error)
+        }
+    }
 }
 
 private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
     private let progress: SyncPackageUploadService.DownloadProgressHandler?
+    private let lock = NSLock()
+    private var session: URLSession?
+    private var downloadedURL: URL?
+    private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
 
     init(progress: SyncPackageUploadService.DownloadProgressHandler?) {
         self.progress = progress
+    }
+
+    func download(request: URLRequest) async throws -> (URL, URLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            self.continuation = continuation
+            let session = URLSession(
+                configuration: NetworkSessionConfiguration.makeConfiguration(),
+                delegate: self,
+                delegateQueue: nil
+            )
+            self.session = session
+            lock.unlock()
+
+            session.downloadTask(with: request).resume()
+        }
     }
 
     func urlSession(
@@ -962,7 +1032,61 @@ private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelega
         _ session: URLSession,
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
-    ) {}
+    ) {
+        let destinationURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ETOS-Download-\(UUID().uuidString)", isDirectory: false)
+        do {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.moveItem(at: location, to: destinationURL)
+            downloadedURL = destinationURL
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure(error))
+            return
+        }
+
+        guard let response = task.response else {
+            finish(.failure(SyncPackageUploadError.invalidHTTPResponse))
+            return
+        }
+
+        guard let downloadedURL else {
+            finish(.failure(URLError(.cannotOpenFile)))
+            return
+        }
+
+        finish(.success((downloadedURL, response)))
+    }
+
+    private func finish(_ result: Result<(URL, URLResponse), Error>) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        let session = self.session
+        self.session = nil
+        let downloadedURL = self.downloadedURL
+        lock.unlock()
+
+        guard let continuation else { return }
+        session?.finishTasksAndInvalidate()
+
+        switch result {
+        case .success(let value):
+            continuation.resume(returning: value)
+        case .failure(let error):
+            if let downloadedURL {
+                try? FileManager.default.removeItem(at: downloadedURL)
+            }
+            continuation.resume(throwing: error)
+        }
+    }
 }
 
 private final class S3ListObjectsV2Parser: NSObject, XMLParserDelegate {
