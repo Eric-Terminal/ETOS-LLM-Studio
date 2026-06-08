@@ -22,6 +22,7 @@ struct MCPServerHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord
         case displayName = "display_name"
         case notes
         case isSelectedForChat = "is_selected_for_chat"
+        case sortIndex = "sort_index"
         case status
         case transportKind = "transport_kind"
         case endpointURL = "endpoint_url"
@@ -34,6 +35,7 @@ struct MCPServerHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord
     enum Columns {
         static let id = Column(CodingKeys.id.rawValue)
         static let displayName = Column(CodingKeys.displayName.rawValue)
+        static let sortIndex = Column(CodingKeys.sortIndex.rawValue)
         static let status = Column(CodingKeys.status.rawValue)
         static let updatedAt = Column(CodingKeys.updatedAt.rawValue)
     }
@@ -42,6 +44,7 @@ struct MCPServerHeaderRecord: Codable, FetchableRecord, MutablePersistableRecord
     var displayName: String
     var notes: String?
     var isSelectedForChat: Int
+    var sortIndex: Int
     var status: String
     var transportKind: String
     var endpointURL: String?

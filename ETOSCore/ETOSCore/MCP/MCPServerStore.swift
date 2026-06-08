@@ -160,14 +160,6 @@ public struct MCPServerStore {
                         updatedAt: Date()
                     )
                 }
-                .sorted {
-                    let lhsName = $0.displayName.lowercased()
-                    let rhsName = $1.displayName.lowercased()
-                    if lhsName == rhsName {
-                        return $0.id.uuidString < $1.id.uuidString
-                    }
-                    return lhsName < rhsName
-                }
         }
     }
 
@@ -189,6 +181,40 @@ public struct MCPServerStore {
                 records.append(MCPServerStoredRecord(server: server, metadata: nil))
             }
             saveLegacyRecords(records)
+        }
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+    }
+
+    public static func saveOrder(_ orderedServers: [MCPServerConfiguration]) {
+        guard !orderedServers.isEmpty else { return }
+        let normalizedServers = orderedServers.enumerated().map { pair -> MCPServerConfiguration in
+            var server = pair.element
+            server.sortIndex = pair.offset
+            return server
+        }
+
+        lock.withLock {
+            bootstrapRelationalStoreIfNeeded()
+            if saveServerOrderToRelationalStore(normalizedServers) {
+                cleanupLegacyArtifactsAfterRelationalSave()
+                return
+            }
+
+            let records = loadLegacyRecords(usingBlobCache: true)
+            var recordsByID: [UUID: MCPServerStoredRecord] = [:]
+            for record in records {
+                recordsByID[record.server.id] = record
+            }
+
+            let orderedIDs = Set(normalizedServers.map(\.id))
+            let orderedRecords = normalizedServers.map { server -> MCPServerStoredRecord in
+                var record = recordsByID[server.id] ?? MCPServerStoredRecord(server: server, metadata: nil)
+                record.server = server
+                return record
+            }
+            let remainingRecords = records.filter { !orderedIDs.contains($0.server.id) }
+            saveLegacyRecords(orderedRecords + remainingRecords)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)

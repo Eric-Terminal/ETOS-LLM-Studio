@@ -12,7 +12,7 @@ import os.log
 extension MCPServerStore {
     static func loadLegacyRecords(usingBlobCache: Bool) -> [MCPServerStoredRecord] {
         if let records = loadLegacyRecordsFromBlob() {
-            return records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
+            return sortedRecordsByServerOrder(records)
         }
 
         let fileRecords = loadRecordsFromFiles()
@@ -24,17 +24,31 @@ extension MCPServerStore {
             cleanupLegacyFileArtifacts()
         }
 
-        return fileRecords.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
+        return sortedRecordsByServerOrder(fileRecords)
     }
 
     static func saveLegacyRecords(_ records: [MCPServerStoredRecord]) {
-        let sortedRecords = records.sorted { $0.server.displayName.lowercased() < $1.server.displayName.lowercased() }
+        let sortedRecords = sortedRecordsByServerOrder(records)
         if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: recordBlobKey) {
             removeLegacyRecordBlobs(excluding: recordBlobKey)
             cleanupLegacyFileArtifacts()
             return
         }
         saveRecordsToFiles(sortedRecords)
+    }
+
+    static func sortedRecordsByServerOrder(_ records: [MCPServerStoredRecord]) -> [MCPServerStoredRecord] {
+        records.sorted { lhs, rhs in
+            if lhs.server.sortIndex != rhs.server.sortIndex {
+                return lhs.server.sortIndex < rhs.server.sortIndex
+            }
+            let lhsName = lhs.server.displayName.lowercased()
+            let rhsName = rhs.server.displayName.lowercased()
+            if lhsName != rhsName {
+                return lhsName < rhsName
+            }
+            return lhs.server.id.uuidString < rhs.server.id.uuidString
+        }
     }
 
     static func loadLegacyRecordsFromBlob() -> [MCPServerStoredRecord]? {

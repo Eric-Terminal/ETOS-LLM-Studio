@@ -81,6 +81,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public var disabledToolIds: [String]
     public var toolApprovalPolicies: [String: MCPToolApprovalPolicy]
     public var streamResumptionToken: String?
+    public var sortIndex: Int
 
     public init(
         id: UUID = UUID(),
@@ -90,7 +91,8 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         isSelectedForChat: Bool = false,
         disabledToolIds: [String] = [],
         toolApprovalPolicies: [String: MCPToolApprovalPolicy] = [:],
-        streamResumptionToken: String? = nil
+        streamResumptionToken: String? = nil,
+        sortIndex: Int = 0
     ) {
         self.id = id
         self.displayName = displayName
@@ -100,6 +102,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         self.disabledToolIds = disabledToolIds
         self.toolApprovalPolicies = toolApprovalPolicies
         self.streamResumptionToken = streamResumptionToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.sortIndex = sortIndex
     }
 }
 
@@ -113,6 +116,7 @@ extension MCPServerConfiguration {
         case disabledToolIds
         case toolApprovalPolicies
         case streamResumptionToken
+        case sortIndex
     }
 
     public init(from decoder: Decoder) throws {
@@ -124,6 +128,7 @@ extension MCPServerConfiguration {
         isSelectedForChat = try container.decodeIfPresent(Bool.self, forKey: .isSelectedForChat) ?? false
         disabledToolIds = try container.decodeIfPresent([String].self, forKey: .disabledToolIds) ?? []
         toolApprovalPolicies = try container.decodeIfPresent([String: MCPToolApprovalPolicy].self, forKey: .toolApprovalPolicies) ?? [:]
+        sortIndex = try container.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
         let decodedToken = try container.decodeIfPresent(String.self, forKey: .streamResumptionToken)
         if let decodedToken {
             let trimmed = decodedToken.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -159,6 +164,9 @@ extension MCPServerConfiguration {
             if !trimmed.isEmpty {
                 try container.encode(trimmed, forKey: .streamResumptionToken)
             }
+        }
+        if sortIndex != 0 {
+            try container.encode(sortIndex, forKey: .sortIndex)
         }
     }
 }

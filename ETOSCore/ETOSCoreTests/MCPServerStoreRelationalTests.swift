@@ -266,4 +266,68 @@ struct MCPServerStoreRelationalTests {
         #expect(matched?.displayName == "Header 轻查询测试服务器")
         #expect(matched?.transportKind == "oauth")
     }
+
+    @MainActor
+    @Test("GRDB 模式下 MCP 服务器顺序可持久化")
+    func testMCPServerOrderPersistsWithRelationalStore() {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+
+        let originalServers = MCPServerStore.loadServers()
+        let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
+            (server.id, MCPServerStore.loadMetadata(for: server.id))
+        })
+
+        defer {
+            for server in MCPServerStore.loadServers() {
+                MCPServerStore.delete(server)
+            }
+
+            for server in originalServers {
+                MCPServerStore.save(server)
+                if let metadata = originalMetadata[server.id] {
+                    MCPServerStore.saveMetadata(metadata, for: server.id)
+                }
+            }
+
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        for server in MCPServerStore.loadServers() {
+            MCPServerStore.delete(server)
+        }
+
+        let alpha = MCPServerConfiguration(
+            displayName: "Alpha 顺序测试服务器",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/order-alpha")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            sortIndex: 0
+        )
+        let beta = MCPServerConfiguration(
+            displayName: "Beta 顺序测试服务器",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/order-beta")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            sortIndex: 1
+        )
+
+        MCPServerStore.save(alpha)
+        MCPServerStore.save(beta)
+        MCPServerStore.saveOrder([beta, alpha])
+
+        let targetIDs: Set<UUID> = [alpha.id, beta.id]
+        let reloadedServers = MCPServerStore.loadServers().filter { targetIDs.contains($0.id) }
+        #expect(reloadedServers.map(\.id) == [beta.id, alpha.id])
+        #expect(reloadedServers.map(\.sortIndex) == [0, 1])
+
+        let reloadedHeaders = MCPServerStore.loadServerHeaders().filter { targetIDs.contains($0.id) }
+        #expect(reloadedHeaders.map(\.id) == [beta.id, alpha.id])
+    }
 }

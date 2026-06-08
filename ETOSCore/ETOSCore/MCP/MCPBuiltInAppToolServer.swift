@@ -31,6 +31,10 @@ public enum MCPBuiltInAppToolServer {
         serverIDs[category]!
     }
 
+    static func defaultSortIndex(for category: AppToolCatalogCategory) -> Int {
+        (categories.firstIndex(of: category) ?? categories.count) + 1
+    }
+
     public static func category(for serverID: UUID) -> AppToolCatalogCategory? {
         serverIDs.first(where: { $0.value == serverID })?.key
     }
@@ -94,7 +98,8 @@ public enum MCPBuiltInAppToolServer {
             transport: .builtInAppTool(category: category),
             isSelectedForChat: appToolManager.chatToolsEnabled,
             disabledToolIds: disabledToolIds,
-            toolApprovalPolicies: approvalPolicies
+            toolApprovalPolicies: approvalPolicies,
+            sortIndex: defaultSortIndex(for: category)
         )
     }
 

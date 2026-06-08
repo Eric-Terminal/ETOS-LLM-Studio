@@ -354,9 +354,7 @@ private extension ETOSSnapshotPackageImporter {
             keys: MCPServerStore.allRecordBlobKeys,
             store: store
         ) ?? []
-        return records
-            .map(\.server)
-            .sorted { $0.displayName.lowercased() < $1.displayName.lowercased() }
+        return MCPServerStore.sortedRecordsByServerOrder(records).map(\.server)
     }
 
     static func loadShortcutTools(from store: PersistenceAuxiliaryGRDBStore) throws -> [ShortcutToolDefinition] {

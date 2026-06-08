@@ -27,7 +27,8 @@ public enum MCPBuiltInSearchServer {
             notes: NSLocalizedString("应用内置的 Mock MCP 搜索服务器，用于验证本地工具调用链路。", comment: "Built-in MCP search server notes"),
             transport: .builtInSearch,
             isSelectedForChat: true,
-            toolApprovalPolicies: [toolID: .alwaysAllow]
+            toolApprovalPolicies: [toolID: .alwaysAllow],
+            sortIndex: 0
         )
     }
 

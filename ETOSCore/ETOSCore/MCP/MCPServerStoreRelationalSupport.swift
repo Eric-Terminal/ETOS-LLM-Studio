@@ -15,6 +15,7 @@ extension MCPServerStore {
         let displayName: String = row["display_name"]
         let notes: String? = row["notes"]
         let selectedRaw: Int = row["is_selected_for_chat"]
+        let sortIndex: Int = row["sort_index"]
         let kindRaw: String = row["transport_kind"]
         let endpointURLRaw: String? = row["endpoint_url"]
         let messageEndpointURLRaw: String? = row["message_endpoint_url"]
@@ -31,6 +32,7 @@ extension MCPServerStore {
             displayName: displayName,
             notes: notes,
             isSelectedForChat: selectedRaw,
+            sortIndex: sortIndex,
             status: MCPServerHeaderRecord.Status.idle.rawValue,
             transportKind: kindRaw,
             endpointURL: endpointURLRaw,
@@ -119,7 +121,8 @@ extension MCPServerStore {
             isSelectedForChat: header.isSelectedForChat != 0,
             disabledToolIds: disabledToolIDs,
             toolApprovalPolicies: toolPolicies,
-            streamResumptionToken: streamToken
+            streamResumptionToken: streamToken,
+            sortIndex: header.sortIndex
         )
     }
 

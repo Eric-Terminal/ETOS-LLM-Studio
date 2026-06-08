@@ -99,6 +99,9 @@ struct MCPIntegrationView: View {
                             }
                         }
                     }
+                    .onMove { offsets, destination in
+                        manager.moveServers(fromOffsets: offsets, toOffset: destination)
+                    }
                 }
 
                 NavigationLink {

@@ -98,6 +98,7 @@ extension MCPServerConfiguration {
         notes == other.notes &&
         transport == other.transport &&
         isSelectedForChat == other.isSelectedForChat &&
+        sortIndex == other.sortIndex &&
         Set(disabledToolIds) == Set(other.disabledToolIds) &&
         toolApprovalPolicies == other.toolApprovalPolicies
     }

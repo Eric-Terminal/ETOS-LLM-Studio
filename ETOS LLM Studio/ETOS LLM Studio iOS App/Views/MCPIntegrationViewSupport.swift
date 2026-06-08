@@ -58,8 +58,12 @@ extension MCPIntegrationView {
                         .tint(.blue)
                     }
                 }
+                .onMove { offsets, destination in
+                    manager.moveServers(fromOffsets: offsets, toOffset: destination)
+                }
             }
         }
+        .environment(\.editMode, .constant(.active))
     }
 
     var connectionOverviewSection: some View {

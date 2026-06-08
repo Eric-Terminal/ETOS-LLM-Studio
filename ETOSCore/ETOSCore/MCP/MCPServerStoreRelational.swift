@@ -80,10 +80,11 @@ extension MCPServerStore {
             sql: """
             SELECT
                 id, display_name, notes, is_selected_for_chat,
+                sort_index,
                 status, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
                 metadata_cached_at, updated_at
             FROM \(relationalServerTable)
-            ORDER BY LOWER(display_name) ASC, id ASC
+            ORDER BY sort_index ASC, LOWER(display_name) ASC, id ASC
             """
         )
         let payloadRows = try MCPServerPayloadRecord.fetchAll(
@@ -115,10 +116,11 @@ extension MCPServerStore {
                 sql: """
                 SELECT
                     id, display_name, notes, is_selected_for_chat,
+                    sort_index,
                     status, transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
                     metadata_cached_at, updated_at
                 FROM \(relationalServerTable)
-                ORDER BY LOWER(display_name) ASC, id ASC
+                ORDER BY sort_index ASC, LOWER(display_name) ASC, id ASC
                 """
             )
 
@@ -149,6 +151,7 @@ extension MCPServerStore {
                 SELECT
                     id, display_name, notes, is_selected_for_chat,
                     transport_kind, endpoint_url, message_endpoint_url, sse_endpoint_url,
+                    sort_index,
                     api_key, additional_headers_json, oauth_payload_json,
                     disabled_tool_ids_json, tool_approval_policies_json, stream_resumption_token,
                     status, metadata_cached_at,
@@ -191,6 +194,23 @@ extension MCPServerStore {
         } ?? false
 
         return didSave
+    }
+
+    static func saveServerOrderToRelationalStore(_ orderedServers: [MCPServerConfiguration]) -> Bool {
+        Persistence.withConfigDatabaseWrite { db in
+            let updatedAt = Date().timeIntervalSince1970
+            for server in orderedServers {
+                try db.execute(
+                    sql: """
+                    UPDATE \(relationalServerTable)
+                    SET sort_index = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    arguments: [server.sortIndex, updatedAt, server.id.uuidString]
+                )
+            }
+            return true
+        } ?? false
     }
 
     static func deleteServerFromRelationalStore(serverID: UUID) -> Bool {
@@ -437,13 +457,14 @@ extension MCPServerStore {
             SELECT
                 s.id AS id,
                 s.display_name AS name,
+                s.sort_index AS sort_index,
                 s.status AS status,
                 s.updated_at AS updated_at,
                 COALESCE(MAX(t.updated_at), 0) AS tools_updated_at,
                 COUNT(t.tool_name) AS tools_count
             FROM \(relationalServerTable) s
             LEFT JOIN \(relationalToolTable) t ON t.server_id = s.id
-            GROUP BY s.id, s.display_name, s.status, s.updated_at
+            GROUP BY s.id, s.display_name, s.sort_index, s.status, s.updated_at
             ORDER BY s.id ASC
             """
         )
@@ -451,11 +472,12 @@ extension MCPServerStore {
         let signatures = rows.map { row -> String in
             let id: String = row["id"]
             let name: String = row["name"]
+            let sortIndex: Int = row["sort_index"]
             let status: String = row["status"]
             let updatedAt: Double = row["updated_at"]
             let toolsUpdatedAt: Double = row["tools_updated_at"]
             let toolsCount: Int = row["tools_count"]
-            return "\(id)|\(name)|\(status)|\(updatedAt)|\(toolsUpdatedAt)|\(toolsCount)"
+            return "\(id)|\(name)|\(sortIndex)|\(status)|\(updatedAt)|\(toolsUpdatedAt)|\(toolsCount)"
         }
         return signatures.joined(separator: ";")
     }
@@ -472,6 +494,7 @@ extension MCPServerStore {
             displayName: server.displayName,
             notes: server.notes,
             isSelectedForChat: server.isSelectedForChat ? 1 : 0,
+            sortIndex: server.sortIndex,
             status: status.rawValue,
             transportKind: transportKind(of: server.transport),
             endpointURL: transportEndpoint(of: server.transport),
@@ -486,15 +509,16 @@ extension MCPServerStore {
             sql: """
             INSERT INTO \(relationalServerTable) (
                 id, display_name, notes, is_selected_for_chat, status, transport_kind,
-                endpoint_url, message_endpoint_url, sse_endpoint_url, metadata_cached_at, updated_at,
+                sort_index, endpoint_url, message_endpoint_url, sse_endpoint_url, metadata_cached_at, updated_at,
                 api_key, additional_headers_json, disabled_tool_ids_json, tool_approval_policies_json,
                 oauth_payload_json, stream_resumption_token,
                 info_json, resources_json, resource_templates_json, prompts_json, roots_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 display_name = excluded.display_name,
                 notes = excluded.notes,
                 is_selected_for_chat = excluded.is_selected_for_chat,
+                sort_index = excluded.sort_index,
                 status = excluded.status,
                 transport_kind = excluded.transport_kind,
                 endpoint_url = excluded.endpoint_url,
@@ -521,6 +545,7 @@ extension MCPServerStore {
                 header.isSelectedForChat,
                 header.status,
                 header.transportKind,
+                header.sortIndex,
                 header.endpointURL,
                 header.messageEndpointURL,
                 header.sseEndpointURL,

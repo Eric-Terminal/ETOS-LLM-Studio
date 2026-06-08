@@ -247,9 +247,35 @@ public final class MCPManager: ObservableObject {
     }
 
     public func save(server: MCPServerConfiguration) {
-        MCPServerStore.save(server)
-        appendGovernanceLog(level: .info, category: .lifecycle, serverID: server.id, message: String(format: NSLocalizedString("保存服务器配置：%@", comment: "MCP governance server saved"), server.displayName))
+        var serverToSave = server
+        if let existingServer = servers.first(where: { $0.id == server.id }) {
+            serverToSave.sortIndex = existingServer.sortIndex
+        } else {
+            serverToSave.sortIndex = (servers.map(\.sortIndex).max() ?? -1) + 1
+        }
+
+        MCPServerStore.save(serverToSave)
+        appendGovernanceLog(level: .info, category: .lifecycle, serverID: serverToSave.id, message: String(format: NSLocalizedString("保存服务器配置：%@", comment: "MCP governance server saved"), serverToSave.displayName))
         reloadServers()
+    }
+
+    public func moveServers(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        let serverCount = servers.count
+        guard serverCount > 1 else { return }
+        guard destination >= 0 && destination <= serverCount else { return }
+        guard offsets.allSatisfy({ $0 >= 0 && $0 < serverCount }) else { return }
+        guard !offsets.isEmpty else { return }
+
+        var updatedServers = servers
+        moveElements(in: &updatedServers, fromOffsets: offsets, toOffset: destination)
+        for index in updatedServers.indices {
+            updatedServers[index].sortIndex = index
+        }
+
+        servers = updatedServers
+        MCPServerStore.saveOrder(updatedServers)
+        configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
+        rebuildAggregates()
     }
 
     public func delete(server: MCPServerConfiguration) {
