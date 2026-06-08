@@ -128,6 +128,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let previewMaxHeight: CGFloat
     let enableMarkdown: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
@@ -145,6 +146,7 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
             && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
+            && lhs.previewMaxHeight == rhs.previewMaxHeight
             && lhs.enableMarkdown == rhs.enableMarkdown
             && lhs.enableAdvancedRenderer == rhs.enableAdvancedRenderer
             && lhs.enableMathRendering == rhs.enableMathRendering
@@ -205,7 +207,7 @@ struct ReasoningDisclosureView: View, Equatable {
                 )
                 ReasoningPreviewContent(
                     isPreviewing: isPreviewing,
-                    maxHeight: 177,
+                    maxHeight: previewMaxHeight,
                     contentID: reasoning
                 ) {
                     ReasoningMarkdownContentView(
