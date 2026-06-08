@@ -32,6 +32,7 @@ public final class AppToolManager: ObservableObject {
     @Published public internal(set) var chatToolsEnabled: Bool
     @Published var enabledToolIDs: Set<String>
     @Published var toolApprovalPolicies: [String: AppToolApprovalPolicy]
+    @Published public internal(set) var customJSTools: [AppToolCustomJSTool]
 
     private init(defaults: UserDefaults = .standard) {
         chatToolsEnabled = AppConfigStore.boolValue(
@@ -75,10 +76,11 @@ public final class AppToolManager: ObservableObject {
             guard let policy = AppToolApprovalPolicy(rawValue: pair.value), policy != .askEveryTime else { return }
             result[pair.key] = policy
         }
+        customJSTools = Self.loadCustomJSToolsFromDisk()
     }
 
     public nonisolated static func isAppToolName(_ name: String) -> Bool {
-        AppToolKind.resolve(from: name) != nil
+        AppToolKind.resolve(from: name) != nil || isCustomJSToolName(name)
     }
 
     public nonisolated static func isBuiltInToolName(_ name: String) -> Bool {
@@ -87,7 +89,9 @@ public final class AppToolManager: ObservableObject {
     }
 
     public var tools: [AppToolCatalogItem] {
-        AppToolKind.allCases.filter { !Self.builtInToolKinds.contains($0) }.map { kind in
+        AppToolKind.allCases
+            .filter { !Self.builtInToolKinds.contains($0) && $0.isAvailableOnCurrentPlatform }
+            .map { kind in
             AppToolCatalogItem(kind: kind, isEnabled: enabledToolIDs.contains(kind.rawValue))
         }
     }
@@ -124,6 +128,7 @@ public final class AppToolManager: ObservableObject {
             guard let policy = AppToolApprovalPolicy(rawValue: pair.value), policy != .askEveryTime else { return }
             result[pair.key] = policy
         }
+        customJSTools = Self.loadCustomJSToolsFromDisk()
         objectWillChange.send()
     }
 
@@ -154,8 +159,10 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func approvalPolicy(for toolName: String) -> AppToolApprovalPolicy? {
-        guard let kind = AppToolKind.resolve(from: toolName) else { return nil }
-        return approvalPolicy(for: kind)
+        if let kind = AppToolKind.resolve(from: toolName) {
+            return approvalPolicy(for: kind)
+        }
+        return customJSTool(withToolName: toolName)?.approvalPolicy
     }
 
     public func setToolApprovalPolicy(kind: AppToolKind, policy: AppToolApprovalPolicy) {
@@ -177,10 +184,16 @@ public final class AppToolManager: ObservableObject {
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
         guard chatToolsEnabled else { return [] }
-        return tools
+        let appTools = tools
             .filter(\.isEnabled)
             .filter { approvalPolicy(for: $0.kind) != .alwaysDeny }
             .map { item in toolDefinition(for: item.kind) }
+        let customTools = customJSTools
+            .filter { $0.engine.isAvailableOnCurrentPlatform }
+            .filter(\.isEnabled)
+            .filter { $0.approvalPolicy != .alwaysDeny }
+            .map { customJSToolDefinition(for: $0) }
+        return appTools + customTools
     }
 
     public func builtInToolsForLLM() -> [InternalToolDefinition] {
@@ -198,27 +211,49 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func displayLabel(for toolName: String) -> String? {
-        AppToolKind.resolve(from: toolName)?.displayName
+        if let kind = AppToolKind.resolve(from: toolName) {
+            return kind.displayName
+        }
+        return customJSTool(withToolName: toolName)?.displayName
     }
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
-        guard let kind = AppToolKind.resolve(from: toolName) else {
-            throw AppToolExecutionError.unknownTool
-        }
-        if !Self.builtInToolKinds.contains(kind) && !chatToolsEnabled {
-            throw AppToolExecutionError.toolGroupDisabled
-        }
-        guard isToolEnabled(kind) else {
-            throw AppToolExecutionError.toolDisabled(kind.displayName)
-        }
-        if approvalPolicy(for: kind) == .alwaysDeny {
-            throw AppToolExecutionError.toolDeniedByPolicy(kind.displayName)
+        if let kind = AppToolKind.resolve(from: toolName) {
+            guard kind.isAvailableOnCurrentPlatform else {
+                throw AppToolExecutionError.toolDisabled(kind.displayName)
+            }
+            if !Self.builtInToolKinds.contains(kind) && !chatToolsEnabled {
+                throw AppToolExecutionError.toolGroupDisabled
+            }
+            guard isToolEnabled(kind) else {
+                throw AppToolExecutionError.toolDisabled(kind.displayName)
+            }
+            if approvalPolicy(for: kind) == .alwaysDeny {
+                throw AppToolExecutionError.toolDeniedByPolicy(kind.displayName)
+            }
+
+            return try await Self.executeResolvedTool(
+                kind: kind,
+                argumentsJSON: argumentsJSON,
+                current: self
+            )
         }
 
-        return try await Self.executeResolvedTool(
-            kind: kind,
-            argumentsJSON: argumentsJSON,
-            current: self
-        )
+        guard let customTool = customJSTool(withToolName: toolName) else {
+            throw AppToolExecutionError.unknownTool
+        }
+        guard chatToolsEnabled else {
+            throw AppToolExecutionError.toolGroupDisabled
+        }
+        guard customTool.engine.isAvailableOnCurrentPlatform else {
+            throw AppToolExecutionError.toolDisabled(customTool.displayName)
+        }
+        guard customTool.isEnabled else {
+            throw AppToolExecutionError.toolDisabled(customTool.displayName)
+        }
+        if customTool.approvalPolicy == .alwaysDeny {
+            throw AppToolExecutionError.toolDeniedByPolicy(customTool.displayName)
+        }
+        return try await executeCustomJSTool(customTool, argumentsJSON: argumentsJSON)
     }
 }

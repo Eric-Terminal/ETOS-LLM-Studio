@@ -14,6 +14,10 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
     case getSystemTime = "get_system_time"
     case echoText = "echo_text"
     case fillUserInput = "fill_user_input"
+    case executeJSCJavaScript = "execute_jsc_javascript"
+    case createCustomJSCJSTool = "create_custom_jsc_js_tool"
+    case executeWebKitJavaScript = "execute_webkit_javascript"
+    case createCustomWebKitJSTool = "create_custom_webkit_js_tool"
     case editMemory = "edit_memory"
     case submitFeedbackTicket = "submit_feedback_ticket"
     case listSandboxDirectory = "list_sandbox_directory"
@@ -57,6 +61,14 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "app_echo_text"
         case .fillUserInput:
             return "app_fill_user_input"
+        case .executeJSCJavaScript:
+            return "app_execute_jsc_javascript"
+        case .createCustomJSCJSTool:
+            return "app_create_custom_jsc_js_tool"
+        case .executeWebKitJavaScript:
+            return "app_execute_webkit_javascript"
+        case .createCustomWebKitJSTool:
+            return "app_create_custom_webkit_js_tool"
         case .editMemory:
             return "app_edit_memory"
         case .submitFeedbackTicket:
@@ -110,6 +122,14 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("示例：文本回显", comment: "Example echo tool name")
         case .fillUserInput:
             return NSLocalizedString("填充输入框", comment: "Fill user input tool name")
+        case .executeJSCJavaScript:
+            return NSLocalizedString("执行 JSC JavaScript", comment: "Execute JSC JavaScript tool name")
+        case .createCustomJSCJSTool:
+            return NSLocalizedString("创建自定义 JSC 工具", comment: "Create custom JSC JS tool name")
+        case .executeWebKitJavaScript:
+            return NSLocalizedString("执行 WebKit JavaScript", comment: "Execute WebKit JavaScript tool name")
+        case .createCustomWebKitJSTool:
+            return NSLocalizedString("创建自定义 WebKit JS 工具", comment: "Create custom WebKit JS tool name")
         case .editMemory:
             return NSLocalizedString("记忆编辑", comment: "Memory edit tool name")
         case .submitFeedbackTicket:
@@ -163,6 +183,14 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("把传入文本原样返回，用于验证拓展工具链路是否正常。", comment: "Example echo tool summary")
         case .fillUserInput:
             return NSLocalizedString("把文本放进聊天输入框，支持覆盖或追加。", comment: "Fill user input tool summary")
+        case .executeJSCJavaScript:
+            return NSLocalizedString("使用 Apple JavaScriptCore 运行同步 JavaScript 算法。", comment: "Execute JSC JavaScript tool summary")
+        case .createCustomJSCJSTool:
+            return NSLocalizedString("保存 AI 可复用的 JavaScriptCore 自定义工具。", comment: "Create custom JSC JS tool summary")
+        case .executeWebKitJavaScript:
+            return NSLocalizedString("使用 watchOS WebKit bridge 运行同步 JavaScript 算法。", comment: "Execute WebKit JavaScript tool summary")
+        case .createCustomWebKitJSTool:
+            return NSLocalizedString("保存 AI 可复用的 WebKit bridge 自定义工具。", comment: "Create custom WebKit JS tool summary")
         case .editMemory:
             return NSLocalizedString("按记忆 ID 编辑既有记忆内容，并在需要时自动重新嵌入。", comment: "Memory edit tool summary")
         case .submitFeedbackTicket:
@@ -216,6 +244,14 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("示例工具详情：文本回显", comment: "Example echo tool detail description")
         case .fillUserInput:
             return NSLocalizedString("工具详情：填充输入框", comment: "Fill user input tool detail description")
+        case .executeJSCJavaScript:
+            return NSLocalizedString("工具详情：执行 JSC JavaScript", comment: "Execute JSC JavaScript tool detail description")
+        case .createCustomJSCJSTool:
+            return NSLocalizedString("工具详情：创建自定义 JSC 工具", comment: "Create custom JSC JS tool detail description")
+        case .executeWebKitJavaScript:
+            return NSLocalizedString("工具详情：执行 WebKit JavaScript", comment: "Execute WebKit JavaScript tool detail description")
+        case .createCustomWebKitJSTool:
+            return NSLocalizedString("工具详情：创建自定义 WebKit JS 工具", comment: "Create custom WebKit JS tool detail description")
         case .editMemory:
             return NSLocalizedString("工具详情：记忆编辑", comment: "Memory edit tool detail description")
         case .submitFeedbackTicket:
@@ -254,6 +290,25 @@ public enum AppToolKind: String, CaseIterable, Identifiable, Hashable, Sendable 
             return NSLocalizedString("工具详情：局部编辑沙盒文件", comment: "Edit sandbox file tool detail description")
         case .deleteSandboxItem:
             return NSLocalizedString("工具详情：删除沙盒路径", comment: "Delete sandbox item tool detail description")
+        }
+    }
+
+    public var isAvailableOnCurrentPlatform: Bool {
+        switch self {
+        case .executeJSCJavaScript, .createCustomJSCJSTool:
+            #if canImport(JavaScriptCore) && !os(watchOS)
+            return true
+            #else
+            return false
+            #endif
+        case .executeWebKitJavaScript, .createCustomWebKitJSTool:
+            #if os(watchOS)
+            return true
+            #else
+            return false
+            #endif
+        default:
+            return true
         }
     }
 

@@ -141,6 +141,62 @@ extension AppToolKind {
                 ]),
                 "required": .array([.string("text")])
             ])
+        case .executeJSCJavaScript, .executeWebKitJavaScript:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "code": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("要执行的 JavaScript 代码。必须声明同步 function main(input)，返回 JSON 可序列化结果。", comment: "Execute JavaScript code parameter description"))
+                    ]),
+                    "input": .dictionary([
+                        "type": .string("object"),
+                        "additionalProperties": .bool(true),
+                        "description": .string(NSLocalizedString("传给 main(input) 的 JSON 输入，可为对象、数组、字符串、数字、布尔或 null。", comment: "Execute JavaScript input parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("code")])
+            ])
+        case .createCustomJSCJSTool, .createCustomWebKitJSTool:
+            return JSONValue.dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "tool_id": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("自定义工具 ID，可选。仅允许小写字母、数字和下划线；JSC 工具名会是 app_custom_jsc_<tool_id>，WebKit 工具名会是 app_custom_webkit_js_<tool_id>。", comment: "Create custom JS tool id parameter description"))
+                    ]),
+                    "display_name": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("工具中心显示名称。", comment: "Create custom JS tool display name parameter description"))
+                    ]),
+                    "description": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("发送给模型的工具用途说明。", comment: "Create custom JS tool description parameter description"))
+                    ]),
+                    "parameters_schema": .dictionary([
+                        "type": .string("object"),
+                        "description": .string(NSLocalizedString("该自定义工具的 JSON Schema 参数定义。省略时使用通用 input 字段。", comment: "Create custom JS tool parameters schema parameter description"))
+                    ]),
+                    "code": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("自定义工具脚本。必须声明同步 function main(input)，不能依赖 Node.js、文件系统或原生网络 API。", comment: "Create custom JS tool code parameter description"))
+                    ]),
+                    "enabled": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("创建后是否启用，默认 true。", comment: "Create custom JS tool enabled parameter description"))
+                    ]),
+                    "approval_policy": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("审批策略：ask_every_time、always_allow 或 always_deny，默认 ask_every_time。", comment: "Create custom JS tool approval policy parameter description")),
+                        "enum": .array([.string("ask_every_time"), .string("always_allow"), .string("always_deny")])
+                    ]),
+                    "overwrite": .dictionary([
+                        "type": .string("boolean"),
+                        "description": .string(NSLocalizedString("同 ID 工具存在时是否覆盖，默认 false。", comment: "Create custom JS tool overwrite parameter description"))
+                    ])
+                ]),
+                "required": .array([.string("display_name"), .string("description"), .string("code")])
+            ])
         case .editMemory:
             return JSONValue.dictionary([
                 "type": .string("object"),

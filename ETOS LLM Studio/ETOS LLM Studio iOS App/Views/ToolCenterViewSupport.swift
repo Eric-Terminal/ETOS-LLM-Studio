@@ -132,7 +132,7 @@ extension ToolCenterView {
                     subtitle: String(
                         format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
                         configuredAppToolCount,
-                        appToolManager.tools.count
+                        totalAppToolCount
                     ),
                     detail: appToolCategoryStatusText,
                     auxiliary: String(
@@ -508,6 +508,13 @@ extension ToolCenterView {
 
     var appToolCategoryStatusText: String {
         if appToolManager.tools.isEmpty {
+            if !platformCustomJSTools.isEmpty {
+                return String(
+                    format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+                    availableAppToolCount,
+                    totalAppToolCount
+                )
+            }
             return NSLocalizedString("当前还没有已注册的拓展工具。", comment: "No registered app tools")
         }
         if currentSessionIsolationActive {
@@ -519,7 +526,7 @@ extension ToolCenterView {
         return String(
             format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
             availableAppToolCount,
-            appToolManager.tools.count
+            totalAppToolCount
         )
     }
 

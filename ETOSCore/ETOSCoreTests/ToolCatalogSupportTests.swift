@@ -121,6 +121,8 @@ struct ToolCatalogSupportTests {
         #expect(ToolCatalogSupport.appToolCategory(for: .querySQLite) == .database)
         #expect(ToolCatalogSupport.appToolCategory(for: .submitFeedbackTicket) == .feedback)
         #expect(ToolCatalogSupport.appToolCategory(for: .fillUserInput) == .interaction)
+        #expect(ToolCatalogSupport.appToolCategory(for: .executeJSCJavaScript) == .custom)
+        #expect(ToolCatalogSupport.appToolCategory(for: .createCustomWebKitJSTool) == .custom)
     }
 
     @Test("拓展工具分类状态会统计启用与当前可用数量")

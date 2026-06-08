@@ -25,6 +25,14 @@ extension AppToolManager {
             return try current.executeEchoText(argumentsJSON: argumentsJSON)
         case .fillUserInput:
             return try current.executeFillUserInput(argumentsJSON: argumentsJSON)
+        case .executeJSCJavaScript:
+            return try await current.executeJavaScript(argumentsJSON: argumentsJSON, engine: .javaScriptCore)
+        case .createCustomJSCJSTool:
+            return try await current.executeCreateCustomJSTool(argumentsJSON: argumentsJSON, engine: .javaScriptCore)
+        case .executeWebKitJavaScript:
+            return try await current.executeJavaScript(argumentsJSON: argumentsJSON, engine: .webKitBridge)
+        case .createCustomWebKitJSTool:
+            return try await current.executeCreateCustomJSTool(argumentsJSON: argumentsJSON, engine: .webKitBridge)
         case .editMemory:
             return try await current.executeEditMemory(argumentsJSON: argumentsJSON)
         case .submitFeedbackTicket:

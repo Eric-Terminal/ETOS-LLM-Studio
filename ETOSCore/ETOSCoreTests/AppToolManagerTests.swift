@@ -20,15 +20,17 @@ struct AppToolManagerTests {
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
         let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        let originalCustomJSTools = manager.customJSTools
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
                 enabledKinds: originalEnabledKinds,
-                approvalPolicies: originalApprovalPolicies
+                approvalPolicies: originalApprovalPolicies,
+                customJSTools: originalCustomJSTools
             )
         }
 
-        manager.restoreStateForTests(chatToolsEnabled: true, enabledKinds: [])
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledKinds: [], customJSTools: [])
 
         #expect(manager.chatToolsForLLM().isEmpty)
     }
@@ -44,6 +46,10 @@ struct AppToolManagerTests {
         #expect(kinds.contains(.editMemory))
         #expect(kinds.contains(.submitFeedbackTicket))
         #expect(kinds.contains(.fillUserInput))
+        #expect(kinds.contains(.executeJSCJavaScript))
+        #expect(kinds.contains(.createCustomJSCJSTool))
+        #expect(kinds.contains(.executeWebKitJavaScript))
+        #expect(kinds.contains(.createCustomWebKitJSTool))
         #expect(kinds.contains(.listSandboxDirectory))
         #expect(kinds.contains(.readSandboxFile))
         #expect(kinds.contains(.writeSandboxFile))
@@ -70,17 +76,20 @@ struct AppToolManagerTests {
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
         let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        let originalCustomJSTools = manager.customJSTools
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
                 enabledKinds: originalEnabledKinds,
-                approvalPolicies: originalApprovalPolicies
+                approvalPolicies: originalApprovalPolicies,
+                customJSTools: originalCustomJSTools
             )
         }
 
         manager.restoreStateForTests(
             chatToolsEnabled: true,
-            enabledKinds: [.echoText]
+            enabledKinds: [.echoText],
+            customJSTools: []
         )
 
         let tools = manager.chatToolsForLLM()
@@ -96,18 +105,21 @@ struct AppToolManagerTests {
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
         let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        let originalCustomJSTools = manager.customJSTools
         defer {
             manager.restoreStateForTests(
                 chatToolsEnabled: originalGlobalSwitch,
                 enabledKinds: originalEnabledKinds,
-                approvalPolicies: originalApprovalPolicies
+                approvalPolicies: originalApprovalPolicies,
+                customJSTools: originalCustomJSTools
             )
         }
 
         manager.restoreStateForTests(
             chatToolsEnabled: true,
             enabledKinds: [.echoText],
-            approvalPolicies: [.echoText: .alwaysDeny]
+            approvalPolicies: [.echoText: .alwaysDeny],
+            customJSTools: []
         )
 
         #expect(manager.approvalPolicy(for: .echoText) == .alwaysDeny)

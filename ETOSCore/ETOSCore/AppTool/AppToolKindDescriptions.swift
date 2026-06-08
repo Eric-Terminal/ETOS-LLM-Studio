@@ -36,6 +36,26 @@ extension AppToolKind {
                 "把文本放入用户当前聊天输入框。text 为要填入的内容；mode=replace 会覆盖输入框，mode=append 会追加到末尾。适合为用户准备可编辑的草稿，而不是直接代替用户发送。",
                 comment: "Fill user input tool description sent to model"
             )
+        case .executeJSCJavaScript:
+            return NSLocalizedString(
+                "使用 Apple JavaScriptCore（JSC）执行一段同步 JavaScript 算法代码。代码必须声明 function main(input)，工具会把 input 作为 JSON 值传入，并返回 main 的 JSON 可序列化结果与 console 输出。能力边界：不提供 Node.js、require/import、文件系统、原生网络 API、长时间后台任务或 Promise 返回值，适合计算、解析、格式转换等本地算法。此工具只在支持 JSC 的平台暴露。",
+                comment: "Execute JSC JavaScript description sent to model"
+            )
+        case .createCustomJSCJSTool:
+            return NSLocalizedString(
+                "创建或覆盖一个 AI 可复用的 JavaScriptCore（JSC）自定义工具。脚本会保存到应用 Application Support 下的 CustomJSTools 独立目录，每个工具包含 manifest.json 与 script.js。脚本必须声明同步 function main(input)，以后会以 app_custom_jsc_<tool_id> 暴露给模型。能力边界：没有 Node.js、文件系统、原生网络 API 或 Promise 返回值能力。",
+                comment: "Create custom JSC JS tool description sent to model"
+            )
+        case .executeWebKitJavaScript:
+            return NSLocalizedString(
+                "使用 watchOS 系统 WebKit JavaScript bridge 执行一段同步 JavaScript 算法代码。代码必须声明 function main(input)，工具会把 input 作为 JSON 值传入，并返回 main 的 JSON 可序列化结果与 console 输出。能力边界：这是 WebKit JS bridge，不是 JavaScriptCore.framework；不提供 Node.js、require/import、文件系统、原生网络 API、外部页面 DOM 或 Promise 返回值。此工具只在 watchOS 暴露。",
+                comment: "Execute WebKit JavaScript description sent to model"
+            )
+        case .createCustomWebKitJSTool:
+            return NSLocalizedString(
+                "创建或覆盖一个 AI 可复用的 watchOS WebKit JavaScript bridge 自定义工具。脚本会保存到应用 Application Support 下的 CustomJSTools 独立目录，每个工具包含 manifest.json 与 script.js。脚本必须声明同步 function main(input)，以后会以 app_custom_webkit_js_<tool_id> 暴露给模型。能力边界：这是 WebKit JS bridge，不是 JavaScriptCore.framework；没有 Node.js、文件系统、原生网络 API、外部页面 DOM 或 Promise 返回值能力。",
+                comment: "Create custom WebKit JS tool description sent to model"
+            )
         case .editMemory:
             return NSLocalizedString(
                 "编辑既有长期记忆。可按 memory_id 修改 content，也可切换归档状态。修改 content 后会自动重新生成这条记忆的嵌入。",

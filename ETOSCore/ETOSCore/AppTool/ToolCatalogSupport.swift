@@ -60,6 +60,7 @@ public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable
     case memory
     case file
     case database
+    case custom
     case feedback
 
     public var id: String { rawValue }
@@ -74,6 +75,8 @@ public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable
             return NSLocalizedString("文件操作", comment: "App tool file category title")
         case .database:
             return NSLocalizedString("数据库操作", comment: "App tool database category title")
+        case .custom:
+            return NSLocalizedString("自定义工具", comment: "App tool custom category title")
         case .feedback:
             return NSLocalizedString("反馈工单", comment: "App tool feedback category title")
         }
@@ -89,6 +92,8 @@ public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable
             return NSLocalizedString("访问与修改应用沙盒 Documents 文件。", comment: "App tool file category summary")
         case .database:
             return NSLocalizedString("查看表结构、查询或受限修改 SQLite 数据。", comment: "App tool database category summary")
+        case .custom:
+            return NSLocalizedString("运行 JS 算法，或让 AI 创建可复用脚本工具。", comment: "App tool custom category summary")
         case .feedback:
             return NSLocalizedString("由模型整理并提交问题或建议工单。", comment: "App tool feedback category summary")
         }
@@ -104,6 +109,8 @@ public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable
             return NSLocalizedString("文件操作类只能访问应用沙盒 Documents 目录，包含读取、搜索、写入、移动、复制、删除、差异查看和撤销最近修改。", comment: "App tool file category detail")
         case .database:
             return NSLocalizedString("数据库操作类面向聊天、配置与记忆数据库，查询工具只读，写入工具仍受审批策略和 SQL 限制保护。", comment: "App tool database category detail")
+        case .custom:
+            return NSLocalizedString("自定义工具类包含 JavaScript 执行器与 AI 创建的脚本工具。iOS 使用明确的 JavaScriptCore 工具，watchOS 使用明确的 WebKit JavaScript bridge 工具，避免同一工具名在不同平台切换引擎。", comment: "App tool custom category detail")
         case .feedback:
             return NSLocalizedString("反馈工单类用于把对话里的问题、复现步骤和建议整理为反馈记录。", comment: "App tool feedback category detail")
         }
@@ -232,6 +239,8 @@ public enum ToolCatalogSupport {
             return .file
         case .listSQLiteTables, .querySQLite, .mutateSQLite:
             return .database
+        case .executeJSCJavaScript, .createCustomJSCJSTool, .executeWebKitJavaScript, .createCustomWebKitJSTool:
+            return .custom
         case .submitFeedbackTicket:
             return .feedback
         case .showWidget, .askUserInput, .getSystemTime:

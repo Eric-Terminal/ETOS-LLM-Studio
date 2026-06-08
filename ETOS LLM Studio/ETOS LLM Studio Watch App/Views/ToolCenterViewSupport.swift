@@ -28,8 +28,17 @@ struct WatchAppToolCategoryDetailView: View {
 
     private var filteredCategoryStates: [AppToolCatalogCategoryState] {
         categoryStates.filter { state in
-            showEnabledOnly ? state.configuredEnabledCount > 0 : true
+            if state.category == .custom {
+                return showEnabledOnly
+                    ? state.configuredEnabledCount > 0 || platformCustomJSTools.contains(where: \.isEnabled)
+                    : true
+            }
+            return showEnabledOnly ? state.configuredEnabledCount > 0 : true
         }
+    }
+
+    private var platformCustomJSTools: [AppToolCustomJSTool] {
+        manager.customJSTools.filter { $0.engine.isAvailableOnCurrentPlatform }
     }
 
     var body: some View {
@@ -80,10 +89,7 @@ struct WatchAppToolCategoryDetailView: View {
                                     .etFont(.caption2)
                                     .foregroundStyle(categoryStatusColor(for: state))
                                 Text(
-                                    String(
-                                        format: NSLocalizedString("工具 %d 个", comment: "Tool count"),
-                                        state.totalCount
-                                    )
+                                    categoryAuxiliaryText(for: state)
                                 )
                                 .etFont(.caption2)
                                 .foregroundStyle(.tertiary)
@@ -111,6 +117,14 @@ struct WatchAppToolCategoryDetailView: View {
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
         }
+        if state.category == .custom {
+            let customAvailableCount = platformCustomJSTools.filter { $0.isEnabled && $0.approvalPolicy != .alwaysDeny }.count
+            return String(
+                format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+                state.availableCount + customAvailableCount,
+                state.totalCount + platformCustomJSTools.count
+            )
+        }
         return String(
             format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
             state.availableCount,
@@ -118,8 +132,25 @@ struct WatchAppToolCategoryDetailView: View {
         )
     }
 
+    private func categoryAuxiliaryText(for state: AppToolCatalogCategoryState) -> String {
+        if state.category == .custom {
+            return String(
+                format: NSLocalizedString("工具 %d 个，自定义 %d 个", comment: "Tool and custom tool count"),
+                state.totalCount,
+                platformCustomJSTools.count
+            )
+        }
+        return String(
+            format: NSLocalizedString("工具 %d 个", comment: "Tool count"),
+            state.totalCount
+        )
+    }
+
     private func categoryStatusColor(for state: AppToolCatalogCategoryState) -> Color {
-        if currentSessionIsolationActive || !manager.chatToolsEnabled || state.availableCount == 0 {
+        let customAvailableCount = state.category == .custom
+            ? platformCustomJSTools.filter { $0.isEnabled && $0.approvalPolicy != .alwaysDeny }.count
+            : 0
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || state.availableCount + customAvailableCount == 0 {
             return .secondary
         }
         return .green
@@ -143,6 +174,16 @@ struct WatchAppToolCategoryToolsView: View {
         }
     }
 
+    private var filteredCustomJSTools: [AppToolCustomJSTool] {
+        guard category == .custom else { return [] }
+        return manager.customJSTools
+            .filter { $0.engine.isAvailableOnCurrentPlatform }
+            .filter { tool in
+                showEnabledOnly ? tool.isEnabled : true
+            }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
     var body: some View {
         List {
             Section {
@@ -155,7 +196,7 @@ struct WatchAppToolCategoryToolsView: View {
             }
 
             Section(header: Text(NSLocalizedString("工具", comment: "Tools section title"))) {
-                if filteredTools.isEmpty {
+                if filteredTools.isEmpty && filteredCustomJSTools.isEmpty {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
                 } else {
@@ -174,6 +215,29 @@ struct WatchAppToolCategoryToolsView: View {
                                 Text(appToolStatusText(for: item))
                                     .etFont(.caption2)
                                     .foregroundStyle(appToolStatusColor(for: item))
+                            }
+                        }
+                    }
+                }
+            }
+
+            if category == .custom && !filteredCustomJSTools.isEmpty {
+                Section(header: Text(NSLocalizedString("自定义工具", comment: "Custom tools section title"))) {
+                    ForEach(filteredCustomJSTools) { tool in
+                        NavigationLink {
+                            WatchCustomJSToolCenterDetailView(
+                                tool: tool,
+                                currentSessionIsolationActive: currentSessionIsolationActive
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(tool.displayName)
+                                Text(tool.toolName)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(customJSToolStatusText(for: tool))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(customJSToolStatusColor(for: tool))
                             }
                         }
                     }
@@ -210,6 +274,159 @@ struct WatchAppToolCategoryToolsView: View {
             return .secondary
         }
         return .green
+    }
+
+    private func customJSToolStatusText(for tool: AppToolCustomJSTool) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        if !tool.isEnabled {
+            return NSLocalizedString("当前未启用该拓展工具。", comment: "App tool disabled status")
+        }
+        if tool.approvalPolicy == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        return tool.approvalPolicy.displayName
+    }
+
+    private func customJSToolStatusColor(for tool: AppToolCustomJSTool) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !tool.isEnabled || tool.approvalPolicy == .alwaysDeny {
+            return .secondary
+        }
+        return .green
+    }
+}
+
+struct WatchCustomJSToolCenterDetailView: View {
+    let tool: AppToolCustomJSTool
+    let currentSessionIsolationActive: Bool
+
+    @ObservedObject private var manager = AppToolManager.shared
+    @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
+
+    private var currentTool: AppToolCustomJSTool {
+        manager.customJSTool(withID: tool.id, engine: tool.engine) ?? tool
+    }
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("工具信息", comment: "Tool info section")) {
+                Text(currentTool.displayName)
+                Text(currentTool.toolName)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(currentTool.toolDescription)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(
+                    String(
+                        format: NSLocalizedString("引擎：%@", comment: "JavaScript engine value"),
+                        currentTool.engine.displayName
+                    )
+                )
+                .etFont(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+
+            Section(NSLocalizedString("当前状态", comment: "Current status section")) {
+                Text(currentStatusText)
+                    .etFont(.caption2)
+                    .foregroundStyle(currentStatusColor)
+            }
+
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(
+                    NSLocalizedString("启用", comment: "Enable"),
+                    isOn: Binding(
+                        get: { currentTool.isEnabled },
+                        set: { manager.setCustomJSToolEnabled(id: currentTool.id, engine: currentTool.engine, isEnabled: $0) }
+                    )
+                )
+            }
+
+            Section(
+                header: Text(NSLocalizedString("审批策略", comment: "Approval policy")),
+                footer: Text(NSLocalizedString("默认每次询问，可在这里按工具单独调整。", comment: "Approval policy footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Picker(NSLocalizedString("审批策略", comment: "Approval policy"), selection: approvalPolicyBinding) {
+                    ForEach(AppToolApprovalPolicy.allCases, id: \.self) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("自动同意", comment: "Auto approve section title")),
+                footer: Text(NSLocalizedString("倒计时为全局设置，当前工具可单独关闭自动同意。", comment: "Auto approve section footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("全局启用倒计时自动同意", comment: "Enable global auto approve"),
+                    isOn: Binding(
+                        get: { permissionCenter.autoApproveEnabled },
+                        set: { permissionCenter.setAutoApproveEnabled($0) }
+                    )
+                )
+                Toggle(
+                    NSLocalizedString("允许该工具自动同意", comment: "Allow auto approve for this tool"),
+                    isOn: autoApproveToolBinding
+                )
+                .disabled(!permissionCenter.autoApproveEnabled)
+            }
+        }
+        .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
+    }
+
+    private var currentStatusText: String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        if !currentTool.engine.isAvailableOnCurrentPlatform {
+            return NSLocalizedString("该自定义工具的执行引擎不适用于当前平台。", comment: "Custom JS tool engine unavailable")
+        }
+        if !currentTool.isEnabled {
+            return NSLocalizedString("已停用。", comment: "Tool disabled status")
+        }
+        if currentTool.approvalPolicy == .alwaysDeny {
+            return NSLocalizedString("当前审批策略为始终拒绝，聊天时不会调用该工具。", comment: "Tool always deny status")
+        }
+        return NSLocalizedString("该工具当前可参与聊天。", comment: "Tool available in chat")
+    }
+
+    private var currentStatusColor: Color {
+        if currentSessionIsolationActive
+            || !manager.chatToolsEnabled
+            || !currentTool.engine.isAvailableOnCurrentPlatform
+            || !currentTool.isEnabled
+            || currentTool.approvalPolicy == .alwaysDeny {
+            return .secondary
+        }
+        return .green
+    }
+
+    private var approvalPolicyBinding: Binding<AppToolApprovalPolicy> {
+        Binding {
+            currentTool.approvalPolicy
+        } set: { newValue in
+            manager.setCustomJSToolApprovalPolicy(id: currentTool.id, engine: currentTool.engine, policy: newValue)
+        }
+    }
+
+    private var autoApproveToolBinding: Binding<Bool> {
+        Binding {
+            !permissionCenter.isAutoApproveDisabled(for: currentTool.toolName)
+        } set: { isEnabled in
+            permissionCenter.setAutoApproveDisabled(!isEnabled, for: currentTool.toolName)
+        }
     }
 }
 

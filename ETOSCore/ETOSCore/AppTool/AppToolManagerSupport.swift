@@ -23,7 +23,8 @@ extension AppToolManager {
     func restoreStateForTests(
         chatToolsEnabled: Bool,
         enabledKinds: Set<AppToolKind>,
-        approvalPolicies: [AppToolKind: AppToolApprovalPolicy] = [:]
+        approvalPolicies: [AppToolKind: AppToolApprovalPolicy] = [:],
+        customJSTools: [AppToolCustomJSTool]? = nil
     ) {
         self.chatToolsEnabled = chatToolsEnabled
         enabledToolIDs = Set(enabledKinds.map(\.rawValue))
@@ -36,6 +37,9 @@ extension AppToolManager {
         AppConfigStore.persistStringArray(Array(enabledToolIDs).sorted(), for: .appToolsEnabledToolIDs)
         let rawPolicyValues = toolApprovalPolicies.mapValues(\.rawValue)
         AppConfigStore.persistStringDictionary(rawPolicyValues, for: .appToolsToolApprovalPolicies)
+        if let customJSTools {
+            self.customJSTools = customJSTools
+        }
         objectWillChange.send()
     }
 

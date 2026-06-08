@@ -75,6 +75,10 @@ struct ToolCenterView: View {
         }
     }
 
+    var platformCustomJSTools: [AppToolCustomJSTool] {
+        appToolManager.customJSTools.filter { $0.engine.isAvailableOnCurrentPlatform }
+    }
+
     var filteredAppToolCategoryStates: [AppToolCatalogCategoryState] {
         appToolCategoryStates.filter { state in
             let matchedTools = state.tools.filter { item in
@@ -93,9 +97,19 @@ struct ToolCenterView: View {
                     state.category.detailDescription
                 ]
             )
-            guard matchesCategory || !matchedTools.isEmpty else { return false }
+            let matchedCustomTools = state.category == .custom
+                ? platformCustomJSTools.filter { tool in
+                    matchesSearch(for: [
+                        tool.displayName,
+                        tool.toolDescription,
+                        tool.toolName,
+                        tool.engine.displayName
+                    ])
+                }
+                : []
+            guard matchesCategory || !matchedTools.isEmpty || !matchedCustomTools.isEmpty else { return false }
             if showEnabledOnly {
-                return state.configuredEnabledCount > 0
+                return state.configuredEnabledCount > 0 || matchedCustomTools.contains(where: \.isEnabled)
             }
             return true
         }
@@ -270,13 +284,22 @@ struct ToolCenterView: View {
 
     var configuredAppToolCount: Int {
         appToolManager.tools.filter(\.isEnabled).count
+        + platformCustomJSTools.filter(\.isEnabled).count
+    }
+
+    var totalAppToolCount: Int {
+        appToolManager.tools.count + platformCustomJSTools.count
     }
 
     var availableAppToolCount: Int {
         guard appToolManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
-        return appToolManager.tools.filter {
+        let staticCount = appToolManager.tools.filter {
             $0.isEnabled && appToolManager.approvalPolicy(for: $0.kind) != .alwaysDeny
         }.count
+        let customCount = platformCustomJSTools.filter {
+            $0.isEnabled && $0.approvalPolicy != .alwaysDeny
+        }.count
+        return staticCount + customCount
     }
 
     var availableMCPCount: Int {

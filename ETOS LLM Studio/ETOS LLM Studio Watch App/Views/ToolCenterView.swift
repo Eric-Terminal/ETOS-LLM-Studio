@@ -93,6 +93,10 @@ struct ToolCenterView: View {
         }
     }
 
+    private var platformCustomJSTools: [AppToolCustomJSTool] {
+        appToolManager.customJSTools.filter { $0.engine.isAvailableOnCurrentPlatform }
+    }
+
     private var filteredShortcutTools: [ShortcutToolDefinition] {
         shortcutManager.tools
             .sorted {
@@ -119,13 +123,22 @@ struct ToolCenterView: View {
 
     private var configuredAppToolCount: Int {
         appToolManager.tools.filter(\.isEnabled).count
+        + platformCustomJSTools.filter(\.isEnabled).count
+    }
+
+    private var totalAppToolCount: Int {
+        appToolManager.tools.count + platformCustomJSTools.count
     }
 
     private var availableAppToolCount: Int {
         guard appToolManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
-        return appToolManager.tools.filter {
+        let staticCount = appToolManager.tools.filter {
             $0.isEnabled && appToolManager.approvalPolicy(for: $0.kind) != .alwaysDeny
         }.count
+        let customCount = platformCustomJSTools.filter {
+            $0.isEnabled && $0.approvalPolicy != .alwaysDeny
+        }.count
+        return staticCount + customCount
     }
 
     private var availableMCPCount: Int {
@@ -268,7 +281,7 @@ struct ToolCenterView: View {
                             String(
                                 format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
                                 configuredAppToolCount,
-                                appToolManager.tools.count
+                                totalAppToolCount
                             )
                         )
                         .etFont(.caption2)
@@ -613,7 +626,7 @@ struct ToolCenterView: View {
         return String(
             format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
             availableAppToolCount,
-            appToolManager.tools.count
+            totalAppToolCount
         )
     }
 
