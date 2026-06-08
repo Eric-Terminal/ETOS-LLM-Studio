@@ -19,6 +19,27 @@ struct MCPManagerToolExposureTests {
         #expect(MCPRuntimeDefaults.maxRetryAttempts == 3)
     }
 
+    @MainActor
+    @Test("MCP 管理器可按绑定回写服务器顺序")
+    func testSetServerOrderReordersManagerAndPersists() {
+        let manager = MCPManager.shared
+        manager.reloadServers()
+        let originalOrder = manager.servers.map(\.id)
+        guard originalOrder.count > 1 else { return }
+        let reorderedIDs = [originalOrder[1], originalOrder[0]] + Array(originalOrder.dropFirst(2))
+
+        defer {
+            manager.setServerOrder(originalOrder)
+            manager.reloadServers()
+        }
+
+        manager.setServerOrder(reorderedIDs)
+        #expect(manager.servers.map(\.id) == reorderedIDs)
+
+        manager.reloadServers()
+        #expect(manager.servers.map(\.id) == reorderedIDs)
+    }
+
     @Test("MCP 连接失败通知会合并同一批服务器")
     func testMCPConnectionFailureNotificationBatchAggregatesServers() {
         let batch = MCPConnectionFailureNotificationBatch(failures: [

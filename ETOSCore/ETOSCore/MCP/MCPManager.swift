@@ -268,6 +268,19 @@ public final class MCPManager: ObservableObject {
 
         var updatedServers = servers
         moveElements(in: &updatedServers, fromOffsets: offsets, toOffset: destination)
+        setServerOrder(updatedServers.map(\.id))
+    }
+
+    public func setServerOrder(_ orderedServerIDs: [UUID]) {
+        let currentServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
+        var seenServerIDs = Set<UUID>()
+        var updatedServers = orderedServerIDs.compactMap { serverID -> MCPServerConfiguration? in
+            guard seenServerIDs.insert(serverID).inserted else { return nil }
+            return currentServersByID[serverID]
+        }
+        updatedServers.append(contentsOf: servers.filter { !seenServerIDs.contains($0.id) })
+        guard updatedServers.map(\.id) != servers.map(\.id) else { return }
+
         for index in updatedServers.indices {
             updatedServers[index].sortIndex = index
         }

@@ -27,6 +27,14 @@ struct MCPIntegrationView: View {
         return formatter
     }
 
+    private var serversBinding: Binding<[MCPServerConfiguration]> {
+        Binding {
+            manager.servers
+        } set: { orderedServers in
+            manager.setServerOrder(orderedServers.map(\.id))
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -74,7 +82,7 @@ struct MCPIntegrationView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(manager.servers) { server in
+                    ForEach(serversBinding, id: \.id, editActions: .move) { $server in
                         NavigationLink {
                             MCPServerDetailView(serverID: server.id)
                         } label: {
@@ -96,9 +104,6 @@ struct MCPIntegrationView: View {
                                 }
                             }
                         }
-                    }
-                    .onMove { offsets, destination in
-                        manager.moveServers(fromOffsets: offsets, toOffset: destination)
                     }
                 }
 
