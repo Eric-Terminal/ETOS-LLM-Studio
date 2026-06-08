@@ -35,6 +35,13 @@
 			remoteGlobalIDString = 0796794E2F1278F2006562BC;
 			remoteInfo = "ETOS LLM Studio Watch App";
 		};
+		07FA9DC52FD6C92600C6EEE9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 073CA6D32E8CFD65004516A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 073CA6DA2E8CFD65004516A0;
+			remoteInfo = "ETOS LLM Studio App";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -79,6 +86,7 @@
 		0796795B2F1278F5006562BC /* ETOS LLM Studio Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		07BEEE0B2FB6DB57000D31FC /* ETOSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ETOSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		07BEEE0E2FB6DB5E000D31FC /* ETOSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ETOSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		07FA9DC12FD6C92600C6EEE9 /* ETOS LLM Studio AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ETOS LLM Studio AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -108,6 +116,11 @@
 		0796795E2F1278F5006562BC /* ETOS LLM Studio Watch AppTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "ETOS LLM Studio Watch AppTests";
+			sourceTree = "<group>";
+		};
+		07FA9DC22FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "ETOS LLM Studio AppTests";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -142,6 +155,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		07FA9DBE2FD6C92600C6EEE9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -151,6 +171,7 @@
 				073CA6DD2E8CFD65004516A0 /* ETOS LLM Studio iOS App */,
 				079679502F1278F3006562BC /* ETOS LLM Studio Watch App */,
 				0796795E2F1278F5006562BC /* ETOS LLM Studio Watch AppTests */,
+				07FA9DC22FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */,
 				07BEEE082FB6DAB8000D31FC /* Frameworks */,
 				073CA6DC2E8CFD65004516A0 /* Products */,
 			);
@@ -162,6 +183,7 @@
 				073CA6DB2E8CFD65004516A0 /* ETOS LLM Studio App.app */,
 				0796794F2F1278F2006562BC /* ETOS LLM Studio Watch App.app */,
 				0796795B2F1278F5006562BC /* ETOS LLM Studio Watch AppTests.xctest */,
+				07FA9DC12FD6C92600C6EEE9 /* ETOS LLM Studio AppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -256,6 +278,29 @@
 			productReference = 0796795B2F1278F5006562BC /* ETOS LLM Studio Watch AppTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		07FA9DC02FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07FA9DC92FD6C92600C6EEE9 /* Build configuration list for PBXNativeTarget "ETOS LLM Studio AppTests" */;
+			buildPhases = (
+				07FA9DBD2FD6C92600C6EEE9 /* Sources */,
+				07FA9DBE2FD6C92600C6EEE9 /* Frameworks */,
+				07FA9DBF2FD6C92600C6EEE9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				07FA9DC62FD6C92600C6EEE9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				07FA9DC22FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */,
+			);
+			name = "ETOS LLM Studio AppTests";
+			packageProductDependencies = (
+			);
+			productName = "ETOS LLM Studio AppTests";
+			productReference = 07FA9DC12FD6C92600C6EEE9 /* ETOS LLM Studio AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -263,7 +308,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					073CA6DA2E8CFD65004516A0 = {
@@ -275,6 +320,10 @@
 					0796795A2F1278F5006562BC = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 0796794E2F1278F2006562BC;
+					};
+					07FA9DC02FD6C92600C6EEE9 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 073CA6DA2E8CFD65004516A0;
 					};
 				};
 			};
@@ -308,6 +357,7 @@
 				073CA6DA2E8CFD65004516A0 /* ETOS LLM Studio App */,
 				0796794E2F1278F2006562BC /* ETOS LLM Studio Watch App */,
 				0796795A2F1278F5006562BC /* ETOS LLM Studio Watch AppTests */,
+				07FA9DC02FD6C92600C6EEE9 /* ETOS LLM Studio AppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -328,6 +378,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		079679592F1278F5006562BC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07FA9DBF2FD6C92600C6EEE9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -358,6 +415,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		07FA9DBD2FD6C92600C6EEE9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -374,6 +438,11 @@
 		07967AF32F1281AE006562BC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			productRef = 07967AF22F1281AE006562BC /* MarkdownUI */;
+		};
+		07FA9DC62FD6C92600C6EEE9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 073CA6DA2E8CFD65004516A0 /* ETOS LLM Studio App */;
+			targetProxy = 07FA9DC52FD6C92600C6EEE9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -738,6 +807,50 @@
 			};
 			name = Release;
 		};
+		07FA9DC72FD6C92600C6EEE9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K9LDK6LF4H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ericterminal.ETOS-LLM-Studio-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ETOS LLM Studio App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ETOS LLM Studio App";
+			};
+			name = Debug;
+		};
+		07FA9DC82FD6C92600C6EEE9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K9LDK6LF4H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ericterminal.ETOS-LLM-Studio-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ETOS LLM Studio App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ETOS LLM Studio App";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -773,6 +886,15 @@
 			buildConfigurations = (
 				079679722F1278F5006562BC /* Debug */,
 				079679732F1278F5006562BC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		07FA9DC92FD6C92600C6EEE9 /* Build configuration list for PBXNativeTarget "ETOS LLM Studio AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07FA9DC72FD6C92600C6EEE9 /* Debug */,
+				07FA9DC82FD6C92600C6EEE9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
