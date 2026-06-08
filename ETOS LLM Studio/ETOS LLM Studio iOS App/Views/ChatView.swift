@@ -744,6 +744,10 @@ extension ChatView {
                     }
                     resolvePendingSearchJumpIfNeeded()
                 }
+                .onChange(of: viewModel.streamingScrollAnchorVersion) { _, _ in
+                    guard !showScrollToBottom || scrollDistanceToBottom < 80 else { return }
+                    scrollToBottom(animated: false)
+                }
                 .onAppear {
                     if shouldRestorePendingJumpOnAppear {
                         shouldRestorePendingJumpOnAppear = false

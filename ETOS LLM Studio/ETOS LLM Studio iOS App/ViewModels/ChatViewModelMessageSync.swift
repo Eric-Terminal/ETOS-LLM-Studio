@@ -331,6 +331,7 @@ extension ChatViewModel {
         var updatedLatestAssistantID = latestAssistantMessageID
         var needsDisplayRefilter = false
         var needsFullDisplayRefresh = false
+        var shouldBumpStreamingScrollAnchor = false
 
         for (oldMessage, newMessage) in zip(previousMessages, incomingMessages) where oldMessage != newMessage {
             if oldMessage.selectedResponseAttemptID != newMessage.selectedResponseAttemptID
@@ -346,6 +347,11 @@ extension ChatViewModel {
                     scheduleVisualMessagePreparationIfNeeded(for: state, source: newMessage)
                 }
                 scheduleReasoningMarkdownPreparationIfNeeded(for: newMessage)
+                if oldMessage.content != newMessage.content
+                    || oldMessage.reasoningContent != newMessage.reasoningContent
+                    || oldMessage.toolCalls != newMessage.toolCalls {
+                    shouldBumpStreamingScrollAnchor = true
+                }
             }
 
             let oldResultIDs = toolCallResultIDs(for: oldMessage)
@@ -372,6 +378,9 @@ extension ChatViewModel {
         }
         if latestAssistantMessageID != updatedLatestAssistantID {
             latestAssistantMessageID = updatedLatestAssistantID
+        }
+        if shouldBumpStreamingScrollAnchor {
+            streamingScrollAnchorVersion &+= 1
         }
         if needsFullDisplayRefresh {
             updateDisplayedMessages()

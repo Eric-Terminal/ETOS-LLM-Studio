@@ -84,6 +84,7 @@ final class ChatViewModel: ObservableObject {
     @Published var latestAssistantMessageID: UUID?
     @Published var toolCallResultIDs: Set<String> = []
     @Published var runningSessionIDs: Set<UUID> = []
+    @Published var streamingScrollAnchorVersion: Int = 0
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
