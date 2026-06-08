@@ -35,6 +35,10 @@ struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
+    @StateObject private var inlineSpeechRecorder = InlineSpeechRecorderController()
+    @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
+    @State private var showInlineSpeechError = false
+    @State private var inlineSpeechErrorMessage: String?
 
     private let controlSize: CGFloat = 40
     private let expandedControlSize: CGFloat = 34
@@ -92,46 +96,52 @@ struct TelegramMessageComposer: View {
                     .padding(.horizontal, 16)
             }
 
-            HStack(alignment: .bottom, spacing: 12) {
-                if !isExpandedComposer {
-                    attachmentMenuButton(size: controlSize)
-                }
+            if inlineSpeechRecorder.phase.isActive {
+                inlineSpeechComposer
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                HStack(alignment: .bottom, spacing: 12) {
+                    if !isExpandedComposer {
+                        attachmentMenuButton(size: controlSize)
+                    }
 
-                HStack(alignment: .bottom, spacing: 8) {
-                    inputEditor
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: controlSize)
-                .background(glassRoundedBackground(cornerRadius: composerCornerRadius))
-                .overlay {
-                    GeometryReader { proxy in
-                        Color.clear
-                            .preference(key: InputWidthKey.self, value: proxy.size.width)
+                    HStack(alignment: .bottom, spacing: 8) {
+                        inputEditor
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if isExpandedComposer {
-                        actionControlButton(size: expandedControlSize)
-                            .padding(.trailing, 8)
-                            .padding(.bottom, 8)
+                    .frame(minHeight: controlSize)
+                    .background(glassRoundedBackground(cornerRadius: composerCornerRadius))
+                    .overlay {
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(key: InputWidthKey.self, value: proxy.size.width)
+                        }
                     }
-                }
-                .onPreferenceChange(InputWidthKey.self) { width in
-                    if abs(width - inputAvailableWidth) > 0.5 {
-                        inputAvailableWidth = width
+                    .overlay(alignment: .bottomTrailing) {
+                        if isExpandedComposer {
+                            actionControlButton(size: expandedControlSize)
+                                .padding(.trailing, 8)
+                                .padding(.bottom, 8)
+                        }
                     }
-                    if !isExpandedComposer, abs(width - compactInputWidth) > 0.5 {
-                        compactInputWidth = width
+                    .onPreferenceChange(InputWidthKey.self) { width in
+                        if abs(width - inputAvailableWidth) > 0.5 {
+                            inputAvailableWidth = width
+                        }
+                        if !isExpandedComposer, abs(width - compactInputWidth) > 0.5 {
+                            compactInputWidth = width
+                        }
                     }
-                }
 
-                if !isExpandedComposer {
-                    actionControlButton(size: controlSize)
+                    if !isExpandedComposer {
+                        actionControlButton(size: controlSize)
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
         }
         .padding(.bottom, 6)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
@@ -167,6 +177,16 @@ struct TelegramMessageComposer: View {
                     isExpandedComposer = false
                 }
             }
+        }
+        .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: $showInlineSpeechError) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
+        } message: {
+            Text(inlineSpeechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
+        }
+        .onDisappear {
+            inlineSpeechFinalizeTask?.cancel()
+            inlineSpeechFinalizeTask = nil
+            inlineSpeechRecorder.cancel()
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraImagePicker(isPresented: $showCamera) { image in
@@ -273,8 +293,7 @@ struct TelegramMessageComposer: View {
             } else if canQuickRetry {
                 viewModel.quickRetryLatestMessage()
             } else if viewModel.enableSpeechInput {
-                audioRecorderEntryMode = .speechInput
-                showAudioRecorder = true
+                startInlineSpeechRecording()
             } else {
                 focus.wrappedValue = true
             }
@@ -345,6 +364,152 @@ struct TelegramMessageComposer: View {
             return .speechToText(model: model)
         }
         return .audioAttachment
+    }
+
+    private var inlineSpeechComposer: some View {
+        InlineSpeechComposerBar(
+            phase: inlineSpeechRecorder.phase,
+            samples: inlineSpeechRecorder.waveformSamples,
+            duration: inlineSpeechRecorder.recordingDuration,
+            isPlayingPreview: inlineSpeechRecorder.isPlayingPreview,
+            sendsAudioAttachment: viewModel.sendSpeechAsAudio,
+            cancelAction: cancelInlineSpeechRecording,
+            stopAction: stopInlineSpeechRecording,
+            confirmAction: confirmInlineSpeechRecording,
+            playbackAction: {
+                inlineSpeechRecorder.togglePreviewPlayback()
+            }
+        )
+        .frame(maxWidth: .infinity, minHeight: controlSize)
+    }
+
+    private func startInlineSpeechRecording() {
+        inlineSpeechFinalizeTask?.cancel()
+        inlineSpeechFinalizeTask = nil
+        audioRecorderEntryMode = .speechInput
+        focus.wrappedValue = false
+        Task { @MainActor in
+            do {
+                try validateInlineSpeechInput()
+                try await inlineSpeechRecorder.start(format: viewModel.audioRecordingFormat)
+            } catch {
+                inlineSpeechErrorMessage = error.localizedDescription
+                showInlineSpeechError = true
+                inlineSpeechRecorder.cancel()
+            }
+        }
+    }
+
+    private func stopInlineSpeechRecording() {
+        inlineSpeechRecorder.stopForPreview()
+        if viewModel.sendSpeechAsAudio {
+            scheduleInlineAudioAttachment()
+        } else {
+            transcribeInlineSpeechRecording()
+        }
+    }
+
+    private func confirmInlineSpeechRecording() {
+        inlineSpeechFinalizeTask?.cancel()
+        inlineSpeechFinalizeTask = nil
+        if viewModel.sendSpeechAsAudio {
+            completeInlineAudioAttachment()
+        } else {
+            transcribeInlineSpeechRecording()
+        }
+    }
+
+    private func cancelInlineSpeechRecording() {
+        inlineSpeechFinalizeTask?.cancel()
+        inlineSpeechFinalizeTask = nil
+        inlineSpeechRecorder.cancel()
+    }
+
+    private func scheduleInlineAudioAttachment() {
+        inlineSpeechFinalizeTask?.cancel()
+        inlineSpeechFinalizeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            completeInlineAudioAttachment()
+        }
+    }
+
+    private func completeInlineAudioAttachment() {
+        do {
+            if inlineSpeechRecorder.phase == .recording {
+                inlineSpeechRecorder.stopForPreview()
+            }
+            let attachment = try inlineSpeechRecorder.makeAttachment(format: viewModel.audioRecordingFormat)
+            viewModel.setAudioAttachment(attachment)
+            inlineSpeechRecorder.cancel()
+        } catch {
+            inlineSpeechErrorMessage = error.localizedDescription
+            showInlineSpeechError = true
+            inlineSpeechRecorder.cancel()
+        }
+    }
+
+    private func transcribeInlineSpeechRecording() {
+        inlineSpeechFinalizeTask?.cancel()
+        inlineSpeechFinalizeTask = nil
+        inlineSpeechRecorder.beginTranscribing()
+        Task { @MainActor in
+            do {
+                let model = try selectedInlineSpeechModel()
+                let attachment = try inlineSpeechRecorder.makeAttachment(format: viewModel.audioRecordingFormat)
+                let transcript: String
+                if ChatService.isSystemSpeechRecognizerModel(model) {
+                    transcript = try await SystemSpeechRecognizerService.transcribe(
+                        audioData: attachment.data,
+                        fileExtension: attachment.format
+                    )
+                } else {
+                    transcript = try await viewModel.transcribeAudioAttachment(using: model, attachment: attachment)
+                }
+                let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedTranscript.isEmpty else {
+                    throw NSError(
+                        domain: "InlineSpeechRecorder",
+                        code: -2,
+                        userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未识别到有效语音内容。", comment: "")]
+                    )
+                }
+                appendTranscribedTextToComposer(trimmedTranscript)
+                inlineSpeechRecorder.cancel()
+            } catch {
+                inlineSpeechErrorMessage = error.localizedDescription
+                showInlineSpeechError = true
+                inlineSpeechRecorder.cancel()
+            }
+        }
+    }
+
+    private func validateInlineSpeechInput() throws {
+        guard viewModel.enableSpeechInput else {
+            throw NSError(
+                domain: "InlineSpeechRecorder",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("语言输入已被关闭。", comment: "")]
+            )
+        }
+        guard viewModel.sendSpeechAsAudio || (viewModel.selectedSpeechModel ?? viewModel.speechModels.first) != nil else {
+            throw NSError(
+                domain: "InlineSpeechRecorder",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("请选择一个语音转文字模型。", comment: "")]
+            )
+        }
+    }
+
+    private func selectedInlineSpeechModel() throws -> RunnableModel {
+        if let model = viewModel.selectedSpeechModel ?? viewModel.speechModels.first {
+            return model
+        }
+        throw NSError(
+            domain: "InlineSpeechRecorder",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("请选择一个语音转文字模型。", comment: "")]
+        )
     }
 
     private func appendTranscribedTextToComposer(_ transcript: String) {

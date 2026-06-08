@@ -28,6 +28,7 @@ struct WatchInputBubbleView: View {
     @Binding var isAttachmentImportPresented: Bool
     @Binding var attachmentSourceText: String
     @State private var resourceUsageTask: Task<Void, Never>?
+    @State private var speechPreviewFinalizeTask: Task<Void, Never>?
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -254,7 +255,9 @@ struct WatchInputBubbleView: View {
                     pendingAttachmentPreview
                 }
 
-                if isLiquidGlassEnabled {
+                if isInlineSpeechComposerPresented {
+                    inlineSpeechComposer
+                } else if isLiquidGlassEnabled {
                     HStack(spacing: 10) {
                         if #available(watchOS 26.0, *) {
                             transparentInputField
@@ -426,12 +429,6 @@ struct WatchInputBubbleView: View {
                     )
                 }
             }
-            .sheet(isPresented: Binding(
-                get: { viewModel.isSpeechRecorderPresented },
-                set: { viewModel.isSpeechRecorderPresented = $0 }
-            )) {
-                SpeechRecorderView(viewModel: viewModel)
-            }
             .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: Binding(
                 get: { viewModel.showSpeechErrorAlert },
                 set: { viewModel.showSpeechErrorAlert = $0 }
@@ -466,7 +463,58 @@ struct WatchInputBubbleView: View {
             }
             .onDisappear {
                 stopResourceUsageSampling()
+                speechPreviewFinalizeTask?.cancel()
+                speechPreviewFinalizeTask = nil
             }
+    }
+
+    private var isInlineSpeechComposerPresented: Bool {
+        viewModel.isSpeechRecorderPresented
+            || viewModel.isRecordingSpeech
+            || viewModel.speechTranscriptionInProgress
+    }
+
+    private var inlineSpeechComposer: some View {
+        WatchInlineSpeechComposerView(
+            viewModel: viewModel,
+            inputControlHeight: inputControlHeight,
+            inputFillColor: inputFillColor,
+            inputStrokeColor: inputStrokeColor,
+            onCancel: cancelInlineSpeechRecording,
+            onStop: stopInlineSpeechRecording,
+            onConfirm: confirmInlineSpeechRecording
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func stopInlineSpeechRecording() {
+        viewModel.stopSpeechRecordingForPreview()
+        if viewModel.sendSpeechAsAudio {
+            scheduleInlineAudioAttachment()
+        } else {
+            viewModel.finishSpeechRecording()
+        }
+    }
+
+    private func confirmInlineSpeechRecording() {
+        speechPreviewFinalizeTask?.cancel()
+        speechPreviewFinalizeTask = nil
+        viewModel.finishSpeechRecording()
+    }
+
+    private func cancelInlineSpeechRecording() {
+        speechPreviewFinalizeTask?.cancel()
+        speechPreviewFinalizeTask = nil
+        viewModel.cancelSpeechRecording()
+    }
+
+    private func scheduleInlineAudioAttachment() {
+        speechPreviewFinalizeTask?.cancel()
+        speechPreviewFinalizeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            viewModel.finishSpeechRecording()
+        }
     }
 
     private func updateResourceUsageSampling() {

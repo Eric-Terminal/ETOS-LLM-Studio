@@ -363,6 +363,12 @@
 "录音启动失败。" = "Error al Iniciar Grabando.";
 "录音将直接附带音频给当前模型。下方语音模型为可选项，用于后台转写文字显示。" = "Recordings son enviado as Audio a el Actual Modelo. El Voz Modelo below es Opcional para Fondo transcription.";
 "录音文件未找到，无法处理。" = "Grabando Archivo no Encontrado.";
+"停止录音" = "Detener grabación";
+"取消录音" = "Cancelar grabación";
+"播放录音" = "Reproducir grabación";
+"语音转写中" = "Transcribiendo voz";
+"添加语音附件" = "Añadir adjunto de voz";
+"开始语音转写" = "Iniciar transcripción de voz";
 "快速调试" = "Rápido Depuración";
 "思考过程" = "Reasoning";
 "深度思考" = "Razonamiento profundo";

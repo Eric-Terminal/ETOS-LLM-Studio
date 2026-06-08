@@ -53,7 +53,11 @@ extension ChatViewModel {
     }
 
     func startSpeechRecording() async {
-        guard !isRecordingSpeech else { return }
+        guard !isRecordingSpeech,
+              !speechTranscriptionInProgress,
+              speechRecordingURL == nil,
+              systemSpeechStreamingSession == nil,
+              speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard enableSpeechInput else {
             presentSpeechError(NSLocalizedString("语言输入已被关闭。", comment: ""))
             isSpeechRecorderPresented = false
@@ -181,33 +185,47 @@ extension ChatViewModel {
         }
     }
 
-    func finishSpeechRecording() {
-        if !isRecordingSpeech {
-            if speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return
-            }
-            isSpeechRecorderPresented = false
-            speechStreamingTranscript = ""
-            return
-        }
-
+    func stopSpeechRecordingForPreview() {
+        guard isRecordingSpeech else { return }
         isRecordingSpeech = false
         stopRecordingTimer()
 
         if let streamSession = systemSpeechStreamingSession {
             let transcript = streamSession.finish().trimmingCharacters(in: .whitespacesAndNewlines)
             systemSpeechStreamingSession = nil
-            resetRecordingVisuals()
-            guard !transcript.isEmpty else {
-                presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
-                return
-            }
             speechStreamingTranscript = transcript
-            appendTranscribedText(transcript)
             return
         }
 
         audioRecorder?.stop()
+    }
+
+    func finishSpeechRecording() {
+        if isRecordingSpeech {
+            stopSpeechRecordingForPreview()
+        }
+
+        if !sendSpeechAsAudio,
+           speechRecordingURL == nil {
+            let transcript = speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !transcript.isEmpty else {
+                presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
+                isSpeechRecorderPresented = false
+                resetRecordingVisuals()
+                return
+            }
+            speechTranscriptionInProgress = true
+            Task {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                appendTranscribedText(transcript)
+                speechStreamingTranscript = ""
+                speechTranscriptionInProgress = false
+                isSpeechRecorderPresented = false
+                resetRecordingVisuals()
+            }
+            return
+        }
+
         guard let url = speechRecordingURL else {
             audioRecorder = nil
             speechRecordingURL = nil
@@ -240,6 +258,7 @@ extension ChatViewModel {
                     )
                     await MainActor.run {
                         pendingAudioAttachment = attachment
+                        isSpeechRecorderPresented = false
                     }
                 } else {
                     guard let speechModel = selectedSpeechModel else {
@@ -257,9 +276,11 @@ extension ChatViewModel {
                     }
                     speechStreamingTranscript = trimmedTranscript
                     appendTranscribedText(trimmedTranscript)
+                    isSpeechRecorderPresented = false
                 }
             } catch {
                 presentSpeechError(error.localizedDescription)
+                isSpeechRecorderPresented = false
             }
         }
     }
