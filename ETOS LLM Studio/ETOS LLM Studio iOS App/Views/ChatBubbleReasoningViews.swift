@@ -205,7 +205,7 @@ struct ReasoningDisclosureView: View, Equatable {
                 )
                 ReasoningPreviewContent(
                     isPreviewing: isPreviewing,
-                    maxHeight: 118,
+                    maxHeight: 177,
                     contentID: reasoning
                 ) {
                     ReasoningMarkdownContentView(

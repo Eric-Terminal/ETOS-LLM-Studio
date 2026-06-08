@@ -230,7 +230,7 @@ extension ChatBubble {
                 let contentColor = resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
                 WatchReasoningPreviewContent(
                     isPreviewing: isReasoningAutoPreview,
-                    maxHeight: 86,
+                    maxHeight: 64.5,
                     contentID: reasoning
                 ) {
                     WatchReasoningMarkdownContentView(

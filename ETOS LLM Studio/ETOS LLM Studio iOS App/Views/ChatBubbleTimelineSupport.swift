@@ -166,7 +166,7 @@ struct TimelineReasoningStepView: View {
             if shouldShowContent {
                 ReasoningPreviewContent(
                     isPreviewing: isPreviewing,
-                    maxHeight: 118,
+                    maxHeight: 177,
                     contentID: reasoning
                 ) {
                     ReasoningMarkdownContentView(

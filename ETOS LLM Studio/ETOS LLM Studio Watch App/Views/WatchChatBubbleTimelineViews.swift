@@ -271,7 +271,7 @@ struct WatchTimelineReasoningStepView: View {
             if shouldShowContent {
                 WatchReasoningPreviewContent(
                     isPreviewing: isPreviewing,
-                    maxHeight: 86,
+                    maxHeight: 64.5,
                     contentID: reasoning
                 ) {
                     WatchReasoningMarkdownContentView(
