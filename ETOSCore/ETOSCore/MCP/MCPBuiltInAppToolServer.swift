@@ -67,7 +67,9 @@ public enum MCPBuiltInAppToolServer {
     }
 
     public static func isBuiltInServer(_ server: MCPServerConfiguration) -> Bool {
-        MCPBuiltInSearchServer.isBuiltInSearchServer(server) || isBuiltInAppToolServer(server)
+        MCPBuiltInSearchServer.isBuiltInSearchServer(server) ||
+        isBuiltInAppToolServer(server) ||
+        MCPBuiltInPersonalDataServer.isBuiltInPersonalDataServer(server)
     }
 
     @MainActor

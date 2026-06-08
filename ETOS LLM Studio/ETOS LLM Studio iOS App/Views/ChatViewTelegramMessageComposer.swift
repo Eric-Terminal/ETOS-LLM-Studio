@@ -96,48 +96,7 @@ struct TelegramMessageComposer: View {
                     .padding(.horizontal, 16)
             }
 
-            if inlineSpeechRecorder.phase.isActive {
-                inlineSpeechComposer
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                HStack(alignment: .bottom, spacing: 12) {
-                    if !isExpandedComposer {
-                        attachmentMenuButton(size: controlSize)
-                    }
-
-                    HStack(alignment: .bottom, spacing: 8) {
-                        inputEditor
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(minHeight: controlSize)
-                    .background(glassRoundedBackground(cornerRadius: composerCornerRadius))
-                    .overlay {
-                        GeometryReader { proxy in
-                            Color.clear
-                                .preference(key: InputWidthKey.self, value: proxy.size.width)
-                        }
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        if isExpandedComposer {
-                            actionControlButton(size: expandedControlSize)
-                                .padding(.trailing, 8)
-                                .padding(.bottom, 8)
-                        }
-                    }
-                    .onPreferenceChange(InputWidthKey.self) { width in
-                        if abs(width - inputAvailableWidth) > 0.5 {
-                            inputAvailableWidth = width
-                        }
-                        if !isExpandedComposer, abs(width - compactInputWidth) > 0.5 {
-                            compactInputWidth = width
-                        }
-                    }
-
-                    if !isExpandedComposer {
-                        actionControlButton(size: controlSize)
-                    }
-                }
-            }
+            composerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
@@ -239,6 +198,53 @@ struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
             }
         }
+    }
+
+    @ViewBuilder
+    private var composerContent: some View {
+        if inlineSpeechRecorder.phase.isActive {
+            inlineSpeechComposer
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else {
+            composerInputRow
+        }
+    }
+
+    private var composerInputRow: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            if !isExpandedComposer {
+                attachmentMenuButton(size: controlSize)
+            }
+
+            inputFieldShell
+
+            if !isExpandedComposer {
+                actionControlButton(size: controlSize)
+            }
+        }
+    }
+
+    private var inputFieldShell: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            inputEditor
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: controlSize)
+        .background(glassRoundedBackground(cornerRadius: composerCornerRadius))
+        .overlay {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: InputWidthKey.self, value: proxy.size.width)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if isExpandedComposer {
+                actionControlButton(size: expandedControlSize)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 8)
+            }
+        }
+        .onPreferenceChange(InputWidthKey.self, perform: updateInputWidth)
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {
@@ -515,6 +521,16 @@ struct TelegramMessageComposer: View {
     private func appendTranscribedTextToComposer(_ transcript: String) {
         viewModel.appendTranscribedText(transcript)
         text = viewModel.userInput
+    }
+
+    private func updateInputWidth(_ width: CGFloat) {
+        if abs(width - inputAvailableWidth) > 0.5 {
+            inputAvailableWidth = width
+        }
+        let compactWidthChanged = abs(width - compactInputWidth) > 0.5
+        if !isExpandedComposer && compactWidthChanged {
+            compactInputWidth = width
+        }
     }
 
     private func handleAutoExpand(for newValue: String) {

@@ -152,6 +152,10 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
             self.apiKey = nil
             additionalHeadersJSON = nil
             oauthPayloadJSON = nil
+        case .builtInPersonalData:
+            self.apiKey = nil
+            additionalHeadersJSON = nil
+            oauthPayloadJSON = nil
         case .oauth(_, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             self.apiKey = nil
             additionalHeadersJSON = nil

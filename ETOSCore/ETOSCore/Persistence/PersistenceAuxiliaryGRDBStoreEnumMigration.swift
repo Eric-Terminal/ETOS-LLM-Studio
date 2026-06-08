@@ -52,7 +52,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         notes TEXT,
                         is_selected_for_chat INTEGER NOT NULL DEFAULT 0,
                         status TEXT NOT NULL DEFAULT 'idle' CHECK(status IN ('idle', 'ready')),
-                        transport_kind TEXT NOT NULL CHECK(transport_kind IN ('http', 'sse', 'oauth', 'built_in_search', 'built_in_app_tool')),
+                        transport_kind TEXT NOT NULL CHECK(transport_kind IN ('http', 'sse', 'oauth', 'built_in_search', 'built_in_app_tool', 'built_in_personal_data')),
                         endpoint_url TEXT,
                         message_endpoint_url TEXT,
                         sse_endpoint_url TEXT,
@@ -91,7 +91,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         ELSE 'idle'
                         END,
                         CASE
-                        WHEN transport_kind IN ('http', 'sse', 'oauth', 'built_in_search', 'built_in_app_tool') THEN transport_kind
+                        WHEN transport_kind IN ('http', 'sse', 'oauth', 'built_in_search', 'built_in_app_tool', 'built_in_personal_data') THEN transport_kind
                         WHEN COALESCE(TRIM(message_endpoint_url), '') != '' AND COALESCE(TRIM(sse_endpoint_url), '') != '' THEN 'sse'
                         WHEN COALESCE(TRIM(oauth_payload_json), '') != '' THEN 'oauth'
                         ELSE 'http'

@@ -115,6 +115,20 @@ struct MCPServerEditor: View {
                 _oauthCodeVerifier = State(initialValue: "")
                 _transportOption = State(initialValue: .builtInAppTool)
                 _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
+            case .builtInPersonalData:
+                _endpoint = State(initialValue: MCPBuiltInPersonalDataServer.endpoint)
+                _sseEndpoint = State(initialValue: "")
+                _apiKey = State(initialValue: "")
+                _tokenEndpoint = State(initialValue: "")
+                _clientID = State(initialValue: "")
+                _clientSecret = State(initialValue: "")
+                _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
+                _transportOption = State(initialValue: .builtInPersonalData)
+                _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
             @unknown default:
                 _endpoint = State(initialValue: "")
                 _sseEndpoint = State(initialValue: "")
@@ -160,6 +174,9 @@ struct MCPServerEditor: View {
                     if transportOption == .builtInAppTool {
                         Text(TransportOption.builtInAppTool.label).tag(TransportOption.builtInAppTool)
                     }
+                    if transportOption == .builtInPersonalData {
+                        Text(TransportOption.builtInPersonalData.label).tag(TransportOption.builtInPersonalData)
+                    }
                     ForEach(TransportOption.editableCases) { option in
                         Text(option.label).tag(option)
                     }
@@ -171,6 +188,10 @@ struct MCPServerEditor: View {
                         .etFont(.footnote)
                 } else if transportOption == .builtInAppTool {
                     Text(NSLocalizedString("应用内建本地工具服务，无需配置网络地址。", comment: "Built-in app tool MCP editor hint"))
+                        .foregroundStyle(.secondary)
+                        .etFont(.footnote)
+                } else if transportOption == .builtInPersonalData {
+                    Text(NSLocalizedString("应用内建个人数据服务，无需配置网络地址；HealthKit 与 EventKit 权限仅在工具正式调用时申请。", comment: "Built-in personal data MCP editor hint"))
                         .foregroundStyle(.secondary)
                         .etFont(.footnote)
                 } else if transportOption == .sse {
@@ -350,6 +371,8 @@ struct MCPServerEditor: View {
             } else {
                 transport = .builtInAppTool(category: .interaction)
             }
+        case .builtInPersonalData:
+            transport = .builtInPersonalData
         }
 
         var server = existingServer ?? MCPServerConfiguration(displayName: trimmedName, notes: notesOrNil(), transport: transport)
@@ -508,6 +531,24 @@ struct MCPServerEditor: View {
                 oauthRedirectURI: "",
                 oauthCodeVerifier: "",
                 transportOption: .builtInAppTool,
+                notes: notes,
+                headerOverrideTexts: [""]
+            )
+        case .builtInPersonalData:
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: MCPBuiltInPersonalDataServer.endpoint,
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .builtInPersonalData,
                 notes: notes,
                 headerOverrideTexts: [""]
             )
@@ -681,6 +722,7 @@ struct MCPServerEditor: View {
         case oauth
         case builtInSearch
         case builtInAppTool
+        case builtInPersonalData
 
         var id: String { rawValue }
         static var editableCases: [TransportOption] { [.http, .sse, .oauth] }
@@ -692,12 +734,13 @@ struct MCPServerEditor: View {
             case .oauth: return "OAuth 2.0"
             case .builtInSearch: return NSLocalizedString("内置搜索", comment: "Built-in MCP search transport label")
             case .builtInAppTool: return NSLocalizedString("内建本地工具", comment: "Built-in app tool MCP transport label")
+            case .builtInPersonalData: return NSLocalizedString("内建个人数据", comment: "Built-in personal data MCP transport label")
             }
         }
 
         var isBuiltIn: Bool {
             switch self {
-            case .builtInSearch, .builtInAppTool:
+            case .builtInSearch, .builtInAppTool, .builtInPersonalData:
                 return true
             case .http, .sse, .oauth:
                 return false
@@ -707,7 +750,7 @@ struct MCPServerEditor: View {
         var requiresAPIKey: Bool {
             switch self {
             case .http, .sse: return true
-            case .oauth, .builtInSearch, .builtInAppTool: return false
+            case .oauth, .builtInSearch, .builtInAppTool, .builtInPersonalData: return false
             }
         }
     }

@@ -447,6 +447,8 @@ extension MCPManager {
             return "built_in_search"
         case .builtInAppTool:
             return "built_in_app_tool"
+        case .builtInPersonalData:
+            return "built_in_personal_data"
         case .oauth:
             return "oauth"
         }

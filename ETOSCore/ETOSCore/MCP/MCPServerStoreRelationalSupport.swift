@@ -92,6 +92,8 @@ extension MCPServerStore {
                 return nil
             }
             transport = .builtInAppTool(category: category)
+        case "built_in_personal_data":
+            transport = .builtInPersonalData
         case "oauth":
             guard let endpointURLRaw = header.endpointURL,
                   let endpoint = URL(string: endpointURLRaw),
@@ -255,6 +257,8 @@ extension MCPServerStore {
             return "built_in_search"
         case .builtInAppTool:
             return "built_in_app_tool"
+        case .builtInPersonalData:
+            return "built_in_personal_data"
         case .oauth:
             return "oauth"
         }
@@ -270,6 +274,8 @@ extension MCPServerStore {
             return MCPBuiltInSearchServer.endpoint
         case .builtInAppTool(let category):
             return MCPBuiltInAppToolServer.endpoint(for: category)
+        case .builtInPersonalData:
+            return MCPBuiltInPersonalDataServer.endpoint
         case .oauth(let endpoint, _, _, _, _, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -285,6 +291,8 @@ extension MCPServerStore {
             return nil
         case .builtInAppTool:
             return nil
+        case .builtInPersonalData:
+            return nil
         case .oauth:
             return nil
         }
@@ -299,6 +307,8 @@ extension MCPServerStore {
         case .builtInSearch:
             return nil
         case .builtInAppTool:
+            return nil
+        case .builtInPersonalData:
             return nil
         case .oauth:
             return nil

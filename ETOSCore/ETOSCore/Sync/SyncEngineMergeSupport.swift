@@ -316,6 +316,9 @@ extension SyncEngine {
             hasher.combine("builtInAppTool")
             hasher.combine(category.rawValue)
             hasher.combine(MCPBuiltInAppToolServer.endpoint(for: category))
+        case .builtInPersonalData:
+            hasher.combine("builtInPersonalData")
+            hasher.combine(MCPBuiltInPersonalDataServer.endpoint)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, _, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             hasher.combine("oauth")
             hasher.combine(endpoint.absoluteString)

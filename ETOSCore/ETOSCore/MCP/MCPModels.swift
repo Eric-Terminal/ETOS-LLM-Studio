@@ -98,7 +98,7 @@ public struct MCPToolDescription: Codable, Identifiable, Hashable {
     public let inputSchema: JSONValue?
     public let examples: [JSONValue]?
 
-    public init(toolId: String, description: String?, inputSchema: JSONValue?, examples: [JSONValue]?) {
+    public init(toolId: String, description: String?, inputSchema: JSONValue?, examples: [JSONValue]? = nil) {
         self.toolId = toolId
         self.description = description
         self.inputSchema = inputSchema

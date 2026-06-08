@@ -60,6 +60,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         case httpSSE(messageEndpoint: URL, sseEndpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case builtInSearch
         case builtInAppTool(category: AppToolCatalogCategory)
+        case builtInPersonalData
         case oauth(
             endpoint: URL,
             tokenEndpoint: URL,
@@ -182,6 +183,8 @@ public extension MCPServerConfiguration {
             return MCPBuiltInSearchServer.endpoint
         case .builtInAppTool(let category):
             return MCPBuiltInAppToolServer.endpoint(for: category)
+        case .builtInPersonalData:
+            return MCPBuiltInPersonalDataServer.endpoint
         case .oauth(let endpoint, _, _, _, _, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -196,6 +199,8 @@ public extension MCPServerConfiguration {
         case .builtInSearch:
             return [:]
         case .builtInAppTool:
+            return [:]
+        case .builtInPersonalData:
             return [:]
         case .oauth:
             return [:]
@@ -214,6 +219,8 @@ public extension MCPServerConfiguration {
             return MCPBuiltInSearchLegacyTransport()
         case .builtInAppTool(let category):
             return MCPBuiltInAppToolLegacyTransport(category: category)
+        case .builtInPersonalData:
+            return MCPBuiltInPersonalDataLegacyTransport()
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             return MCPOAuthStreamableHTTPTransport(
                 endpoint: endpoint,
@@ -279,6 +286,12 @@ public extension MCPServerConfiguration {
             )
         case .builtInAppTool(let category):
             let transport = MCPBuiltInAppToolTransport(category: category)
+            return MCPSDKTransportBundle(
+                transport: transport,
+                streamControl: MCPTransportControlBox(control: transport)
+            )
+        case .builtInPersonalData:
+            let transport = MCPBuiltInPersonalDataTransport()
             return MCPSDKTransportBundle(
                 transport: transport,
                 streamControl: MCPTransportControlBox(control: transport)
@@ -410,6 +423,7 @@ extension MCPServerConfiguration.Transport {
         case sse
         case builtInSearch = "built_in_search"
         case builtInAppTool = "built_in_app_tool"
+        case builtInPersonalData = "built_in_personal_data"
         case oauth
     }
 
@@ -445,6 +459,8 @@ extension MCPServerConfiguration.Transport {
         case .builtInAppTool:
             let category = try container.decode(AppToolCatalogCategory.self, forKey: .category)
             self = .builtInAppTool(category: category)
+        case .builtInPersonalData:
+            self = .builtInPersonalData
         case .oauth:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let tokenEndpoint = try container.decode(URL.self, forKey: .tokenEndpoint)
@@ -493,6 +509,8 @@ extension MCPServerConfiguration.Transport {
         case .builtInAppTool(let category):
             try container.encode(Kind.builtInAppTool, forKey: .kind)
             try container.encode(category, forKey: .category)
+        case .builtInPersonalData:
+            try container.encode(Kind.builtInPersonalData, forKey: .kind)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             try container.encode(Kind.oauth, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)

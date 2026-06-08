@@ -101,7 +101,7 @@ extension MCPIntegrationView {
 
     private func serverTransportBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
         switch server.transport {
-        case .builtInSearch, .builtInAppTool:
+        case .builtInSearch, .builtInAppTool, .builtInPersonalData:
             return (NSLocalizedString("内置", comment: "MCP server transport badge"), .indigo)
         case .http:
             return (NSLocalizedString("HTTP", comment: "MCP server transport badge"), .blue)
