@@ -17,7 +17,7 @@ extension MCPIntegrationView {
                 Text(NSLocalizedString("尚未添加任何 MCP Server。点击右上角“＋”创建。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(manager.servers) { server in
+                ForEach(serversBinding, id: \.id, editActions: .move) { $server in
                     NavigationLink {
                         MCPServerDetailView(server: server)
                     } label: {
@@ -40,12 +40,16 @@ extension MCPIntegrationView {
                         .tint(.blue)
                     }
                 }
-                .onMove { offsets, destination in
-                    manager.moveServers(fromOffsets: offsets, toOffset: destination)
-                }
             }
         }
-        .environment(\.editMode, .constant(.active))
+    }
+
+    private var serversBinding: Binding<[MCPServerConfiguration]> {
+        Binding {
+            manager.servers
+        } set: { orderedServers in
+            manager.setServerOrder(orderedServers.map(\.id))
+        }
     }
 
     private func serverSummaryRow(for server: MCPServerConfiguration) -> some View {
