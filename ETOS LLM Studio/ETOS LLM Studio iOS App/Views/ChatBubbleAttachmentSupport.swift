@@ -139,10 +139,6 @@ extension ChatBubble {
             customTextColor: customTextColorOverride,
             isStreaming: showsStreamingIndicators
         )
-        .streamingMessageSweep(
-            isActive: showsStreamingIndicators && message.role == .assistant && !content.isEmpty,
-            highlightColor: Color.white
-        )
     }
 
     @ViewBuilder
