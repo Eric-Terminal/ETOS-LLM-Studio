@@ -123,6 +123,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
     @Binding var isExpanded: Bool
     let isPreviewing: Bool
+    let suppressContentRender: Bool
     let isOutgoing: Bool
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
@@ -139,6 +140,7 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.preparedReasoningContent == rhs.preparedReasoningContent
             && lhs.isExpanded == rhs.isExpanded
             && lhs.isPreviewing == rhs.isPreviewing
+            && lhs.suppressContentRender == rhs.suppressContentRender
             && lhs.isOutgoing == rhs.isOutgoing
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
@@ -227,11 +229,11 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private var isFullyExpanded: Bool {
-        isExpanded && !isPreviewing
+        isExpanded && !isPreviewing && !suppressContentRender
     }
 
     private var shouldShowContent: Bool {
-        isExpanded || isPreviewing
+        !suppressContentRender && (isExpanded || isPreviewing)
     }
 
     private func resolvedTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {

@@ -287,8 +287,11 @@ extension ChatViewModel {
 
     private func scheduleReasoningMarkdownPreparationIfNeeded(for message: ChatMessage) {
         let messageID = message.id
-        guard let sourceText = message.reasoningContent,
-              !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let isStreamingReasoningMessage = isSendingMessage && latestAssistantMessageID == messageID
+        guard ChatReasoningRenderPolicy.shouldPrepareReasoningMarkdown(
+            message: message,
+            isStreaming: isStreamingReasoningMessage
+        ), let sourceText = message.reasoningContent else {
             preparedReasoningMarkdownByMessageID.removeValue(forKey: messageID)
             reasoningMarkdownPrepareTasks[messageID]?.cancel()
             reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
