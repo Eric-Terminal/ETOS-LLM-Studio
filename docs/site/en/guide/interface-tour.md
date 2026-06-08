@@ -51,7 +51,7 @@ If this section reads "No models available. Please enable one under Providers & 
 | Entry | Does | Deep dive |
 | --- | --- | --- |
 | **Session History** | Cross-session search, folder grouping, batch move/delete | [Chat & Models](/en/modules/chat-and-models) |
-| **Providers & Models** | Add/edit providers, configure API keys, fetch model list, connectivity test | [Add Your First Provider](/en/guide/first-provider) |
+| **Providers & Models** | Add/edit providers, configure API keys, fetch model list, enable models | [Add Your First Provider](/en/guide/first-provider) |
 | **Preferences** | Global system prompt, temperature/top_p, streaming, max history, inject system time | [Chat & Models](/en/modules/chat-and-models) advanced |
 | **Text-to-Speech (TTS)** | Pick the default TTS model, read-aloud speed | [Chat & Models](/en/modules/chat-and-models) |
 

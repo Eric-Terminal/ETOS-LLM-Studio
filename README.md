@@ -35,7 +35,7 @@
 
 *   **双端原生体验**：iOS 和 Apple Watch 原生适配，两端界面风格统一，但会针对不同屏幕尺寸分别优化交互；iOS 会话列表采用卡片样式，文件夹与会话分组分明，横屏自动切换为固定双栏侧栏布局。
 *   **会话管理增强**：支持会话全文检索、命中上下文预览、消息序号定位、文件夹分类、嵌套移动、批量操作与单会话跨端发送，会话历史改为无限滚动加载。
-*   **多模型支持**：原生适配 OpenAI Chat、OpenAI Responses、Anthropic（Claude）和 Google（Gemini）等接口格式，支持在 App 内动态管理提供商与模型，长按拖动调整提供商顺序，并可对提供商下所有模型按自定义并发数批量执行连通性测试。
+*   **多模型支持**：原生适配 OpenAI Chat、OpenAI Responses、Anthropic（Claude）和 Google（Gemini）等接口格式，支持在 App 内动态管理提供商与模型，拉取模型列表，并可长按拖动调整提供商顺序。
 *   **端侧本地模型**：支持导入 GGUF 权重并作为“本地模型”提供商使用，底层通过 llama.cpp C ABI 桥接执行；支持流式输出、GGUF Jinja chat template、本地工具调用解析、思考内容解析、本地嵌入模型路由与后台 detached completion。
 *   **本地模型高级调参**：每个 GGUF 权重可按需覆盖上下文长度、输出上限、GPU 层数、batch / ubatch、KV offload、flash attention、seed、采样链、grammar、重复惩罚等参数，也支持常用 llama.cpp-style CLI 参数导入、模型缓存开关和 iOS 高内存限制。
 *   **高级请求配置**：支持自定义请求头、参数表达式、结构化请求控制、键值对 Payload 编辑、原始 JSON 请求体与请求预览，方便折腾兼容接口和特殊模型。

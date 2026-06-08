@@ -112,20 +112,11 @@ Two ways to add models:
 
 Once models are listed, **toggle on the row's switch**. Models that aren't enabled won't show up in the chat picker.
 
-**Step 9: Run the connectivity test**
-
-There's a test button in the top-right of the provider details page (accessibility label: "Model Test"). It fires a minimal request with your key and reports back. Use it — you don't have to bounce back to chat just to verify.
-
-Results are binary:
-
-- ✅ **Green "Test Passed"** — good, move on.
-- ❌ **Red error** — match the message against the table below.
-
-**Step 10: Set this model as "Current Model"**
+**Step 9: Set this model as "Current Model"**
 
 Back in **Settings**, the top **Current Model** section → tap **Model** → pick the model you just enabled.
 
-Now you're truly done. Head to [Start Your First Chat](/en/guide/first-chat) to send a message.
+Now you're truly done. Head to [Start Your First Chat](/en/guide/first-chat) and send a real message to verify it.
 
 ### Common Errors
 
@@ -206,4 +197,4 @@ Details in [Chat & Models](/en/modules/chat-and-models) advanced section.
 
 ## Next
 
-Provider set up, connectivity test green, current model selected → [Start Your First Chat](/en/guide/first-chat)
+Provider set up, current model selected → [Start Your First Chat](/en/guide/first-chat)

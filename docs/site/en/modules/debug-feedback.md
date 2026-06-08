@@ -214,22 +214,6 @@ ETOS redacts by default:
 Even with built-in redaction, logs still contain URLs and headers that may include API keys. **Before sharing** with a developer, do another pass: replace `Authorization` / `X-API-Key` etc. with `***`.
 :::
 
-### Model Connectivity Test
-
-To quickly verify whether a newly added model is reachable, without going through chat:
-
-```
-Settings → Providers & Models → \[provider\] → top-right "Model Test" button
-```
-
-It fires a minimal request against every enabled model in that provider and reports:
-
-- ✅ Passed
-- ❌ Error message
-- Response time
-
-The fastest way to identify "which models still work and which ones broke."
-
 ## Next
 
 - Everyday small tricks → [Hidden Gems](/en/tips/hidden-gems)

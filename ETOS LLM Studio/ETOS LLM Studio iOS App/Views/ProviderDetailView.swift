@@ -17,13 +17,11 @@ struct ProviderDetailView: View {
     let addModelRequest: Int
     let fetchModelsRequest: Int
     let allowsRemoteModelFetch: Bool
-    let allowsModelTesting: Bool
     let allowsManualModelAdd: Bool
     let onSave: (Provider) -> Void
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
-    @State private var isShowingModelTest = false
     @State private var isFetchingModels = false
     @State private var isShowingFetchProgress = false
     @State private var fetchError: String?
@@ -47,7 +45,6 @@ struct ProviderDetailView: View {
         addModelRequest: Int = 0,
         fetchModelsRequest: Int = 0,
         allowsRemoteModelFetch: Bool = true,
-        allowsModelTesting: Bool = true,
         allowsManualModelAdd: Bool = true,
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
@@ -56,7 +53,6 @@ struct ProviderDetailView: View {
         self.addModelRequest = addModelRequest
         self.fetchModelsRequest = fetchModelsRequest
         self.allowsRemoteModelFetch = allowsRemoteModelFetch
-        self.allowsModelTesting = allowsModelTesting
         self.allowsManualModelAdd = allowsManualModelAdd
         _provider = State(initialValue: provider)
         self.onSave = onSave
@@ -135,15 +131,6 @@ struct ProviderDetailView: View {
         .toolbar {
             if showsToolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    if allowsModelTesting {
-                        Button {
-                            isShowingModelTest = true
-                        } label: {
-                            Image(systemName: "checkmark.seal")
-                        }
-                        .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
-                    }
-
                     if allowsRemoteModelFetch {
                         Button {
                             Task { await fetchAndMergeModels(showsProgress: true) }
@@ -168,11 +155,6 @@ struct ProviderDetailView: View {
         .sheet(isPresented: $isAddingModel) {
             NavigationStack {
                 ModelAddView(provider: $provider)
-            }
-        }
-        .sheet(isPresented: $isShowingModelTest) {
-            NavigationStack {
-                ModelConnectivityTestView(provider: provider)
             }
         }
         .onChange(of: provider) { _, _ in

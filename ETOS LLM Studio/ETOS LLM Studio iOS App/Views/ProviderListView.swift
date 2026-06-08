@@ -204,7 +204,6 @@ private struct ProviderConfigurationTabsView: View {
     @State private var hasUnsavedProviderConfiguration = false
     @State private var showUnsavedProviderAlert = false
     @State private var dismissAfterProviderSave = false
-    @State private var isShowingModelTest = false
 
     init(provider: Provider) {
         _provider = State(initialValue: provider)
@@ -218,7 +217,6 @@ private struct ProviderConfigurationTabsView: View {
                     addModelRequest: addModelRequest,
                     fetchModelsRequest: fetchModelsRequest,
                     allowsRemoteModelFetch: allowsRemoteModelFetch,
-                    allowsModelTesting: allowsModelTesting,
                     allowsManualModelAdd: allowsManualModelAdd
                 ) { updatedProvider in
                     updateProvider(updatedProvider)
@@ -269,14 +267,6 @@ private struct ProviderConfigurationTabsView: View {
             }
             if selectedTab == .models {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        isShowingModelTest = true
-                    } label: {
-                        Image(systemName: "checkmark.seal")
-                    }
-                    .accessibilityLabel(NSLocalizedString("模型测试", comment: "Model connectivity test button"))
-                    .disabled(!allowsModelTesting)
-
                     if allowsRemoteModelFetch {
                         Button {
                             fetchModelsRequest += 1
@@ -317,19 +307,10 @@ private struct ProviderConfigurationTabsView: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
         }
-        .sheet(isPresented: $isShowingModelTest) {
-            NavigationStack {
-                ModelConnectivityTestView(provider: provider)
-            }
-        }
     }
 
     private var allowsRemoteModelFetch: Bool {
         !LocalModelProviderBridge.isLocalProvider(provider) && provider.apiFormat.lowercased() != "anthropic"
-    }
-
-    private var allowsModelTesting: Bool {
-        !LocalModelProviderBridge.isLocalProvider(provider)
     }
 
     private var allowsManualModelAdd: Bool {
