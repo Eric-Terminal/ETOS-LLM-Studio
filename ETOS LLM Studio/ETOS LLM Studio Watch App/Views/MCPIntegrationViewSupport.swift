@@ -34,22 +34,9 @@ struct MCPServerDetailView: View {
                 }
 
                 Section(NSLocalizedString("连接控制", comment: "")) {
-                    Button(NSLocalizedString("连接", comment: "")) {
-                        manager.connect(to: server)
+                    Button(connectionActionTitle(for: status.connectionState)) {
+                        performConnectionAction(for: status.connectionState, server: server)
                     }
-                    .disabled(status.connectionState == .ready || status.connectionState == .connecting || isReconnecting(status.connectionState))
-
-                    Button(NSLocalizedString("断开", comment: "")) {
-                        manager.disconnect(server: server)
-                    }
-                    .disabled(status.connectionState == .idle)
-
-                    Button(NSLocalizedString("终止远端会话", comment: "")) {
-                        Task {
-                            await manager.terminateRemoteSession(for: server.id)
-                        }
-                    }
-                    .disabled(status.connectionState == .idle)
 
                     Toggle(NSLocalizedString("用于聊天", comment: ""), isOn: Binding(
                         get: { manager.status(for: server).isSelectedForChat },
@@ -61,15 +48,6 @@ struct MCPServerDetailView: View {
                         }
                     ))
                     .disabled(status.connectionState == .connecting || isReconnecting(status.connectionState))
-
-                    Button(NSLocalizedString("刷新工具/资源", comment: "")) {
-                        manager.refreshMetadata(for: server)
-                    }
-                    .disabled(status.connectionState != .ready || status.isBusy)
-
-                    if status.isBusy {
-                        ProgressView()
-                    }
                 }
 
                 Section(NSLocalizedString("工具", comment: "")) {
@@ -164,6 +142,31 @@ struct MCPServerDetailView: View {
             return true
         }
         return false
+    }
+
+    private func connectionActionTitle(for state: MCPManager.ConnectionState) -> String {
+        isConnectedOrConnecting(state)
+            ? NSLocalizedString("断开连接", comment: "")
+            : NSLocalizedString("连接", comment: "")
+    }
+
+    private func performConnectionAction(for state: MCPManager.ConnectionState, server: MCPServerConfiguration) {
+        if isConnectedOrConnecting(state) {
+            manager.disconnect(server: server)
+        } else {
+            manager.connect(to: server)
+        }
+    }
+
+    private func isConnectedOrConnecting(_ state: MCPManager.ConnectionState) -> Bool {
+        switch state {
+        case .connecting, .reconnecting, .ready:
+            return true
+        case .idle, .failed:
+            return false
+        @unknown default:
+            return false
+        }
     }
 }
 
