@@ -16,14 +16,33 @@ struct WatchAppToolCategoryDetailView: View {
 
     @ObservedObject private var manager = AppToolManager.shared
 
-    private var filteredTools: [AppToolCatalogItem] {
-        manager.tools.filter { item in
-            showEnabledOnly ? item.isEnabled : true
+    private var categoryStates: [AppToolCatalogCategoryState] {
+        ToolCatalogSupport.appToolCategoryStates(
+            tools: manager.tools,
+            chatToolsEnabled: manager.chatToolsEnabled,
+            isIsolatedSession: currentSessionIsolationActive
+        ) { kind in
+            manager.approvalPolicy(for: kind)
+        }
+    }
+
+    private var filteredCategoryStates: [AppToolCatalogCategoryState] {
+        categoryStates.filter { state in
+            showEnabledOnly ? state.configuredEnabledCount > 0 : true
         }
     }
 
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
+                    Text(NSLocalizedString("先按用途选择分类，再进入具体工具。", comment: "App tools grouped watch intro"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section(
                 header: Text(NSLocalizedString("启用状态", comment: "Enable status")),
                 footer: Text(appToolGroupFooterText)
@@ -39,7 +58,103 @@ struct WatchAppToolCategoryDetailView: View {
                 )
             }
 
-            Section(header: Text(NSLocalizedString("拓展工具", comment: "App tools section title"))) {
+            Section(header: Text(NSLocalizedString("工具分类", comment: "App tool categories section title"))) {
+                if filteredCategoryStates.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredCategoryStates) { state in
+                        NavigationLink {
+                            WatchAppToolCategoryToolsView(
+                                category: state.category,
+                                currentSessionIsolationActive: currentSessionIsolationActive,
+                                showEnabledOnly: showEnabledOnly
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(state.category.displayName)
+                                Text(state.category.summary)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(categoryStatusText(for: state))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(categoryStatusColor(for: state))
+                                Text(
+                                    String(
+                                        format: NSLocalizedString("工具 %d 个", comment: "Tool count"),
+                                        state.totalCount
+                                    )
+                                )
+                                .etFont(.caption2)
+                                .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("拓展工具", comment: "App tools section title"))
+    }
+
+    private var appToolGroupFooterText: String {
+        var lines = [NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，默认关闭，开启后才会暴露给模型。", comment: "App tools intro")]
+        if !manager.chatToolsEnabled {
+            lines.append(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private func categoryStatusText(for state: AppToolCatalogCategoryState) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            state.availableCount,
+            state.totalCount
+        )
+    }
+
+    private func categoryStatusColor(for state: AppToolCatalogCategoryState) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || state.availableCount == 0 {
+            return .secondary
+        }
+        return .green
+    }
+}
+
+struct WatchAppToolCategoryToolsView: View {
+    let category: AppToolCatalogCategory
+    let currentSessionIsolationActive: Bool
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = AppToolManager.shared
+
+    private var filteredTools: [AppToolCatalogItem] {
+        manager.tools.filter { item in
+            guard ToolCatalogSupport.appToolCategory(for: item.kind) == category else { return false }
+            if showEnabledOnly {
+                return item.isEnabled
+            }
+            return true
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(category.displayName)
+                    Text(category.detailDescription)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("工具", comment: "Tools section title"))) {
                 if filteredTools.isEmpty {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
@@ -65,15 +180,7 @@ struct WatchAppToolCategoryDetailView: View {
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("拓展工具", comment: "App tools section title"))
-    }
-
-    private var appToolGroupFooterText: String {
-        var lines = [NSLocalizedString("这里用于承接后续要给 AI 写的本地工具，默认关闭，开启后才会暴露给模型。", comment: "App tools intro")]
-        if !manager.chatToolsEnabled {
-            lines.append(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
-        }
-        return lines.joined(separator: "\n\n")
+        .navigationTitle(category.displayName)
     }
 
     private func appToolStatusText(for item: AppToolCatalogItem) -> String {

@@ -236,17 +236,39 @@ struct AppToolCategoryDetailView: View {
     let showEnabledOnly: Bool
 
     @ObservedObject private var manager = AppToolManager.shared
+    @State private var isShowingIntroDetails = false
 
-    private var filteredTools: [AppToolCatalogItem] {
-        manager.tools.filter { item in
-            let keywords = [
-                item.kind.displayName,
-                item.kind.summary,
-                item.kind.toolName
-            ]
-            guard matchesSearch(for: keywords) else { return false }
+    private var categoryStates: [AppToolCatalogCategoryState] {
+        ToolCatalogSupport.appToolCategoryStates(
+            tools: manager.tools,
+            chatToolsEnabled: manager.chatToolsEnabled,
+            isIsolatedSession: currentSessionIsolationActive
+        ) { kind in
+            manager.approvalPolicy(for: kind)
+        }
+    }
+
+    private var filteredCategoryStates: [AppToolCatalogCategoryState] {
+        categoryStates.filter { state in
+            let matchedTools = state.tools.filter { item in
+                matchesSearch(
+                    for: [
+                        item.kind.displayName,
+                        item.kind.summary,
+                        item.kind.toolName
+                    ]
+                )
+            }
+            let matchesCategory = matchesSearch(
+                for: [
+                    state.category.displayName,
+                    state.category.summary,
+                    state.category.detailDescription
+                ]
+            )
+            guard matchesCategory || !matchedTools.isEmpty else { return false }
             if showEnabledOnly {
-                return item.isEnabled
+                return state.configuredEnabledCount > 0
             }
             return true
         }
@@ -254,6 +276,15 @@ struct AppToolCategoryDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                ToolCenterIntroCard(
+                    title: "拓展工具",
+                    summary: "按用途查看本地工具，先选类别，再调整具体工具。",
+                    details: "拓展工具分类说明正文",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
             Section(
                 header: Text(NSLocalizedString("启用状态", comment: "Enable status")),
                 footer: Text(appToolGroupFooterText)
@@ -270,24 +301,30 @@ struct AppToolCategoryDetailView: View {
             }
 
             Section(
-                header: Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
+                header: Text(NSLocalizedString("工具分类", comment: "App tool categories section title"))
             ) {
-                if filteredTools.isEmpty {
+                if filteredCategoryStates.isEmpty {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(filteredTools) { item in
+                    ForEach(filteredCategoryStates) { state in
                         NavigationLink {
-                            AppToolCenterDetailView(
-                                kind: item.kind,
-                                currentSessionIsolationActive: currentSessionIsolationActive
+                            AppToolCategoryToolsView(
+                                category: state.category,
+                                currentSessionIsolationActive: currentSessionIsolationActive,
+                                searchText: searchText,
+                                showEnabledOnly: showEnabledOnly
                             )
                         } label: {
                             ToolCenterStatusRow(
-                                title: item.kind.displayName,
-                                subtitle: item.kind.toolName,
-                                detail: appToolStatusText(for: item),
-                                color: appToolStatusColor(for: item)
+                                title: state.category.displayName,
+                                subtitle: state.category.summary,
+                                detail: categoryStatusText(for: state),
+                                auxiliary: String(
+                                    format: NSLocalizedString("工具 %d 个", comment: "Tool count"),
+                                    state.totalCount
+                                ),
+                                color: categoryStatusColor(for: state)
                             )
                         }
                     }
@@ -303,6 +340,113 @@ struct AppToolCategoryDetailView: View {
             lines.append(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
         }
         return lines.joined(separator: "\n\n")
+    }
+
+    private func matchesSearch(for keywords: [String]) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return keywords.contains { keyword in
+            keyword.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private func categoryStatusText(for state: AppToolCatalogCategoryState) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            state.availableCount,
+            state.totalCount
+        )
+    }
+
+    private func categoryStatusColor(for state: AppToolCatalogCategoryState) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || state.availableCount == 0 {
+            return .secondary
+        }
+        return .green
+    }
+}
+
+struct AppToolCategoryToolsView: View {
+    let category: AppToolCatalogCategory
+    let currentSessionIsolationActive: Bool
+    let searchText: String
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = AppToolManager.shared
+    @State private var isShowingIntroDetails = false
+
+    private var categoryTools: [AppToolCatalogItem] {
+        manager.tools.filter { item in
+            ToolCatalogSupport.appToolCategory(for: item.kind) == category
+        }
+    }
+
+    private var filteredTools: [AppToolCatalogItem] {
+        categoryTools.filter { item in
+            let matchesTool = matchesSearch(
+                for: [
+                    item.kind.displayName,
+                    item.kind.summary,
+                    item.kind.toolName
+                ]
+            )
+            let matchesCategory = matchesSearch(
+                for: [
+                    category.displayName,
+                    category.summary,
+                    category.detailDescription
+                ]
+            )
+            guard matchesTool || matchesCategory else { return false }
+            if showEnabledOnly {
+                return item.isEnabled
+            }
+            return true
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ToolCenterIntroCard(
+                    title: category.displayName,
+                    summary: category.summary,
+                    details: category.detailDescription,
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("工具", comment: "Tools section title"))) {
+                if filteredTools.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredTools) { item in
+                        NavigationLink {
+                            AppToolCenterDetailView(
+                                kind: item.kind,
+                                currentSessionIsolationActive: currentSessionIsolationActive
+                            )
+                        } label: {
+                            ToolCenterStatusRow(
+                                title: item.kind.displayName,
+                                subtitle: item.kind.toolName,
+                                detail: appToolStatusText(for: item),
+                                auxiliary: item.kind.summary,
+                                color: appToolStatusColor(for: item)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(category.displayName)
     }
 
     private func matchesSearch(for keywords: [String]) -> Bool {
@@ -480,6 +624,254 @@ struct AppToolCenterDetailView: View {
         } set: { isEnabled in
             permissionCenter.setAutoApproveDisabled(!isEnabled, for: kind.toolName)
         }
+    }
+}
+
+struct SkillToolCategoryDetailView: View {
+    let currentSessionIsolationActive: Bool
+    let searchText: String
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = SkillManager.shared
+    @State private var isShowingIntroDetails = false
+
+    private var filteredSkills: [SkillMetadata] {
+        manager.skills
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter { skill in
+                let matchesSkill = matchesSearch(
+                    for: [
+                        skill.name,
+                        skill.description,
+                        skill.compatibility ?? "",
+                        "Agent Skills",
+                        "use_skill"
+                    ]
+                )
+                guard matchesSkill else { return false }
+                if showEnabledOnly {
+                    return manager.isSkillEnabled(skill.name)
+                }
+                return true
+            }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ToolCenterIntroCard(
+                    title: "Agent Skills",
+                    summary: "把已安装技能通过 use_skill 暴露给模型。",
+                    details: "Agent Skills 工具说明正文",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
+            Section(
+                header: Text(NSLocalizedString("启用状态", comment: "Enable status")),
+                footer: Text(skillGroupFooterText)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(NSLocalizedString("向模型暴露 Agent Skills（use_skill）", comment: ""),
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("技能", comment: "Skills section title"))) {
+                if manager.skills.isEmpty {
+                    Text(NSLocalizedString("当前还没有已安装技能，可在设置里的 Agent Skills 页面添加。", comment: "没有已安装技能提示"))
+                        .foregroundStyle(.secondary)
+                } else if filteredSkills.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredSkills) { skill in
+                        HStack(alignment: .top, spacing: 12) {
+                            ToolCenterStatusRow(
+                                title: skill.name,
+                                subtitle: skill.description,
+                                detail: skillStatusText(for: skill),
+                                auxiliary: skill.compatibility,
+                                color: skillStatusColor(for: skill)
+                            )
+
+                            Spacer(minLength: 8)
+
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { manager.isSkillEnabled(skill.name) },
+                                    set: { manager.setSkillEnabled(name: skill.name, isEnabled: $0) }
+                                )
+                            )
+                            .labelsHidden()
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Agent Skills")
+    }
+
+    private var skillGroupFooterText: String {
+        var lines = [NSLocalizedString("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。", comment: "Agent Skills 工具中心页脚")]
+        if !manager.chatToolsEnabled {
+            lines.append(NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示"))
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private func matchesSearch(for keywords: [String]) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return keywords.contains { keyword in
+            keyword.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private func skillStatusText(for skill: SkillMetadata) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
+        }
+        return manager.isSkillEnabled(skill.name)
+            ? NSLocalizedString("该技能当前可参与聊天。", comment: "Agent Skills 可参与聊天状态")
+            : NSLocalizedString("已停用。", comment: "工具已停用状态")
+    }
+
+    private func skillStatusColor(for skill: SkillMetadata) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !manager.isSkillEnabled(skill.name) {
+            return .secondary
+        }
+        return .green
+    }
+}
+
+struct ShortcutToolCategoryDetailView: View {
+    let currentSessionIsolationActive: Bool
+    let searchText: String
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = ShortcutToolManager.shared
+    @State private var isShowingIntroDetails = false
+
+    private var filteredTools: [ShortcutToolDefinition] {
+        manager.tools
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            .filter { tool in
+                let matchesTool = matchesSearch(
+                    for: [
+                        tool.displayName,
+                        tool.name,
+                        tool.effectiveDescription
+                    ]
+                )
+                guard matchesTool else { return false }
+                if showEnabledOnly {
+                    return tool.isEnabled
+                }
+                return true
+            }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ToolCenterIntroCard(
+                    title: "快捷指令工具",
+                    summary: "把已导入的 Siri 快捷指令作为聊天工具使用。",
+                    details: "快捷指令工具说明正文",
+                    isExpanded: $isShowingIntroDetails
+                )
+            }
+
+            Section(
+                header: Text(NSLocalizedString("启用状态", comment: "Enable status")),
+                footer: Text(shortcutGroupFooterText)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("向模型暴露快捷指令工具", comment: "Expose shortcut tools to model"),
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))) {
+                if manager.tools.isEmpty {
+                    Text(NSLocalizedString("当前还没有已导入的快捷指令工具。", comment: "No imported shortcut tools"))
+                        .foregroundStyle(.secondary)
+                } else if filteredTools.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredTools) { tool in
+                        NavigationLink {
+                            ShortcutToolCenterDetailView(
+                                toolID: tool.id,
+                                currentSessionIsolationActive: currentSessionIsolationActive
+                            )
+                        } label: {
+                            ToolCenterStatusRow(
+                                title: tool.displayName,
+                                subtitle: tool.name,
+                                detail: shortcutStatusText(for: tool),
+                                auxiliary: tool.effectiveDescription,
+                                color: shortcutStatusColor(for: tool)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))
+    }
+
+    private var shortcutGroupFooterText: String {
+        var lines = [NSLocalizedString("统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。", comment: "Shortcut tools footer")]
+        if !manager.chatToolsEnabled {
+            lines.append(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private func matchesSearch(for keywords: [String]) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return keywords.contains { keyword in
+            keyword.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private func shortcutStatusText(for tool: ShortcutToolDefinition) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        return tool.isEnabled
+            ? NSLocalizedString("已启用。", comment: "Tool enabled status")
+            : NSLocalizedString("已停用。", comment: "Tool disabled status")
+    }
+
+    private func shortcutStatusColor(for tool: ShortcutToolDefinition) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !tool.isEnabled {
+            return .secondary
+        }
+        return .green
     }
 }
 

@@ -78,6 +78,46 @@ struct ToolCenterStatusRow: View {
     }
 }
 
+struct ToolCenterIntroCard: View {
+    let title: String
+    let summary: String
+    let details: String
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(NSLocalizedString(title, comment: "工具中心介绍卡片标题"))
+                .etFont(.headline.weight(.semibold))
+            Text(NSLocalizedString(summary, comment: "工具中心介绍卡片摘要"))
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isExpanded = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: "工具中心介绍卡片展开按钮"))
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: $isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString(details, comment: "工具中心介绍卡片详情"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString(title, comment: "工具中心介绍卡片详情标题"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+    }
+}
+
 extension ToolCenterView {
     var overviewSection: some View {
         Section {
@@ -130,41 +170,20 @@ extension ToolCenterView {
         details: String,
         isExpanded: Binding<Bool>
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(NSLocalizedString(title, comment: "工具中心介绍卡片标题"))
-                .etFont(.headline.weight(.semibold))
-            Text(NSLocalizedString(summary, comment: "工具中心介绍卡片摘要"))
-                .etFont(.subheadline)
-                .foregroundStyle(.secondary)
-            Button {
-                isExpanded.wrappedValue = true
-            } label: {
-                Text(NSLocalizedString("进一步了解…", comment: "工具中心介绍卡片展开按钮"))
-                    .etFont(.footnote.weight(.medium))
-                    .foregroundStyle(.blue)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
-        .sheet(isPresented: isExpanded) {
-            NavigationStack {
-                ScrollView {
-                    Text(NSLocalizedString(details, comment: "工具中心介绍卡片详情"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
-                .navigationTitle(NSLocalizedString(title, comment: "工具中心介绍卡片详情标题"))
-                .navigationBarTitleDisplayMode(.inline)
-            }
-        }
+        ToolCenterIntroCard(
+            title: title,
+            summary: summary,
+            details: details,
+            isExpanded: isExpanded
+        )
     }
 
     var appToolSection: some View {
         Section(
-            header: Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
+            header: Text(NSLocalizedString("拓展工具", comment: "App tools section title")),
+            footer: Text(NSLocalizedString("拓展工具已按用途分组；进入分类后再查看具体工具、启用状态与审批策略。", comment: "App tool grouped section footer"))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
         ) {
             Toggle(
                 NSLocalizedString("向模型暴露拓展工具", comment: "Expose app tools to model"),
@@ -189,6 +208,10 @@ extension ToolCenterView {
                         appToolManager.tools.count
                     ),
                     detail: appToolCategoryStatusText,
+                    auxiliary: String(
+                        format: NSLocalizedString("分类 %d 个", comment: "App tool category count"),
+                        appToolCategoryStates.count
+                    ),
                     color: appToolCategoryStatusColor
                 )
             }
@@ -289,27 +312,23 @@ extension ToolCenterView {
                 )
             )
 
-            if !shortcutManager.chatToolsEnabled {
-                Text(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            ForEach(filteredShortcutTools) { tool in
-                NavigationLink {
-                    ShortcutToolCenterDetailView(
-                        toolID: tool.id,
-                        currentSessionIsolationActive: currentSessionIsolationActive
-                    )
-                } label: {
-                    ToolCenterStatusRow(
-                        title: tool.displayName,
-                        subtitle: tool.name,
-                        detail: shortcutStatusText(for: tool),
-                        auxiliary: tool.effectiveDescription,
-                        color: shortcutStatusColor(for: tool)
-                    )
-                }
+            NavigationLink {
+                ShortcutToolCategoryDetailView(
+                    currentSessionIsolationActive: currentSessionIsolationActive,
+                    searchText: searchText,
+                    showEnabledOnly: showEnabledOnly
+                )
+            } label: {
+                ToolCenterStatusRow(
+                    title: NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"),
+                    subtitle: String(
+                        format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                        configuredShortcutCount,
+                        shortcutManager.tools.count
+                    ),
+                    detail: shortcutCategoryStatusText,
+                    color: shortcutCategoryStatusColor
+                )
             }
         }
     }
@@ -328,42 +347,23 @@ extension ToolCenterView {
                 )
             )
 
-            if !skillManager.chatToolsEnabled {
-                Text(NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if skillManager.skills.isEmpty {
-                Text(NSLocalizedString("当前还没有已安装技能，可在设置里的 Agent Skills 页面添加。", comment: "没有已安装技能提示"))
-                    .foregroundStyle(.secondary)
-            } else if filteredSkills.isEmpty {
-                Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(filteredSkills) { skill in
-                    HStack(alignment: .top, spacing: 12) {
-                        ToolCenterStatusRow(
-                            title: skill.name,
-                            subtitle: skill.description,
-                            detail: skillStatusText(for: skill),
-                            auxiliary: skill.compatibility,
-                            color: skillStatusColor(for: skill)
-                        )
-
-                        Spacer(minLength: 8)
-
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { skillManager.isSkillEnabled(skill.name) },
-                                set: { skillManager.setSkillEnabled(name: skill.name, isEnabled: $0) }
-                            )
-                        )
-                        .labelsHidden()
-                    }
-                    .padding(.vertical, 2)
-                }
+            NavigationLink {
+                SkillToolCategoryDetailView(
+                    currentSessionIsolationActive: currentSessionIsolationActive,
+                    searchText: searchText,
+                    showEnabledOnly: showEnabledOnly
+                )
+            } label: {
+                ToolCenterStatusRow(
+                    title: "Agent Skills",
+                    subtitle: String(
+                        format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                        configuredSkillCount,
+                        skillManager.skills.count
+                    ),
+                    detail: skillCategoryStatusText,
+                    color: skillCategoryStatusColor
+                )
             }
         }
     }
@@ -533,6 +533,54 @@ extension ToolCenterView {
 
     var appToolCategoryStatusColor: Color {
         if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || availableAppToolCount == 0 {
+            return .secondary
+        }
+        return .green
+    }
+
+    var shortcutCategoryStatusText: String {
+        if shortcutManager.tools.isEmpty {
+            return NSLocalizedString("当前还没有已导入的快捷指令工具。", comment: "No imported shortcut tools")
+        }
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !shortcutManager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            availableShortcutCount,
+            shortcutManager.tools.count
+        )
+    }
+
+    var shortcutCategoryStatusColor: Color {
+        if currentSessionIsolationActive || !shortcutManager.chatToolsEnabled || availableShortcutCount == 0 {
+            return .secondary
+        }
+        return .green
+    }
+
+    var skillCategoryStatusText: String {
+        if skillManager.skills.isEmpty {
+            return NSLocalizedString("当前还没有已安装技能，可在设置里的 Agent Skills 页面添加。", comment: "没有已安装技能提示")
+        }
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
+        }
+        if !skillManager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            availableSkillCount,
+            skillManager.skills.count
+        )
+    }
+
+    var skillCategoryStatusColor: Color {
+        if currentSessionIsolationActive || !skillManager.chatToolsEnabled || availableSkillCount == 0 {
             return .secondary
         }
         return .green

@@ -77,9 +77,19 @@ struct ToolCenterView: View {
             }
     }
 
-    private var filteredAppTools: [AppToolCatalogItem] {
-        appToolManager.tools.filter { item in
-            showEnabledOnly ? item.isEnabled : true
+    private var appToolCategoryStates: [AppToolCatalogCategoryState] {
+        ToolCatalogSupport.appToolCategoryStates(
+            tools: appToolManager.tools,
+            chatToolsEnabled: appToolManager.chatToolsEnabled,
+            isIsolatedSession: currentSessionIsolationActive
+        ) { kind in
+            appToolManager.approvalPolicy(for: kind)
+        }
+    }
+
+    private var filteredAppToolCategoryStates: [AppToolCatalogCategoryState] {
+        appToolCategoryStates.filter { state in
+            showEnabledOnly ? state.configuredEnabledCount > 0 : true
         }
     }
 
@@ -149,23 +159,8 @@ struct ToolCenterView: View {
             Section {
                 settingsIntroCard(
                     title: "工具中心",
-                    summary: "统一查看聊天可用工具，并集中调整启用状态。",
-                    details: """
-                    页面作用
-                    • 快速判断各类工具在“配置层”与“会话层”是否真正可用。
-
-                    指标怎么读
-                    • 配置已启用：你在设置里已经打开。
-                    • 当前会话实际可用：在总开关、审批策略、隔离策略后仍可用。
-
-                    推荐流程
-                    1. 先看汇总数字，确认问题范围。
-                    2. 开启“仅显示已启用”缩小排查范围。
-                    3. 进入具体工具页调整策略与状态。
-
-                    常见情况
-                    • 如果显示世界书隔离生效，记忆、MCP、Agent Skills、快捷指令可能被会话策略屏蔽。
-                    """,
+                    summary: "先看当前会话能用什么，再按工具来源进入细分设置。",
+                    details: "工具中心新版说明正文",
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -366,6 +361,14 @@ struct ToolCenterView: View {
                         Text(appToolCategoryStatusText)
                             .etFont(.caption2)
                             .foregroundStyle(appToolCategoryStatusColor)
+                        Text(
+                            String(
+                                format: NSLocalizedString("分类 %d 个", comment: "App tool category count"),
+                                appToolCategoryStates.count
+                            )
+                        )
+                        .etFont(.caption2)
+                        .foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -389,31 +392,26 @@ struct ToolCenterView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if skillManager.skills.isEmpty {
-                    Text(NSLocalizedString("当前还没有已安装技能，可在 Agent Skills 页面添加。", comment: "没有已安装技能提示"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(filteredSkills) { skill in
-                        HStack(alignment: .top, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(skill.name)
-                                Text(skill.description)
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(skillStatusText(for: skill))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(skillStatusColor(for: skill))
-                            }
-                            Spacer(minLength: 4)
-                            Toggle(
-                                "",
-                                isOn: Binding(
-                                    get: { skillManager.isSkillEnabled(skill.name) },
-                                    set: { skillManager.setSkillEnabled(name: skill.name, isEnabled: $0) }
-                                )
+                NavigationLink {
+                    WatchSkillToolCategoryDetailView(
+                        currentSessionIsolationActive: currentSessionIsolationActive,
+                        showEnabledOnly: showEnabledOnly
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Agent Skills")
+                        Text(
+                            String(
+                                format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                                configuredSkillCount,
+                                skillManager.skills.count
                             )
-                            .labelsHidden()
-                        }
+                        )
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        Text(skillCategoryStatusText)
+                            .etFont(.caption2)
+                            .foregroundStyle(skillCategoryStatusColor)
                     }
                 }
             }
@@ -432,27 +430,31 @@ struct ToolCenterView: View {
                     )
                 )
 
-                ForEach(filteredShortcutTools) { tool in
-                    NavigationLink {
-                        WatchShortcutToolCenterDetailView(
-                            toolID: tool.id,
-                            currentSessionIsolationActive: currentSessionIsolationActive
+                NavigationLink {
+                    WatchShortcutToolCategoryDetailView(
+                        currentSessionIsolationActive: currentSessionIsolationActive,
+                        showEnabledOnly: showEnabledOnly
+                    )
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))
+                        Text(
+                            String(
+                                format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
+                                configuredShortcutCount,
+                                shortcutManager.tools.count
+                            )
                         )
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(tool.displayName)
-                            Text(tool.name)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text(shortcutStatusText(for: tool))
-                                .etFont(.caption2)
-                                .foregroundStyle(shortcutStatusColor(for: tool))
-                        }
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        Text(shortcutCategoryStatusText)
+                            .etFont(.caption2)
+                            .foregroundStyle(shortcutCategoryStatusColor)
                     }
                 }
             }
 
-            if filteredBuiltInStates.isEmpty && filteredAppTools.isEmpty && filteredMCPTools.isEmpty && filteredSkills.isEmpty && filteredShortcutTools.isEmpty {
+            if filteredBuiltInStates.isEmpty && filteredAppToolCategoryStates.isEmpty && filteredMCPTools.isEmpty && filteredSkills.isEmpty && filteredShortcutTools.isEmpty {
                 Section {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
@@ -631,6 +633,54 @@ struct ToolCenterView: View {
 
     private var appToolCategoryStatusColor: Color {
         if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || availableAppToolCount == 0 {
+            return .secondary
+        }
+        return .green
+    }
+
+    private var shortcutCategoryStatusText: String {
+        if shortcutManager.tools.isEmpty {
+            return NSLocalizedString("当前还没有已导入的快捷指令工具。", comment: "No imported shortcut tools")
+        }
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !shortcutManager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            availableShortcutCount,
+            shortcutManager.tools.count
+        )
+    }
+
+    private var shortcutCategoryStatusColor: Color {
+        if currentSessionIsolationActive || !shortcutManager.chatToolsEnabled || availableShortcutCount == 0 {
+            return .secondary
+        }
+        return .green
+    }
+
+    private var skillCategoryStatusText: String {
+        if skillManager.skills.isEmpty {
+            return NSLocalizedString("当前还没有已安装技能，可在 Agent Skills 页面添加。", comment: "没有已安装技能提示")
+        }
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
+        }
+        if !skillManager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
+        }
+        return String(
+            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
+            availableSkillCount,
+            skillManager.skills.count
+        )
+    }
+
+    private var skillCategoryStatusColor: Color {
+        if currentSessionIsolationActive || !skillManager.chatToolsEnabled || availableSkillCount == 0 {
             return .secondary
         }
         return .green

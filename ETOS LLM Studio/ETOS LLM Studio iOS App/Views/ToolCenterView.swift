@@ -64,16 +64,37 @@ struct ToolCenterView: View {
         ToolCatalogSupport.availableCount(for: builtInStates)
     }
 
-    var filteredAppTools: [AppToolCatalogItem] {
-        appToolManager.tools.filter { item in
-            let keywords = [
-                item.kind.displayName,
-                item.kind.summary,
-                item.kind.toolName
-            ]
-            guard matchesSearch(for: keywords) else { return false }
+    var appToolCategoryStates: [AppToolCatalogCategoryState] {
+        ToolCatalogSupport.appToolCategoryStates(
+            tools: appToolManager.tools,
+            chatToolsEnabled: appToolManager.chatToolsEnabled,
+            isIsolatedSession: currentSessionIsolationActive
+        ) { kind in
+            appToolManager.approvalPolicy(for: kind)
+        }
+    }
+
+    var filteredAppToolCategoryStates: [AppToolCatalogCategoryState] {
+        appToolCategoryStates.filter { state in
+            let matchedTools = state.tools.filter { item in
+                matchesSearch(
+                    for: [
+                        item.kind.displayName,
+                        item.kind.summary,
+                        item.kind.toolName
+                    ]
+                )
+            }
+            let matchesCategory = matchesSearch(
+                for: [
+                    state.category.displayName,
+                    state.category.summary,
+                    state.category.detailDescription
+                ]
+            )
+            guard matchesCategory || !matchedTools.isEmpty else { return false }
             if showEnabledOnly {
-                return item.isEnabled
+                return state.configuredEnabledCount > 0
             }
             return true
         }
@@ -84,7 +105,7 @@ struct ToolCenterView: View {
         if query.isEmpty {
             return true
         }
-        if !filteredAppTools.isEmpty {
+        if !filteredAppToolCategoryStates.isEmpty {
             return true
         }
         return matchesSearch(
@@ -200,6 +221,22 @@ struct ToolCenterView: View {
         )
     }
 
+    var isShortcutSectionVisible: Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            return true
+        }
+        if !filteredShortcutTools.isEmpty {
+            return true
+        }
+        return matchesSearch(
+            for: [
+                NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"),
+                NSLocalizedString("向模型暴露快捷指令工具", comment: "Expose shortcut tools to model")
+            ]
+        )
+    }
+
     var configuredMCPCount: Int {
         mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
@@ -248,7 +285,7 @@ struct ToolCenterView: View {
         || isAppToolSectionVisible
         || isMCPSectionVisible
         || isSkillsSectionVisible
-        || !filteredShortcutTools.isEmpty
+        || isShortcutSectionVisible
     }
 
     var body: some View {
@@ -256,31 +293,8 @@ struct ToolCenterView: View {
             Section {
                 settingsIntroCard(
                     title: "工具中心",
-                    summary: "集中管理内置记忆、拓展工具、MCP、Agent Skills 与快捷指令的聊天暴露状态。",
-                    details: """
-                    适用场景
-                    • 你想快速判断“当前会话到底能用哪些工具”。
-                    • 你想统一调整不同类型工具的启用与审批策略。
-
-                    页面怎么看
-                    • 配置已启用：表示你在设置层面已打开。
-                    • 当前会话可用：在“总开关 + 审批策略 + 会话隔离”等条件下，聊天时真的可用。
-                    • 两个数字不一致通常不是 bug，而是被会话条件限制（例如世界书隔离发送）。
-
-                    推荐使用流程
-                    1. 先看概览区，确认五类工具的可用数量。
-                    2. 用“仅显示已启用”快速聚焦当前生效配置。
-                    3. 分别进入内置/拓展/MCP/Skills/快捷指令分类做单项微调。
-
-                    关键开关说明
-                    • 启用记忆系统：决定记忆相关内置工具是否可参与聊天。
-                    • 各分类“向模型暴露…工具”：控制该类工具是否整体开放给模型。
-                    • 审批策略：决定调用前是否确认、自动通过或拒绝。
-
-                    排查建议
-                    • 工具不生效：优先核对“当前会话可用”而不是“配置已启用”。
-                    • 会话隔离提示为橙色时：记忆、MCP、Agent Skills、快捷指令会被会话级策略屏蔽。
-                    """,
+                    summary: "先看当前会话能用什么，再按工具来源进入细分设置。",
+                    details: "工具中心新版说明正文",
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -297,7 +311,9 @@ struct ToolCenterView: View {
             if isSkillsSectionVisible {
                 skillsSection
             }
-            shortcutSection
+            if isShortcutSectionVisible {
+                shortcutSection
+            }
 
             if !hasVisibleTools {
                 Section {

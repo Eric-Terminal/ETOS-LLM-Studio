@@ -500,6 +500,212 @@ struct WatchMCPToolCenterDetailView: View {
     }
 }
 
+struct WatchSkillToolCategoryDetailView: View {
+    let currentSessionIsolationActive: Bool
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = SkillManager.shared
+
+    private var filteredSkills: [SkillMetadata] {
+        manager.skills
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter { skill in
+                showEnabledOnly ? manager.isSkillEnabled(skill.name) : true
+            }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Agent Skills")
+                    Text(NSLocalizedString("把已安装技能通过 use_skill 暴露给模型。", comment: "Agent Skills intro summary"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("启用状态", comment: "Enable status")),
+                footer: Text(skillGroupFooterText)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(NSLocalizedString("向模型暴露 Agent Skills（use_skill）", comment: ""),
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("技能", comment: "Skills section title"))) {
+                if manager.skills.isEmpty {
+                    Text(NSLocalizedString("当前还没有已安装技能，可在 Agent Skills 页面添加。", comment: "没有已安装技能提示"))
+                        .foregroundStyle(.secondary)
+                } else if filteredSkills.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredSkills) { skill in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(skill.name)
+                                Text(skill.description)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(skillStatusText(for: skill))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(skillStatusColor(for: skill))
+                            }
+                            Spacer(minLength: 4)
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { manager.isSkillEnabled(skill.name) },
+                                    set: { manager.setSkillEnabled(name: skill.name, isEnabled: $0) }
+                                )
+                            )
+                            .labelsHidden()
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Agent Skills")
+    }
+
+    private var skillGroupFooterText: String {
+        var lines = [NSLocalizedString("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。", comment: "Agent Skills 工具中心页脚")]
+        if !manager.chatToolsEnabled {
+            lines.append(NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示"))
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private func skillStatusText(for skill: SkillMetadata) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
+        }
+        return manager.isSkillEnabled(skill.name)
+            ? NSLocalizedString("该技能当前可参与聊天。", comment: "Agent Skills 可参与聊天状态")
+            : NSLocalizedString("已停用。", comment: "工具已停用状态")
+    }
+
+    private func skillStatusColor(for skill: SkillMetadata) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !manager.isSkillEnabled(skill.name) {
+            return .secondary
+        }
+        return .green
+    }
+}
+
+struct WatchShortcutToolCategoryDetailView: View {
+    let currentSessionIsolationActive: Bool
+    let showEnabledOnly: Bool
+
+    @ObservedObject private var manager = ShortcutToolManager.shared
+
+    private var filteredTools: [ShortcutToolDefinition] {
+        manager.tools
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            .filter { tool in
+                showEnabledOnly ? tool.isEnabled : true
+            }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))
+                    Text(NSLocalizedString("把已导入的 Siri 快捷指令作为聊天工具使用。", comment: "Shortcut tools intro summary"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("启用状态", comment: "Enable status")),
+                footer: Text(shortcutGroupFooterText)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("向模型暴露快捷指令工具", comment: "Expose shortcut tools to model"),
+                    isOn: Binding(
+                        get: { manager.chatToolsEnabled },
+                        set: { manager.setChatToolsEnabled($0) }
+                    )
+                )
+            }
+
+            Section(header: Text(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))) {
+                if manager.tools.isEmpty {
+                    Text(NSLocalizedString("当前还没有已导入的快捷指令工具。", comment: "No imported shortcut tools"))
+                        .foregroundStyle(.secondary)
+                } else if filteredTools.isEmpty {
+                    Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(filteredTools) { tool in
+                        NavigationLink {
+                            WatchShortcutToolCenterDetailView(
+                                toolID: tool.id,
+                                currentSessionIsolationActive: currentSessionIsolationActive
+                            )
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(tool.displayName)
+                                Text(tool.name)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(shortcutStatusText(for: tool))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(shortcutStatusColor(for: tool))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))
+    }
+
+    private var shortcutGroupFooterText: String {
+        var lines = [NSLocalizedString("统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。", comment: "Shortcut tools footer")]
+        if !manager.chatToolsEnabled {
+            lines.append(NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation"))
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private func shortcutStatusText(for tool: ShortcutToolDefinition) -> String {
+        if currentSessionIsolationActive {
+            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        }
+        if !manager.chatToolsEnabled {
+            return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
+        }
+        return tool.isEnabled
+            ? NSLocalizedString("已启用。", comment: "Tool enabled status")
+            : NSLocalizedString("已停用。", comment: "Tool disabled status")
+    }
+
+    private func shortcutStatusColor(for tool: ShortcutToolDefinition) -> Color {
+        if currentSessionIsolationActive || !manager.chatToolsEnabled || !tool.isEnabled {
+            return .secondary
+        }
+        return .green
+    }
+}
+
 struct WatchShortcutToolCenterDetailView: View {
     let toolID: UUID
     let currentSessionIsolationActive: Bool
