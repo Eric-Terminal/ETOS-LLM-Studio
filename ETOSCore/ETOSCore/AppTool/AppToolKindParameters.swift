@@ -181,6 +181,11 @@ extension AppToolKind {
                         "type": .string("string"),
                         "description": .string(NSLocalizedString("自定义工具脚本。必须声明同步 function main(input)，不能依赖 Node.js、文件系统或原生网络 API。", comment: "Create custom JS tool code parameter description"))
                     ]),
+                    "validation_input": .dictionary([
+                        "type": .string("object"),
+                        "additionalProperties": .bool(true),
+                        "description": .string(NSLocalizedString("创建前试运行 main(input) 的示例 JSON 输入。工具需要必填参数时必须提供一份能通过脚本校验的输入；省略时使用空对象。验证失败则不会保存工具。", comment: "Create custom JS tool validation input parameter description"))
+                    ]),
                     "enabled": .dictionary([
                         "type": .string("boolean"),
                         "description": .string(NSLocalizedString("创建后是否启用，默认 true。", comment: "Create custom JS tool enabled parameter description"))

@@ -43,7 +43,7 @@ extension AppToolKind {
             )
         case .createCustomJSCJSTool:
             return NSLocalizedString(
-                "创建或覆盖一个 AI 可复用的 JavaScriptCore（JSC）自定义工具。脚本会保存到应用 Application Support 下的 CustomJSTools 独立目录，每个工具包含 manifest.json 与 script.js。脚本必须声明同步 function main(input)，以后会以 app_custom_jsc_<tool_id> 暴露给模型。能力边界：没有 Node.js、文件系统、原生网络 API 或 Promise 返回值能力。",
+                "创建或覆盖一个 AI 可复用的 JavaScriptCore（JSC）自定义工具。脚本会保存到应用 Application Support 下的 CustomJSTools 独立目录，每个工具包含 manifest.json 与 script.js。脚本必须声明同步 function main(input)，创建前会用 validation_input 试运行；如果工具需要参数，请提供一份能通过校验的 validation_input，否则验证失败不会保存。以后会以 app_custom_jsc_<tool_id> 暴露给模型。能力边界：没有 Node.js、文件系统、原生网络 API 或 Promise 返回值能力。",
                 comment: "Create custom JSC JS tool description sent to model"
             )
         case .executeWebKitJavaScript:
@@ -53,7 +53,7 @@ extension AppToolKind {
             )
         case .createCustomWebKitJSTool:
             return NSLocalizedString(
-                "创建或覆盖一个 AI 可复用的 watchOS WebKit JavaScript bridge 自定义工具。脚本会保存到应用 Application Support 下的 CustomJSTools 独立目录，每个工具包含 manifest.json 与 script.js。脚本必须声明同步 function main(input)，以后会以 app_custom_webkit_js_<tool_id> 暴露给模型。能力边界：这是 WebKit JS bridge，不是 JavaScriptCore.framework；没有 Node.js、文件系统、原生网络 API、外部页面 DOM 或 Promise 返回值能力。",
+                "创建或覆盖一个 AI 可复用的 watchOS WebKit JavaScript bridge 自定义工具。脚本会保存到应用 Application Support 下的 CustomJSTools 独立目录，每个工具包含 manifest.json 与 script.js。脚本必须声明同步 function main(input)，创建前会用 validation_input 试运行；如果工具需要参数，请提供一份能通过校验的 validation_input，否则验证失败不会保存。以后会以 app_custom_webkit_js_<tool_id> 暴露给模型。能力边界：这是 WebKit JS bridge，不是 JavaScriptCore.framework；没有 Node.js、文件系统、原生网络 API、外部页面 DOM 或 Promise 返回值能力。",
                 comment: "Create custom WebKit JS tool description sent to model"
             )
         case .editMemory:

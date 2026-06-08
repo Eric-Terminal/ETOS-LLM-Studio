@@ -172,6 +172,7 @@ extension AppToolManager {
             let description: String
             let parameters_schema: JSONValue?
             let code: String
+            let validation_input: JSONValue?
             let enabled: Bool?
             let approval_policy: String?
             let overwrite: Bool?
@@ -210,6 +211,28 @@ extension AppToolManager {
             )
         }
 
+        let validationInput = args.validation_input ?? Self.defaultCustomJSToolValidationInput
+        guard case .dictionary = validationInput else {
+            throw AppToolExecutionError.invalidArguments(
+                NSLocalizedString("错误：validation_input 必须是 JSON object。", comment: "Create custom JS tool invalid validation input")
+            )
+        }
+        do {
+            _ = try await runJavaScript(
+                code: code,
+                input: validationInput,
+                source: .validation,
+                engine: engine
+            )
+        } catch {
+            throw AppToolExecutionError.invalidArguments(
+                String(
+                    format: NSLocalizedString("错误：自定义 JavaScript 工具验证失败，脚本未保存。 %@", comment: "Custom JS tool validation failed"),
+                    error.localizedDescription
+                )
+            )
+        }
+
         let policy = args.approval_policy
             .flatMap { AppToolApprovalPolicy(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
             ?? .askEveryTime
@@ -245,6 +268,7 @@ extension AppToolManager {
             "display_name": tool.displayName,
             "engine": tool.engine.displayName,
             "enabled": tool.isEnabled,
+            "validated": true,
             "approval_policy": tool.approvalPolicy.rawValue,
             "directory": directoryURL.path
         ])
@@ -261,6 +285,7 @@ extension AppToolManager {
 
     private enum JavaScriptToolSource {
         case adHoc
+        case validation
         case custom(toolID: String)
     }
 
@@ -491,6 +516,10 @@ extension AppToolManager {
             "additionalProperties": .bool(true),
             "description": .string(NSLocalizedString("整包参数会作为 input 传给自定义 JavaScript 工具的 main(input)。", comment: "Default custom JS tool input parameter description"))
         ])
+    }
+
+    static var defaultCustomJSToolValidationInput: JSONValue {
+        .dictionary([:])
     }
 
     static func loadCustomJSToolsFromDisk() -> [AppToolCustomJSTool] {

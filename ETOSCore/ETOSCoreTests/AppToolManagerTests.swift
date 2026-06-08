@@ -69,6 +69,59 @@ struct AppToolManagerTests {
         #expect(kinds.contains(.deleteSandboxItem))
     }
 
+    @Test("创建自定义 JS 工具参数包含验证输入")
+    func testCreateCustomJSToolParametersIncludeValidationInput() {
+        guard case let .dictionary(schema) = AppToolKind.createCustomJSCJSTool.parameters,
+              case let .dictionary(properties)? = schema["properties"],
+              case let .dictionary(validationInput)? = properties["validation_input"] else {
+            Issue.record("创建自定义 JS 工具缺少 validation_input 参数。")
+            return
+        }
+
+        #expect(validationInput["type"] == .string("object"))
+        #expect(validationInput["additionalProperties"] == .bool(true))
+    }
+
+    #if canImport(JavaScriptCore) && !os(watchOS)
+    @MainActor
+    @Test("创建自定义 JSC 工具会先验证脚本")
+    func testCreateCustomJSToolRejectsInvalidScript() async {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        let originalCustomJSTools = manager.customJSTools
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies,
+                customJSTools: originalCustomJSTools
+            )
+        }
+
+        let suffix = String(UUID().uuidString.prefix(8)).lowercased()
+        let toolID = "validation_failure_\(suffix)"
+        let argumentsJSON = """
+        {
+          "tool_id": "\(toolID)",
+          "display_name": "验证失败工具",
+          "description": "用于确认错误脚本不会被保存。",
+          "code": "function main(input) { throw new Error('validation failed'); }",
+          "validation_input": {}
+        }
+        """
+
+        await #expect(throws: AppToolExecutionError.self) {
+            _ = try await manager.executeCreateCustomJSTool(
+                argumentsJSON: argumentsJSON,
+                engine: .javaScriptCore
+            )
+        }
+        #expect(manager.customJSTool(withID: toolID, engine: .javaScriptCore) == nil)
+    }
+    #endif
+
     @MainActor
     @Test("启用示例工具后会向模型暴露工具定义")
     func testChatToolsForLLMReturnsEnabledAppTools() {
