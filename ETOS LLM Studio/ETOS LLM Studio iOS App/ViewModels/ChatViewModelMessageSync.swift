@@ -180,16 +180,23 @@ extension ChatViewModel {
         let sourceText = message.content
 
         if preparedMarkdownByMessageID[messageID]?.sourceText == sourceText {
+            markdownPrepareTasks[messageID]?.cancel()
+            markdownPrepareTasks.removeValue(forKey: messageID)
             return
         }
 
+        let generation = (markdownPrepareGenerations[messageID] ?? 0) &+ 1
+        markdownPrepareGenerations[messageID] = generation
         markdownPrepareTasks[messageID]?.cancel()
-        markdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText] in
+        markdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText, generation] in
             let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: sourceText)
             guard !Task.isCancelled, let self else { return }
+            guard self.markdownPrepareGenerations[messageID] == generation else { return }
             guard self.messageStateByID[messageID]?.visualMessage.content == sourceText else { return }
             self.preparedMarkdownByMessageID[messageID] = prepared
-            self.markdownPrepareTasks[messageID] = nil
+            if self.markdownPrepareGenerations[messageID] == generation {
+                self.markdownPrepareTasks[messageID] = nil
+            }
         }
     }
 
@@ -198,6 +205,7 @@ extension ChatViewModel {
         guard Self.hasVisualRegexRule(in: rules, for: message) else {
             visualMessagePrepareTasks[message.id]?.cancel()
             visualMessagePrepareTasks.removeValue(forKey: message.id)
+            visualMessagePrepareGenerations.removeValue(forKey: message.id)
             state.updateVisualMessage(message)
             scheduleMarkdownPreparationIfNeeded(for: message)
             return
@@ -205,20 +213,25 @@ extension ChatViewModel {
 
         let messageID = message.id
         state.updateVisualMessage(message)
+        let generation = (visualMessagePrepareGenerations[messageID] ?? 0) &+ 1
+        visualMessagePrepareGenerations[messageID] = generation
         visualMessagePrepareTasks[messageID]?.cancel()
-        visualMessagePrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceMessage = message, rules] in
+        visualMessagePrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceMessage = message, rules, generation] in
             let visualMessage = await Task.detached(priority: .utility) {
                 ChatService.visualMessage(from: sourceMessage, rules: rules)
             }.value
 
             guard !Task.isCancelled, let self else { return }
+            guard self.visualMessagePrepareGenerations[messageID] == generation else { return }
             guard let state = self.messageStateByID[messageID],
                   state.message == sourceMessage else {
                 return
             }
             state.updateVisualMessage(visualMessage)
             self.scheduleMarkdownPreparationIfNeeded(for: visualMessage)
-            self.visualMessagePrepareTasks[messageID] = nil
+            if self.visualMessagePrepareGenerations[messageID] == generation {
+                self.visualMessagePrepareTasks[messageID] = nil
+            }
         }
     }
 
@@ -229,20 +242,28 @@ extension ChatViewModel {
             preparedReasoningMarkdownByMessageID.removeValue(forKey: messageID)
             reasoningMarkdownPrepareTasks[messageID]?.cancel()
             reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
+            reasoningMarkdownPrepareGenerations.removeValue(forKey: messageID)
             return
         }
 
         if preparedReasoningMarkdownByMessageID[messageID]?.sourceText == sourceText {
+            reasoningMarkdownPrepareTasks[messageID]?.cancel()
+            reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
             return
         }
 
+        let generation = (reasoningMarkdownPrepareGenerations[messageID] ?? 0) &+ 1
+        reasoningMarkdownPrepareGenerations[messageID] = generation
         reasoningMarkdownPrepareTasks[messageID]?.cancel()
-        reasoningMarkdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText] in
+        reasoningMarkdownPrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceText, generation] in
             let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: sourceText)
             guard !Task.isCancelled, let self else { return }
+            guard self.reasoningMarkdownPrepareGenerations[messageID] == generation else { return }
             guard self.messageStateByID[messageID]?.message.reasoningContent == sourceText else { return }
             self.preparedReasoningMarkdownByMessageID[messageID] = prepared
-            self.reasoningMarkdownPrepareTasks[messageID] = nil
+            if self.reasoningMarkdownPrepareGenerations[messageID] == generation {
+                self.reasoningMarkdownPrepareTasks[messageID] = nil
+            }
         }
     }
 
@@ -252,6 +273,15 @@ extension ChatViewModel {
         }
         if !preparedReasoningMarkdownByMessageID.isEmpty {
             preparedReasoningMarkdownByMessageID = preparedReasoningMarkdownByMessageID.filter { validIDs.contains($0.key) }
+        }
+        if !visualMessagePrepareGenerations.isEmpty {
+            visualMessagePrepareGenerations = visualMessagePrepareGenerations.filter { validIDs.contains($0.key) }
+        }
+        if !markdownPrepareGenerations.isEmpty {
+            markdownPrepareGenerations = markdownPrepareGenerations.filter { validIDs.contains($0.key) }
+        }
+        if !reasoningMarkdownPrepareGenerations.isEmpty {
+            reasoningMarkdownPrepareGenerations = reasoningMarkdownPrepareGenerations.filter { validIDs.contains($0.key) }
         }
         if !visualMessagePrepareTasks.isEmpty {
             for (messageID, task) in visualMessagePrepareTasks where !validIDs.contains(messageID) {

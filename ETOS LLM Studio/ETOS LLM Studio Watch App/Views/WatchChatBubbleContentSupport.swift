@@ -45,6 +45,10 @@ extension ChatBubble {
             isStreaming: showsStreamingIndicators,
             onCodeBlockHeaderTap: onCodeBlockHeaderTap
         )
+        .streamingMessageSweep(
+            isActive: showsStreamingIndicators && message.role == .assistant && !content.isEmpty,
+            highlightColor: Color.white
+        )
     }
 
     @ViewBuilder

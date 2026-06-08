@@ -89,6 +89,9 @@ final class ChatViewModel: ObservableObject {
     var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
     var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var visualMessagePrepareGenerations: [UUID: Int] = [:]
+    var markdownPrepareGenerations: [UUID: Int] = [:]
+    var reasoningMarkdownPrepareGenerations: [UUID: Int] = [:]
     
     // MARK: - Attachment State
     
