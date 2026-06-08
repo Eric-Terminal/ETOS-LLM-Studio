@@ -164,9 +164,9 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
-                    UsageAnalyticsView()
+                    LogsAndUsageSettingsView()
                 } label: {
-                    SettingsListIconLabel("用量统计", icon: .usageAnalytics)
+                    SettingsListIconLabel("日志与用量", icon: .logs)
                 }
 
                 NavigationLink {
@@ -434,6 +434,7 @@ extension SettingsListIcon {
     static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink)
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal)
     static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow)
+    static let logs = SettingsListIcon(systemName: "doc.text", backgroundColor: .cyan)
     static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan)
     static let memory = SettingsListIcon(systemName: "brain", backgroundColor: .mint)
     static let mcp = SettingsListIcon(systemName: "network", backgroundColor: .blue)
@@ -504,6 +505,27 @@ struct SettingsListIconView: View {
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
+    }
+}
+
+private struct LogsAndUsageSettingsView: View {
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    UsageAnalyticsView()
+                } label: {
+                    SettingsListIconLabel("用量统计", icon: .usageAnalytics)
+                }
+
+                NavigationLink {
+                    AppLogsView()
+                } label: {
+                    SettingsListIconLabel("应用日志", icon: .logs)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("日志与用量", comment: "日志与用量设置页标题"))
     }
 }
 
