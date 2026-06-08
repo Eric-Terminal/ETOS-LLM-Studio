@@ -29,6 +29,7 @@ struct MCPServerEditor: View {
     @State private var notes: String
     @State private var headerOverrideEntries: [HeaderOverrideEntry]
     @State private var validationMessage: String?
+    @State private var showUnsavedChangesAlert = false
 
     init(existingServer: MCPServerConfiguration?, onSave: @escaping (MCPServerConfiguration) -> Void) {
         self.existingServer = existingServer
@@ -38,8 +39,8 @@ struct MCPServerEditor: View {
             _displayName = State(initialValue: server.displayName)
             _notes = State(initialValue: server.notes ?? "")
             switch server.transport {
-            case .http(let endpoint, let apiKey, _):
-                let serializedHeaders = HeaderExpressionParser.serialize(headers: server.additionalHeaders)
+            case .http(let endpoint, let apiKey, let additionalHeaders):
+                let serializedHeaders = HeaderExpressionParser.serialize(headers: additionalHeaders)
                 _endpoint = State(initialValue: endpoint.absoluteString)
                 _sseEndpoint = State(initialValue: "")
                 _apiKey = State(initialValue: apiKey ?? "")
@@ -55,8 +56,8 @@ struct MCPServerEditor: View {
                 _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
                     ? [HeaderOverrideEntry(text: "")]
                     : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
-            case .httpSSE(_, let sseEndpoint, let apiKey, _):
-                let serializedHeaders = HeaderExpressionParser.serialize(headers: server.additionalHeaders)
+            case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
+                let serializedHeaders = HeaderExpressionParser.serialize(headers: additionalHeaders)
                 _endpoint = State(initialValue: MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint).absoluteString)
                 _sseEndpoint = State(initialValue: sseEndpoint.absoluteString)
                 _apiKey = State(initialValue: apiKey ?? "")
@@ -229,9 +230,19 @@ struct MCPServerEditor: View {
             }
         }
         .navigationTitle(existingServer == nil ? NSLocalizedString("新增服务器", comment: "") : NSLocalizedString("编辑服务器", comment: ""))
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                Button {
+                    requestDismiss()
+                } label: {
+                    if hasUnsavedChanges {
+                        Image(systemName: "chevron.left")
+                    } else {
+                        Text(NSLocalizedString("取消", comment: ""))
+                    }
+                }
+                .accessibilityLabel(NSLocalizedString("返回", comment: ""))
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(NSLocalizedString("保存", comment: "")) {
@@ -239,6 +250,19 @@ struct MCPServerEditor: View {
                 }
                 .disabled(isSaveDisabled)
             }
+        }
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            if !isSaveDisabled {
+                Button(NSLocalizedString("保存并离开", comment: "Save and leave button")) {
+                    saveServer()
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes button"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing button"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
         }
     }
 
@@ -340,6 +364,177 @@ struct MCPServerEditor: View {
     private func notesOrNil() -> String? {
         let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var hasUnsavedChanges: Bool {
+        currentSnapshot != Self.initialSnapshot(for: existingServer)
+    }
+
+    private var currentSnapshot: EditorSnapshot {
+        EditorSnapshot(
+            displayName: displayName,
+            endpoint: endpoint,
+            sseEndpoint: sseEndpoint,
+            apiKey: apiKey,
+            tokenEndpoint: tokenEndpoint,
+            clientID: clientID,
+            clientSecret: clientSecret,
+            oauthScope: oauthScope,
+            oauthGrantType: oauthGrantType,
+            oauthAuthorizationCode: oauthAuthorizationCode,
+            oauthRedirectURI: oauthRedirectURI,
+            oauthCodeVerifier: oauthCodeVerifier,
+            transportOption: transportOption,
+            notes: notes,
+            headerOverrideTexts: headerOverrideEntries.map(\.text)
+        )
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            showUnsavedChangesAlert = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private static func initialSnapshot(for server: MCPServerConfiguration?) -> EditorSnapshot {
+        guard let server else {
+            return EditorSnapshot(
+                displayName: "",
+                endpoint: "",
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .http,
+                notes: "",
+                headerOverrideTexts: [""]
+            )
+        }
+
+        let notes = server.notes ?? ""
+        switch server.transport {
+        case .http(let endpoint, let apiKey, let additionalHeaders):
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: endpoint.absoluteString,
+                sseEndpoint: "",
+                apiKey: apiKey ?? "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .http,
+                notes: notes,
+                headerOverrideTexts: serializedHeaderTexts(for: additionalHeaders)
+            )
+        case .httpSSE(_, let sseEndpoint, let apiKey, let additionalHeaders):
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: MCPServerConfiguration.inferMessageEndpoint(fromSSE: sseEndpoint).absoluteString,
+                sseEndpoint: sseEndpoint.absoluteString,
+                apiKey: apiKey ?? "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .sse,
+                notes: notes,
+                headerOverrideTexts: serializedHeaderTexts(for: additionalHeaders)
+            )
+        case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: endpoint.absoluteString,
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: tokenEndpoint.absoluteString,
+                clientID: clientID,
+                clientSecret: clientSecret ?? "",
+                oauthScope: scope ?? "",
+                oauthGrantType: grantType,
+                oauthAuthorizationCode: authorizationCode ?? "",
+                oauthRedirectURI: redirectURI ?? "",
+                oauthCodeVerifier: codeVerifier ?? "",
+                transportOption: .oauth,
+                notes: notes,
+                headerOverrideTexts: [""]
+            )
+        case .builtInSearch:
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: MCPBuiltInSearchServer.endpoint,
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .builtInSearch,
+                notes: notes,
+                headerOverrideTexts: [""]
+            )
+        case .builtInAppTool(let category):
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: MCPBuiltInAppToolServer.endpoint(for: category),
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .builtInAppTool,
+                notes: notes,
+                headerOverrideTexts: [""]
+            )
+        @unknown default:
+            return EditorSnapshot(
+                displayName: server.displayName,
+                endpoint: "",
+                sseEndpoint: "",
+                apiKey: "",
+                tokenEndpoint: "",
+                clientID: "",
+                clientSecret: "",
+                oauthScope: "",
+                oauthGrantType: .clientCredentials,
+                oauthAuthorizationCode: "",
+                oauthRedirectURI: "",
+                oauthCodeVerifier: "",
+                transportOption: .http,
+                notes: notes,
+                headerOverrideTexts: [""]
+            )
+        }
+    }
+
+    private static func serializedHeaderTexts(for additionalHeaders: [String: String]) -> [String] {
+        let serializedHeaders = HeaderExpressionParser.serialize(headers: additionalHeaders)
+        return serializedHeaders.isEmpty ? [""] : serializedHeaders
     }
 
     private func oauthFieldsValid() -> Bool {
@@ -515,6 +710,24 @@ struct MCPServerEditor: View {
             case .oauth, .builtInSearch, .builtInAppTool: return false
             }
         }
+    }
+
+    private struct EditorSnapshot: Equatable {
+        var displayName: String
+        var endpoint: String
+        var sseEndpoint: String
+        var apiKey: String
+        var tokenEndpoint: String
+        var clientID: String
+        var clientSecret: String
+        var oauthScope: String
+        var oauthGrantType: MCPOAuthGrantType
+        var oauthAuthorizationCode: String
+        var oauthRedirectURI: String
+        var oauthCodeVerifier: String
+        var transportOption: TransportOption
+        var notes: String
+        var headerOverrideTexts: [String]
     }
 }
 

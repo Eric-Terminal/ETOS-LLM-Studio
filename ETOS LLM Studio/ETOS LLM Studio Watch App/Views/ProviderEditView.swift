@@ -24,12 +24,18 @@ struct ProviderEditView: View {
     @State private var providerProxyConfiguration: NetworkProxyConfiguration
     @State private var showApiKeys: Bool = false
     @State private var showProxyPassword: Bool = false
+    @State private var showUnsavedChangesAlert = false
     
     var isNew: Bool
     let dismissAfterSave: Bool
     let showsCancelButton: Bool
     let navigationTitleOverride: String?
     let onSave: (Provider) -> Void
+    private let savedProvider: Provider
+    private let savedApiKeysText: String
+    private let savedHeaderOverrideTexts: [String]
+    private let savedUseProviderProxyOverride: Bool
+    private let savedProviderProxyConfiguration: NetworkProxyConfiguration
     private var isLocalProvider: Bool {
         LocalModelProviderBridge.isLocalProvider(provider)
     }
@@ -43,18 +49,27 @@ struct ProviderEditView: View {
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self._provider = State(initialValue: provider)
-        self._apiKeysText = State(initialValue: provider.apiKeys.joined(separator: ","))
+        let apiKeysText = provider.apiKeys.joined(separator: ",")
+        self._apiKeysText = State(initialValue: apiKeysText)
         let serializedHeaders = HeaderExpressionParser.serialize(headers: provider.headerOverrides)
+        let headerOverrideTexts = serializedHeaders.isEmpty ? [""] : serializedHeaders
         self._headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
             ? [HeaderOverrideEntry(text: "")]
             : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
-        self._useProviderProxyOverride = State(initialValue: provider.proxyConfiguration != nil)
-        self._providerProxyConfiguration = State(initialValue: provider.proxyConfiguration ?? NetworkProxyConfiguration())
+        let useProviderProxyOverride = provider.proxyConfiguration != nil
+        let providerProxyConfiguration = provider.proxyConfiguration ?? NetworkProxyConfiguration()
+        self._useProviderProxyOverride = State(initialValue: useProviderProxyOverride)
+        self._providerProxyConfiguration = State(initialValue: providerProxyConfiguration)
         self.isNew = isNew
         self.dismissAfterSave = dismissAfterSave
         self.showsCancelButton = showsCancelButton
         self.navigationTitleOverride = navigationTitleOverride
         self.onSave = onSave
+        self.savedProvider = provider
+        self.savedApiKeysText = apiKeysText
+        self.savedHeaderOverrideTexts = headerOverrideTexts
+        self.savedUseProviderProxyOverride = useProviderProxyOverride
+        self.savedProviderProxyConfiguration = providerProxyConfiguration
     }
     
     var body: some View {
@@ -160,12 +175,40 @@ struct ProviderEditView: View {
             }
         }
         .navigationTitle(navigationTitle)
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
             if showsCancelButton {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                    Button {
+                        requestDismiss()
+                    } label: {
+                        if hasUnsavedChanges {
+                            Image(systemName: "chevron.left")
+                        } else {
+                            Text(NSLocalizedString("取消", comment: ""))
+                        }
+                    }
+                    .accessibilityLabel(NSLocalizedString("返回", comment: ""))
                 }
             }
+
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("保存", comment: ""), action: saveProvider)
+                    .disabled(isSaveDisabled)
+            }
+        }
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            if !isSaveDisabled {
+                Button(NSLocalizedString("保存并离开", comment: "Save and leave button")) {
+                    saveProvider()
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes button"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing button"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
         }
     }
     
@@ -181,6 +224,22 @@ struct ProviderEditView: View {
         onSave(updated)
         
         if dismissAfterSave {
+            dismiss()
+        }
+    }
+
+    private var hasUnsavedChanges: Bool {
+        provider != savedProvider ||
+        apiKeysText != savedApiKeysText ||
+        headerOverrideEntries.map(\.text) != savedHeaderOverrideTexts ||
+        useProviderProxyOverride != savedUseProviderProxyOverride ||
+        providerProxyConfiguration != savedProviderProxyConfiguration
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            showUnsavedChangesAlert = true
+        } else {
             dismiss()
         }
     }

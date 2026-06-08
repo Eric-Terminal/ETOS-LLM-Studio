@@ -20,6 +20,7 @@ struct ProviderEditView: View {
     @State private var providerProxyConfiguration: NetworkProxyConfiguration
     @State private var showApiKeys: Bool = false
     @State private var showProxyPassword: Bool = false
+    @State private var showUnsavedChangesAlert = false
     let isNew: Bool
     let dismissAfterSave: Bool
     let showsCancelButton: Bool
@@ -27,7 +28,13 @@ struct ProviderEditView: View {
     let saveRequest: Int
     let showsToolbarSaveButton: Bool
     let onSaveAvailabilityChange: (Bool) -> Void
+    let onUnsavedChangesChange: (Bool) -> Void
     let onSave: (Provider) -> Void
+    private let savedProvider: Provider
+    private let savedApiKeysText: String
+    private let savedHeaderOverrideTexts: [String]
+    private let savedUseProviderProxyOverride: Bool
+    private let savedProviderProxyConfiguration: NetworkProxyConfiguration
     private var isLocalProvider: Bool {
         LocalModelProviderBridge.isLocalProvider(provider)
     }
@@ -41,16 +48,21 @@ struct ProviderEditView: View {
         saveRequest: Int = 0,
         showsToolbarSaveButton: Bool = true,
         onSaveAvailabilityChange: @escaping (Bool) -> Void = { _ in },
+        onUnsavedChangesChange: @escaping (Bool) -> Void = { _ in },
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         _provider = State(initialValue: provider)
-        _apiKeysText = State(initialValue: provider.apiKeys.joined(separator: ","))
+        let apiKeysText = provider.apiKeys.joined(separator: ",")
+        _apiKeysText = State(initialValue: apiKeysText)
         let serializedHeaders = HeaderExpressionParser.serialize(headers: provider.headerOverrides)
+        let headerOverrideTexts = serializedHeaders.isEmpty ? [""] : serializedHeaders
         _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
             ? [HeaderOverrideEntry(text: "")]
             : serializedHeaders.map { HeaderOverrideEntry(text: $0) })
-        _useProviderProxyOverride = State(initialValue: provider.proxyConfiguration != nil)
-        _providerProxyConfiguration = State(initialValue: provider.proxyConfiguration ?? NetworkProxyConfiguration())
+        let useProviderProxyOverride = provider.proxyConfiguration != nil
+        let providerProxyConfiguration = provider.proxyConfiguration ?? NetworkProxyConfiguration()
+        _useProviderProxyOverride = State(initialValue: useProviderProxyOverride)
+        _providerProxyConfiguration = State(initialValue: providerProxyConfiguration)
         self.isNew = isNew
         self.dismissAfterSave = dismissAfterSave
         self.showsCancelButton = showsCancelButton
@@ -58,7 +70,13 @@ struct ProviderEditView: View {
         self.saveRequest = saveRequest
         self.showsToolbarSaveButton = showsToolbarSaveButton
         self.onSaveAvailabilityChange = onSaveAvailabilityChange
+        self.onUnsavedChangesChange = onUnsavedChangesChange
         self.onSave = onSave
+        self.savedProvider = provider
+        self.savedApiKeysText = apiKeysText
+        self.savedHeaderOverrideTexts = headerOverrideTexts
+        self.savedUseProviderProxyOverride = useProviderProxyOverride
+        self.savedProviderProxyConfiguration = providerProxyConfiguration
     }
     
     var body: some View {
@@ -167,10 +185,20 @@ struct ProviderEditView: View {
 
         }
         .navigationTitle(navigationTitle)
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
             if showsCancelButton {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("取消", comment: "")) { dismiss() }
+                    Button {
+                        requestDismiss()
+                    } label: {
+                        if hasUnsavedChanges {
+                            Image(systemName: "chevron.left")
+                        } else {
+                            Text(NSLocalizedString("取消", comment: ""))
+                        }
+                    }
+                    .accessibilityLabel(NSLocalizedString("返回", comment: ""))
                 }
             }
             if showsToolbarSaveButton {
@@ -182,7 +210,23 @@ struct ProviderEditView: View {
                 }
             }
         }
-        .onAppear(perform: notifySaveAvailability)
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            if !isSaveDisabled {
+                Button(NSLocalizedString("保存并离开", comment: "Save and leave button")) {
+                    saveProvider()
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes button"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing button"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
+        }
+        .onAppear {
+            notifySaveAvailability()
+            notifyUnsavedChanges()
+        }
         .onChange(of: saveRequest) { _, _ in
             guard !isSaveDisabled else {
                 notifySaveAvailability()
@@ -193,10 +237,16 @@ struct ProviderEditView: View {
         .onChange(of: isSaveDisabled) { _, _ in
             notifySaveAvailability()
         }
+        .onChange(of: hasUnsavedChanges) { _, _ in
+            notifyUnsavedChanges()
+        }
     }
     
     private func saveProvider() {
-        guard let headerOverrides = buildHeaderOverrides() else { return }
+        guard let headerOverrides = buildHeaderOverrides() else {
+            notifySaveAvailability()
+            return
+        }
         var updated = provider
         updated.apiKeys = parsedApiKeys
         updated.headerOverrides = headerOverrides
@@ -205,7 +255,24 @@ struct ProviderEditView: View {
         provider = updated
         onSave(updated)
         notifySaveAvailability()
+        onUnsavedChangesChange(false)
         if dismissAfterSave {
+            dismiss()
+        }
+    }
+
+    private var hasUnsavedChanges: Bool {
+        provider != savedProvider ||
+        apiKeysText != savedApiKeysText ||
+        headerOverrideEntries.map(\.text) != savedHeaderOverrideTexts ||
+        useProviderProxyOverride != savedUseProviderProxyOverride ||
+        providerProxyConfiguration != savedProviderProxyConfiguration
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            showUnsavedChangesAlert = true
+        } else {
             dismiss()
         }
     }
@@ -287,6 +354,10 @@ struct ProviderEditView: View {
 
     private func notifySaveAvailability() {
         onSaveAvailabilityChange(!isSaveDisabled)
+    }
+
+    private func notifyUnsavedChanges() {
+        onUnsavedChangesChange(hasUnsavedChanges)
     }
 
     private func normalizedProxyConfiguration(_ configuration: NetworkProxyConfiguration) -> NetworkProxyConfiguration {

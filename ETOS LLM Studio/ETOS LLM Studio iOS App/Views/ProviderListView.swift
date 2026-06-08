@@ -192,6 +192,7 @@ private struct ProviderManagementContentView: View {
 }
 
 private struct ProviderConfigurationTabsView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var provider: Provider
     @State private var selectedTab: ProviderConfigurationTab = .models
@@ -200,6 +201,9 @@ private struct ProviderConfigurationTabsView: View {
     @State private var fetchModelsRequest = 0
     @State private var saveProviderRequest = 0
     @State private var canSaveProviderConfiguration = false
+    @State private var hasUnsavedProviderConfiguration = false
+    @State private var showUnsavedProviderAlert = false
+    @State private var dismissAfterProviderSave = false
     @State private var isShowingModelTest = false
 
     init(provider: Provider) {
@@ -233,7 +237,13 @@ private struct ProviderConfigurationTabsView: View {
                 navigationTitleOverride: NSLocalizedString("提供商配置", comment: ""),
                 saveRequest: saveProviderRequest,
                 showsToolbarSaveButton: false,
-                onSaveAvailabilityChange: { canSaveProviderConfiguration = $0 }
+                onSaveAvailabilityChange: { canSave in
+                    canSaveProviderConfiguration = canSave
+                    if !canSave {
+                        dismissAfterProviderSave = false
+                    }
+                },
+                onUnsavedChangesChange: { hasUnsavedProviderConfiguration = $0 }
             ) { updatedProvider in
                 updateProvider(updatedProvider)
             }
@@ -245,7 +255,18 @@ private struct ProviderConfigurationTabsView: View {
             .tag(ProviderConfigurationTab.provider)
         }
         .navigationTitle(provider.name)
+        .navigationBarBackButtonHidden(hasUnsavedProviderConfiguration)
         .toolbar {
+            if hasUnsavedProviderConfiguration {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        showUnsavedProviderAlert = true
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel(NSLocalizedString("返回", comment: ""))
+                }
+            }
             if selectedTab == .models {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
@@ -282,6 +303,20 @@ private struct ProviderConfigurationTabsView: View {
                 }
             }
         }
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedProviderAlert) {
+            if canSaveProviderConfiguration {
+                Button(NSLocalizedString("保存并离开", comment: "Save and leave button")) {
+                    dismissAfterProviderSave = true
+                    saveProviderRequest += 1
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes button"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing button"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
+        }
         .sheet(isPresented: $isShowingModelTest) {
             NavigationStack {
                 ModelConnectivityTestView(provider: provider)
@@ -302,9 +337,21 @@ private struct ProviderConfigurationTabsView: View {
     }
 
     private func updateProvider(_ updatedProvider: Provider) {
-        guard provider != updatedProvider else { return }
+        guard provider != updatedProvider else {
+            hasUnsavedProviderConfiguration = false
+            if dismissAfterProviderSave {
+                dismissAfterProviderSave = false
+                dismiss()
+            }
+            return
+        }
         provider = updatedProvider
+        hasUnsavedProviderConfiguration = false
         providerRevision += 1
+        if dismissAfterProviderSave {
+            dismissAfterProviderSave = false
+            dismiss()
+        }
     }
 }
 

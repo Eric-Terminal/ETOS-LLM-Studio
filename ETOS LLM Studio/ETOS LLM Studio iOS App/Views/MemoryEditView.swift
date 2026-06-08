@@ -19,6 +19,7 @@ struct MemoryEditView: View {
     @State private var reembedStatusMessage: String?
     @State private var reembedStatusIsError = false
     @State private var reembedAlert: MemoryReembedAlert?
+    @State private var showUnsavedChangesAlert = false
     
     init(memory: MemoryItem) {
         _memory = State(initialValue: memory)
@@ -87,6 +88,7 @@ struct MemoryEditView: View {
         }
         .navigationTitle(NSLocalizedString("编辑记忆", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(hasChanges)
         .alert(item: $reembedAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -95,15 +97,36 @@ struct MemoryEditView: View {
             )
         }
         .toolbar {
+            if hasChanges {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        requestDismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel(NSLocalizedString("返回", comment: "Back button"))
+                }
+            }
+
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(NSLocalizedString("保存", comment: "")) {
-                    Task {
-                        await viewModel.updateMemory(item: memory)
-                        dismiss()
-                    }
+                    saveMemory()
                 }
-                .disabled(!hasChanges || isReembeddingMemory || memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!canSaveChanges)
             }
+        }
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            if canSaveChanges {
+                Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
+                    saveMemory()
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
         }
     }
 
@@ -111,6 +134,26 @@ struct MemoryEditView: View {
         hasChanges
             ? NSLocalizedString("保存并重新嵌入", comment: "Save and reembed single memory")
             : NSLocalizedString("重新嵌入这条记忆", comment: "Reembed single memory")
+    }
+
+    private var canSaveChanges: Bool {
+        hasChanges && !isReembeddingMemory && !memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func requestDismiss() {
+        if hasChanges {
+            showUnsavedChangesAlert = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func saveMemory() {
+        guard canSaveChanges else { return }
+        Task {
+            await viewModel.updateMemory(item: memory)
+            dismiss()
+        }
     }
 
     private func triggerMemoryReembed() {

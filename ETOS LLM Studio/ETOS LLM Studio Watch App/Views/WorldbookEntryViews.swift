@@ -90,12 +90,15 @@ struct WatchWorldbookEntryEditView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: WatchWorldbookEntryDraft
+    @State private var showUnsavedChangesAlert = false
 
     let onSave: (WorldbookEntry) -> Void
     let onDelete: (() -> Void)?
+    private let savedEntry: WorldbookEntry
 
     init(draft: WatchWorldbookEntryDraft, onSave: @escaping (WorldbookEntry) -> Void, onDelete: (() -> Void)? = nil) {
         _draft = State(initialValue: draft)
+        savedEntry = draft.toEntry()
         self.onSave = onSave
         self.onDelete = onDelete
     }
@@ -201,20 +204,51 @@ struct WatchWorldbookEntryEditView: View {
             }
         }
         .navigationTitle(NSLocalizedString("编辑条目", comment: "Edit entry"))
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(NSLocalizedString("取消", comment: "Cancel")) {
-                    dismiss()
+                    requestDismiss()
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(NSLocalizedString("保存", comment: "Save")) {
-                    onSave(draft.toEntry())
-                    dismiss()
+                    saveAndDismiss()
                 }
                 .disabled(!canSave)
             }
         }
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            if canSave {
+                Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
+                    saveAndDismiss()
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
+        }
+    }
+
+    private var hasUnsavedChanges: Bool {
+        draft.toEntry() != savedEntry
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            showUnsavedChangesAlert = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func saveAndDismiss() {
+        guard canSave else { return }
+        onSave(draft.toEntry())
+        dismiss()
     }
 }
 

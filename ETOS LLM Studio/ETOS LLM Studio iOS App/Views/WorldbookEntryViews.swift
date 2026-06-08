@@ -94,10 +94,12 @@ struct WorldbookEntryEditView: View {
 
     @State private var draft: WorldbookEntryDraft
     @State private var showDeleteConfirmation = false
+    @State private var showUnsavedChangesAlert = false
 
     let isNew: Bool
     let onSave: (WorldbookEntry) -> Void
     let onDelete: (() -> Void)?
+    private let savedEntry: WorldbookEntry
 
     init(
         draft: WorldbookEntryDraft,
@@ -106,6 +108,7 @@ struct WorldbookEntryEditView: View {
         onDelete: (() -> Void)?
     ) {
         _draft = State(initialValue: draft)
+        savedEntry = draft.toEntry()
         self.isNew = isNew
         self.onSave = onSave
         self.onDelete = onDelete
@@ -359,16 +362,16 @@ struct WorldbookEntryEditView: View {
         .navigationTitle(isNew
                          ? NSLocalizedString("新增条目", comment: "Add entry")
                          : NSLocalizedString("编辑条目", comment: "Edit entry"))
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(NSLocalizedString("取消", comment: "Cancel")) {
-                    dismiss()
+                    requestDismiss()
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(NSLocalizedString("保存", comment: "Save")) {
-                    onSave(draft.toEntry())
-                    dismiss()
+                    saveAndDismiss()
                 }
                 .disabled(!canSave)
             }
@@ -387,6 +390,37 @@ struct WorldbookEntryEditView: View {
                 Text(NSLocalizedString("删除后不可恢复。", comment: "Delete entry irreversible"))
             }
         )
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            if canSave {
+                Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
+                    saveAndDismiss()
+                }
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
+        }
+    }
+
+    private var hasUnsavedChanges: Bool {
+        draft.toEntry() != savedEntry
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            showUnsavedChangesAlert = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func saveAndDismiss() {
+        guard canSave else { return }
+        onSave(draft.toEntry())
+        dismiss()
     }
 
     private func saveDraftIfEditingExistingEntry() {

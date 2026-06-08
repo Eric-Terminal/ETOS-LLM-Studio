@@ -20,6 +20,7 @@
 "保存" = "Enregistrer";
 "未保存更改" = "Modifications non enregistrées";
 "要保存当前本地模型设置，还是放弃更改并离开？" = "Enregistrer les réglages actuels du modèle local ou abandonner les modifications et quitter ?";
+"要保存当前编辑内容，还是放弃更改并离开？" = "Enregistrer les modifications actuelles ou les abandonner et quitter ?";
 "保存并离开" = "Enregistrer et quitter";
 "放弃更改" = "Abandonner les modifications";
 "继续编辑" = "Continuer l’édition";
