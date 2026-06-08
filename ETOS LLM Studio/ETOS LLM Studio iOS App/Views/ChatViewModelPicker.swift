@@ -88,6 +88,7 @@ extension ChatView {
     func nativeModelPickerModelRow(_ runnable: RunnableModel) -> some View {
         Button {
             viewModel.setSelectedModel(runnable)
+            dismissModelPickerSheet()
         } label: {
             MarqueeTitleSubtitleSelectionRow(
                 title: runnable.model.displayName,
