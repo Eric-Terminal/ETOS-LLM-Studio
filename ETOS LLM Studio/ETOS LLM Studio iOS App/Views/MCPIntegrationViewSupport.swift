@@ -17,13 +17,12 @@ extension MCPIntegrationView {
                 Text(NSLocalizedString("尚未添加任何 MCP Server。点击右上角“＋”创建。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(serversBinding, id: \.id, editActions: .move) { $server in
+                ForEach(manager.servers) { server in
                     NavigationLink {
                         MCPServerDetailView(server: server)
                     } label: {
                         serverSummaryRow(for: server)
                     }
-                    .contentShape(Rectangle())
                     .swipeActions(edge: .trailing) {
                         if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
                             Button(role: .destructive) {
@@ -41,16 +40,12 @@ extension MCPIntegrationView {
                         .tint(.blue)
                     }
                 }
+                .onMove { offsets, destination in
+                    manager.moveServers(fromOffsets: offsets, toOffset: destination)
+                }
             }
         }
-    }
-
-    private var serversBinding: Binding<[MCPServerConfiguration]> {
-        Binding {
-            manager.servers
-        } set: { orderedServers in
-            manager.setServerOrder(orderedServers.map(\.id))
-        }
+        .environment(\.editMode, .constant(.active))
     }
 
     private func serverSummaryRow(for server: MCPServerConfiguration) -> some View {
@@ -58,29 +53,25 @@ extension MCPIntegrationView {
         let transportBadge = serverTransportBadge(for: server)
         let toolsBadge = serverToolsBadge(for: server)
 
-        return HStack(alignment: .center, spacing: 12) {
-            MCPServerIconTile(statusColor: connectionBadge.color)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(server.displayName)
+                .etFont(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(server.displayName)
-                    .etFont(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    MCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
+                    MCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
+                    MCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
+                }
 
-                ViewThatFits(in: .horizontal) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         MCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
                         MCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
-                        MCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
                     }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            MCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
-                            MCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
-                        }
-                        MCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
-                    }
+                    MCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
                 }
             }
         }
@@ -541,31 +532,6 @@ extension MCPIntegrationView {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
-    }
-}
-
-private struct MCPServerIconTile: View {
-    let statusColor: Color
-
-    var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondary.opacity(0.10))
-
-            Image(systemName: "terminal")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            Circle()
-                .fill(statusColor)
-                .frame(width: 10, height: 10)
-                .overlay {
-                    Circle()
-                        .stroke(Color(.systemBackground), lineWidth: 2)
-                }
-                .padding(3)
-        }
-        .frame(width: 44, height: 44)
     }
 }
 
