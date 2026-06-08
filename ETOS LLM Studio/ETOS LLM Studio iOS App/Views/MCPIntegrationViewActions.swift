@@ -140,27 +140,27 @@ extension MCPIntegrationView {
         }
     }
 
-    func statusIcon(for server: MCPServerConfiguration) -> String {
-        let state = manager.status(for: server).connectionState
-        switch state {
+    func statusIcon(for server: MCPServerConfiguration) -> String? {
+        let status = manager.status(for: server)
+        switch status.connectionState {
         case .connecting:
             return "arrow.triangle.2.circlepath"
         case .reconnecting:
-            return "arrow.clockwise.circle.fill"
+            return "arrow.clockwise"
         case .ready:
-            return "checkmark.circle.fill"
+            return status.isSelectedForChat ? "checkmark.circle.fill" : "checkmark"
         case .failed:
-            return "exclamationmark.circle"
+            return "exclamationmark.triangle.fill"
         case .idle:
-            return "circle"
+            return status.isSelectedForChat ? "checkmark.circle.fill" : nil
         @unknown default:
             return "questionmark.circle"
         }
     }
 
     func statusColor(for server: MCPServerConfiguration) -> Color {
-        let state = manager.status(for: server).connectionState
-        switch state {
+        let status = manager.status(for: server)
+        switch status.connectionState {
         case .ready:
             return .green
         case .connecting:
@@ -170,7 +170,7 @@ extension MCPIntegrationView {
         case .failed:
             return .red
         case .idle:
-            return .secondary
+            return status.isSelectedForChat ? .green : .secondary
         @unknown default:
             return .secondary
         }

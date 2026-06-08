@@ -30,6 +30,7 @@ struct MCPIntegrationView: View {
     @State var selectedToolServerID: UUID?
     @State var selectedResourceServerID: UUID?
     @State var isShowingIntroDetails = false
+    @State var draggedServerID: UUID?
     
     var body: some View {
         List {

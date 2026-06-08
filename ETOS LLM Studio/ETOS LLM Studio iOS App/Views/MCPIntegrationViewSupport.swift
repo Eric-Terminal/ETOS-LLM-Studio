@@ -9,6 +9,7 @@
 import SwiftUI
 import Foundation
 import ETOSCore
+import UniformTypeIdentifiers
 
 extension MCPIntegrationView {
     var serverListSection: some View {
@@ -33,14 +34,25 @@ extension MCPIntegrationView {
                                     .foregroundStyle(.tertiary)
                             }
                             Spacer()
-                            if manager.status(for: server).isSelectedForChat {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
+                            if let iconName = statusIcon(for: server) {
+                                Image(systemName: iconName)
+                                    .foregroundStyle(statusColor(for: server))
                             }
-                            Image(systemName: statusIcon(for: server))
-                                .foregroundStyle(statusColor(for: server))
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onDrag {
+                        draggedServerID = server.id
+                        return MCPServerDragPayload.itemProvider(for: server.id)
+                    }
+                    .onDrop(
+                        of: [MCPServerDragPayload.type],
+                        delegate: MCPServerReorderDropDelegate(
+                            targetServerID: server.id,
+                            manager: manager,
+                            draggedServerID: $draggedServerID
+                        )
+                    )
                     .swipeActions(edge: .trailing) {
                         if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
                             Button(role: .destructive) {
@@ -58,12 +70,8 @@ extension MCPIntegrationView {
                         .tint(.blue)
                     }
                 }
-                .onMove { offsets, destination in
-                    manager.moveServers(fromOffsets: offsets, toOffset: destination)
-                }
             }
         }
-        .environment(\.editMode, .constant(.active))
     }
 
     var connectionOverviewSection: some View {
@@ -484,4 +492,46 @@ extension MCPIntegrationView {
         }
     }
 
+}
+
+private enum MCPServerDragPayload {
+    static let type = UTType(exportedAs: "com.etos.llm-studio.mcp-server-order")
+
+    static func itemProvider(for serverID: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(
+            forTypeIdentifier: type.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            completion(serverID.uuidString.data(using: .utf8), nil)
+            return nil
+        }
+        return provider
+    }
+}
+
+private struct MCPServerReorderDropDelegate: DropDelegate {
+    let targetServerID: UUID
+    let manager: MCPManager
+    @Binding var draggedServerID: UUID?
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedServerID, draggedServerID != targetServerID else { return }
+        guard let sourceIndex = manager.servers.firstIndex(where: { $0.id == draggedServerID }),
+              let targetIndex = manager.servers.firstIndex(where: { $0.id == targetServerID }) else { return }
+
+        let destination = targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+        withAnimation {
+            manager.moveServers(fromOffsets: IndexSet(integer: sourceIndex), toOffset: destination)
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedServerID = nil
+        return true
+    }
 }

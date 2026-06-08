@@ -90,12 +90,10 @@ struct MCPIntegrationView: View {
                                         .foregroundStyle(.tertiary)
                                 }
                                 Spacer()
-                                if manager.status(for: server).isSelectedForChat {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
+                                if let iconName = statusIcon(for: server) {
+                                    Image(systemName: iconName)
+                                        .foregroundStyle(statusColor(for: server))
                                 }
-                                Image(systemName: statusIcon(for: server))
-                                    .foregroundStyle(statusColor(for: server))
                             }
                         }
                     }
@@ -300,24 +298,26 @@ struct MCPIntegrationView: View {
         }
     }
 
-    private func statusIcon(for server: MCPServerConfiguration) -> String {
-        switch manager.status(for: server).connectionState {
-        case .ready: return "checkmark.circle.fill"
+    private func statusIcon(for server: MCPServerConfiguration) -> String? {
+        let status = manager.status(for: server)
+        switch status.connectionState {
+        case .ready: return status.isSelectedForChat ? "checkmark.circle.fill" : "checkmark"
         case .connecting: return "arrow.triangle.2.circlepath"
-        case .reconnecting: return "arrow.clockwise.circle.fill"
-        case .failed: return "exclamationmark.circle"
-        case .idle: return "circle"
+        case .reconnecting: return "arrow.clockwise"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .idle: return status.isSelectedForChat ? "checkmark.circle.fill" : nil
         @unknown default: return "questionmark.circle"
         }
     }
 
     private func statusColor(for server: MCPServerConfiguration) -> Color {
-        switch manager.status(for: server).connectionState {
+        let status = manager.status(for: server)
+        switch status.connectionState {
         case .ready: return .green
         case .connecting: return .yellow
         case .reconnecting: return .orange
         case .failed: return .red
-        case .idle: return .secondary
+        case .idle: return status.isSelectedForChat ? .green : .secondary
         @unknown default: return .secondary
         }
     }
