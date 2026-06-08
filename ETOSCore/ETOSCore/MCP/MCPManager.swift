@@ -163,6 +163,9 @@ public final class MCPManager: ObservableObject {
         let storedServers = MCPServerStore.loadServers()
         let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(storedServers)
         let preparedAppToolServers = MCPBuiltInAppToolServer.prepareServersForManager(preparedSearchServers.servers)
+        for serverToDelete in preparedAppToolServers.serversToDelete {
+            MCPServerStore.delete(serverToDelete)
+        }
         let serversToPersist = [preparedSearchServers.serverToPersist].compactMap { $0 } + preparedAppToolServers.serversToPersist
         for serverToPersist in serversToPersist {
             MCPServerStore.save(serverToPersist)

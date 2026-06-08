@@ -228,7 +228,7 @@ public enum ToolCatalogSupport {
 
     public static func appToolCategory(for kind: AppToolKind) -> AppToolCatalogCategory {
         switch kind {
-        case .echoText, .fillUserInput:
+        case .echoText, .fillUserInput, .submitFeedbackTicket:
             return .interaction
         case .editMemory, .listMemories:
             return .memory
@@ -241,8 +241,6 @@ public enum ToolCatalogSupport {
             return .database
         case .executeJSCJavaScript, .createCustomJSCJSTool, .executeWebKitJavaScript, .createCustomWebKitJSTool:
             return .custom
-        case .submitFeedbackTicket:
-            return .feedback
         case .showWidget, .askUserInput, .getSystemTime:
             return .interaction
         }

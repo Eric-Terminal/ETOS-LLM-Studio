@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 将原本的本地拓展工具按工具中心分类包装为应用内建 MCP Server。
+// 将需要审批的本地工具包装为应用内建 MCP Server。
 // MCP 负责统一暴露、启停与审批；AppTool 只保留具体执行实现。
 // ============================================================================
 
@@ -24,7 +24,7 @@ public enum MCPBuiltInAppToolServer {
     ]
 
     public static var categories: [AppToolCatalogCategory] {
-        AppToolCatalogCategory.allCases
+        [.interaction, .memory, .file, .database, .custom]
     }
 
     public static func serverID(for category: AppToolCatalogCategory) -> UUID {
@@ -47,10 +47,19 @@ public enum MCPBuiltInAppToolServer {
     }
 
     public static func isBuiltInAppToolServer(_ server: MCPServerConfiguration) -> Bool {
-        if case .builtInAppTool = server.transport {
-            return true
+        if case .builtInAppTool(let category) = server.transport {
+            return categories.contains(category)
         }
-        return category(for: server.id) != nil
+        guard let category = category(for: server.id) else { return false }
+        return categories.contains(category)
+    }
+
+    static func isObsoleteBuiltInAppToolServer(_ server: MCPServerConfiguration) -> Bool {
+        if case .builtInAppTool(let category) = server.transport {
+            return !categories.contains(category)
+        }
+        guard let category = category(for: server.id) else { return false }
+        return !categories.contains(category)
     }
 
     public static func isBuiltInServer(_ server: MCPServerConfiguration) -> Bool {
@@ -92,9 +101,11 @@ public enum MCPBuiltInAppToolServer {
     @MainActor
     static func prepareServersForManager(_ storedServers: [MCPServerConfiguration]) -> (
         servers: [MCPServerConfiguration],
-        serversToPersist: [MCPServerConfiguration]
+        serversToPersist: [MCPServerConfiguration],
+        serversToDelete: [MCPServerConfiguration]
     ) {
-        var servers = storedServers
+        let serversToDelete = storedServers.filter(isObsoleteBuiltInAppToolServer)
+        var servers = storedServers.filter { !isObsoleteBuiltInAppToolServer($0) }
         var serversToPersist: [MCPServerConfiguration] = []
 
         for category in categories {
@@ -120,7 +131,7 @@ public enum MCPBuiltInAppToolServer {
             }
         }
 
-        return (servers, serversToPersist)
+        return (servers, serversToPersist, serversToDelete)
     }
 
     static func displayName(for category: AppToolCatalogCategory) -> String {
@@ -136,15 +147,25 @@ public enum MCPBuiltInAppToolServer {
         case .custom:
             return NSLocalizedString("内建自定义工具", comment: "Built-in app tool custom MCP server name")
         case .feedback:
-            return NSLocalizedString("内建反馈工单", comment: "Built-in app tool feedback MCP server name")
+            return displayName(for: .interaction)
         }
     }
 
     static func notes(for category: AppToolCatalogCategory) -> String {
-        String(
-            format: NSLocalizedString("应用内建 MCP Server，承载原“%@”分类下的本地拓展工具。", comment: "Built-in app tool MCP server notes"),
-            category.displayName
-        )
+        switch category {
+        case .interaction:
+            return NSLocalizedString("提供文本回显、输入草稿填充与反馈工单提交等本地交互工具。", comment: "Built-in app tool interaction MCP server notes")
+        case .memory:
+            return NSLocalizedString("提供长期记忆的查看、编辑、归档与恢复工具。", comment: "Built-in app tool memory MCP server notes")
+        case .file:
+            return NSLocalizedString("提供应用沙盒 Documents 目录内的读取、搜索、写入、移动、复制、删除、差异查看与撤销工具。", comment: "Built-in app tool file MCP server notes")
+        case .database:
+            return NSLocalizedString("提供聊天、配置与记忆数据库的表结构查看、只读查询和受限写入工具。", comment: "Built-in app tool database MCP server notes")
+        case .custom:
+            return NSLocalizedString("提供 JavaScript 执行器以及由 AI 创建的可复用脚本工具。", comment: "Built-in app tool custom MCP server notes")
+        case .feedback:
+            return notes(for: .interaction)
+        }
     }
 
     @MainActor

@@ -119,7 +119,7 @@ struct ToolCatalogSupportTests {
         #expect(ToolCatalogSupport.appToolCategory(for: .listSandboxDirectory) == .file)
         #expect(ToolCatalogSupport.appToolCategory(for: .editMemory) == .memory)
         #expect(ToolCatalogSupport.appToolCategory(for: .querySQLite) == .database)
-        #expect(ToolCatalogSupport.appToolCategory(for: .submitFeedbackTicket) == .feedback)
+        #expect(ToolCatalogSupport.appToolCategory(for: .submitFeedbackTicket) == .interaction)
         #expect(ToolCatalogSupport.appToolCategory(for: .fillUserInput) == .interaction)
         #expect(ToolCatalogSupport.appToolCategory(for: .executeJSCJavaScript) == .custom)
         #expect(ToolCatalogSupport.appToolCategory(for: .createCustomWebKitJSTool) == .custom)

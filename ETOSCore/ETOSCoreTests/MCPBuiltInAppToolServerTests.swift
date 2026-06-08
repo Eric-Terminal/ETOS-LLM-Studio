@@ -23,6 +23,7 @@ struct MCPBuiltInAppToolServerTests {
         let tools = try await client.listTools()
         #expect(tools.contains(where: { $0.toolId == AppToolKind.echoText.toolName }))
         #expect(tools.contains(where: { $0.toolId == AppToolKind.fillUserInput.toolName }))
+        #expect(tools.contains(where: { $0.toolId == AppToolKind.submitFeedbackTicket.toolName }))
 
         let result = try await client.executeTool(
             toolId: AppToolKind.echoText.toolName,
@@ -68,8 +69,10 @@ struct MCPBuiltInAppToolServerTests {
         )
 
         let result = MCPBuiltInAppToolServer.prepareServersForManager([])
-        #expect(result.servers.count == AppToolCatalogCategory.allCases.count)
-        #expect(result.serversToPersist.count == AppToolCatalogCategory.allCases.count)
+        #expect(result.servers.count == MCPBuiltInAppToolServer.categories.count)
+        #expect(result.serversToPersist.count == MCPBuiltInAppToolServer.categories.count)
+        #expect(result.serversToDelete.isEmpty)
+        #expect(result.servers.contains(where: { $0.transport == .builtInAppTool(category: .feedback) }) == false)
 
         let interactionServer = result.servers.first {
             $0.id == MCPBuiltInAppToolServer.serverID(for: .interaction)
@@ -78,7 +81,25 @@ struct MCPBuiltInAppToolServerTests {
         #expect(interactionServer?.isSelectedForChat == true)
         #expect(interactionServer?.disabledToolIds.contains(AppToolKind.echoText.toolName) == false)
         #expect(interactionServer?.disabledToolIds.contains(AppToolKind.fillUserInput.toolName) == true)
+        #expect(interactionServer?.disabledToolIds.contains(AppToolKind.submitFeedbackTicket.toolName) == true)
         #expect(interactionServer?.toolApprovalPolicies[AppToolKind.echoText.toolName] == .alwaysAllow)
+    }
+
+    @MainActor
+    @Test("Manager 准备列表时会移除旧反馈分类服务器")
+    func testPrepareServersForManagerRemovesFeedbackServer() {
+        let obsoleteServer = MCPServerConfiguration(
+            id: MCPBuiltInAppToolServer.serverID(for: .feedback),
+            displayName: "内建反馈工单",
+            transport: .builtInAppTool(category: .feedback),
+            isSelectedForChat: true
+        )
+
+        let result = MCPBuiltInAppToolServer.prepareServersForManager([obsoleteServer])
+
+        #expect(result.serversToDelete.map(\.id) == [obsoleteServer.id])
+        #expect(result.servers.contains(where: { $0.id == obsoleteServer.id }) == false)
+        #expect(result.servers.contains(where: { $0.transport == .builtInAppTool(category: .feedback) }) == false)
     }
 
     @Test("内建 AppTool 服务器配置可编码解码")

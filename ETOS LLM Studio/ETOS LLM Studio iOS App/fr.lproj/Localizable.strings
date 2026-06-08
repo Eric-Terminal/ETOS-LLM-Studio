@@ -4144,6 +4144,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "内建文件操作" = "Opérations de fichiers intégrées";
 "内建数据库操作" = "Opérations de base de données intégrées";
 "内建自定义工具" = "Outils personnalisés intégrés";
-"内建反馈工单" = "Tickets de retour intégrés";
-"应用内建 MCP Server，承载原“%@”分类下的本地拓展工具。" = "Serveur MCP intégré à l’app pour les outils locaux auparavant dans la catégorie « %@ ».";
 "自定义 JavaScript 工具。脚本保存在应用的 CustomJSTools 独立目录中，执行入口为同步 function main(input)。运行引擎：%@。能力边界：没有 Node.js、require/import、文件系统、原生网络 API 或持久后台任务能力。工具说明：%@" = "Outil JavaScript personnalisé. Les scripts sont stockés dans le dossier CustomJSTools séparé de l’app. Le point d’entrée est la fonction synchrone main(input). Moteur d’exécution : %@. Limites : pas de Node.js, require/import, système de fichiers, API réseau native ni tâche d’arrière-plan persistante. Description de l’outil : %@";
+
+// 内建 AppTool MCP 服务器说明
+"提供文本回显、输入草稿填充与反馈工单提交等本地交互工具。" = "Fournit des outils d’interaction locale pour l’écho de texte, le remplissage de brouillons et l’envoi de tickets de retour.";
+"提供长期记忆的查看、编辑、归档与恢复工具。" = "Fournit des outils pour consulter, modifier, archiver et restaurer les mémoires à long terme.";
+"提供应用沙盒 Documents 目录内的读取、搜索、写入、移动、复制、删除、差异查看与撤销工具。" = "Fournit des outils pour lire, rechercher, écrire, déplacer, copier, supprimer, comparer et annuler les changements dans le dossier Documents du bac à sable de l’app.";
+"提供聊天、配置与记忆数据库的表结构查看、只读查询和受限写入工具。" = "Fournit des outils pour inspecter les schémas de tables, lancer des requêtes en lecture seule et effectuer des écritures limitées dans les bases de chat, de réglages et de mémoire.";
+"提供 JavaScript 执行器以及由 AI 创建的可复用脚本工具。" = "Fournit des exécuteurs JavaScript et des outils de script réutilisables créés par l’IA.";
