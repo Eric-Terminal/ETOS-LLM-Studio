@@ -53,8 +53,6 @@ struct ETAdvancedMarkdownRenderer: View {
                         fontScale: fontScale
                     )
                 }
-            } else if isStreaming {
-                plainTextView(content, textColor: textColor)
             } else {
                 markdownTextView(
                     markdownContent: MarkdownContent(content),
