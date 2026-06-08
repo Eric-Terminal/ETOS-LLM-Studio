@@ -58,6 +58,8 @@ extension LocalDebugServer {
         guard !isRunning else { return }
 
         let parsed = parseDebugAddress(url)
+        cancelScheduledReconnect(resetAttempt: true)
+        beginAutoReconnect(host: parsed.host, port: parsed.port, useHTTPMode: useHTTP)
         wsAutoFallbackEnabled = false
         wsFallbackPort = parsed.port
 
@@ -76,11 +78,13 @@ extension LocalDebugServer {
     @MainActor
     func performConnection(host: String, port: String) {
         logger.info("开始建立WebSocket连接到 \(host):\(port)")
+        let token = beginConnectionAttempt(host: host, port: port, useHTTPMode: false)
 
         let urlString = "ws://\(host):\(port)/ws"
         guard let wsURL = URL(string: urlString) else {
             self.errorMessage = NSLocalizedString("无效的服务器地址", comment: "")
             self.connectionStatus = NSLocalizedString("连接失败", comment: "")
+            self.scheduleReconnectIfNeeded()
             return
         }
 
@@ -104,18 +108,21 @@ extension LocalDebugServer {
         wsConnection?.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             Task { @MainActor in
+                guard self.isCurrentConnection(token) else { return }
                 switch state {
                 case .ready:
                     self.isRunning = true
                     self.connectionStatus = NSLocalizedString("已连接", comment: "")
                     self.errorMessage = nil
                     self.wsAutoFallbackEnabled = false
+                    self.reconnectAttempt = 0
                     self.logger.info("已连接到 \(host):\(port)")
                 case .failed(let error):
                     if self.wsAutoFallbackEnabled {
                         self.wsAutoFallbackEnabled = false
                         self.useHTTP = true
                         self.serverURL = "\(host):\(self.wsFallbackPort)"
+                        self.beginAutoReconnect(host: host, port: self.wsFallbackPort, useHTTPMode: true)
                         self.connectionStatus = NSLocalizedString("WebSocket 失败，回退到 HTTP 轮询...", comment: "")
                         self.errorMessage = NSLocalizedString("WebSocket 连接失败，已自动切换到 HTTP 轮询", comment: "")
                         self.logger.error("WebSocket 连接失败，准备回退 HTTP: \(error.localizedDescription)")
@@ -123,19 +130,8 @@ extension LocalDebugServer {
                         return
                     }
 
-                    self.isRunning = false
-                    self.connectionStatus = NSLocalizedString("连接失败", comment: "")
-                    let errorDescription = error.localizedDescription.lowercased()
-                    if errorDescription.contains("connection refused") || errorDescription.contains("拒绝") {
-                        self.errorMessage = NSLocalizedString("连接被拒绝，请检查服务器是否已启动", comment: "")
-                    } else if errorDescription.contains("timed out") || errorDescription.contains("超时") {
-                        self.errorMessage = NSLocalizedString("连接超时，请检查 IP 地址和网络", comment: "")
-                    } else if errorDescription.contains("unreachable") || errorDescription.contains("不可达") {
-                        self.errorMessage = NSLocalizedString("网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络", comment: "")
-                    } else {
-                        self.errorMessage = String(format: NSLocalizedString("连接失败: %@", comment: ""), error.localizedDescription)
-                    }
                     self.logger.error("连接失败: \(error.localizedDescription)")
+                    self.handleConnectionLost(errorMessage: self.describeDebugConnectionFailure(error))
                 case .cancelled:
                     self.isRunning = false
                     self.connectionStatus = NSLocalizedString("未连接", comment: "")
@@ -155,12 +151,14 @@ extension LocalDebugServer {
         }
 
         wsConnection?.start(queue: queue)
-        startReceiving()
+        startReceiving(connectionToken: token)
     }
 
     /// 断开连接
     @MainActor
     public func disconnect() {
+        stopAutoReconnect()
+        invalidateConnectionToken()
         httpPollingTimer?.invalidate()
         httpPollingTimer = nil
         httpFailureCount = 0
@@ -180,6 +178,111 @@ extension LocalDebugServer {
         updatePendingOpenAIState()
     }
 
+    @MainActor
+    func beginAutoReconnect(host: String, port: String, useHTTPMode: Bool) {
+        autoReconnectEnabled = true
+        reconnectTarget = DebugConnectionTarget(host: host, port: port, useHTTP: useHTTPMode)
+        reconnectAttempt = 0
+    }
+
+    @MainActor
+    func stopAutoReconnect() {
+        autoReconnectEnabled = false
+        reconnectTarget = nil
+        cancelScheduledReconnect(resetAttempt: true)
+    }
+
+    @MainActor
+    func cancelScheduledReconnect(resetAttempt: Bool) {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        if resetAttempt {
+            reconnectAttempt = 0
+        }
+    }
+
+    @MainActor
+    func beginConnectionAttempt(host: String, port: String, useHTTPMode: Bool) -> UUID {
+        cancelScheduledReconnect(resetAttempt: false)
+        connectionToken = UUID()
+        serverURL = "\(host):\(port)"
+        useHTTP = useHTTPMode
+        return connectionToken
+    }
+
+    @MainActor
+    func invalidateConnectionToken() {
+        connectionToken = UUID()
+    }
+
+    @MainActor
+    func isCurrentConnection(_ token: UUID) -> Bool {
+        connectionToken == token
+    }
+
+    @MainActor
+    func handleConnectionLost(errorMessage: String?) {
+        invalidateConnectionToken()
+        httpPollingTimer?.invalidate()
+        httpPollingTimer = nil
+        httpFailureCount = 0
+        wsConnection?.cancel()
+        wsConnection = nil
+        httpSession?.invalidateAndCancel()
+        httpSession = nil
+
+        isRunning = false
+        connectionStatus = NSLocalizedString("连接失败", comment: "")
+        self.errorMessage = errorMessage
+        wsAutoFallbackEnabled = false
+        pendingOpenAIRequests.removeAll()
+        updatePendingOpenAIState()
+        scheduleReconnectIfNeeded()
+    }
+
+    @MainActor
+    func scheduleReconnectIfNeeded() {
+        guard autoReconnectEnabled, reconnectTask == nil, let target = reconnectTarget else { return }
+        reconnectAttempt += 1
+        let attempt = reconnectAttempt
+        let interval = reconnectInterval
+        let delaySeconds = Int(interval)
+        connectionStatus = String(
+            format: NSLocalizedString("重连中（第%d次，约 %ds）", comment: "Local debug reconnect status"),
+            attempt,
+            delaySeconds
+        )
+
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.reconnectTask = nil
+                guard self.autoReconnectEnabled, !self.isRunning else { return }
+                if target.useHTTP {
+                    self.performHTTPConnection(host: target.host, port: target.port)
+                } else {
+                    self.performConnection(host: target.host, port: target.port)
+                }
+            }
+        }
+    }
+
+    func describeDebugConnectionFailure(_ error: Error) -> String {
+        let errorDescription = error.localizedDescription.lowercased()
+        if errorDescription.contains("connection refused") || errorDescription.contains("拒绝") {
+            return NSLocalizedString("连接被拒绝，请检查服务器是否已启动", comment: "")
+        }
+        if errorDescription.contains("timed out") || errorDescription.contains("超时") {
+            return NSLocalizedString("连接超时，请检查 IP 地址和网络", comment: "")
+        }
+        if errorDescription.contains("unreachable") || errorDescription.contains("不可达") {
+            return NSLocalizedString("网络不可达，请检查 Wi-Fi 连接和设备是否在同一网络", comment: "")
+        }
+        return String(format: NSLocalizedString("连接失败: %@", comment: ""), error.localizedDescription)
+    }
+
     /// 获取设备标识符
     func getDeviceIdentifier() -> String {
         #if os(watchOS)
@@ -189,7 +292,7 @@ extension LocalDebugServer {
         #endif
     }
 
-    func startReceiving() {
+    func startReceiving(connectionToken token: UUID) {
         guard let connection = wsConnection else { return }
 
         connection.receiveMessage { [weak self] data, _, isComplete, error in
@@ -198,18 +301,20 @@ extension LocalDebugServer {
             if let error {
                 self.logger.error("接收错误: \(error.localizedDescription)")
                 Task { @MainActor in
-                    self.disconnect()
+                    guard self.isCurrentConnection(token) else { return }
+                    self.handleConnectionLost(errorMessage: self.describeDebugConnectionFailure(error))
                 }
                 return
             }
 
             Task { @MainActor in
+                guard self.isCurrentConnection(token) else { return }
                 if let data {
                     self.handleReceivedMessage(data)
                 }
 
                 if isComplete {
-                    self.startReceiving()
+                    self.startReceiving(connectionToken: token)
                 }
             }
         }

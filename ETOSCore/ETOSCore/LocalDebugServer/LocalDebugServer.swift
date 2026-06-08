@@ -55,6 +55,12 @@ public class LocalDebugServer: ObservableObject {
         let originalMessageCount: Int
     }
 
+    struct DebugConnectionTarget: Sendable {
+        let host: String
+        let port: String
+        let useHTTP: Bool
+    }
+
     @Published public var isRunning = false
     @Published public var serverURL: String = ""
     @Published public var connectionStatus: String = NSLocalizedString("未连接", comment: "")
@@ -79,6 +85,12 @@ public class LocalDebugServer: ObservableObject {
 
     var wsAutoFallbackEnabled = false
     var wsFallbackPort = "7654"
+    var autoReconnectEnabled = false
+    var reconnectTarget: DebugConnectionTarget?
+    var reconnectTask: Task<Void, Never>?
+    var reconnectAttempt = 0
+    let reconnectInterval: TimeInterval = 5
+    var connectionToken = UUID()
 
     let maxLogEntries = 100
 

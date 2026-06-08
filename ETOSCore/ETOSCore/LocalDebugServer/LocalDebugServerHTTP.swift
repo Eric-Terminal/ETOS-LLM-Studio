@@ -15,6 +15,7 @@ extension LocalDebugServer {
     @MainActor
     func performHTTPConnection(host: String, port: String) {
         logger.info("开始 HTTP 轮询模式，目标: \(host):\(port)")
+        let token = beginConnectionAttempt(host: host, port: port, useHTTPMode: true)
         connectionStatus = NSLocalizedString("连接中...", comment: "")
 
         let config = NetworkSessionConfiguration.makeConfiguration()
@@ -24,17 +25,17 @@ extension LocalDebugServer {
         testHTTPConnection(host: host, port: port) { [weak self] success, error in
             guard let self = self else { return }
             Task { @MainActor in
+                guard self.isCurrentConnection(token) else { return }
                 if success {
                     self.isRunning = true
                     self.connectionStatus = NSLocalizedString("已连接 (HTTP)", comment: "")
                     self.errorMessage = nil
+                    self.reconnectAttempt = 0
                     self.logger.info("HTTP 连接测试成功")
-                    self.startHTTPPolling(host: host, port: port)
+                    self.startHTTPPolling(host: host, port: port, connectionToken: token)
                 } else {
-                    self.isRunning = false
-                    self.connectionStatus = NSLocalizedString("连接失败", comment: "")
-                    self.errorMessage = self.describeHTTPConnectionFailure(error)
                     self.logger.error("HTTP 连接测试失败")
+                    self.handleConnectionLost(errorMessage: self.describeHTTPConnectionFailure(error))
                 }
             }
         }
@@ -95,21 +96,22 @@ extension LocalDebugServer {
 
     /// 启动 HTTP 轮询
     @MainActor
-    func startHTTPPolling(host: String, port: String) {
+    func startHTTPPolling(host: String, port: String, connectionToken token: UUID) {
         logger.info("启动 HTTP 轮询，间隔: \(self.httpPollingInterval)秒")
 
         httpPollingTimer = Timer.scheduledTimer(withTimeInterval: self.httpPollingInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
-                self.performHTTPPoll(host: host, port: port)
+                guard self.isCurrentConnection(token) else { return }
+                self.performHTTPPoll(host: host, port: port, connectionToken: token)
             }
         }
 
-        performHTTPPoll(host: host, port: port)
+        performHTTPPoll(host: host, port: port, connectionToken: token)
     }
 
     /// 执行一次 HTTP 轮询
-    func performHTTPPoll(host: String, port: String) {
+    func performHTTPPoll(host: String, port: String, connectionToken token: UUID) {
         if isTransferring {
             return
         }
@@ -138,11 +140,12 @@ extension LocalDebugServer {
 
             if let error = error {
                 Task { @MainActor in
+                    guard self.isCurrentConnection(token) else { return }
                     self.httpFailureCount += 1
                     self.addLog("轮询失败: \(error.localizedDescription)", type: .error)
                     if self.httpFailureCount >= self.maxHTTPFailures {
                         self.addLog("连续失败 \(self.httpFailureCount) 次，断开连接", type: .error)
-                        self.disconnect()
+                        self.handleConnectionLost(errorMessage: self.describeHTTPConnectionFailure(error))
                     }
                 }
                 return
@@ -152,22 +155,25 @@ extension LocalDebugServer {
                   let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
                 Task { @MainActor in
+                    guard self.isCurrentConnection(token) else { return }
                     self.httpFailureCount += 1
                     if self.httpFailureCount >= self.maxHTTPFailures {
                         self.addLog("响应异常，断开连接", type: .error)
-                        self.disconnect()
+                        self.handleConnectionLost(errorMessage: self.describeHTTPConnectionFailure(nil))
                     }
                 }
                 return
             }
 
             Task { @MainActor in
+                guard self.isCurrentConnection(token) else { return }
                 self.httpFailureCount = 0
             }
 
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let command = json["command"] as? String {
                 Task { @MainActor in
+                    guard self.isCurrentConnection(token) else { return }
                     if command == "none" {
                         self.addLog("心跳", type: .heartbeat)
                     } else {

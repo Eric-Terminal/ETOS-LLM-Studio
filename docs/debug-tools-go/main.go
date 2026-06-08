@@ -33,6 +33,11 @@ const (
 	defaultHost = "0.0.0.0"
 	defaultPort = 7654
 	wsPath      = "/ws"
+
+	webSocketConnectionTimeout = 15 * time.Second
+	webSocketPingInterval      = 5 * time.Second
+	webSocketWriteTimeout      = 3 * time.Second
+	httpPollFreshTimeout       = 10 * time.Second
 )
 
 type DebugServer struct {
@@ -45,7 +50,8 @@ type DebugServer struct {
 	deviceConn *websocket.Conn
 	deviceName string
 
-	lastPollTime time.Time
+	lastWebSocketActivity time.Time
+	lastPollTime          time.Time
 
 	commandQueue     []map[string]any
 	pendingResponses map[string]chan map[string]any
@@ -238,6 +244,16 @@ func (s *DebugServer) handleWebSocketUpgrade(w http.ResponseWriter, r *http.Requ
 
 	clientIP := parseRemoteIP(r.RemoteAddr)
 	s.setDeviceConnection(conn, fmt.Sprintf("设备 %s", clientIP))
+	_ = conn.SetReadDeadline(time.Now().Add(webSocketConnectionTimeout))
+	conn.SetPongHandler(func(string) error {
+		s.markWebSocketActivity(conn)
+		return conn.SetReadDeadline(time.Now().Add(webSocketConnectionTimeout))
+	})
+
+	heartbeatDone := make(chan struct{})
+	defer close(heartbeatDone)
+	go s.runWebSocketHeartbeat(conn, heartbeatDone)
+
 	if debugMode {
 		fmt.Printf("\n[OK] 设备已连接 (WebSocket): %s\n", clientIP)
 	}
@@ -266,6 +282,8 @@ func (s *DebugServer) handleWebSocketUpgrade(w http.ResponseWriter, r *http.Requ
 		if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
 			continue
 		}
+		s.markWebSocketActivity(conn)
+		_ = conn.SetReadDeadline(time.Now().Add(webSocketConnectionTimeout))
 
 		if debugMode {
 			printDebugRawMessage(payload)
@@ -769,15 +787,19 @@ func (s *DebugServer) sendCommand(command map[string]any) bool {
 }
 
 func (s *DebugServer) getConnectionStatus() (bool, string) {
-	if s.getDeviceConnection() != nil {
-		return true, "WebSocket"
+	if conn, lastActivity := s.getDeviceConnectionState(); conn != nil {
+		if !lastActivity.IsZero() && time.Since(lastActivity) <= webSocketConnectionTimeout {
+			return true, "WebSocket"
+		}
+		s.expireDeviceConnection(conn)
+		return false, "WebSocket（已断开）"
 	}
 
 	s.mu.RLock()
 	lastPoll := s.lastPollTime
 	s.mu.RUnlock()
 	if !lastPoll.IsZero() {
-		if time.Since(lastPoll) < 10*time.Second {
+		if time.Since(lastPoll) < httpPollFreshTimeout {
 			return true, "HTTP 轮询"
 		}
 		return false, "HTTP 轮询（已断开）"
@@ -992,6 +1014,7 @@ func (s *DebugServer) setDeviceConnection(conn *websocket.Conn, name string) {
 	s.mu.Lock()
 	s.deviceConn = conn
 	s.deviceName = name
+	s.lastWebSocketActivity = time.Now()
 	s.mu.Unlock()
 }
 
@@ -999,14 +1022,66 @@ func (s *DebugServer) clearDeviceConnection(conn *websocket.Conn) {
 	s.mu.Lock()
 	if s.deviceConn == conn {
 		s.deviceConn = nil
+		s.lastWebSocketActivity = time.Time{}
 	}
 	s.mu.Unlock()
+}
+
+func (s *DebugServer) expireDeviceConnection(conn *websocket.Conn) {
+	shouldClose := false
+	s.mu.Lock()
+	if s.deviceConn == conn {
+		s.deviceConn = nil
+		s.lastWebSocketActivity = time.Time{}
+		shouldClose = true
+	}
+	s.mu.Unlock()
+	if shouldClose {
+		_ = conn.Close()
+	}
 }
 
 func (s *DebugServer) getDeviceConnection() *websocket.Conn {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.deviceConn
+}
+
+func (s *DebugServer) getDeviceConnectionState() (*websocket.Conn, time.Time) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.deviceConn, s.lastWebSocketActivity
+}
+
+func (s *DebugServer) markWebSocketActivity(conn *websocket.Conn) {
+	s.mu.Lock()
+	if s.deviceConn == conn {
+		s.lastWebSocketActivity = time.Now()
+	}
+	s.mu.Unlock()
+}
+
+func (s *DebugServer) runWebSocketHeartbeat(conn *websocket.Conn, done <-chan struct{}) {
+	ticker := time.NewTicker(webSocketPingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			s.wsWriteMu.Lock()
+			err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(webSocketWriteTimeout))
+			s.wsWriteMu.Unlock()
+			if err != nil {
+				if debugMode {
+					fmt.Printf("[INFO] WebSocket 心跳失败，连接已过期: %v\n", err)
+				}
+				s.expireDeviceConnection(conn)
+				return
+			}
+		}
+	}
 }
 
 func (s *DebugServer) getDeviceName() string {

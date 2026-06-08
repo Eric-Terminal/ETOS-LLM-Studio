@@ -2,9 +2,13 @@ package main
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestSendCommandFallbackToQueueWhenNoWebSocket(t *testing.T) {
@@ -94,6 +98,57 @@ func TestSendCommandWithResponseTimeout(t *testing.T) {
 	server.mu.RUnlock()
 	if exists {
 		t.Fatalf("pendingResponses[%s] 仍存在，期望已清理", requestID)
+	}
+}
+
+func TestWebSocketConnectionStatusExpiresWithoutActivity(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 7654)
+	httpServer := httptest.NewServer(http.HandlerFunc(server.handleWebSocketUpgrade))
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + wsPath
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("WebSocket 连接测试服务失败: %v", err)
+	}
+	defer conn.Close()
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for server.getDeviceConnection() == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("等待服务端记录 WebSocket 连接超时")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	server.mu.Lock()
+	server.lastWebSocketActivity = time.Now().Add(-webSocketConnectionTimeout - time.Second)
+	server.mu.Unlock()
+
+	connected, mode := server.getConnectionStatus()
+	if connected {
+		t.Fatalf("过期 WebSocket 连接仍显示在线: %s", mode)
+	}
+	if !strings.Contains(mode, "已断开") {
+		t.Fatalf("过期 WebSocket 状态 = %q, want 包含“已断开”", mode)
+	}
+	if server.getDeviceConnection() != nil {
+		t.Fatal("过期 WebSocket 状态检查后连接仍未清理")
+	}
+}
+
+func TestHTTPPollConnectionStatusExpiresAfterTimeout(t *testing.T) {
+	server := NewDebugServer("127.0.0.1", 7654)
+	server.mu.Lock()
+	server.lastPollTime = time.Now().Add(-httpPollFreshTimeout - time.Second)
+	server.mu.Unlock()
+
+	connected, mode := server.getConnectionStatus()
+	if connected {
+		t.Fatalf("过期 HTTP 轮询仍显示在线: %s", mode)
+	}
+	if !strings.Contains(mode, "已断开") {
+		t.Fatalf("过期 HTTP 轮询状态 = %q, want 包含“已断开”", mode)
 	}
 }
 
