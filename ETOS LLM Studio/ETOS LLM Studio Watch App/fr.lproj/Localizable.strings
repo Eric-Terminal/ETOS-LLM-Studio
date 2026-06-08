@@ -18,6 +18,12 @@
 "会话管理" = "Gestion des sessions";
 "使用动态背景" = "Utiliser un arrière-plan dynamique";
 "保存" = "Enregistrer";
+"未保存更改" = "Modifications non enregistrées";
+"要保存当前本地模型设置，还是放弃更改并离开？" = "Enregistrer les réglages actuels du modèle local ou abandonner les modifications et quitter ?";
+"保存并离开" = "Enregistrer et quitter";
+"放弃更改" = "Abandonner les modifications";
+"继续编辑" = "Continuer l’édition";
+"返回" = "Retour";
 "关于 ETOS LLM Studio" = "À propos ETOS LLM Studio";
 "内容显示" = "Affichage du contenu";
 "分支提示词和对话记录" = "Prompts de branche et historique de discussion";

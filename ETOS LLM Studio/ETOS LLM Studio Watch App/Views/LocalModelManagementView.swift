@@ -232,6 +232,7 @@ private struct LocalModelDetailView: View {
     @ObservedObject private var store = LocalModelStore.shared
     @State private var draft: LocalModelRecord
     @State private var showDeleteAlert = false
+    @State private var showUnsavedChangesAlert = false
     @State private var showCLIImport = false
     @State private var cliImportResult: LocalLLMCLIStyleImportResult?
     @State private var contextSizeText: String
@@ -247,10 +248,12 @@ private struct LocalModelDetailView: View {
     @State private var presencePenaltyText: String
 
     private static let watchOSGPULayers = 0
+    private let savedSnapshot: LocalModelRecord
 
     init(record: LocalModelRecord) {
         var initialDraft = record
         initialDraft.gpuLayers = Self.watchOSGPULayers
+        savedSnapshot = initialDraft
         _draft = State(initialValue: initialDraft)
         _contextSizeText = State(initialValue: "\(initialDraft.effectiveContextSize)")
         _maxOutputTokensText = State(initialValue: "\(initialDraft.effectiveMaxOutputTokens)")
@@ -306,12 +309,11 @@ private struct LocalModelDetailView: View {
 
             Section {
                 Button {
-                    applyDraftNumbers()
-                    store.update(draft)
-                    dismiss()
+                    saveAndDismiss()
                 } label: {
                     Label(NSLocalizedString("保存", comment: "Save"), systemImage: "checkmark")
                 }
+                .disabled(!hasUnsavedChanges)
 
                 Button(role: .destructive) {
                     showDeleteAlert = true
@@ -321,6 +323,7 @@ private struct LocalModelDetailView: View {
             }
         }
         .navigationTitle(draft.sanitizedDisplayName)
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .sheet(isPresented: $showCLIImport) {
             NavigationStack {
                 LocalModelCLIStyleImportView(record: draft) { result in
@@ -328,6 +331,25 @@ private struct LocalModelDetailView: View {
                     cliImportResult = result
                     refreshTextFieldsFromDraft()
                 }
+            }
+        }
+        .toolbar {
+            if hasUnsavedChanges {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        requestDismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel(NSLocalizedString("返回", comment: "Back button"))
+                }
+            }
+
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("保存", comment: "Save")) {
+                    saveAndDismiss()
+                }
+                .disabled(!hasUnsavedChanges)
             }
         }
         .alert(NSLocalizedString("删除本地模型", comment: "Delete local model alert"), isPresented: $showDeleteAlert) {
@@ -338,6 +360,17 @@ private struct LocalModelDetailView: View {
             }
         } message: {
             Text(NSLocalizedString("会同时删除手表上保存的权重文件。", comment: "Watch delete local model alert message"))
+        }
+        .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
+            Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
+                saveAndDismiss()
+            }
+            Button(NSLocalizedString("放弃更改", comment: "Discard changes"), role: .destructive) {
+                dismiss()
+            }
+            Button(NSLocalizedString("继续编辑", comment: "Continue editing"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("要保存当前本地模型设置，还是放弃更改并离开？", comment: "Unsaved local model settings alert message"))
         }
     }
 
@@ -536,44 +569,66 @@ private struct LocalModelDetailView: View {
         draft.samplerKinds == nil || LocalLLMSamplerKind.unique(draft.samplerKinds ?? []) == LocalLLMSamplerKind.defaultChain
     }
 
-    private func applyDraftNumbers() {
-        if draft.contextSize != nil, let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.contextSize = contextSize
+    private var hasUnsavedChanges: Bool {
+        draftApplyingTextFields(draft, clearsAdvancedArguments: false) != savedSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            showUnsavedChangesAlert = true
+        } else {
+            dismiss()
         }
-        if draft.maxOutputTokens != nil, let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.maxOutputTokens = maxOutputTokens
+    }
+
+    private func saveAndDismiss() {
+        let updatedDraft = draftApplyingTextFields(draft, clearsAdvancedArguments: true)
+        draft = updatedDraft
+        store.update(updatedDraft)
+        dismiss()
+    }
+
+    private func draftApplyingTextFields(_ source: LocalModelRecord, clearsAdvancedArguments: Bool) -> LocalModelRecord {
+        var updatedDraft = source
+        if updatedDraft.contextSize != nil, let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.contextSize = contextSize
         }
-        draft.gpuLayers = Self.watchOSGPULayers
-        if draft.seed != nil, let seed = parseSeed(seedText) {
-            draft.seed = seed
+        if updatedDraft.maxOutputTokens != nil, let maxOutputTokens = Int(maxOutputTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.maxOutputTokens = maxOutputTokens
         }
-        if draft.temperature != nil, let temperature = Double(temperatureText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.temperature = temperature
+        updatedDraft.gpuLayers = Self.watchOSGPULayers
+        if updatedDraft.seed != nil, let seed = parseSeed(seedText) {
+            updatedDraft.seed = seed
         }
-        if draft.topK != nil, let topK = Int(topKText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.topK = topK
+        if updatedDraft.temperature != nil, let temperature = Double(temperatureText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.temperature = temperature
         }
-        if draft.topP != nil, let topP = Double(topPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.topP = topP
+        if updatedDraft.topK != nil, let topK = Int(topKText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.topK = topK
         }
-        if draft.minP != nil, let minP = Double(minPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.minP = minP
+        if updatedDraft.topP != nil, let topP = Double(topPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.topP = topP
         }
-        if draft.repeatLastN != nil, let repeatLastN = Int(repeatLastNText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.repeatLastN = repeatLastN
+        if updatedDraft.minP != nil, let minP = Double(minPText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.minP = minP
         }
-        if draft.repeatPenalty != nil, let repeatPenalty = Double(repeatPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.repeatPenalty = repeatPenalty
+        if updatedDraft.repeatLastN != nil, let repeatLastN = Int(repeatLastNText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.repeatLastN = repeatLastN
         }
-        if draft.frequencyPenalty != nil, let frequencyPenalty = Double(frequencyPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.frequencyPenalty = frequencyPenalty
+        if updatedDraft.repeatPenalty != nil, let repeatPenalty = Double(repeatPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.repeatPenalty = repeatPenalty
         }
-        if draft.presencePenalty != nil, let presencePenalty = Double(presencePenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            draft.presencePenalty = presencePenalty
+        if updatedDraft.frequencyPenalty != nil, let frequencyPenalty = Double(frequencyPenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.frequencyPenalty = frequencyPenalty
         }
-        draft.advancedArguments = ""
-        draft.normalizeGenerationParameters()
-        refreshTextFieldsFromDraft()
+        if updatedDraft.presencePenalty != nil, let presencePenalty = Double(presencePenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.presencePenalty = presencePenalty
+        }
+        if clearsAdvancedArguments {
+            updatedDraft.advancedArguments = ""
+        }
+        updatedDraft.normalizeGenerationParameters()
+        return updatedDraft
     }
 
     private func refreshTextFieldsFromDraft() {

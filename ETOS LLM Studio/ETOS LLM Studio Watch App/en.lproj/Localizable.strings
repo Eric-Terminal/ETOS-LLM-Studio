@@ -18,6 +18,12 @@
 "会话管理" = "Session management";
 "使用动态背景" = "Use dynamic background";
 "保存" = "Save";
+"未保存更改" = "Unsaved Changes";
+"要保存当前本地模型设置，还是放弃更改并离开？" = "Save the current local model settings, or discard changes and leave?";
+"保存并离开" = "Save and Leave";
+"放弃更改" = "Discard Changes";
+"继续编辑" = "Continue Editing";
+"返回" = "Back";
 "关于 ETOS LLM Studio" = "About ETOS LLM Studio";
 "内容显示" = "Content display";
 "自动切换" = "Auto switch";
