@@ -56,6 +56,15 @@ struct ModelAdvancedSettingsView: View {
         return formatter
     }
 
+    private var samplingParameterFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.minimumIntegerDigits = 1
+        return formatter
+    }
+
     private var selectedGlobalPromptEntry: GlobalSystemPromptEntry? {
         guard let selectedGlobalSystemPromptEntryID else { return nil }
         return globalSystemPromptEntries.first(where: { $0.id == selectedGlobalSystemPromptEntryID })
@@ -203,19 +212,17 @@ struct ModelAdvancedSettingsView: View {
 
                 Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                 if aiTemperatureEnabled {
-                    samplingParameterSlider(
+                    samplingParameterField(
                         title: NSLocalizedString("温度", comment: "Temperature sampling parameter title"),
-                        value: temperatureBinding,
-                        range: temperatureRange
+                        value: temperatureBinding
                     )
                 }
 
                 Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
                 if aiTopPEnabled {
-                    samplingParameterSlider(
+                    samplingParameterField(
                         title: NSLocalizedString("Top-P", comment: "Top P sampling parameter title"),
-                        value: topPBinding,
-                        range: topPRange
+                        value: topPBinding
                     )
                 }
             }
@@ -232,21 +239,17 @@ struct ModelAdvancedSettingsView: View {
         }
     }
 
-    private func samplingParameterSlider(title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
-        VStack(alignment: .leading) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Spacer()
-                Text(String(format: "%.2f", value.wrappedValue))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-
-            // watchOS 的 Stepper 会把长标签放大成整屏控件，这里保留紧凑 Slider 交互。
-            Slider(value: value, in: range, step: samplingParameterStep)
+    private func samplingParameterField(title: String, value: Binding<Double>) -> some View {
+        HStack {
+            Text(title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer()
+            // 数值输入避开 watchOS Slider/Stepper 在小屏上的异常布局。
+            TextField("", value: value, formatter: samplingParameterFormatter)
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
+                .frame(width: 64)
                 .accessibilityLabel(Text(title))
         }
     }
