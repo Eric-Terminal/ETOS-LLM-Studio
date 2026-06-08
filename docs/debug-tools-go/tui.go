@@ -465,14 +465,38 @@ func (m *tuiModel) layout(width, height int) {
 	contentWidth := m.rightContentWidth()
 	m.content.Width = contentWidth
 	m.content.Height = contentHeight
-	tableHeight := maxInt(5, minInt(12, contentHeight/2))
-	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.mcpServers, &m.sessions, &m.memories, &m.sqlTables, &m.sqlRows} {
+	tableHeight := tuiPrimaryTableHeight(contentHeight)
+	for _, t := range []*table.Model{&m.filesTable, &m.providers, &m.settings, &m.mcpServers, &m.sessions, &m.memories} {
 		t.SetHeight(tableHeight)
 	}
+	sqlTablesHeight := tuiSQLTablesHeight(contentHeight)
+	sqlRowsHeight := tuiSQLRowsHeight(contentHeight)
+	m.sqlTables.SetHeight(sqlTablesHeight)
+	m.sqlRows.SetHeight(sqlRowsHeight)
 	previewWidth := maxInt(38, contentWidth-2)
 	m.preview.SetWidth(previewWidth)
-	m.preview.SetHeight(maxInt(4, contentHeight-tableHeight-5))
+	m.preview.SetHeight(tuiPreviewHeightForLayout(contentHeight, m.active, tableHeight, sqlTablesHeight, sqlRowsHeight))
 	m.resizeActiveForm()
+}
+
+func tuiPrimaryTableHeight(contentHeight int) int {
+	maxTableHeight := maxInt(5, contentHeight-9)
+	return maxInt(5, minInt(maxInt(12, contentHeight/2), maxTableHeight))
+}
+
+func tuiSQLTablesHeight(contentHeight int) int {
+	return maxInt(4, minInt(10, contentHeight/4))
+}
+
+func tuiSQLRowsHeight(contentHeight int) int {
+	return maxInt(5, minInt(maxInt(8, contentHeight/3), maxInt(5, contentHeight-tuiSQLTablesHeight(contentHeight)-12)))
+}
+
+func tuiPreviewHeightForLayout(contentHeight int, active tuiView, tableHeight, sqlTablesHeight, sqlRowsHeight int) int {
+	if active == tuiSQLite {
+		return maxInt(4, contentHeight-sqlTablesHeight-sqlRowsHeight-8)
+	}
+	return maxInt(4, contentHeight-tableHeight-5)
 }
 
 func (m tuiModel) boxHeight() int {
@@ -1884,13 +1908,12 @@ func (m *tuiModel) createSelectedKind() tea.Cmd {
 }
 
 func (m *tuiModel) editSelectedMemory() tea.Cmd {
-	row := m.memories.SelectedRow()
-	if len(row) == 0 {
+	memory := m.selectedMemory()
+	if len(memory) == 0 {
 		return nil
 	}
-	memoryID := row[0]
-	current := row[2]
-	content := current
+	memoryID := asString(memory["id"])
+	content := asString(memory["content"])
 	form := newTUIForm(huh.NewGroup(huh.NewText().Title("记忆内容").Value(&content)))
 	return m.beginInlineForm("编辑记忆", form, func(m *tuiModel) tea.Cmd {
 		return func() tea.Msg {
@@ -1901,12 +1924,12 @@ func (m *tuiModel) editSelectedMemory() tea.Cmd {
 }
 
 func (m tuiModel) showSelectedMemory() tea.Cmd {
-	row := m.memories.SelectedRow()
-	if len(row) == 0 {
+	memory := m.selectedMemory()
+	if len(memory) == 0 {
 		return nil
 	}
 	return func() tea.Msg {
-		return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": fmt.Sprintf("%s\n\n%s", row[1], row[2]), "focus_detail": true}}
+		return tuiCommandResultMsg{op: "preview", response: map[string]any{"status": "ok", "preview": memoryPreview(memory), "focus_detail": true}}
 	}
 }
 

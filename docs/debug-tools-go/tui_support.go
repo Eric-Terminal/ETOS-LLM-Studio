@@ -47,6 +47,28 @@ func (m tuiModel) selectedFileItem() map[string]any {
 	return nil
 }
 
+func (m tuiModel) selectedMemory() map[string]any {
+	row := m.memories.SelectedRow()
+	if len(row) == 0 {
+		return nil
+	}
+	id := row[0]
+	for _, memory := range m.memoryRows {
+		if asString(memory["id"]) == id {
+			return memory
+		}
+	}
+
+	fallback := map[string]any{"id": id}
+	if len(row) > 1 {
+		fallback["is_archived"] = row[1] == "归档"
+	}
+	if len(row) > 2 {
+		fallback["content"] = row[2]
+	}
+	return fallback
+}
+
 func tableRowsEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -287,6 +309,28 @@ func providerPreview(provider map[string]any) string {
 	lines = append(lines, "", "模型")
 	lines = append(lines, providerModelSummary(provider)...)
 	return strings.Join(lines, "\n")
+}
+
+func memoryStatusText(memory map[string]any) string {
+	if asBool(memory["isArchived"]) || asBool(memory["is_archived"]) {
+		return "归档"
+	}
+	return "活跃"
+}
+
+func memoryPreview(memory map[string]any) string {
+	content := strings.TrimSpace(asString(memory["content"]))
+	if content == "" {
+		content = "（空）"
+	}
+	return strings.Join([]string{
+		"记忆",
+		"  ID: " + emptyDash(asString(memory["id"])),
+		"  状态: " + memoryStatusText(memory),
+		"",
+		"内容",
+		content,
+	}, "\n")
 }
 
 func providerHeaderSummary(provider map[string]any) []string {

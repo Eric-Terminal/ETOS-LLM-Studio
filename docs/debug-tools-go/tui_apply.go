@@ -110,13 +110,9 @@ func (m *tuiModel) applyMemories(response map[string]any) {
 	memories := asMapSlice(response["memories"])
 	rows := make([]table.Row, 0, len(memories))
 	for _, memory := range memories {
-		status := "活跃"
-		if asBool(memory["isArchived"]) || asBool(memory["is_archived"]) {
-			status = "归档"
-		}
 		rows = append(rows, table.Row{
 			asString(memory["id"]),
-			status,
+			memoryStatusText(memory),
 			truncateLine(asString(memory["content"]), 80),
 		})
 	}

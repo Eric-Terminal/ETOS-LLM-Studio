@@ -137,6 +137,56 @@ func TestTUIInlineFormAcrossTerminalSizes(t *testing.T) {
 	}
 }
 
+func TestTUILargeTerminalUsesMoreThanDefaultTableRows(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiMemories
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 180, Height: 70})
+	model = updated.(tuiModel)
+
+	if model.memories.Height() <= 12 {
+		t.Fatalf("大屏记忆表格高度 = %d，仍像固定 12 行", model.memories.Height())
+	}
+	if model.preview.Height() < 16 {
+		t.Fatalf("大屏详情高度 = %d，未给详情保留足够空间", model.preview.Height())
+	}
+}
+
+func TestTUISelectedMemoryPreviewUsesFullContent(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiMemories
+	model.focus = tuiFocusContent
+	model.content.Width = 120
+	model.content.Height = 24
+	fullContent := strings.Repeat("完整记忆内容", 12) + "结尾标记"
+	model.applyMemories(map[string]any{
+		"memories": []any{
+			map[string]any{
+				"id":          "memory-1",
+				"content":     fullContent,
+				"is_archived": true,
+			},
+		},
+	})
+
+	row := model.memories.SelectedRow()
+	if strings.Contains(row[2], "结尾标记") {
+		t.Fatalf("测试数据没有被表格截断: %q", row[2])
+	}
+	cmd := model.showSelectedMemory()
+	if cmd == nil {
+		t.Fatal("showSelectedMemory 未返回命令")
+	}
+	rawMsg := cmd()
+	msg, ok := rawMsg.(tuiCommandResultMsg)
+	if !ok {
+		t.Fatalf("showSelectedMemory 返回消息类型 = %T", rawMsg)
+	}
+	model.applyCommandResult(msg)
+	if !strings.Contains(model.preview.Value(), "结尾标记") {
+		t.Fatalf("记忆详情没有使用完整内容:\n%s", model.preview.Value())
+	}
+}
+
 func TestApplyFilesKeepsDirectoryMetadataForNavigation(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.applyFiles(map[string]any{
