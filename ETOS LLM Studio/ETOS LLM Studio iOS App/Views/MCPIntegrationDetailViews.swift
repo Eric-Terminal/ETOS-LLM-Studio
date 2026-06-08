@@ -206,6 +206,10 @@ struct MCPToolSettingsDetailView: View {
                 }
             }
 
+            Section(NSLocalizedString("启用状态", comment: "Enable status")) {
+                Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: toolBinding)
+            }
+
             Section(
                 header: Text(NSLocalizedString("审批策略", comment: "")),
                 footer: Text(NSLocalizedString("默认“每次询问”，可按工具单独设置。", comment: ""))
@@ -220,6 +224,14 @@ struct MCPToolSettingsDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: ""))
+    }
+
+    private var toolBinding: Binding<Bool> {
+        Binding {
+            manager.isToolEnabled(serverID: serverID, toolId: tool.toolId)
+        } set: { newValue in
+            manager.setToolEnabled(serverID: serverID, toolId: tool.toolId, isEnabled: newValue)
+        }
     }
 
     private var toolApprovalPolicyBinding: Binding<MCPToolApprovalPolicy> {

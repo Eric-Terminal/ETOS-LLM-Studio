@@ -245,20 +245,24 @@ struct MCPToolListView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(manager.tools) { tool in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(tool.tool.toolId)
-                            .etFont(.headline)
-                        Text(tool.server.displayName)
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                        if let description = tool.tool.description, !description.isEmpty {
-                            Text(description)
+                    NavigationLink {
+                        MCPToolSettingsDetailView(serverID: tool.server.id, tool: tool.tool)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(tool.tool.toolId)
+                                .etFont(.headline)
+                            Text(tool.server.displayName)
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
+                            if let description = tool.tool.description, !description.isEmpty {
+                                Text(description)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(tool.internalName)
+                                .etFont(.caption2)
+                                .foregroundStyle(.tertiary)
                         }
-                        Text(tool.internalName)
-                            .etFont(.caption2)
-                            .foregroundStyle(.tertiary)
                     }
                     .padding(.vertical, 2)
                 }

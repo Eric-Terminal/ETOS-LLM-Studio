@@ -17,6 +17,31 @@ import SwiftUI
 import Foundation
 import ETOSCore
 
+private enum MCPIntegrationTab: String, CaseIterable, Identifiable {
+    case servers
+    case tools
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .servers:
+            return NSLocalizedString("服务器", comment: "")
+        case .tools:
+            return NSLocalizedString("工具", comment: "")
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .servers:
+            return "server.rack"
+        case .tools:
+            return "hammer"
+        }
+    }
+}
+
 struct MCPIntegrationView: View {
     @StateObject var manager = MCPManager.shared
     @StateObject var toolPermissionCenter = ToolPermissionCenter.shared
@@ -30,8 +55,45 @@ struct MCPIntegrationView: View {
     @State var selectedToolServerID: UUID?
     @State var selectedResourceServerID: UUID?
     @State var isShowingIntroDetails = false
+    @State private var selectedTab: MCPIntegrationTab = .servers
     
     var body: some View {
+        TabView(selection: $selectedTab) {
+            managementList
+                .tabItem {
+                    Label(MCPIntegrationTab.servers.title, systemImage: MCPIntegrationTab.servers.iconName)
+                }
+                .tag(MCPIntegrationTab.servers)
+
+            publishedToolsList
+                .tabItem {
+                    Label(MCPIntegrationTab.tools.title, systemImage: MCPIntegrationTab.tools.iconName)
+                }
+                .tag(MCPIntegrationTab.tools)
+        }
+        .navigationTitle(NSLocalizedString("MCP 工具箱", comment: ""))
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if selectedTab == .servers {
+                    Button {
+                        serverToEdit = nil
+                        isPresentingEditor = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isPresentingEditor, onDismiss: { serverToEdit = nil }) {
+            NavigationStack {
+                MCPServerEditor(existingServer: serverToEdit) { server in
+                    manager.save(server: server)
+                }
+            }
+        }
+    }
+
+    private var managementList: some View {
         List {
             Section {
                 settingsIntroCard(
@@ -86,7 +148,6 @@ struct MCPIntegrationView: View {
             serverListSection
             connectionOverviewSection
             approvalAutomationSection
-            publishedToolsSection
             activeToolCallsSection
             resourceSection
             promptSection
@@ -96,21 +157,11 @@ struct MCPIntegrationView: View {
             latestOutputSection
             latestErrorSection
         }
-        .navigationTitle(NSLocalizedString("MCP 工具箱", comment: ""))
-        .toolbar {
-            Button {
-                serverToEdit = nil
-                isPresentingEditor = true
-            } label: {
-                Image(systemName: "plus")
-            }
-        }
-        .sheet(isPresented: $isPresentingEditor, onDismiss: { serverToEdit = nil }) {
-            NavigationStack {
-                MCPServerEditor(existingServer: serverToEdit) { server in
-                    manager.save(server: server)
-                }
-            }
+    }
+
+    private var publishedToolsList: some View {
+        List {
+            publishedToolsSection
         }
     }
 }

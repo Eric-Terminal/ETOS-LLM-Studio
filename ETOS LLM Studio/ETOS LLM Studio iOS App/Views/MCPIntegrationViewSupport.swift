@@ -178,47 +178,69 @@ extension MCPIntegrationView {
 
     @ViewBuilder
     var publishedToolsSection: some View {
-        if manager.tools.isEmpty {
-            EmptyView()
-        } else {
-            Section(
-                String(format: NSLocalizedString("已公布工具 (%d)", comment: ""), manager.tools.count)
-            ) {
-                if !manager.chatToolsEnabled {
-                    Text(NSLocalizedString("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。", comment: ""))
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        Section(
+            String(format: NSLocalizedString("已公布工具 (%d)", comment: ""), manager.tools.count)
+        ) {
+            if !manager.chatToolsEnabled {
+                Text(NSLocalizedString("当前总开关已关闭，以下工具仅用于查看与配置，不会参与聊天调用。", comment: ""))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if manager.tools.isEmpty {
+                Text(NSLocalizedString("当前服务器尚未公布任何工具。", comment: ""))
+                    .foregroundStyle(.secondary)
+            } else {
                 ForEach(manager.tools) { available in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(available.tool.toolId)
-                            .etFont(.headline)
-                        Text(
-                            String(
-                                format: NSLocalizedString("来源：%@", comment: ""),
-                                available.server.displayName
-                            )
-                        )
-                            .etFont(.caption)
-                            .foregroundStyle(.secondary)
-                        if let desc = available.tool.description, !desc.isEmpty {
-                            Text(desc)
-                                .etFont(.footnote)
-                        }
-                        Text(
-                            String(
-                                format: NSLocalizedString("内部名称：%@", comment: ""),
-                                available.internalName
-                            )
-                        )
-                            .etFont(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .textSelection(.enabled)
+                    NavigationLink {
+                        MCPToolSettingsDetailView(serverID: available.server.id, tool: available.tool)
+                    } label: {
+                        publishedToolRow(available)
                     }
-                    .padding(.vertical, 2)
                 }
             }
         }
+    }
+
+    private func publishedToolRow(_ available: MCPAvailableTool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(available.tool.toolId)
+                    .etFont(.headline)
+                Spacer()
+                Text(
+                    manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)
+                    ? NSLocalizedString("已启用", comment: "MCP tool enabled status")
+                    : NSLocalizedString("已停用", comment: "MCP tool disabled status")
+                )
+                .etFont(.caption)
+                .foregroundStyle(
+                    manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)
+                    ? .green
+                    : .secondary
+                )
+            }
+            Text(
+                String(
+                    format: NSLocalizedString("来源：%@", comment: ""),
+                    available.server.displayName
+                )
+            )
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+            if let desc = available.tool.description, !desc.isEmpty {
+                Text(desc)
+                    .etFont(.footnote)
+            }
+            Text(
+                String(
+                    format: NSLocalizedString("内部名称：%@", comment: ""),
+                    available.internalName
+                )
+            )
+                .etFont(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
