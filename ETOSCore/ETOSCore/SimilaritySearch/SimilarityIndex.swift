@@ -210,6 +210,19 @@ public class SimilarityIndex: Identifiable, Hashable {
             dimension = newValue
         }
     }
+
+    private func refreshDimensionFromIndexItems() {
+        guard let storedDimension = indexItems.first(where: { !$0.embedding.isEmpty })?.embedding.count else {
+            dimension = 0
+            return
+        }
+
+        // 持久化索引保存的是预计算向量，加载后必须以实际索引维度为准。
+        if dimension != storedDimension {
+            logger.info("已从持久化索引恢复嵌入维度: \(self.dimension) -> \(storedDimension)。")
+        }
+        dimension = storedDimension
+    }
 }
 
 // MARK: - 增删改查 (CRUD)
@@ -306,6 +319,7 @@ public extension SimilarityIndex {
 
     func removeAll() {
         indexItems.removeAll()
+        dimension = 0
     }
 }
 
@@ -333,6 +347,7 @@ public extension SimilarityIndex {
     func loadIndex(fromDirectory path: URL? = nil, name: String? = nil) throws -> [IndexItem]? {
         if let indexPath = try getIndexPath(fromDirectory: path, name: name) {
             indexItems = try vectorStore.loadIndex(from: indexPath)
+            refreshDimensionFromIndexItems()
             return indexItems
         }
 

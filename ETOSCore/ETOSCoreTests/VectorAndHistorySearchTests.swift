@@ -188,6 +188,24 @@ fileprivate struct VectorSearchTests {
             #expect(newIndex.getItem(id: "c")?.text == "cat")
             cleanup()
         }
+
+        @Test("加载索引后应恢复持久化向量维度")
+        mutating func testLoadIndexRestoresPersistedEmbeddingDimension() async throws {
+            let sourceEmbeddings = MockEmbeddings(dimension: 4)
+            index = await SimilarityIndex(name: indexName, model: sourceEmbeddings, metric: CosineSimilarity(), vectorStore: JsonStore())
+            await index.addItem(id: "a", text: "apple", metadata: [:], embedding: [1, 0, 0, 0, 0, 0])
+            await index.addItem(id: "b", text: "banana", metadata: [:], embedding: [0, 1, 0, 0, 0, 0])
+            _ = try index.saveIndex(toDirectory: testDir)
+
+            let restartEmbeddings = MockEmbeddings(dimension: 4)
+            let restartedIndex = await SimilarityIndex(name: indexName, model: restartEmbeddings, metric: CosineSimilarity(), vectorStore: JsonStore())
+            _ = try restartedIndex.loadIndex(fromDirectory: testDir)
+
+            #expect(restartedIndex.dimension == 6)
+            let results = restartedIndex.search(usingQueryEmbedding: [1, 0, 0, 0, 0, 0], top: 1)
+            #expect(results.first?.id == "a")
+            cleanup()
+        }
     }
 
     struct NativeTokenizerTests {
