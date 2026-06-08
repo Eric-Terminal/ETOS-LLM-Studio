@@ -80,9 +80,10 @@ type tuiCommandResultMsg struct {
 }
 
 type tuiInlineForm struct {
-	title  string
-	form   *huh.Form
-	submit func(*tuiModel) tea.Cmd
+	title      string
+	form       *huh.Form
+	textFields []*huh.Text
+	submit     func(*tuiModel) tea.Cmd
 }
 
 type tuiStatus struct {
@@ -440,7 +441,7 @@ func (m tuiModel) renderRightPanel(help, message string) string {
 
 	contextHeight := m.inlineFormContextHeight()
 	context := clipRenderedLines(m.content.View(), contextHeight)
-	formHelp := tuiHelpStyle.Render("表单 | ↑↓/Tab 切换 | Enter 确认 | Esc 取消 | Ctrl+C 退出")
+	formHelp := tuiHelpStyle.Render("表单 | ↑↓/Tab 切换 | 文本 Enter 换行 | Ctrl+S/Ctrl+Enter 保存 | Esc 取消")
 	title := tuiDetailStyle.Render("▶ " + m.activeForm.title)
 	separator := tuiHelpStyle.Render(strings.Repeat("─", maxInt(8, minInt(m.rightContentWidth(), 80))))
 
@@ -538,20 +539,37 @@ func (m tuiModel) inlineFormHeight() int {
 	return maxInt(6, m.boxHeight()-m.inlineFormContextHeight()-7)
 }
 
+func (m tuiModel) inlineTextFieldHeight(count int) int {
+	if count <= 0 {
+		return 0
+	}
+	formHeight := m.inlineFormHeight()
+	if count == 1 {
+		return maxInt(6, formHeight-1)
+	}
+	return maxInt(6, (formHeight-count-1)/count)
+}
+
 func (m *tuiModel) resizeActiveForm() {
 	if m.activeForm == nil || m.activeForm.form == nil {
 		return
 	}
+	formWidth := maxInt(28, m.rightContentWidth()-2)
+	formHeight := m.inlineFormHeight()
 	m.activeForm.form.
-		WithWidth(maxInt(28, m.rightContentWidth()-2)).
-		WithHeight(m.inlineFormHeight())
+		WithWidth(formWidth)
+	for _, textField := range m.activeForm.textFields {
+		textField.WithHeight(m.inlineTextFieldHeight(len(m.activeForm.textFields)))
+	}
+	m.activeForm.form.WithHeight(formHeight)
 }
 
-func (m *tuiModel) beginInlineForm(title string, form *huh.Form, submit func(*tuiModel) tea.Cmd) tea.Cmd {
+func (m *tuiModel) beginInlineForm(title string, form *huh.Form, submit func(*tuiModel) tea.Cmd, textFields ...*huh.Text) tea.Cmd {
 	m.activeForm = &tuiInlineForm{
-		title:  title,
-		form:   form,
-		submit: submit,
+		title:      title,
+		form:       form,
+		textFields: textFields,
+		submit:     submit,
 	}
 	m.isLoading = false
 	m.resizeActiveForm()
@@ -1026,6 +1044,9 @@ func (m *tuiModel) setMessage(text string, style lipgloss.Style) {
 func newTUIForm(groups ...*huh.Group) *huh.Form {
 	keymap := huh.NewDefaultKeyMap()
 	keymap.Quit = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "取消"))
+	keymap.Text.Next = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "下一项"))
+	keymap.Text.Submit = key.NewBinding(key.WithKeys("ctrl+s", "ctrl+enter"), key.WithHelp("ctrl+s / ctrl+enter", "保存"))
+	keymap.Text.NewLine = key.NewBinding(key.WithKeys("enter", "shift+enter", "alt+enter", "ctrl+j"), key.WithHelp("enter", "换行"))
 	return huh.NewForm(groups...).WithKeyMap(keymap).WithShowHelp(false)
 }
 
@@ -1454,6 +1475,10 @@ func (m *tuiModel) addProviderModel() tea.Cmd {
 	requestBodyControls := "[]"
 	overrideParameters := "{}"
 	pricing := "{}"
+	rawRequestBodyField := huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON)
+	requestBodyControlsField := huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls)
+	overrideParametersField := huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters)
+	pricingField := huh.NewText().Title("Pricing JSON").Value(&pricing)
 	form := newTUIForm(huh.NewGroup(
 		huh.NewInput().Title("模型 ID").Value(&modelName),
 		huh.NewInput().Title("显示名称").Value(&displayName),
@@ -1482,10 +1507,10 @@ func (m *tuiModel) addProviderModel() tea.Cmd {
 			Options(tuiRequestBodyOverrideModeOptions()...).
 			Value(&requestBodyOverrideMode).
 			Height(3),
-		huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON),
-		huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls),
-		huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
-		huh.NewText().Title("Pricing JSON").Value(&pricing),
+		rawRequestBodyField,
+		requestBodyControlsField,
+		overrideParametersField,
+		pricingField,
 	))
 	return m.beginInlineForm("新增 Provider 模型", form, func(m *tuiModel) tea.Cmd {
 		payload, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
@@ -1510,7 +1535,7 @@ func (m *tuiModel) addProviderModel() tea.Cmd {
 			response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 			return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
 		}
-	})
+	}, rawRequestBodyField, requestBodyControlsField, overrideParametersField, pricingField)
 }
 
 func (m *tuiModel) editSelectedProviderModel() tea.Cmd {
@@ -1572,6 +1597,10 @@ func (m *tuiModel) editSelectedProviderModel() tea.Cmd {
 		overrideParameters := providerModelOverrideText(model)
 		pricing := providerModelPricingText(model)
 		isActivated := model["isActivated"] == nil || asBool(model["isActivated"])
+		rawRequestBodyField := huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON)
+		requestBodyControlsField := huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls)
+		overrideParametersField := huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters)
+		pricingField := huh.NewText().Title("Pricing JSON").Value(&pricing)
 
 		editForm := newTUIForm(huh.NewGroup(
 			huh.NewInput().Title("模型 ID").Value(&modelName),
@@ -1602,10 +1631,10 @@ func (m *tuiModel) editSelectedProviderModel() tea.Cmd {
 				Options(tuiSelectOptionsWithCurrent(tuiRequestBodyOverrideModeOptions(), requestBodyOverrideMode)...).
 				Value(&requestBodyOverrideMode).
 				Height(4),
-			huh.NewText().Title("Raw Request Body JSON（留空则清除）").Value(&rawRequestBodyJSON),
-			huh.NewText().Title("请求体控件 JSON 数组").Value(&requestBodyControls),
-			huh.NewText().Title("Override Parameters JSON").Value(&overrideParameters),
-			huh.NewText().Title("Pricing JSON").Value(&pricing),
+			rawRequestBodyField,
+			requestBodyControlsField,
+			overrideParametersField,
+			pricingField,
 		))
 		return m.beginInlineForm("编辑 Provider 模型", editForm, func(m *tuiModel) tea.Cmd {
 			payload, err := buildProviderModelUpsertPayload(providerModelUpsertInput{
@@ -1631,7 +1660,7 @@ func (m *tuiModel) editSelectedProviderModel() tea.Cmd {
 				response, err := m.server.sendCommandWithResponse(payload, 35*time.Second)
 				return tuiCommandResultMsg{op: "providers:model_upsert", response: response, err: err}
 			}
-		})
+		}, rawRequestBodyField, requestBodyControlsField, overrideParametersField, pricingField)
 	})
 }
 
@@ -1765,9 +1794,11 @@ func (m *tuiModel) promptSQLiteQuery(mutating bool) tea.Cmd {
 	if mutating {
 		title = "SQLite 写入"
 	}
+	sqlField := huh.NewText().Title("SQL").Value(&sql)
+	parametersField := huh.NewText().Title("Parameters JSON 数组").Value(&parametersJSON)
 	fields := []huh.Field{
-		huh.NewText().Title("SQL").Value(&sql),
-		huh.NewText().Title("Parameters JSON 数组").Value(&parametersJSON),
+		sqlField,
+		parametersField,
 	}
 	if mutating {
 		fields = append(fields,
@@ -1805,7 +1836,7 @@ func (m *tuiModel) promptSQLiteQuery(mutating bool) tea.Cmd {
 			}, 60*time.Second)
 			return tuiCommandResultMsg{op: op, response: response, err: err}
 		}
-	})
+	}, sqlField, parametersField)
 }
 
 func (m tuiModel) runSQLiteQuery(sql string, mutating bool) tea.Cmd {
@@ -1888,13 +1919,14 @@ func (m *tuiModel) editSelectedMemory() tea.Cmd {
 	}
 	memoryID := asString(memory["id"])
 	content := asString(memory["content"])
-	form := newTUIForm(huh.NewGroup(huh.NewText().Title("记忆内容").Value(&content)))
+	contentField := huh.NewText().Title("记忆内容").Value(&content)
+	form := newTUIForm(huh.NewGroup(contentField))
 	return m.beginInlineForm("编辑记忆", form, func(m *tuiModel) tea.Cmd {
 		return func() tea.Msg {
 			response, err := m.server.sendCommandWithResponse(map[string]any{"command": "memory_update", "memory_id": memoryID, "content": content}, 45*time.Second)
 			return tuiCommandResultMsg{op: "memories:update", response: response, err: err}
 		}
-	})
+	}, contentField)
 }
 
 func (m tuiModel) showSelectedMemory() tea.Cmd {

@@ -81,6 +81,37 @@ func TestNewTUIFormHidesDefaultHelp(t *testing.T) {
 	}
 }
 
+func TestTUITextFormEnterAddsNewlineWithoutSubmitting(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiMemories
+	model.focus = tuiFocusContent
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model = updated.(tuiModel)
+	model.applyMemories(map[string]any{
+		"memories": []any{
+			map[string]any{
+				"id":      "memory-1",
+				"content": "第一行",
+			},
+		},
+	})
+
+	if cmd := model.editSelectedMemory(); cmd == nil {
+		t.Fatal("记忆编辑未启动表单")
+	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if model.activeForm == nil {
+		t.Fatal("Enter 直接提交了长文本表单，期望在文本框内换行")
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("第二行")})
+	model = updated.(tuiModel)
+	if !strings.Contains(model.activeForm.form.View(), "第二行") {
+		t.Fatalf("Enter 后新行没有继续接收输入:\n%s", model.activeForm.form.View())
+	}
+}
+
 func TestTUIInlineFormKeepsCurrentContextVisible(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.active = tuiSQLite
@@ -149,6 +180,32 @@ func TestTUILargeTerminalUsesMoreThanDefaultTableRows(t *testing.T) {
 	}
 	if model.preview.Height() < 16 {
 		t.Fatalf("大屏详情高度 = %d，未给详情保留足够空间", model.preview.Height())
+	}
+}
+
+func TestTUILargeInlineTextFormExpandsMemoryEditor(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiMemories
+	model.focus = tuiFocusContent
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 180, Height: 70})
+	model = updated.(tuiModel)
+	model.applyMemories(map[string]any{
+		"memories": []any{
+			map[string]any{
+				"id":      "memory-1",
+				"content": strings.Repeat("记忆内容\n", 3),
+			},
+		},
+	})
+
+	if cmd := model.editSelectedMemory(); cmd == nil {
+		t.Fatal("记忆编辑未启动表单")
+	}
+	if model.activeForm == nil {
+		t.Fatal("记忆编辑表单未保持激活")
+	}
+	if got := lipgloss.Height(model.activeForm.form.View()); got < 30 {
+		t.Fatalf("大屏记忆编辑表单高度 = %d，仍像小文本框", got)
 	}
 }
 

@@ -146,6 +146,9 @@ func (m *tuiModel) editSelectedMCPServer() tea.Cmd {
 
 func (m *tuiModel) promptMCPServer(title string, input mcpServerInput, isNew bool) tea.Cmd {
 	originalInput := input
+	additionalHeadersField := huh.NewText().Title("Additional Headers JSON").Value(&input.AdditionalHeadersJSON)
+	oauthPayloadField := huh.NewText().Title("OAuth Payload JSON").Value(&input.OAuthPayloadJSON)
+	notesField := huh.NewText().Title("备注").Value(&input.Notes)
 	form := newTUIForm(huh.NewGroup(
 		huh.NewInput().Title("显示名称").Value(&input.DisplayName),
 		huh.NewSelect[string]().
@@ -157,9 +160,9 @@ func (m *tuiModel) promptMCPServer(title string, input mcpServerInput, isNew boo
 		huh.NewInput().Title("SSE Endpoint").Value(&input.SSEEndpointURL),
 		huh.NewInput().Title("Message Endpoint（SSE 可留空自动推断）").Value(&input.MessageEndpointURL),
 		huh.NewInput().Title("Bearer API Key").EchoMode(huh.EchoModePassword).Value(&input.APIKey),
-		huh.NewText().Title("Additional Headers JSON").Value(&input.AdditionalHeadersJSON),
-		huh.NewText().Title("OAuth Payload JSON").Value(&input.OAuthPayloadJSON),
-		huh.NewText().Title("备注").Value(&input.Notes),
+		additionalHeadersField,
+		oauthPayloadField,
+		notesField,
 		huh.NewConfirm().Title("加入聊天路由").Affirmative("加入").Negative("不加入").Value(&input.IsSelectedForChat),
 	))
 	return m.beginInlineForm(title, form, func(m *tuiModel) tea.Cmd {
@@ -179,7 +182,7 @@ func (m *tuiModel) promptMCPServer(title string, input mcpServerInput, isNew boo
 		}
 		commands = append(commands, m.loadMCPServers())
 		return tea.Sequence(commands...)
-	})
+	}, additionalHeadersField, oauthPayloadField, notesField)
 }
 
 func (m *tuiModel) editSelectedMCPPolicies() tea.Cmd {
@@ -190,9 +193,11 @@ func (m *tuiModel) editSelectedMCPPolicies() tea.Cmd {
 	serverID := asString(server["id"])
 	disabledToolIDs := firstNonEmpty(asString(server["disabled_tool_ids_json"]), "[]")
 	policies := firstNonEmpty(asString(server["tool_approval_policies_json"]), "{}")
+	disabledToolIDsField := huh.NewText().Title("Disabled Tool IDs JSON").Value(&disabledToolIDs)
+	policiesField := huh.NewText().Title("Tool Approval Policies JSON").Value(&policies)
 	form := newTUIForm(huh.NewGroup(
-		huh.NewText().Title("Disabled Tool IDs JSON").Value(&disabledToolIDs),
-		huh.NewText().Title("Tool Approval Policies JSON").Value(&policies),
+		disabledToolIDsField,
+		policiesField,
 	))
 	return m.beginInlineForm("编辑 MCP 工具策略", form, func(m *tuiModel) tea.Cmd {
 		normalizedDisabled, err := normalizeJSONStringArray(disabledToolIDs, "Disabled Tool IDs")
@@ -208,7 +213,7 @@ func (m *tuiModel) editSelectedMCPPolicies() tea.Cmd {
 			m.remoteCommand("mcp:policies", payload, 30*time.Second),
 			m.loadMCPServers(),
 		)
-	})
+	}, disabledToolIDsField, policiesField)
 }
 
 func (m *tuiModel) editSelectedMCPToolPolicy() tea.Cmd {

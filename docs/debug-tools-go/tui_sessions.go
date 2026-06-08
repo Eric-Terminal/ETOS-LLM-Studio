@@ -486,9 +486,8 @@ func (m *tuiModel) editSelectedSessionDetail() tea.Cmd {
 	}
 
 	value := sessionDetailEditValue(selectedMessage, section.kind)
-	form := newTUIForm(huh.NewGroup(
-		huh.NewText().Title(section.title).Value(&value),
-	))
+	valueField := huh.NewText().Title(section.title).Value(&value)
+	form := newTUIForm(huh.NewGroup(valueField))
 	return m.beginInlineForm("编辑会话消息", form, func(m *tuiModel) tea.Cmd {
 		updatedMessages := cloneSessionMessages(m.allSessionMessagesForEditing())
 		targetIndex := sessionMessageIndexByID(updatedMessages, asString(selectedMessage["id"]))
@@ -508,7 +507,7 @@ func (m *tuiModel) editSelectedSessionDetail() tea.Cmd {
 			response["messages"] = updatedMessages
 			return tuiCommandResultMsg{op: "sessions:update_messages", response: response, err: err}
 		}
-	})
+	}, valueField)
 }
 
 func sessionDetailEditValue(message map[string]any, kind tuiSessionDetailKind) string {
