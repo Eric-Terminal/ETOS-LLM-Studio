@@ -94,7 +94,7 @@ struct ETAdvancedMarkdownRenderer: View {
         }
     }
 
-    // 流式期间只把最后一行作为活动文本，避免整泡切纯文本或扫过气泡背景。
+    // 流式期间只把短的最后一行作为活动文本，避免整泡切纯文本或扫过气泡背景。
     private var streamingLineParts: (prefix: String, activeLine: String)? {
         guard isStreaming, !content.isEmpty else {
             return nil
@@ -110,6 +110,7 @@ struct ETAdvancedMarkdownRenderer: View {
             activeLine = content
         }
         guard !activeLine.isEmpty,
+              activeLine.utf16.count <= 48,
               (prefix.isEmpty || !containsUnclosedFence(in: prefix)) else {
             return nil
         }
@@ -154,6 +155,7 @@ struct ETAdvancedMarkdownRenderer: View {
         textColor: Color,
         fontScale: Double
     ) -> some View {
+        let normalizedFontScale = CGFloat(FontLibrary.normalizedFontScale(fontScale))
         VStack(alignment: .leading, spacing: 0) {
             if !prefix.isEmpty {
                 markdownTextView(
@@ -165,8 +167,10 @@ struct ETAdvancedMarkdownRenderer: View {
             }
             ETStreamingActiveLineText(
                 text: activeLine,
-                textColor: textColor
+                textColor: textColor,
+                lineSpacing: 2 * normalizedFontScale
             )
+            .padding(.top, prefix.isEmpty ? 0 : 2 * normalizedFontScale)
         }
     }
 
@@ -201,6 +205,7 @@ struct ETAdvancedMarkdownRenderer: View {
 private struct ETStreamingActiveLineText: View {
     let text: String
     let textColor: Color
+    let lineSpacing: CGFloat
     var fadeDuration: TimeInterval = 0.18
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -213,6 +218,7 @@ private struct ETStreamingActiveLineText: View {
     var body: some View {
         displayText
             .etFont(.body, sampleText: text)
+            .lineSpacing(lineSpacing)
             .onAppear {
                 reset(to: text)
             }
