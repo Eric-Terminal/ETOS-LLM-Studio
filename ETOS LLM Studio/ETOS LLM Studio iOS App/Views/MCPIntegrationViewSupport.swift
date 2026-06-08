@@ -42,10 +42,12 @@ extension MCPIntegrationView {
                         }
                     }
                     .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            manager.delete(server: server)
-                        } label: {
-                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                        if !MCPBuiltInSearchServer.isBuiltInSearchServer(server) {
+                            Button(role: .destructive) {
+                                manager.delete(server: server)
+                            } label: {
+                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                            }
                         }
                         Button {
                             serverToEdit = server

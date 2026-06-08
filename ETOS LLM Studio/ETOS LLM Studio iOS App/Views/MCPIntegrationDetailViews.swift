@@ -137,10 +137,12 @@ struct MCPServerDetailView: View {
                 Button(NSLocalizedString("编辑", comment: "")) {
                     isEditing = true
                 }
-                Button(role: .destructive) {
-                    showingDeleteConfirmation = true
-                } label: {
-                    Image(systemName: "trash")
+                if !MCPBuiltInSearchServer.isBuiltInSearchServer(server) {
+                    Button(role: .destructive) {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
                 }
             }
         }

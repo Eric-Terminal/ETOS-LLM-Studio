@@ -248,6 +248,15 @@ public final class MCPManager: ObservableObject {
     }
 
     public func delete(server: MCPServerConfiguration) {
+        guard !MCPBuiltInSearchServer.isBuiltInSearchServer(server) else {
+            appendGovernanceLog(
+                level: .warning,
+                category: .lifecycle,
+                serverID: server.id,
+                message: NSLocalizedString("内置 MCP 服务器不能删除，可通过“用于聊天”开关关闭。", comment: "Built-in MCP server cannot be deleted")
+            )
+            return
+        }
         persistResumptionToken(for: server.id)
         cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器被删除", comment: "MCP server deleted cancellation reason"))
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)

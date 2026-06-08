@@ -16,6 +16,10 @@ public enum MCPBuiltInSearchServer {
     public static let toolID = "search_web"
     public static let endpoint = "builtin://search"
 
+    public static func isBuiltInSearchServer(_ server: MCPServerConfiguration) -> Bool {
+        server.id == serverID || server.transport == .builtInSearch
+    }
+
     static func defaultConfiguration() -> MCPServerConfiguration {
         MCPServerConfiguration(
             id: serverID,

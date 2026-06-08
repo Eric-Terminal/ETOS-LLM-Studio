@@ -121,8 +121,10 @@ struct MCPServerDetailView: View {
                         }
                     }
 
-                    Button(NSLocalizedString("删除服务器", comment: ""), role: .destructive) {
-                        showingDeleteConfirmation = true
+                    if !MCPBuiltInSearchServer.isBuiltInSearchServer(server) {
+                        Button(NSLocalizedString("删除服务器", comment: ""), role: .destructive) {
+                            showingDeleteConfirmation = true
+                        }
                     }
                 }
             } else {

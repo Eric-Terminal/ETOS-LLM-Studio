@@ -130,5 +130,10 @@ struct MCPBuiltInSearchServerTests {
         #expect(reloaded.first?.humanReadableEndpoint == MCPBuiltInSearchServer.endpoint)
         #expect(reloaded.first?.isSelectedForChat == false)
         #expect(reloaded.first?.toolApprovalPolicies[MCPBuiltInSearchServer.toolID] == .alwaysDeny)
+
+        MCPServerStore.delete(server)
+        let afterDeleteAttempt = MCPServerStore.loadServers()
+        #expect(afterDeleteAttempt.count == 1)
+        #expect(afterDeleteAttempt.first?.id == MCPBuiltInSearchServer.serverID)
     }
 }
