@@ -3,39 +3,11 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 工具中心视图的概览、分类入口与状态文案辅助。
+// 工具中心视图的分类入口与状态文案辅助。
 // ============================================================================
 
 import SwiftUI
 import ETOSCore
-
-struct ToolCenterSummaryRow: View {
-    let title: String
-    let configuredEnabled: Int
-    let availableNow: Int
-    let total: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .etFont(.headline.weight(.semibold))
-            HStack(spacing: 12) {
-                Label(
-                    String(format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"), configuredEnabled, total),
-                    systemImage: "slider.horizontal.3"
-                )
-                Label(
-                    String(format: NSLocalizedString("当前会话可用 %d / %d", comment: "Currently available count"), availableNow, total),
-                    systemImage: "checkmark.circle"
-                )
-            }
-            .etFont(.caption)
-            .foregroundStyle(availableNow > 0 ? Color.green : Color.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
-    }
-}
 
 struct ToolCenterStatusRow: View {
     let title: String
@@ -119,51 +91,6 @@ struct ToolCenterIntroCard: View {
 }
 
 extension ToolCenterView {
-    var overviewSection: some View {
-        Section {
-            ToolCenterSummaryRow(
-                title: NSLocalizedString("内置工具", comment: "Built-in tools section title"),
-                configuredEnabled: configuredBuiltInCount,
-                availableNow: availableBuiltInCount,
-                total: builtInStates.count
-            )
-
-            ToolCenterSummaryRow(
-                title: NSLocalizedString("MCP 工具", comment: "MCP tools section title"),
-                configuredEnabled: configuredMCPCount,
-                availableNow: availableMCPCount,
-                total: mcpCatalogTools.count
-            )
-
-            ToolCenterSummaryRow(
-                title: NSLocalizedString("拓展工具", comment: "App tools section title"),
-                configuredEnabled: configuredAppToolCount,
-                availableNow: availableAppToolCount,
-                total: appToolManager.tools.count
-            )
-
-            ToolCenterSummaryRow(
-                title: "Agent Skills",
-                configuredEnabled: configuredSkillCount,
-                availableNow: availableSkillCount,
-                total: skillManager.skills.count
-            )
-
-            ToolCenterSummaryRow(
-                title: NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"),
-                configuredEnabled: configuredShortcutCount,
-                availableNow: availableShortcutCount,
-                total: shortcutManager.tools.count
-            )
-
-            if currentSessionIsolationActive {
-                Text(NSLocalizedString("当前会话已启用世界书隔离发送，聊天时不会发送记忆、MCP、Agent Skills 与快捷指令工具。", comment: "世界书隔离发送提示"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.orange)
-            }
-        }
-    }
-
     func settingsIntroCard(
         title: String,
         summary: String,

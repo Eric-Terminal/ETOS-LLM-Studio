@@ -324,7 +324,6 @@ struct ToolCenterView: View {
                 )
             }
 
-            overviewSection
             filterSection
             if isBuiltInSectionVisible {
                 builtInSection
