@@ -802,6 +802,65 @@ func TestTUIProviderDetailFocusScrollsWithDownKey(t *testing.T) {
 	}
 }
 
+func TestTUIProviderDetailTopUpReturnsToTableSelection(t *testing.T) {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.active = tuiProviders
+	model.focus = tuiFocusContent
+	model.content.Width = 100
+	model.content.Height = 8
+	model.applyProviders(map[string]any{"providers": []any{
+		map[string]any{"id": "provider-1", "name": "Provider One", "apiFormat": "openai-compatible"},
+		map[string]any{"id": "provider-2", "name": "Provider Two", "apiFormat": "gemini"},
+	}})
+	model.providers.SetCursor(1)
+	model.applyCommandResult(tuiCommandResultMsg{
+		op: "preview",
+		response: map[string]any{
+			"status":       "ok",
+			"preview":      "Provider Two\n短详情",
+			"focus_detail": true,
+		},
+	})
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	got := updated.(tuiModel)
+	if got.focus != tuiFocusContent {
+		t.Fatalf("focus = %v, want tuiFocusContent", got.focus)
+	}
+	if got.providers.Cursor() != 0 {
+		t.Fatalf("providers cursor = %d, want 0", got.providers.Cursor())
+	}
+}
+
+func TestTUIMCPShortDetailDownReturnsToTableSelection(t *testing.T) {
+	model := tuiModelWithMCPShortDetail()
+
+	if model.focus != tuiFocusDetail {
+		t.Fatalf("focus = %v, want tuiFocusDetail", model.focus)
+	}
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	got := updated.(tuiModel)
+	if got.focus != tuiFocusContent {
+		t.Fatalf("focus = %v, want tuiFocusContent", got.focus)
+	}
+	if got.mcpServers.Cursor() != 1 {
+		t.Fatalf("mcpServers cursor = %d, want 1", got.mcpServers.Cursor())
+	}
+}
+
+func TestTUITouchDetailDownReturnsToTableSelection(t *testing.T) {
+	model := tuiModelWithMCPShortDetail()
+
+	updated, _ := model.Update(tuiMousePressForHelpLabel(t, model, "↓滚动"))
+	got := updated.(tuiModel)
+	if got.focus != tuiFocusContent {
+		t.Fatalf("focus = %v, want tuiFocusContent", got.focus)
+	}
+	if got.mcpServers.Cursor() != 1 {
+		t.Fatalf("mcpServers cursor = %d, want 1", got.mcpServers.Cursor())
+	}
+}
+
 func TestTUITouchHelpButtonOpensFilesPathForm(t *testing.T) {
 	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
 	model.layout(150, 42)
@@ -1195,4 +1254,38 @@ func sessionMessageElementStartLine(model tuiModel, messageIndex int) int {
 		start += 2
 	}
 	return start
+}
+
+func tuiModelWithMCPShortDetail() tuiModel {
+	model := newTUIModel(NewDebugServer("127.0.0.1", 7654), "127.0.0.1")
+	model.layout(150, 42)
+	model.active = tuiMCP
+	model.focus = tuiFocusContent
+	model.content.Width = 120
+	model.content.Height = 18
+	model.applyMCPServers(map[string]any{"rows": []any{
+		map[string]any{
+			"id":                   "mcp-1",
+			"display_name":         "MCP One",
+			"transport_kind":       "http",
+			"is_selected_for_chat": true,
+			"endpoint":             "https://one.example.com/mcp",
+		},
+		map[string]any{
+			"id":                   "mcp-2",
+			"display_name":         "MCP Two",
+			"transport_kind":       "sse",
+			"is_selected_for_chat": false,
+			"endpoint":             "https://two.example.com/sse",
+		},
+	}})
+	model.applyCommandResult(tuiCommandResultMsg{
+		op: "preview",
+		response: map[string]any{
+			"status":       "ok",
+			"preview":      "MCP One\n短详情",
+			"focus_detail": true,
+		},
+	})
+	return model
 }

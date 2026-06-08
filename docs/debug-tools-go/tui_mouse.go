@@ -415,10 +415,38 @@ func (m *tuiModel) runTouchAction(action tuiTouchAction) tea.Cmd {
 			m.focus = tuiFocusContent
 			m.syncFocusedComponent()
 		}
+		previousFocus := m.focus
 		cmd = m.handleContentKey(action.key)
+		if previousFocus == tuiFocusDetail && m.focus == tuiFocusContent {
+			var componentCmd tea.Cmd
+			updated, componentCmd := m.updateActiveContentComponent(tuiKeyMsgForTouchAction(action.key))
+			*m = updated
+			cmd = tea.Batch(cmd, componentCmd)
+		}
 	}
 	m.syncContentViewport()
 	return m.markTouchLoading(cmd, action.key)
+}
+
+func tuiKeyMsgForTouchAction(key string) tea.KeyMsg {
+	switch key {
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
+	case "pgup":
+		return tea.KeyMsg{Type: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyMsg{Type: tea.KeyPgDown}
+	case "home":
+		return tea.KeyMsg{Type: tea.KeyHome}
+	case "end":
+		return tea.KeyMsg{Type: tea.KeyEnd}
+	case "enter":
+		return tea.KeyMsg{Type: tea.KeyEnter}
+	default:
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+	}
 }
 
 func (m *tuiModel) handleTouchEscape() tea.Cmd {

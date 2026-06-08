@@ -926,22 +926,47 @@ func (m *tuiModel) handleDetailKey(key string) tea.Cmd {
 	case "r":
 		return m.refreshActiveView()
 	case "up", "k":
-		m.content.ScrollUp(1)
+		if !m.scrollDetailUp(1) {
+			m.returnDetailFocusToContent()
+		}
 	case "down", "j":
-		m.content.ScrollDown(1)
+		if !m.scrollDetailDown(1) {
+			m.returnDetailFocusToContent()
+		}
 	case "pgup", "ctrl+u":
-		m.content.HalfViewUp()
+		m.scrollDetailUp(maxInt(1, m.content.Height/2))
 	case "pgdown", "ctrl+d":
-		m.content.HalfViewDown()
+		m.scrollDetailDown(maxInt(1, m.content.Height/2))
 	case "home":
-		m.content.GotoTop()
+		m.content.SetYOffset(m.previewStartYOffset())
 	case "end":
 		m.content.GotoBottom()
 	case "enter":
-		m.focus = tuiFocusContent
-		m.syncFocusedComponent()
+		m.returnDetailFocusToContent()
 	}
 	return nil
+}
+
+func (m *tuiModel) scrollDetailUp(lines int) bool {
+	previewTop := m.previewStartYOffset()
+	if m.content.YOffset <= previewTop {
+		m.content.SetYOffset(previewTop)
+		return false
+	}
+	before := m.content.YOffset
+	m.content.SetYOffset(maxInt(previewTop, m.content.YOffset-lines))
+	return m.content.YOffset != before
+}
+
+func (m *tuiModel) scrollDetailDown(lines int) bool {
+	before := m.content.YOffset
+	m.content.ScrollDown(lines)
+	return m.content.YOffset != before
+}
+
+func (m *tuiModel) returnDetailFocusToContent() {
+	m.focus = tuiFocusContent
+	m.syncFocusedComponent()
 }
 
 func (m tuiModel) updateActiveContentComponent(msg tea.Msg) (tuiModel, tea.Cmd) {
