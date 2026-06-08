@@ -230,7 +230,8 @@ struct MCPToolSettingsDetailView: View {
                     Text(String(format: NSLocalizedString("输入 Schema：%@", comment: ""), schemaSummary))
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
-                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
             }
 

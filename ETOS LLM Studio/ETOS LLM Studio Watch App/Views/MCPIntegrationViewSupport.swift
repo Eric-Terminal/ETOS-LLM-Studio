@@ -189,10 +189,10 @@ struct MCPToolSettingsDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let schemaSummary = ToolCatalogSupport.schemaSummary(for: tool.inputSchema, fieldLimit: 4) {
-                    Text("Schema: \(schemaSummary)")
+                    Text(String(format: NSLocalizedString("输入 Schema：%@", comment: ""), schemaSummary))
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
-                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
