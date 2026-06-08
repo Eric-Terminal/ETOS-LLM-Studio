@@ -218,6 +218,8 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableAdvancedRenderer: Bool { didSet { write(.enableAdvancedRenderer, enableAdvancedRenderer) } }
     @Published public var enableExperimentalToolResultDisplay: Bool { didSet { write(.enableExperimentalToolResultDisplay, enableExperimentalToolResultDisplay) } }
     @Published public var enableAutoReasoningPreview: Bool { didSet { write(.enableAutoReasoningPreview, enableAutoReasoningPreview) } }
+    @Published public var enableResponsiveReasoningPreviewHeight: Bool { didSet { write(.enableResponsiveReasoningPreviewHeight, enableResponsiveReasoningPreviewHeight) } }
+    @Published public var reasoningPreviewHeightPercent: Double { didSet { write(.reasoningPreviewHeightPercent, reasoningPreviewHeightPercent) } }
     @Published public var enableBackground: Bool { didSet { write(.enableBackground, enableBackground) } }
     @Published public var backgroundBlur: Double { didSet { write(.backgroundBlur, backgroundBlur) } }
     @Published public var backgroundOpacity: Double { didSet { write(.backgroundOpacity, backgroundOpacity) } }
@@ -366,6 +368,8 @@ public final class AppConfigStore: ObservableObject {
         enableAdvancedRenderer = Self.boolValue(.enableAdvancedRenderer, userDefaults: userDefaults)
         enableExperimentalToolResultDisplay = Self.boolValue(.enableExperimentalToolResultDisplay, userDefaults: userDefaults)
         enableAutoReasoningPreview = Self.boolValue(.enableAutoReasoningPreview, userDefaults: userDefaults)
+        enableResponsiveReasoningPreviewHeight = Self.boolValue(.enableResponsiveReasoningPreviewHeight, userDefaults: userDefaults)
+        reasoningPreviewHeightPercent = Self.realValue(.reasoningPreviewHeightPercent, userDefaults: userDefaults)
         enableBackground = Self.boolValue(.enableBackground, userDefaults: userDefaults)
         backgroundBlur = Self.realValue(.backgroundBlur, userDefaults: userDefaults)
         backgroundOpacity = Self.realValue(.backgroundOpacity, userDefaults: userDefaults)
@@ -806,6 +810,8 @@ public final class AppConfigStore: ObservableObject {
         case .enableAdvancedRenderer: return .bool(enableAdvancedRenderer)
         case .enableExperimentalToolResultDisplay: return .bool(enableExperimentalToolResultDisplay)
         case .enableAutoReasoningPreview: return .bool(enableAutoReasoningPreview)
+        case .enableResponsiveReasoningPreviewHeight: return .bool(enableResponsiveReasoningPreviewHeight)
+        case .reasoningPreviewHeightPercent: return .real(reasoningPreviewHeightPercent)
         case .enableBackground: return .bool(enableBackground)
         case .backgroundBlur: return .real(backgroundBlur)
         case .backgroundOpacity: return .real(backgroundOpacity)
@@ -920,6 +926,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableAdvancedRenderer: enableAdvancedRenderer = value
         case .enableExperimentalToolResultDisplay: enableExperimentalToolResultDisplay = value
         case .enableAutoReasoningPreview: enableAutoReasoningPreview = value
+        case .enableResponsiveReasoningPreviewHeight: enableResponsiveReasoningPreviewHeight = value
         case .enableBackground: enableBackground = value
         case .enableAutoRotateBackground: enableAutoRotateBackground = value
         case .enableReasoningSummary: enableReasoningSummary = value
@@ -969,6 +976,7 @@ public final class AppConfigStore: ObservableObject {
         case .backgroundBlur: backgroundBlur = value
         case .backgroundOpacity: backgroundOpacity = value
         case .fontCustomScale: fontCustomScale = value
+        case .reasoningPreviewHeightPercent: reasoningPreviewHeightPercent = value
         default: break
         }
     }

@@ -111,10 +111,28 @@ struct DisplaySettingsView: View {
 
                 Section {
                     Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
+                    Toggle(NSLocalizedString("响应式思考预览高度", comment: ""), isOn: $appConfig.enableResponsiveReasoningPreviewHeight)
+
+                    if !appConfig.enableResponsiveReasoningPreviewHeight {
+                        HStack {
+                            Text(NSLocalizedString("预览高度百分比", comment: ""))
+                            Spacer()
+                            TextField(
+                                NSLocalizedString("百分比", comment: ""),
+                                value: $appConfig.reasoningPreviewHeightPercent,
+                                formatter: percentageFormatter
+                            )
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 82)
+                            Text("%")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Text(NSLocalizedString("思考过程展现", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("开启后，AI 回复仅有思考内容时会自动展开；一旦出现正文会自动收起。", comment: ""))
+                    Text(NSLocalizedString("自动预览会在 AI 回复仅有思考内容时展开，一旦出现正文会收起。关闭响应式高度后，预览框会按你填写的聊天区高度百分比直接计算。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -176,5 +194,14 @@ struct DisplaySettingsView: View {
         } else {
             Text(language.nativeDisplayName)
         }
+    }
+
+    private var percentageFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.allowsFloats = true
+        return formatter
     }
 }

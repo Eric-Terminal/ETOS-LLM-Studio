@@ -68,13 +68,24 @@ struct DisplaySettingsView: View {
             }
 
             // MARK: Section 2：对话框与内容
-            Section(header: Text(NSLocalizedString("对话框与内容", comment: ""))) {
+            Section(
+                header: Text(NSLocalizedString("对话框与内容", comment: "")),
+                footer: Text(NSLocalizedString("关闭响应式高度后，预览框会按你填写的聊天区高度百分比直接计算。", comment: ""))
+            ) {
                 Toggle(NSLocalizedString("渲染 Markdown", comment: ""), isOn: $enableMarkdown)
                 if enableMarkdown {
                     Toggle(NSLocalizedString("使用高级渲染器", comment: ""), isOn: $enableAdvancedRenderer)
                 }
                 Toggle(NSLocalizedString("关闭助手气泡", comment: ""), isOn: $enableNoBubbleUI)
                 Toggle(NSLocalizedString("自动预览思考过程", comment: ""), isOn: $enableAutoReasoningPreview)
+                Toggle(NSLocalizedString("响应式思考预览高度", comment: ""), isOn: $appConfig.enableResponsiveReasoningPreviewHeight)
+                if !appConfig.enableResponsiveReasoningPreviewHeight {
+                    TextField(
+                        NSLocalizedString("预览高度百分比", comment: ""),
+                        value: $appConfig.reasoningPreviewHeightPercent,
+                        formatter: percentageFormatter
+                    )
+                }
                 NavigationLink {
                     WatchChatAppearanceProfileSettingsView()
                 } label: {
@@ -149,6 +160,15 @@ struct DisplaySettingsView: View {
         if normalizedBackgroundOpacity != backgroundOpacity {
             backgroundOpacity = normalizedBackgroundOpacity
         }
+    }
+
+    private var percentageFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.allowsFloats = true
+        return formatter
     }
 
     private var appLanguageBinding: Binding<String> {

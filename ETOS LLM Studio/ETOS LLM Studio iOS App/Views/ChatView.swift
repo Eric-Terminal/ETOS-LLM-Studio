@@ -123,7 +123,13 @@ struct ChatView: View {
         navBarPillHeight
     }
     func responsiveReasoningPreviewMaxHeight(for viewportHeight: CGFloat) -> CGFloat {
-        let scaledHeight = max(1, viewportHeight) * reasoningPreviewHeightRatio
+        let viewportHeight = max(1, viewportHeight)
+        guard appConfig.enableResponsiveReasoningPreviewHeight else {
+            let percent = appConfig.reasoningPreviewHeightPercent
+            let safePercent = percent.isFinite ? max(0, percent) : 0
+            return viewportHeight * CGFloat(safePercent / 100)
+        }
+        let scaledHeight = viewportHeight * reasoningPreviewHeightRatio
         return min(max(scaledHeight, reasoningPreviewMinHeight), reasoningPreviewMaxHeightLimit)
     }
     var usesLandscapeSessionSidebar: Bool {

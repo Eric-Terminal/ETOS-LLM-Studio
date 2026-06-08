@@ -162,6 +162,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableAdvancedRenderer = "enableAdvancedRenderer"
     case enableExperimentalToolResultDisplay = "enableExperimentalToolResultDisplay"
     case enableAutoReasoningPreview = "enableAutoReasoningPreview"
+    case enableResponsiveReasoningPreviewHeight = "chat.reasoningPreviewHeight.responsive"
+    case reasoningPreviewHeightPercent = "chat.reasoningPreviewHeight.percent"
     case enableBackground = "enableBackground"
     case backgroundBlur = "backgroundBlur"
     case backgroundOpacity = "backgroundOpacity"
@@ -364,6 +366,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .enableAdvancedRenderer,
              .enableExperimentalToolResultDisplay,
              .enableAutoReasoningPreview,
+             .enableResponsiveReasoningPreviewHeight,
              .enableBackground,
              .enableReasoningSummary,
              .enableChatTopBlurFade:
@@ -376,6 +379,12 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(10.0)
         case .backgroundOpacity:
             return .real(0.7)
+        case .reasoningPreviewHeightPercent:
+            #if os(watchOS)
+            return .real(28.0)
+            #else
+            return .real(20.8)
+            #endif
         case .backgroundContentMode:
             return .text("fill")
         case .currentBackgroundImage:
