@@ -32,13 +32,19 @@ public enum MCPBuiltInSearchServer {
         )
     }
 
-    static func prepareServersForManager(_ storedServers: [MCPServerConfiguration]) -> (
+    static func prepareServersForManager(
+        _ storedServers: [MCPServerConfiguration],
+        deletedBuiltInServerIDs: Set<UUID> = []
+    ) -> (
         servers: [MCPServerConfiguration],
         serverToPersist: MCPServerConfiguration?
     ) {
         var servers = storedServers
         let defaultServer = defaultConfiguration()
         guard let index = servers.firstIndex(where: { $0.id == serverID }) else {
+            guard !deletedBuiltInServerIDs.contains(serverID) else {
+                return (servers, nil)
+            }
             servers.append(defaultServer)
             return (servers, defaultServer)
         }

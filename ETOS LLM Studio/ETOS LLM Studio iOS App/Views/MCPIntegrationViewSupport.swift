@@ -24,12 +24,10 @@ extension MCPIntegrationView {
                         serverSummaryRow(for: server)
                     }
                     .swipeActions(edge: .trailing) {
-                        if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
-                            Button(role: .destructive) {
-                                manager.delete(server: server)
-                            } label: {
-                                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
-                            }
+                        Button(role: .destructive) {
+                            manager.delete(server: server)
+                        } label: {
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                         }
                         Button {
                             serverToEdit = server
@@ -39,6 +37,19 @@ extension MCPIntegrationView {
                         }
                         .tint(.blue)
                     }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var moreSection: some View {
+        if !manager.restorableBuiltInServers.isEmpty {
+            Section(NSLocalizedString("更多", comment: "")) {
+                NavigationLink {
+                    MCPBuiltInServerRestoreView()
+                } label: {
+                    Label(NSLocalizedString("内置工具", comment: "Built-in tools section title"), systemImage: "shippingbox.and.arrow.backward")
                 }
             }
         }

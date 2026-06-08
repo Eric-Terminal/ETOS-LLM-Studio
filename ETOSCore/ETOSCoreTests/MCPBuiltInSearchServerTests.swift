@@ -70,12 +70,18 @@ struct MCPBuiltInSearchServerTests {
         #expect(decoded.toolApprovalPolicies[MCPBuiltInSearchServer.toolID] == .alwaysAllow)
     }
 
-    @Test("Manager 准备列表时会补入并保留内置搜索配置")
+    @Test("Manager 准备列表时只跳过已删除的内置搜索配置")
     func testPrepareServersForManager() {
         let emptyResult = MCPBuiltInSearchServer.prepareServersForManager([])
         #expect(emptyResult.servers.map(\.id) == [MCPBuiltInSearchServer.serverID])
         #expect(emptyResult.serverToPersist?.id == MCPBuiltInSearchServer.serverID)
-        #expect(emptyResult.servers.first?.isSelectedForChat == true)
+
+        let deletedResult = MCPBuiltInSearchServer.prepareServersForManager(
+            [],
+            deletedBuiltInServerIDs: [MCPBuiltInSearchServer.serverID]
+        )
+        #expect(deletedResult.servers.isEmpty)
+        #expect(deletedResult.serverToPersist == nil)
 
         var storedServer = MCPBuiltInSearchServer.defaultConfiguration()
         storedServer.isSelectedForChat = false
@@ -88,7 +94,7 @@ struct MCPBuiltInSearchServerTests {
     }
 
     @MainActor
-    @Test("关系化存储可回读内置搜索服务器")
+    @Test("关系化存储可回读并删除内置搜索服务器")
     func testBuiltInSearchRelationalRoundtrip() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         Persistence.grdbEnabledOverrideForTests = true
@@ -132,8 +138,7 @@ struct MCPBuiltInSearchServerTests {
         #expect(reloaded.first?.toolApprovalPolicies[MCPBuiltInSearchServer.toolID] == .alwaysDeny)
 
         MCPServerStore.delete(server)
-        let afterDeleteAttempt = MCPServerStore.loadServers()
-        #expect(afterDeleteAttempt.count == 1)
-        #expect(afterDeleteAttempt.first?.id == MCPBuiltInSearchServer.serverID)
+        let afterDelete = MCPServerStore.loadServers()
+        #expect(afterDelete.isEmpty)
     }
 }

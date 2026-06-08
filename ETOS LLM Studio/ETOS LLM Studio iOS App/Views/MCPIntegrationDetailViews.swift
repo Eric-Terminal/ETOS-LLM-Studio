@@ -94,12 +94,10 @@ struct MCPServerDetailView: View {
                 Button(NSLocalizedString("编辑", comment: "")) {
                     isEditing = true
                 }
-                if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
-                    Button(role: .destructive) {
-                        showingDeleteConfirmation = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
+                Button(role: .destructive) {
+                    showingDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
                 }
             }
         }
@@ -179,6 +177,53 @@ struct MCPServerDetailView: View {
             return true
         }
         return false
+    }
+}
+
+struct MCPBuiltInServerRestoreView: View {
+    @ObservedObject private var manager = MCPManager.shared
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("内置工具", comment: "Built-in tools section title")) {
+                if manager.restorableBuiltInServers.isEmpty {
+                    Text(NSLocalizedString("所有内置 MCP 服务器都已添加。", comment: "All built-in MCP servers restored"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(manager.restorableBuiltInServers) { item in
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.displayName)
+                                    .etFont(.headline)
+                                if let notes = item.notes, !notes.isEmpty {
+                                    Text(notes)
+                                        .etFont(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Spacer()
+
+                            Button {
+                                manager.restoreBuiltInServer(id: item.id)
+                            } label: {
+                                Label(NSLocalizedString("恢复", comment: ""), systemImage: "arrow.clockwise")
+                                    .labelStyle(.iconOnly)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(
+                                String(
+                                    format: NSLocalizedString("恢复%@", comment: "Restore built-in MCP server accessibility label"),
+                                    item.displayName
+                                )
+                            )
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
     }
 }
 

@@ -45,8 +45,8 @@ struct MCPBuiltInAppToolServerTests {
     }
 
     @MainActor
-    @Test("Manager 准备列表时会补入分类服务器并迁移旧启用状态")
-    func testPrepareServersForManagerAddsCategoryServers() {
+    @Test("默认内置配置会迁移旧启用状态，准备列表只跳过已删除分类")
+    func testDefaultConfigurationsAndPrepareServersForManager() {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
@@ -68,13 +68,30 @@ struct MCPBuiltInAppToolServerTests {
             customJSTools: []
         )
 
+        let defaultServers = MCPManager.defaultBuiltInServerConfigurations()
+        let appToolServers = defaultServers.filter {
+            if case .builtInAppTool = $0.transport { return true }
+            return false
+        }
+        #expect(appToolServers.count == MCPBuiltInAppToolServer.categories.count)
+        #expect(appToolServers.contains(where: { $0.transport == .builtInAppTool(category: .feedback) }) == false)
+
         let result = MCPBuiltInAppToolServer.prepareServersForManager([])
         #expect(result.servers.count == MCPBuiltInAppToolServer.categories.count)
         #expect(result.serversToPersist.count == MCPBuiltInAppToolServer.categories.count)
         #expect(result.serversToDelete.isEmpty)
-        #expect(result.servers.contains(where: { $0.transport == .builtInAppTool(category: .feedback) }) == false)
 
-        let interactionServer = result.servers.first {
+        let deletedFileServerID = MCPBuiltInAppToolServer.serverID(for: .file)
+        let deletedResult = MCPBuiltInAppToolServer.prepareServersForManager(
+            [],
+            deletedBuiltInServerIDs: [deletedFileServerID]
+        )
+        #expect(deletedResult.servers.count == MCPBuiltInAppToolServer.categories.count - 1)
+        #expect(deletedResult.servers.contains(where: { $0.id == deletedFileServerID }) == false)
+        #expect(deletedResult.serversToPersist.contains(where: { $0.id == deletedFileServerID }) == false)
+        #expect(deletedResult.serversToDelete.isEmpty)
+
+        let interactionServer = appToolServers.first {
             $0.id == MCPBuiltInAppToolServer.serverID(for: .interaction)
         }
         #expect(interactionServer?.transport == .builtInAppTool(category: .interaction))
@@ -122,7 +139,7 @@ struct MCPBuiltInAppToolServerTests {
     }
 
     @MainActor
-    @Test("关系化存储可回读并保护内建 AppTool 服务器")
+    @Test("关系化存储可回读并删除内建 AppTool 服务器")
     func testBuiltInAppToolRelationalRoundtrip() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         Persistence.grdbEnabledOverrideForTests = true
@@ -173,8 +190,7 @@ struct MCPBuiltInAppToolServerTests {
 
         server.displayName = "尝试删除内建文件操作"
         MCPServerStore.delete(server)
-        let afterDeleteAttempt = MCPServerStore.loadServers()
-        #expect(afterDeleteAttempt.count == 1)
-        #expect(afterDeleteAttempt.first?.id == MCPBuiltInAppToolServer.serverID(for: .file))
+        let afterDelete = MCPServerStore.loadServers()
+        #expect(afterDelete.isEmpty)
     }
 }

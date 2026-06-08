@@ -93,10 +93,8 @@ struct MCPServerDetailView: View {
                         }
                     }
 
-                    if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
-                        Button(NSLocalizedString("删除服务器", comment: ""), role: .destructive) {
-                            showingDeleteConfirmation = true
-                        }
+                    Button(NSLocalizedString("删除服务器", comment: ""), role: .destructive) {
+                        showingDeleteConfirmation = true
                     }
                 }
             } else {
@@ -167,6 +165,38 @@ struct MCPServerDetailView: View {
         @unknown default:
             return false
         }
+    }
+}
+
+struct MCPBuiltInServerRestoreView: View {
+    @ObservedObject private var manager = MCPManager.shared
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("内置工具", comment: "Built-in tools section title")) {
+                if manager.restorableBuiltInServers.isEmpty {
+                    Text(NSLocalizedString("所有内置 MCP 服务器都已添加。", comment: "All built-in MCP servers restored"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(manager.restorableBuiltInServers) { item in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(item.displayName)
+                                .etFont(.headline)
+                            if let notes = item.notes, !notes.isEmpty {
+                                Text(notes)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Button(NSLocalizedString("恢复", comment: "")) {
+                                manager.restoreBuiltInServer(id: item.id)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
     }
 }
 

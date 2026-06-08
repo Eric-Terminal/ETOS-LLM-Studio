@@ -221,10 +221,6 @@ public struct MCPServerStore {
     }
 
     public static func delete(_ server: MCPServerConfiguration) {
-        guard !MCPBuiltInAppToolServer.isBuiltInServer(server) else {
-            mcpStoreLogger.info("跳过删除内置 MCP Server: \(server.displayName, privacy: .public)")
-            return
-        }
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
             if deleteServerFromRelationalStore(serverID: server.id) {
@@ -240,6 +236,33 @@ public struct MCPServerStore {
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+    }
+
+    public static func deletedBuiltInServerIDs() -> Set<UUID> {
+        let rawIDs = AppConfigStore.stringArrayValue(
+            for: .mcpDeletedBuiltInServerIDs,
+            defaultValue: []
+        ) ?? []
+        return Set(rawIDs.compactMap(UUID.init(uuidString:)))
+    }
+
+    public static func markBuiltInServerDeleted(_ serverID: UUID) {
+        var deletedIDs = deletedBuiltInServerIDs()
+        guard deletedIDs.insert(serverID).inserted else { return }
+        persistDeletedBuiltInServerIDs(deletedIDs)
+    }
+
+    public static func clearBuiltInServerDeletedMark(_ serverID: UUID) {
+        var deletedIDs = deletedBuiltInServerIDs()
+        guard deletedIDs.remove(serverID) != nil else { return }
+        persistDeletedBuiltInServerIDs(deletedIDs)
+    }
+
+    private static func persistDeletedBuiltInServerIDs(_ serverIDs: Set<UUID>) {
+        AppConfigStore.persistStringArray(
+            serverIDs.map(\.uuidString).sorted(),
+            for: .mcpDeletedBuiltInServerIDs
+        )
     }
 
     public static func loadMetadata(for serverID: UUID, includeTools: Bool = true) -> MCPServerMetadataCache? {

@@ -106,7 +106,10 @@ public enum MCPBuiltInAppToolServer {
     }
 
     @MainActor
-    static func prepareServersForManager(_ storedServers: [MCPServerConfiguration]) -> (
+    static func prepareServersForManager(
+        _ storedServers: [MCPServerConfiguration],
+        deletedBuiltInServerIDs: Set<UUID> = []
+    ) -> (
         servers: [MCPServerConfiguration],
         serversToPersist: [MCPServerConfiguration],
         serversToDelete: [MCPServerConfiguration]
@@ -132,7 +135,7 @@ public enum MCPBuiltInAppToolServer {
                     serversToPersist.append(server)
                 }
                 servers[index] = server
-            } else {
+            } else if !deletedBuiltInServerIDs.contains(defaultServer.id) {
                 servers.append(defaultServer)
                 serversToPersist.append(defaultServer)
             }

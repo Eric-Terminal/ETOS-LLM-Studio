@@ -240,8 +240,23 @@ struct MCPIntegrationView: View {
                     }
                 }
             }
+
+            moreSection
         }
         .navigationTitle("MCP")
+    }
+
+    @ViewBuilder
+    private var moreSection: some View {
+        if !manager.restorableBuiltInServers.isEmpty {
+            Section(NSLocalizedString("更多", comment: "")) {
+                NavigationLink {
+                    MCPBuiltInServerRestoreView()
+                } label: {
+                    Label(NSLocalizedString("内置工具", comment: "Built-in tools section title"), systemImage: "shippingbox.and.arrow.backward")
+                }
+            }
+        }
     }
 
     private func settingsIntroCard(

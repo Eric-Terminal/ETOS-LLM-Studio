@@ -156,6 +156,7 @@ struct MCPIntegrationView: View {
             debugSection
             latestOutputSection
             latestErrorSection
+            moreSection
         }
     }
 

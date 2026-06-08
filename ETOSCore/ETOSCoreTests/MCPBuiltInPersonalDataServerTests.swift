@@ -58,12 +58,18 @@ struct MCPBuiltInPersonalDataServerTests {
         #expect(decoded.humanReadableEndpoint == MCPBuiltInPersonalDataServer.endpoint)
     }
 
-    @Test("Manager 准备列表时会补入并保留内建个人数据配置")
+    @Test("Manager 准备列表时只跳过已删除的内建个人数据配置")
     func testPrepareServersForManager() {
         let emptyResult = MCPBuiltInPersonalDataServer.prepareServersForManager([])
         #expect(emptyResult.servers.map(\.id) == [MCPBuiltInPersonalDataServer.serverID])
         #expect(emptyResult.serverToPersist?.id == MCPBuiltInPersonalDataServer.serverID)
-        #expect(emptyResult.servers.first?.isSelectedForChat == true)
+
+        let deletedResult = MCPBuiltInPersonalDataServer.prepareServersForManager(
+            [],
+            deletedBuiltInServerIDs: [MCPBuiltInPersonalDataServer.serverID]
+        )
+        #expect(deletedResult.servers.isEmpty)
+        #expect(deletedResult.serverToPersist == nil)
 
         var storedServer = MCPBuiltInPersonalDataServer.defaultConfiguration()
         storedServer.isSelectedForChat = false
@@ -76,7 +82,7 @@ struct MCPBuiltInPersonalDataServerTests {
     }
 
     @MainActor
-    @Test("关系化存储可回读并保护内建个人数据服务器")
+    @Test("关系化存储可回读并删除内建个人数据服务器")
     func testBuiltInPersonalDataRelationalRoundtrip() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         Persistence.grdbEnabledOverrideForTests = true
@@ -120,8 +126,7 @@ struct MCPBuiltInPersonalDataServerTests {
         #expect(reloaded.first?.disabledToolIds == ["health.write_category"])
 
         MCPServerStore.delete(server)
-        let afterDeleteAttempt = MCPServerStore.loadServers()
-        #expect(afterDeleteAttempt.count == 1)
-        #expect(afterDeleteAttempt.first?.id == MCPBuiltInPersonalDataServer.serverID)
+        let afterDelete = MCPServerStore.loadServers()
+        #expect(afterDelete.isEmpty)
     }
 }

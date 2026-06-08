@@ -64,6 +64,20 @@ public struct MCPAvailablePrompt: Identifiable, Hashable {
     }
 }
 
+public struct MCPBuiltInServerTemplate: Identifiable, Hashable {
+    public let id: UUID
+    public let displayName: String
+    public let notes: String?
+    public let configuration: MCPServerConfiguration
+
+    public init(configuration: MCPServerConfiguration) {
+        self.id = configuration.id
+        self.displayName = configuration.displayName
+        self.notes = configuration.notes
+        self.configuration = configuration
+    }
+}
+
 public struct MCPServerStatus: Equatable {
     public var connectionState: MCPManager.ConnectionState
     public var info: MCPServerInfo?

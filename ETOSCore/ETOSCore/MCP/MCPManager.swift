@@ -161,9 +161,19 @@ public final class MCPManager: ObservableObject {
 
     public func reloadServers() {
         let storedServers = MCPServerStore.loadServers()
-        let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(storedServers)
-        let preparedAppToolServers = MCPBuiltInAppToolServer.prepareServersForManager(preparedSearchServers.servers)
-        let preparedPersonalDataServers = MCPBuiltInPersonalDataServer.prepareServersForManager(preparedAppToolServers.servers)
+        let deletedBuiltInServerIDs = MCPServerStore.deletedBuiltInServerIDs()
+        let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(
+            storedServers,
+            deletedBuiltInServerIDs: deletedBuiltInServerIDs
+        )
+        let preparedAppToolServers = MCPBuiltInAppToolServer.prepareServersForManager(
+            preparedSearchServers.servers,
+            deletedBuiltInServerIDs: deletedBuiltInServerIDs
+        )
+        let preparedPersonalDataServers = MCPBuiltInPersonalDataServer.prepareServersForManager(
+            preparedAppToolServers.servers,
+            deletedBuiltInServerIDs: deletedBuiltInServerIDs
+        )
         for serverToDelete in preparedAppToolServers.serversToDelete {
             MCPServerStore.delete(serverToDelete)
         }
@@ -260,6 +270,32 @@ public final class MCPManager: ObservableObject {
         reloadServers()
     }
 
+    public var restorableBuiltInServers: [MCPBuiltInServerTemplate] {
+        let currentServerIDs = Set(servers.map(\.id))
+        return Self.defaultBuiltInServerConfigurations()
+            .filter { !currentServerIDs.contains($0.id) }
+            .map(MCPBuiltInServerTemplate.init(configuration:))
+    }
+
+    public func restoreBuiltInServer(id: UUID) {
+        guard let server = Self.defaultBuiltInServerConfigurations().first(where: { $0.id == id }) else { return }
+        MCPServerStore.clearBuiltInServerDeletedMark(id)
+        save(server: server)
+        appendGovernanceLog(
+            level: .info,
+            category: .lifecycle,
+            serverID: server.id,
+            message: String(format: NSLocalizedString("恢复内置服务器：%@", comment: "MCP governance built-in server restored"), server.displayName)
+        )
+        connectSelectedServersIfNeeded()
+    }
+
+    public static func defaultBuiltInServerConfigurations() -> [MCPServerConfiguration] {
+        [MCPBuiltInSearchServer.defaultConfiguration()]
+            + MCPBuiltInAppToolServer.categories.map { MCPBuiltInAppToolServer.defaultConfiguration(for: $0) }
+            + [MCPBuiltInPersonalDataServer.defaultConfiguration()]
+    }
+
     public func moveServers(fromOffsets offsets: IndexSet, toOffset destination: Int) {
         let serverCount = servers.count
         guard serverCount > 1 else { return }
@@ -293,21 +329,15 @@ public final class MCPManager: ObservableObject {
     }
 
     public func delete(server: MCPServerConfiguration) {
-        guard !MCPBuiltInAppToolServer.isBuiltInServer(server) else {
-            appendGovernanceLog(
-                level: .warning,
-                category: .lifecycle,
-                serverID: server.id,
-                message: NSLocalizedString("内置 MCP 服务器不能删除，可通过“用于聊天”开关关闭。", comment: "Built-in MCP server cannot be deleted")
-            )
-            return
-        }
         persistResumptionToken(for: server.id)
         cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器被删除", comment: "MCP server deleted cancellation reason"))
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
         autoConnectSuppressedServerIDs.remove(server.id)
         inFlightConnections[server.id]?.cancel()
         inFlightConnections[server.id] = nil
+        if MCPBuiltInAppToolServer.isBuiltInServer(server) {
+            MCPServerStore.markBuiltInServerDeleted(server.id)
+        }
         MCPServerStore.delete(server)
         let client = removeConnectionArtifacts(for: server.id)
         Task {
