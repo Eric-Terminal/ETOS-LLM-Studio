@@ -3,7 +3,7 @@
 // ============================================================================
 // 本地拓展工具管理器。
 // - 管理默认关闭的本地拓展工具目录
-// - 负责聊天工具暴露与执行分发
+// - 保留具体执行实现，聊天暴露由内建 MCP Server 统一管理
 // ============================================================================
 
 import Foundation
@@ -183,17 +183,8 @@ public final class AppToolManager: ObservableObject {
     }
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
-        guard chatToolsEnabled else { return [] }
-        let appTools = tools
-            .filter(\.isEnabled)
-            .filter { approvalPolicy(for: $0.kind) != .alwaysDeny }
-            .map { item in toolDefinition(for: item.kind) }
-        let customTools = customJSTools
-            .filter { $0.engine.isAvailableOnCurrentPlatform }
-            .filter(\.isEnabled)
-            .filter { $0.approvalPolicy != .alwaysDeny }
-            .map { customJSToolDefinition(for: $0) }
-        return appTools + customTools
+        // 原拓展工具已迁移为内建 MCP Server，由 MCPManager 统一暴露与审批。
+        return []
     }
 
     public func builtInToolsForLLM() -> [InternalToolDefinition] {

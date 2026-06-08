@@ -2,7 +2,7 @@
 // AppToolManagerTests.swift
 // ============================================================================
 // AppToolManagerTests 测试文件
-// - 覆盖拓展工具默认关闭与注入逻辑
+// - 覆盖拓展工具默认关闭与旧直曝隔离逻辑
 // - 覆盖示例工具执行逻辑
 // ============================================================================
 
@@ -123,8 +123,8 @@ struct AppToolManagerTests {
     #endif
 
     @MainActor
-    @Test("启用示例工具后会向模型暴露工具定义")
-    func testChatToolsForLLMReturnsEnabledAppTools() {
+    @Test("启用示例工具后不再通过 AppTool 直接暴露")
+    func testChatToolsForLLMDoesNotExposeMigratedAppTools() {
         let manager = AppToolManager.shared
         let originalGlobalSwitch = manager.chatToolsEnabled
         let originalEnabledKinds = manager.enabledToolKinds
@@ -145,10 +145,7 @@ struct AppToolManagerTests {
             customJSTools: []
         )
 
-        let tools = manager.chatToolsForLLM()
-        #expect(tools.count == 1)
-        #expect(tools.first?.name == AppToolKind.echoText.toolName)
-        #expect(tools.first?.isBlocking == true)
+        #expect(manager.chatToolsForLLM().isEmpty)
     }
 
     @MainActor

@@ -77,26 +77,6 @@ struct ToolCenterView: View {
             }
     }
 
-    private var appToolCategoryStates: [AppToolCatalogCategoryState] {
-        ToolCatalogSupport.appToolCategoryStates(
-            tools: appToolManager.tools,
-            chatToolsEnabled: appToolManager.chatToolsEnabled,
-            isIsolatedSession: currentSessionIsolationActive
-        ) { kind in
-            appToolManager.approvalPolicy(for: kind)
-        }
-    }
-
-    private var filteredAppToolCategoryStates: [AppToolCatalogCategoryState] {
-        appToolCategoryStates.filter { state in
-            showEnabledOnly ? state.configuredEnabledCount > 0 : true
-        }
-    }
-
-    private var platformCustomJSTools: [AppToolCustomJSTool] {
-        appToolManager.customJSTools.filter { $0.engine.isAvailableOnCurrentPlatform }
-    }
-
     private var filteredShortcutTools: [ShortcutToolDefinition] {
         shortcutManager.tools
             .sorted {
@@ -119,26 +99,6 @@ struct ToolCenterView: View {
         mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
         }.count
-    }
-
-    private var configuredAppToolCount: Int {
-        appToolManager.tools.filter(\.isEnabled).count
-        + platformCustomJSTools.filter(\.isEnabled).count
-    }
-
-    private var totalAppToolCount: Int {
-        appToolManager.tools.count + platformCustomJSTools.count
-    }
-
-    private var availableAppToolCount: Int {
-        guard appToolManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
-        let staticCount = appToolManager.tools.filter {
-            $0.isEnabled && appToolManager.approvalPolicy(for: $0.kind) != .alwaysDeny
-        }.count
-        let customCount = platformCustomJSTools.filter {
-            $0.isEnabled && $0.approvalPolicy != .alwaysDeny
-        }.count
-        return staticCount + customCount
     }
 
     private var availableMCPCount: Int {
@@ -259,49 +219,6 @@ struct ToolCenterView: View {
             }
 
             Section(
-                header: Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
-            ) {
-                Toggle(
-                    NSLocalizedString("向模型暴露拓展工具", comment: "Expose app tools to model"),
-                    isOn: Binding(
-                        get: { appToolManager.chatToolsEnabled },
-                        set: { appToolManager.setChatToolsEnabled($0) }
-                    )
-                )
-
-                NavigationLink {
-                    WatchAppToolCategoryDetailView(
-                        currentSessionIsolationActive: currentSessionIsolationActive,
-                        showEnabledOnly: showEnabledOnly
-                    )
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(NSLocalizedString("拓展工具", comment: "App tools section title"))
-                        Text(
-                            String(
-                                format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
-                                configuredAppToolCount,
-                                totalAppToolCount
-                            )
-                        )
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        Text(appToolCategoryStatusText)
-                            .etFont(.caption2)
-                            .foregroundStyle(appToolCategoryStatusColor)
-                        Text(
-                            String(
-                                format: NSLocalizedString("分类 %d 个", comment: "App tool category count"),
-                                appToolCategoryStates.count
-                            )
-                        )
-                        .etFont(.caption2)
-                        .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-
-            Section(
                 header: Text("Agent Skills"),
                 footer: Text(NSLocalizedString("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。", comment: "Agent Skills 工具中心页脚"))
                     .etFont(.footnote)
@@ -382,7 +299,7 @@ struct ToolCenterView: View {
                 }
             }
 
-            if filteredBuiltInStates.isEmpty && filteredAppToolCategoryStates.isEmpty && filteredMCPTools.isEmpty && filteredSkills.isEmpty && filteredShortcutTools.isEmpty {
+            if filteredBuiltInStates.isEmpty && filteredMCPTools.isEmpty && filteredSkills.isEmpty && filteredShortcutTools.isEmpty {
                 Section {
                     Text(NSLocalizedString("当前没有匹配的工具。", comment: "No matching tools in tool center"))
                         .foregroundStyle(.secondary)
@@ -608,30 +525,6 @@ struct ToolCenterView: View {
 
     private var mcpCategoryStatusColor: Color {
         if currentSessionIsolationActive || !mcpManager.chatToolsEnabled || availableMCPCount == 0 {
-            return .secondary
-        }
-        return .green
-    }
-
-    private var appToolCategoryStatusText: String {
-        if appToolManager.tools.isEmpty {
-            return NSLocalizedString("当前还没有已注册的拓展工具。", comment: "No registered app tools")
-        }
-        if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-        }
-        if !appToolManager.chatToolsEnabled {
-            return NSLocalizedString("拓展工具总开关已关闭。", comment: "App tools group disabled")
-        }
-        return String(
-            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
-            availableAppToolCount,
-            totalAppToolCount
-        )
-    }
-
-    private var appToolCategoryStatusColor: Color {
-        if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || availableAppToolCount == 0 {
             return .secondary
         }
         return .green

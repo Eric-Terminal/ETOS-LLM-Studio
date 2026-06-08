@@ -195,7 +195,7 @@ public struct MCPServerStore {
     }
 
     public static func delete(_ server: MCPServerConfiguration) {
-        guard !MCPBuiltInSearchServer.isBuiltInSearchServer(server) else {
+        guard !MCPBuiltInAppToolServer.isBuiltInServer(server) else {
             mcpStoreLogger.info("跳过删除内置 MCP Server: \(server.displayName, privacy: .public)")
             return
         }

@@ -42,7 +42,7 @@ extension MCPIntegrationView {
                         }
                     }
                     .swipeActions(edge: .trailing) {
-                        if !MCPBuiltInSearchServer.isBuiltInSearchServer(server) {
+                        if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
                             Button(role: .destructive) {
                                 manager.delete(server: server)
                             } label: {

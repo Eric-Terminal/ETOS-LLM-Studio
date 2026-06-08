@@ -312,6 +312,10 @@ extension SyncEngine {
         case .builtInSearch:
             hasher.combine("builtInSearch")
             hasher.combine(MCPBuiltInSearchServer.endpoint)
+        case .builtInAppTool(let category):
+            hasher.combine("builtInAppTool")
+            hasher.combine(category.rawValue)
+            hasher.combine(MCPBuiltInAppToolServer.endpoint(for: category))
         case .oauth(let endpoint, let tokenEndpoint, let clientID, _, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             hasher.combine("oauth")
             hasher.combine(endpoint.absoluteString)

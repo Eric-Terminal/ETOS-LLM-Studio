@@ -34,9 +34,9 @@ extension ChatServiceTests {
         )
 
         #expect(normalPolicy.includeBuiltInAppTools)
-        #expect(normalPolicy.includeAppTools)
+        #expect(normalPolicy.includeMCPTools)
         #expect(!isolatedPolicy.includeBuiltInAppTools)
-        #expect(!isolatedPolicy.includeAppTools)
+        #expect(!isolatedPolicy.includeMCPTools)
 
         await cleanup()
     }

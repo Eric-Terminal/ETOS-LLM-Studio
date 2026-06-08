@@ -4133,3 +4133,15 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "系统自带能力集中在这里，按单项调整记忆、网页卡片、问答与时间工具。" = "System-provided capabilities live here. Adjust memory, web cards, Q&A, and time tools one by one.";
 "内置工具说明正文" = "Built-in tools are provided directly by the app. They control core capabilities such as memory writing, active retrieval, web cards, structured Q&A, and system time.\n\nRecommendations\n• Check the Memory System switch first, then adjust memory writing and active retrieval.\n• Web cards, user questions, and system time are lightweight capabilities you can enable individually.\n• If the current session uses worldbook isolation, these settings are kept but not actually exposed during chat.";
 "启用记忆系统后，记忆写入与主动检索工具才可能参与聊天。" = "After the Memory System is enabled, memory writing and active retrieval tools can participate in chat.";
+
+// 内建 AppTool MCP 服务器
+"内建本地工具" = "أدوات محلية مدمجة";
+"应用内建本地工具服务，无需配置网络地址。" = "خدمة أدوات محلية مدمجة في التطبيق. لا يلزم عنوان شبكة.";
+"内建交互工具" = "أدوات تفاعل مدمجة";
+"内建记忆操作" = "عمليات ذاكرة مدمجة";
+"内建文件操作" = "عمليات ملفات مدمجة";
+"内建数据库操作" = "عمليات قاعدة بيانات مدمجة";
+"内建自定义工具" = "أدوات مخصصة مدمجة";
+"内建反馈工单" = "تذاكر ملاحظات مدمجة";
+"应用内建 MCP Server，承载原“%@”分类下的本地拓展工具。" = "خادم MCP مدمج في التطبيق للأدوات المحلية التي كانت ضمن فئة \"%@\".";
+"自定义 JavaScript 工具。脚本保存在应用的 CustomJSTools 独立目录中，执行入口为同步 function main(input)。运行引擎：%@。能力边界：没有 Node.js、require/import、文件系统、原生网络 API 或持久后台任务能力。工具说明：%@" = "أداة JavaScript مخصصة. تُحفظ السكربتات في دليل CustomJSTools مستقل داخل التطبيق. نقطة الدخول هي الدالة المتزامنة main(input). محرك التشغيل: %@. الحدود: لا Node.js ولا require/import ولا نظام ملفات ولا واجهات شبكة أصلية ولا مهام خلفية مستمرة. وصف الأداة: %@";

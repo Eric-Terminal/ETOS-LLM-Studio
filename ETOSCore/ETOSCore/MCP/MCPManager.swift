@@ -161,11 +161,13 @@ public final class MCPManager: ObservableObject {
 
     public func reloadServers() {
         let storedServers = MCPServerStore.loadServers()
-        let preparedServers = MCPBuiltInSearchServer.prepareServersForManager(storedServers)
-        if let serverToPersist = preparedServers.serverToPersist {
+        let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(storedServers)
+        let preparedAppToolServers = MCPBuiltInAppToolServer.prepareServersForManager(preparedSearchServers.servers)
+        let serversToPersist = [preparedSearchServers.serverToPersist].compactMap { $0 } + preparedAppToolServers.serversToPersist
+        for serverToPersist in serversToPersist {
             MCPServerStore.save(serverToPersist)
         }
-        servers = preparedServers.servers
+        servers = preparedAppToolServers.servers
         configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
         let serverIDs = Set(servers.map { $0.id })
         autoConnectSuppressedServerIDs = autoConnectSuppressedServerIDs.intersection(serverIDs)
@@ -248,7 +250,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func delete(server: MCPServerConfiguration) {
-        guard !MCPBuiltInSearchServer.isBuiltInSearchServer(server) else {
+        guard !MCPBuiltInAppToolServer.isBuiltInServer(server) else {
             appendGovernanceLog(
                 level: .warning,
                 category: .lifecycle,

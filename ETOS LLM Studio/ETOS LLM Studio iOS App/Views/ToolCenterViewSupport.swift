@@ -105,46 +105,6 @@ extension ToolCenterView {
         )
     }
 
-    var appToolSection: some View {
-        Section(
-            header: Text(NSLocalizedString("拓展工具", comment: "App tools section title")),
-            footer: Text(NSLocalizedString("拓展工具已按用途分组；进入分类后再查看具体工具、启用状态与审批策略。", comment: "App tool grouped section footer"))
-                .etFont(.footnote)
-                .foregroundStyle(.secondary)
-        ) {
-            Toggle(
-                NSLocalizedString("向模型暴露拓展工具", comment: "Expose app tools to model"),
-                isOn: Binding(
-                    get: { appToolManager.chatToolsEnabled },
-                    set: { appToolManager.setChatToolsEnabled($0) }
-                )
-            )
-
-            NavigationLink {
-                AppToolCategoryDetailView(
-                    currentSessionIsolationActive: currentSessionIsolationActive,
-                    searchText: searchText,
-                    showEnabledOnly: showEnabledOnly
-                )
-            } label: {
-                ToolCenterStatusRow(
-                    title: NSLocalizedString("拓展工具", comment: "App tools section title"),
-                    subtitle: String(
-                        format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
-                        configuredAppToolCount,
-                        totalAppToolCount
-                    ),
-                    detail: appToolCategoryStatusText,
-                    auxiliary: String(
-                        format: NSLocalizedString("分类 %d 个", comment: "App tool category count"),
-                        appToolCategoryStates.count
-                    ),
-                    color: appToolCategoryStatusColor
-                )
-            }
-        }
-    }
-
     var filterSection: some View {
         Section {
             Toggle(
@@ -501,37 +461,6 @@ extension ToolCenterView {
 
     var mcpCategoryStatusColor: Color {
         if currentSessionIsolationActive || !mcpManager.chatToolsEnabled || availableMCPCount == 0 {
-            return .secondary
-        }
-        return .green
-    }
-
-    var appToolCategoryStatusText: String {
-        if appToolManager.tools.isEmpty {
-            if !platformCustomJSTools.isEmpty {
-                return String(
-                    format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
-                    availableAppToolCount,
-                    totalAppToolCount
-                )
-            }
-            return NSLocalizedString("当前还没有已注册的拓展工具。", comment: "No registered app tools")
-        }
-        if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
-        }
-        if !appToolManager.chatToolsEnabled {
-            return NSLocalizedString("拓展工具总开关已关闭。", comment: "App tools group disabled")
-        }
-        return String(
-            format: NSLocalizedString("当前会话实际可用 %d / %d", comment: "Currently available count"),
-            availableAppToolCount,
-            totalAppToolCount
-        )
-    }
-
-    var appToolCategoryStatusColor: Color {
-        if currentSessionIsolationActive || !appToolManager.chatToolsEnabled || availableAppToolCount == 0 {
             return .secondary
         }
         return .green

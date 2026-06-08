@@ -365,6 +365,8 @@ extension MCPManager {
             return "sse"
         case .builtInSearch:
             return "built_in_search"
+        case .builtInAppTool:
+            return "built_in_app_tool"
         case .oauth:
             return "oauth"
         }

@@ -65,72 +65,6 @@ struct ToolCenterView: View {
         ToolCatalogSupport.availableCount(for: builtInStates)
     }
 
-    var appToolCategoryStates: [AppToolCatalogCategoryState] {
-        ToolCatalogSupport.appToolCategoryStates(
-            tools: appToolManager.tools,
-            chatToolsEnabled: appToolManager.chatToolsEnabled,
-            isIsolatedSession: currentSessionIsolationActive
-        ) { kind in
-            appToolManager.approvalPolicy(for: kind)
-        }
-    }
-
-    var platformCustomJSTools: [AppToolCustomJSTool] {
-        appToolManager.customJSTools.filter { $0.engine.isAvailableOnCurrentPlatform }
-    }
-
-    var filteredAppToolCategoryStates: [AppToolCatalogCategoryState] {
-        appToolCategoryStates.filter { state in
-            let matchedTools = state.tools.filter { item in
-                matchesSearch(
-                    for: [
-                        item.kind.displayName,
-                        item.kind.summary,
-                        item.kind.toolName
-                    ]
-                )
-            }
-            let matchesCategory = matchesSearch(
-                for: [
-                    state.category.displayName,
-                    state.category.summary,
-                    state.category.detailDescription
-                ]
-            )
-            let matchedCustomTools = state.category == .custom
-                ? platformCustomJSTools.filter { tool in
-                    matchesSearch(for: [
-                        tool.displayName,
-                        tool.toolDescription,
-                        tool.toolName,
-                        tool.engine.displayName
-                    ])
-                }
-                : []
-            guard matchesCategory || !matchedTools.isEmpty || !matchedCustomTools.isEmpty else { return false }
-            if showEnabledOnly {
-                return state.configuredEnabledCount > 0 || matchedCustomTools.contains(where: \.isEnabled)
-            }
-            return true
-        }
-    }
-
-    var isAppToolSectionVisible: Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            return true
-        }
-        if !filteredAppToolCategoryStates.isEmpty {
-            return true
-        }
-        return matchesSearch(
-            for: [
-                NSLocalizedString("拓展工具", comment: "App tools section title"),
-                NSLocalizedString("向模型暴露拓展工具", comment: "Expose app tools to model")
-            ]
-        )
-    }
-
     var filteredBuiltInStates: [ToolCatalogBuiltInToolState] {
         let matchesGroup = matchesSearch(
             for: [
@@ -282,26 +216,6 @@ struct ToolCenterView: View {
         }.count
     }
 
-    var configuredAppToolCount: Int {
-        appToolManager.tools.filter(\.isEnabled).count
-        + platformCustomJSTools.filter(\.isEnabled).count
-    }
-
-    var totalAppToolCount: Int {
-        appToolManager.tools.count + platformCustomJSTools.count
-    }
-
-    var availableAppToolCount: Int {
-        guard appToolManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
-        let staticCount = appToolManager.tools.filter {
-            $0.isEnabled && appToolManager.approvalPolicy(for: $0.kind) != .alwaysDeny
-        }.count
-        let customCount = platformCustomJSTools.filter {
-            $0.isEnabled && $0.approvalPolicy != .alwaysDeny
-        }.count
-        return staticCount + customCount
-    }
-
     var availableMCPCount: Int {
         guard mcpManager.chatToolsEnabled, !currentSessionIsolationActive else { return 0 }
         return mcpCatalogTools.filter {
@@ -330,7 +244,6 @@ struct ToolCenterView: View {
 
     var hasVisibleTools: Bool {
         isBuiltInSectionVisible
-        || isAppToolSectionVisible
         || isMCPSectionVisible
         || isSkillsSectionVisible
         || isShortcutSectionVisible
@@ -350,9 +263,6 @@ struct ToolCenterView: View {
             filterSection
             if isBuiltInSectionVisible {
                 builtInSection
-            }
-            if isAppToolSectionVisible {
-                appToolSection
             }
             if isMCPSectionVisible {
                 mcpSection

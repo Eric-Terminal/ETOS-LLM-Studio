@@ -21,7 +21,6 @@ extension ChatService {
         let enableMemoryWrite: Bool
         let enableMemoryActiveRetrieval: Bool
         let includeBuiltInAppTools: Bool
-        let includeAppTools: Bool
         let includeMCPTools: Bool
         let includeShortcutTools: Bool
         let includeSkills: Bool
@@ -40,7 +39,6 @@ extension ChatService {
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeBuiltInAppTools: true,
-                includeAppTools: true,
                 includeMCPTools: true,
                 includeShortcutTools: true,
                 includeSkills: true
@@ -53,7 +51,6 @@ extension ChatService {
             enableMemoryWrite: false,
             enableMemoryActiveRetrieval: false,
             includeBuiltInAppTools: false,
-            includeAppTools: false,
             includeMCPTools: false,
             includeShortcutTools: false,
             includeSkills: false
@@ -83,10 +80,6 @@ extension ChatService {
         if policy.includeBuiltInAppTools {
             let builtInAppTools = await MainActor.run { AppToolManager.shared.builtInToolsForLLM() }
             resolvedTools.append(contentsOf: builtInAppTools)
-        }
-        if policy.includeAppTools {
-            let appTools = await MainActor.run { AppToolManager.shared.chatToolsForLLM() }
-            resolvedTools.append(contentsOf: appTools)
         }
         if policy.includeMCPTools {
             let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }

@@ -100,6 +100,20 @@ struct MCPServerEditor: View {
                 _oauthCodeVerifier = State(initialValue: "")
                 _transportOption = State(initialValue: .builtInSearch)
                 _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
+            case .builtInAppTool(let category):
+                _endpoint = State(initialValue: MCPBuiltInAppToolServer.endpoint(for: category))
+                _sseEndpoint = State(initialValue: "")
+                _apiKey = State(initialValue: "")
+                _tokenEndpoint = State(initialValue: "")
+                _clientID = State(initialValue: "")
+                _clientSecret = State(initialValue: "")
+                _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
+                _transportOption = State(initialValue: .builtInAppTool)
+                _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
             @unknown default:
                 _endpoint = State(initialValue: "")
                 _sseEndpoint = State(initialValue: "")
@@ -142,13 +156,20 @@ struct MCPServerEditor: View {
                     if transportOption == .builtInSearch {
                         Text(TransportOption.builtInSearch.label).tag(TransportOption.builtInSearch)
                     }
+                    if transportOption == .builtInAppTool {
+                        Text(TransportOption.builtInAppTool.label).tag(TransportOption.builtInAppTool)
+                    }
                     ForEach(TransportOption.editableCases) { option in
                         Text(option.label).tag(option)
                     }
                 }
-                .disabled(transportOption == .builtInSearch)
+                .disabled(transportOption.isBuiltIn)
                 if transportOption == .builtInSearch {
                     Text(NSLocalizedString("应用内置搜索服务，无需配置网络地址。", comment: "Built-in MCP search editor hint"))
+                        .foregroundStyle(.secondary)
+                        .etFont(.footnote)
+                } else if transportOption == .builtInAppTool {
+                    Text(NSLocalizedString("应用内建本地工具服务，无需配置网络地址。", comment: "Built-in app tool MCP editor hint"))
                         .foregroundStyle(.secondary)
                         .etFont(.footnote)
                 } else if transportOption == .sse {
@@ -299,6 +320,12 @@ struct MCPServerEditor: View {
             )
         case .builtInSearch:
             transport = .builtInSearch
+        case .builtInAppTool:
+            if case .builtInAppTool(let category) = existingServer?.transport {
+                transport = .builtInAppTool(category: category)
+            } else {
+                transport = .builtInAppTool(category: .interaction)
+            }
         }
 
         var server = existingServer ?? MCPServerConfiguration(displayName: trimmedName, notes: notesOrNil(), transport: transport)
@@ -337,7 +364,7 @@ struct MCPServerEditor: View {
         if displayName.trimmingCharacters(in: .whitespaces).isEmpty {
             return true
         }
-        if transportOption == .builtInSearch {
+        if transportOption.isBuiltIn {
             return false
         }
         return (transportOption == .sse
@@ -458,6 +485,7 @@ struct MCPServerEditor: View {
         case sse
         case oauth
         case builtInSearch
+        case builtInAppTool
 
         var id: String { rawValue }
         static var editableCases: [TransportOption] { [.http, .sse, .oauth] }
@@ -468,13 +496,23 @@ struct MCPServerEditor: View {
             case .sse: return "SSE"
             case .oauth: return "OAuth 2.0"
             case .builtInSearch: return NSLocalizedString("内置搜索", comment: "Built-in MCP search transport label")
+            case .builtInAppTool: return NSLocalizedString("内建本地工具", comment: "Built-in app tool MCP transport label")
+            }
+        }
+
+        var isBuiltIn: Bool {
+            switch self {
+            case .builtInSearch, .builtInAppTool:
+                return true
+            case .http, .sse, .oauth:
+                return false
             }
         }
 
         var requiresAPIKey: Bool {
             switch self {
             case .http, .sse: return true
-            case .oauth, .builtInSearch: return false
+            case .oauth, .builtInSearch, .builtInAppTool: return false
             }
         }
     }

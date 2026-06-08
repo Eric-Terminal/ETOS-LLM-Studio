@@ -59,6 +59,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case httpSSE(messageEndpoint: URL, sseEndpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case builtInSearch
+        case builtInAppTool(category: AppToolCatalogCategory)
         case oauth(
             endpoint: URL,
             tokenEndpoint: URL,
@@ -171,6 +172,8 @@ public extension MCPServerConfiguration {
             return sseEndpoint.absoluteString
         case .builtInSearch:
             return MCPBuiltInSearchServer.endpoint
+        case .builtInAppTool(let category):
+            return MCPBuiltInAppToolServer.endpoint(for: category)
         case .oauth(let endpoint, _, _, _, _, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -183,6 +186,8 @@ public extension MCPServerConfiguration {
         case .httpSSE(_, _, _, let headers):
             return headers
         case .builtInSearch:
+            return [:]
+        case .builtInAppTool:
             return [:]
         case .oauth:
             return [:]
@@ -199,6 +204,8 @@ public extension MCPServerConfiguration {
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
         case .builtInSearch:
             return MCPBuiltInSearchLegacyTransport()
+        case .builtInAppTool(let category):
+            return MCPBuiltInAppToolLegacyTransport(category: category)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             return MCPOAuthStreamableHTTPTransport(
                 endpoint: endpoint,
@@ -258,6 +265,12 @@ public extension MCPServerConfiguration {
             )
         case .builtInSearch:
             let transport = MCPBuiltInSearchTransport()
+            return MCPSDKTransportBundle(
+                transport: transport,
+                streamControl: MCPTransportControlBox(control: transport)
+            )
+        case .builtInAppTool(let category):
+            let transport = MCPBuiltInAppToolTransport(category: category)
             return MCPSDKTransportBundle(
                 transport: transport,
                 streamControl: MCPTransportControlBox(control: transport)
@@ -370,6 +383,7 @@ extension MCPServerConfiguration.Transport {
         case sseEndpoint
         case apiKey
         case additionalHeaders
+        case category
         case tokenEndpoint
         case clientID
         case clientSecret
@@ -387,6 +401,7 @@ extension MCPServerConfiguration.Transport {
         case httpSSE
         case sse
         case builtInSearch = "built_in_search"
+        case builtInAppTool = "built_in_app_tool"
         case oauth
     }
 
@@ -419,6 +434,9 @@ extension MCPServerConfiguration.Transport {
             self = .httpSSE(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, apiKey: apiKey, additionalHeaders: headers)
         case .builtInSearch:
             self = .builtInSearch
+        case .builtInAppTool:
+            let category = try container.decode(AppToolCatalogCategory.self, forKey: .category)
+            self = .builtInAppTool(category: category)
         case .oauth:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let tokenEndpoint = try container.decode(URL.self, forKey: .tokenEndpoint)
@@ -464,6 +482,9 @@ extension MCPServerConfiguration.Transport {
             }
         case .builtInSearch:
             try container.encode(Kind.builtInSearch, forKey: .kind)
+        case .builtInAppTool(let category):
+            try container.encode(Kind.builtInAppTool, forKey: .kind)
+            try container.encode(category, forKey: .category)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             try container.encode(Kind.oauth, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)

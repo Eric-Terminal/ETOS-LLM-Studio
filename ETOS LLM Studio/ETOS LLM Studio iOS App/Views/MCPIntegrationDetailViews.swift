@@ -137,7 +137,7 @@ struct MCPServerDetailView: View {
                 Button(NSLocalizedString("编辑", comment: "")) {
                     isEditing = true
                 }
-                if !MCPBuiltInSearchServer.isBuiltInSearchServer(server) {
+                if !MCPBuiltInAppToolServer.isBuiltInServer(server) {
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {

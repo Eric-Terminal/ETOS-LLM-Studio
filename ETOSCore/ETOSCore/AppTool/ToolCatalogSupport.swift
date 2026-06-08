@@ -55,7 +55,7 @@ public struct ToolCatalogBuiltInToolState: Identifiable, Equatable, Sendable {
     }
 }
 
-public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
+public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
     case interaction
     case memory
     case file

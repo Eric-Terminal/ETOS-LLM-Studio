@@ -185,23 +185,6 @@ struct AppToolManagerExecutionTests {
     @MainActor
     @Test("SQLite 工具导出给 Gemini 时数组参数 schema 会包含 items")
     func testSQLiteToolSchemaIncludesItemsForGemini() throws {
-        let manager = AppToolManager.shared
-        let originalGlobalSwitch = manager.chatToolsEnabled
-        let originalEnabledKinds = manager.enabledToolKinds
-        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
-        defer {
-            manager.restoreStateForTests(
-                chatToolsEnabled: originalGlobalSwitch,
-                enabledKinds: originalEnabledKinds,
-                approvalPolicies: originalApprovalPolicies
-            )
-        }
-
-        manager.restoreStateForTests(
-            chatToolsEnabled: true,
-            enabledKinds: [.querySQLite, .mutateSQLite]
-        )
-
         let adapter = GeminiAdapter()
         let model = RunnableModel(
             provider: Provider(
@@ -214,12 +197,20 @@ struct AppToolManagerExecutionTests {
             model: Model(modelName: "gemini-2.5-pro")
         )
         let messages = [ChatMessage(role: .user, content: "测试一下")]
+        let tools = [AppToolKind.querySQLite, .mutateSQLite].map { kind in
+            InternalToolDefinition(
+                name: kind.toolName,
+                description: kind.toolDescription,
+                parameters: kind.parameters,
+                isBlocking: true
+            )
+        }
 
         guard let request = adapter.buildChatRequest(
             for: model,
             commonPayload: [:],
             messages: messages,
-            tools: manager.chatToolsForLLM(),
+            tools: tools,
             audioAttachments: [:],
             imageAttachments: [:],
             fileAttachments: [:]
