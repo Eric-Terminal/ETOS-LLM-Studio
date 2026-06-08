@@ -231,14 +231,6 @@ extension MCPIntegrationView {
                 Text(desc)
                     .etFont(.footnote)
             }
-            Text(
-                String(
-                    format: NSLocalizedString("内部名称：%@", comment: ""),
-                    available.internalName
-                )
-            )
-                .etFont(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 2)
     }

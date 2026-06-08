@@ -39,6 +39,7 @@ extension MCPManager {
     }
 
     func rebuildAggregates() {
+        var toolEntries: [(server: MCPServerConfiguration, tool: MCPToolDescription, fullName: String, legacyShortName: String, toolComponent: String)] = []
         var aggregatedTools: [MCPAvailableTool] = []
         var aggregatedResources: [MCPAvailableResource] = []
         var aggregatedResourceTemplates: [MCPAvailableResourceTemplate] = []
@@ -63,15 +64,13 @@ extension MCPManager {
                 guard server.isToolEnabled(tool.toolId) else { continue }
                 guard server.approvalPolicy(for: tool.toolId) != .alwaysDeny else { continue }
                 let fullName = internalToolName(for: server, tool: tool)
-                let shortNameCandidate = shortToolName(for: server, tool: tool)
-                let shortName = newToolRouting[shortNameCandidate] == nil ? shortNameCandidate : fullName
-
-                aggregatedTools.append(MCPAvailableTool(server: server, tool: tool, internalName: shortName))
-                newToolRouting[shortName] = RoutedTool(internalName: shortName, server: server, tool: tool)
-
-                if shortName != fullName {
-                    newToolRouting[fullName] = RoutedTool(internalName: fullName, server: server, tool: tool)
-                }
+                toolEntries.append((
+                    server: server,
+                    tool: tool,
+                    fullName: fullName,
+                    legacyShortName: shortToolName(for: server, tool: tool),
+                    toolComponent: Self.toolAliasComponent(tool.toolId)
+                ))
             }
 
             for resource in status.resources {
@@ -94,6 +93,26 @@ extension MCPManager {
                 let name = internalPromptName(for: server, prompt: prompt)
                 aggregatedPrompts.append(MCPAvailablePrompt(server: server, prompt: prompt, internalName: name))
                 newPromptRouting[name] = RoutedPrompt(internalName: name, server: server, prompt: prompt)
+            }
+        }
+
+        let toolComponentCounts = Dictionary(grouping: toolEntries, by: { $0.toolComponent })
+            .mapValues(\.count)
+        var usedReadableToolNames = Set<String>()
+        for entry in toolEntries {
+            // 模型只暴露可读别名，完整 UUID 名和旧短名保留为内部兼容路由。
+            let readableName = Self.readableToolName(
+                for: entry.server,
+                tool: entry.tool,
+                duplicateToolComponent: (toolComponentCounts[entry.toolComponent] ?? 0) > 1,
+                usedToolNames: &usedReadableToolNames
+            )
+            let routed = RoutedTool(internalName: readableName, server: entry.server, tool: entry.tool)
+            aggregatedTools.append(MCPAvailableTool(server: entry.server, tool: entry.tool, internalName: readableName))
+            newToolRouting[readableName] = routed
+
+            for routeName in [entry.fullName, entry.legacyShortName] where routeName != readableName && newToolRouting[routeName] == nil {
+                newToolRouting[routeName] = RoutedTool(internalName: routeName, server: entry.server, tool: entry.tool)
             }
         }
 
@@ -163,6 +182,67 @@ extension MCPManager {
     func shortToolName(for server: MCPServerConfiguration, tool: MCPToolDescription) -> String {
         let shortID = server.id.uuidString.prefix(8)
         return "\(Self.toolAliasPrefix)\(shortID)_\(tool.toolId)"
+    }
+
+    nonisolated static func readableToolName(
+        for server: MCPServerConfiguration,
+        tool: MCPToolDescription,
+        duplicateToolComponent: Bool,
+        usedToolNames: inout Set<String>
+    ) -> String {
+        let toolComponent = toolAliasComponent(tool.toolId)
+        let baseName: String
+        if duplicateToolComponent {
+            baseName = "\(toolAliasPrefix)\(serverAliasComponent(for: server))_\(toolComponent)"
+        } else {
+            baseName = "\(toolAliasPrefix)\(toolComponent)"
+        }
+        return uniquedToolName(baseName, usedToolNames: &usedToolNames)
+    }
+
+    nonisolated static func toolAliasComponent(_ rawValue: String) -> String {
+        let scalars = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().unicodeScalars
+        var component = ""
+        var previousWasSeparator = false
+        for scalar in scalars {
+            let isNumber = scalar.value >= 48 && scalar.value <= 57
+            let isLowercaseLetter = scalar.value >= 97 && scalar.value <= 122
+            let isUnderscore = scalar.value == 95
+            if isNumber || isLowercaseLetter || isUnderscore {
+                component.unicodeScalars.append(scalar)
+                previousWasSeparator = isUnderscore
+            } else if !previousWasSeparator {
+                component.append("_")
+                previousWasSeparator = true
+            }
+        }
+        let trimmed = component.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return trimmed.isEmpty ? "tool" : trimmed
+    }
+
+    private nonisolated static func serverAliasComponent(for server: MCPServerConfiguration) -> String {
+        let component = toolAliasComponent(server.displayName)
+        if component == "tool" {
+            return "server_\(server.id.uuidString.prefix(8).lowercased())"
+        }
+        return component
+    }
+
+    private nonisolated static func uniquedToolName(_ baseName: String, usedToolNames: inout Set<String>) -> String {
+        guard usedToolNames.contains(baseName) else {
+            usedToolNames.insert(baseName)
+            return baseName
+        }
+
+        var suffix = 2
+        while true {
+            let candidate = "\(baseName)_\(suffix)"
+            if !usedToolNames.contains(candidate) {
+                usedToolNames.insert(candidate)
+                return candidate
+            }
+            suffix += 1
+        }
     }
 
     func internalResourceName(for server: MCPServerConfiguration, resource: MCPResourceDescription) -> String {

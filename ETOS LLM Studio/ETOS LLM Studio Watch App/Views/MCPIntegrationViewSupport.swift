@@ -259,9 +259,6 @@ struct MCPToolListView: View {
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                             }
-                            Text(tool.internalName)
-                                .etFont(.caption2)
-                                .foregroundStyle(.tertiary)
                         }
                     }
                     .padding(.vertical, 2)

@@ -19,6 +19,85 @@ struct MCPManagerToolExposureTests {
         #expect(MCPRuntimeDefaults.maxRetryAttempts == 3)
     }
 
+    @Test("MCP 工具可读别名默认不包含服务器 UUID")
+    func testReadableMCPToolAliasOmitsServerUUIDWhenUnique() {
+        let serverID = UUID(uuidString: "A3DDABC5-1111-2222-3333-444455556666")!
+        let server = MCPServerConfiguration(
+            id: serverID,
+            displayName: "GitHub",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/mcp")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            isSelectedForChat: true
+        )
+        let tool = MCPToolDescription(
+            toolId: "get_pull_request_comments",
+            description: nil,
+            inputSchema: nil,
+            examples: nil
+        )
+        var usedToolNames = Set<String>()
+
+        let alias = MCPManager.readableToolName(
+            for: server,
+            tool: tool,
+            duplicateToolComponent: false,
+            usedToolNames: &usedToolNames
+        )
+
+        #expect(alias == "mcp_get_pull_request_comments")
+        #expect(!alias.contains("A3DDABC5"))
+    }
+
+    @Test("MCP 工具撞名时才加入来源并保持唯一")
+    func testReadableMCPToolAliasAddsSourceOnlyForDuplicates() {
+        let firstServer = MCPServerConfiguration(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+            displayName: "GitHub",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/first")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            isSelectedForChat: true
+        )
+        let secondServer = MCPServerConfiguration(
+            id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+            displayName: "GitHub",
+            transport: .http(
+                endpoint: URL(string: "https://example.com/second")!,
+                apiKey: nil,
+                additionalHeaders: [:]
+            ),
+            isSelectedForChat: true
+        )
+        let tool = MCPToolDescription(
+            toolId: "get.pull-request comments",
+            description: nil,
+            inputSchema: nil,
+            examples: nil
+        )
+        var usedToolNames = Set<String>()
+
+        let firstAlias = MCPManager.readableToolName(
+            for: firstServer,
+            tool: tool,
+            duplicateToolComponent: true,
+            usedToolNames: &usedToolNames
+        )
+        let secondAlias = MCPManager.readableToolName(
+            for: secondServer,
+            tool: tool,
+            duplicateToolComponent: true,
+            usedToolNames: &usedToolNames
+        )
+
+        #expect(firstAlias == "mcp_github_get_pull_request_comments")
+        #expect(secondAlias == "mcp_github_get_pull_request_comments_2")
+    }
+
     @MainActor
     @Test("MCP 管理器可按绑定回写服务器顺序")
     func testSetServerOrderReordersManagerAndPersists() {
@@ -139,6 +218,7 @@ struct MCPManagerToolExposureTests {
         manager.reloadServers()
         let exposedTools = manager.chatToolsForLLM()
         #expect(exposedTools.count == 1)
+        #expect(exposedTools[0].name == "mcp_tool_alpha")
 
         manager.setChatToolsEnabled(false)
         #expect(manager.chatToolsForLLM().isEmpty)
