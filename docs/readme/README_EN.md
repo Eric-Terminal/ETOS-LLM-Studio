@@ -215,7 +215,7 @@ If you want to build it yourself:
     Open `ETOS LLM Studio.xcworkspace` (**workspace**, not xcodeproj).
     On first launch, Xcode will automatically resolve and fetch Swift Package dependencies.
 5.  **Run**:
-    Select the `ETOS LLM Studio Watch App` or `ETOS LLM Studio iOS App` target, connect a device (or simulator), and press Command + R.
+    Select the `ETOS LLM Studio App` scheme to run the iOS app; choose the `ETOS LLM Studio Watch App` scheme only when debugging watchOS directly. Connect a device (or simulator), then press Command + R.
 6.  **Configure**:
     After launching, add your API key in Settings. I strongly recommend using the “LAN Debugging” feature to push prepared JSON configuration files straight into `Documents/Providers/` (because who really wants to type an API key on an Apple Watch?).
 

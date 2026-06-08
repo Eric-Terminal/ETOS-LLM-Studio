@@ -215,7 +215,7 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（96 个 
     打开 `ETOS LLM Studio.xcworkspace`（注意是 **workspace** 不是 xcodeproj）。
     首次打开会自动解析并拉取 Swift Package 依赖。
 5.  **运行**:
-    选择 `ETOS LLM Studio Watch App` 或 `ETOS LLM Studio iOS App` Target，连上设备（或模拟器），Command + R 即可。
+    选择 `ETOS LLM Studio App` Scheme 运行 iOS App；如果要单独调试 watchOS，再选择 `ETOS LLM Studio Watch App` Scheme。连上设备（或模拟器）后，Command + R 即可。
 6.  **配置**:
     启动后，去设置里添加你的 API Key。推荐使用"局域网调试"功能，直接把做好的 JSON 配置文件推送到 `Documents/Providers/` 目录下（真的有人会想在 Apple Watch 上面戳 API Key 进去吗）。
 

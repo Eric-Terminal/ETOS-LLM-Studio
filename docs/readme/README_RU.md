@@ -210,7 +210,7 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
     `ETOS LLM Studio.xcworkspace` (именно workspace, не xcodeproj).
     При первом открытии Xcode автоматически подтянет Swift Package зависимости.
 5.  **Запуск**:
-    Выберите target `ETOS LLM Studio Watch App` или `ETOS LLM Studio iOS App`, подключите устройство/симулятор и нажмите Command + R.
+    Выберите scheme `ETOS LLM Studio App` для запуска iOS-приложения. Scheme `ETOS LLM Studio Watch App` нужна только для отдельной отладки watchOS. Подключите устройство/симулятор и нажмите Command + R.
 6.  **Настройка**:
     Добавьте API key в настройках. Для удобства можно через LAN Debugging отправить готовый JSON в `Documents/Providers/`.
 
