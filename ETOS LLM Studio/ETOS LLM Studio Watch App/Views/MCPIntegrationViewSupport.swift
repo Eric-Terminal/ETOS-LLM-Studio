@@ -99,12 +99,6 @@ struct MCPServerDetailView: View {
                                             .foregroundStyle(.secondary)
                                             .lineLimit(2)
                                     }
-                                    if let schemaSummary = ToolCatalogSupport.schemaSummary(for: tool.inputSchema, fieldLimit: 4) {
-                                        Text("Schema: \(schemaSummary)")
-                                            .etFont(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                            .lineLimit(3)
-                                    }
                                     Text(NSLocalizedString("点击进入二级菜单配置开关与审批策略", comment: ""))
                                         .etFont(.caption2)
                                         .foregroundStyle(.tertiary)
@@ -258,12 +252,6 @@ struct MCPToolListView: View {
                             Text(description)
                                 .etFont(.caption2)
                                 .foregroundStyle(.secondary)
-                        }
-                        if let schemaSummary = ToolCatalogSupport.schemaSummary(for: tool.tool.inputSchema, fieldLimit: 4) {
-                            Text("Schema: \(schemaSummary)")
-                                .etFont(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(3)
                         }
                         Text(tool.internalName)
                             .etFont(.caption2)

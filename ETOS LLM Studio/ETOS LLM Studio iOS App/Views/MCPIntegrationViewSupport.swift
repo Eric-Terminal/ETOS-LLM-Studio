@@ -211,12 +211,6 @@ extension MCPIntegrationView {
                             .etFont(.caption2)
                             .foregroundStyle(.tertiary)
                             .textSelection(.enabled)
-                        if let schemaSummary = schemaSummary(for: available.tool.inputSchema) {
-                            Text(String(format: NSLocalizedString("输入 Schema：%@", comment: ""), schemaSummary))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
                     }
                     .padding(.vertical, 2)
                 }
