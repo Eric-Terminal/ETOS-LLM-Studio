@@ -21,23 +21,7 @@ extension MCPIntegrationView {
                     NavigationLink {
                         MCPServerDetailView(server: server)
                     } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(server.displayName)
-                                    .etFont(.headline)
-                                Text(server.humanReadableEndpoint)
-                                    .etFont(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(statusDescription(for: server))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            if let iconName = statusIcon(for: server) {
-                                Image(systemName: iconName)
-                                    .foregroundStyle(statusColor(for: server))
-                            }
-                        }
+                        serverSummaryRow(for: server)
                     }
                     .contentShape(Rectangle())
                     .swipeActions(edge: .trailing) {
@@ -67,6 +51,78 @@ extension MCPIntegrationView {
         } set: { orderedServers in
             manager.setServerOrder(orderedServers.map(\.id))
         }
+    }
+
+    private func serverSummaryRow(for server: MCPServerConfiguration) -> some View {
+        let connectionBadge = serverConnectionBadge(for: server)
+        let transportBadge = serverTransportBadge(for: server)
+        let toolsBadge = serverToolsBadge(for: server)
+
+        return HStack(alignment: .center, spacing: 12) {
+            MCPServerIconTile(statusColor: connectionBadge.color)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(server.displayName)
+                    .etFont(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        MCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
+                        MCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
+                        MCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            MCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
+                            MCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
+                        }
+                        MCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func serverConnectionBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
+        switch manager.status(for: server).connectionState {
+        case .idle:
+            return (NSLocalizedString("未连接", comment: "MCP server list connection badge"), .secondary)
+        case .connecting:
+            return (NSLocalizedString("连接中", comment: "MCP server list connection badge"), .blue)
+        case .reconnecting:
+            return (NSLocalizedString("重连中", comment: "MCP server list connection badge"), .orange)
+        case .ready:
+            return (NSLocalizedString("已连接", comment: "MCP server list connection badge"), .green)
+        case .failed:
+            return (NSLocalizedString("失败", comment: "MCP server list connection badge"), .red)
+        @unknown default:
+            return (NSLocalizedString("未知", comment: "MCP server list connection badge"), .secondary)
+        }
+    }
+
+    private func serverTransportBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
+        switch server.transport {
+        case .builtInSearch, .builtInAppTool:
+            return (NSLocalizedString("内置", comment: "MCP server transport badge"), .indigo)
+        case .http:
+            return (NSLocalizedString("HTTP", comment: "MCP server transport badge"), .blue)
+        case .httpSSE:
+            return (NSLocalizedString("SSE", comment: "MCP server transport badge"), .purple)
+        case .oauth:
+            return (NSLocalizedString("OAuth", comment: "MCP server transport badge"), .blue)
+        }
+    }
+
+    private func serverToolsBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
+        let tools = manager.status(for: server).tools
+        let disabledToolIds = Set(server.disabledToolIds)
+        let enabledCount = tools.filter { !disabledToolIds.contains($0.toolId) }.count
+        let text = String(format: NSLocalizedString("工具：%d/%d", comment: "MCP server enabled/total tools badge"), enabledCount, tools.count)
+        return (text, .secondary)
     }
 
     var connectionOverviewSection: some View {
@@ -485,5 +541,50 @@ extension MCPIntegrationView {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
+    }
+}
+
+private struct MCPServerIconTile: View {
+    let statusColor: Color
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.secondary.opacity(0.10))
+
+            Image(systemName: "terminal")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
+            Circle()
+                .fill(statusColor)
+                .frame(width: 10, height: 10)
+                .overlay {
+                    Circle()
+                        .stroke(Color(.systemBackground), lineWidth: 2)
+                }
+                .padding(3)
+        }
+        .frame(width: 44, height: 44)
+    }
+}
+
+private struct MCPServerSummaryBadge: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .etFont(.caption.weight(.medium))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(color.opacity(0.28), lineWidth: 1)
+            }
     }
 }

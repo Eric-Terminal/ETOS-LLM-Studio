@@ -86,23 +86,7 @@ struct MCPIntegrationView: View {
                         NavigationLink {
                             MCPServerDetailView(serverID: server.id)
                         } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(server.displayName)
-                                        .etFont(.headline)
-                                    Text(server.humanReadableEndpoint)
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                    Text(statusDescription(for: server))
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                Spacer()
-                                if let iconName = statusIcon(for: server) {
-                                    Image(systemName: iconName)
-                                        .foregroundStyle(statusColor(for: server))
-                                }
-                            }
+                            serverSummaryRow(for: server)
                         }
                     }
                 }
@@ -303,6 +287,74 @@ struct MCPIntegrationView: View {
         }
     }
 
+    private func serverSummaryRow(for server: MCPServerConfiguration) -> some View {
+        let connectionBadge = serverConnectionBadge(for: server)
+        let transportBadge = serverTransportBadge(for: server)
+        let toolsBadge = serverToolsBadge(for: server)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(server.displayName)
+                .etFont(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 4) {
+                    WatchMCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
+                    WatchMCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
+                    WatchMCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        WatchMCPServerSummaryBadge(text: connectionBadge.text, color: connectionBadge.color)
+                        WatchMCPServerSummaryBadge(text: transportBadge.text, color: transportBadge.color)
+                    }
+                    WatchMCPServerSummaryBadge(text: toolsBadge.text, color: toolsBadge.color)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func serverConnectionBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
+        switch manager.status(for: server).connectionState {
+        case .idle:
+            return (NSLocalizedString("未连接", comment: "MCP server list connection badge"), .secondary)
+        case .connecting:
+            return (NSLocalizedString("连接中", comment: "MCP server list connection badge"), .blue)
+        case .reconnecting:
+            return (NSLocalizedString("重连中", comment: "MCP server list connection badge"), .orange)
+        case .ready:
+            return (NSLocalizedString("已连接", comment: "MCP server list connection badge"), .green)
+        case .failed:
+            return (NSLocalizedString("失败", comment: "MCP server list connection badge"), .red)
+        @unknown default:
+            return (NSLocalizedString("未知", comment: "MCP server list connection badge"), .secondary)
+        }
+    }
+
+    private func serverTransportBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
+        switch server.transport {
+        case .builtInSearch, .builtInAppTool:
+            return (NSLocalizedString("内置", comment: "MCP server transport badge"), .indigo)
+        case .http:
+            return (NSLocalizedString("HTTP", comment: "MCP server transport badge"), .blue)
+        case .httpSSE:
+            return (NSLocalizedString("SSE", comment: "MCP server transport badge"), .purple)
+        case .oauth:
+            return (NSLocalizedString("OAuth", comment: "MCP server transport badge"), .blue)
+        }
+    }
+
+    private func serverToolsBadge(for server: MCPServerConfiguration) -> (text: String, color: Color) {
+        let tools = manager.status(for: server).tools
+        let disabledToolIds = Set(server.disabledToolIds)
+        let enabledCount = tools.filter { !disabledToolIds.contains($0.toolId) }.count
+        let text = String(format: NSLocalizedString("工具：%d/%d", comment: "MCP server enabled/total tools badge"), enabledCount, tools.count)
+        return (text, .secondary)
+    }
+
     private func statusIcon(for server: MCPServerConfiguration) -> String? {
         let status = manager.status(for: server)
         switch status.connectionState {
@@ -325,5 +377,25 @@ struct MCPIntegrationView: View {
         case .idle: return status.isSelectedForChat ? .green : .secondary
         @unknown default: return .secondary
         }
+    }
+}
+
+private struct WatchMCPServerSummaryBadge: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .etFont(.caption2.weight(.medium))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(color.opacity(0.28), lineWidth: 1)
+            }
     }
 }
