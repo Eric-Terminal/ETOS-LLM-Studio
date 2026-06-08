@@ -309,6 +309,9 @@ extension SyncEngine {
                 hasher.combine(key)
                 hasher.combine(value)
             }
+        case .builtInSearch:
+            hasher.combine("builtInSearch")
+            hasher.combine(MCPBuiltInSearchServer.endpoint)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, _, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             hasher.combine("oauth")
             hasher.combine(endpoint.absoluteString)

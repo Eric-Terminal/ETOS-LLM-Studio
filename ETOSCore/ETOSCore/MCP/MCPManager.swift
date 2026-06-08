@@ -160,7 +160,12 @@ public final class MCPManager: ObservableObject {
     // MARK: - Server Management
 
     public func reloadServers() {
-        servers = MCPServerStore.loadServers()
+        let storedServers = MCPServerStore.loadServers()
+        let preparedServers = MCPBuiltInSearchServer.prepareServersForManager(storedServers)
+        if let serverToPersist = preparedServers.serverToPersist {
+            MCPServerStore.save(serverToPersist)
+        }
+        servers = preparedServers.servers
         configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
         let serverIDs = Set(servers.map { $0.id })
         autoConnectSuppressedServerIDs = autoConnectSuppressedServerIDs.intersection(serverIDs)

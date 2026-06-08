@@ -58,6 +58,7 @@ public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
     public enum Transport: Codable, Hashable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case httpSSE(messageEndpoint: URL, sseEndpoint: URL, apiKey: String?, additionalHeaders: [String: String])
+        case builtInSearch
         case oauth(
             endpoint: URL,
             tokenEndpoint: URL,
@@ -168,6 +169,8 @@ public extension MCPServerConfiguration {
             return endpoint.absoluteString
         case .httpSSE(_, let sseEndpoint, _, _):
             return sseEndpoint.absoluteString
+        case .builtInSearch:
+            return MCPBuiltInSearchServer.endpoint
         case .oauth(let endpoint, _, _, _, _, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -179,6 +182,8 @@ public extension MCPServerConfiguration {
             return headers
         case .httpSSE(_, _, _, let headers):
             return headers
+        case .builtInSearch:
+            return [:]
         case .oauth:
             return [:]
         }
@@ -192,6 +197,8 @@ public extension MCPServerConfiguration {
         case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
+        case .builtInSearch:
+            return MCPBuiltInSearchLegacyTransport()
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             return MCPOAuthStreamableHTTPTransport(
                 endpoint: endpoint,
@@ -248,6 +255,12 @@ public extension MCPServerConfiguration {
                     sdkTransport: sdkTransport,
                     legacyTransport: legacyTransport
                 )
+            )
+        case .builtInSearch:
+            let transport = MCPBuiltInSearchTransport()
+            return MCPSDKTransportBundle(
+                transport: transport,
+                streamControl: MCPTransportControlBox(control: transport)
             )
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             let configuration = NetworkSessionConfiguration.makeConfiguration()
@@ -373,6 +386,7 @@ extension MCPServerConfiguration.Transport {
         case streamableHTTP = "streamable_http"
         case httpSSE
         case sse
+        case builtInSearch = "built_in_search"
         case oauth
     }
 
@@ -403,6 +417,8 @@ extension MCPServerConfiguration.Transport {
             let apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
             let headers = try container.decodeIfPresent([String: String].self, forKey: .additionalHeaders) ?? [:]
             self = .httpSSE(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, apiKey: apiKey, additionalHeaders: headers)
+        case .builtInSearch:
+            self = .builtInSearch
         case .oauth:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
             let tokenEndpoint = try container.decode(URL.self, forKey: .tokenEndpoint)
@@ -446,6 +462,8 @@ extension MCPServerConfiguration.Transport {
             if !headers.isEmpty {
                 try container.encode(headers, forKey: .additionalHeaders)
             }
+        case .builtInSearch:
+            try container.encode(Kind.builtInSearch, forKey: .kind)
         case .oauth(let endpoint, let tokenEndpoint, let clientID, let clientSecret, let scope, let grantType, let authorizationCode, let redirectURI, let codeVerifier):
             try container.encode(Kind.oauth, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)

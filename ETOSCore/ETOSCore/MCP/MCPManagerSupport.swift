@@ -363,6 +363,8 @@ extension MCPManager {
             return "streamable_http"
         case .httpSSE:
             return "sse"
+        case .builtInSearch:
+            return "built_in_search"
         case .oauth:
             return "oauth"
         }

@@ -88,6 +88,20 @@ struct MCPServerEditor: View {
                 _apiKey = State(initialValue: "")
                 _transportOption = State(initialValue: .oauth)
                 _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
+            case .builtInSearch:
+                _endpoint = State(initialValue: MCPBuiltInSearchServer.endpoint)
+                _sseEndpoint = State(initialValue: "")
+                _apiKey = State(initialValue: "")
+                _tokenEndpoint = State(initialValue: "")
+                _clientID = State(initialValue: "")
+                _clientSecret = State(initialValue: "")
+                _oauthScope = State(initialValue: "")
+                _oauthGrantType = State(initialValue: .clientCredentials)
+                _oauthAuthorizationCode = State(initialValue: "")
+                _oauthRedirectURI = State(initialValue: "")
+                _oauthCodeVerifier = State(initialValue: "")
+                _transportOption = State(initialValue: .builtInSearch)
+                _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
             @unknown default:
                 _endpoint = State(initialValue: "")
                 _sseEndpoint = State(initialValue: "")
@@ -127,11 +141,19 @@ struct MCPServerEditor: View {
             Section(NSLocalizedString("基本信息", comment: "")) {
                 TextField(NSLocalizedString("显示名称", comment: ""), text: $displayName)
                 Picker(NSLocalizedString("传输类型", comment: ""), selection: $transportOption) {
-                    ForEach(TransportOption.allCases) { option in
+                    if transportOption == .builtInSearch {
+                        Text(TransportOption.builtInSearch.label).tag(TransportOption.builtInSearch)
+                    }
+                    ForEach(TransportOption.editableCases) { option in
                         Text(option.label).tag(option)
                     }
                 }
-                if transportOption == .sse {
+                .disabled(transportOption == .builtInSearch)
+                if transportOption == .builtInSearch {
+                    Text(NSLocalizedString("应用内置搜索服务，无需配置网络地址。", comment: "Built-in MCP search editor hint"))
+                        .foregroundStyle(.secondary)
+                        .etFont(.footnote)
+                } else if transportOption == .sse {
                     TextField("SSE Endpoint", text: $sseEndpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -304,6 +326,8 @@ struct MCPServerEditor: View {
                 redirectURI: redirectURITrimmed.isEmpty ? nil : redirectURITrimmed,
                 codeVerifier: codeVerifierTrimmed.isEmpty ? nil : codeVerifierTrimmed
             )
+        case .builtInSearch:
+            transport = .builtInSearch
         }
 
         var server = existingServer ?? MCPServerConfiguration(displayName: trimmedName, notes: notesOrNil(), transport: transport)
@@ -339,12 +363,17 @@ struct MCPServerEditor: View {
     }
 
     private var isSaveDisabled: Bool {
-        displayName.trimmingCharacters(in: .whitespaces).isEmpty ||
-        (transportOption == .sse
-         ? sseEndpoint.trimmingCharacters(in: .whitespaces).isEmpty
-         : endpoint.trimmingCharacters(in: .whitespaces).isEmpty) ||
-        !oauthFieldsValid() ||
-        (transportOption.requiresAPIKey && headerOverrideEntries.contains { $0.error != nil })
+        if displayName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return true
+        }
+        if transportOption == .builtInSearch {
+            return false
+        }
+        return (transportOption == .sse
+                ? sseEndpoint.trimmingCharacters(in: .whitespaces).isEmpty
+                : endpoint.trimmingCharacters(in: .whitespaces).isEmpty) ||
+            !oauthFieldsValid() ||
+            (transportOption.requiresAPIKey && headerOverrideEntries.contains { $0.error != nil })
     }
 
     private func addHeaderOverrideEntry() {
@@ -457,21 +486,24 @@ struct MCPServerEditor: View {
         case http
         case sse
         case oauth
+        case builtInSearch
 
         var id: String { rawValue }
+        static var editableCases: [TransportOption] { [.http, .sse, .oauth] }
 
         var label: String {
             switch self {
             case .http: return "Streamable HTTP"
             case .sse: return "SSE"
             case .oauth: return "OAuth 2.0"
+            case .builtInSearch: return NSLocalizedString("内置搜索", comment: "Built-in MCP search transport label")
             }
         }
 
         var requiresAPIKey: Bool {
             switch self {
             case .http, .sse: return true
-            case .oauth: return false
+            case .oauth, .builtInSearch: return false
             }
         }
     }

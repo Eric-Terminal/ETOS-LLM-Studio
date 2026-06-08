@@ -83,6 +83,8 @@ extension MCPServerStore {
                 apiKey: payload?.apiKey,
                 additionalHeaders: additionalHeaders
             )
+        case "built_in_search":
+            transport = .builtInSearch
         case "oauth":
             guard let endpointURLRaw = header.endpointURL,
                   let endpoint = URL(string: endpointURLRaw),
@@ -241,6 +243,8 @@ extension MCPServerStore {
             return "http"
         case .httpSSE:
             return "sse"
+        case .builtInSearch:
+            return "built_in_search"
         case .oauth:
             return "oauth"
         }
@@ -252,6 +256,8 @@ extension MCPServerStore {
             return endpoint.absoluteString
         case .httpSSE:
             return nil
+        case .builtInSearch:
+            return MCPBuiltInSearchServer.endpoint
         case .oauth(let endpoint, _, _, _, _, _, _, _, _):
             return endpoint.absoluteString
         }
@@ -263,6 +269,8 @@ extension MCPServerStore {
             return nil
         case .httpSSE(let messageEndpoint, _, _, _):
             return messageEndpoint.absoluteString
+        case .builtInSearch:
+            return nil
         case .oauth:
             return nil
         }
@@ -274,6 +282,8 @@ extension MCPServerStore {
             return nil
         case .httpSSE(_, let sseEndpoint, _, _):
             return sseEndpoint.absoluteString
+        case .builtInSearch:
+            return nil
         case .oauth:
             return nil
         }
