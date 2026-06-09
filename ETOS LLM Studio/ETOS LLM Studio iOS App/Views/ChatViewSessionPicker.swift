@@ -17,7 +17,11 @@ extension ChatView {
                 if activeChatPickerDetent == .large {
                     expandedSessionManagerContent
                 } else {
-                    nativeSessionPickerContent(showsCloseButton: true)
+                    nativeSessionPickerContent(
+                        showsCloseButton: true,
+                        showsSearchInput: false,
+                        showsFooter: false
+                    )
                 }
             }
         )
@@ -52,13 +56,17 @@ extension ChatView {
         showsTopDivider: Bool = true,
         showsFooterDivider: Bool = true,
         showsInlineCreateButton: Bool = false,
+        showsSearchInput: Bool = true,
         showsFooter: Bool = true
     ) -> some View {
-        let queryActive = nativeSessionPickerQueryActive
+        let queryActive = showsSearchInput && nativeSessionPickerQueryActive
         let displayedCount = nativeSessionPickerDisplayedCount
 
         return VStack(spacing: 0) {
-            nativeSessionPickerTopBar(showsCreateButton: showsInlineCreateButton)
+            nativeSessionPickerTopBar(
+                showsCreateButton: showsInlineCreateButton,
+                showsSearchInput: showsSearchInput
+            )
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
 
@@ -149,7 +157,10 @@ extension ChatView {
         }
     }
 
-    func nativeSessionPickerTopBar(showsCreateButton: Bool = false) -> some View {
+    func nativeSessionPickerTopBar(
+        showsCreateButton: Bool = false,
+        showsSearchInput: Bool = true
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -158,7 +169,7 @@ extension ChatView {
                             .etFont(.system(size: 18, weight: .semibold))
                             .foregroundColor(TelegramColors.navBarText)
                     }
-                    Text(nativeSessionPickerSubtitle)
+                    Text(nativeSessionPickerSubtitle(showsSearchInput: showsSearchInput))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -180,7 +191,9 @@ extension ChatView {
                 }
             }
 
-            sessionPickerSearchInput
+            if showsSearchInput {
+                sessionPickerSearchInput
+            }
             sessionPickerFolderHeader
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,8 +207,8 @@ extension ChatView {
         nativeSessionPickerQueryActive ? totalSessionPickerSearchResultCount : totalSessionPickerCount
     }
 
-    var nativeSessionPickerSubtitle: String {
-        if nativeSessionPickerQueryActive {
+    func nativeSessionPickerSubtitle(showsSearchInput: Bool) -> String {
+        if showsSearchInput && nativeSessionPickerQueryActive {
             if isSessionPickerSearching {
                 return NSLocalizedString("正在搜索历史会话…", comment: "")
             }
