@@ -59,6 +59,9 @@ struct TelegramMessageComposer: View {
         let rawHeight = UIScreen.main.bounds.height * 0.3
         return max(160 * effectiveFontScale, min(rawHeight, 360 * effectiveFontScale))
     }
+    private var composerReservedHeight: CGFloat {
+        max(controlSize, compactInputHeight) + 16
+    }
     private var estimatedCompactInputWidth: CGFloat {
         max(0, UIScreen.main.bounds.width - 16 * 2 - controlSize * 2 - 12 * 2)
     }
@@ -99,11 +102,16 @@ struct TelegramMessageComposer: View {
                     .padding(.horizontal, 16)
             }
 
-            composerContent
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
-            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
+            ZStack(alignment: .bottom) {
+                composerContent
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
+            }
+            // 展开态只作为临时浮层向上覆盖，不增加聊天列表的底部布局占位。
+            .frame(height: composerReservedHeight, alignment: .bottom)
+            .zIndex(1)
         }
         .padding(.bottom, 6)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
