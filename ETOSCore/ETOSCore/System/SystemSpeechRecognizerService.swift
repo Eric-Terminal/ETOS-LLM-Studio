@@ -71,10 +71,29 @@ public enum SystemSpeechRecognizerService {
         guard await requestAuthorization() else {
             throw TranscriptionError.authorizationDenied
         }
-        guard let recognizer = makeSpeechRecognizer(localeIdentifier: localeIdentifier) else {
+        let recognizers = makeSpeechRecognizers(localeIdentifier: localeIdentifier)
+        guard !recognizers.isEmpty else {
             throw TranscriptionError.noSpeechRecognizer
         }
 
+        var lastError: Error?
+        for recognizer in recognizers {
+            do {
+                return try await transcribe(audioURL: audioURL, recognizer: recognizer)
+            } catch TranscriptionError.emptyResult {
+                throw TranscriptionError.emptyResult
+            } catch {
+                lastError = error
+            }
+        }
+
+        throw lastError ?? TranscriptionError.noSpeechRecognizer
+    }
+
+    private static func transcribe(
+        audioURL: URL,
+        recognizer: SFSpeechRecognizer
+    ) async throws -> String {
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.shouldReportPartialResults = false
 
@@ -111,13 +130,168 @@ public enum SystemSpeechRecognizerService {
     }
 
     fileprivate static func makeSpeechRecognizer(localeIdentifier: String?) -> SFSpeechRecognizer? {
-        let locale: Locale
-        if let localeIdentifier, !localeIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            locale = Locale(identifier: localeIdentifier)
-        } else {
-            locale = Locale.autoupdatingCurrent
+        makeSpeechRecognizers(localeIdentifier: localeIdentifier).first
+    }
+
+    fileprivate static func makeSpeechRecognizers(localeIdentifier: String?) -> [SFSpeechRecognizer] {
+        let locales = resolvedSpeechRecognizerLocales(
+            requestedIdentifier: localeIdentifier,
+            currentIdentifier: Locale.autoupdatingCurrent.identifier,
+            preferredIdentifiers: Locale.preferredLanguages,
+            supportedLocales: SFSpeechRecognizer.supportedLocales()
+        )
+        let recognizers = locales.compactMap { SFSpeechRecognizer(locale: $0) }
+        let availableRecognizers = recognizers.filter(\.isAvailable)
+        return availableRecognizers.isEmpty ? recognizers : availableRecognizers
+    }
+
+    static func resolvedSpeechRecognizerLocale(
+        requestedIdentifier: String?,
+        currentIdentifier: String,
+        preferredIdentifiers: [String],
+        supportedLocales: Set<Locale>
+    ) -> Locale? {
+        resolvedSpeechRecognizerLocales(
+            requestedIdentifier: requestedIdentifier,
+            currentIdentifier: currentIdentifier,
+            preferredIdentifiers: preferredIdentifiers,
+            supportedLocales: supportedLocales
+        ).first
+    }
+
+    private static func resolvedSpeechRecognizerLocales(
+        requestedIdentifier: String?,
+        currentIdentifier: String,
+        preferredIdentifiers: [String],
+        supportedLocales: Set<Locale>
+    ) -> [Locale] {
+        let supported = supportedLocales.sorted {
+            normalizedLocaleIdentifier($0.identifier) < normalizedLocaleIdentifier($1.identifier)
         }
-        return SFSpeechRecognizer(locale: locale)
+        guard !supported.isEmpty else { return [] }
+
+        var seedIdentifiers: [String] = []
+        appendLocaleIdentifier(requestedIdentifier, to: &seedIdentifiers)
+        appendLocaleIdentifier(currentIdentifier, to: &seedIdentifiers)
+        preferredIdentifiers.forEach { appendLocaleIdentifier($0, to: &seedIdentifiers) }
+        appendLocaleIdentifier("en_US", to: &seedIdentifiers)
+
+        var resolvedLocales: [Locale] = []
+        var usedIdentifiers = Set<String>()
+        for seedIdentifier in seedIdentifiers {
+            for candidateIdentifier in speechLocaleIdentifierCandidates(from: seedIdentifier) {
+                let candidate = Locale(identifier: candidateIdentifier)
+                guard let locale = supportedSpeechLocale(matching: candidate, in: supported) else { continue }
+                let normalizedIdentifier = normalizedLocaleIdentifier(locale.identifier)
+                guard usedIdentifiers.insert(normalizedIdentifier).inserted else { continue }
+                resolvedLocales.append(locale)
+            }
+        }
+
+        if resolvedLocales.isEmpty, let fallback = supported.first(where: {
+            normalizedLocaleIdentifier($0.identifier) == "en_us"
+        }) ?? supported.first {
+            resolvedLocales.append(fallback)
+        }
+        return resolvedLocales
+    }
+
+    private static func speechLocaleIdentifierCandidates(from identifier: String) -> [String] {
+        let trimmedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedIdentifier.isEmpty else { return [] }
+
+        let locale = Locale(identifier: trimmedIdentifier)
+        let components = speechLocaleComponents(locale)
+        var identifiers = [trimmedIdentifier, locale.identifier]
+
+        if components.language == "zh" {
+            let region = components.region
+            if components.script == "hant" || region == "HK" || region == "MO" || region == "TW" {
+                if region == "HK" || region == "MO" {
+                    identifiers.append(contentsOf: ["zh_HK", "zh_TW"])
+                } else {
+                    identifiers.append(contentsOf: ["zh_TW", "zh_HK"])
+                }
+            } else {
+                identifiers.append(contentsOf: ["zh_CN", "zh_SG"])
+            }
+        } else if components.language == "en" {
+            identifiers.append("en_US")
+        }
+
+        var uniqueIdentifiers: [String] = []
+        var usedIdentifiers = Set<String>()
+        for identifier in identifiers {
+            let normalizedIdentifier = normalizedLocaleIdentifier(identifier)
+            guard usedIdentifiers.insert(normalizedIdentifier).inserted else { continue }
+            uniqueIdentifiers.append(identifier)
+        }
+        return uniqueIdentifiers
+    }
+
+    private static func supportedSpeechLocale(matching candidate: Locale, in supportedLocales: [Locale]) -> Locale? {
+        let normalizedCandidate = normalizedLocaleIdentifier(candidate.identifier)
+        if let exact = supportedLocales.first(where: {
+            normalizedLocaleIdentifier($0.identifier) == normalizedCandidate
+        }) {
+            return exact
+        }
+
+        let candidateComponents = speechLocaleComponents(candidate)
+        guard let language = candidateComponents.language else { return nil }
+        if let script = candidateComponents.script,
+           let region = candidateComponents.region,
+           let match = supportedLocales.first(where: {
+               let components = speechLocaleComponents($0)
+               return components.language == language
+                   && components.script == script
+                   && components.region == region
+           }) {
+            return match
+        }
+        if let region = candidateComponents.region,
+           let match = supportedLocales.first(where: {
+               let components = speechLocaleComponents($0)
+               return components.language == language
+                   && components.region == region
+           }) {
+            return match
+        }
+        if let script = candidateComponents.script,
+           let match = supportedLocales.first(where: {
+               let components = speechLocaleComponents($0)
+               return components.language == language
+                   && components.script == script
+           }) {
+            return match
+        }
+        return supportedLocales.first {
+            speechLocaleComponents($0).language == language
+        }
+    }
+
+    private static func speechLocaleComponents(_ locale: Locale) -> (language: String?, script: String?, region: String?) {
+        (
+            locale.language.languageCode?.identifier.lowercased(),
+            locale.language.script?.identifier.lowercased(),
+            locale.region?.identifier.uppercased()
+        )
+    }
+
+    private static func appendLocaleIdentifier(_ identifier: String?, to identifiers: inout [String]) {
+        guard let identifier else { return }
+        let trimmedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedIdentifier.isEmpty else { return }
+        let normalizedIdentifier = normalizedLocaleIdentifier(trimmedIdentifier)
+        guard !identifiers.contains(where: { normalizedLocaleIdentifier($0) == normalizedIdentifier }) else { return }
+        identifiers.append(trimmedIdentifier)
+    }
+
+    private static func normalizedLocaleIdentifier(_ identifier: String) -> String {
+        Locale(identifier: identifier)
+            .identifier
+            .replacingOccurrences(of: "-", with: "_")
+            .lowercased()
     }
 #else
     public static func requestAuthorization() async -> Bool {

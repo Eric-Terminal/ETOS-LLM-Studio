@@ -61,6 +61,61 @@ struct SpeechModelSelectionTests {
         #expect(!activated.contains(where: { $0.model.modelName == "gpt-4o" }))
     }
 
+#if canImport(Speech) && canImport(AVFoundation)
+    @Test("系统语音识别将简体中文回退到可用地区")
+    func testSystemSpeechLocaleResolverUsesSimplifiedChineseFallback() {
+        let supportedLocales: Set<Locale> = [
+            Locale(identifier: "en_US"),
+            Locale(identifier: "zh_CN"),
+            Locale(identifier: "zh_TW")
+        ]
+
+        let locale = SystemSpeechRecognizerService.resolvedSpeechRecognizerLocale(
+            requestedIdentifier: nil,
+            currentIdentifier: "zh-Hans-US",
+            preferredIdentifiers: [],
+            supportedLocales: supportedLocales
+        )
+
+        #expect(locale?.identifier == "zh_CN")
+    }
+
+    @Test("系统语音识别保留香港繁体中文地区")
+    func testSystemSpeechLocaleResolverKeepsTraditionalHongKongRegion() {
+        let supportedLocales: Set<Locale> = [
+            Locale(identifier: "zh_CN"),
+            Locale(identifier: "zh_HK"),
+            Locale(identifier: "zh_TW")
+        ]
+
+        let locale = SystemSpeechRecognizerService.resolvedSpeechRecognizerLocale(
+            requestedIdentifier: "zh-Hant-HK",
+            currentIdentifier: "en-US",
+            preferredIdentifiers: [],
+            supportedLocales: supportedLocales
+        )
+
+        #expect(locale?.identifier == "zh_HK")
+    }
+
+    @Test("系统语音识别在当前地区不可用时使用首选语言")
+    func testSystemSpeechLocaleResolverFallsBackToPreferredLanguage() {
+        let supportedLocales: Set<Locale> = [
+            Locale(identifier: "en_US"),
+            Locale(identifier: "ja_JP")
+        ]
+
+        let locale = SystemSpeechRecognizerService.resolvedSpeechRecognizerLocale(
+            requestedIdentifier: nil,
+            currentIdentifier: "de-DE",
+            preferredIdentifiers: ["ja-JP"],
+            supportedLocales: supportedLocales
+        )
+
+        #expect(locale?.identifier == "ja_JP")
+    }
+#endif
+
     @Test("OCR 模型列表仅包含支持图像输入的聊天模型")
     func testActivatedOCRModelsIncludesVisionChatModelsOnly() {
         let backupProviders = ConfigLoader.loadProviders()
