@@ -19,7 +19,6 @@ import WebKit
 struct ChatBubble: View {
     @ObservedObject var messageState: ChatMessageRenderState
     let layoutWidth: CGFloat?
-    let reasoningPreviewMaxHeight: CGFloat
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
     @Binding var isReasoningExpanded: Bool
@@ -62,7 +61,6 @@ struct ChatBubble: View {
     init(
         messageState: ChatMessageRenderState,
         layoutWidth: CGFloat? = nil,
-        reasoningPreviewMaxHeight: CGFloat = 177,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         isReasoningExpanded: Binding<Bool>,
@@ -94,7 +92,6 @@ struct ChatBubble: View {
     ) {
         self.messageState = messageState
         self.layoutWidth = layoutWidth
-        self.reasoningPreviewMaxHeight = reasoningPreviewMaxHeight
         self.preparedMarkdownPayload = preparedMarkdownPayload
         self.preparedReasoningMarkdownPayload = preparedReasoningMarkdownPayload
         self._isReasoningExpanded = isReasoningExpanded

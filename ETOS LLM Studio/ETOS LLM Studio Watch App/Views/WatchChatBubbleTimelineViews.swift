@@ -236,7 +236,6 @@ struct WatchTimelineReasoningStepView: View {
     let suppressContentRender: Bool
     let isShimmering: Bool
     let customTextColor: Color?
-    let previewMaxHeight: CGFloat
     let enableMarkdown: Bool
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
@@ -272,7 +271,7 @@ struct WatchTimelineReasoningStepView: View {
             if shouldShowContent {
                 WatchReasoningPreviewContent(
                     isPreviewing: isPreviewing,
-                    maxHeight: previewMaxHeight,
+                    maxHeight: 64.5,
                     contentID: reasoning
                 ) {
                     WatchReasoningMarkdownContentView(

@@ -94,9 +94,6 @@ struct ChatView: View {
     let landscapeSessionSidebarMinWidth: CGFloat = 220
     let landscapeSessionSidebarMaxWidth: CGFloat = 300
     let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
-    let reasoningPreviewHeightRatio: CGFloat = 0.208
-    let reasoningPreviewMinHeight: CGFloat = 118
-    let reasoningPreviewMaxHeightLimit: CGFloat = 220
     let sessionPickerMaxSessionsPerPage = 100
     let sessionPickerInfiniteScrollTriggerRemainingCount = 5
     let transcriptExportService = ChatTranscriptExportService()
@@ -123,16 +120,6 @@ struct ChatView: View {
     }
     var navBarIconSize: CGFloat {
         navBarPillHeight
-    }
-    func responsiveReasoningPreviewMaxHeight(for viewportHeight: CGFloat) -> CGFloat {
-        let viewportHeight = max(1, viewportHeight)
-        guard appConfig.enableResponsiveReasoningPreviewHeight else {
-            let percent = appConfig.reasoningPreviewHeightPercent
-            let safePercent = percent.isFinite ? max(0, percent) : 0
-            return viewportHeight * CGFloat(safePercent / 100)
-        }
-        let scaledHeight = viewportHeight * reasoningPreviewHeightRatio
-        return min(max(scaledHeight, reasoningPreviewMinHeight), reasoningPreviewMaxHeightLimit)
     }
     var usesLandscapeSessionSidebar: Bool {
         isChatLayoutLandscape
@@ -606,7 +593,6 @@ extension ChatView {
             isSending: viewModel.isSendingMessage
         )
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
-        let reasoningPreviewMaxHeight = responsiveReasoningPreviewMaxHeight(for: chatViewportSize.height)
         ZStack {
                 // Z-Index 0: 背景壁纸层（穿透安全区）
                 if showsBackground {
@@ -643,7 +629,6 @@ extension ChatView {
                                 ChatBubble(
                                     messageState: state,
                                     layoutWidth: messageLayoutWidth,
-                                    reasoningPreviewMaxHeight: reasoningPreviewMaxHeight,
                                     preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
                                     preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
                                     isReasoningExpanded: Binding(

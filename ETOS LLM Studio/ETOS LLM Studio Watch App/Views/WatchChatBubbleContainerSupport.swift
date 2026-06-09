@@ -183,7 +183,6 @@ extension ChatBubble {
                             suppressContentRender: shouldSuppressReasoningContentRender,
                             isShimmering: shouldShimmerReasoningHeader,
                             customTextColor: customTextColorOverride,
-                            previewMaxHeight: reasoningPreviewMaxHeight,
                             enableMarkdown: enableMarkdown,
                             enableAdvancedRenderer: enableAdvancedRenderer,
                             enableMathRendering: enableMathRendering,
