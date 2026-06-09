@@ -102,16 +102,12 @@ struct TelegramMessageComposer: View {
                     .padding(.horizontal, 16)
             }
 
-            ZStack(alignment: .bottom) {
-                composerContent
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
-            }
-            // 展开态只作为临时浮层向上覆盖，不增加聊天列表的底部布局占位。
-            .frame(height: composerReservedHeight, alignment: .bottom)
-            .zIndex(1)
+            Color.clear
+                .frame(height: composerReservedHeight)
+                .overlay(alignment: .bottom) {
+                    composerOverlayContent
+                }
+                .zIndex(1)
         }
         .padding(.bottom, 6)
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
@@ -209,6 +205,17 @@ struct TelegramMessageComposer: View {
                 print(String(format: NSLocalizedString("无法加载文件: %@", comment: ""), error.localizedDescription))
             }
         }
+    }
+
+    private var composerOverlayContent: some View {
+        // 固定占位交给外层 Color.clear，真实输入框在 overlay 中按自身高度展开。
+        composerContent
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .bottom)
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
+            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
     }
 
     @ViewBuilder
