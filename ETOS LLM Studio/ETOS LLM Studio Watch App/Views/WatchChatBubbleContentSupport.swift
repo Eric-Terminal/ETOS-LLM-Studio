@@ -194,7 +194,7 @@ extension ChatBubble {
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
-                    if isReasoningAutoPreview && !isReasoningExpanded {
+                    if isReasoningAutoPreview {
                         isReasoningExpanded = true
                     } else {
                         isReasoningExpanded.toggle()
@@ -217,7 +217,7 @@ extension ChatBubble {
                     }
                     .layoutPriority(1)
                     Spacer(minLength: 4)
-                    Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isReasoningFullyExpanded ? "chevron.down" : "chevron.right")
                         .etFont(.caption)
                         .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                         .padding(.top, 2)
@@ -236,7 +236,7 @@ extension ChatBubble {
                     WatchReasoningMarkdownContentView(
                         reasoning: reasoning,
                         preparedReasoningContent: preparedReasoningMarkdownPayload,
-                        enableMarkdown: enableMarkdown,
+                        enableMarkdown: shouldRenderReasoningMarkdownContent,
                         enableAdvancedRenderer: enableAdvancedRenderer,
                         enableMathRendering: enableMathRendering,
                         textColor: contentColor,
@@ -251,11 +251,19 @@ extension ChatBubble {
     }
 
     var shouldShowReasoningContent: Bool {
-        isReasoningExpanded || (isReasoningAutoPreview && !shouldSuppressReasoningContentRender)
+        isReasoningExpanded || isReasoningAutoPreview
     }
 
     var shouldUseReasoningPreviewContainer: Bool {
-        isReasoningAutoPreview && !isReasoningExpanded
+        isReasoningAutoPreview
+    }
+
+    var isReasoningFullyExpanded: Bool {
+        isReasoningExpanded && !shouldUseReasoningPreviewContainer
+    }
+
+    var shouldRenderReasoningMarkdownContent: Bool {
+        enableMarkdown && !shouldSuppressReasoningContentRender
     }
 
     @ViewBuilder

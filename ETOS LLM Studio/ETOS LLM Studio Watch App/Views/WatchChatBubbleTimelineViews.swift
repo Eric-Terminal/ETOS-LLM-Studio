@@ -250,7 +250,7 @@ struct WatchTimelineReasoningStepView: View {
         VStack(alignment: .leading, spacing: 5) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    if isPreviewing && !isExpanded {
+                    if isPreviewing {
                         isExpanded = true
                     } else {
                         isExpanded.toggle()
@@ -279,7 +279,7 @@ struct WatchTimelineReasoningStepView: View {
                     WatchReasoningMarkdownContentView(
                         reasoning: reasoning,
                         preparedReasoningContent: preparedReasoningContent,
-                        enableMarkdown: enableMarkdown,
+                        enableMarkdown: shouldRenderMarkdownContent,
                         enableAdvancedRenderer: enableAdvancedRenderer,
                         enableMathRendering: enableMathRendering,
                         textColor: secondaryColor,
@@ -300,11 +300,15 @@ struct WatchTimelineReasoningStepView: View {
     }
 
     private var shouldShowContent: Bool {
-        isExpanded || (isPreviewing && !suppressContentRender)
+        isExpanded || isPreviewing
     }
 
     private var shouldUsePreviewContainer: Bool {
-        isPreviewing && !isExpanded
+        isPreviewing
+    }
+
+    private var shouldRenderMarkdownContent: Bool {
+        enableMarkdown && !suppressContentRender
     }
 
     private var titleColor: Color {

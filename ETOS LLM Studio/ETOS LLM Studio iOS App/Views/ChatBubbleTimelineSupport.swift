@@ -144,7 +144,7 @@ struct TimelineReasoningStepView: View {
         VStack(alignment: .leading, spacing: 7) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    if isPreviewing && !isExpanded {
+                    if isPreviewing {
                         isExpanded = true
                     } else {
                         isExpanded.toggle()
@@ -174,7 +174,7 @@ struct TimelineReasoningStepView: View {
                     ReasoningMarkdownContentView(
                         reasoning: reasoning,
                         preparedReasoningContent: preparedReasoningContent,
-                        enableMarkdown: enableMarkdown,
+                        enableMarkdown: shouldRenderMarkdownContent,
                         enableAdvancedRenderer: enableAdvancedRenderer,
                         enableMathRendering: enableMathRendering,
                         isOutgoing: false,
@@ -195,11 +195,15 @@ struct TimelineReasoningStepView: View {
     }
 
     private var shouldShowContent: Bool {
-        isExpanded || (isPreviewing && !suppressContentRender)
+        isExpanded || isPreviewing
     }
 
     private var shouldUsePreviewContainer: Bool {
-        isPreviewing && !isExpanded
+        isPreviewing
+    }
+
+    private var shouldRenderMarkdownContent: Bool {
+        enableMarkdown && !suppressContentRender
     }
 
     private var titleColor: Color {

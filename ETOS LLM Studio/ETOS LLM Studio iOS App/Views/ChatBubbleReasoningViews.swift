@@ -174,7 +174,7 @@ struct ReasoningDisclosureView: View, Equatable {
                 customOpacity: 0.92
             )
             Button {
-                if isPreviewing && !isExpanded {
+                if isPreviewing {
                     isExpanded = true
                 } else {
                     isExpanded.toggle()
@@ -215,7 +215,7 @@ struct ReasoningDisclosureView: View, Equatable {
                     ReasoningMarkdownContentView(
                         reasoning: reasoning,
                         preparedReasoningContent: preparedReasoningContent,
-                        enableMarkdown: enableMarkdown,
+                        enableMarkdown: shouldRenderMarkdownContent,
                         enableAdvancedRenderer: enableAdvancedRenderer,
                         enableMathRendering: enableMathRendering,
                         isOutgoing: isOutgoing,
@@ -237,11 +237,15 @@ struct ReasoningDisclosureView: View, Equatable {
     }
 
     private var shouldShowContent: Bool {
-        isExpanded || (isPreviewing && !suppressContentRender)
+        isExpanded || isPreviewing
     }
 
     private var shouldUsePreviewContainer: Bool {
-        isPreviewing && !isExpanded
+        isPreviewing
+    }
+
+    private var shouldRenderMarkdownContent: Bool {
+        enableMarkdown && !suppressContentRender
     }
 
     private func resolvedTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {

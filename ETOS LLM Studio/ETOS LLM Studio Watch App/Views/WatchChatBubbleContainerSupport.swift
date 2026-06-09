@@ -171,7 +171,7 @@ extension ChatBubble {
                         lineBottomY: 18,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext,
-                        extendsLineThroughContent: isReasoningExpanded || (!shouldSuppressReasoningContentRender && isReasoningAutoPreview),
+                        extendsLineThroughContent: isReasoningExpanded || isReasoningAutoPreview,
                         lineTopExtension: connectsTimelineFromPrevious ? externalLineBridge : 0,
                         lineBottomExtension: stepCount == 1 && connectsTimelineToNext ? externalLineBridge : 0
                     ) {
