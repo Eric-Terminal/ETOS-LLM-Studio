@@ -15,6 +15,7 @@ import ETOSCore
 final class InlineSpeechRecorderController: ObservableObject {
     enum Phase: Equatable {
         case idle
+        case preparing
         case recording
         case preview
         case transcribing
@@ -37,8 +38,24 @@ final class InlineSpeechRecorderController: ObservableObject {
     private var playbackTask: Task<Void, Never>?
     private let sampleCount = 56
 
+    func prepareForRecording() {
+        resetRecorderResources(removeRecordedFile: true)
+        recordingDuration = 0
+        waveformSamples = Array(repeating: 0.08, count: sampleCount)
+        withAnimation(Self.phaseAnimation) {
+            phase = .preparing
+        }
+    }
+
     func start(format: AudioRecordingFormat) async throws {
-        cancel(removeRecordedFile: true)
+        resetRecorderResources(removeRecordedFile: true)
+        recordingDuration = 0
+        waveformSamples = Array(repeating: 0.08, count: sampleCount)
+        if phase == .idle {
+            withAnimation(Self.phaseAnimation) {
+                phase = .preparing
+            }
+        }
         let permissionGranted = await requestMicrophonePermission()
         guard permissionGranted else {
             throw Self.localizedError(NSLocalizedString("麦克风权限被拒绝，请到设置中开启。", comment: ""))
@@ -60,7 +77,9 @@ final class InlineSpeechRecorderController: ObservableObject {
         recordingURL = url
         recordingDuration = 0
         waveformSamples = Array(repeating: 0.08, count: sampleCount)
-        phase = .recording
+        withAnimation(Self.phaseAnimation) {
+            phase = .recording
+        }
         startRecordingTimer()
     }
 
@@ -68,12 +87,16 @@ final class InlineSpeechRecorderController: ObservableObject {
         guard phase == .recording else { return }
         audioRecorder?.stop()
         stopRecordingTimer()
-        phase = .preview
+        withAnimation(Self.phaseAnimation) {
+            phase = .preview
+        }
     }
 
     func beginTranscribing() {
         stopPreviewPlayback()
-        phase = .transcribing
+        withAnimation(Self.phaseAnimation) {
+            phase = .transcribing
+        }
     }
 
     func makeAttachment(format: AudioRecordingFormat) throws -> AudioAttachment {
@@ -109,6 +132,15 @@ final class InlineSpeechRecorderController: ObservableObject {
     }
 
     func cancel(removeRecordedFile: Bool = true) {
+        resetRecorderResources(removeRecordedFile: removeRecordedFile)
+        recordingDuration = 0
+        waveformSamples = Self.placeholderSamples
+        withAnimation(Self.phaseAnimation) {
+            phase = .idle
+        }
+    }
+
+    private func resetRecorderResources(removeRecordedFile: Bool) {
         stopRecordingTimer()
         stopPreviewPlayback()
         audioRecorder?.stop()
@@ -118,9 +150,6 @@ final class InlineSpeechRecorderController: ObservableObject {
         }
         recordingURL = nil
         recordingStartDate = nil
-        recordingDuration = 0
-        waveformSamples = Self.placeholderSamples
-        phase = .idle
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -224,6 +253,7 @@ final class InlineSpeechRecorderController: ObservableObject {
     }
 
     private static let placeholderSamples: [CGFloat] = Array(repeating: 0.08, count: 56)
+    private static let phaseAnimation = Animation.spring(response: 0.3, dampingFraction: 0.86)
 }
 
 struct InlineSpeechComposerBar: View {
@@ -242,7 +272,7 @@ struct InlineSpeechComposerBar: View {
             switch phase {
             case .idle:
                 EmptyView()
-            case .recording:
+            case .preparing, .recording:
                 recordingCapsule
             case .preview, .transcribing:
                 previewRow
@@ -276,6 +306,8 @@ struct InlineSpeechComposerBar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(NSLocalizedString("停止录音", comment: ""))
+            .disabled(phase == .preparing)
+            .opacity(phase == .preparing ? 0.58 : 1)
         }
         .padding(.leading, 18)
         .padding(.trailing, 8)
@@ -291,7 +323,7 @@ struct InlineSpeechComposerBar: View {
                     .etFont(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.primary)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.primary.opacity(0.08)))
+                    .background(previewControlBackground)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(NSLocalizedString("取消录音", comment: ""))
@@ -360,6 +392,12 @@ struct InlineSpeechComposerBar: View {
             .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.8))
     }
 
+    private var previewControlBackground: some View {
+        Circle()
+            .fill(Color(uiColor: .secondarySystemBackground).opacity(0.86))
+            .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.8))
+    }
+
     private var shortDurationText: String {
         formattedDuration(prefix: "")
     }
@@ -400,22 +438,20 @@ struct InlineVoiceWaveformView: View {
                 .opacity(isProcessing ? 0.62 : 1)
 
                 if isProcessing {
-                    TimelineView(.animation) { context in
-                        let phase = context.date.timeIntervalSinceReferenceDate
-                            .truncatingRemainder(dividingBy: 1.35) / 1.35
-                        LinearGradient(
-                            colors: [.clear, tint.opacity(0.05), tint.opacity(0.85), tint.opacity(0.05), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                    processingSweep(containerWidth: proxy.size.width)
+                        .mask(
+                            waveformBars(
+                                samples: displaySamples,
+                                height: proxy.size.height,
+                                barWidth: barWidth,
+                                spacing: spacing
+                            )
                         )
-                        .frame(width: proxy.size.width * 0.45)
-                        .offset(x: -proxy.size.width * 0.75 + proxy.size.width * 1.5 * phase)
                         .blendMode(.plusLighter)
-                    }
-                    .clipShape(Rectangle())
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             .accessibilityHidden(true)
         }
     }
@@ -439,5 +475,19 @@ struct InlineVoiceWaveformView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func processingSweep(containerWidth: CGFloat) -> some View {
+        TimelineView(.animation) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: 1.25) / 1.25
+            LinearGradient(
+                colors: [.clear, tint.opacity(0.08), tint.opacity(0.95), tint.opacity(0.08), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: max(48, containerWidth * 0.82))
+            .offset(x: -containerWidth + containerWidth * 2 * phase)
+        }
     }
 }

@@ -65,9 +65,11 @@ struct ChatView: View {
     @State var scrollDistanceToBottom: CGFloat = 0
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
+    @State var chatLayoutSettleTask: Task<Void, Never>?
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var needsImmediateBottomSnap: Bool = true
+    @State var isChatLayoutSettling: Bool = false
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
@@ -803,7 +805,7 @@ extension ChatView {
                         )
                 }
                 .onPreferenceChange(ChatInputBarHeightPreferenceKey.self) { newHeight in
-                    chatInputBarHeight = newHeight
+                    handleChatInputBarHeightChange(newHeight)
                 }
                 .overlay(alignment: .bottomTrailing) {
                     // Telegram 风格的滚动到底部按钮
@@ -856,11 +858,13 @@ extension ChatView {
                 bottomSafeAreaInset = newValue
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                beginChatLayoutSettling(keepBottomPinned: scrollDistanceToBottom < 120)
                 if !isKeyboardVisible {
                     isKeyboardVisible = true
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                beginChatLayoutSettling(keepBottomPinned: scrollDistanceToBottom < 120)
                 if isKeyboardVisible {
                     isKeyboardVisible = false
                 }
@@ -870,6 +874,8 @@ extension ChatView {
                 pendingHistoryResetWorkItem = nil
                 pendingBottomSnapTask?.cancel()
                 pendingBottomSnapTask = nil
+                chatLayoutSettleTask?.cancel()
+                chatLayoutSettleTask = nil
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)

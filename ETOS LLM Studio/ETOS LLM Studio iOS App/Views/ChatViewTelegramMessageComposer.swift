@@ -204,9 +204,16 @@ struct TelegramMessageComposer: View {
     private var composerContent: some View {
         if inlineSpeechRecorder.phase.isActive {
             inlineSpeechComposer
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
         } else {
             composerInputRow
+                .transition(.asymmetric(
+                    insertion: .move(edge: .leading).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)
+                ))
         }
     }
 
@@ -393,10 +400,12 @@ struct TelegramMessageComposer: View {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
         audioRecorderEntryMode = .speechInput
+        inlineSpeechRecorder.prepareForRecording()
         focus.wrappedValue = false
         Task { @MainActor in
             do {
                 try validateInlineSpeechInput()
+                await Task.yield()
                 try await inlineSpeechRecorder.start(format: viewModel.audioRecordingFormat)
             } catch {
                 inlineSpeechErrorMessage = error.localizedDescription

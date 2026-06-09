@@ -160,22 +160,20 @@ private struct WatchInlineVoiceWaveformView: View {
                 .opacity(isProcessing ? 0.62 : 1)
 
                 if isProcessing {
-                    TimelineView(.animation) { context in
-                        let phase = context.date.timeIntervalSinceReferenceDate
-                            .truncatingRemainder(dividingBy: 1.2) / 1.2
-                        LinearGradient(
-                            colors: [.clear, tint.opacity(0.08), tint.opacity(0.9), tint.opacity(0.08), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                    processingSweep(containerWidth: proxy.size.width)
+                        .mask(
+                            bars(
+                                samples: displaySamples,
+                                height: proxy.size.height,
+                                barWidth: barWidth,
+                                spacing: spacing
+                            )
                         )
-                        .frame(width: proxy.size.width * 0.5)
-                        .offset(x: -proxy.size.width * 0.8 + proxy.size.width * 1.6 * phase)
                         .blendMode(.plusLighter)
-                    }
-                    .clipShape(Rectangle())
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             .accessibilityHidden(true)
         }
     }
@@ -199,5 +197,19 @@ private struct WatchInlineVoiceWaveformView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func processingSweep(containerWidth: CGFloat) -> some View {
+        TimelineView(.animation) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: 1.15) / 1.15
+            LinearGradient(
+                colors: [.clear, tint.opacity(0.08), tint.opacity(0.95), tint.opacity(0.08), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: max(32, containerWidth * 0.82))
+            .offset(x: -containerWidth + containerWidth * 2 * phase)
+        }
     }
 }

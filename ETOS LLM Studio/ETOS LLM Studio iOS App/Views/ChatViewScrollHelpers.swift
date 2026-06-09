@@ -199,11 +199,45 @@ extension ChatView {
                     showScrollToBottom = shouldShow
                 }
             }
-            if normalizedDistance < 24, viewModel.resetAutomaticHistoryWindowIfNeeded() {
+            if !isChatLayoutSettling,
+               normalizedDistance < 24,
+               viewModel.resetAutomaticHistoryWindowIfNeeded() {
                 scheduleDeferredBottomSnap()
             }
         }
     }
+
+    func handleChatInputBarHeightChange(_ newHeight: CGFloat) {
+        let heightDelta = abs(newHeight - chatInputBarHeight)
+        guard heightDelta > 0.5 else {
+            chatInputBarHeight = newHeight
+            return
+        }
+
+        let keepBottomPinned = scrollDistanceToBottom < 120
+        chatInputBarHeight = newHeight
+        beginChatLayoutSettling(keepBottomPinned: keepBottomPinned)
+    }
+
+    func beginChatLayoutSettling(keepBottomPinned: Bool) {
+        chatLayoutSettleTask?.cancel()
+        isChatLayoutSettling = true
+
+        if keepBottomPinned {
+            scrollToBottom(animated: false)
+        }
+
+        chatLayoutSettleTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled else { return }
+            isChatLayoutSettling = false
+            if keepBottomPinned {
+                scrollToBottom(animated: false)
+            }
+            chatLayoutSettleTask = nil
+        }
+    }
+
     private func setScrollTarget(
         _ target: ChatScrollTargetID,
         anchor: UnitPoint,
