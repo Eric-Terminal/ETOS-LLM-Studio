@@ -35,7 +35,6 @@ struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
-    @State private var measuredInputTextHeight: CGFloat = 0
     @StateObject private var inlineSpeechRecorder = InlineSpeechRecorderController()
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
     @State private var showInlineSpeechError = false
@@ -55,11 +54,6 @@ struct TelegramMessageComposer: View {
     }
     private var compactInputHeight: CGFloat {
         max(44, inputUIFont.lineHeight + compactTextVerticalPadding * 2 + textContainerInset * 2)
-    }
-    private var visibleCompactInputHeight: CGFloat {
-        guard measuredInputTextHeight > 0 else { return compactInputHeight }
-        let fittedHeight = measuredInputTextHeight + compactTextVerticalPadding * 2 + textContainerInset * 2
-        return max(compactInputHeight, min(fittedHeight, expandedInputHeight))
     }
     private var expandedInputHeight: CGFloat {
         let rawHeight = UIScreen.main.bounds.height * 0.3
@@ -332,7 +326,7 @@ struct TelegramMessageComposer: View {
 
     @ViewBuilder
     private var inputEditor: some View {
-        let targetHeight = isExpandedComposer ? expandedInputHeight : visibleCompactInputHeight
+        let targetHeight = isExpandedComposer ? expandedInputHeight : compactInputHeight
         let verticalPadding = isExpandedComposer ? expandedTextVerticalPadding : compactTextVerticalPadding
 
         ZStack(alignment: .topLeading) {
@@ -554,7 +548,6 @@ struct TelegramMessageComposer: View {
     private func handleAutoExpand(for newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            measuredInputTextHeight = 0
             if isExpandedComposer {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                     isExpandedComposer = false
@@ -573,9 +566,7 @@ struct TelegramMessageComposer: View {
         var shouldExpand = hasExplicitNewline
 
         if availableWidth > 0 {
-            let measuredHeight = measuredTextHeight(for: newValue, width: availableWidth)
-            measuredInputTextHeight = measuredHeight
-            let lineCount = max(1, Int(ceil(measuredHeight / inputUIFont.lineHeight)))
+            let lineCount = measuredTextLineCount(for: newValue, width: availableWidth)
             shouldExpand = hasExplicitNewline || lineCount > 1
         }
 
@@ -595,13 +586,13 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func measuredTextHeight(for value: String, width: CGFloat) -> CGFloat {
+    private func measuredTextLineCount(for value: String, width: CGFloat) -> Int {
         let textStorage = NSTextStorage(string: value, attributes: [.font: inputUIFont])
         let layoutManager = NSLayoutManager()
         layoutManager.usesFontLeading = true
 
         let textContainer = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
-        // 使用 UIKit 文本布局器测量，确保自动折行结果和实际输入框一致。
+        // 数实际行片段，避免单行字体 leading 被高度换算误判成两行。
         textContainer.lineFragmentPadding = 0
         textContainer.maximumNumberOfLines = 0
         textContainer.lineBreakMode = .byWordWrapping
@@ -610,7 +601,11 @@ struct TelegramMessageComposer: View {
         textStorage.addLayoutManager(layoutManager)
         layoutManager.ensureLayout(for: textContainer)
 
-        return ceil(layoutManager.usedRect(for: textContainer).height)
+        var lineCount = 0
+        layoutManager.enumerateLineFragments(forGlyphRange: layoutManager.glyphRange(for: textContainer)) { _, _, _, _, _ in
+            lineCount += 1
+        }
+        return max(lineCount, 1)
     }
 
     private struct InputWidthKey: PreferenceKey {
