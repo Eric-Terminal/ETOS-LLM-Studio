@@ -194,7 +194,7 @@ extension ChatBubble {
         VStack(alignment: .leading, spacing: 5) {
             Button(action: {
                 withAnimation {
-                    if isReasoningAutoPreview && !isReasoningExpanded {
+                    if isReasoningAutoPreview {
                         isReasoningExpanded = true
                     } else {
                         isReasoningExpanded.toggle()
@@ -217,7 +217,7 @@ extension ChatBubble {
                     }
                     .layoutPriority(1)
                     Spacer(minLength: 4)
-                    Image(systemName: isReasoningExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isReasoningExpanded && !isReasoningAutoPreview ? "chevron.down" : "chevron.right")
                         .etFont(.caption)
                         .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                         .padding(.top, 2)
@@ -229,7 +229,7 @@ extension ChatBubble {
             if shouldShowReasoningContent {
                 let contentColor = resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
                 WatchReasoningPreviewContent(
-                    isPreviewing: shouldUseReasoningPreviewContainer,
+                    isPreviewing: isReasoningAutoPreview,
                     maxHeight: reasoningPreviewMaxHeight,
                     contentID: reasoning
                 ) {
@@ -251,11 +251,7 @@ extension ChatBubble {
     }
 
     var shouldShowReasoningContent: Bool {
-        isReasoningExpanded || (isReasoningAutoPreview && !shouldSuppressReasoningContentRender)
-    }
-
-    var shouldUseReasoningPreviewContainer: Bool {
-        isReasoningAutoPreview && !isReasoningExpanded
+        !shouldSuppressReasoningContentRender && (isReasoningExpanded || isReasoningAutoPreview)
     }
 
     @ViewBuilder
@@ -304,7 +300,7 @@ extension ChatBubble {
     func reasoningHeaderTitle(referenceDate: Date) -> String {
         if isReasoningAutoPreview,
            reasoningCompletedAt == nil,
-           let thinkingTitle = effectiveReasoningThinkingTitle,
+           let thinkingTitle = preparedReasoningMarkdownPayload?.thinkingTitle,
            !thinkingTitle.isEmpty {
             return thinkingTitle
         }
@@ -318,11 +314,6 @@ extension ChatBubble {
 
         guard let reasoningSummaryText else { return baseTitle }
         return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, reasoningSummaryText)
-    }
-
-    var effectiveReasoningThinkingTitle: String? {
-        let title = reasoningThinkingTitle ?? preparedReasoningMarkdownPayload?.thinkingTitle
-        return title?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func reasoningElapsedSeconds(referenceDate: Date) -> Int? {

@@ -59,7 +59,6 @@ extension ChatBubble {
                 ReasoningDisclosureView(
                     reasoning: reasoning,
                     preparedReasoningContent: preparedReasoningMarkdownPayload,
-                    reasoningThinkingTitle: reasoningThinkingTitle,
                     isExpanded: $isReasoningExpanded,
                     isPreviewing: isReasoningAutoPreview,
                     suppressContentRender: shouldSuppressReasoningContentRender,
@@ -158,14 +157,13 @@ extension ChatBubble {
                         lineBottomY: 20,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext,
-                        extendsLineThroughContent: isReasoningExpanded || (!shouldSuppressReasoningContentRender && isReasoningAutoPreview),
+                        extendsLineThroughContent: !shouldSuppressReasoningContentRender && (isReasoningExpanded || isReasoningAutoPreview),
                         lineTopExtension: connectsTimelineFromPrevious ? externalLineBridge : 0,
                         lineBottomExtension: stepCount == 1 && connectsTimelineToNext ? externalLineBridge : 0
                     ) {
                         TimelineReasoningStepView(
                             reasoning: trimmedReasoning,
                             preparedReasoningContent: preparedReasoningMarkdownPayload,
-                            reasoningThinkingTitle: reasoningThinkingTitle,
                             isExpanded: $isReasoningExpanded,
                             isPreviewing: isReasoningAutoPreview,
                             suppressContentRender: shouldSuppressReasoningContentRender,

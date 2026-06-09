@@ -76,7 +76,6 @@ struct WatchMessageRowView: View {
             messageState: state,
             preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
             preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
-            reasoningThinkingTitle: viewModel.reasoningThinkingTitleByMessageID[message.id],
             reasoningPreviewMaxHeight: responsiveReasoningPreviewMaxHeight,
             isReasoningExpanded: isReasoningExpandedBinding,
             isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),

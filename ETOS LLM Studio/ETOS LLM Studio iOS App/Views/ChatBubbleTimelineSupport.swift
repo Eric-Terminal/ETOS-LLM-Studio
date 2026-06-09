@@ -125,7 +125,6 @@ struct AssistantTimelineLineShape: Shape {
 struct TimelineReasoningStepView: View {
     let reasoning: String
     let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
-    let reasoningThinkingTitle: String?
     @Binding var isExpanded: Bool
     let isPreviewing: Bool
     let suppressContentRender: Bool
@@ -144,7 +143,7 @@ struct TimelineReasoningStepView: View {
         VStack(alignment: .leading, spacing: 7) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    if isPreviewing && !isExpanded {
+                    if isPreviewing {
                         isExpanded = true
                     } else {
                         isExpanded.toggle()
@@ -167,7 +166,7 @@ struct TimelineReasoningStepView: View {
 
             if shouldShowContent {
                 ReasoningPreviewContent(
-                    isPreviewing: shouldUsePreviewContainer,
+                    isPreviewing: isPreviewing,
                     maxHeight: previewMaxHeight,
                     contentID: reasoning
                 ) {
@@ -187,19 +186,15 @@ struct TimelineReasoningStepView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
-        .animation(.easeInOut(duration: 0.2), value: shouldUsePreviewContainer)
+        .animation(.easeInOut(duration: 0.2), value: isPreviewing)
     }
 
     private var isFullyExpanded: Bool {
-        isExpanded && !shouldUsePreviewContainer
+        isExpanded && !isPreviewing && !suppressContentRender
     }
 
     private var shouldShowContent: Bool {
-        isExpanded || (isPreviewing && !suppressContentRender)
-    }
-
-    private var shouldUsePreviewContainer: Bool {
-        isPreviewing && !isExpanded
+        !suppressContentRender && (isExpanded || isPreviewing)
     }
 
     private var titleColor: Color {
@@ -252,7 +247,7 @@ struct TimelineReasoningStepView: View {
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
         if isPreviewing,
            reasoningCompletedAt == nil,
-           let thinkingTitle = effectiveThinkingTitle,
+           let thinkingTitle = preparedReasoningContent?.thinkingTitle,
            !thinkingTitle.isEmpty {
             return thinkingTitle
         }
@@ -269,11 +264,6 @@ struct TimelineReasoningStepView: View {
             return baseTitle
         }
         return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, summary)
-    }
-
-    private var effectiveThinkingTitle: String? {
-        let title = reasoningThinkingTitle ?? preparedReasoningContent?.thinkingTitle
-        return title?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {

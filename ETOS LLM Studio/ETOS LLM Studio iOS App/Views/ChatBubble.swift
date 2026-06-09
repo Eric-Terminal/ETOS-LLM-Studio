@@ -22,7 +22,6 @@ struct ChatBubble: View {
     let reasoningPreviewMaxHeight: CGFloat
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
-    let reasoningThinkingTitle: String?
     @Binding var isReasoningExpanded: Bool
     let isReasoningAutoPreview: Bool
     @Binding var isToolCallsExpanded: Bool
@@ -66,7 +65,6 @@ struct ChatBubble: View {
         reasoningPreviewMaxHeight: CGFloat = 177,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
-        reasoningThinkingTitle: String? = nil,
         isReasoningExpanded: Binding<Bool>,
         isReasoningAutoPreview: Bool = false,
         isToolCallsExpanded: Binding<Bool>,
@@ -99,7 +97,6 @@ struct ChatBubble: View {
         self.reasoningPreviewMaxHeight = reasoningPreviewMaxHeight
         self.preparedMarkdownPayload = preparedMarkdownPayload
         self.preparedReasoningMarkdownPayload = preparedReasoningMarkdownPayload
-        self.reasoningThinkingTitle = reasoningThinkingTitle
         self._isReasoningExpanded = isReasoningExpanded
         self.isReasoningAutoPreview = isReasoningAutoPreview
         self._isToolCallsExpanded = isToolCallsExpanded
