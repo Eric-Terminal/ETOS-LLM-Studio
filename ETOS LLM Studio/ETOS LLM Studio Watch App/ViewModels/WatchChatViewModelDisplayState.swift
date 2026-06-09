@@ -288,6 +288,7 @@ extension ChatViewModel {
     private func scheduleReasoningMarkdownPreparationIfNeeded(for message: ChatMessage) {
         let messageID = message.id
         let isStreamingReasoningMessage = isSendingMessage && latestAssistantMessageID == messageID
+        updateReasoningThinkingTitle(for: messageID, sourceText: message.reasoningContent)
         guard ChatReasoningRenderPolicy.shouldPrepareReasoningMarkdown(
             message: message,
             isStreaming: isStreamingReasoningMessage
@@ -320,12 +321,31 @@ extension ChatViewModel {
         }
     }
 
+    private func updateReasoningThinkingTitle(for messageID: UUID, sourceText: String?) {
+        guard let sourceText,
+              !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let thinkingTitle = ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: sourceText),
+              !thinkingTitle.isEmpty else {
+            if reasoningThinkingTitleByMessageID[messageID] != nil {
+                reasoningThinkingTitleByMessageID.removeValue(forKey: messageID)
+            }
+            return
+        }
+
+        if reasoningThinkingTitleByMessageID[messageID] != thinkingTitle {
+            reasoningThinkingTitleByMessageID[messageID] = thinkingTitle
+        }
+    }
+
     private func cleanupPreparedMarkdownCache(validIDs: Set<UUID>) {
         if !preparedMarkdownByMessageID.isEmpty {
             preparedMarkdownByMessageID = preparedMarkdownByMessageID.filter { validIDs.contains($0.key) }
         }
         if !preparedReasoningMarkdownByMessageID.isEmpty {
             preparedReasoningMarkdownByMessageID = preparedReasoningMarkdownByMessageID.filter { validIDs.contains($0.key) }
+        }
+        if !reasoningThinkingTitleByMessageID.isEmpty {
+            reasoningThinkingTitleByMessageID = reasoningThinkingTitleByMessageID.filter { validIDs.contains($0.key) }
         }
         if !visualMessagePrepareGenerations.isEmpty {
             visualMessagePrepareGenerations = visualMessagePrepareGenerations.filter { validIDs.contains($0.key) }

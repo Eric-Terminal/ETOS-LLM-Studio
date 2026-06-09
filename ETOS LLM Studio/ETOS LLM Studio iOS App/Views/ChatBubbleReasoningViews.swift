@@ -121,6 +121,7 @@ struct ReasoningMarkdownContentView: View {
 struct ReasoningDisclosureView: View, Equatable {
     let reasoning: String
     let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
+    let reasoningThinkingTitle: String?
     @Binding var isExpanded: Bool
     let isPreviewing: Bool
     let suppressContentRender: Bool
@@ -139,6 +140,7 @@ struct ReasoningDisclosureView: View, Equatable {
     static func == (lhs: ReasoningDisclosureView, rhs: ReasoningDisclosureView) -> Bool {
         lhs.reasoning == rhs.reasoning
             && lhs.preparedReasoningContent == rhs.preparedReasoningContent
+            && lhs.reasoningThinkingTitle == rhs.reasoningThinkingTitle
             && lhs.isExpanded == rhs.isExpanded
             && lhs.isPreviewing == rhs.isPreviewing
             && lhs.suppressContentRender == rhs.suppressContentRender
@@ -172,7 +174,7 @@ struct ReasoningDisclosureView: View, Equatable {
                 customOpacity: 0.92
             )
             Button {
-                if isPreviewing {
+                if isPreviewing && !isExpanded {
                     isExpanded = true
                 } else {
                     isExpanded.toggle()
@@ -206,7 +208,7 @@ struct ReasoningDisclosureView: View, Equatable {
                     customOpacity: 0.85
                 )
                 ReasoningPreviewContent(
-                    isPreviewing: isPreviewing,
+                    isPreviewing: shouldUsePreviewContainer,
                     maxHeight: previewMaxHeight,
                     contentID: reasoning
                 ) {
@@ -227,15 +229,19 @@ struct ReasoningDisclosureView: View, Equatable {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: isFullyExpanded)
-        .animation(.easeInOut(duration: 0.2), value: isPreviewing)
+        .animation(.easeInOut(duration: 0.2), value: shouldUsePreviewContainer)
     }
 
     private var isFullyExpanded: Bool {
-        isExpanded && !isPreviewing && !suppressContentRender
+        isExpanded && !shouldUsePreviewContainer
     }
 
     private var shouldShowContent: Bool {
-        !suppressContentRender && (isExpanded || isPreviewing)
+        isExpanded || (isPreviewing && !suppressContentRender)
+    }
+
+    private var shouldUsePreviewContainer: Bool {
+        isPreviewing && !isExpanded
     }
 
     private func resolvedTextColor(default defaultColor: Color, customTextColor: Color?, customOpacity: Double) -> Color {
@@ -295,7 +301,7 @@ struct ReasoningDisclosureView: View, Equatable {
     private func reasoningHeaderTitle(referenceDate: Date) -> String {
         if isPreviewing,
            reasoningCompletedAt == nil,
-           let thinkingTitle = preparedReasoningContent?.thinkingTitle,
+           let thinkingTitle = effectiveThinkingTitle,
            !thinkingTitle.isEmpty {
             return thinkingTitle
         }
@@ -312,6 +318,11 @@ struct ReasoningDisclosureView: View, Equatable {
             return baseTitle
         }
         return String(format: NSLocalizedString("%@：%@", comment: ""), baseTitle, summary)
+    }
+
+    private var effectiveThinkingTitle: String? {
+        let title = reasoningThinkingTitle ?? preparedReasoningContent?.thinkingTitle
+        return title?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func reasoningElapsedSeconds(referenceDate: Date) -> Int? {

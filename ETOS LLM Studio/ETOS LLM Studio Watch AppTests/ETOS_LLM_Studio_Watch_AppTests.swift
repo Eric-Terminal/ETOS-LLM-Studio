@@ -488,4 +488,15 @@ let value = 42
         #expect(prepared.normalizedText == source)
     }
 
+    @Test("思考标题提取支持 Gemini 加粗首行")
+    func testThinkingTitleExtractionSupportsGeminiBoldLine() {
+        let source = """
+**定位展开状态**
+
+需要确认自动预览和用户手动展开的状态是否冲突。
+"""
+
+        #expect(ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: source) == "定位展开状态")
+    }
+
 }
