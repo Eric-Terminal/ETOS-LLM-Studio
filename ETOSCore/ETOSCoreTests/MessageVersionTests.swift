@@ -777,34 +777,3 @@ final class ChatQuickRetrySupportTests: XCTestCase {
         XCTAssertFalse(ChatQuickRetrySupport.canRetryLatestMessage(in: messages, isSending: true))
     }
 }
-
-final class ChatReasoningRenderPolicyTests: XCTestCase {
-    func testStreamingAssistantSuppressesReasoningContentRender() {
-        let message = ChatMessage(role: .assistant, content: "", reasoningContent: "逐步分析")
-
-        XCTAssertTrue(ChatReasoningRenderPolicy.shouldSuppressReasoningContentRender(message: message, isStreaming: true))
-        XCTAssertFalse(ChatReasoningRenderPolicy.shouldSuppressReasoningContentRender(message: message, isStreaming: false))
-    }
-
-    func testStreamingUserMessageDoesNotSuppressReasoningContentRender() {
-        let message = ChatMessage(role: .user, content: "逐步分析")
-
-        XCTAssertFalse(ChatReasoningRenderPolicy.shouldSuppressReasoningContentRender(message: message, isStreaming: true))
-    }
-
-    func testReasoningMarkdownPreparationWaitsUntilReasoningStabilizes() {
-        let requestStartedAt = Date()
-        var streamingMessage = ChatMessage(role: .assistant, content: "", requestedAt: requestStartedAt, reasoningContent: "逐步分析")
-        streamingMessage.responseMetrics = MessageResponseMetrics(
-            requestStartedAt: requestStartedAt,
-            reasoningStartedAt: requestStartedAt
-        )
-
-        var reasoningFinishedMessage = streamingMessage
-        reasoningFinishedMessage.responseMetrics?.reasoningCompletedAt = requestStartedAt.addingTimeInterval(2)
-
-        XCTAssertFalse(ChatReasoningRenderPolicy.shouldPrepareReasoningMarkdown(message: streamingMessage, isStreaming: true))
-        XCTAssertTrue(ChatReasoningRenderPolicy.shouldPrepareReasoningMarkdown(message: reasoningFinishedMessage, isStreaming: true))
-        XCTAssertTrue(ChatReasoningRenderPolicy.shouldPrepareReasoningMarkdown(message: streamingMessage, isStreaming: false))
-    }
-}

@@ -668,13 +668,6 @@ extension ChatBubble {
             && reasoningCompletedAt == nil
     }
 
-    var shouldSuppressReasoningContentRender: Bool {
-        ChatReasoningRenderPolicy.shouldSuppressReasoningContentRender(
-            message: message,
-            isStreaming: showsStreamingIndicators
-        )
-    }
-
     var reasoningStartedAt: Date? {
         if let reasoningStartedAt = message.responseMetrics?.reasoningStartedAt {
             return reasoningStartedAt

@@ -233,7 +233,6 @@ struct WatchTimelineReasoningStepView: View {
     let preparedReasoningContent: ETPreparedMarkdownRenderPayload?
     @Binding var isExpanded: Bool
     let isPreviewing: Bool
-    let suppressContentRender: Bool
     let isShimmering: Bool
     let customTextColor: Color?
     let enableMarkdown: Bool
@@ -294,11 +293,11 @@ struct WatchTimelineReasoningStepView: View {
     }
 
     private var isFullyExpanded: Bool {
-        isExpanded && !isPreviewing && !suppressContentRender
+        isExpanded && !isPreviewing
     }
 
     private var shouldShowContent: Bool {
-        !suppressContentRender && (isExpanded || isPreviewing)
+        isExpanded || isPreviewing
     }
 
     private var titleColor: Color {

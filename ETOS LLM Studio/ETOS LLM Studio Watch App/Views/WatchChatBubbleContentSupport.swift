@@ -226,7 +226,7 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
 
-            if shouldShowReasoningContent {
+            if isReasoningExpanded || isReasoningAutoPreview {
                 let contentColor = resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8)
                 WatchReasoningPreviewContent(
                     isPreviewing: isReasoningAutoPreview,
@@ -247,11 +247,7 @@ extension ChatBubble {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, shouldShowReasoningContent ? 5 : 0)
-    }
-
-    var shouldShowReasoningContent: Bool {
-        !shouldSuppressReasoningContentRender && (isReasoningExpanded || isReasoningAutoPreview)
+        .padding(.bottom, (isReasoningExpanded || isReasoningAutoPreview) ? 5 : 0)
     }
 
     @ViewBuilder
