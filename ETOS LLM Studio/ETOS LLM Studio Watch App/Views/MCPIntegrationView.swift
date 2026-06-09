@@ -49,22 +49,21 @@ struct MCPIntegrationView: View {
             Section {
                 settingsIntroCard(
                     title: "MCP 工具箱",
-                    summary: "在手表端查看服务器状态，并快速进入 MCP 调试。",
+                    summary: "在手表端查看服务器状态、工具能力和治理日志。",
                     details: """
                     快速上手
                     1. 在“服务器管理”确认至少一台服务器已连接。
                     2. 打开“向模型暴露 MCP 工具”总开关。
                     3. 在“能力概览”检查工具与资源是否已发布。
-                    4. 用“调试面板”验证调用是否正常。
+                    4. 聊天中由模型自行决定是否调用已启用的 MCP 工具。
 
                     关键项说明
                     • 连接状态：已连接 / 聊天使用 / 重连中 / 失败。
                     • 自动批准：审批倒计时（1~30 秒）。
-                    • 调用工具：手动测试工具执行链路。
-                    • 读取资源：手动验证资源读取能力。
+                    • 治理日志：查看连接、工具调用、通知与进度事件。
 
                     提示
-                    • watch 端主要用于查看与快速排查；
+                    • watch 端主要用于查看与轻量管理；
                     • 复杂配置建议在 iPhone 端完成后同步到手表。
                     """,
                     isExpanded: $isShowingIntroDetails
@@ -73,7 +72,7 @@ struct MCPIntegrationView: View {
 
             Section(
                 header: Text(NSLocalizedString("聊天工具总开关", comment: "")),
-                footer: Text(NSLocalizedString("关闭后不会向模型暴露任何 MCP 工具，但你仍可继续管理服务器和手动调试。", comment: ""))
+                footer: Text(NSLocalizedString("关闭后不会向模型暴露任何 MCP 工具，但你仍可继续管理服务器和查看日志。", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {
@@ -196,30 +195,6 @@ struct MCPIntegrationView: View {
                         MCPResourceListView()
                     }
                     .disabled(manager.resources.isEmpty)
-                }
-            }
-
-            Section(NSLocalizedString("调试面板", comment: "")) {
-                NavigationLink {
-                    MCPToolDebuggerView()
-                } label: {
-                    Label(NSLocalizedString("调用工具", comment: ""), systemImage: "play.circle")
-                }
-                NavigationLink {
-                    MCPResourceDebuggerView()
-                } label: {
-                    Label(NSLocalizedString("读取资源", comment: ""), systemImage: "tray.and.arrow.down")
-                }
-
-                if manager.lastOperationOutput != nil || manager.lastOperationError != nil {
-                    NavigationLink {
-                        MCPResponseDetailView(
-                            output: manager.lastOperationOutput,
-                            error: manager.lastOperationError
-                        )
-                    } label: {
-                        Label(NSLocalizedString("查看最新响应", comment: ""), systemImage: "text.bubble")
-                    }
                 }
             }
 

@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// MCP 工具箱的快速调试、状态图标和 Schema 摘要辅助。
+// MCP 工具箱的状态图标和 Schema 摘要辅助。
 // ============================================================================
 
 import SwiftUI
@@ -11,66 +11,6 @@ import Foundation
 import ETOSCore
 
 extension MCPIntegrationView {
-    func triggerToolExecution() {
-        do {
-            let payload = try decodeJSONDictionary(from: toolPayloadInput)
-            guard let serverID = resolveServerSelection(forTool: true) else {
-                localError = NSLocalizedString("请选择一个已连接的服务器。", comment: "")
-                return
-            }
-            let toolID = toolIdInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            manager.executeTool(on: serverID, toolId: toolID, inputs: payload)
-            localError = nil
-        } catch {
-            localError = error.localizedDescription
-        }
-    }
-
-    func triggerResourceRead() {
-        do {
-            let payload = try decodeJSONDictionary(from: resourceQueryInput)
-            guard let serverID = resolveServerSelection(forTool: false) else {
-                localError = NSLocalizedString("请选择一个已连接的服务器。", comment: "")
-                return
-            }
-            let query = payload.isEmpty ? nil : payload
-            let resourceID = resourceIdInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            manager.readResource(on: serverID, resourceId: resourceID, query: query)
-            localError = nil
-        } catch {
-            localError = error.localizedDescription
-        }
-    }
-
-    func resolveServerSelection(forTool: Bool) -> UUID? {
-        let explicit = forTool ? selectedToolServerID : selectedResourceServerID
-        if let explicit { return explicit }
-        if let preferred = manager.selectedServers().first?.id {
-            if forTool {
-                selectedToolServerID = preferred
-            } else {
-                selectedResourceServerID = preferred
-            }
-            return preferred
-        }
-        if let fallback = manager.connectedServers().first?.id {
-            if forTool {
-                selectedToolServerID = fallback
-            } else {
-                selectedResourceServerID = fallback
-            }
-            return fallback
-        }
-        return nil
-    }
-
-    func decodeJSONDictionary(from text: String) throws -> [String: JSONValue] {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [:] }
-        let data = Data(trimmed.utf8)
-        return try JSONDecoder().decode([String: JSONValue].self, from: data)
-    }
-
     func logLevelIcon(_ level: MCPLogLevel) -> some View {
         let (icon, color): (String, Color) = {
             switch level {

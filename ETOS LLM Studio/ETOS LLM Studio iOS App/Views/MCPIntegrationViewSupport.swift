@@ -484,64 +484,6 @@ extension MCPIntegrationView {
         }
     }
 
-    var debugSection: some View {
-        Section(NSLocalizedString("快速调试", comment: "")) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(NSLocalizedString("调用工具", comment: ""))
-                    .etFont(.subheadline)
-                    .bold()
-                Picker(NSLocalizedString("目标服务器", comment: ""), selection: $selectedToolServerID) {
-                    Text(NSLocalizedString("请选择", comment: "")).tag(Optional<UUID>.none)
-                    ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
-                        Text(server.displayName).tag(Optional(server.id))
-                    }
-                }
-                TextField(NSLocalizedString("工具 ID", comment: ""), text: $toolIdInput)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                TextEditor(text: $toolPayloadInput)
-                    .etFont(.system(.footnote, design: .monospaced))
-                    .frame(minHeight: 80)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
-                Button(NSLocalizedString("执行工具", comment: "")) {
-                    triggerToolExecution()
-                }
-                .disabled(manager.isBusy)
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(NSLocalizedString("读取资源", comment: ""))
-                    .etFont(.subheadline)
-                    .bold()
-                Picker(NSLocalizedString("目标服务器", comment: ""), selection: $selectedResourceServerID) {
-                    Text(NSLocalizedString("请选择", comment: "")).tag(Optional<UUID>.none)
-                    ForEach(manager.selectedServers().isEmpty ? manager.connectedServers() : manager.selectedServers()) { server in
-                        Text(server.displayName).tag(Optional(server.id))
-                    }
-                }
-                TextField(NSLocalizedString("资源 ID", comment: ""), text: $resourceIdInput)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                TextEditor(text: $resourceQueryInput)
-                    .etFont(.system(.footnote, design: .monospaced))
-                    .frame(minHeight: 80)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
-                Button(NSLocalizedString("读取资源", comment: "")) {
-                    triggerResourceRead()
-                }
-                .disabled(manager.isBusy)
-            }
-
-            if let error = localError {
-                Text(error)
-                    .etFont(.footnote)
-                    .foregroundStyle(.red)
-            }
-        }
-    }
-
     @ViewBuilder
     var latestOutputSection: some View {
         if let output = manager.lastOperationOutput {

@@ -47,13 +47,6 @@ struct MCPIntegrationView: View {
     @StateObject var toolPermissionCenter = ToolPermissionCenter.shared
     @State var isPresentingEditor = false
     @State var serverToEdit: MCPServerConfiguration?
-    @State var toolIdInput: String = ""
-    @State var toolPayloadInput: String = "{}"
-    @State var resourceIdInput: String = ""
-    @State var resourceQueryInput: String = "{}"
-    @State var localError: String?
-    @State var selectedToolServerID: UUID?
-    @State var selectedResourceServerID: UUID?
     @State var isShowingIntroDetails = false
     @State private var selectedTab: MCPIntegrationTab = .servers
     
@@ -108,18 +101,16 @@ struct MCPIntegrationView: View {
                     1. 在“已配置服务器”添加或编辑 MCP Server，先确保连接正常。
                     2. 打开“向模型暴露 MCP 工具”，否则聊天阶段不会调用 MCP。
                     3. 在“连接概览”确认“已连接数量 / 参与聊天数量”。
-                    4. 用“快速调试”先做一次手动调用，确认参数、返回和超时策略都正常。
+                    4. 到“工具”页确认模型可见的 MCP 工具，并按需调整启用状态和审批策略。
 
                     关键参数说明
                     • 倒计时自动批准：自动审批等待秒数，范围 1~30 秒。
-                    • 工具 ID：必须填写服务端公布的 toolId。
-                    • 工具 Payload（JSON）：调用参数对象，必须是合法 JSON 字典。
-                    • 资源 ID：资源读取标识符。
-                    • 资源 Query（JSON）：可选查询参数，留空等价于不传。
+                    • 工具启用：关闭后对应 MCP 工具不会暴露给模型。
+                    • 审批策略：可按工具设置总是允许、总是拒绝或每次询问。
 
                     常见状态解读
                     • 已连接并参与聊天：可被模型正常调用。
-                    • 已连接：可调试，但当前未参与聊天。
+                    • 已连接：服务器在线，但当前未参与聊天。
                     • 重连中 / 失败：优先检查 Endpoint、鉴权头和网络可达性。
 
                     排查建议
@@ -152,7 +143,6 @@ struct MCPIntegrationView: View {
             resourceSection
             promptSection
             logNavigationSection
-            debugSection
             moreSection
         }
     }
