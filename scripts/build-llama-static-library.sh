@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+# 禁用动态终端进度，避免构建日志残留 \r 刷新字符。
+export TERM=dumb
+
 ROOT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 LLAMA_SOURCE_PATH="$ROOT_PATH/Dependencies/llama.cpp"
 OUTPUT_ROOT="$ROOT_PATH/Dependencies/llama-build"
