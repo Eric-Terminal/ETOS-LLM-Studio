@@ -11,6 +11,8 @@ SDK_FAMILY="${PLATFORM_NAME:-}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 REQUESTED_ARCHS="${ETOS_LLAMA_ARCHS:-${ARCHS:-${CURRENT_ARCH:-$(uname -m)}}}"
 EXPLICIT_LLAMA_ARCHS=0
+CMAKE_GENERATOR="Ninja"
+CMAKE_BUILD_DIR_SUFFIX="ninja"
 PARALLEL_BUILD="${ETOS_LLAMA_PARALLEL:-0}"
 PARALLEL_JOBS="${ETOS_LLAMA_PARALLEL_JOBS:-}"
 
@@ -28,6 +30,10 @@ usage() {
 环境变量：
   ETOS_LLAMA_PARALLEL=1       开启 CMake 多线程构建。
   ETOS_LLAMA_PARALLEL_JOBS=8  指定 CMake 构建线程数。
+
+说明：
+  脚本默认使用 Ninja 作为 CMake Generator；如果本机缺少 ninja，会尝试通过 Homebrew 安装。
+  Ninja 默认会并行构建；--parallel 和 ETOS_LLAMA_PARALLEL_JOBS 只用于显式指定任务数。
 EOF
 }
 
@@ -203,11 +209,12 @@ case "$SDK_FAMILY" in
         ;;
 esac
 
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
 
 cleanup_intermediates() {
     if [ "$KEEP_CMAKE_BUILD" != "1" ]; then
         for arch in $REQUESTED_ARCHS; do
+            rm -rf "$OUTPUT_ROOT/cmake/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE-$CMAKE_BUILD_DIR_SUFFIX"
             rm -rf "$OUTPUT_ROOT/cmake/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE"
         done
     fi
@@ -263,6 +270,20 @@ if ! command -v cmake >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! command -v ninja >/dev/null 2>&1; then
+    if command -v brew >/dev/null 2>&1; then
+        echo "未找到 ninja，正在通过 Homebrew 安装。"
+        brew install ninja
+    fi
+fi
+
+if ! command -v ninja >/dev/null 2>&1; then
+    echo "未找到 ninja，请先运行 brew install ninja 后再构建 llama.cpp 静态库。" >&2
+    exit 1
+fi
+
+NINJA_PATH="$(command -v ninja)"
+
 SDK_PATH="$(xcrun --sdk "$SDK_NAME" --show-sdk-path)"
 CC_PATH="$(xcrun --sdk "$SDK_NAME" --find clang)"
 CXX_PATH="$(xcrun --sdk "$SDK_NAME" --find clang++)"
@@ -272,11 +293,11 @@ mkdir -p "$PRODUCT_DIR"
 ARCH_PRODUCTS=""
 
 for arch in $REQUESTED_ARCHS; do
-    BUILD_DIR="$OUTPUT_ROOT/cmake/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE"
+    BUILD_DIR="$OUTPUT_ROOT/cmake/$SDK_FAMILY-$arch-$CMAKE_BUILD_TYPE-$CMAKE_BUILD_DIR_SUFFIX"
     ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] ||
        [ ! -f "$ARCH_PRODUCT_STAMP" ] ||
@@ -284,9 +305,10 @@ for arch in $REQUESTED_ARCHS; do
        ! xcrun lipo -verify_arch "$arch" "$ARCH_PRODUCT_LIBRARY" >/dev/null 2>&1; then
         mkdir -p "$BUILD_DIR" "$ARCH_PRODUCT_DIR"
 
-        cmake -S "$LLAMA_SOURCE_PATH" -B "$BUILD_DIR" \
+        cmake -S "$LLAMA_SOURCE_PATH" -B "$BUILD_DIR" -G "$CMAKE_GENERATOR" \
             -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
             -DCMAKE_SYSTEM_NAME="$CMAKE_SYSTEM_NAME" \
+            -DCMAKE_MAKE_PROGRAM="$NINJA_PATH" \
             -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
             -DCMAKE_OSX_ARCHITECTURES="$arch" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
@@ -366,4 +388,4 @@ printf '%s' "$PRODUCT_SIGNATURE" > "$PRODUCT_STAMP"
 cleanup_intermediates
 
 echo "已生成 llama.cpp 静态库：$PRODUCT_LIBRARY"
-echo "构建平台：$SDK_FAMILY/$REQUESTED_ARCHS/$PLATFORM_SUFFIX/${PRODUCT_CONFIGURATION}，CMake=$CMAKE_BUILD_TYPE"
+echo "构建平台：$SDK_FAMILY/$REQUESTED_ARCHS/$PLATFORM_SUFFIX/${PRODUCT_CONFIGURATION}，CMake=$CMAKE_BUILD_TYPE，Generator=$CMAKE_GENERATOR"
