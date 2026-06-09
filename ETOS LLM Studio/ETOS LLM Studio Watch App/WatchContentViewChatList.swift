@@ -118,10 +118,16 @@ extension ContentView {
                             shouldKeepBottomPinned = true
                             viewModel.quickRetryLatestMessage()
                         case .speechInput:
-                            viewModel.beginSpeechInputFlow()
+                            beginWatchInputLayoutSettling(proxy: proxy)
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                viewModel.beginSpeechInputFlow()
+                            }
                         case .inactive:
                             break
                         }
+                    },
+                    onSpeechInputLayoutWillChange: {
+                        beginWatchInputLayoutSettling(proxy: proxy)
                     },
                     onRememberAttachmentSource: { source in
                         let updatedHistory = WatchImportSourceHistory.appending(
@@ -147,7 +153,8 @@ extension ContentView {
                         isAtBottom = true
                         shouldKeepBottomPinned = true
                         showScrollToBottomButton = false
-                        if viewModel.resetAutomaticHistoryWindowIfNeeded() {
+                        if !isWatchInputLayoutSettling,
+                           viewModel.resetAutomaticHistoryWindowIfNeeded() {
                             scheduleDeferredBottomSnap(proxy: proxy)
                         }
                     }
@@ -268,6 +275,9 @@ extension ContentView {
             let workItem = DispatchWorkItem {
                 pendingBottomSnapTask?.cancel()
                 pendingBottomSnapTask = nil
+                watchInputLayoutSettleTask?.cancel()
+                watchInputLayoutSettleTask = nil
+                isWatchInputLayoutSettling = false
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
@@ -392,6 +402,9 @@ extension ContentView {
         pendingHistoryResetWorkItem = nil
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
+        watchInputLayoutSettleTask?.cancel()
+        watchInputLayoutSettleTask = nil
+        isWatchInputLayoutSettling = false
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
         shouldKeepBottomPinned = false
@@ -454,6 +467,24 @@ extension ContentView {
             }
             guard !Task.isCancelled else { return }
             pendingBottomSnapTask = nil
+        }
+    }
+
+    func beginWatchInputLayoutSettling(proxy: ScrollViewProxy) {
+        watchInputLayoutSettleTask?.cancel()
+        isWatchInputLayoutSettling = true
+        shouldKeepBottomPinned = true
+        showScrollToBottomButton = false
+        scrollToBottom(proxy: proxy, animated: false)
+
+        watchInputLayoutSettleTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled else { return }
+            isWatchInputLayoutSettling = false
+            if shouldKeepBottomPinned {
+                scrollToBottom(proxy: proxy, animated: false)
+            }
+            watchInputLayoutSettleTask = nil
         }
     }
 

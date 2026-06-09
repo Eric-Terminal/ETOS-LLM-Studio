@@ -49,6 +49,7 @@ extension ChatViewModel {
         }
         speechErrorMessage = nil
         showSpeechErrorAlert = false
+        isSpeechRecordingPreparing = true
         isSpeechRecorderPresented = true
     }
 
@@ -57,15 +58,20 @@ extension ChatViewModel {
               !speechTranscriptionInProgress,
               speechRecordingURL == nil,
               systemSpeechStreamingSession == nil,
-              speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+              speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            isSpeechRecordingPreparing = false
+            return
+        }
         guard enableSpeechInput else {
             presentSpeechError(NSLocalizedString("语言输入已被关闭。", comment: ""))
+            isSpeechRecordingPreparing = false
             isSpeechRecorderPresented = false
             return
         }
         if !sendSpeechAsAudio {
             guard selectedSpeechModel != nil else {
                 presentSpeechError(NSLocalizedString("尚未选择语音转文字模型。", comment: ""))
+                isSpeechRecordingPreparing = false
                 isSpeechRecorderPresented = false
                 return
             }
@@ -74,6 +80,7 @@ extension ChatViewModel {
         let permissionGranted = await requestMicrophonePermission()
         guard permissionGranted else {
             presentSpeechError(NSLocalizedString("麦克风权限被拒绝，请到设置中开启。", comment: ""))
+            isSpeechRecordingPreparing = false
             isSpeechRecorderPresented = false
             return
         }
@@ -83,6 +90,7 @@ extension ChatViewModel {
             let speechPermissionGranted = await SystemSpeechRecognizerService.requestAuthorization()
             guard speechPermissionGranted else {
                 presentSpeechError(NSLocalizedString("语音识别权限被拒绝，请到设置中开启。", comment: ""))
+                isSpeechRecordingPreparing = false
                 isSpeechRecorderPresented = false
                 return
             }
@@ -105,6 +113,7 @@ extension ChatViewModel {
                 )
                 systemSpeechStreamingSession = streamSession
                 isRecordingSpeech = true
+                isSpeechRecordingPreparing = false
                 startRecordingTimer()
             } catch {
                 presentSpeechError(
@@ -113,6 +122,7 @@ extension ChatViewModel {
                         error.localizedDescription
                     )
                 )
+                isSpeechRecordingPreparing = false
                 isSpeechRecorderPresented = false
                 stopRecordingTimer(resetVisuals: true)
                 systemSpeechStreamingSession = nil
@@ -167,6 +177,7 @@ extension ChatViewModel {
 
             speechRecordingURL = targetURL
             isRecordingSpeech = true
+            isSpeechRecordingPreparing = false
             resetRecordingVisuals()
             startRecordingTimer()
         } catch {
@@ -176,6 +187,7 @@ extension ChatViewModel {
                     error.localizedDescription
                 )
             )
+            isSpeechRecordingPreparing = false
             isSpeechRecorderPresented = false
             stopRecordingTimer(resetVisuals: true)
             audioRecorder = nil
@@ -187,6 +199,7 @@ extension ChatViewModel {
 
     func stopSpeechRecordingForPreview() {
         guard isRecordingSpeech else { return }
+        isSpeechRecordingPreparing = false
         isRecordingSpeech = false
         stopRecordingTimer()
 
@@ -210,6 +223,7 @@ extension ChatViewModel {
             let transcript = speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !transcript.isEmpty else {
                 presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
+                isSpeechRecordingPreparing = false
                 isSpeechRecorderPresented = false
                 resetRecordingVisuals()
                 return
@@ -229,6 +243,7 @@ extension ChatViewModel {
         guard let url = speechRecordingURL else {
             audioRecorder = nil
             speechRecordingURL = nil
+            isSpeechRecordingPreparing = false
             isSpeechRecorderPresented = false
             presentSpeechError(NSLocalizedString("录音文件未找到，无法处理。", comment: ""))
             resetRecordingVisuals()
@@ -242,6 +257,7 @@ extension ChatViewModel {
         Task {
             defer {
                 speechTranscriptionInProgress = false
+                isSpeechRecordingPreparing = false
                 audioRecorder = nil
                 speechRecordingURL = nil
                 try? FileManager.default.removeItem(at: url)
@@ -296,6 +312,7 @@ extension ChatViewModel {
             isRecordingSpeech = false
         }
         speechTranscriptionInProgress = false
+        isSpeechRecordingPreparing = false
         if let url = speechRecordingURL {
             try? FileManager.default.removeItem(at: url)
         }

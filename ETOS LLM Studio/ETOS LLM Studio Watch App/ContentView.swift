@@ -33,7 +33,9 @@ struct ContentView: View {
     @State var suppressAutoScrollOnce = false
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
+    @State var watchInputLayoutSettleTask: Task<Void, Never>?
     @State var needsImmediateBottomSnap = true
+    @State var isWatchInputLayoutSettling = false
     @State var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
     @State var shouldRestorePendingJumpOnAppear = false
     @State var pendingJumpRequest: MessageJumpRequest?
@@ -156,6 +158,8 @@ struct ContentView: View {
             pendingHistoryResetWorkItem = nil
             pendingBottomSnapTask?.cancel()
             pendingBottomSnapTask = nil
+            watchInputLayoutSettleTask?.cancel()
+            watchInputLayoutSettleTask = nil
             bottomAnchorVisibilityWorkItem?.cancel()
             bottomAnchorVisibilityWorkItem = nil
         }

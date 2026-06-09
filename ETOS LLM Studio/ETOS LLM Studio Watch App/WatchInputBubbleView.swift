@@ -21,6 +21,7 @@ struct WatchInputBubbleView: View {
     let inputBubbleVerticalPadding: CGFloat
     let onOpenSessionHistory: () -> Void
     let onHandleInputAction: (WatchChatInputActionState) -> Void
+    let onSpeechInputLayoutWillChange: () -> Void
     let onRememberAttachmentSource: (String) -> Void
     let importSourceHistory: [String]
     let lastAttachmentSource: String
@@ -338,6 +339,7 @@ struct WatchInputBubbleView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, inputBubbleVerticalPadding)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isInlineSpeechComposerPresented)
 
         return coreBubble
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -470,6 +472,7 @@ struct WatchInputBubbleView: View {
 
     private var isInlineSpeechComposerPresented: Bool {
         viewModel.isSpeechRecorderPresented
+            || viewModel.isSpeechRecordingPreparing
             || viewModel.isRecordingSpeech
             || viewModel.speechTranscriptionInProgress
     }
@@ -488,6 +491,7 @@ struct WatchInputBubbleView: View {
     }
 
     private func stopInlineSpeechRecording() {
+        onSpeechInputLayoutWillChange()
         viewModel.stopSpeechRecordingForPreview()
         if viewModel.sendSpeechAsAudio {
             scheduleInlineAudioAttachment()
@@ -497,12 +501,14 @@ struct WatchInputBubbleView: View {
     }
 
     private func confirmInlineSpeechRecording() {
+        onSpeechInputLayoutWillChange()
         speechPreviewFinalizeTask?.cancel()
         speechPreviewFinalizeTask = nil
         viewModel.finishSpeechRecording()
     }
 
     private func cancelInlineSpeechRecording() {
+        onSpeechInputLayoutWillChange()
         speechPreviewFinalizeTask?.cancel()
         speechPreviewFinalizeTask = nil
         viewModel.cancelSpeechRecording()

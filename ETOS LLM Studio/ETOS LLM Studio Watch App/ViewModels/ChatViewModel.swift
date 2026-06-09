@@ -103,6 +103,7 @@ class ChatViewModel: ObservableObject {
     @Published var selectedReasoningSummaryModel: RunnableModel?
     @Published var selectedOCRModel: RunnableModel?
     @Published var isSpeechRecorderPresented: Bool = false
+    @Published var isSpeechRecordingPreparing: Bool = false
     @Published var isRecordingSpeech: Bool = false
     @Published var speechTranscriptionInProgress: Bool = false
     @Published var speechStreamingTranscript: String = ""

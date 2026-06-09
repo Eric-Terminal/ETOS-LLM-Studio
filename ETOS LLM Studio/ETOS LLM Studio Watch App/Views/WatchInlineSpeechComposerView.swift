@@ -19,13 +19,14 @@ struct WatchInlineSpeechComposerView: View {
 
     var body: some View {
         Group {
-            if viewModel.isRecordingSpeech {
+            if viewModel.isRecordingSpeech || viewModel.isSpeechRecordingPreparing {
                 recordingCapsule
             } else {
                 previewRow
             }
         }
         .frame(height: inputControlHeight)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: viewModel.isSpeechRecordingPreparing)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: viewModel.isRecordingSpeech)
         .animation(.easeOut(duration: 0.16), value: viewModel.speechTranscriptionInProgress)
         .task {
@@ -57,6 +58,8 @@ struct WatchInlineSpeechComposerView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(NSLocalizedString("停止录音", comment: ""))
+            .disabled(viewModel.isSpeechRecordingPreparing)
+            .opacity(viewModel.isSpeechRecordingPreparing ? 0.58 : 1)
         }
         .padding(.leading, 12)
         .padding(.trailing, 4)
