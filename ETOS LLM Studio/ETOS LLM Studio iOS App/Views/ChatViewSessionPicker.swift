@@ -28,7 +28,7 @@ extension ChatView {
     }
 
     var expandedSessionManagerContent: some View {
-        SessionListView()
+        SessionListView(createConversationAction: createConversationFromExpandedSessionManager)
             .environmentObject(viewModel)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -37,6 +37,11 @@ extension ChatView {
                     }
                 }
             }
+    }
+
+    func createConversationFromExpandedSessionManager() {
+        viewModel.createNewSession()
+        dismissSessionPicker()
     }
 
     var landscapeSessionSidebar: some View {
