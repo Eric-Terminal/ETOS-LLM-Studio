@@ -104,7 +104,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         return normalizedText
     }
 
-    nonisolated private static func extractThinkingTitle(from text: String) -> String? {
+    nonisolated static func extractThinkingTitle(from text: String) -> String? {
         for line in text.components(separatedBy: "\n").reversed() {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }

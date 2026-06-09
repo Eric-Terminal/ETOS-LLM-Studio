@@ -646,6 +646,7 @@ extension ChatView {
                                     reasoningPreviewMaxHeight: reasoningPreviewMaxHeight,
                                     preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
                                     preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
+                                    reasoningThinkingTitle: viewModel.reasoningThinkingTitleByMessageID[message.id],
                                     isReasoningExpanded: Binding(
                                         get: { viewModel.reasoningExpandedState[message.id, default: false] },
                                         set: { viewModel.setReasoningExpanded($0, for: message.id) }
