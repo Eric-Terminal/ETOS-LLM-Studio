@@ -61,6 +61,7 @@ extension ChatBubble {
                     preparedReasoningContent: preparedReasoningMarkdownPayload,
                     isExpanded: $isReasoningExpanded,
                     isPreviewing: isReasoningAutoPreview,
+                    suppressContentRender: shouldSuppressReasoningContentRender,
                     isOutgoing: isOutgoing,
                     usesNoBubbleStyle: usesNoBubbleStyle,
                     isShimmering: shouldShimmerReasoningHeader,
@@ -155,7 +156,7 @@ extension ChatBubble {
                         lineBottomY: 20,
                         isFirst: !connectsTimelineFromPrevious,
                         isLast: stepCount == 1 && !connectsTimelineToNext,
-                        extendsLineThroughContent: isReasoningExpanded || isReasoningAutoPreview,
+                        extendsLineThroughContent: !shouldSuppressReasoningContentRender && (isReasoningExpanded || isReasoningAutoPreview),
                         lineTopExtension: connectsTimelineFromPrevious ? externalLineBridge : 0,
                         lineBottomExtension: stepCount == 1 && connectsTimelineToNext ? externalLineBridge : 0
                     ) {
@@ -164,6 +165,7 @@ extension ChatBubble {
                             preparedReasoningContent: preparedReasoningMarkdownPayload,
                             isExpanded: $isReasoningExpanded,
                             isPreviewing: isReasoningAutoPreview,
+                            suppressContentRender: shouldSuppressReasoningContentRender,
                             isShimmering: shouldShimmerReasoningHeader,
                             customTextColor: customTextColorOverride,
                             usesNoBubbleStyle: usesNoBubbleStyle,

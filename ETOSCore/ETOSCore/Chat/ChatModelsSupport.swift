@@ -27,6 +27,35 @@ public struct MessageRewriteReferenceVersion: Identifiable, Equatable, Hashable,
     }
 }
 
+/// 统一控制思考内容在流式阶段的正文渲染与 Markdown 预处理节奏。
+public enum ChatReasoningRenderPolicy {
+    public static func shouldSuppressReasoningContentRender(message: ChatMessage, isStreaming: Bool) -> Bool {
+        isStreaming && message.role == .assistant
+    }
+
+    public static func shouldPrepareReasoningMarkdown(message: ChatMessage, isStreaming: Bool) -> Bool {
+        guard hasReasoningContent(message) else { return false }
+        guard shouldSuppressReasoningPreparation(message: message, isStreaming: isStreaming) else {
+            return true
+        }
+        return false
+    }
+
+    private static func shouldSuppressReasoningPreparation(message: ChatMessage, isStreaming: Bool) -> Bool {
+        guard shouldSuppressReasoningContentRender(message: message, isStreaming: isStreaming) else {
+            return false
+        }
+        let metrics = message.responseMetrics
+        return metrics?.reasoningCompletedAt == nil && metrics?.responseCompletedAt == nil
+    }
+
+    private static func hasReasoningContent(_ message: ChatMessage) -> Bool {
+        !(message.reasoningContent ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+}
+
 public enum ChatQuickRetrySupport {
     public static func canRetryLatestMessage(in messages: [ChatMessage], isSending: Bool) -> Bool {
         guard !isSending else { return false }
