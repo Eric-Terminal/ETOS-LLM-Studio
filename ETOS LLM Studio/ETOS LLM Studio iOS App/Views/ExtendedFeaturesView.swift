@@ -10,6 +10,7 @@ import SwiftUI
 import ETOSCore
 
 struct ExtendedFeaturesView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var achievementCenter = AchievementCenter.shared
     @State private var isShowingIntroDetails = false
 
@@ -83,6 +84,19 @@ struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("管理本机 GGUF 权重、提供商开关与高级调参。", comment: "本地模型入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    ImageGenerationFeatureView()
+                        .environmentObject(viewModel)
+                } label: {
+                    SettingsListIconLabel("图片相册", icon: .imageGeneration)
+                }
+            } footer: {
+                Text(NSLocalizedString("查看当前会话中助手返回的图片。", comment: "图片相册入口说明"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

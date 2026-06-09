@@ -1,8 +1,9 @@
 // ============================================================================
 // ImageGenerationFeatureSupport.swift
 // ============================================================================
-// iOS 图片生成页面支持组件
-// - 负责模型选择、参数表达式行、生成相册与图片保存
+// iOS 图片相册支持组件
+// - 扫描当前会话中助手返回的图片消息
+// - 提供预览、保存到系统相册与删除本地图片
 // ============================================================================
 
 import Foundation
@@ -11,140 +12,61 @@ import ETOSCore
 import SwiftUI
 import UIKit
 
-struct GeneratedImageItem: Identifiable {
+struct AssistantImageItem: Identifiable, Sendable {
     let id: String
     let messageID: UUID
     let fileName: String
-    let prompt: String
+    let sourcePrompt: String
 }
 
-private struct GeneratedImagePreviewPayload: Identifiable {
+private struct AssistantImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
-    let prompt: String
-}
-
-struct ImageGenerationModelSelectionView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let models: [RunnableModel]
-    @Binding var selectedModelIdentifier: String
-
-    var body: some View {
-        List {
-            ForEach(models) { model in
-                Button {
-                    select(model.id)
-                } label: {
-                    MarqueeTitleSubtitleSelectionRow(
-                        title: model.model.displayName,
-                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                        isSelected: selectedModelIdentifier == model.id,
-                        subtitleUIFont: .monospacedSystemFont(
-                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                            weight: .regular
-                        )
-                    )
-                }
-            }
-        }
-        .navigationTitle(NSLocalizedString("生图模型", comment: "Image generation model picker title"))
-    }
-
-    private func select(_ identifier: String) {
-        selectedModelIdentifier = identifier
-        dismiss()
-    }
-}
-
-struct ImageParameterExpressionEntry: Identifiable, Equatable {
-    let id: UUID
-    var text: String
-    var error: String?
-
-    init(id: UUID = UUID(), text: String, error: String? = nil) {
-        self.id = id
-        self.text = text
-        self.error = error
-    }
-}
-
-struct ImageParameterExpressionRow: View {
-    @Binding var entry: ImageParameterExpressionEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            TextField(
-                NSLocalizedString("生图参数表达式，比如 size = 2048x2048", comment: "Image generation parameter expression placeholder"),
-                text: $entry.text
-            )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .etFont(.body.monospaced())
-
-            if let error = entry.error {
-                Text(error)
-                    .etFont(.footnote)
-                    .foregroundStyle(.red)
-            }
-        }
-    }
+    let sourcePrompt: String
 }
 
 struct ImageGenerationGalleryView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var previewPayload: GeneratedImagePreviewPayload?
-    @State private var pendingDeleteItem: GeneratedImageItem?
+    @State private var assistantImageItems: [AssistantImageItem] = []
+    @State private var previewPayload: AssistantImagePreviewPayload?
+    @State private var pendingDeleteItem: AssistantImageItem?
     @State private var alertMessage: String?
-    let onReusePrompt: (String) -> Void
-    let onContinueGeneration: (String, ImageAttachment) -> Void
+    @State private var refreshTask: Task<Void, Never>?
 
     private let galleryColumns: [GridItem] = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12)
     ]
 
-    private var generatedImageItems: [GeneratedImageItem] {
-        let messages = viewModel.allMessagesForSession
-        guard !messages.isEmpty else { return [] }
-
-        var items: [GeneratedImageItem] = []
-        for (index, message) in messages.enumerated() where message.role == .assistant {
-            guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else { continue }
-            let prompt = messages[..<index].last(where: { $0.role == .user })?.content ?? ""
-            for fileName in imageFileNames {
-                items.append(
-                    GeneratedImageItem(
-                        id: "\(message.id.uuidString)-\(fileName)",
-                        messageID: message.id,
-                        fileName: fileName,
-                        prompt: prompt
-                    )
-                )
-            }
-        }
-        return items.reversed()
-    }
-
     var body: some View {
         ScrollView {
-            if generatedImageItems.isEmpty {
-                Text(NSLocalizedString("当前会话暂无生图结果。", comment: "No generated images in current session"))
+            if assistantImageItems.isEmpty {
+                Text(NSLocalizedString("当前会话暂无助手返回的图片。", comment: "No assistant images in current session"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal)
             } else {
                 LazyVGrid(columns: galleryColumns, spacing: 12) {
-                    ForEach(generatedImageItems) { item in
+                    ForEach(assistantImageItems) { item in
                         galleryCard(for: item)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal)
+                .padding(.vertical)
             }
         }
-        .navigationTitle(NSLocalizedString("生成相册", comment: "Generated image gallery title"))
+        .navigationTitle(NSLocalizedString("图片相册", comment: "Assistant image album title"))
+        .onAppear(perform: refreshAssistantImageItems)
+        .onChange(of: viewModel.allMessageIdentityVersion) { _, _ in
+            refreshAssistantImageItems()
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            refreshAssistantImageItems()
+        }
+        .onDisappear {
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
         .sheet(item: $previewPayload) { payload in
             ScrollView {
                 VStack(spacing: 16) {
@@ -152,8 +74,9 @@ struct ImageGenerationGalleryView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: .infinity)
-                    if !payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(payload.prompt)
+
+                    if !payload.sourcePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(payload.sourcePrompt)
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -163,7 +86,7 @@ struct ImageGenerationGalleryView: View {
             }
         }
         .confirmationDialog(
-            NSLocalizedString("确认删除这张图片？", comment: "Delete generated image confirmation"),
+            NSLocalizedString("确认删除这张图片？", comment: "Delete assistant image confirmation"),
             isPresented: Binding(
                 get: { pendingDeleteItem != nil },
                 set: { isPresented in
@@ -172,10 +95,11 @@ struct ImageGenerationGalleryView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button(NSLocalizedString("删除", comment: "Delete generated image"), role: .destructive) {
+            Button(NSLocalizedString("删除", comment: "Delete assistant image"), role: .destructive) {
                 if let item = pendingDeleteItem {
                     viewModel.removeGeneratedImage(fileName: item.fileName, fromMessageID: item.messageID)
-                    alertMessage = NSLocalizedString("图片已删除。", comment: "Generated image deleted")
+                    assistantImageItems.removeAll { $0.id == item.id }
+                    alertMessage = NSLocalizedString("图片已删除。", comment: "Assistant image deleted")
                 }
                 pendingDeleteItem = nil
             }
@@ -199,17 +123,17 @@ struct ImageGenerationGalleryView: View {
     }
 
     @ViewBuilder
-    private func galleryCard(for item: GeneratedImageItem) -> some View {
+    private func galleryCard(for item: AssistantImageItem) -> some View {
         let image = generatedUIImage(fileName: item.fileName)
-        let promptText = item.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let promptText = item.sourcePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayPrompt = promptText.isEmpty
-            ? NSLocalizedString("图片生成", comment: "Image generation view title")
+            ? NSLocalizedString("助手图片", comment: "Assistant image fallback title")
             : promptText
 
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 guard let image else { return }
-                previewPayload = GeneratedImagePreviewPayload(image: image, prompt: item.prompt)
+                previewPayload = AssistantImagePreviewPayload(image: image, sourcePrompt: item.sourcePrompt)
             } label: {
                 ZStack {
                     if let image {
@@ -224,7 +148,7 @@ struct ImageGenerationGalleryView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -242,35 +166,17 @@ struct ImageGenerationGalleryView: View {
 
                 Menu {
                     Button {
-                        onReusePrompt(item.prompt)
-                        dismiss()
-                    } label: {
-                        Label(NSLocalizedString("复用提示词", comment: "Reuse prompt from generated image"), systemImage: "text.quote")
-                    }
-
-                    Button {
-                        if let attachment = imageAttachment(for: item.fileName) {
-                            onContinueGeneration(item.prompt, attachment)
-                            dismiss()
-                        } else {
-                            alertMessage = NSLocalizedString("图片文件不存在。", comment: "Generated image file missing")
-                        }
-                    } label: {
-                        Label(NSLocalizedString("以此图继续生成", comment: "Continue generation with selected image"), systemImage: "wand.and.stars")
-                    }
-
-                    Button {
                         Task {
                             await downloadImage(item)
                         }
                     } label: {
-                        Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
+                        Label(NSLocalizedString("下载", comment: "Download assistant image"), systemImage: "square.and.arrow.down")
                     }
 
                     Button(role: .destructive) {
                         pendingDeleteItem = item
                     } label: {
-                        Label(NSLocalizedString("删除", comment: "Delete generated image"), systemImage: "trash")
+                        Label(NSLocalizedString("删除", comment: "Delete assistant image"), systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -279,11 +185,46 @@ struct ImageGenerationGalleryView: View {
                 .accessibilityLabel(NSLocalizedString("更多", comment: "More actions"))
             }
         }
-        .padding(10)
+        .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemBackground))
         )
+    }
+
+    private func refreshAssistantImageItems() {
+        let messages = viewModel.allMessagesForSession
+        refreshTask?.cancel()
+        refreshTask = Task {
+            let items = await Task.detached(priority: .userInitiated) {
+                Self.makeAssistantImageItems(from: messages)
+            }.value
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                assistantImageItems = items
+            }
+        }
+    }
+
+    private nonisolated static func makeAssistantImageItems(from messages: [ChatMessage]) -> [AssistantImageItem] {
+        guard !messages.isEmpty else { return [] }
+
+        var items: [AssistantImageItem] = []
+        for (index, message) in messages.enumerated() where message.role == .assistant {
+            guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else { continue }
+            let sourcePrompt = messages[..<index].last(where: { $0.role == .user })?.content ?? ""
+            for fileName in imageFileNames {
+                items.append(
+                    AssistantImageItem(
+                        id: "\(message.id.uuidString)-\(fileName)",
+                        messageID: message.id,
+                        fileName: fileName,
+                        sourcePrompt: sourcePrompt
+                    )
+                )
+            }
+        }
+        return Array(items.reversed())
     }
 
     private func generatedUIImage(fileName: String) -> UIImage? {
@@ -291,36 +232,16 @@ struct ImageGenerationGalleryView: View {
         return UIImage(contentsOfFile: url.path)
     }
 
-    private func imageAttachment(for fileName: String) -> ImageAttachment? {
-        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        let ext = (fileName as NSString).pathExtension.lowercased()
-        let mimeType: String
-        switch ext {
-        case "jpg", "jpeg":
-            mimeType = "image/jpeg"
-        case "png":
-            mimeType = "image/png"
-        case "webp":
-            mimeType = "image/webp"
-        case "heic", "heif":
-            mimeType = "image/heic"
-        default:
-            mimeType = "image/jpeg"
-        }
-        return ImageAttachment(data: data, mimeType: mimeType, fileName: fileName)
-    }
-
-    private func downloadImage(_ item: GeneratedImageItem) async {
+    private func downloadImage(_ item: AssistantImageItem) async {
         do {
             try await saveImageToPhotoLibrary(fileName: item.fileName)
             await MainActor.run {
-                alertMessage = NSLocalizedString("已保存到相册。", comment: "Saved to photo library")
+                alertMessage = NSLocalizedString("已保存到系统相册。", comment: "Saved to photo library")
             }
         } catch {
             await MainActor.run {
                 alertMessage = String(
-                    format: NSLocalizedString("保存失败: %@", comment: "Save generated image failed"),
+                    format: NSLocalizedString("保存失败：%@", comment: "Save assistant image failed"),
                     error.localizedDescription
                 )
             }
@@ -330,7 +251,7 @@ struct ImageGenerationGalleryView: View {
     private func saveImageToPhotoLibrary(fileName: String) async throws {
         let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw NSError(domain: "ImageGenerationGallery", code: 404, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("图片文件不存在。", comment: "Generated image file missing")])
+            throw NSError(domain: "ImageGenerationGallery", code: 404, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("图片文件不存在。", comment: "Assistant image file missing")])
         }
 
         let status = await requestPhotoLibraryAccessStatus()

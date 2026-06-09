@@ -1,162 +1,75 @@
 // ============================================================================
 // ImageGenerationFeatureSupport.swift
 // ============================================================================
-// watchOS 图片生成页面支持组件
-// - 负责模型选择、参数表达式行、生成相册与图片预览
+// watchOS 图片相册支持组件
+// - 扫描当前会话中助手返回的图片消息
+// - 小屏提供预览、分享保存与删除本地图片
 // ============================================================================
 
+import Foundation
 import SwiftUI
 import ETOSCore
 
-struct WatchGeneratedImageItem: Identifiable {
+struct WatchAssistantImageItem: Identifiable, Sendable {
     let id: String
     let messageID: UUID
     let fileName: String
-    let prompt: String
+    let sourcePrompt: String
 }
 
 private struct WatchImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage
-    let prompt: String
-}
-
-struct WatchImageModelSelectionListView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let models: [RunnableModel]
-    @Binding var selectedModelIdentifier: String
-
-    var body: some View {
-        List {
-            ForEach(models) { model in
-                Button {
-                    select(model)
-                } label: {
-                    selectionRow(
-                        title: model.model.displayName,
-                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                        isSelected: selectedModelIdentifier == model.id
-                    )
-                }
-            }
-        }
-        .navigationTitle(NSLocalizedString("生图模型", comment: "Image generation model picker title"))
-    }
-
-    private func select(_ model: RunnableModel) {
-        selectedModelIdentifier = model.id
-        dismiss()
-    }
-
-    @ViewBuilder
-    private func selectionRow(title: String, subtitle: String? = nil, isSelected: Bool) -> some View {
-        MarqueeTitleSubtitleSelectionRow(
-            title: title,
-            subtitle: subtitle,
-            isSelected: isSelected,
-            subtitleUIFont: .monospacedSystemFont(
-                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                weight: .regular
-            )
-        )
-    }
-}
-
-struct WatchImageParameterExpressionEntry: Identifiable, Equatable {
-    let id: UUID
-    var text: String
-    var error: String?
-
-    init(id: UUID = UUID(), text: String, error: String? = nil) {
-        self.id = id
-        self.text = text
-        self.error = error
-    }
-}
-
-struct WatchImageParameterExpressionRow: View {
-    @Binding var entry: WatchImageParameterExpressionEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TextField(
-                NSLocalizedString("生图参数表达式，比如 size = 2048x2048", comment: "Image generation parameter expression placeholder"),
-                text: $entry.text.watchKeyboardNewlineBinding()
-            )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .etFont(.footnote.monospaced())
-
-            if let error = entry.error {
-                Text(error)
-                    .etFont(.footnote)
-                    .foregroundStyle(.red)
-            }
-        }
-    }
 }
 
 struct WatchImageGenerationGalleryView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @Environment(\.dismiss) private var dismiss
+    @State private var assistantImageItems: [WatchAssistantImageItem] = []
     @State private var previewPayload: WatchImagePreviewPayload?
-    @State private var pendingDeleteItem: WatchGeneratedImageItem?
+    @State private var pendingDeleteItem: WatchAssistantImageItem?
     @State private var alertMessage: String?
-    let onReusePrompt: (String) -> Void
-    let onContinueGeneration: (String, ImageAttachment) -> Void
+    @State private var refreshTask: Task<Void, Never>?
 
     private let galleryColumns: [GridItem] = [
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8)
     ]
 
-    private var generatedImageItems: [WatchGeneratedImageItem] {
-        let messages = viewModel.allMessagesForSession
-        guard !messages.isEmpty else { return [] }
-
-        var items: [WatchGeneratedImageItem] = []
-        for (index, message) in messages.enumerated() where message.role == .assistant {
-            guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else { continue }
-            let prompt = messages[..<index].last(where: { $0.role == .user })?.content ?? ""
-            for fileName in imageFileNames {
-                items.append(
-                    WatchGeneratedImageItem(
-                        id: "\(message.id.uuidString)-\(fileName)",
-                        messageID: message.id,
-                        fileName: fileName,
-                        prompt: prompt
-                    )
-                )
-            }
-        }
-        return items.reversed()
-    }
-
     var body: some View {
         ScrollView {
-            if generatedImageItems.isEmpty {
-                Text(NSLocalizedString("当前会话暂无生图结果。", comment: "No generated images in current session"))
+            if assistantImageItems.isEmpty {
+                Text(NSLocalizedString("当前会话暂无助手返回的图片。", comment: "No assistant images in current session"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal)
             } else {
                 LazyVGrid(columns: galleryColumns, spacing: 8) {
-                    ForEach(generatedImageItems.prefix(20)) { item in
+                    ForEach(assistantImageItems) { item in
                         galleryCard(for: item)
                     }
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal)
                 .padding(.vertical, 8)
             }
         }
-        .navigationTitle(NSLocalizedString("生成相册", comment: "Generated image gallery title"))
+        .navigationTitle(NSLocalizedString("图片相册", comment: "Assistant image album title"))
+        .onAppear(perform: refreshAssistantImageItems)
+        .onChange(of: viewModel.allMessageIdentityVersion) { _, _ in
+            refreshAssistantImageItems()
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            refreshAssistantImageItems()
+        }
+        .onDisappear {
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
         .sheet(item: $previewPayload) { payload in
-            WatchGeneratedImagePreviewSheet(payload: payload)
+            WatchAssistantImagePreviewSheet(payload: payload)
         }
         .confirmationDialog(
-            NSLocalizedString("确认删除这张图片？", comment: "Delete generated image confirmation"),
+            NSLocalizedString("确认删除这张图片？", comment: "Delete assistant image confirmation"),
             isPresented: Binding(
                 get: { pendingDeleteItem != nil },
                 set: { isPresented in
@@ -165,10 +78,11 @@ struct WatchImageGenerationGalleryView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button(NSLocalizedString("删除", comment: "Delete generated image"), role: .destructive) {
+            Button(NSLocalizedString("删除", comment: "Delete assistant image"), role: .destructive) {
                 if let item = pendingDeleteItem {
                     viewModel.removeGeneratedImage(fileName: item.fileName, fromMessageID: item.messageID)
-                    alertMessage = NSLocalizedString("图片已删除。", comment: "Generated image deleted")
+                    assistantImageItems.removeAll { $0.id == item.id }
+                    alertMessage = NSLocalizedString("图片已删除。", comment: "Assistant image deleted")
                 }
                 pendingDeleteItem = nil
             }
@@ -192,93 +106,107 @@ struct WatchImageGenerationGalleryView: View {
     }
 
     @ViewBuilder
-    private func galleryCard(for item: WatchGeneratedImageItem) -> some View {
-        if let image = generatedUIImage(fileName: item.fileName) {
-            let promptText = item.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            let displayPrompt = promptText.isEmpty
-                ? NSLocalizedString("图片生成", comment: "Image generation view title")
-                : promptText
+    private func galleryCard(for item: WatchAssistantImageItem) -> some View {
+        let image = generatedUIImage(fileName: item.fileName)
+        let promptText = item.sourcePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayPrompt = promptText.isEmpty
+            ? NSLocalizedString("助手图片", comment: "Assistant image fallback title")
+            : promptText
 
-            VStack(alignment: .leading, spacing: 6) {
-                Button {
-                    previewPayload = WatchImagePreviewPayload(image: image, prompt: item.prompt)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(1, contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                        Text(displayPrompt)
-                            .etFont(.footnote)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                HStack(spacing: 4) {
-                    Text(item.fileName)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let fileURL = generatedImageFileURL(fileName: item.fileName) {
-                        if #available(watchOS 9.0, *) {
-                            ShareLink(item: fileURL) {
-                                Image(systemName: "square.and.arrow.down")
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(NSLocalizedString("下载", comment: "Download generated image"))
-                        }
-                    }
-                }
-
-                HStack(spacing: 10) {
-                    Button {
-                        onReusePrompt(item.prompt)
-                        dismiss()
-                    } label: {
-                        Image(systemName: "text.quote")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("复用提示词", comment: "Reuse prompt from generated image"))
-
-                    Button {
-                        if let attachment = imageAttachment(for: item.fileName) {
-                            onContinueGeneration(item.prompt, attachment)
-                            dismiss()
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                guard let image else { return }
+                previewPayload = WatchImagePreviewPayload(image: image)
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    ZStack {
+                        if let image {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
                         } else {
-                            alertMessage = NSLocalizedString("图片文件不存在。", comment: "Generated image file missing")
+                            Color.gray.opacity(0.15)
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
                         }
-                    } label: {
-                        Image(systemName: "wand.and.stars")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("以此图继续生成", comment: "Continue generation with selected image"))
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                    Button(role: .destructive) {
-                        pendingDeleteItem = item
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("删除", comment: "Delete generated image"))
+                    Text(displayPrompt)
+                        .etFont(.footnote)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.gray.opacity(0.15))
-            )
-        } else {
-            Label(NSLocalizedString("图片丢失", comment: "Image missing"), systemImage: "exclamationmark.triangle")
-                .etFont(.footnote)
-                .foregroundStyle(.secondary)
+            .buttonStyle(.plain)
+
+            HStack(spacing: 4) {
+                Text(item.fileName)
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let fileURL = generatedImageFileURL(fileName: item.fileName),
+                   #available(watchOS 9.0, *) {
+                    ShareLink(item: fileURL) {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("下载", comment: "Download assistant image"))
+                }
+            }
+
+            Button(role: .destructive) {
+                pendingDeleteItem = item
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(NSLocalizedString("删除", comment: "Delete assistant image"))
         }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.gray.opacity(0.15))
+        )
+    }
+
+    private func refreshAssistantImageItems() {
+        let messages = viewModel.allMessagesForSession
+        refreshTask?.cancel()
+        refreshTask = Task {
+            let items = await Task.detached(priority: .userInitiated) {
+                Self.makeAssistantImageItems(from: messages)
+            }.value
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                assistantImageItems = items
+            }
+        }
+    }
+
+    private nonisolated static func makeAssistantImageItems(from messages: [ChatMessage]) -> [WatchAssistantImageItem] {
+        guard !messages.isEmpty else { return [] }
+
+        var items: [WatchAssistantImageItem] = []
+        for (index, message) in messages.enumerated() where message.role == .assistant {
+            guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else { continue }
+            let sourcePrompt = messages[..<index].last(where: { $0.role == .user })?.content ?? ""
+            for fileName in imageFileNames {
+                items.append(
+                    WatchAssistantImageItem(
+                        id: "\(message.id.uuidString)-\(fileName)",
+                        messageID: message.id,
+                        fileName: fileName,
+                        sourcePrompt: sourcePrompt
+                    )
+                )
+            }
+        }
+        return Array(items.reversed())
     }
 
     private func generatedUIImage(fileName: String) -> UIImage? {
@@ -290,29 +218,9 @@ struct WatchImageGenerationGalleryView: View {
         let url = Persistence.getImageDirectory().appendingPathComponent(fileName)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
-
-    private func imageAttachment(for fileName: String) -> ImageAttachment? {
-        let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        let ext = (fileName as NSString).pathExtension.lowercased()
-        let mimeType: String
-        switch ext {
-        case "jpg", "jpeg":
-            mimeType = "image/jpeg"
-        case "png":
-            mimeType = "image/png"
-        case "webp":
-            mimeType = "image/webp"
-        case "heic", "heif":
-            mimeType = "image/heic"
-        default:
-            mimeType = "image/jpeg"
-        }
-        return ImageAttachment(data: data, mimeType: mimeType, fileName: fileName)
-    }
 }
 
-private struct WatchGeneratedImagePreviewSheet: View {
+private struct WatchAssistantImagePreviewSheet: View {
     let payload: WatchImagePreviewPayload
 
     @State private var zoomScale = 1.0

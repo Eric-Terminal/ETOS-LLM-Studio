@@ -908,6 +908,7 @@ Veuillez Générer a short, concise Titre for ce conversation based activé le u
 "图" = "Image";
 "独立生图" = "Image Studio";
 "生图在独立页面发起，不影响主聊天输入区。" = "Générer Images dans a dedicated page sans affecting le main Discussion composer.";
+"查看当前会话中助手返回的图片。" = "Afficher les images renvoyées par l’assistant dans la session actuelle.";
 "提示词" = "Prompt";
 "输入提示词，独立发起生图请求。" = "Entrer a Prompt et Envoyer an isolated image-generation Requête.";
 "选择参考图" = "Choisir reference Images";
@@ -923,13 +924,17 @@ Veuillez Générer a short, concise Titre for ce conversation based activé le u
 "生图请求会使用这里单独选择的模型，不影响主聊天模型。" = "Image Requêtes utiliser le Modèle Sélectionné ici et do pas affect le main Discussion Modèle.";
 "当前没有可用的生图模型，请先在模型管理中启用。" = "Aucun Image Génération Modèle est Disponible. Activer un dans Modèle Gestion Premier.";
 "生成相册" = "Généré Galerie";
+"图片相册" = "Album d’images";
 "当前会话暂无生图结果。" = "Aucune Image générée dans cette Session pour le moment.";
+"当前会话暂无助手返回的图片。" = "Aucune image renvoyée par l’assistant dans cette session pour le moment.";
+"助手图片" = "Image de l’assistant";
 "已生成 %d 张图片。" = "%d Images Généré.";
 "这里展示当前会话里已生成的图片，点击可预览。" = "Ce section shows Images Généré dans le Actuel Session. Touchez à Aperçu.";
 "图片预览" = "Image Aperçu";
 "打开生成相册可查看、下载或删除已生成图片。" = "Ouvrir le Généré Galerie à Voir, Télécharger, ou Supprimer Généré Images.";
 "下载" = "Télécharger";
 "已保存到相册。" = "Enregistré dans Photos.";
+"已保存到系统相册。" = "Enregistré dans Photos.";
 "保存失败: %@" = "Enregistrer Échec: %@";
 "图片文件不存在。" = "Image Fichier does pas exist.";
 "没有相册访问权限。" = "Aucune autorisation Photos.";

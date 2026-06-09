@@ -244,12 +244,12 @@ public struct ExtendedFeaturesView: View {
                     ImageGenerationFeatureView()
                         .environmentObject(viewModel)
                 } label: {
-                    settingsNavigationLabel("图片生成", icon: .imageGeneration)
+                    settingsNavigationLabel("图片相册", icon: .imageGeneration)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
             } footer: {
-                Text(NSLocalizedString("生图在独立页面发起，不影响主聊天输入区。", comment: "图片生成入口说明"))
+                Text(NSLocalizedString("查看当前会话中助手返回的图片。", comment: "图片相册入口说明"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }

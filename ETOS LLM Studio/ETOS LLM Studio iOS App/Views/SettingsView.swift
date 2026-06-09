@@ -195,13 +195,6 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
-                    ImageGenerationFeatureView()
-                        .environmentObject(viewModel)
-                } label: {
-                    SettingsListIconLabel("图片生成", icon: .imageGeneration)
-                }
-
-                NavigationLink {
                     WorldbookSettingsView().environmentObject(viewModel)
                 } label: {
                     SettingsListIconLabel("世界书", icon: .worldbook)
@@ -224,6 +217,7 @@ struct SettingsView: View {
 
                 NavigationLink {
                     ExtendedFeaturesView()
+                        .environmentObject(viewModel)
                 } label: {
                     SettingsListIconLabel("拓展功能", icon: .extendedFeatures)
                 }

@@ -787,6 +787,7 @@
 "图" = "Image";
 "独立生图" = "Image Studio";
 "生图在独立页面发起，不影响主聊天输入区。" = "Generate images in a dedicated page without affecting the main chat composer.";
+"查看当前会话中助手返回的图片。" = "View images returned by the assistant in the current session.";
 "提示词" = "Prompt";
 "输入提示词，独立发起生图请求。" = "Enter a prompt and send an isolated image-generation request.";
 "选择参考图" = "Choose reference images";
@@ -802,7 +803,10 @@
 "生图请求会使用这里单独选择的模型，不影响主聊天模型。" = "Image requests use the model selected here and do not affect the main chat model.";
 "当前没有可用的生图模型，请先在模型管理中启用。" = "No image generation model is available. Enable one in Model Management first.";
 "生成相册" = "Generated Gallery";
+"图片相册" = "Image Album";
 "当前会话暂无生图结果。" = "No generated images in this session yet.";
+"当前会话暂无助手返回的图片。" = "No images returned by the assistant in this session yet.";
+"助手图片" = "Assistant Image";
 "已生成 %d 张图片。" = "%d images generated.";
 "这里展示当前会话里已生成的图片，点击可预览。" = "This section shows images generated in the current session. Tap to preview.";
 "图片预览" = "Image Preview";

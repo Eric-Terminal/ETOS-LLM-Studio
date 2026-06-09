@@ -908,6 +908,7 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "图" = "Imagen";
 "独立生图" = "Imagen Studio";
 "生图在独立页面发起，不影响主聊天输入区。" = "Generar Imágenes en a dedicated page sin affecting el main Chat composer.";
+"查看当前会话中助手返回的图片。" = "Ver imágenes devueltas por el asistente en la sesión actual.";
 "提示词" = "Prompt";
 "输入提示词，独立发起生图请求。" = "Ingresar a Prompt y Enviar an isolated image-generation Solicitud.";
 "选择参考图" = "Elegir reference Imágenes";
@@ -923,13 +924,17 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "生图请求会使用这里单独选择的模型，不影响主聊天模型。" = "Imagen Solicitudes usar el Modelo Seleccionado aquí y do no affect el main Chat Modelo.";
 "当前没有可用的生图模型，请先在模型管理中启用。" = "Sin hay Imagen Generación Modelo es Disponible. Activar uno en Modelo Gestión Primero.";
 "生成相册" = "Generado Galería";
+"图片相册" = "Álbum de imágenes";
 "当前会话暂无生图结果。" = "Aún Sin hay imágenes generadas en esta sesión.";
+"当前会话暂无助手返回的图片。" = "Aún no hay imágenes devueltas por el asistente en esta sesión.";
+"助手图片" = "Imagen del asistente";
 "已生成 %d 张图片。" = "%d Imágenes Generado.";
 "这里展示当前会话里已生成的图片，点击可预览。" = "Este section shows Imágenes Generado en el Actual Sesión. Toca a Vista previa.";
 "图片预览" = "Imagen Vista previa";
 "打开生成相册可查看、下载或删除已生成图片。" = "Abrir el Generado Galería a Ver, Descargar, o Eliminar Generado Imágenes.";
 "下载" = "Descargar";
 "已保存到相册。" = "Guardado en Fotos.";
+"已保存到系统相册。" = "Guardado en Fotos.";
 "保存失败: %@" = "Guardar Falló: %@";
 "图片文件不存在。" = "Imagen Archivo does no exist.";
 "没有相册访问权限。" = "Sin permiso de Fotos.";
