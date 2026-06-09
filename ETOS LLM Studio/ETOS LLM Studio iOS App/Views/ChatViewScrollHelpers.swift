@@ -214,7 +214,9 @@ extension ChatView {
             return
         }
 
-        let keepBottomPinned = scrollDistanceToBottom < 120
+        let isInputBarGrowing = newHeight > chatInputBarHeight
+        // 输入框展开是临时覆盖态，增高时不强制回底，避免最后一条气泡被底部 inset 锁住。
+        let keepBottomPinned = !isInputBarGrowing && scrollDistanceToBottom < 120
         chatInputBarHeight = newHeight
         beginChatLayoutSettling(keepBottomPinned: keepBottomPinned)
     }
