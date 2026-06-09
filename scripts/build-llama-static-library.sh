@@ -11,6 +11,108 @@ SDK_FAMILY="${PLATFORM_NAME:-}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 REQUESTED_ARCHS="${ETOS_LLAMA_ARCHS:-${ARCHS:-${CURRENT_ARCH:-$(uname -m)}}}"
 EXPLICIT_LLAMA_ARCHS=0
+PARALLEL_BUILD="${ETOS_LLAMA_PARALLEL:-0}"
+PARALLEL_JOBS="${ETOS_LLAMA_PARALLEL_JOBS:-}"
+
+usage() {
+    cat <<'EOF'
+用法：build-llama-static-library.sh [--parallel[=线程数]] [--jobs 线程数] [-j线程数]
+
+选项：
+  --parallel        开启 CMake 多线程构建，默认使用本机 CPU 数。
+  --parallel=线程数  开启 CMake 多线程构建，并指定线程数。
+  --jobs 线程数      等同于 --parallel=线程数。
+  -j 线程数          等同于 --parallel=线程数。
+  -j线程数           等同于 --parallel=线程数。
+
+环境变量：
+  ETOS_LLAMA_PARALLEL=1       开启 CMake 多线程构建。
+  ETOS_LLAMA_PARALLEL_JOBS=8  指定 CMake 构建线程数。
+EOF
+}
+
+default_parallel_jobs() {
+    if command -v sysctl >/dev/null 2>&1; then
+        jobs="$(sysctl -n hw.ncpu 2>/dev/null || true)"
+        if [ -n "$jobs" ]; then
+            printf '%s' "$jobs"
+            return
+        fi
+    fi
+
+    jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    if [ -n "$jobs" ]; then
+        printf '%s' "$jobs"
+        return
+    fi
+
+    printf '2'
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        --parallel)
+            PARALLEL_BUILD=1
+            ;;
+        --parallel=*)
+            PARALLEL_BUILD=1
+            PARALLEL_JOBS="${1#*=}"
+            ;;
+        --jobs=*)
+            PARALLEL_BUILD=1
+            PARALLEL_JOBS="${1#*=}"
+            ;;
+        --jobs|-j)
+            if [ "$#" -lt 2 ]; then
+                echo "$1 需要指定线程数。" >&2
+                exit 2
+            fi
+            PARALLEL_BUILD=1
+            shift
+            PARALLEL_JOBS="$1"
+            ;;
+        -j*)
+            PARALLEL_BUILD=1
+            PARALLEL_JOBS="${1#-j}"
+            ;;
+        *)
+            echo "未知参数：$1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
+
+case "$PARALLEL_BUILD" in
+    1|true|TRUE|yes|YES|on|ON) PARALLEL_BUILD=1 ;;
+    0|false|FALSE|no|NO|off|OFF|'') PARALLEL_BUILD=0 ;;
+    *)
+        echo "ETOS_LLAMA_PARALLEL 必须是 1/0、true/false、yes/no 或 on/off：$PARALLEL_BUILD" >&2
+        exit 2
+        ;;
+esac
+
+if [ -n "$PARALLEL_JOBS" ]; then
+    PARALLEL_BUILD=1
+fi
+
+if [ "$PARALLEL_BUILD" = "1" ]; then
+    if [ -z "$PARALLEL_JOBS" ]; then
+        PARALLEL_JOBS="$(default_parallel_jobs)"
+    fi
+
+    case "$PARALLEL_JOBS" in
+        ''|*[!0-9]*|0)
+            echo "CMake 多线程构建线程数必须是正整数：$PARALLEL_JOBS" >&2
+            exit 2
+            ;;
+    esac
+fi
 
 if [ -n "${ETOS_LLAMA_ARCHS:-}" ]; then
     EXPLICIT_LLAMA_ARCHS=1
@@ -143,6 +245,10 @@ if [ "$LOCAL_LIGHTWEIGHT_DEBUG" = "1" ]; then
     echo "本地 Debug 使用 Release 编译 llama.cpp，避免生成调试符号。若需要调试 llama.cpp，请设置 ETOS_LLAMA_DEBUG_SYMBOLS=1。"
 fi
 
+if [ "$PARALLEL_BUILD" = "1" ]; then
+    echo "CMake 多线程构建已开启：$PARALLEL_JOBS 个任务。"
+fi
+
 if ! command -v cmake >/dev/null 2>&1; then
     if [ "${CI_XCODE_CLOUD:-FALSE}" = "TRUE" ] || [ "${ETOS_LLAMA_INSTALL_CMAKE:-0}" = "1" ]; then
         if command -v brew >/dev/null 2>&1; then
@@ -207,7 +313,11 @@ for arch in $REQUESTED_ARCHS; do
             -DGGML_METAL_EMBED_LIBRARY="$METAL_ENABLED" \
             -DGGML_CCACHE=OFF
 
-        cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target llama-common
+        if [ "$PARALLEL_BUILD" = "1" ]; then
+            cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target llama-common --parallel "$PARALLEL_JOBS"
+        else
+            cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target llama-common
+        fi
 
         set --
         for archive in \
