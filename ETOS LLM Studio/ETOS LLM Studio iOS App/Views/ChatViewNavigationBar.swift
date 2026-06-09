@@ -194,6 +194,7 @@ extension ChatView {
     }
 
     func presentModelPickerSheet() {
+        activeChatPickerDetent = .medium
         activeChatPickerSheet = .model
     }
 
@@ -212,6 +213,7 @@ extension ChatView {
             }
             return
         }
+        activeChatPickerDetent = .medium
         activeChatPickerSheet = .session
     }
 
@@ -241,6 +243,7 @@ extension ChatView {
     }
 
     func handleChatPickerSheetDismissed() {
+        activeChatPickerDetent = .medium
         resetSessionPickerSearchState()
     }
 

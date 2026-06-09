@@ -133,7 +133,7 @@ extension ChatView {
             }
             .sheet(item: $activeChatPickerSheet, onDismiss: handleChatPickerSheetDismissed) { sheet in
                 chatPickerSheet(for: sheet)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.medium, .large], selection: $activeChatPickerDetent)
                     .presentationDragIndicator(.visible)
             }
             .confirmationDialog(NSLocalizedString("创建分支选项", comment: ""), isPresented: $showBranchOptions, titleVisibility: .visible) {

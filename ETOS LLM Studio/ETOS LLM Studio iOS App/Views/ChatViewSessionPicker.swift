@@ -14,9 +14,25 @@ extension ChatView {
     var nativeSessionPickerSheet: some View {
         applySessionPickerLifecycle(
             to: NavigationStack {
-                nativeSessionPickerContent(showsCloseButton: true)
+                if activeChatPickerDetent == .large {
+                    expandedSessionManagerContent
+                } else {
+                    nativeSessionPickerContent(showsCloseButton: true)
+                }
             }
         )
+    }
+
+    var expandedSessionManagerContent: some View {
+        SessionListView()
+            .environmentObject(viewModel)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("完成", comment: "")) {
+                        dismissSessionPicker()
+                    }
+                }
+            }
     }
 
     var landscapeSessionSidebar: some View {

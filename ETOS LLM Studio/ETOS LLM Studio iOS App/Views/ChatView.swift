@@ -57,6 +57,7 @@ struct ChatView: View {
     @State var exportSharePayload: ChatExportSharePayload?
     @State var exportErrorMessage: String?
     @State var activeChatPickerSheet: ChatPickerSheet?
+    @State var activeChatPickerDetent: PresentationDetent = .medium
     @State var isChatLayoutLandscape = false
     @State var isLandscapeSessionSidebarPresented = true
     @State var bottomSafeAreaInset: CGFloat = 0
