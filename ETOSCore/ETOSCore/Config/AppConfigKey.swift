@@ -384,7 +384,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(0.7)
         case .reasoningPreviewHeightPercent:
             #if os(watchOS)
-            return .real(28.0)
+            return .real(58.0)
             #else
             return .real(20.8)
             #endif
