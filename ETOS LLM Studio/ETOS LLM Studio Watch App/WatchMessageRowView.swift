@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import WatchKit
 import ETOSCore
 
 struct WatchMessageRowView: View {
@@ -59,11 +60,23 @@ struct WatchMessageRowView: View {
         }
     }
 
+    private var responsiveReasoningPreviewMaxHeight: CGFloat {
+        let screenHeight = max(1, WKInterfaceDevice.current().screenBounds.height)
+        guard appConfig.enableResponsiveReasoningPreviewHeight else {
+            let percent = appConfig.reasoningPreviewHeightPercent
+            let safePercent = percent.isFinite ? max(0, percent) : 0
+            return screenHeight * CGFloat(safePercent / 100)
+        }
+        let scaledHeight = screenHeight * 0.28
+        return min(max(scaledHeight, 56), 72)
+    }
+
     var body: some View {
         let bubble = ChatBubble(
             messageState: state,
             preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
             preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
+            reasoningPreviewMaxHeight: responsiveReasoningPreviewMaxHeight,
             isReasoningExpanded: isReasoningExpandedBinding,
             isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
             isToolCallsExpanded: isToolCallsExpandedBinding,
