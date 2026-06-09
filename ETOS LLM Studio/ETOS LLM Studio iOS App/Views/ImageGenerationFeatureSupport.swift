@@ -32,6 +32,7 @@ struct ImageGenerationGalleryView: View {
     @State private var pendingDeleteItem: AssistantImageItem?
     @State private var alertMessage: String?
     @State private var refreshTask: Task<Void, Never>?
+    @State private var isShowingIntroDetails = false
 
     private let galleryColumns: [GridItem] = [
         GridItem(.flexible(), spacing: 12),
@@ -40,19 +41,43 @@ struct ImageGenerationGalleryView: View {
 
     var body: some View {
         ScrollView {
-            if assistantImageItems.isEmpty {
-                Text(NSLocalizedString("当前会话暂无助手返回的图片。", comment: "No assistant images in current session"))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
-                    .padding(.horizontal)
-            } else {
-                LazyVGrid(columns: galleryColumns, spacing: 12) {
-                    ForEach(assistantImageItems) { item in
-                        galleryCard(for: item)
-                    }
-                }
+            VStack(spacing: 16) {
+                settingsIntroCard(
+                    title: "图片相册",
+                    summary: "集中查看当前会话里由助手返回并保存到本机的图片。",
+                    details: """
+                    这里展示什么
+                    • 只收录当前会话中助手消息返回的图片。
+                    • 这些图片来自聊天回复，不是单独的图片生成工作台。
+
+                    可以做什么
+                    • 点按图片查看大图与对应提示词上下文。
+                    • 通过更多菜单保存到系统相册。
+                    • 删除图片会移除当前消息里的本地图片引用。
+
+                    使用建议
+                    • 继续生成或修改图片时，回到聊天里直接描述需求。
+                    • 需要整理历史结果时，先切到对应会话再打开相册。
+                    """,
+                    isExpanded: $isShowingIntroDetails
+                )
                 .padding(.horizontal)
-                .padding(.vertical)
+                .padding(.top)
+
+                if assistantImageItems.isEmpty {
+                    Text(NSLocalizedString("当前会话暂无助手返回的图片。", comment: "No assistant images in current session"))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
+                        .padding(.horizontal)
+                } else {
+                    LazyVGrid(columns: galleryColumns, spacing: 12) {
+                        ForEach(assistantImageItems) { item in
+                            galleryCard(for: item)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom)
+                }
             }
         }
         .navigationTitle(NSLocalizedString("图片相册", comment: "Assistant image album title"))
@@ -119,6 +144,55 @@ struct ImageGenerationGalleryView: View {
             Button(NSLocalizedString("确定", comment: "OK"), role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
+        }
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.title3)
+                .foregroundStyle(.blue)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(NSLocalizedString(title, comment: "图片相册介绍卡片标题"))
+                    .etFont(.headline.weight(.semibold))
+                Text(NSLocalizedString(summary, comment: "图片相册介绍卡片摘要"))
+                    .etFont(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button {
+                    isExpanded.wrappedValue = true
+                } label: {
+                    Text(NSLocalizedString("进一步了解…", comment: "图片相册介绍卡片展开按钮"))
+                        .etFont(.footnote.weight(.medium))
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString(details, comment: "图片相册介绍卡片详情"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString(title, comment: "图片相册介绍卡片详情标题"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 

@@ -876,6 +876,8 @@
 "当前没有可用的生图模型，请先在模型管理中启用。" = "No image generation model is available. Enable one in Model Management first.";
 "生成相册" = "Generated Gallery";
 "图片相册" = "Image Album";
+"集中查看当前会话里由助手返回并保存到本机的图片。" = "Browse images returned by the assistant in the current session and saved on this device.";
+"这里展示什么\n• 只收录当前会话中助手消息返回的图片。\n• 这些图片来自聊天回复，不是单独的图片生成工作台。\n\n可以做什么\n• 点按图片查看大图与对应提示词上下文。\n• 通过更多菜单保存到系统相册。\n• 删除图片会移除当前消息里的本地图片引用。\n\n使用建议\n• 继续生成或修改图片时，回到聊天里直接描述需求。\n• 需要整理历史结果时，先切到对应会话再打开相册。" = "What appears here\n• Only images returned by assistant messages in the current session are shown.\n• These images come from chat replies, not a separate image generation workspace.\n\nWhat you can do\n• Tap an image to view it with the related prompt context.\n• Use the more menu to save it to Photos.\n• Deleting an image removes the local image reference from the current message.\n\nTips\n• To continue or revise an image, go back to chat and describe what you need.\n• To organize older results, switch to that session before opening the album.";
 "当前会话暂无生图结果。" = "No generated images in this session yet.";
 "当前会话暂无助手返回的图片。" = "No images returned by the assistant in this session yet.";
 "助手图片" = "Assistant Image";
