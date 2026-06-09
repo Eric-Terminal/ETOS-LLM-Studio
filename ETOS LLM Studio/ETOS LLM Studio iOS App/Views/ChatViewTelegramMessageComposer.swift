@@ -35,6 +35,7 @@ struct TelegramMessageComposer: View {
     @State private var isExpandedComposer = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
+    @State private var measuredInputTextHeight: CGFloat = 0
     @StateObject private var inlineSpeechRecorder = InlineSpeechRecorderController()
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
     @State private var showInlineSpeechError = false
@@ -55,9 +56,17 @@ struct TelegramMessageComposer: View {
     private var compactInputHeight: CGFloat {
         max(44, inputUIFont.lineHeight + compactTextVerticalPadding * 2 + textContainerInset * 2)
     }
+    private var visibleCompactInputHeight: CGFloat {
+        guard measuredInputTextHeight > 0 else { return compactInputHeight }
+        let fittedHeight = measuredInputTextHeight + compactTextVerticalPadding * 2 + textContainerInset * 2
+        return max(compactInputHeight, min(fittedHeight, expandedInputHeight))
+    }
     private var expandedInputHeight: CGFloat {
         let rawHeight = UIScreen.main.bounds.height * 0.3
         return max(160 * effectiveFontScale, min(rawHeight, 360 * effectiveFontScale))
+    }
+    private var estimatedCompactInputWidth: CGFloat {
+        max(0, UIScreen.main.bounds.width - 16 * 2 - controlSize * 2 - 12 * 2)
     }
     private let textContainerInset: CGFloat = 8
     private let textHorizontalPadding: CGFloat = 10
@@ -323,7 +332,7 @@ struct TelegramMessageComposer: View {
 
     @ViewBuilder
     private var inputEditor: some View {
-        let targetHeight = isExpandedComposer ? expandedInputHeight : compactInputHeight
+        let targetHeight = isExpandedComposer ? expandedInputHeight : visibleCompactInputHeight
         let verticalPadding = isExpandedComposer ? expandedTextVerticalPadding : compactTextVerticalPadding
 
         ZStack(alignment: .topLeading) {
@@ -545,6 +554,7 @@ struct TelegramMessageComposer: View {
     private func handleAutoExpand(for newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
+            measuredInputTextHeight = 0
             if isExpandedComposer {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                     isExpandedComposer = false
@@ -553,44 +563,54 @@ struct TelegramMessageComposer: View {
             return
         }
 
+        let baseWidth = compactInputWidth > 0
+            ? compactInputWidth
+            : (inputAvailableWidth > 0 ? inputAvailableWidth : estimatedCompactInputWidth)
+        let availableWidth = baseWidth
+            - textHorizontalPadding * 2
+            - textContainerInset * 2
         let hasExplicitNewline = newValue.contains("\n")
         var shouldExpand = hasExplicitNewline
 
-        if !shouldExpand {
-            let baseWidth = compactInputWidth > 0 ? compactInputWidth : inputAvailableWidth
-            let availableWidth = baseWidth
-                - textHorizontalPadding * 2
-                - textContainerInset * 2
-            if availableWidth > 0 {
-                let paragraphStyle = NSMutableParagraphStyle()
-                // 按字符折行测量，避免中文长句已经视觉换行但仍被误判为单行。
-                paragraphStyle.lineBreakMode = .byCharWrapping
-                let boundingRect = (newValue as NSString).boundingRect(
-                    with: CGSize(width: availableWidth, height: .greatestFiniteMagnitude),
-                    options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    attributes: [
-                        .font: inputUIFont,
-                        .paragraphStyle: paragraphStyle
-                    ],
-                    context: nil
-                )
-                let lineCount = max(1, Int(ceil(boundingRect.height / inputUIFont.lineHeight)))
-                shouldExpand = lineCount > 1
-            }
+        if availableWidth > 0 {
+            let measuredHeight = measuredTextHeight(for: newValue, width: availableWidth)
+            measuredInputTextHeight = measuredHeight
+            let lineCount = max(1, Int(ceil(measuredHeight / inputUIFont.lineHeight)))
+            shouldExpand = hasExplicitNewline || lineCount > 1
         }
 
         if shouldExpand {
-            guard focus.wrappedValue else { return }
+            let wasFocused = focus.wrappedValue
             guard !isExpandedComposer else { return }
             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                 isExpandedComposer = true
             }
-            focus.wrappedValue = true
+            if wasFocused {
+                focus.wrappedValue = true
+            }
         } else if isExpandedComposer {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                 isExpandedComposer = false
             }
         }
+    }
+
+    private func measuredTextHeight(for value: String, width: CGFloat) -> CGFloat {
+        let textStorage = NSTextStorage(string: value, attributes: [.font: inputUIFont])
+        let layoutManager = NSLayoutManager()
+        layoutManager.usesFontLeading = true
+
+        let textContainer = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        // 使用 UIKit 文本布局器测量，确保自动折行结果和实际输入框一致。
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = 0
+        textContainer.lineBreakMode = .byWordWrapping
+
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+        layoutManager.ensureLayout(for: textContainer)
+
+        return ceil(layoutManager.usedRect(for: textContainer).height)
     }
 
     private struct InputWidthKey: PreferenceKey {
