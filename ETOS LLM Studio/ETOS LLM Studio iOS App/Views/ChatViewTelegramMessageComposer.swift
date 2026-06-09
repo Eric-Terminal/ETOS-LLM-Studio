@@ -562,10 +562,16 @@ struct TelegramMessageComposer: View {
                 - textHorizontalPadding * 2
                 - textContainerInset * 2
             if availableWidth > 0 {
+                let paragraphStyle = NSMutableParagraphStyle()
+                // 按字符折行测量，避免中文长句已经视觉换行但仍被误判为单行。
+                paragraphStyle.lineBreakMode = .byCharWrapping
                 let boundingRect = (newValue as NSString).boundingRect(
                     with: CGSize(width: availableWidth, height: .greatestFiniteMagnitude),
                     options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    attributes: [.font: inputUIFont],
+                    attributes: [
+                        .font: inputUIFont,
+                        .paragraphStyle: paragraphStyle
+                    ],
                     context: nil
                 )
                 let lineCount = max(1, Int(ceil(boundingRect.height / inputUIFont.lineHeight)))
