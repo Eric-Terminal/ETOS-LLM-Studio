@@ -369,6 +369,52 @@ extension MCPIntegrationView {
     }
 
     @ViewBuilder
+    var logNavigationSection: some View {
+        Section {
+            NavigationLink {
+                mcpLogDestination
+            } label: {
+                HStack {
+                    Label(NSLocalizedString("日志", comment: ""), systemImage: "doc.text")
+                    Spacer()
+                    if mcpLogEntryCount > 0 {
+                        Text("\(mcpLogEntryCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mcpLogDestination: some View {
+        List {
+            if hasMCPLogDetails {
+                logSection
+                governanceLogSection
+                latestOutputSection
+                latestErrorSection
+            } else {
+                Section {
+                    Text(NSLocalizedString("暂无日志", comment: ""))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("日志", comment: ""))
+    }
+
+    private var mcpLogEntryCount: Int {
+        manager.logEntries.count + manager.governanceLogEntries.count
+    }
+
+    private var hasMCPLogDetails: Bool {
+        mcpLogEntryCount > 0 ||
+            manager.lastOperationOutput != nil ||
+            manager.lastOperationError != nil
+    }
+
+    @ViewBuilder
     var logSection: some View {
         if manager.logEntries.isEmpty {
             EmptyView()

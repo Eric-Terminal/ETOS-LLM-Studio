@@ -151,11 +151,8 @@ struct MCPIntegrationView: View {
             activeToolCallsSection
             resourceSection
             promptSection
-            logSection
-            governanceLogSection
+            logNavigationSection
             debugSection
-            latestOutputSection
-            latestErrorSection
             moreSection
         }
     }
