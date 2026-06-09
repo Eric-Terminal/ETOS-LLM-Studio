@@ -72,6 +72,7 @@ extension ChatViewModel {
 
     func refreshAfterAppConfigPersistentStoreLoad() {
         applyAppConfigSnapshotToLocalState()
+        chatService.reloadLocalModelsAndAppConfigBackedModelState()
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
         syncSpeechModelSelection()
@@ -178,7 +179,7 @@ extension ChatViewModel {
 
     @objc func handleDidBecomeActive() {
         isApplicationActive = true
-        // 预留: 恢复 UI 或触发刷新
+        chatService.reloadLocalModelsAndProvidersIfNeeded()
     }
 
     func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
@@ -476,9 +477,7 @@ extension ChatViewModel {
     func applyActivatedModels(_ models: [RunnableModel]) {
         let ids = models.map(\.id)
         let identityChanged = activatedModelIDs != ids
-        if activatedModels != models {
-            activatedModels = models
-        }
+        activatedModels = models
         if identityChanged {
             activatedModelIDs = ids
             activatedModelListVersion &+= 1
@@ -486,15 +485,11 @@ extension ChatViewModel {
     }
 
     func applyActivatedConversationModels(_ models: [RunnableModel]) {
-        if activatedConversationModels != models {
-            activatedConversationModels = models
-        }
+        activatedConversationModels = models
     }
 
     func applyActivatedChatModels(_ models: [RunnableModel]) {
-        if activatedChatModels != models {
-            activatedChatModels = models
-        }
+        activatedChatModels = models
     }
 
     func rotateBackgroundImageIfNeeded() {

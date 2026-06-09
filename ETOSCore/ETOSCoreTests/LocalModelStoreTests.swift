@@ -73,6 +73,32 @@ struct LocalModelStoreTests {
         #expect(try Data(contentsOf: store.fileURL(for: record)) == payload)
     }
 
+    @Test("重新加载会恢复启动时未读到的本地模型元数据")
+    func reloadRecoversModelsAddedAfterInitialization() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storeDirectory = root.appendingPathComponent("LocalModels")
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        let store = LocalModelStore(directoryURL: storeDirectory)
+
+        #expect(store.models.isEmpty)
+        #expect(store.reload() == false)
+
+        let record = LocalModelRecord(
+            displayName: "TinyLlama",
+            fileName: "tiny.gguf",
+            relativePath: "tiny.gguf",
+            fileSize: 8
+        )
+        let snapshot = LocalModelStoreSnapshot(models: [record])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(snapshot).write(to: storeDirectory.appendingPathComponent("local-models.json"))
+
+        #expect(store.reload() == true)
+        #expect(store.models.first?.id == record.id)
+    }
+
     @Test("本地模型虚拟提供商使用稳定 ID")
     func localProviderBridgeUsesStableRunnableID() {
         let id = UUID()

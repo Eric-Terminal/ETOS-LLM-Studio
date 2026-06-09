@@ -176,9 +176,17 @@ extension ChatService {
         let nextModel = selectedID.isEmpty
             ? activatedConversationModels.first
             : activatedConversationModels.first { $0.id == selectedID } ?? activatedConversationModels.first
-        if selectedModelSubject.value?.id != nextModel?.id {
-            selectedModelSubject.send(nextModel)
-        }
+        selectedModelSubject.send(nextModel)
+    }
+
+    public func reloadLocalModelsAndAppConfigBackedModelState() {
+        _ = localModelStore.reload()
+        reloadAppConfigBackedModelState()
+    }
+
+    public func reloadLocalModelsAndProvidersIfNeeded() {
+        guard localModelStore.reload() else { return }
+        reloadProviders()
     }
 
     public func reloadProviders() {

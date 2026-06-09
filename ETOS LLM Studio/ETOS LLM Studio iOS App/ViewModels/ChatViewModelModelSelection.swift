@@ -116,9 +116,7 @@ extension ChatViewModel {
 
     func syncSpeechModelSelection() {
         if let match = speechModels.first(where: { $0.id == speechModelIdentifier }) {
-            if selectedSpeechModel?.id != match.id {
-                selectedSpeechModel = match
-            }
+            selectedSpeechModel = match
             return
         }
 
@@ -137,9 +135,7 @@ extension ChatViewModel {
 
     func syncTTSModelSelection() {
         if let match = ttsModels.first(where: { $0.id == ttsModelIdentifier }) {
-            if selectedTTSModel?.id != match.id {
-                selectedTTSModel = match
-            }
+            selectedTTSModel = match
             ttsManager.updateSelectedModel(match)
             return
         }
@@ -160,9 +156,7 @@ extension ChatViewModel {
 
     func syncEmbeddingModelSelection() {
         if let match = embeddingModelOptions.first(where: { $0.id == memoryEmbeddingModelIdentifier }) {
-            if selectedEmbeddingModel?.id != match.id {
-                selectedEmbeddingModel = match
-            }
+            selectedEmbeddingModel = match
             return
         }
 
@@ -180,9 +174,7 @@ extension ChatViewModel {
 
     func syncTitleGenerationModelSelection() {
         if let match = titleGenerationModelOptions.first(where: { $0.id == titleGenerationModelIdentifier }) {
-            if selectedTitleGenerationModel?.id != match.id {
-                selectedTitleGenerationModel = match
-            }
+            selectedTitleGenerationModel = match
             return
         }
 
@@ -200,9 +192,7 @@ extension ChatViewModel {
 
     func syncDailyPulseModelSelection() {
         if let match = dailyPulseModelOptions.first(where: { $0.id == dailyPulseModelIdentifier }) {
-            if selectedDailyPulseModel?.id != match.id {
-                selectedDailyPulseModel = match
-            }
+            selectedDailyPulseModel = match
             return
         }
 
@@ -220,9 +210,7 @@ extension ChatViewModel {
 
     func syncConversationSummaryModelSelection() {
         if let match = conversationSummaryModelOptions.first(where: { $0.id == conversationSummaryModelIdentifier }) {
-            if selectedConversationSummaryModel?.id != match.id {
-                selectedConversationSummaryModel = match
-            }
+            selectedConversationSummaryModel = match
             return
         }
 
@@ -240,9 +228,7 @@ extension ChatViewModel {
 
     func syncReasoningSummaryModelSelection() {
         if let match = reasoningSummaryModelOptions.first(where: { $0.id == reasoningSummaryModelIdentifier }) {
-            if selectedReasoningSummaryModel?.id != match.id {
-                selectedReasoningSummaryModel = match
-            }
+            selectedReasoningSummaryModel = match
             return
         }
 
@@ -264,9 +250,7 @@ extension ChatViewModel {
             ocrModelIdentifier = ChatService.systemOCRRunnableModel.id
         }
         if let match = ocrModelOptions.first(where: { $0.id == ocrModelIdentifier }) {
-            if selectedOCRModel?.id != match.id {
-                selectedOCRModel = match
-            }
+            selectedOCRModel = match
             return
         }
 

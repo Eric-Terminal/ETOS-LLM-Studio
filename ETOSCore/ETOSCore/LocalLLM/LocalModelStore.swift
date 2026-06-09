@@ -45,8 +45,12 @@ public final class LocalModelStore: ObservableObject {
         return directory
     }
 
-    public func reload() {
-        models = loadModels()
+    @discardableResult
+    public func reload() -> Bool {
+        let reloadedModels = loadModels()
+        guard reloadedModels != models else { return false }
+        models = reloadedModels
+        return true
     }
 
     public var isProviderEnabled: Bool {
