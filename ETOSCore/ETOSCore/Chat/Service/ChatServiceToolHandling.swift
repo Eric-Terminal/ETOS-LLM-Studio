@@ -23,6 +23,15 @@ extension ChatService {
         var content = ""
         var displayResult: String?
         var shouldAwaitUserSupplement = false
+        let policyDeniedText: (String) -> String = {
+            String(format: NSLocalizedString("%@ 已被策略禁止调用。", comment: "Tool result when policy denies a call"), $0)
+        }
+        let callFailedText: (String, String) -> String = {
+            String(format: NSLocalizedString("%@ 调用失败：%@", comment: "Tool result when a call fails"), $0, $1)
+        }
+        let userDeniedText: (String) -> String = {
+            String(format: NSLocalizedString("%@ 调用已被用户拒绝。", comment: "Tool result when user denies a call"), $0)
+        }
 
         switch toolCall.toolName {
         case "save_memory":
@@ -32,11 +41,11 @@ extension ChatService {
             if let argsData = toolCall.arguments.data(using: .utf8),
                let args = try? JSONDecoder().decode(SaveMemoryArgs.self, from: argsData) {
                 await self.memoryManager.addMemory(content: args.content)
-                content = "成功将内容 \"\(args.content)\" 存入记忆。"
+                content = String(format: NSLocalizedString("成功将内容 \"%@\" 存入记忆。", comment: "Save memory tool result"), args.content)
                 displayResult = content
                 logger.info("  - 记忆保存成功。")
             } else {
-                content = "错误：无法解析 save_memory 的参数。"
+                content = NSLocalizedString("错误：无法解析 save_memory 的参数。", comment: "Save memory args parse error")
                 displayResult = content
                 logger.error("  - 无法解析 save_memory 的参数: \(toolCall.arguments)")
             }
@@ -102,7 +111,7 @@ extension ChatService {
 
             switch approvalPolicy {
             case .alwaysDeny:
-                content = "\(toolLabel) 已被策略禁止调用。"
+                content = policyDeniedText(toolLabel)
                 displayResult = content
                 logger.info("  - MCP 工具调用被策略拒绝: \(toolCall.toolName)")
             case .alwaysAllow:
@@ -112,7 +121,7 @@ extension ChatService {
                     displayResult = result
                     logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
                 } catch {
-                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    content = callFailedText(toolLabel, error.localizedDescription)
                     displayResult = content
                     logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
                 }
@@ -124,11 +133,11 @@ extension ChatService {
                 )
                 switch permissionDecision {
                 case .deny:
-                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    content = userDeniedText(toolLabel)
                     displayResult = content
                     logger.info("  - MCP 工具调用被用户拒绝: \(toolCall.toolName)")
                 case .supplement:
-                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    content = userDeniedText(toolLabel)
                     displayResult = content
                     shouldAwaitUserSupplement = true
                     logger.info("  - MCP 工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
@@ -139,7 +148,7 @@ extension ChatService {
                         displayResult = result
                         logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
                     } catch {
-                        content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                        content = callFailedText(toolLabel, error.localizedDescription)
                         displayResult = content
                         logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
                     }
@@ -150,7 +159,7 @@ extension ChatService {
             let toolLabel = await ShortcutToolManager.shared.displayLabel(for: toolCall.toolName) ?? toolCall.toolName
             let shortcutToolsEnabled = await MainActor.run { ShortcutToolManager.shared.chatToolsEnabled }
             guard shortcutToolsEnabled else {
-                content = "快捷指令工具总开关已关闭。"
+                content = NSLocalizedString("快捷指令工具总开关已关闭。", comment: "Shortcut tool disabled result")
                 displayResult = content
                 logger.info("  - 快捷指令工具调用被总开关拒绝: \(toolCall.toolName)")
                 break
@@ -162,11 +171,11 @@ extension ChatService {
             )
             switch permissionDecision {
             case .deny:
-                content = "\(toolLabel) 调用已被用户拒绝。"
+                content = userDeniedText(toolLabel)
                 displayResult = content
                 logger.info("  - 快捷指令工具调用被用户拒绝: \(toolCall.toolName)")
             case .supplement:
-                content = "\(toolLabel) 调用已被用户拒绝。"
+                content = userDeniedText(toolLabel)
                 displayResult = content
                 shouldAwaitUserSupplement = true
                 logger.info("  - 快捷指令工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
@@ -180,7 +189,7 @@ extension ChatService {
                     displayResult = result
                     logger.info("  - 快捷指令工具调用成功: \(toolCall.toolName)")
                 } catch {
-                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    content = callFailedText(toolLabel, error.localizedDescription)
                     displayResult = content
                     logger.error("  - 快捷指令工具调用失败: \(error.localizedDescription)")
                 }
@@ -192,7 +201,7 @@ extension ChatService {
             } ?? toolCall.toolName
             let skillsEnabled = await MainActor.run { SkillManager.shared.chatToolsEnabled }
             guard skillsEnabled else {
-                content = "Agent Skills 总开关已关闭。"
+                content = NSLocalizedString("Agent Skills 总开关已关闭。", comment: "Agent Skills disabled result")
                 displayResult = content
                 logger.info("  - Agent Skills 调用被总开关拒绝: \(toolCall.toolName)")
                 break
@@ -207,7 +216,7 @@ extension ChatService {
                 displayResult = result
                 logger.info("  - Agent Skills 调用成功: \(toolCall.toolName)")
             } catch {
-                content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                content = callFailedText(toolLabel, error.localizedDescription)
                 displayResult = content
                 logger.error("  - Agent Skills 调用失败: \(error.localizedDescription)")
             }
@@ -219,7 +228,7 @@ extension ChatService {
             let isBuiltInAppTool = AppToolManager.isBuiltInToolName(toolCall.toolName)
             let appToolsEnabled = await MainActor.run { AppToolManager.shared.chatToolsEnabled }
             guard appToolsEnabled || isBuiltInAppTool else {
-                content = "拓展工具总开关已关闭。"
+                content = NSLocalizedString("拓展工具总开关已关闭。", comment: "App tool disabled result")
                 displayResult = content
                 logger.info("  - 拓展工具调用被总开关拒绝: \(toolCall.toolName)")
                 break
@@ -229,7 +238,7 @@ extension ChatService {
             }
             switch approvalPolicy {
             case .alwaysDeny:
-                content = "\(toolLabel) 已被策略禁止调用。"
+                content = policyDeniedText(toolLabel)
                 displayResult = content
                 logger.info("  - 拓展工具调用被策略拒绝: \(toolCall.toolName)")
             case .alwaysAllow:
@@ -245,7 +254,7 @@ extension ChatService {
                     }
                     logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
                 } catch {
-                    content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                    content = callFailedText(toolLabel, error.localizedDescription)
                     displayResult = content
                     logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
                 }
@@ -257,11 +266,11 @@ extension ChatService {
                 )
                 switch permissionDecision {
                 case .deny:
-                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    content = userDeniedText(toolLabel)
                     displayResult = content
                     logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
                 case .supplement:
-                    content = "\(toolLabel) 调用已被用户拒绝。"
+                    content = userDeniedText(toolLabel)
                     displayResult = content
                     shouldAwaitUserSupplement = true
                     logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
@@ -278,7 +287,7 @@ extension ChatService {
                         }
                         logger.info("  - 拓展工具调用成功: \(toolCall.toolName)")
                     } catch {
-                        content = "\(toolLabel) 调用失败：\(error.localizedDescription)"
+                        content = callFailedText(toolLabel, error.localizedDescription)
                         displayResult = content
                         logger.error("  - 拓展工具调用失败: \(error.localizedDescription)")
                     }
@@ -286,7 +295,7 @@ extension ChatService {
             }
 
         default:
-            content = "错误：未知的工具名称 \(toolCall.toolName)。"
+            content = String(format: NSLocalizedString("错误：未知的工具名称 %@。", comment: "Unknown tool result"), toolCall.toolName)
             displayResult = content
             logger.error("  - 未知的工具名称: \(toolCall.toolName)")
         }

@@ -197,12 +197,12 @@ struct MCPServerEditor: View {
                         .foregroundStyle(.secondary)
                         .etFont(.footnote)
                 } else if transportOption == .sse {
-                    TextField("SSE Endpoint", text: $sseEndpoint)
+                    TextField(NSLocalizedString("SSE Endpoint", comment: "MCP SSE endpoint field"), text: $sseEndpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } else {
-                    TextField("Streamable HTTP Endpoint", text: $endpoint)
+                    TextField(NSLocalizedString("Streamable HTTP Endpoint", comment: "MCP streamable HTTP endpoint field"), text: $endpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -214,14 +214,14 @@ struct MCPServerEditor: View {
                 }
                 if transportOption == .oauth {
                     Picker(NSLocalizedString("授权类型", comment: ""), selection: $oauthGrantType) {
-                        Text("Client Credentials").tag(MCPOAuthGrantType.clientCredentials)
-                        Text("Authorization Code").tag(MCPOAuthGrantType.authorizationCode)
+                        Text(NSLocalizedString("Client Credentials", comment: "OAuth grant type")).tag(MCPOAuthGrantType.clientCredentials)
+                        Text(NSLocalizedString("Authorization Code", comment: "OAuth grant type")).tag(MCPOAuthGrantType.authorizationCode)
                     }
-                    TextField("OAuth Token Endpoint", text: $tokenEndpoint)
+                    TextField(NSLocalizedString("OAuth Token Endpoint", comment: "OAuth token endpoint field"), text: $tokenEndpoint)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    TextField("Client ID", text: $clientID)
+                    TextField(NSLocalizedString("Client ID", comment: "OAuth client id field"), text: $clientID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     SecureField(NSLocalizedString("Client Secret (可选)", comment: ""), text: $clientSecret)
@@ -229,10 +229,10 @@ struct MCPServerEditor: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     if oauthGrantType == .authorizationCode {
-                        TextField("Authorization Code", text: $oauthAuthorizationCode)
+                        TextField(NSLocalizedString("Authorization Code", comment: "OAuth authorization code field"), text: $oauthAuthorizationCode)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                        TextField("Redirect URI", text: $oauthRedirectURI)
+                        TextField(NSLocalizedString("Redirect URI", comment: "OAuth redirect URI field"), text: $oauthRedirectURI)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)

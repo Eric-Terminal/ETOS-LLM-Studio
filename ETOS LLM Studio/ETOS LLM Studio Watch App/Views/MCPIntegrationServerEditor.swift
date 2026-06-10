@@ -195,25 +195,25 @@ struct MCPServerEditor: View {
                         .foregroundStyle(.secondary)
                         .etFont(.footnote)
                 } else if transportOption == .sse {
-                    TextField("SSE Endpoint", text: $sseEndpoint.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("SSE Endpoint", comment: "MCP SSE endpoint field"), text: $sseEndpoint.watchKeyboardNewlineBinding())
                 } else {
-                    TextField("Streamable HTTP Endpoint", text: $endpoint.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("Streamable HTTP Endpoint", comment: "MCP streamable HTTP endpoint field"), text: $endpoint.watchKeyboardNewlineBinding())
                 }
                 if transportOption.requiresAPIKey {
                     TextField(NSLocalizedString("Bearer API Key (可选)", comment: ""), text: $apiKey.watchKeyboardNewlineBinding())
                 }
                 if transportOption == .oauth {
                     Picker(NSLocalizedString("授权类型", comment: ""), selection: $oauthGrantType) {
-                        Text("Client Credentials").tag(MCPOAuthGrantType.clientCredentials)
-                        Text("Authorization Code").tag(MCPOAuthGrantType.authorizationCode)
+                        Text(NSLocalizedString("Client Credentials", comment: "OAuth grant type")).tag(MCPOAuthGrantType.clientCredentials)
+                        Text(NSLocalizedString("Authorization Code", comment: "OAuth grant type")).tag(MCPOAuthGrantType.authorizationCode)
                     }
-                    TextField("OAuth Token Endpoint", text: $tokenEndpoint.watchKeyboardNewlineBinding())
-                    TextField("Client ID", text: $clientID.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("OAuth Token Endpoint", comment: "OAuth token endpoint field"), text: $tokenEndpoint.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("Client ID", comment: "OAuth client id field"), text: $clientID.watchKeyboardNewlineBinding())
                     SecureField(NSLocalizedString("Client Secret (可选)", comment: ""), text: $clientSecret.watchKeyboardNewlineBinding())
                     TextField(NSLocalizedString("Scope (可选)", comment: ""), text: $oauthScope.watchKeyboardNewlineBinding())
                     if oauthGrantType == .authorizationCode {
-                        TextField("Authorization Code", text: $oauthAuthorizationCode.watchKeyboardNewlineBinding())
-                        TextField("Redirect URI", text: $oauthRedirectURI.watchKeyboardNewlineBinding())
+                        TextField(NSLocalizedString("Authorization Code", comment: "OAuth authorization code field"), text: $oauthAuthorizationCode.watchKeyboardNewlineBinding())
+                        TextField(NSLocalizedString("Redirect URI", comment: "OAuth redirect URI field"), text: $oauthRedirectURI.watchKeyboardNewlineBinding())
                         TextField(NSLocalizedString("PKCE Code Verifier (可选)", comment: ""), text: $oauthCodeVerifier.watchKeyboardNewlineBinding())
                     }
                 }

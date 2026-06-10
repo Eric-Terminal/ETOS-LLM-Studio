@@ -94,7 +94,11 @@ extension ChatService {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
             let timestamp = dateFormatter.string(from: Date())
-            let audioFileName = "语音_\(timestamp).\(audioAttachment.format)"
+            let audioFileName = String(
+                format: NSLocalizedString("语音_%@.%@", comment: "Generated audio attachment file name"),
+                timestamp,
+                audioAttachment.format
+            )
             if Persistence.saveAudio(audioAttachment.data, fileName: audioFileName) != nil {
                 savedAudioFileName = audioFileName
                 logger.info("音频文件已保存: \(audioFileName)")

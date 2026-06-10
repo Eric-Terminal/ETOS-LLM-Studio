@@ -24,7 +24,7 @@ struct MCPServerDetailView: View {
                 let status = manager.status(for: server)
                 Section(NSLocalizedString("服务器信息", comment: "")) {
                     LabeledContent(NSLocalizedString("名称", comment: ""), value: server.displayName)
-                    LabeledContent("Endpoint", value: server.humanReadableEndpoint)
+                    LabeledContent(NSLocalizedString("Endpoint", comment: "MCP endpoint label"), value: server.humanReadableEndpoint)
                     if let notes = server.notes {
                         LabeledContent(NSLocalizedString("备注", comment: ""), value: notes)
                     }

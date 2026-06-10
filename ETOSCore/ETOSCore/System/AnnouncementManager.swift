@@ -632,11 +632,11 @@ public enum AnnouncementError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "服务器响应无效"
+            return NSLocalizedString("服务器响应无效", comment: "Invalid announcement server response error")
         case .decodingFailed:
-            return "数据解析失败"
+            return NSLocalizedString("数据解析失败", comment: "Announcement data decoding failed error")
         case .timeout:
-            return "请求超时"
+            return NSLocalizedString("请求超时", comment: "Announcement request timeout error")
         }
     }
 }

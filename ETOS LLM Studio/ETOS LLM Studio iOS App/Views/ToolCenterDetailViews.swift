@@ -1008,7 +1008,7 @@ struct SkillToolCategoryDetailView: View {
                 }
             }
         }
-        .navigationTitle("Agent Skills")
+        .navigationTitle(NSLocalizedString("Agent Skills", comment: "Agent Skills navigation title"))
     }
 
     private var skillGroupFooterText: String {

@@ -219,7 +219,7 @@ struct ToolCenterView: View {
             }
 
             Section(
-                header: Text("Agent Skills"),
+                header: Text(NSLocalizedString("Agent Skills", comment: "Agent Skills section title")),
                 footer: Text(NSLocalizedString("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。", comment: "Agent Skills 工具中心页脚"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
@@ -244,7 +244,7 @@ struct ToolCenterView: View {
                     )
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Agent Skills")
+                        Text(NSLocalizedString("Agent Skills", comment: "Agent Skills row title"))
                         Text(
                             String(
                                 format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),

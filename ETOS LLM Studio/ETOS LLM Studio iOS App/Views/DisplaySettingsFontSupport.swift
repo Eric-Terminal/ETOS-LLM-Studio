@@ -352,7 +352,7 @@ struct FontSettingsView: View {
 
     private var previewSection: some View {
         Section(NSLocalizedString("预览", comment: "")) {
-            Text("The quick brown fox jumps over the lazy dog.")
+            Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
                 .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
             Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
                 .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
@@ -362,7 +362,7 @@ struct FontSettingsView: View {
             Text(NSLocalizedString("粗体预览 / Strong", comment: ""))
                 .font(FontRoutePreview.font(for: .strong, sample: "粗体预览 Strong"))
                 .fontWeight(.bold)
-            Text("let message = \"Code Preview\"")
+            Text(NSLocalizedString("let message = \"Code Preview\"", comment: "Font preview code sample"))
                 .font(FontRoutePreview.font(for: .code, sample: "let message = \"Code Preview\""))
         }
     }

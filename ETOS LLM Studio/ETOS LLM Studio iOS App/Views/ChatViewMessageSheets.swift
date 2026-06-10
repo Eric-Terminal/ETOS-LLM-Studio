@@ -641,34 +641,34 @@ struct SessionPickerRow: View {
                 Button {
                     onExport(.pdf, true)
                 } label: {
-                    Label("PDF", systemImage: "doc.richtext")
+                    Label(NSLocalizedString("PDF", comment: "Export format"), systemImage: "doc.richtext")
                 }
                 Button {
                     onExport(.markdown, true)
                 } label: {
-                    Label("Markdown", systemImage: "number.square")
+                    Label(NSLocalizedString("Markdown", comment: "Export format"), systemImage: "number.square")
                 }
                 Button {
                     onExport(.text, true)
                 } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
+                    Label(NSLocalizedString("TXT", comment: "Export format"), systemImage: "doc.plaintext")
                 }
             }
             Menu(NSLocalizedString("不包含思考", comment: "")) {
                 Button {
                     onExport(.pdf, false)
                 } label: {
-                    Label("PDF", systemImage: "doc.richtext")
+                    Label(NSLocalizedString("PDF", comment: "Export format"), systemImage: "doc.richtext")
                 }
                 Button {
                     onExport(.markdown, false)
                 } label: {
-                    Label("Markdown", systemImage: "number.square")
+                    Label(NSLocalizedString("Markdown", comment: "Export format"), systemImage: "number.square")
                 }
                 Button {
                     onExport(.text, false)
                 } label: {
-                    Label("TXT", systemImage: "doc.plaintext")
+                    Label(NSLocalizedString("TXT", comment: "Export format"), systemImage: "doc.plaintext")
                 }
             }
         } label: {

@@ -729,18 +729,30 @@ enum AppLogRedactor {
     }
 
     private static func binaryPayloadPlaceholder(for text: String) -> String {
-        "[二进制内容已隐藏，长度: \(text.count)]"
+        String(
+            format: NSLocalizedString("[二进制内容已隐藏，长度: %d]", comment: "App log binary payload redaction placeholder"),
+            text.count
+        )
     }
 
     private static func redactionPlaceholder(for value: Any) -> String {
         if let array = value as? [Any] {
-            return "[已隐藏数组，元素数: \(array.count)]"
+            return String(
+                format: NSLocalizedString("[已隐藏数组，元素数: %d]", comment: "App log array redaction placeholder"),
+                array.count
+            )
         }
         if let dictionary = value as? [String: Any] {
-            return "[已隐藏对象，字段数: \(dictionary.count)]"
+            return String(
+                format: NSLocalizedString("[已隐藏对象，字段数: %d]", comment: "App log object redaction placeholder"),
+                dictionary.count
+            )
         }
         if let text = value as? String {
-            return "[已隐藏文本，长度: \(text.count)]"
+            return String(
+                format: NSLocalizedString("[已隐藏文本，长度: %d]", comment: "App log text redaction placeholder"),
+                text.count
+            )
         }
         return redactionToken
     }

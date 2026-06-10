@@ -25,7 +25,7 @@ struct MCPServerDetailView: View {
         Form {
             Section(NSLocalizedString("服务器信息", comment: "")) {
                 LabeledContent(NSLocalizedString("名称", comment: ""), value: server.displayName)
-                LabeledContent("Endpoint", value: server.humanReadableEndpoint)
+                LabeledContent(NSLocalizedString("Endpoint", comment: "MCP endpoint label"), value: server.humanReadableEndpoint)
                 if let notes = server.notes {
                     LabeledContent(NSLocalizedString("备注", comment: ""), value: notes)
                 }
@@ -44,7 +44,7 @@ struct MCPServerDetailView: View {
                 Section(NSLocalizedString("服务器能力", comment: "")) {
                     Text(info.name + (info.version.map { " \($0)" } ?? ""))
                     if let capabilities = info.capabilities, !capabilities.isEmpty {
-                        Text("Capabilities: \(capabilities.keys.joined(separator: ", "))")
+                        Text(String(format: NSLocalizedString("Capabilities: %@", comment: "MCP server capabilities label"), capabilities.keys.joined(separator: ", ")))
                             .etFont(.caption)
                             .foregroundStyle(.secondary)
                     }

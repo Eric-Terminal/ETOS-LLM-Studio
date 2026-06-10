@@ -263,15 +263,21 @@ extension DailyPulseManager {
             let lines = messages.suffix(maxMessagesPerSession).compactMap { message -> String? in
                 let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { return nil }
-                let prefix = message.role == .user ? "用户" : "助手"
-                return "\(prefix)：\(Self.truncated(trimmed, limit: 180))"
+                let prefix = message.role == .user
+                    ? NSLocalizedString("用户", comment: "Daily Pulse prompt user role label")
+                    : NSLocalizedString("助手", comment: "Daily Pulse prompt assistant role label")
+                return String(
+                    format: NSLocalizedString("%@：%@", comment: "Daily Pulse prompt role line"),
+                    prefix,
+                    Self.truncated(trimmed, limit: 180)
+                )
             }
             guard !lines.isEmpty else { continue }
 
             let name = session.name.trimmingCharacters(in: .whitespacesAndNewlines)
             results.append(
                 DailyPulseSessionExcerpt(
-                    name: name.isEmpty ? "未命名会话" : name,
+                    name: name.isEmpty ? NSLocalizedString("未命名会话", comment: "Untitled session fallback") : name,
                     lines: Array(lines)
                 )
             )
@@ -309,9 +315,9 @@ extension DailyPulseManager {
             .joined(separator: "，")
 
         return [
-            "最近 7 天请求数：\(summary.totalRequests)",
-            providerSummary.isEmpty ? "" : "常用提供商：\(providerSummary)",
-            modelSummary.isEmpty ? "" : "常用模型：\(modelSummary)"
+            String(format: NSLocalizedString("最近 7 天请求数：%d", comment: "Daily Pulse request count summary"), summary.totalRequests),
+            providerSummary.isEmpty ? "" : String(format: NSLocalizedString("常用提供商：%@", comment: "Daily Pulse top provider summary"), providerSummary),
+            modelSummary.isEmpty ? "" : String(format: NSLocalizedString("常用模型：%@", comment: "Daily Pulse top model summary"), modelSummary)
         ]
         .filter { !$0.isEmpty }
         .joined(separator: "\n")

@@ -225,7 +225,7 @@ extension ChatBubble {
                         lineTopExtension: doneStepIndex == 0 && connectsTimelineFromPrevious ? externalLineBridge : 0,
                         lineBottomExtension: connectsTimelineToNext ? externalLineBridge : 0
                     ) {
-                        Text("Done")
+                        Text(NSLocalizedString("Done", comment: "Assistant timeline done step"))
                             .etFont(.footnote.weight(.semibold))
                             .foregroundStyle(timelineDoneColor)
                             .frame(maxWidth: .infinity, alignment: .leading)

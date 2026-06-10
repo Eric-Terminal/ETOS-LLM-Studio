@@ -178,26 +178,31 @@ extension DailyPulseManager {
         candidateCardsPerRun: Int
     ) -> String {
         let sessionBlock: String = {
-            guard !input.sessionExcerpts.isEmpty else { return "（无）" }
+            guard !input.sessionExcerpts.isEmpty else { return NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") }
             return input.sessionExcerpts.enumerated().map { index, excerpt in
                 let lines = excerpt.lines.joined(separator: "\n")
-                return "### 会话 \(index + 1)：\(excerpt.name)\n\(lines)"
+                let title = String(
+                    format: NSLocalizedString("### 会话 %d：%@", comment: "Daily Pulse prompt session section title"),
+                    index + 1,
+                    excerpt.name
+                )
+                return "\(title)\n\(lines)"
             }.joined(separator: "\n\n")
         }()
 
         let memoryBlock: String = {
-            guard !input.memories.isEmpty else { return "（无）" }
+            guard !input.memories.isEmpty else { return NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") }
             return input.memories.map { "- \($0)" }.joined(separator: "\n")
         }()
 
-        let focus = input.focusText.isEmpty ? "（未填写）" : input.focusText
-        let curation = input.curationText.isEmpty ? "（无）" : input.curationText
-        let globalSystemPrompt = input.globalSystemPrompt.isEmpty ? "（无）" : input.globalSystemPrompt
-        let logSummary = input.requestLogSummary.isEmpty ? "（无）" : input.requestLogSummary
+        let focus = input.focusText.isEmpty ? NSLocalizedString("（未填写）", comment: "Daily Pulse prompt empty focus placeholder") : input.focusText
+        let curation = input.curationText.isEmpty ? NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") : input.curationText
+        let globalSystemPrompt = input.globalSystemPrompt.isEmpty ? NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") : input.globalSystemPrompt
+        let logSummary = input.requestLogSummary.isEmpty ? NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") : input.requestLogSummary
         let taskBlock: String = {
-            guard !input.activeTasks.isEmpty else { return "（无）" }
+            guard !input.activeTasks.isEmpty else { return NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") }
             return input.activeTasks.prefix(6).map { task in
-                "- \(task.title)：\(task.details)"
+                String(format: NSLocalizedString("- %@：%@", comment: "Daily Pulse task prompt entry"), task.title, task.details)
             }.joined(separator: "\n")
         }()
 

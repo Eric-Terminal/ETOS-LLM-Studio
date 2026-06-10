@@ -269,7 +269,7 @@ extension ToolCenterView {
 
     var skillsSection: some View {
         Section(
-            header: Text("Agent Skills"),
+            header: Text(NSLocalizedString("Agent Skills", comment: "Agent Skills section title")),
             footer: Text(NSLocalizedString("统一查看已安装技能，并集中调整聊天暴露与单项启用状态。", comment: "Agent Skills 工具中心页脚"))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
@@ -289,7 +289,7 @@ extension ToolCenterView {
                 )
             } label: {
                 ToolCenterStatusRow(
-                    title: "Agent Skills",
+                    title: NSLocalizedString("Agent Skills", comment: "Agent Skills row title"),
                     subtitle: String(
                         format: NSLocalizedString("配置已启用 %d / %d", comment: "Configured enabled count"),
                         configuredSkillCount,

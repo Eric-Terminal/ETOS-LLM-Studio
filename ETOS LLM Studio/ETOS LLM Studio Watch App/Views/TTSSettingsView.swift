@@ -57,11 +57,11 @@ struct TTSSettingsView: View {
 
             Section(NSLocalizedString("云端设置", comment: "")) {
                 Picker(NSLocalizedString("提供商", comment: ""), selection: $settingsStore.providerKind) {
-                    Text("OpenAI").tag(TTSProviderKind.openAICompatible)
-                    Text("Gemini").tag(TTSProviderKind.gemini)
-                    Text("Qwen").tag(TTSProviderKind.qwen)
-                    Text("MiniMax").tag(TTSProviderKind.miniMax)
-                    Text("Groq").tag(TTSProviderKind.groq)
+                    Text(NSLocalizedString("OpenAI", comment: "TTS provider")).tag(TTSProviderKind.openAICompatible)
+                    Text(NSLocalizedString("Gemini", comment: "TTS provider")).tag(TTSProviderKind.gemini)
+                    Text(NSLocalizedString("Qwen", comment: "TTS provider")).tag(TTSProviderKind.qwen)
+                    Text(NSLocalizedString("MiniMax", comment: "TTS provider")).tag(TTSProviderKind.miniMax)
+                    Text(NSLocalizedString("Groq", comment: "TTS provider")).tag(TTSProviderKind.groq)
                 }
 
                 Button {
@@ -72,7 +72,7 @@ struct TTSSettingsView: View {
             }
 
             Section(NSLocalizedString("云端快捷预设", comment: "")) {
-                Picker("Voice", selection: voicePresetBinding) {
+                Picker(NSLocalizedString("Voice", comment: "TTS voice picker"), selection: voicePresetBinding) {
                     ForEach(providerVoiceOptions, id: \.self) { option in
                         Text(option).tag(option)
                     }
@@ -111,7 +111,7 @@ struct TTSSettingsView: View {
                 Toggle(NSLocalizedString("手动覆盖参数", comment: ""), isOn: $showCustomCloudParameters)
 
                 if showCustomCloudParameters {
-                    TextField("Voice", text: $settingsStore.voice.watchKeyboardNewlineBinding())
+                    TextField(NSLocalizedString("Voice", comment: "TTS voice text field"), text: $settingsStore.voice.watchKeyboardNewlineBinding())
                     if supportsResponseFormat {
                         TextField(NSLocalizedString("格式", comment: ""), text: $settingsStore.responseFormat.watchKeyboardNewlineBinding())
                     }

@@ -173,13 +173,13 @@ struct WatchFontSettingsView: View {
             Section(NSLocalizedString("预览", comment: "")) {
                 Text(NSLocalizedString("风来疏竹，风过而竹不留声。", comment: ""))
                     .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
-                Text("Emphasis")
+                Text(NSLocalizedString("Emphasis", comment: "Font preview emphasis sample"))
                     .font(FontRoutePreview.font(for: .emphasis, sample: "Emphasis", size: 14))
                     .italic()
-                Text("Strong")
+                Text(NSLocalizedString("Strong", comment: "Font preview strong sample"))
                     .font(FontRoutePreview.font(for: .strong, sample: "Strong", size: 14))
                     .fontWeight(.bold)
-                Text("let value = 42")
+                Text(NSLocalizedString("let value = 42", comment: "Font preview code sample"))
                     .font(FontRoutePreview.font(for: .code, sample: "let value = 42", size: 13))
             }
         }

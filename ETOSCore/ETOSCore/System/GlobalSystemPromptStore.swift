@@ -410,7 +410,7 @@ public enum GlobalSystemPromptStore {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         if firstLine.isEmpty {
-            return "历史提示词"
+            return NSLocalizedString("历史提示词", comment: "Migrated global system prompt fallback title")
         }
 
         if firstLine.count <= 20 {

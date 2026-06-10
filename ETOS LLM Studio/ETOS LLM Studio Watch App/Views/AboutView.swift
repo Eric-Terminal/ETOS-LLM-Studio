@@ -23,15 +23,15 @@ struct AboutView: View {
     @State private var showAppLogs = false
     
     private var appVersion: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "N/A"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "N/A"
-        return "\(version) (Build \(build))"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? NSLocalizedString("N/A", comment: "Unavailable app info")
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? NSLocalizedString("N/A", comment: "Unavailable app info")
+        return String(format: NSLocalizedString("%@ (Build %@)", comment: "App version and build"), version, build)
     }
 
     private var appCommitHash: String {
         let rawValue = Bundle.main.object(forInfoDictionaryKey: "ETCommitHash") as? String
         let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let normalized, !normalized.isEmpty else { return "Unknown" }
+        guard let normalized, !normalized.isEmpty else { return NSLocalizedString("Unknown", comment: "Unknown app info") }
         return normalized
     }
 
@@ -64,7 +64,7 @@ struct AboutView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     
                     VStack(spacing: 2) {
-                        Text("ETOS LLM Studio")
+                        Text(NSLocalizedString("ETOS LLM Studio", comment: "App name"))
                             .etFont(.headline)
                         Text(NSLocalizedString("原生 AI 聊天客户端", comment: ""))
                             .etFont(.caption2)
@@ -90,8 +90,8 @@ struct AboutView: View {
                         handleVersionTap()
                     }
                     InfoRow(title: "Git 提交", value: appCommitHashShort)
-                    InfoRow(title: "开发者", value: "Eric-Terminal")
-                    InfoRow(title: "平台支持", value: "iOS / watchOS")
+                    InfoRow(title: "开发者", value: NSLocalizedString("Eric-Terminal", comment: "Developer name"))
+                    InfoRow(title: "平台支持", value: NSLocalizedString("iOS / watchOS", comment: "Supported platforms"))
                     NavigationLink {
                         WatchUpdateTimelineView()
                     } label: {
@@ -145,7 +145,7 @@ struct AboutView: View {
                 
                 // MARK: - Legal
                 VStack(alignment: .leading, spacing: 6) {
-                    InfoRow(title: "开源协议", value: "GPLv3")
+                    InfoRow(title: "开源协议", value: NSLocalizedString("GPLv3", comment: "Open source license"))
                     
                     Button {
                         webAuthLauncher.open(url: privacyURL)
@@ -171,10 +171,10 @@ struct AboutView: View {
                 
                 // MARK: - Footer
                 VStack(spacing: 4) {
-                    Text("Made with ❤️ in SwiftUI")
+                    Text(NSLocalizedString("Made with ❤️ in SwiftUI", comment: "About page footer"))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
-                    Text("© 2025-2026 Eric-Terminal")
+                    Text(NSLocalizedString("© 2025-2026 Eric-Terminal", comment: "Copyright footer"))
                         .etFont(.system(size: 9))
                         .foregroundStyle(.tertiary)
                 }

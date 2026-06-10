@@ -92,8 +92,8 @@ struct ProviderEditView: View {
                 Picker(NSLocalizedString("API 格式", comment: ""), selection: $provider.apiFormat) {
                     Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag("openai-compatible")
                     Text(NSLocalizedString("OpenAI Responses", comment: "")).tag("openai-responses")
-                    Text("Gemini").tag("gemini")
-                    Text("Anthropic").tag("anthropic")
+                    Text(NSLocalizedString("Gemini", comment: "Provider API format")).tag("gemini")
+                    Text(NSLocalizedString("Anthropic", comment: "Provider API format")).tag("anthropic")
                 }
                 .disabled(isLocalProvider)
             }
@@ -101,9 +101,9 @@ struct ProviderEditView: View {
             Section(header: Text(NSLocalizedString("认证", comment: "")), footer: Text(apiKeysHint)) {
                 Group {
                     if showApiKeys {
-                        TextField("API Key", text: $apiKeysText)
+                        TextField(NSLocalizedString("API Key", comment: "Provider API key field"), text: $apiKeysText)
                     } else {
-                        SecureField("API Key", text: $apiKeysText)
+                        SecureField(NSLocalizedString("API Key", comment: "Provider API key field"), text: $apiKeysText)
                     }
                 }
                 .textInputAutocapitalization(.never)
@@ -122,8 +122,8 @@ struct ProviderEditView: View {
                     Toggle(NSLocalizedString("启用代理", comment: ""), isOn: $providerProxyConfiguration.isEnabled)
 
                     Picker(NSLocalizedString("代理类型", comment: ""), selection: $providerProxyConfiguration.type) {
-                        Text("HTTP / HTTPS").tag(NetworkProxyType.http)
-                        Text("SOCKS5").tag(NetworkProxyType.socks5)
+                        Text(NSLocalizedString("HTTP / HTTPS", comment: "HTTP proxy type")).tag(NetworkProxyType.http)
+                        Text(NSLocalizedString("SOCKS5", comment: "SOCKS5 proxy type")).tag(NetworkProxyType.socks5)
                     }
 
                     TextField(NSLocalizedString("代理地址", comment: ""), text: $providerProxyConfiguration.host)

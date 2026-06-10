@@ -239,17 +239,20 @@ extension DailyPulseManager {
 
     internal nonisolated static func archivedChatContent(for card: DailyPulseCard) -> String {
         let prompt = card.suggestedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let whyTitle = NSLocalizedString("## 为什么推荐给你", comment: "Daily Pulse archived chat why heading")
+        let detailsTitle = NSLocalizedString("## 详情", comment: "Daily Pulse archived chat details heading")
+        let promptTitle = NSLocalizedString("## 建议追问", comment: "Daily Pulse archived chat suggested prompt heading")
         return [
             "# \(card.title)",
             "",
             "> \(card.summary)",
             "",
-            "## 为什么推荐给你",
+            whyTitle,
             card.whyRecommended,
             "",
-            "## 详情",
+            detailsTitle,
             card.detailsMarkdown,
-            prompt.isEmpty ? "" : "\n## 建议追问\n\(prompt)"
+            prompt.isEmpty ? "" : "\n\(promptTitle)\n\(prompt)"
         ]
         .joined(separator: "\n")
         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -307,11 +310,11 @@ extension DailyPulseManager {
             var parts: [String] = []
 
             if server.isSelectedForChat {
-                parts.append("已选中用于聊天")
+                parts.append(NSLocalizedString("已选中用于聊天", comment: "Daily Pulse MCP context selected flag"))
             }
 
             if let notes = normalizedOptionalText(server.notes, fallback: nil) {
-                parts.append("备注：\(truncated(notes, limit: 36))")
+                parts.append(String(format: NSLocalizedString("备注：%@", comment: "Daily Pulse MCP context notes"), truncated(notes, limit: 36)))
             }
 
             if let metadata = metadataByServerID[server.id] ?? nil {
@@ -319,23 +322,29 @@ extension DailyPulseManager {
                     .filter { server.isToolEnabled($0.toolId) }
                     .map(\.toolId)
                 if !enabledToolIDs.isEmpty {
-                    let sample = enabledToolIDs.prefix(3).joined(separator: "、")
-                    parts.append("工具 \(enabledToolIDs.count) 个（\(sample)）")
+                    let sample = enabledToolIDs.prefix(3).joined(separator: NSLocalizedString("、", comment: "Daily Pulse compact list separator"))
+                    parts.append(String(format: NSLocalizedString("工具 %d 个（%@）", comment: "Daily Pulse MCP context tool count"), enabledToolIDs.count, sample))
                 }
 
                 let promptNames = metadata.prompts.map(\.name)
                 if !promptNames.isEmpty {
-                    parts.append("提示词：\(promptNames.prefix(2).joined(separator: "、"))")
+                    let sample = promptNames.prefix(2).joined(separator: NSLocalizedString("、", comment: "Daily Pulse compact list separator"))
+                    parts.append(String(format: NSLocalizedString("提示词：%@", comment: "Daily Pulse MCP context prompts"), sample))
                 }
 
                 let resourceIDs = metadata.resources.map(\.resourceId)
                 if !resourceIDs.isEmpty {
-                    parts.append("资源：\(resourceIDs.prefix(2).joined(separator: "、"))")
+                    let sample = resourceIDs.prefix(2).joined(separator: NSLocalizedString("、", comment: "Daily Pulse compact list separator"))
+                    parts.append(String(format: NSLocalizedString("资源：%@", comment: "Daily Pulse MCP context resources"), sample))
                 }
             }
 
             guard !parts.isEmpty else { continue }
-            entries.append("- \(server.displayName)：\(parts.joined(separator: "；"))")
+            entries.append(String(
+                format: NSLocalizedString("- %@：%@", comment: "Daily Pulse MCP context server entry"),
+                server.displayName,
+                parts.joined(separator: NSLocalizedString("；", comment: "Daily Pulse digest separator"))
+            ))
             if entries.count >= max(1, limit) {
                 break
             }

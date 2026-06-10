@@ -306,17 +306,21 @@ internal struct DailyPulsePreferenceProfile: Hashable, Sendable {
     }
 
     var summaryText: String {
-        let positive = positiveHints.isEmpty ? "（无）" : positiveHints.map { "- \($0)" }.joined(separator: "\n")
-        let negative = negativeHints.isEmpty ? "（无）" : negativeHints.map { "- \($0)" }.joined(separator: "\n")
-        let recent = recentVisibleHints.isEmpty ? "（无）" : recentVisibleHints.map { "- \($0)" }.joined(separator: "\n")
+        let empty = NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder")
+        let positiveTitle = NSLocalizedString("更可能喜欢的话题：", comment: "Daily Pulse preference profile positive title")
+        let negativeTitle = NSLocalizedString("应尽量避开的主题：", comment: "Daily Pulse preference profile negative title")
+        let recentTitle = NSLocalizedString("最近几天已经出现过的卡片主题：", comment: "Daily Pulse preference profile recent title")
+        let positive = positiveHints.isEmpty ? empty : positiveHints.map { "- \($0)" }.joined(separator: "\n")
+        let negative = negativeHints.isEmpty ? empty : negativeHints.map { "- \($0)" }.joined(separator: "\n")
+        let recent = recentVisibleHints.isEmpty ? empty : recentVisibleHints.map { "- \($0)" }.joined(separator: "\n")
         return """
-        更可能喜欢的话题：
+        \(positiveTitle)
         \(positive)
 
-        应尽量避开的主题：
+        \(negativeTitle)
         \(negative)
 
-        最近几天已经出现过的卡片主题：
+        \(recentTitle)
         \(recent)
         """
     }
@@ -346,25 +350,31 @@ internal struct DailyPulseExternalContext: Hashable, Sendable {
     }
 
     var summaryText: String {
-        let mcpSummary = mcpSourceLines.isEmpty ? "（无）" : mcpSourceLines.joined(separator: "\n")
-        let shortcutSummary = shortcutSourceLines.isEmpty ? "（无）" : shortcutSourceLines.joined(separator: "\n")
-        let snapshotSummary = recentSnapshotLines.isEmpty ? "（无）" : recentSnapshotLines.joined(separator: "\n")
-        let trendSummary = trendSourceLines.isEmpty ? "（无）" : trendSourceLines.joined(separator: "\n")
-        let signalHistorySummary = signalHistoryLines.isEmpty ? "（无）" : signalHistoryLines.joined(separator: "\n")
+        let empty = NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder")
+        let mcpTitle = NSLocalizedString("可用 MCP 外部能力：", comment: "Daily Pulse external context MCP title")
+        let shortcutTitle = NSLocalizedString("可用快捷指令能力：", comment: "Daily Pulse external context shortcuts title")
+        let snapshotTitle = NSLocalizedString("最近已获取到的外部结果快照：", comment: "Daily Pulse external context snapshots title")
+        let trendTitle = NSLocalizedString("公告与趋势信号：", comment: "Daily Pulse external context trends title")
+        let signalHistoryTitle = NSLocalizedString("最近积累的外部信号历史：", comment: "Daily Pulse external context signal history title")
+        let mcpSummary = mcpSourceLines.isEmpty ? empty : mcpSourceLines.joined(separator: "\n")
+        let shortcutSummary = shortcutSourceLines.isEmpty ? empty : shortcutSourceLines.joined(separator: "\n")
+        let snapshotSummary = recentSnapshotLines.isEmpty ? empty : recentSnapshotLines.joined(separator: "\n")
+        let trendSummary = trendSourceLines.isEmpty ? empty : trendSourceLines.joined(separator: "\n")
+        let signalHistorySummary = signalHistoryLines.isEmpty ? empty : signalHistoryLines.joined(separator: "\n")
         return """
-        可用 MCP 外部能力：
+        \(mcpTitle)
         \(mcpSummary)
 
-        可用快捷指令能力：
+        \(shortcutTitle)
         \(shortcutSummary)
 
-        最近已获取到的外部结果快照：
+        \(snapshotTitle)
         \(snapshotSummary)
 
-        公告与趋势信号：
+        \(trendTitle)
         \(trendSummary)
 
-        最近积累的外部信号历史：
+        \(signalHistoryTitle)
         \(signalHistorySummary)
         """
     }

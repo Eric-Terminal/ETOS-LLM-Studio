@@ -23,8 +23,8 @@ struct GlobalProxySettingsView: View {
 
                 if proxyStore.isEnabled {
                     Picker(NSLocalizedString("代理类型", comment: ""), selection: $proxyStore.type) {
-                        Text("HTTP / HTTPS").tag(NetworkProxyType.http)
-                        Text("SOCKS5").tag(NetworkProxyType.socks5)
+                        Text(NSLocalizedString("HTTP / HTTPS", comment: "HTTP proxy type")).tag(NetworkProxyType.http)
+                        Text(NSLocalizedString("SOCKS5", comment: "SOCKS5 proxy type")).tag(NetworkProxyType.socks5)
                     }
 
                     TextField(NSLocalizedString("代理地址", comment: ""), text: $proxyStore.host)

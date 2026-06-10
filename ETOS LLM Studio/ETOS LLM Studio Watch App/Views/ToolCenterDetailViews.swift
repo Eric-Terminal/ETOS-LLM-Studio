@@ -25,7 +25,7 @@ struct WatchAppToolCenterDetailView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 if let schemaSummary = ToolCatalogSupport.schemaSummary(for: kind.parameters, fieldLimit: 4) {
-                    Text("Schema: \(schemaSummary)")
+                    Text(String(format: NSLocalizedString("Schema: %@", comment: "Tool schema summary"), schemaSummary))
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -425,7 +425,7 @@ struct WatchMCPToolCenterDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let schemaSummary = ToolCatalogSupport.schemaSummary(for: tool.inputSchema, fieldLimit: 4) {
-                    Text("Schema: \(schemaSummary)")
+                    Text(String(format: NSLocalizedString("Schema: %@", comment: "Tool schema summary"), schemaSummary))
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -518,7 +518,7 @@ struct WatchSkillToolCategoryDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Agent Skills")
+                    Text(NSLocalizedString("Agent Skills", comment: "Agent Skills detail title"))
                     Text(NSLocalizedString("把已安装技能通过 use_skill 暴露给模型。", comment: "Agent Skills intro summary"))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
@@ -573,7 +573,7 @@ struct WatchSkillToolCategoryDetailView: View {
                 }
             }
         }
-        .navigationTitle("Agent Skills")
+        .navigationTitle(NSLocalizedString("Agent Skills", comment: "Agent Skills navigation title"))
     }
 
     private var skillGroupFooterText: String {

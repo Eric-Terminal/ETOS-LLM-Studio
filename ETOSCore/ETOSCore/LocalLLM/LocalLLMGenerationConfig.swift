@@ -263,16 +263,16 @@ public enum LocalLLMSamplerKind: Int32, Codable, CaseIterable, Identifiable, Has
 
     public var title: String {
         switch self {
-        case .penalties: return "Penalties"
-        case .dry: return "DRY"
-        case .topNSigma: return "Top-n-sigma"
-        case .topK: return "Top-K"
-        case .typical: return "Typical-P"
-        case .topP: return "Top-P"
-        case .minP: return "Min-P"
-        case .xtc: return "XTC"
-        case .temperature: return "Temperature"
-        case .adaptive: return "Adaptive"
+        case .penalties: return NSLocalizedString("Penalties", comment: "Local sampler technical penalties title")
+        case .dry: return NSLocalizedString("DRY", comment: "Local sampler technical DRY title")
+        case .topNSigma: return NSLocalizedString("Top-n-sigma", comment: "Local sampler technical Top-n-sigma title")
+        case .topK: return NSLocalizedString("Top-K", comment: "Local sampler technical Top-K title")
+        case .typical: return NSLocalizedString("Typical-P", comment: "Local sampler technical Typical-P title")
+        case .topP: return NSLocalizedString("Top-P", comment: "Local sampler technical Top-P title")
+        case .minP: return NSLocalizedString("Min-P", comment: "Local sampler technical Min-P title")
+        case .xtc: return NSLocalizedString("XTC", comment: "Local sampler technical XTC title")
+        case .temperature: return NSLocalizedString("Temperature", comment: "Local sampler technical temperature title")
+        case .adaptive: return NSLocalizedString("Adaptive", comment: "Local sampler technical adaptive title")
         }
     }
 
@@ -530,7 +530,7 @@ public enum LocalLLMParameterCatalog {
         ),
         LocalLLMParameterDescriptor(
             id: "flashAttention",
-            title: "Flash Attention",
+            title: NSLocalizedString("Flash Attention", comment: "Local parameter flash attention title"),
             aliases: ["--flash-attn", "-fa"],
             summary: NSLocalizedString("自动、开启或关闭 Flash Attention；Metal 报错时可先试关闭。", comment: "Local parameter flash attention summary"),
             defaultValue: LocalModelRecord.defaultFlashAttention.localizedTitle,
@@ -554,7 +554,7 @@ public enum LocalLLMParameterCatalog {
         ),
         LocalLLMParameterDescriptor(
             id: "topK",
-            title: "Top-K",
+            title: NSLocalizedString("Top-K", comment: "Local parameter Top-K title"),
             aliases: ["--top-k"],
             summary: NSLocalizedString("只保留概率最高的 K 个候选；0 通常表示关闭。", comment: "Local parameter Top-K summary"),
             defaultValue: "\(LocalModelRecord.defaultTopK)",
@@ -562,7 +562,7 @@ public enum LocalLLMParameterCatalog {
         ),
         LocalLLMParameterDescriptor(
             id: "topP",
-            title: "Top-P",
+            title: NSLocalizedString("Top-P", comment: "Local parameter Top-P title"),
             aliases: ["--top-p"],
             summary: NSLocalizedString("保留累计概率达到 P 的候选集合。", comment: "Local parameter Top-P summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultTopP),
@@ -570,7 +570,7 @@ public enum LocalLLMParameterCatalog {
         ),
         LocalLLMParameterDescriptor(
             id: "minP",
-            title: "Min-P",
+            title: NSLocalizedString("Min-P", comment: "Local parameter Min-P title"),
             aliases: ["--min-p"],
             summary: NSLocalizedString("过滤相对最高概率太低的候选。", comment: "Local parameter Min-P summary"),
             defaultValue: formatDefault(LocalModelRecord.defaultMinP),
@@ -610,7 +610,7 @@ public enum LocalLLMParameterCatalog {
         ),
         LocalLLMParameterDescriptor(
             id: "grammar",
-            title: "Grammar",
+            title: NSLocalizedString("Grammar", comment: "Local parameter grammar title"),
             aliases: ["--grammar"],
             summary: NSLocalizedString("粘贴 GBNF grammar 文本来约束输出格式。", comment: "Local parameter grammar summary"),
             defaultValue: NSLocalizedString("空", comment: "Empty local parameter default"),

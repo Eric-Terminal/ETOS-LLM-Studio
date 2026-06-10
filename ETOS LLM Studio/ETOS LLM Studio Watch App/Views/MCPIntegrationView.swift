@@ -218,7 +218,7 @@ struct MCPIntegrationView: View {
 
             moreSection
         }
-        .navigationTitle("MCP")
+        .navigationTitle(NSLocalizedString("MCP", comment: "MCP navigation title"))
     }
 
     @ViewBuilder

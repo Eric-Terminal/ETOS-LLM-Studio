@@ -53,10 +53,10 @@ struct TTSSettingsView: View {
             Section(NSLocalizedString("云端提供商", comment: "")) {
                 Picker(NSLocalizedString("提供商类型", comment: ""), selection: $settingsStore.providerKind) {
                     Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag(TTSProviderKind.openAICompatible)
-                    Text("Gemini").tag(TTSProviderKind.gemini)
-                    Text("Qwen").tag(TTSProviderKind.qwen)
-                    Text("MiniMax").tag(TTSProviderKind.miniMax)
-                    Text("Groq").tag(TTSProviderKind.groq)
+                    Text(NSLocalizedString("Gemini", comment: "TTS provider")).tag(TTSProviderKind.gemini)
+                    Text(NSLocalizedString("Qwen", comment: "TTS provider")).tag(TTSProviderKind.qwen)
+                    Text(NSLocalizedString("MiniMax", comment: "TTS provider")).tag(TTSProviderKind.miniMax)
+                    Text(NSLocalizedString("Groq", comment: "TTS provider")).tag(TTSProviderKind.groq)
                 }
 
                 Button {
@@ -67,7 +67,7 @@ struct TTSSettingsView: View {
             }
 
             Section {
-                Picker("Voice", selection: voicePresetBinding) {
+                Picker(NSLocalizedString("Voice", comment: "TTS voice picker"), selection: voicePresetBinding) {
                     ForEach(providerVoiceOptions, id: \.self) { option in
                         Text(option).tag(option)
                     }
@@ -108,7 +108,7 @@ struct TTSSettingsView: View {
 
             Section(NSLocalizedString("云端高级参数", comment: "")) {
                 DisclosureGroup(NSLocalizedString("手动覆盖参数（可选）", comment: ""), isExpanded: $showCustomCloudParameters) {
-                    TextField("Voice", text: $settingsStore.voice)
+                    TextField(NSLocalizedString("Voice", comment: "TTS voice text field"), text: $settingsStore.voice)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 

@@ -219,7 +219,7 @@ extension ChatService {
             最新会话摘要：
             %@
             """, comment: "Conversation profile update user prompt"),
-            existingProfileText.isEmpty ? "（暂无）" : existingProfileText,
+            existingProfileText.isEmpty ? NSLocalizedString("（暂无）", comment: "Conversation profile empty placeholder") : existingProfileText,
             latestSummary
         )
 
@@ -303,7 +303,9 @@ extension ChatService {
     private func makeConversationSummaryContext(from messages: [ChatMessage], messageLimit: Int = 12) -> String {
         let slice = messages.suffix(max(1, messageLimit))
         let lines = slice.map { message -> String in
-            let roleText = message.role == .user ? "用户" : "助手"
+            let roleText = message.role == .user
+                ? NSLocalizedString("用户", comment: "Conversation summary user role label")
+                : NSLocalizedString("助手", comment: "Conversation summary assistant role label")
             let compact = sanitizeConversationMemoryText(message.content, maxLength: 2_000)
             return "\(roleText): \(compact)"
         }
@@ -537,9 +539,9 @@ extension ChatService {
             guard !trimmed.isEmpty else { return nil }
             switch message.role {
             case .user:
-                return "User: \(trimmed)"
+                return "\(NSLocalizedString("用户", comment: "Memory query user role label")): \(trimmed)"
             case .assistant:
-                return "Assistant: \(trimmed)"
+                return "\(NSLocalizedString("助手", comment: "Memory query assistant role label")): \(trimmed)"
             default:
                 return nil
             }
