@@ -158,17 +158,23 @@ int32_t generate(
         return cancelled(error_message);
     }
 
+    const llama_vocab * vocab = llama_model_get_vocab(model.get());
+    const int32_t requested_context = std::max<int32_t>(1, generation_params.context_size);
+    const int32_t requested_output = std::max<int32_t>(1, generation_params.max_output_tokens);
+
     local_chat_template_result chat_template;
     local_chat_parser_state parser_state;
     if (!prompt || prompt[0] == '\0') {
         if (should_cancel(cancel_callback, user_data)) {
             return cancelled(error_message);
         }
-        chat_template = apply_chat_template(
+        chat_template = apply_chat_template_fitting_context(
             model.get(),
+            vocab,
             messages_json,
             tools_json,
             generation_params.chat_template_kwargs,
+            requested_context,
             error_message
         );
         if (chat_template.prompt.empty()) {
@@ -190,7 +196,6 @@ int32_t generate(
         return cancelled(error_message);
     }
 
-    const llama_vocab * vocab = llama_model_get_vocab(model.get());
     std::vector<llama_token> prompt_tokens = tokenize_prompt(vocab, prompt);
     if (prompt_tokens.empty()) {
         return fail("本地模型无法解析提示词。", error_message);
@@ -199,8 +204,6 @@ int32_t generate(
         return cancelled(error_message);
     }
 
-    const int32_t requested_context = std::max<int32_t>(1, generation_params.context_size);
-    const int32_t requested_output = std::max<int32_t>(1, generation_params.max_output_tokens);
     const size_t prompt_token_count = prompt_tokens.size();
     if (prompt_token_count >= static_cast<size_t>(requested_context)) {
         return fail("本地模型提示词已占满上下文窗口。请缩短聊天内容或调大上下文。", error_message);

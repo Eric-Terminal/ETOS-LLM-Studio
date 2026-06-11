@@ -64,6 +64,43 @@ public enum LocalLLMChatMessageBuilder {
         }
     }
 
+    public static func templateCompatibleMessages(from messages: [ChatMessage]) -> [LocalLLMChatMessage] {
+        templateCompatibleMessages(messages(from: messages))
+    }
+
+    public static func templateCompatibleMessages(_ messages: [LocalLLMChatMessage]) -> [LocalLLMChatMessage] {
+        guard !messages.isEmpty else { return [] }
+
+        var systemContents: [String] = []
+        var conversationMessages: [LocalLLMChatMessage] = []
+        conversationMessages.reserveCapacity(messages.count)
+
+        for message in messages {
+            if message.role == "system" {
+                let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !content.isEmpty {
+                    systemContents.append(content)
+                }
+            } else {
+                conversationMessages.append(message)
+            }
+        }
+
+        // 多数 GGUF chat template 只接受开头 system，且第一条非 system 消息必须是 user。
+        while let first = conversationMessages.first, first.role != "user" {
+            conversationMessages.removeFirst()
+        }
+
+        if !systemContents.isEmpty {
+            conversationMessages.insert(
+                LocalLLMChatMessage(role: "system", content: systemContents.joined(separator: "\n\n")),
+                at: 0
+            )
+        }
+
+        return conversationMessages
+    }
+
     public static func toolDefinitions(from tools: [InternalToolDefinition]?) -> [LocalLLMToolDefinition] {
         guard let tools else { return [] }
         return tools.compactMap { tool in

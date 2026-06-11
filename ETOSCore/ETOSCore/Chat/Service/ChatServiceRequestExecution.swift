@@ -148,7 +148,7 @@ extension ChatService {
 
         var chatHistory = requestMessages
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
-            chatHistory = Array(chatHistory.suffix(maxChatHistory))
+            chatHistory = limitedChatHistory(chatHistory, maxMessages: maxChatHistory)
         }
 
         if enablePeriodicTimeLandmark {

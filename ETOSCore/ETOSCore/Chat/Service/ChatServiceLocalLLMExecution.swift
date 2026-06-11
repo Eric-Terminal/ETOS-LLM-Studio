@@ -44,7 +44,7 @@ extension ChatService {
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
             let parsedOutput = try await LocalLLMEngine.shared.generateParsed(
-                messages: LocalLLMChatMessageBuilder.messages(from: requestMessages),
+                messages: LocalLLMChatMessageBuilder.templateCompatibleMessages(from: requestMessages),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
@@ -150,7 +150,7 @@ extension ChatService {
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let globalTopPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
-            let localMessagesToSend = LocalLLMChatMessageBuilder.messages(from: messagesToSend)
+            let localMessagesToSend = LocalLLMChatMessageBuilder.templateCompatibleMessages(from: messagesToSend)
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
             let stream = try LocalLLMEngine.shared.streamParsed(
                 messages: localMessagesToSend,

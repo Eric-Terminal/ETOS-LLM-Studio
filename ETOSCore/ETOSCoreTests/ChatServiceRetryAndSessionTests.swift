@@ -133,4 +133,36 @@ extension ChatServiceTests {
 
         await cleanup()
     }
+
+    @Test("上下文消息数裁剪后应从最近用户轮次开始")
+    func testMaxChatHistoryTrimStartsAtRecentUserTurn() async throws {
+        await cleanup()
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "新的回答")
+
+        let firstUser = ChatMessage(role: .user, content: "第一轮问题")
+        let firstAssistant = ChatMessage(role: .assistant, content: "第一轮回答")
+        let session = try #require(chatService.currentSessionSubject.value)
+        chatService.updateMessages([firstUser, firstAssistant], for: session.id)
+
+        await chatService.sendAndProcessMessage(
+            content: "第二轮问题",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 2,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let sentMessages = mockAdapter.receivedMessages ?? []
+        #expect(sentMessages.map(\.role) == [.user])
+        #expect(sentMessages.first?.content == "第二轮问题")
+
+        await cleanup()
+    }
 }

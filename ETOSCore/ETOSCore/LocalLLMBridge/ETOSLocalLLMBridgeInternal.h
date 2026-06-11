@@ -176,6 +176,15 @@ local_chat_template_result apply_chat_template(
     const std::map<std::string, std::string> & chat_template_kwargs,
     char ** error_message
 );
+local_chat_template_result apply_chat_template_fitting_context(
+    const llama_model * model,
+    const llama_vocab * vocab,
+    const char * messages_json,
+    const char * tools_json,
+    const std::map<std::string, std::string> & chat_template_kwargs,
+    int32_t context_size,
+    char ** error_message
+);
 
 int32_t parse_chat_response(
     const char * model_path,

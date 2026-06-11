@@ -69,6 +69,20 @@ struct LocalLLMChatTemplatePayloadTests {
             )
         }
     }
+
+    @Test("本地模板消息会合并系统消息并从用户轮次开始")
+    func templateCompatibleMessagesStartFromUserTurn() throws {
+        let messages = LocalLLMChatMessageBuilder.templateCompatibleMessages([
+            LocalLLMChatMessage(role: "assistant", content: "被截断后悬空的旧回复"),
+            LocalLLMChatMessage(role: "system", content: "前置系统提示"),
+            LocalLLMChatMessage(role: "user", content: "继续聊"),
+            LocalLLMChatMessage(role: "system", content: "末尾注入提示")
+        ])
+
+        #expect(messages.map(\.role) == ["system", "user"])
+        #expect(messages.first?.content == "前置系统提示\n\n末尾注入提示")
+        #expect(messages.last?.content == "继续聊")
+    }
 }
 
 private func decodedJSONArray(_ json: String) throws -> [[String: Any]] {

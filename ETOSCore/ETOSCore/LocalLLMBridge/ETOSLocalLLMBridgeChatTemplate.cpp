@@ -17,8 +17,188 @@ using json = nlohmann::ordered_json;
 namespace etos_local_llm_bridge {
 namespace {
 
+struct parsed_chat_template_payload {
+    json messages = json::array();
+    json tools = json::array();
+};
+
+std::string role_for_message(const json & message) {
+    if (!message.is_object() || !message.contains("role") || !message.at("role").is_string()) {
+        return "";
+    }
+    return message.at("role").get<std::string>();
+}
+
 std::string next_local_tool_call_id(local_chat_parser_state & state) {
     return "local_tool_" + std::to_string(state.next_tool_call_index++);
+}
+
+json normalized_messages_for_template(const json & messages) {
+    json normalized = json::array();
+    std::vector<std::string> system_contents;
+
+    for (const auto & message : messages) {
+        if (role_for_message(message) == "system") {
+            if (message.contains("content") && message.at("content").is_string()) {
+                const std::string content = message.at("content").get<std::string>();
+                if (!content.empty()) {
+                    system_contents.push_back(content);
+                }
+            }
+            continue;
+        }
+        normalized.push_back(message);
+    }
+
+    if (!system_contents.empty()) {
+        std::string merged_system_content;
+        for (size_t index = 0; index < system_contents.size(); ++index) {
+            if (index > 0) {
+                merged_system_content.append("\n\n");
+            }
+            merged_system_content.append(system_contents[index]);
+        }
+        json system_message = {
+            { "role", "system" },
+            { "content", merged_system_content },
+        };
+        normalized.insert(normalized.begin(), system_message);
+    }
+    return normalized;
+}
+
+void drop_leading_non_user_messages(json & messages) {
+    if (!messages.is_array() || messages.empty()) {
+        return;
+    }
+
+    size_t start = role_for_message(messages.front()) == "system" ? 1 : 0;
+    while (start < messages.size() && role_for_message(messages[start]) != "user") {
+        messages.erase(messages.begin() + static_cast<json::difference_type>(start));
+    }
+}
+
+bool remove_oldest_conversation_turn(json & messages) {
+    if (!messages.is_array() || messages.empty()) {
+        return false;
+    }
+
+    const size_t start = role_for_message(messages.front()) == "system" ? 1 : 0;
+    if (start >= messages.size() || role_for_message(messages[start]) != "user") {
+        return false;
+    }
+
+    size_t next_user = messages.size();
+    for (size_t index = start + 1; index < messages.size(); ++index) {
+        if (role_for_message(messages[index]) == "user") {
+            next_user = index;
+            break;
+        }
+    }
+    if (next_user >= messages.size()) {
+        return false;
+    }
+
+    messages.erase(
+        messages.begin() + static_cast<json::difference_type>(start),
+        messages.begin() + static_cast<json::difference_type>(next_user)
+    );
+    return true;
+}
+
+bool parse_chat_template_payload(
+    const char * messages_json,
+    const char * tools_json,
+    parsed_chat_template_payload & payload,
+    char ** error_message
+) {
+    if (!messages_json || messages_json[0] == '\0') {
+        fail("本地对话消息为空。", error_message);
+        return false;
+    }
+
+    try {
+        json chat_messages = json::parse(messages_json);
+        if (!chat_messages.is_array() || chat_messages.empty()) {
+            fail("本地对话消息为空。", error_message);
+            return false;
+        }
+
+        json tool_definitions = json::array();
+        if (tools_json && tools_json[0] != '\0') {
+            tool_definitions = json::parse(tools_json);
+            if (!tool_definitions.is_array()) {
+                fail("本地工具定义 JSON 必须是数组。", error_message);
+                return false;
+            }
+        }
+
+        payload.messages = normalized_messages_for_template(chat_messages);
+        drop_leading_non_user_messages(payload.messages);
+        payload.tools = std::move(tool_definitions);
+        return true;
+    } catch (const std::exception & e) {
+        fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
+        return false;
+    }
+}
+
+local_chat_template_result render_chat_template(
+    const llama_model * model,
+    const parsed_chat_template_payload & payload,
+    const std::map<std::string, std::string> & chat_template_kwargs,
+    char ** error_message
+) {
+    try {
+        auto templates = common_chat_templates_init(model, "");
+        common_chat_templates_inputs inputs;
+        inputs.messages = common_chat_msgs_parse_oaicompat(payload.messages);
+        inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+        inputs.chat_template_kwargs = chat_template_kwargs;
+        if (const auto found = chat_template_kwargs.find("enable_thinking"); found != chat_template_kwargs.end()) {
+            const json enable_thinking = json::parse(found->second);
+            if (!enable_thinking.is_boolean()) {
+                fail("本地对话模板参数 enable_thinking 必须是 JSON 布尔值。", error_message);
+                return {};
+            }
+            inputs.enable_thinking = enable_thinking.get<bool>();
+        }
+        if (!payload.tools.empty()) {
+            inputs.tools = common_chat_tools_parse_oaicompat(payload.tools);
+            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
+            inputs.parallel_tool_calls = true;
+        }
+        common_chat_params params = common_chat_templates_apply(templates.get(), inputs);
+        local_chat_template_result result;
+        result.prompt = params.prompt;
+        result.grammar = params.grammar;
+        result.grammar_lazy = params.grammar_lazy;
+        result.grammar_triggers = params.grammar_triggers;
+        result.generation_prompt = params.generation_prompt;
+        result.additional_stops = params.additional_stops;
+        result.parser_params = common_chat_parser_params(params);
+        result.parser_params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+        if (!params.parser.empty()) {
+            result.parser_params.parser.load(params.parser);
+        }
+        result.parser_enabled = true;
+        return result;
+    } catch (const std::exception & e) {
+        fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
+        return {};
+    }
+}
+
+bool prompt_exceeds_context(
+    const llama_vocab * vocab,
+    const std::string & prompt,
+    int32_t context_size
+) {
+    if (!vocab || prompt.empty() || context_size <= 1) {
+        return false;
+    }
+    const std::vector<llama_token> tokens = tokenize_prompt(vocab, prompt);
+    return !tokens.empty() && tokens.size() >= static_cast<size_t>(context_size);
 }
 
 } // namespace
@@ -69,63 +249,45 @@ local_chat_template_result apply_chat_template(
     const std::map<std::string, std::string> & chat_template_kwargs,
     char ** error_message
 ) {
-    if (!messages_json || messages_json[0] == '\0') {
-        fail("本地对话消息为空。", error_message);
+    parsed_chat_template_payload payload;
+    if (!parse_chat_template_payload(messages_json, tools_json, payload, error_message)) {
         return {};
     }
 
-    try {
-        json chat_messages = json::parse(messages_json);
-        if (!chat_messages.is_array() || chat_messages.empty()) {
-            fail("本地对话消息为空。", error_message);
+    return render_chat_template(model, payload, chat_template_kwargs, error_message);
+}
+
+local_chat_template_result apply_chat_template_fitting_context(
+    const llama_model * model,
+    const llama_vocab * vocab,
+    const char * messages_json,
+    const char * tools_json,
+    const std::map<std::string, std::string> & chat_template_kwargs,
+    int32_t context_size,
+    char ** error_message
+) {
+    parsed_chat_template_payload payload;
+    if (!parse_chat_template_payload(messages_json, tools_json, payload, error_message)) {
+        return {};
+    }
+
+    while (true) {
+        local_chat_template_result result = render_chat_template(
+            model,
+            payload,
+            chat_template_kwargs,
+            error_message
+        );
+        if (result.prompt.empty()) {
             return {};
         }
-
-        json tool_definitions = json::array();
-        if (tools_json && tools_json[0] != '\0') {
-            tool_definitions = json::parse(tools_json);
-            if (!tool_definitions.is_array()) {
-                fail("本地工具定义 JSON 必须是数组。", error_message);
-                return {};
-            }
+        if (!prompt_exceeds_context(vocab, result.prompt, context_size)) {
+            return result;
         }
-
-        auto templates = common_chat_templates_init(model, "");
-        common_chat_templates_inputs inputs;
-        inputs.messages = common_chat_msgs_parse_oaicompat(chat_messages);
-        inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
-        inputs.chat_template_kwargs = chat_template_kwargs;
-        if (const auto found = chat_template_kwargs.find("enable_thinking"); found != chat_template_kwargs.end()) {
-            const json enable_thinking = json::parse(found->second);
-            if (!enable_thinking.is_boolean()) {
-                fail("本地对话模板参数 enable_thinking 必须是 JSON 布尔值。", error_message);
-                return {};
-            }
-            inputs.enable_thinking = enable_thinking.get<bool>();
+        if (!remove_oldest_conversation_turn(payload.messages)) {
+            return result;
         }
-        if (!tool_definitions.empty()) {
-            inputs.tools = common_chat_tools_parse_oaicompat(tool_definitions);
-            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
-            inputs.parallel_tool_calls = true;
-        }
-        common_chat_params params = common_chat_templates_apply(templates.get(), inputs);
-        local_chat_template_result result;
-        result.prompt = params.prompt;
-        result.grammar = params.grammar;
-        result.grammar_lazy = params.grammar_lazy;
-        result.grammar_triggers = params.grammar_triggers;
-        result.generation_prompt = params.generation_prompt;
-        result.additional_stops = params.additional_stops;
-        result.parser_params = common_chat_parser_params(params);
-        result.parser_params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
-        if (!params.parser.empty()) {
-            result.parser_params.parser.load(params.parser);
-        }
-        result.parser_enabled = true;
-        return result;
-    } catch (const std::exception & e) {
-        fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
-        return {};
+        drop_leading_non_user_messages(payload.messages);
     }
 }
 

@@ -131,6 +131,17 @@ extension ChatService {
         }
     }
 
+    func limitedChatHistory(_ messages: [ChatMessage], maxMessages: Int) -> [ChatMessage] {
+        guard maxMessages > 0, messages.count > maxMessages else { return messages }
+
+        let suffix = Array(messages.suffix(maxMessages))
+        guard let firstUserIndex = suffix.firstIndex(where: { $0.role == .user }) else {
+            return suffix
+        }
+
+        return Array(suffix[firstUserIndex...])
+    }
+
     func responseAttemptMetadata(from message: ChatMessage) -> ResponseAttemptMetadata? {
         guard let groupID = message.responseGroupID,
               let attemptID = message.responseAttemptID else {
