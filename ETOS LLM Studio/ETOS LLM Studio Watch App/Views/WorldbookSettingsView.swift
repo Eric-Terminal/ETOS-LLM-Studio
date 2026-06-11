@@ -27,22 +27,9 @@ struct WorldbookSettingsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "世界书",
-                    summary: "按关键词规则注入上下文，不会写入记忆系统。",
-                    details: """
-                    能力说明
-                    • 世界书会按条目规则注入上下文，帮助模型保持设定一致。
-                    • 它不等于记忆系统，不会自动学习新事实。
-
-                    在手表上怎么用
-                    1. 先确认会话已绑定目标世界书。
-                    2. 需要新增时可用 URL 导入。
-                    3. 查看“启用条目 x/y”判断每本世界书的生效密度。
-
-                    提示
-                    • 手表适合快速查看与基础操作；
-                    • 深度编辑建议在 iPhone 完成后同步。
-                    """,
+                    title: NSLocalizedString("世界书", comment: "Worldbook intro title"),
+                    summary: NSLocalizedString("按关键词规则注入上下文，不会写入记忆系统。", comment: "Watch worldbook intro summary"),
+                    details: NSLocalizedString("世界书说明正文", comment: "Worldbook intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

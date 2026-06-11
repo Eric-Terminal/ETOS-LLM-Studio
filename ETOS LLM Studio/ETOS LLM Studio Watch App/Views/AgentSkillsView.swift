@@ -22,26 +22,9 @@ struct AgentSkillsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "Agent Skills",
-                    summary: "为模型提供自定义技能，通过 use_skill 在聊天中按需调用。",
-                    details: """
-                    怎么用
-                    1. 添加技能（粘贴 SKILL.md 或 GitHub 导入）。
-                    2. 确认技能已启用。
-                    3. 打开"向模型暴露 Agent Skills"总开关。
-                    4. 在聊天中让模型调用对应技能。
-
-                    SKILL.md 格式
-                    • frontmatter 可声明 name、description、when_to_use 等字段。
-                    • 导入目录或仓库时，省略 name 会使用技能目录名；省略 description 会使用正文首段。
-                    • 正文可写使用说明、参数等 Markdown 内容。
-
-                    常见问题
-                    • 模型不调用：检查总开关与技能启用状态。
-                    • 导入失败：确认仓库地址可访问。
-                    • 无法本地选文件：可使用链接导入 SKILL.md。
-                    • 需要更新内容：在技能详情里编辑 SKILL.md。
-                    """,
+                    title: NSLocalizedString("Agent Skills", comment: "Agent Skills intro title"),
+                    summary: NSLocalizedString("为模型提供自定义技能，通过 use_skill 在聊天中按需调用。", comment: "Watch Agent Skills intro summary"),
+                    details: NSLocalizedString("Agent Skills 管理说明正文", comment: "Agent Skills intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -290,14 +273,7 @@ private extension AgentSkillsView {
 private struct WatchAddSkillSheet: View {
     @ObservedObject var manager: SkillManager
     @Environment(\.dismiss) private var dismiss
-    @State private var content: String = """
----
-name: my-skill
-description: "技能描述"
----
-
-在这里编写技能说明。
-"""
+    @State private var content: String = NSLocalizedString("默认技能模板", comment: "Default SKILL.md template")
     @State private var fallbackName: String = ""
     @State private var localError: String?
 

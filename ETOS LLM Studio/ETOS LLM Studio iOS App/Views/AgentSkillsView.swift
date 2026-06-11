@@ -25,30 +25,9 @@ struct AgentSkillsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "Agent Skills",
-                    summary: "为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。",
-                    details: """
-                    适用场景
-                    • 你想让模型在聊天时执行特定任务，例如格式化输出、代码检查、知识问答等。
-                    • 你希望将常用的提示词或操作封装为可复用的技能模块。
-
-                    怎么用（建议顺序）
-                    1. 点击"新增技能"粘贴 SKILL.md，或通过 GitHub / 本地文件导入。
-                    2. 确认技能列表中对应技能已启用（右侧开关为开）。
-                    3. 打开"向模型暴露 Agent Skills（use_skill）"总开关。
-                    4. 在聊天中告知模型你的需求，模型会在合适时机调用 use_skill。
-
-                    SKILL.md 格式说明
-                    • 文件头（frontmatter）可声明 name、description、when_to_use 等字段。
-                    • 导入目录或仓库时，省略 name 会使用技能目录名；省略 description 会使用正文首段。
-                    • name 作为技能的唯一标识，不能与已有技能重名。
-                    • 正文可包含使用说明、参数说明、示例等任意 Markdown 内容。
-
-                    常见问题
-                    • 模型不调用技能：先检查总开关是否已开启，并确认对应技能已启用。
-                    • 导入失败：检查仓库地址是否可访问，或改用本地文件/手动粘贴 SKILL.md 内容。
-                    • 技能内容需更新：进入技能详情编辑 SKILL.md 文件即可。
-                    """,
+                    title: NSLocalizedString("Agent Skills", comment: "Agent Skills intro title"),
+                    summary: NSLocalizedString("为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。", comment: "Agent Skills intro summary"),
+                    details: NSLocalizedString("Agent Skills 管理说明正文", comment: "Agent Skills intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -273,14 +252,7 @@ private extension AgentSkillsView {
 private struct AddSkillSheet: View {
     @ObservedObject var manager: SkillManager
     @Environment(\.dismiss) private var dismiss
-    @State private var content: String = """
----
-name: my-skill
-description: "技能描述"
----
-
-在这里编写技能说明。
-"""
+    @State private var content: String = NSLocalizedString("默认技能模板", comment: "Default SKILL.md template")
     @State private var fallbackName: String = ""
     @State private var localError: String?
 

@@ -68,23 +68,9 @@ struct MemorySettingsView: View {
 
             Section {
                 settingsIntroCard(
-                    title: "记忆检索",
-                    summary: "控制记忆如何被选中，并决定发送给模型时附带哪些信息。",
-                    details: """
-                    检索数量 (Top K)
-                    • 大于 0 时，会按当前消息检索最相关的记忆。
-                    • 设置为 0 时，跳过向量检索，直接发送所有激活记忆原文。
-                    • 默认 3。
-
-                    主动检索
-                    • 开启后会向 AI 暴露 search_memory 工具。
-                    • AI 可按向量或关键词主动检索，并指定返回数量。
-                    • 主动检索可能降低上下文缓存命中率。
-
-                    发送更新时间
-                    • 开启时，每条记忆会附带最近更新时间。
-                    • 关闭时，只发送记忆条目内容。
-                    """,
+                    title: NSLocalizedString("记忆检索", comment: "Memory retrieval intro title"),
+                    summary: NSLocalizedString("控制记忆如何被选中，并决定发送给模型时附带哪些信息。", comment: "Memory retrieval intro summary"),
+                    details: NSLocalizedString("记忆检索说明正文", comment: "Memory retrieval intro details"),
                     isExpanded: $isShowingRetrievalIntroDetails
                 )
                 LabeledContent(NSLocalizedString("检索数量 (Top K)", comment: "")) {

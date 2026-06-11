@@ -411,20 +411,20 @@ private struct DocumentationView: View {
             Section(NSLocalizedString("启动步骤", comment: "")) {
                 StepRow(
                     number: 1,
-                    title: "电脑端下载并运行",
-                    detail: "在 GitHub Release 下载最新调试工具（Go 版）",
-                    linkTitle: "前往下载页面",
+                    title: NSLocalizedString("电脑端下载并运行", comment: "Local debug setup step title"),
+                    detail: NSLocalizedString("在 GitHub Release 下载最新调试工具（Go 版）", comment: "Local debug setup step detail"),
+                    linkTitle: NSLocalizedString("前往下载页面", comment: "Open download page"),
                     linkURL: debugToolReleaseURL
                 )
-                StepRow(number: 2, title: "自动发现服务器", detail: "设备会扫描 Bonjour 服务，也可以手动记录 IP")
-                StepRow(number: 3, title: "填入并连接", detail: "选择发现到的电脑端，或输入 IP 地址和端口")
-                StepRow(number: 4, title: "开始操作", detail: "电脑端会显示交互式菜单，选择操作即可")
+                StepRow(number: 2, title: NSLocalizedString("自动发现服务器", comment: "Local debug setup step title"), detail: NSLocalizedString("设备会扫描 Bonjour 服务，也可以手动记录 IP", comment: "Local debug setup step detail"))
+                StepRow(number: 3, title: NSLocalizedString("填入并连接", comment: "Local debug setup step title"), detail: NSLocalizedString("选择发现到的电脑端，或输入 IP 地址和端口", comment: "Local debug setup step detail"))
+                StepRow(number: 4, title: NSLocalizedString("开始操作", comment: "Local debug setup step title"), detail: NSLocalizedString("电脑端会显示交互式菜单，选择操作即可", comment: "Local debug setup step detail"))
             }
             
             Section(NSLocalizedString("功能", comment: "")) {
-                FeatureRow(icon: "folder", title: "文件管理", description: "管理应用沙盒内的文件和目录")
-                FeatureRow(icon: "tray.and.arrow.down", title: "API 分析", description: "查看并分析 API 请求日志")
-                FeatureRow(icon: "menucard", title: "远程控制", description: "通过电脑端菜单进行辅助操作")
+                FeatureRow(icon: "folder", title: NSLocalizedString("文件管理", comment: "Local debug feature title"), description: NSLocalizedString("管理应用沙盒内的文件和目录", comment: "Local debug feature description"))
+                FeatureRow(icon: "tray.and.arrow.down", title: NSLocalizedString("API 分析", comment: "Local debug feature title"), description: NSLocalizedString("查看并分析 API 请求日志", comment: "Local debug feature description"))
+                FeatureRow(icon: "menucard", title: NSLocalizedString("远程控制", comment: "Local debug feature title"), description: NSLocalizedString("通过电脑端菜单进行辅助操作", comment: "Local debug feature description"))
             }
             
             Section(NSLocalizedString("API 代理设置", comment: "")) {

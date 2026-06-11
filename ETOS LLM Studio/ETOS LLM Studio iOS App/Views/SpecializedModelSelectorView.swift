@@ -16,61 +16,61 @@ struct SpecializedModelSelectorView: View {
     var body: some View {
         Form {
             modelPickerSection(
-                title: "语音模型",
+                title: NSLocalizedString("语音模型", comment: "Speech model specialized selector title"),
                 options: viewModel.speechModels,
                 selectionID: speechModelIdentifierBinding,
-                footer: "用于语音转文字；也可在“偏好设置”中修改。"
+                footer: NSLocalizedString("用于语音转文字；也可在“偏好设置”中修改。", comment: "Speech model specialized selector footer")
             )
 
             modelPickerSection(
-                title: "TTS 模型",
+                title: NSLocalizedString("TTS 模型", comment: "TTS model specialized selector title"),
                 options: viewModel.ttsModels,
                 selectionID: ttsModelIdentifierBinding,
-                footer: "用于文字转语音；也可在“TTS 设置”中修改。"
+                footer: NSLocalizedString("用于文字转语音；也可在“TTS 设置”中修改。", comment: "TTS model specialized selector footer")
             )
 
             modelPickerSection(
-                title: "嵌入模型",
+                title: NSLocalizedString("嵌入模型", comment: "Embedding model specialized selector title"),
                 options: viewModel.embeddingModelOptions,
                 selectionID: embeddingModelIdentifierBinding,
-                footer: "用于记忆向量化与检索；也可在“记忆库管理”中修改。"
+                footer: NSLocalizedString("用于记忆向量化与检索；也可在“记忆库管理”中修改。", comment: "Embedding model specialized selector footer")
             )
 
             modelPickerSection(
-                title: "标题生成模型",
+                title: NSLocalizedString("标题生成模型", comment: "Title generation model specialized selector title"),
                 options: viewModel.titleGenerationModelOptions,
                 selectionID: titleModelIdentifierBinding,
-                footer: "留空时跟随当前对话模型。"
+                footer: NSLocalizedString("留空时跟随当前对话模型。", comment: "Specialized selector empty follows chat model footer")
             )
 
             modelPickerSection(
-                title: "每日脉冲模型",
+                title: NSLocalizedString("每日脉冲模型", comment: "Daily pulse model specialized selector title"),
                 options: viewModel.dailyPulseModelOptions,
                 selectionID: dailyPulseModelIdentifierBinding,
-                footer: "用于每日脉冲生成；留空时跟随当前对话模型。"
+                footer: NSLocalizedString("用于每日脉冲生成；留空时跟随当前对话模型。", comment: "Daily pulse model specialized selector footer")
             )
 
             modelPickerSection(
-                title: "思考摘要模型",
+                title: NSLocalizedString("思考摘要模型", comment: "Reasoning summary model specialized selector title"),
                 options: viewModel.reasoningSummaryModelOptions,
                 selectionID: reasoningSummaryModelIdentifierBinding,
-                footer: "用于为思考内容生成摘要；留空时跟随当前对话模型。"
+                footer: NSLocalizedString("用于为思考内容生成摘要；留空时跟随当前对话模型。", comment: "Reasoning summary model specialized selector footer")
             )
 
             modelPickerSection(
-                title: "OCR 模型",
+                title: NSLocalizedString("OCR 模型", comment: "OCR model specialized selector title"),
                 options: viewModel.ocrModelOptions,
                 selectionID: ocrModelIdentifierBinding,
                 allowEmptySelection: false,
-                footer: "当当前对话模型不支持图片输入时，用于先把图片识别为文字；默认使用系统 OCR。"
+                footer: NSLocalizedString("当当前对话模型不支持图片输入时，用于先把图片识别为文字；默认使用系统 OCR。", comment: "OCR model specialized selector footer")
             )
 
             modelPickerSection(
-                title: "生图模型",
+                title: NSLocalizedString("生图模型", comment: "Image generation model specialized selector title"),
                 options: viewModel.imageGenerationModelOptions,
                 selectionID: imageGenerationModelIdentifierBinding,
                 allowEmptySelection: false,
-                footer: "用于图片生成功能；也可在“图片生成”中修改。"
+                footer: NSLocalizedString("用于图片生成功能；也可在“图片生成”中修改。", comment: "Image generation model specialized selector footer")
             )
         }
         .navigationTitle(NSLocalizedString("专用模型选择器", comment: ""))

@@ -40,21 +40,9 @@ struct FontSettingsView: View {
         Form {
             Section {
                 settingsIntroCard(
-                    title: "字体样式优先级",
-                    summary: "管理每个样式槽位的字体候选链；越靠上优先级越高。",
-                    details: """
-                    怎么用（建议顺序）
-                    1. 先在“字体文件”导入你要用的字体。
-                    2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
-                    3. 点击右上角“编辑”，拖拽右侧把手调整顺序。
-                    4. 在编辑状态使用“添加字体到当前槽位”，把漏掉的字体补进来。
-                    5. 对槽位内字体右滑可“移除”，仅移出当前槽位，不会删除字体文件。
-
-                    规则说明
-                    • 每个槽位都有独立优先级链。
-                    • 字体可同时存在于多个槽位。
-                    • 槽位内字体都不可用时，会回退到系统字体。
-                    """,
+                    title: NSLocalizedString("字体样式优先级", comment: "Font style priority intro title"),
+                    summary: NSLocalizedString("管理每个样式槽位的字体候选链；越靠上优先级越高。", comment: "Font style priority intro summary"),
+                    details: NSLocalizedString("字体样式优先级说明正文", comment: "Font style priority intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

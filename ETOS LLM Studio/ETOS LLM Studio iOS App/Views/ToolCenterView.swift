@@ -189,7 +189,7 @@ struct ToolCenterView: View {
             for: [
                 "Agent Skills",
                 "use_skill",
-                "向模型暴露 Agent Skills（use_skill）"
+                NSLocalizedString("向模型暴露 Agent Skills（use_skill）", comment: "Expose Agent Skills to model")
             ]
         )
     }
@@ -253,9 +253,9 @@ struct ToolCenterView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "工具中心",
-                    summary: "先看当前会话能用什么，再按工具来源进入细分设置。",
-                    details: "工具中心新版说明正文",
+                    title: NSLocalizedString("工具中心", comment: "Tool center intro title"),
+                    summary: NSLocalizedString("先看当前会话能用什么，再按工具来源进入细分设置。", comment: "Tool center intro summary"),
+                    details: NSLocalizedString("工具中心新版说明正文", comment: "Tool center intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

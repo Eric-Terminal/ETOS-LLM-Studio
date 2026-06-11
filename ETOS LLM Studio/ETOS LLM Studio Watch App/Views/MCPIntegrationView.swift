@@ -48,24 +48,9 @@ struct MCPIntegrationView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "MCP 工具箱",
-                    summary: "在手表端查看服务器状态、工具能力和治理日志。",
-                    details: """
-                    快速上手
-                    1. 在“服务器管理”确认至少一台服务器已连接。
-                    2. 打开“向模型暴露 MCP 工具”总开关。
-                    3. 在“能力概览”检查工具与资源是否已发布。
-                    4. 聊天中由模型自行决定是否调用已启用的 MCP 工具。
-
-                    关键项说明
-                    • 连接状态：已连接 / 聊天使用 / 重连中 / 失败。
-                    • 自动批准：审批倒计时（1~30 秒）。
-                    • 治理日志：查看连接、工具调用、通知与进度事件。
-
-                    提示
-                    • watch 端主要用于查看与轻量管理；
-                    • 复杂配置建议在 iPhone 端完成后同步到手表。
-                    """,
+                    title: NSLocalizedString("MCP 工具箱", comment: "MCP toolbox intro title"),
+                    summary: NSLocalizedString("在手表端查看服务器状态、工具能力和治理日志。", comment: "Watch MCP toolbox intro summary"),
+                    details: NSLocalizedString("MCP 工具箱说明正文", comment: "MCP toolbox intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

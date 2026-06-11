@@ -22,21 +22,9 @@ public struct ExtendedFeaturesView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "拓展功能",
-                    summary: "集中管理工具集成、语音能力与系统维护入口。",
-                    details: """
-                    这个页面适合做什么
-                    • 统一进入进阶功能，不打断主聊天流程。
-                    • 快速定位语音、工具集成、导入和维护能力。
-
-                    入口建议
-                    • 记忆系统 / 世界书：管理长期偏好与规则知识。
-                    • MCP / 快捷指令：接入外部能力和自动化流程。
-                    • 存储管理 / 远程文件访问：做维护与清理。
-
-                    使用建议
-                    • 先保证核心入口可用，再逐步开启实验功能。
-                    """,
+                    title: NSLocalizedString("拓展功能", comment: "Extended features intro title"),
+                    summary: NSLocalizedString("集中管理工具集成、语音能力与系统维护入口。", comment: "Watch extended features intro summary"),
+                    details: NSLocalizedString("拓展功能说明正文", comment: "Extended features intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -328,18 +316,9 @@ struct LongTermMemoryFeatureView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "记忆系统",
-                    summary: "让 AI 持续理解你的长期偏好和上下文。",
-                    details: """
-                    能力说明
-                    • 记忆系统会在回复前检索历史信息，提升连续性。
-                    • 写入开关仅影响“新增记忆”，不影响读取已有记忆。
-
-                    推荐流程
-                    1. 先开启总开关体验效果。
-                    2. 对噪声敏感时可先关闭写入，仅保留读取。
-                    3. 定期到记忆库管理清理低质量记忆。
-                    """,
+                    title: NSLocalizedString("记忆系统", comment: "Memory system intro title"),
+                    summary: NSLocalizedString("让 AI 持续理解你的长期偏好和上下文。", comment: "Watch memory system intro summary"),
+                    details: NSLocalizedString("记忆系统说明正文", comment: "Memory system intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

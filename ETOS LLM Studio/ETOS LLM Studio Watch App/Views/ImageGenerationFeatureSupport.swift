@@ -40,22 +40,9 @@ struct WatchImageGenerationGalleryView: View {
         ScrollView {
             VStack(spacing: 10) {
                 settingsIntroCard(
-                    title: "图片相册",
-                    summary: "集中查看当前会话里由助手返回并保存到本机的图片。",
-                    details: """
-                    这里展示什么
-                    • 只收录当前会话中助手消息返回的图片。
-                    • 这些图片来自聊天回复，不是单独的图片生成工作台。
-
-                    可以做什么
-                    • 点按图片查看大图。
-                    • 通过分享按钮保存或转发图片。
-                    • 删除图片会移除当前消息里的本地图片引用。
-
-                    使用建议
-                    • 继续生成或修改图片时，回到聊天里直接描述需求。
-                    • 需要整理历史结果时，先切到对应会话再打开相册。
-                    """,
+                    title: NSLocalizedString("图片相册", comment: "Image album intro title"),
+                    summary: NSLocalizedString("集中查看当前会话里由助手返回并保存到本机的图片。", comment: "Image album intro summary"),
+                    details: NSLocalizedString("图片相册说明正文", comment: "Image album intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
                 .padding(.horizontal)

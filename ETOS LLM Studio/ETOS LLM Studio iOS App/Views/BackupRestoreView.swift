@@ -45,8 +45,8 @@ struct BackupRestoreView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "快照备份",
-                    summary: "先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。",
+                    title: NSLocalizedString("快照备份", comment: "Snapshot backup intro title"),
+                    summary: NSLocalizedString("先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。", comment: "Snapshot backup intro summary"),
                     details: snapshotIntroDetails,
                     isExpanded: $isSnapshotIntroPresented
                 )

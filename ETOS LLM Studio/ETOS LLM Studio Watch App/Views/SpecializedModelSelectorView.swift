@@ -72,60 +72,60 @@ struct SpecializedModelSelectorView: View {
     var body: some View {
         List {
             modelSelectionSection(
-                title: "语音模型",
+                title: NSLocalizedString("语音模型", comment: "Speech model specialized selector title"),
                 options: viewModel.speechModels,
                 selection: speechModelBinding,
-                footer: "用于语音转文字，也可在偏好设置中修改。"
+                footer: NSLocalizedString("用于语音转文字，也可在偏好设置中修改。", comment: "Watch speech model specialized selector footer")
             )
 
             modelSelectionSection(
-                title: "TTS 模型",
+                title: NSLocalizedString("TTS 模型", comment: "TTS model specialized selector title"),
                 options: viewModel.ttsModels,
                 selection: ttsModelBinding,
-                footer: "用于文字转语音，也可在 TTS 设置中修改。"
+                footer: NSLocalizedString("用于文字转语音，也可在 TTS 设置中修改。", comment: "Watch TTS model specialized selector footer")
             )
 
             modelSelectionSection(
-                title: "嵌入模型",
+                title: NSLocalizedString("嵌入模型", comment: "Embedding model specialized selector title"),
                 options: viewModel.embeddingModelOptions,
                 selection: embeddingModelBinding,
-                footer: "用于记忆嵌入，也可在记忆库管理中修改。"
+                footer: NSLocalizedString("用于记忆嵌入，也可在记忆库管理中修改。", comment: "Watch embedding model specialized selector footer")
             )
 
             modelSelectionSection(
-                title: "标题生成模型",
+                title: NSLocalizedString("标题生成模型", comment: "Title generation model specialized selector title"),
                 options: viewModel.titleGenerationModelOptions,
                 selection: titleModelBinding,
-                footer: "留空时跟随当前对话模型。"
+                footer: NSLocalizedString("留空时跟随当前对话模型。", comment: "Specialized selector empty follows chat model footer")
             )
 
             modelSelectionSection(
-                title: "每日脉冲模型",
+                title: NSLocalizedString("每日脉冲模型", comment: "Daily pulse model specialized selector title"),
                 options: viewModel.dailyPulseModelOptions,
                 selection: dailyPulseModelBinding,
-                footer: "用于每日脉冲生成；留空时跟随当前对话模型。"
+                footer: NSLocalizedString("用于每日脉冲生成；留空时跟随当前对话模型。", comment: "Daily pulse model specialized selector footer")
             )
 
             modelSelectionSection(
-                title: "思考摘要模型",
+                title: NSLocalizedString("思考摘要模型", comment: "Reasoning summary model specialized selector title"),
                 options: viewModel.reasoningSummaryModelOptions,
                 selection: reasoningSummaryModelBinding,
-                footer: "用于为思考内容生成摘要；留空时跟随当前对话模型。"
+                footer: NSLocalizedString("用于为思考内容生成摘要；留空时跟随当前对话模型。", comment: "Reasoning summary model specialized selector footer")
             )
 
             modelSelectionSection(
-                title: "OCR 模型",
+                title: NSLocalizedString("OCR 模型", comment: "OCR model specialized selector title"),
                 options: viewModel.ocrModelOptions,
                 selection: ocrModelBinding,
-                footer: "当前对话模型不支持图片输入时，用于先把图片识别为文字；手表端默认不选择。"
+                footer: NSLocalizedString("当前对话模型不支持图片输入时，用于先把图片识别为文字；手表端默认不选择。", comment: "Watch OCR model specialized selector footer")
             )
 
             modelSelectionSection(
-                title: "生图模型",
+                title: NSLocalizedString("生图模型", comment: "Image generation model specialized selector title"),
                 options: viewModel.imageGenerationModelOptions,
                 selection: imageGenerationModelBinding,
                 allowEmptySelection: false,
-                footer: "用于图片生成，也可在图片生成功能中修改。"
+                footer: NSLocalizedString("用于图片生成，也可在图片生成功能中修改。", comment: "Watch image generation model specialized selector footer")
             )
         }
         .navigationTitle(NSLocalizedString("专用模型", comment: ""))

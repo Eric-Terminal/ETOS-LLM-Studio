@@ -28,29 +28,9 @@ struct ShortcutIntegrationView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "快捷指令工具箱",
-                    summary: "在手表端查看并管理已同步的快捷指令工具。",
-                    details: """
-                    快速上手
-                    1. 在 iPhone 端完成导入。
-                    2. 手表端确认工具已同步并按需启用。
-                    3. 打开“向模型暴露快捷指令工具”总开关。
-
-                    导入模式
-                    • 轻度导入：仅名称，配置速度快。
-                    • 深度导入：解析 iCloud 链接并尝试生成描述；失败会降级为仅链接。
-
-                    关键项说明
-                    • 运行模式：
-                      - 直连优先：先直接执行。
-                      - 桥接优先：先经桥接快捷指令。
-                    • 自动批准：审批倒计时（1~30 秒）。
-
-                    提示
-                    • watchOS 不支持直接读剪贴板，建议在 iPhone 完成导入后同步到手表。
-                    • 如果工具不可用，先检查总开关和单项启用状态。
-                    • 如果 urlshim / URL Scheme 在 iPhone 跳转失败，请回到 iPhone 的快捷设定页，复制清单到剪贴板后使用“从剪贴板导入清单”。
-                    """,
+                    title: NSLocalizedString("快捷指令工具箱", comment: "Shortcut toolbox intro title"),
+                    summary: NSLocalizedString("在手表端查看并管理已同步的快捷指令工具。", comment: "Watch shortcut toolbox intro summary"),
+                    details: NSLocalizedString("快捷指令工具箱说明正文", comment: "Shortcut toolbox intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

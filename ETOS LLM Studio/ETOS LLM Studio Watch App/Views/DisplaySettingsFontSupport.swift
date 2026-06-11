@@ -39,21 +39,9 @@ struct WatchFontSettingsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "字体样式优先级",
-                    summary: "按槽位管理字体顺序，越靠上优先级越高。",
-                    details: """
-                    快速上手
-                    1. 可在手表粘贴字体链接直接导入，或在 iPhone 端导入后同步到手表。
-                    2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。
-                    3. 拖拽右侧把手调整顺序。
-                    4. 点击“添加字体到当前槽位”补入缺失字体。
-                    5. 对槽位内字体右滑可“移除”，仅移出当前槽位。
-
-                    规则说明
-                    • 每个槽位互相独立。
-                    • 同一字体可加入多个槽位。
-                    • 当前槽位无可用字体时自动回退系统字体。
-                    """,
+                    title: NSLocalizedString("字体样式优先级", comment: "Font style priority intro title"),
+                    summary: NSLocalizedString("按槽位管理字体顺序，越靠上优先级越高。", comment: "Watch font style priority intro summary"),
+                    details: NSLocalizedString("字体样式优先级说明正文", comment: "Font style priority intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

@@ -209,31 +209,31 @@ struct ChatAppearanceProfileEditor: View {
         TextField(NSLocalizedString("配置名称", comment: ""), text: nameBinding)
 
         colorSlotEditor(
-            title: "用户气泡颜色",
-            toggleTitle: "自定义用户气泡颜色",
+            title: NSLocalizedString("用户气泡颜色", comment: "User bubble color title"),
+            toggleTitle: NSLocalizedString("自定义用户气泡颜色", comment: "Custom user bubble color toggle"),
             slot: userBubbleBinding,
             fallback: defaultUserBubbleColor,
             supportsOpacity: true,
-            opacityTitle: "用户气泡不透明度"
+            opacityTitle: NSLocalizedString("用户气泡不透明度", comment: "User bubble opacity title")
         )
         colorSlotEditor(
-            title: "助手气泡颜色",
-            toggleTitle: "自定义助手气泡颜色（含 Tool）",
+            title: NSLocalizedString("助手气泡颜色", comment: "Assistant bubble color title"),
+            toggleTitle: NSLocalizedString("自定义助手气泡颜色（含 Tool）", comment: "Custom assistant bubble color toggle"),
             slot: assistantBubbleBinding,
             fallback: defaultAssistantBubbleColor,
             supportsOpacity: true,
-            opacityTitle: "助手气泡不透明度"
+            opacityTitle: NSLocalizedString("助手气泡不透明度", comment: "Assistant bubble opacity title")
         )
         colorSlotEditor(
-            title: "白天文字颜色",
-            toggleTitle: "自定义白天文字颜色",
+            title: NSLocalizedString("白天文字颜色", comment: "Light appearance text color title"),
+            toggleTitle: NSLocalizedString("自定义白天文字颜色", comment: "Custom light text color toggle"),
             slot: lightTextBinding,
             fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1),
             supportsOpacity: false
         )
         colorSlotEditor(
-            title: "夜览文字颜色",
-            toggleTitle: "自定义夜览文字颜色",
+            title: NSLocalizedString("夜览文字颜色", comment: "Dark appearance text color title"),
+            toggleTitle: NSLocalizedString("自定义夜览文字颜色", comment: "Custom dark text color toggle"),
             slot: darkTextBinding,
             fallback: .white,
             supportsOpacity: false

@@ -386,7 +386,7 @@ private struct WatchDocumentationView: View {
             
             Section(NSLocalizedString("启动步骤", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    StepItem(num: 1, text: "电脑端下载并运行:")
+                    StepItem(num: 1, text: NSLocalizedString("电脑端下载并运行:", comment: "Watch local debug setup step"))
                     Text(NSLocalizedString("在 GitHub Release 下载最新调试工具（Go 版）", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
@@ -397,18 +397,18 @@ private struct WatchDocumentationView: View {
                     }
                     .padding(.leading)
                     
-                    StepItem(num: 2, text: "自动发现或记下 IP")
+                    StepItem(num: 2, text: NSLocalizedString("自动发现或记下 IP", comment: "Watch local debug setup step"))
                     
-                    StepItem(num: 3, text: "填入地址并连接")
+                    StepItem(num: 3, text: NSLocalizedString("填入地址并连接", comment: "Watch local debug setup step"))
                     
-                    StepItem(num: 4, text: "电脑端菜单操作文件")
+                    StepItem(num: 4, text: NSLocalizedString("电脑端菜单操作文件", comment: "Watch local debug setup step"))
                 }
             }
             
             Section(NSLocalizedString("功能", comment: "")) {
-                FeatureItem(icon: "folder", name: "文件管理", desc: "管理应用内数据")
-                FeatureItem(icon: "tray.and.arrow.down", name: "流量分析", desc: "API 请求日志记录")
-                FeatureItem(icon: "menucard", name: "远程控制", desc: "通过调试端辅助操作")
+                FeatureItem(icon: "folder", name: NSLocalizedString("文件管理", comment: "Local debug feature title"), desc: NSLocalizedString("管理应用内数据", comment: "Watch local debug feature description"))
+                FeatureItem(icon: "tray.and.arrow.down", name: NSLocalizedString("流量分析", comment: "Watch local debug feature title"), desc: NSLocalizedString("API 请求日志记录", comment: "Watch local debug feature description"))
+                FeatureItem(icon: "menucard", name: NSLocalizedString("远程控制", comment: "Local debug feature title"), desc: NSLocalizedString("通过调试端辅助操作", comment: "Watch local debug feature description"))
             }
             
             Section(NSLocalizedString("API 代理", comment: "")) {

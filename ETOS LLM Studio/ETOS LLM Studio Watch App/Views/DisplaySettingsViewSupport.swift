@@ -210,32 +210,32 @@ private struct WatchChatAppearanceProfileEditor: View {
         TextField(NSLocalizedString("配置名称", comment: ""), text: nameBinding)
 
         colorSlotEditor(
-            title: "用户气泡颜色",
-            toggleTitle: "自定义用户气泡颜色",
+            title: NSLocalizedString("用户气泡颜色", comment: "User bubble color title"),
+            toggleTitle: NSLocalizedString("自定义用户气泡颜色", comment: "Custom user bubble color toggle"),
             slot: userBubbleBinding,
             fallback: defaultUserBubbleColor,
-            description: "影响你发送消息的气泡背景颜色。"
+            description: NSLocalizedString("影响你发送消息的气泡背景颜色。", comment: "User bubble color description")
         )
         colorSlotEditor(
-            title: "助手气泡颜色",
-            toggleTitle: "自定义助手气泡颜色（含 Tool）",
+            title: NSLocalizedString("助手气泡颜色", comment: "Assistant bubble color title"),
+            toggleTitle: NSLocalizedString("自定义助手气泡颜色（含 Tool）", comment: "Custom assistant bubble color toggle"),
             slot: assistantBubbleBinding,
             fallback: defaultAssistantBubbleColor,
-            description: "影响助手消息与 Tool 消息的气泡背景颜色。"
+            description: NSLocalizedString("影响助手消息与 Tool 消息的气泡背景颜色。", comment: "Assistant bubble color description")
         )
         colorSlotEditor(
-            title: "白天文字颜色",
-            toggleTitle: "自定义白天文字颜色",
+            title: NSLocalizedString("白天文字颜色", comment: "Light appearance text color title"),
+            toggleTitle: NSLocalizedString("自定义白天文字颜色", comment: "Custom light text color toggle"),
             slot: lightTextBinding,
             fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1),
-            description: "覆盖浅色外观下的聊天文本颜色。"
+            description: NSLocalizedString("覆盖浅色外观下的聊天文本颜色。", comment: "Light text color description")
         )
         colorSlotEditor(
-            title: "夜览文字颜色",
-            toggleTitle: "自定义夜览文字颜色",
+            title: NSLocalizedString("夜览文字颜色", comment: "Dark appearance text color title"),
+            toggleTitle: NSLocalizedString("自定义夜览文字颜色", comment: "Custom dark text color toggle"),
             slot: darkTextBinding,
             fallback: .white,
-            description: "覆盖深色外观下的聊天文本颜色。"
+            description: NSLocalizedString("覆盖深色外观下的聊天文本颜色。", comment: "Dark text color description")
         )
     }
 
@@ -478,9 +478,9 @@ private struct WatchColorEditorView: View {
             }
 
             Section {
-                channelSlider(title: "红", value: $red, tint: .red)
-                channelSlider(title: "绿", value: $green, tint: .green)
-                channelSlider(title: "蓝", value: $blue, tint: .blue)
+                channelSlider(title: NSLocalizedString("红", comment: "Red color channel"), value: $red, tint: .red)
+                channelSlider(title: NSLocalizedString("绿", comment: "Green color channel"), value: $green, tint: .green)
+                channelSlider(title: NSLocalizedString("蓝", comment: "Blue color channel"), value: $blue, tint: .blue)
             } header: {
                 Text(NSLocalizedString("RGB", comment: ""))
             }

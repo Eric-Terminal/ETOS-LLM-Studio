@@ -26,8 +26,8 @@ struct DeviceSyncSettingsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "同步与备份",
-                    summary: "先区分手动快照、启动保护和设备同步，再选择要执行的操作。",
+                    title: NSLocalizedString("同步与备份", comment: "Sync and backup intro title"),
+                    summary: NSLocalizedString("先区分手动快照、启动保护和设备同步，再选择要执行的操作。", comment: "Sync and backup intro summary"),
                     details: syncIntroDetails,
                     isExpanded: $isSyncIntroExpanded
                 )

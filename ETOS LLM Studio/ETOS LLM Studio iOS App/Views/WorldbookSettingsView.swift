@@ -33,28 +33,9 @@ struct WorldbookSettingsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "世界书",
-                    summary: "按规则在发送消息时自动激活并注入，独立于记忆系统。",
-                    details: """
-                    能力说明
-                    • 世界书会根据触发规则在发送消息时自动注入上下文。
-                    • 它是“静态规则知识”，不参与记忆系统写入。
-
-                    怎么用（建议顺序）
-                    1. 先导入世界书（支持 JSON/PNG 或 URL）。
-                    2. 在“当前会话”绑定需要生效的世界书。
-                    3. 按需启用“隔离发送”，让会话只发送提示词与世界书上下文。
-
-                    关键参数与状态
-                    • 绑定数量：显示当前会话已绑定 / 总世界书数。
-                    • 启用条目：显示每本世界书里启用条目占比。
-                    • 已启用隔离发送：会屏蔽记忆、MCP、快捷指令等外部工具上下文。
-
-                    管理建议
-                    • 大型世界书优先维护条目启用状态，避免注入冗余内容。
-                    • 导入后先看“最近导入结果”，及时处理失败条目和冲突。
-                    • 重要世界书建议定期导出备份。
-                    """,
+                    title: NSLocalizedString("世界书", comment: "Worldbook intro title"),
+                    summary: NSLocalizedString("按规则在发送消息时自动激活并注入，独立于记忆系统。", comment: "Worldbook intro summary"),
+                    details: NSLocalizedString("世界书说明正文", comment: "Worldbook intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }

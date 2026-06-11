@@ -90,33 +90,9 @@ struct MCPIntegrationView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: "MCP 工具箱",
-                    summary: "统一管理 MCP Server 的连接、聊天暴露与能力调试。",
-                    details: """
-                    适用场景
-                    • 你想把外部服务能力接入聊天（例如检索、执行工具、读取资源）。
-                    • 你需要快速定位“为什么工具没被模型调用”这类问题。
-
-                    怎么用（建议顺序）
-                    1. 在“已配置服务器”添加或编辑 MCP Server，先确保连接正常。
-                    2. 打开“向模型暴露 MCP 工具”，否则聊天阶段不会调用 MCP。
-                    3. 在“连接概览”确认“已连接数量 / 参与聊天数量”。
-                    4. 到“工具”页确认模型可见的 MCP 工具，并按需调整启用状态和审批策略。
-
-                    关键参数说明
-                    • 倒计时自动批准：自动审批等待秒数，范围 1~30 秒。
-                    • 工具启用：关闭后对应 MCP 工具不会暴露给模型。
-                    • 审批策略：可按工具设置总是允许、总是拒绝或每次询问。
-
-                    常见状态解读
-                    • 已连接并参与聊天：可被模型正常调用。
-                    • 已连接：服务器在线，但当前未参与聊天。
-                    • 重连中 / 失败：优先检查 Endpoint、鉴权头和网络可达性。
-
-                    排查建议
-                    • 模型不调用工具：先看总开关、工具是否启用、审批策略是否 alwaysDeny。
-                    • 调用失败：看“活跃调用”“治理日志”“最新响应”三处信息定位。
-                    """,
+                    title: NSLocalizedString("MCP 工具箱", comment: "MCP toolbox intro title"),
+                    summary: NSLocalizedString("统一管理 MCP Server 的连接、聊天暴露与能力调试。", comment: "MCP toolbox intro summary"),
+                    details: NSLocalizedString("MCP 工具箱说明正文", comment: "MCP toolbox intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
             }
