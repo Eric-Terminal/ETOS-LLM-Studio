@@ -391,13 +391,20 @@ extension ChatViewModel {
         if !pathName.isEmpty {
             return pathName
         }
-        return "附件_\(UUID().uuidString)"
+        return String(
+            format: NSLocalizedString("附件_%@", comment: "Generated watch attachment file name"),
+            UUID().uuidString
+        )
     }
 
     nonisolated private static func normalizedAttachmentFileName(_ fileName: String, mimeType: String) -> String {
         let trimmed = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = (trimmed.isEmpty ? "附件_\(UUID().uuidString)" : trimmed) as NSString
-        let lastPathComponent = baseName.lastPathComponent.isEmpty ? "附件_\(UUID().uuidString)" : baseName.lastPathComponent
+        let generatedName = String(
+            format: NSLocalizedString("附件_%@", comment: "Generated watch attachment file name"),
+            UUID().uuidString
+        )
+        let baseName = (trimmed.isEmpty ? generatedName : trimmed) as NSString
+        let lastPathComponent = baseName.lastPathComponent.isEmpty ? generatedName : baseName.lastPathComponent
         guard (lastPathComponent as NSString).pathExtension.isEmpty else { return lastPathComponent }
         let ext = fallbackFileExtension(for: mimeType)
         return ext.isEmpty ? lastPathComponent : "\(lastPathComponent).\(ext)"

@@ -298,7 +298,7 @@ struct DailyPulseView: View {
 
     private var externalSourcesFooterText: String {
         var parts: [String] = [
-            "前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。"
+            NSLocalizedString("前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。", comment: "Daily Pulse external context footer")
         ]
         if pulseManager.externalSignalPreview.isEmpty {
             parts.append(NSLocalizedString("还没有积累到可复用的外部信号历史。快捷指令执行、MCP 输出和公告变化会逐步沉淀到这里。", comment: ""))

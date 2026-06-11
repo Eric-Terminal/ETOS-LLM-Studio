@@ -1745,7 +1745,7 @@
 "恢复该工具自动批准" = "Restore Auto-approval for This Tool";
 "情感" = "Emotion";
 "懒加载轮次" = "Lazy-load Turns";
-"成功" = "Success";
+"成功" = "成功";
 "所选项目" = "Selected Items";
 "手动覆盖参数" = "Manual Override Parameters";
 "执行中" = "Running";
@@ -2772,8 +2772,8 @@
 "尚未添加任何 MCP Server。点击右上角“＋”创建。" = "No MCP Server has been added yet. Tap “+” in the top-right to create one.";
 "局域网直连，无中间服务器" = "Direct LAN connection, no intermediary servers";
 "展开" = "Expand";
-"工具参数" = "Tool Arguments";
-"工具结果" = "Tool Result";
+"工具参数" = "ツール引数";
+"工具结果" = "ツール結果";
 "工具详情：修改数据库" = "Tool Details: Modify Database";
 "工具详情：分块读取沙盒文件" = "Tool Details: Read Sandbox File Chunk";
 "工具详情：列出数据库表" = "Tool Details: List Database Tables";
@@ -2938,7 +2938,7 @@
 "本次解析会话" = "Parsed Sessions";
 "本次解析提供商" = "Parsed Providers";
 "条目 %d" = "Entry %d";
-"来源分布" = "Source Distribution";
+"来源分布" = "ソース分布";
 "查看本周整体用量趋势" = "View overall usage trends for this week";
 "查看聊天/配置/记忆 SQLite 数据库中的表结构。" = "View table structures in the chat/config/memory SQLite databases.";
 "查询" = "Query";
@@ -3028,7 +3028,7 @@
 "语音朗读" = "Text to Speech";
 "语音消息" = "Voice Message";
 "请先在设置中启用模型" = "Enable a model in Settings first";
-"请求" = "Requests";
+"请求" = "リクエスト";
 "请求将被重定向到调试端进行记录和分析。" = "Requests will be redirected to debug endpoint for logging and analysis.";
 "请求控制" = "Request Controls";
 "请求详情：模型 %@ · 消息数 %d" = "Request: Model %@ · Messages %d";
@@ -3123,7 +3123,7 @@
 "主卡「%@」。" = "Main card: \"%@\".";
 "今天的每日脉冲已经整理完成，已为你准备 %d 张主动情报卡片。%@" = "Today's Daily Pulse is ready, with %d proactive intelligence cards prepared for you. %@";
 "到了每日脉冲提醒时间。若今天这一期仍在准备中，请稍候片刻，完成后会再收到“已准备好”通知。" = "It is time for your Daily Pulse reminder. If today's issue is still being prepared, please wait a moment; you will receive another notification when it is ready.";
-"原始返回" = "Raw response";
+"原始返回" = "生レスポンス";
 "周详情" = "Week details";
 "在手表端查看并管理已同步的快捷指令工具。" = "View and manage synced Shortcut tools on Apple Watch.";
 "在手表端查看服务器状态，并快速进入 MCP 调试。" = "View server status on Apple Watch and quickly enter MCP debugging.";
@@ -3152,7 +3152,7 @@
 "用于记忆嵌入，也可在记忆库管理中修改。" = "Used for memory embeddings; can also be changed in Memory Library Management.";
 "用于语音转文字，也可在偏好设置中修改。" = "Used for speech-to-text; can also be changed in Preferences.";
 "留空时跟随当前对话模型。" = "Leave empty to follow the current chat model.";
-"结果内容" = "Result content";
+"结果内容" = "結果内容";
 "统一查看聊天可用工具，并集中调整启用状态。" = "Review tools available to chat and adjust enabled states in one place.";
 "能力说明\n• 世界书会按条目规则注入上下文，帮助模型保持设定一致。\n• 它不等于记忆系统，不会自动学习新事实。\n\n在手表上怎么用\n1. 先确认会话已绑定目标世界书。\n2. 需要新增时可用 URL 导入。\n3. 查看“启用条目 x/y”判断每本世界书的生效密度。\n\n提示\n• 手表适合快速查看与基础操作；\n• 深度编辑建议在 iPhone 完成后同步。" = "What it does\n• Worldbooks inject context by entry rules to help the model keep settings consistent.\n• They are not the memory system and do not automatically learn new facts.\n\nHow to use on Apple Watch\n1. Make sure the session is bound to the target worldbook.\n2. Use URL import when you need to add one.\n3. Check Enabled entries x/y to understand how much of each worldbook is active.\n\nTips\n• Apple Watch is best for quick review and basic operations.\n• Do deeper editing on iPhone and sync afterward.";
 "能力说明\n• 记忆系统会在回复前检索历史信息，提升连续性。\n• 写入开关仅影响“新增记忆”，不影响读取已有记忆。\n\n推荐流程\n1. 先开启总开关体验效果。\n2. 对噪声敏感时可先关闭写入，仅保留读取。\n3. 定期到记忆库管理清理低质量记忆。" = "What it does\n• The memory system retrieves historical information before replies to improve continuity.\n• The write switch affects only new memories and does not affect reading existing memories.\n\nRecommended flow\n1. Turn on the master switch first to try the effect.\n2. If you are sensitive to noise, disable writing first and keep reading only.\n3. Regularly clean low-quality memories in Memory Library Management.";
@@ -3340,10 +3340,10 @@
 
 /* Usage analytics dynamic helper keys */
 "日历面板" = "Calendar panel";
-"总 Token" = "Total tokens";
+"总 Token" = "合計トークン";
 "常用模型" = "Top model";
-"输入" = "Input";
-"输出" = "Output";
+"输入" = "入力";
+"输出" = "出力";
 
 /* Conversation memory prompt keys */
 "思考内容：\n```\n%@\n```" = "Reasoning content:\n```\n%@\n```";
@@ -4400,3 +4400,16 @@
 "[已隐藏对象，字段数: %d]" = "[オブジェクトを非表示、フィールド数: %d]";
 "[已隐藏文本，长度: %d]" = "[テキストを非表示、長さ: %d]";
 "语音_%@.%@" = "音声_%@.%@";
+
+// 第二轮补齐：明确用户可见的工具、用量、附件与会话文案
+"主要内容" = "主な内容";
+"模型榜单" = "モデルランキング";
+"分支: %@" = "分岐: %@";
+"前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。" = "最初の2項目は呼び出し可能な機能説明に含まれます。「最近の外部結果」にはショートカット / MCP の最近結果とシグナル履歴が含まれ、「お知らせとトレンドシグナル」には現在のアプリ内お知らせと蓄積済みのトレンド断片が含まれます。";
+"前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。" = "最初の2項目は呼び出し可能な機能説明に含まれます。「最近の外部結果」にはショートカットと MCP の最近結果が含まれ、「お知らせとトレンドシグナル」にはアプリ内お知らせと蓄積済みのトレンド断片が含まれます。";
+"当前范围内还没有来源统计。" = "現在の範囲にはソース統計がありません。";
+"更多权限" = "その他の権限";
+"空文件夹" = "空のフォルダ";
+"这个文件夹里还没有内容。" = "このフォルダにはまだ内容がありません。";
+"重试失败\n\n%@" = "再試行に失敗しました\n\n%@";
+"附件_%@" = "添付_%@";

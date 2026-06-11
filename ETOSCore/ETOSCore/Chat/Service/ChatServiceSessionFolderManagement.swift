@@ -133,7 +133,11 @@ extension ChatService {
         let persistedFolders = Persistence.loadSessionFolders()
         let persistedTags = Persistence.loadSessionTags()
         let existingTemporary = chatSessionsSubject.value.first(where: \.isTemporary)
-            ?? ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+            ?? ChatSession(
+                id: UUID(),
+                name: NSLocalizedString("新的对话", comment: "Default new chat session name"),
+                isTemporary: true
+            )
 
         var mergedSessions = persistedSessions
         mergedSessions.insert(existingTemporary, at: 0)

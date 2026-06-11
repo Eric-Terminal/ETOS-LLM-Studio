@@ -305,7 +305,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                     Divider()
                         .background(sectionBackgroundColor.opacity(0.7))
                     toolResultSection(
-                        title: "原始返回",
+                        title: NSLocalizedString("原始返回", comment: "Raw tool result section title"),
                         text: display.rawDisplayText,
                         font: .system(.caption, design: .monospaced),
                         enableSelection: true
@@ -330,7 +330,9 @@ struct ToolResultsDisclosureView: View, Equatable {
             if let primaryContentText = display.primaryContentText,
                !primaryContentText.isEmpty {
                 toolResultSection(
-                    title: display.shouldShowRawSection ? "主要内容" : "结果内容",
+                    title: display.shouldShowRawSection
+                        ? NSLocalizedString("主要内容", comment: "Primary tool result content section title")
+                        : NSLocalizedString("结果内容", comment: "Tool result content section title"),
                     text: primaryContentText,
                     font: .caption,
                     enableSelection: true
@@ -342,7 +344,7 @@ struct ToolResultsDisclosureView: View, Equatable {
                         .background(sectionBackgroundColor.opacity(0.7))
                 }
                 toolResultSection(
-                    title: "原始返回",
+                    title: NSLocalizedString("原始返回", comment: "Raw tool result section title"),
                     text: display.rawDisplayText,
                     font: .system(.caption, design: .monospaced),
                     enableSelection: true

@@ -248,7 +248,7 @@ private struct ToolPermissionDetailSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                detailSection(title: "工具") {
+                detailSection(title: NSLocalizedString("工具", comment: "Tool permission tool section title")) {
                     Text(toolName)
                         .etFont(.headline)
                     if let countdownText {
@@ -259,7 +259,7 @@ private struct ToolPermissionDetailSheet: View {
                 }
 
                 if !displayArguments.isEmpty {
-                    detailSection(title: "参数") {
+                    detailSection(title: NSLocalizedString("参数", comment: "Tool permission arguments section title")) {
                         ScrollView {
                             Text(displayArguments)
                                 .etFont(.caption2.monospaced())
@@ -270,7 +270,7 @@ private struct ToolPermissionDetailSheet: View {
                     }
                 }
 
-                detailSection(title: "更多权限") {
+                detailSection(title: NSLocalizedString("更多权限", comment: "Tool permission more options section title")) {
                     VStack(spacing: 8) {
                         Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
                             resolve(.deny)
@@ -298,7 +298,7 @@ private struct ToolPermissionDetailSheet: View {
                     }
                 }
 
-                detailSection(title: "自动批准") {
+                detailSection(title: NSLocalizedString("自动批准", comment: "Tool permission auto approve section title")) {
                     Toggle(NSLocalizedString("允许该工具自动批准", comment: ""), isOn: autoApproveBinding)
                         .disabled(!permissionCenter.autoApproveEnabled)
 

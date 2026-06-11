@@ -291,7 +291,10 @@ extension ChatBubble {
     }
 
     var isError: Bool {
-        message.role == .error || (message.role == .assistant && message.content.hasPrefix("重试失败"))
+        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
+        return message.role == .error
+            || (message.role == .assistant
+                && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
     }
 
     var usesNoBubbleStyle: Bool {

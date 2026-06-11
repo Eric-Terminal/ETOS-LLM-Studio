@@ -261,7 +261,11 @@ extension Persistence {
             return legacy
         }
 
-        return ChatSession(id: sessionID, name: "新的对话", isTemporary: true)
+        return ChatSession(
+            id: sessionID,
+            name: NSLocalizedString("新的对话", comment: "Default new chat session name"),
+            isTemporary: true
+        )
     }
 
     static func makeSessionRecordPayload(session: ChatSession, messages: [ChatMessage]) -> SessionRecordFilePayload {

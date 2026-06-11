@@ -31,9 +31,11 @@ extension ChatBubble {
 
     @ViewBuilder
     func renderContent(_ content: String) -> some View {
+        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
         let shouldRenderAsOutgoing = message.role == .user
             || message.role == .error
-            || (message.role == .assistant && message.content.hasPrefix("重试失败"))
+            || (message.role == .assistant
+                && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
         ETAdvancedMarkdownRenderer(
             content: content,
             preparedContent: preparedMarkdownPayload,
@@ -553,7 +555,7 @@ extension ChatBubble {
 
             if display.shouldShowRawSection {
                 toolResultSection(
-                    title: "原始返回",
+                    title: NSLocalizedString("原始返回", comment: "Raw tool result section title"),
                     text: display.rawDisplayText,
                     font: .system(.caption2, design: .monospaced),
                     maxHeight: 90
@@ -572,7 +574,7 @@ extension ChatBubble {
                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
             if display.shouldShowRawSection {
                 toolResultSection(
-                    title: "原始返回",
+                    title: NSLocalizedString("原始返回", comment: "Raw tool result section title"),
                     text: display.rawDisplayText,
                     font: .system(.caption2, design: .monospaced),
                     maxHeight: 90
@@ -580,7 +582,7 @@ extension ChatBubble {
             } else if let primaryContentText = display.primaryContentText,
                       !primaryContentText.isEmpty {
                 toolResultSection(
-                    title: "结果内容",
+                    title: NSLocalizedString("结果内容", comment: "Tool result content section title"),
                     text: primaryContentText,
                     font: .caption2,
                     maxHeight: 110

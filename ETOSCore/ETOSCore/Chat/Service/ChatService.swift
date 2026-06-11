@@ -470,7 +470,11 @@ public class ChatService {
             isEnabled: localModelStore.isProviderEnabled,
             preferRecordBasics: true
         )
-        let startupTemporarySession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+        let startupTemporarySession = ChatSession(
+            id: UUID(),
+            name: NSLocalizedString("新的对话", comment: "Default new chat session name"),
+            isTemporary: true
+        )
         self.startupTemporarySession = startupTemporarySession
         self.adapters = adapters ?? [
             "openai-compatible": OpenAIAdapter(),

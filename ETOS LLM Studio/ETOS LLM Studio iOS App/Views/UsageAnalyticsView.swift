@@ -335,16 +335,16 @@ struct UsageAnalyticsView: View {
                     .foregroundStyle(.secondary)
 
                 LazyVGrid(columns: detailMetricColumns, spacing: 10) {
-                    detailMetric("请求", value: "\(viewModel.state.detail.requestCount)")
-                    detailMetric("成功", value: "\(viewModel.state.detail.successCount)")
-                    detailMetric("错误", value: "\(viewModel.state.detail.failedCount)")
-                    detailMetric("取消", value: "\(viewModel.state.detail.cancelledCount)")
-                    detailMetric("总 Token", value: "\(viewModel.state.detail.tokenTotals.totalTokens)")
+                    detailMetric(NSLocalizedString("请求", comment: "Usage detail requests metric label"), value: "\(viewModel.state.detail.requestCount)")
+                    detailMetric(NSLocalizedString("成功", comment: "Usage detail success metric label"), value: "\(viewModel.state.detail.successCount)")
+                    detailMetric(NSLocalizedString("错误", comment: "Usage detail error metric label"), value: "\(viewModel.state.detail.failedCount)")
+                    detailMetric(NSLocalizedString("取消", comment: "Usage detail cancelled metric label"), value: "\(viewModel.state.detail.cancelledCount)")
+                    detailMetric(NSLocalizedString("总 Token", comment: "Usage detail total token metric label"), value: "\(viewModel.state.detail.tokenTotals.totalTokens)")
                     if let costText = costSummaryText(viewModel.state.detail.costSummary) {
-                        detailMetric("费用", value: costText)
+                        detailMetric(NSLocalizedString("费用", comment: "Usage detail cost metric label"), value: costText)
                     }
-                    detailMetric("输入", value: "\(viewModel.state.detail.tokenTotals.sentTokens)")
-                    detailMetric("输出", value: "\(viewModel.state.detail.tokenTotals.receivedTokens)")
+                    detailMetric(NSLocalizedString("输入", comment: "Usage detail input token metric label"), value: "\(viewModel.state.detail.tokenTotals.sentTokens)")
+                    detailMetric(NSLocalizedString("输出", comment: "Usage detail output token metric label"), value: "\(viewModel.state.detail.tokenTotals.receivedTokens)")
                     detailMetric(NSLocalizedString("思考", comment: "Thinking tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.thinkingTokens)")
                     detailMetric(NSLocalizedString("缓存写入", comment: "Cache write tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.cacheWriteTokens)")
                     detailMetric(NSLocalizedString("缓存读取", comment: "Cache read tokens metric label"), value: "\(viewModel.state.detail.tokenTotals.cacheReadTokens)")
@@ -353,15 +353,15 @@ struct UsageAnalyticsView: View {
                 .padding(.top, 2)
 
                 rankedSection(
-                    title: "模型榜单",
-                    emptyText: "当前范围内还没有模型请求。",
+                    title: NSLocalizedString("模型榜单", comment: "Usage detail model leaderboard section title"),
+                    emptyText: NSLocalizedString("当前范围内还没有模型请求。", comment: "Usage detail empty model requests"),
                     items: viewModel.state.detail.topModels,
                     showsTokenDetails: true
                 )
 
                 rankedSection(
-                    title: "来源分布",
-                    emptyText: "当前范围内还没有来源统计。",
+                    title: NSLocalizedString("来源分布", comment: "Usage detail source distribution section title"),
+                    emptyText: NSLocalizedString("当前范围内还没有来源统计。", comment: "Usage detail empty source stats"),
                     items: viewModel.state.detail.sourceBreakdown,
                     showsTokenDetails: false
                 )

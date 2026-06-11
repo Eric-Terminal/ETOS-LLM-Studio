@@ -119,11 +119,19 @@ extension ChatService {
                     messages[loadingIndex] = ChatMessage(
                         id: loadingMessage.id,
                         role: .error,
-                        content: "重试失败\n\n\(formattedContent)",
+                        content: String(
+                            format: NSLocalizedString("重试失败\n\n%@", comment: "Retry failed full error content"),
+                            formattedContent
+                        ),
                         requestedAt: loadingMessage.requestedAt,
                         modelReference: loadingMessage.modelReference,
                         costEstimate: loadingMessage.costEstimate,
-                        fullErrorContent: fullContent.map { "重试失败\n\n\($0)" },
+                        fullErrorContent: fullContent.map {
+                            String(
+                                format: NSLocalizedString("重试失败\n\n%@", comment: "Retry failed full error content"),
+                                $0
+                            )
+                        },
                         responseGroupID: loadingMessage.responseGroupID,
                         responseAttemptID: loadingMessage.responseAttemptID,
                         responseAttemptIndex: loadingMessage.responseAttemptIndex,

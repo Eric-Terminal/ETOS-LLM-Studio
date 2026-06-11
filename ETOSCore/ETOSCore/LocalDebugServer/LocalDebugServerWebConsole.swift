@@ -141,7 +141,9 @@ extension LocalDebugServer {
 
     func handleSessionCreate(_ json: [String: Any]) async -> [String: Any] {
         let rawName = (json["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = (rawName?.isEmpty == false) ? rawName! : "新的对话"
+        let name = (rawName?.isEmpty == false)
+            ? rawName!
+            : NSLocalizedString("新的对话", comment: "Default new chat session name")
         let topicPrompt = json["topic_prompt"] as? String
         let enhancedPrompt = json["enhanced_prompt"] as? String
 

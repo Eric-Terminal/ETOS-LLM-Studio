@@ -39,7 +39,7 @@ extension ChatBubble {
                     permissionRequest: permissionRequest
                 )
 
-                toolDetailSection(title: "工具参数") {
+                toolDetailSection(title: NSLocalizedString("工具参数", comment: "Tool detail arguments section title")) {
                     Text(argumentText)
                         .etFont(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -48,7 +48,7 @@ extension ChatBubble {
                 }
 
                 if permissionRequest == nil {
-                    toolDetailSection(title: "工具结果") {
+                    toolDetailSection(title: NSLocalizedString("工具结果", comment: "Tool detail result section title")) {
                         toolResultSheetContent(
                             status: status,
                             resultText: resultText,

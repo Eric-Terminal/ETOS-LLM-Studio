@@ -202,8 +202,8 @@ struct StorageDirectoryBrowserView: View {
                     title: file.name,
                     rootDirectory: rootDirectory,
                     currentDirectory: file.url,
-                    emptyTitle: "空文件夹",
-                    emptyDescription: "这个文件夹里还没有内容。",
+                    emptyTitle: NSLocalizedString("空文件夹", comment: "Empty folder title"),
+                    emptyDescription: NSLocalizedString("这个文件夹里还没有内容。", comment: "Empty folder description"),
                     footerText: footerText,
                     itemFilter: itemFilter
                 )

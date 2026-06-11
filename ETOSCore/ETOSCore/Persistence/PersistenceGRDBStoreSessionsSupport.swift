@@ -229,7 +229,7 @@ extension PersistenceGRDBStore {
             """,
             arguments: [
                 sessionID.uuidString,
-                "新的对话",
+                NSLocalizedString("新的对话", comment: "Default new chat session name"),
                 nil,
                 nil,
                 nil,

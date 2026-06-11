@@ -536,7 +536,11 @@ extension SyncDeltaEngine {
                 chatService.currentSessionSubject.send(replacement)
                 chatService.messagesForSessionSubject.send(Persistence.loadMessages(for: replacement.id))
             } else {
-                let temp = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+                let temp = ChatSession(
+                    id: UUID(),
+                    name: NSLocalizedString("新的对话", comment: "Default new chat session name"),
+                    isTemporary: true
+                )
                 sessions.insert(temp, at: 0)
                 chatService.chatSessionsSubject.send(sessions)
                 chatService.currentSessionSubject.send(temp)

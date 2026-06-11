@@ -61,7 +61,11 @@ extension ChatService {
             return
         }
 
-        let newSession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+        let newSession = ChatSession(
+            id: UUID(),
+            name: NSLocalizedString("新的对话", comment: "Default new chat session name"),
+            isTemporary: true
+        )
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
@@ -86,7 +90,9 @@ extension ChatService {
         folderID: UUID? = nil
     ) -> ChatSession {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sessionName = trimmedName.isEmpty ? "新的对话" : trimmedName
+        let sessionName = trimmedName.isEmpty
+            ? NSLocalizedString("新的对话", comment: "Default new chat session name")
+            : trimmedName
         let newSession = ChatSession(
             id: UUID(),
             name: sessionName,
@@ -142,7 +148,11 @@ extension ChatService {
             if let firstSession = currentSessions.first {
                 newCurrentSession = firstSession
             } else {
-                let newSession = ChatSession(id: UUID(), name: "新的对话", isTemporary: true)
+                let newSession = ChatSession(
+                    id: UUID(),
+                    name: NSLocalizedString("新的对话", comment: "Default new chat session name"),
+                    isTemporary: true
+                )
                 currentSessions.append(newSession)
                 newCurrentSession = newSession
             }
@@ -167,7 +177,10 @@ extension ChatService {
     public func branchSession(from sourceSession: ChatSession, copyMessages: Bool) -> ChatSession {
         let newSession = ChatSession(
             id: UUID(),
-            name: "分支: \(sourceSession.name)",
+            name: String(
+                format: NSLocalizedString("分支: %@", comment: "Branched chat session name"),
+                sourceSession.name
+            ),
             topicPrompt: sourceSession.topicPrompt,
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
@@ -218,7 +231,10 @@ extension ChatService {
     public func branchSessionFromMessage(from sourceSession: ChatSession, upToMessage: ChatMessage, copyPrompts: Bool) -> ChatSession {
         let newSession = ChatSession(
             id: UUID(),
-            name: "分支: \(sourceSession.name)",
+            name: String(
+                format: NSLocalizedString("分支: %@", comment: "Branched chat session name"),
+                sourceSession.name
+            ),
             topicPrompt: copyPrompts ? sourceSession.topicPrompt : nil,
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,

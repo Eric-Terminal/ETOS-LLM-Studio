@@ -1927,7 +1927,7 @@
 "总超时 %ds" = "Total timeout %ds";
 "恢复该工具自动批准" = "Restore Auto-approval for This Tool";
 "懒加载轮次" = "Lazy-load Turns";
-"成功" = "Success";
+"成功" = "成功";
 "所选项目" = "Selected Items";
 "执行中" = "Running";
 "批量选择" = "Batch Select";
@@ -2033,7 +2033,7 @@
 "本次解析会话" = "Parsed Sessions";
 "本次解析提供商" = "Parsed Providers";
 "条目 %d" = "Entry %d";
-"来源分布" = "Source Distribution";
+"来源分布" = "ソース分布";
 "查看完整反馈历史" = "View Full Feedback History";
 "查看完整响应" = "View Full Response";
 "查看本周整体用量趋势" = "View overall usage trends for this week";
@@ -2167,7 +2167,7 @@
 "请先输入自定义上传地址。" = "カスタムアップロード URL を入力してください。";
 "请提供合法的 SSE Endpoint。" = "Provide a valid SSE endpoint.";
 "请提供合法的 Streamable HTTP 地址。" = "Provide a valid Streamable HTTP URL.";
-"请求" = "Requests";
+"请求" = "リクエスト";
 "请求体编辑方式" = "Request Body Edit Mode";
 "请求热力图" = "Request Heatmap";
 "请至少选择一个导入项。" = "Select at least one import item.";
@@ -2862,9 +2862,9 @@
 "将删除 %d 个文件夹。%d 个会话将回到未分类。" = "Delete %d folders. %d sessions will return to Uncategorized.";
 "将导出前 %d 条消息（包含目标消息与其上文）。" = "Will export the first %d messages, including the target message and earlier context.";
 "将导出当前会话全部 %d 条消息。" = "Will export all %d messages in the current chat.";
-"工具参数" = "Tool Arguments";
+"工具参数" = "ツール引数";
 "工具审批" = "Tool Approval";
-"工具结果" = "Tool Result";
+"工具结果" = "ツール結果";
 "工具详情：修改数据库" = "Tool Details: Modify Database";
 "工具详情：分块读取沙盒文件" = "Tool Details: Read Sandbox File Chunk";
 "工具详情：列出数据库表" = "Tool Details: List Database Tables";
@@ -3157,7 +3157,7 @@
 "主卡「%@」。" = "Main card: \"%@\".";
 "今天的每日脉冲已经整理完成，已为你准备 %d 张主动情报卡片。%@" = "Today's Daily Pulse is ready, with %d proactive intelligence cards prepared for you. %@";
 "到了每日脉冲提醒时间。若今天这一期仍在准备中，请稍候片刻，完成后会再收到“已准备好”通知。" = "It is time for your Daily Pulse reminder. If today's issue is still being prepared, please wait a moment; you will receive another notification when it is ready.";
-"原始返回" = "Raw response";
+"原始返回" = "生レスポンス";
 "周详情" = "Week details";
 "字体样式优先级" = "Font style priority";
 "快捷指令工具集成" = "Shortcut tool integration";
@@ -3168,7 +3168,7 @@
 "日详情" = "Day details";
 "月详情" = "Month details";
 "标题生成模型" = "Title generation model";
-"模型榜单" = "Model leaderboard";
+"模型榜单" = "モデルランキング";
 "每日脉冲已准备好" = "Daily Pulse is ready";
 "每日脉冲晨间提醒" = "Daily Pulse morning reminder";
 "每日脉冲模型" = "Daily Pulse model";
@@ -3369,10 +3369,10 @@
 
 /* Usage analytics dynamic helper keys */
 "日历面板" = "Calendar panel";
-"总 Token" = "Total tokens";
+"总 Token" = "合計トークン";
 "常用模型" = "Top model";
-"输入" = "Input";
-"输出" = "Output";
+"输入" = "入力";
+"输出" = "出力";
 
 /* Conversation memory prompt keys */
 "思考内容：\n```\n%@\n```" = "Reasoning content:\n```\n%@\n```";
@@ -4431,3 +4431,16 @@
 "[已隐藏对象，字段数: %d]" = "[オブジェクトを非表示、フィールド数: %d]";
 "[已隐藏文本，长度: %d]" = "[テキストを非表示、長さ: %d]";
 "语音_%@.%@" = "音声_%@.%@";
+
+// 第二轮补齐：明确用户可见的工具、用量、附件与会话文案
+"主要内容" = "主な内容";
+"结果内容" = "結果内容";
+"分支: %@" = "分岐: %@";
+"前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。" = "最初の2項目は呼び出し可能な機能説明に含まれます。「最近の外部結果」にはショートカット / MCP の最近結果とシグナル履歴が含まれ、「お知らせとトレンドシグナル」には現在のアプリ内お知らせと蓄積済みのトレンド断片が含まれます。";
+"前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。" = "最初の2項目は呼び出し可能な機能説明に含まれます。「最近の外部結果」にはショートカットと MCP の最近結果が含まれ、「お知らせとトレンドシグナル」にはアプリ内お知らせと蓄積済みのトレンド断片が含まれます。";
+"当前范围内还没有来源统计。" = "現在の範囲にはソース統計がありません。";
+"更多权限" = "その他の権限";
+"空文件夹" = "空のフォルダ";
+"这个文件夹里还没有内容。" = "このフォルダにはまだ内容がありません。";
+"重试失败\n\n%@" = "再試行に失敗しました\n\n%@";
+"附件_%@" = "添付_%@";
