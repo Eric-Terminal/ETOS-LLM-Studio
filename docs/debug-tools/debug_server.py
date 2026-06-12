@@ -16,11 +16,26 @@ from pathlib import Path
 import websockets
 from aiohttp import web
 
+from dataclasses import dataclass, field
+from typing import Callable, Awaitable
+
 # ============================================================================
 # 调试配置 - 用户可修改
 # ============================================================================
 DEBUG_MODE = True  # 设置为 True 查看详细请求体，False 只显示摘要
 # ============================================================================
+
+@dataclass
+class MenuItem:
+    """菜单项：key(选项编号) / label(显示文本) / handler(异步处理函数)
+    
+    新增菜单项只需创建一个 MenuItem 并加入 DebugServer.build_menu() 返回的列表，
+    无需修改 interactive_menu 的分发逻辑。
+    """
+    key: str
+    label: str
+    handler: Callable[[], Awaitable[None]]
+    exit_after: bool = False  # 选中后是否退出菜单循环（如"退出"项）
 
 def get_local_ip():
     """获取本机局域网IP地址"""
@@ -553,14 +568,162 @@ class DebugServer:
                 print(f"  ➤ {rel_path}")
         return files
             
+    # ========================================================================
+    # 菜单项处理函数（每个对应一个菜单选项）
+    # ========================================================================
+
+    async def menu_list_directory(self):
+        """1. 列出设备目录"""
+        path = await asyncio.to_thread(input, "设备路径 (留空或输入 . 为 Documents): ") or "."
+        await self.send_command({"command": "list", "path": path})
+        await asyncio.sleep(1)  # 等待响应
+
+    async def menu_download_file(self):
+        """2. 下载文件（设备→电脑）"""
+        path = await asyncio.to_thread(input, "设备文件路径: ")
+        if path:
+            await self.send_command({"command": "download", "path": path})
+            if self.device_connection:
+                await asyncio.sleep(1)
+            else:
+                print("⏳ 命令已入队，等待设备轮询...")
+
+    async def menu_upload_file(self):
+        """3. 上传文件（电脑→设备）"""
+        local_file = await asyncio.to_thread(input, "本地文件路径: ")
+        remote_path = await asyncio.to_thread(input, "设备目标路径: ")
+        if os.path.exists(local_file) and remote_path:
+            with open(local_file, 'rb') as f:
+                data = base64.b64encode(f.read()).decode()
+            await self.send_command({
+                "command": "upload",
+                "path": remote_path,
+                "data": data
+            })
+            await asyncio.sleep(1)
+        else:
+            print("❌ 文件不存在或路径为空")
+
+    async def menu_delete_path(self):
+        """4. 删除设备文件/目录"""
+        path = await asyncio.to_thread(input, "要删除的设备路径: ")
+        if path:
+            confirm = await asyncio.to_thread(input, f"确认删除设备上的 '{path}'? (yes/no): ")
+            if confirm.lower() == 'yes':
+                await self.send_command({"command": "delete", "path": path})
+                await asyncio.sleep(1)
+
+    async def menu_mkdir(self):
+        """5. 在设备创建目录"""
+        path = await asyncio.to_thread(input, "在设备创建目录: ")
+        if path:
+            await self.send_command({"command": "mkdir", "path": path})
+            await asyncio.sleep(1)
+
+    async def menu_download_all(self):
+        """6. 一键下载 Documents 目录"""
+        print("📦 准备下载整个 Documents 目录...")
+
+        if self.device_connection:
+            # WebSocket模式：批量下载
+            await self.send_command({"command": "download_all"})
+            print("⏳ 等待设备打包和传输（WebSocket模式）...")
+            await asyncio.sleep(5)
+        else:
+            # HTTP模式：流式下载
+            self.reset_stream_download_state()
+            self.download_in_progress = True  # 开始下载
+            await self.send_command({"command": "download_all"})
+            print("⏳ 命令已队列，等待设备传输文件...")
+            print("💡 提示：如果长时间没有进度，可能是设备端发送格式有问题")
+
+    async def menu_download_all_compatible(self):
+        """7. 一键下载（兼容模式）"""
+        print("📦 兼容模式：准备下载整个 Documents 目录...")
+        print("💡 此模式会先获取文件列表，然后逐个请求下载")
+        await self.download_all_compatible()
+
+    async def menu_upload_all(self):
+        """8. 一键上传覆盖 Documents"""
+        local_dir = await asyncio.to_thread(input, "本地目录路径 (将覆盖设备 Documents): ")
+        if not os.path.isdir(local_dir):
+            print("❌ 目录不存在")
+            return
+
+        confirm = await asyncio.to_thread(input, "⚠️  确认覆盖设备 Documents 目录? 所有数据将被删除! (yes/no): ")
+        if confirm.lower() != 'yes':
+            return
+
+        print("📦 扫描本地目录...")
+        files = self.collect_local_files_for_upload(local_dir)
+
+        if self.device_connection:
+            # WebSocket模式：批量上传
+            print(f"\n📤 上传 {len(files)} 个文件到设备（批量模式）...")
+            await self.send_command({
+                "command": "upload_all",
+                "files": files
+            })
+            print("⏳ WebSocket模式：设备正在清空 Documents 并写入文件...")
+            await asyncio.sleep(5)
+        else:
+            # HTTP模式：先发送文件列表，设备主动请求文件
+            print(f"\n📤 上传 {len(files)} 个文件到设备（流式模式）...")
+
+            # 准备文件数据字典（路径->数据）
+            self.upload_file_queue = {f["path"]: f["data"] for f in files}
+            self.upload_in_progress = True
+
+            # 发送文件列表命令（只包含路径）
+            await self.send_command({
+                "command": "upload_list",
+                "paths": [f["path"] for f in files],
+                "total": len(files)
+            })
+
+            print(f"✅ 已发送文件列表 ({len(files)} 个)")
+            print(f"   设备将主动请求每个文件数据")
+
+    async def menu_refresh_connection(self):
+        """9. 刷新连接"""
+        if self.device_connection:
+            await self.send_command({"command": "ping"})
+            await asyncio.sleep(0.5)
+            print("✅ 已发送 ping")
+        else:
+            self.last_poll_time = None
+            print("💡 HTTP模式：已重置连接状态，下次设备轮询时会重新识别")
+
+    async def menu_exit(self):
+        """0. 退出"""
+        print("👋 再见!")
+
+    def build_menu(self):
+        """构建菜单项列表。新增功能时只需在此列表中追加 MenuItem。"""
+        return [
+            MenuItem("1", "📂 列出设备目录", self.menu_list_directory),
+            MenuItem("2", "📥 下载文件（设备→电脑）", self.menu_download_file),
+            MenuItem("3", "📤 上传文件（电脑→设备）", self.menu_upload_file),
+            MenuItem("4", "🗑️  删除设备文件/目录", self.menu_delete_path),
+            MenuItem("5", "📁 在设备创建目录", self.menu_mkdir),
+            MenuItem("6", "📦 一键下载 Documents 目录", self.menu_download_all),
+            MenuItem("7", "📦 一键下载（兼容模式）", self.menu_download_all_compatible),
+            MenuItem("8", "🚀 一键上传覆盖 Documents", self.menu_upload_all),
+            MenuItem("9", "🔄 刷新连接", self.menu_refresh_connection),
+            MenuItem("0", "🚪 退出", self.menu_exit, exit_after=True),
+        ]
+
     async def interactive_menu(self):
         """交互式菜单"""
+        menu_items = self.build_menu()
+        menu_map = {item.key: item for item in menu_items}
+
         while True:
             await asyncio.sleep(0.1)  # 给 WebSocket/HTTP 处理留空间
 
             # 检测连接状态
             is_connected, connection_type = self.get_connection_status()
-            
+
             if not is_connected:
                 print(f"\n⏳ 等待设备连接... (模式: {connection_type})")
                 await asyncio.sleep(5)
@@ -569,143 +732,31 @@ class DebugServer:
             # 如果正在进行传输，等待完成
             if await self.show_transfer_progress_if_needed():
                 continue
-                
+
             print(f"\n{'='*60}")
             print(f"📱 {self.device_name} - ETOS LLM Studio 调试控制台")
             print(f"🔗 连接模式: {connection_type}")
             if not self.device_connection:
                 print(f"📦 待发送命令: {len(self.command_queue)} 个")
             print(f"{'='*60}")
-            print("1. 📂 列出设备目录")
-            print("2. 📥 下载文件（设备→电脑）")
-            print("3. 📤 上传文件（电脑→设备）")
-            print("4. 🗑️  删除设备文件/目录")
-            print("5. 📁 在设备创建目录")
-            print("6. 📦 一键下载 Documents 目录")
-            print("7. 📦 一键下载（兼容模式）")
-            print("8. 🚀 一键上传覆盖 Documents")
-            print("9. 🔄 刷新连接")
-            print("0. 🚪 退出")
+            for item in menu_items:
+                print(f"{item.key}. {item.label}")
             print(f"{'='*60}")
-            
+
             try:
                 choice = await asyncio.to_thread(input, "请选择操作 [0-9]: ")
             except EOFError:
                 await asyncio.sleep(1)
                 continue
-                
-            if choice == '1':
-                path = await asyncio.to_thread(input, "设备路径 (留空或输入 . 为 Documents): ") or "."
-                await self.send_command({"command": "list", "path": path})
-                await asyncio.sleep(1)  # 等待响应
-                
-            elif choice == '2':
-                path = await asyncio.to_thread(input, "设备文件路径: ")
-                if path:
-                    await self.send_command({"command": "download", "path": path})
-                    if self.device_connection:
-                        await asyncio.sleep(1)
-                    else:
-                        print("⏳ 命令已入队，等待设备轮询...")
-                    
-            elif choice == '3':
-                local_file = await asyncio.to_thread(input, "本地文件路径: ")
-                remote_path = await asyncio.to_thread(input, "设备目标路径: ")
-                if os.path.exists(local_file) and remote_path:
-                    with open(local_file, 'rb') as f:
-                        data = base64.b64encode(f.read()).decode()
-                    await self.send_command({
-                        "command": "upload",
-                        "path": remote_path,
-                        "data": data
-                    })
-                    await asyncio.sleep(1)
-                else:
-                    print("❌ 文件不存在或路径为空")
-                    
-            elif choice == '4':
-                path = await asyncio.to_thread(input, "要删除的设备路径: ")
-                if path:
-                    confirm = await asyncio.to_thread(input, f"确认删除设备上的 '{path}'? (yes/no): ")
-                    if confirm.lower() == 'yes':
-                        await self.send_command({"command": "delete", "path": path})
-                        await asyncio.sleep(1)
-                        
-            elif choice == '5':
-                path = await asyncio.to_thread(input, "在设备创建目录: ")
-                if path:
-                    await self.send_command({"command": "mkdir", "path": path})
-                    await asyncio.sleep(1)
-            
-            elif choice == '6':
-                print("📦 准备下载整个 Documents 目录...")
-                
-                if self.device_connection:
-                    # WebSocket模式：批量下载
-                    await self.send_command({"command": "download_all"})
-                    print("⏳ 等待设备打包和传输（WebSocket模式）...")
-                    await asyncio.sleep(5)
-                else:
-                    # HTTP模式：流式下载
-                    self.reset_stream_download_state()
-                    self.download_in_progress = True  # 开始下载
-                    await self.send_command({"command": "download_all"})
-                    print("⏳ 命令已队列，等待设备传输文件...")
-                    print("💡 提示：如果长时间没有进度，可能是设备端发送格式有问题")
-            
-            elif choice == '7':
-                # 兼容模式：先获取文件列表，再逐个下载
-                print("📦 兼容模式：准备下载整个 Documents 目录...")
-                print("💡 此模式会先获取文件列表，然后逐个请求下载")
-                await self.download_all_compatible()
-            
-            elif choice == '8':
-                local_dir = await asyncio.to_thread(input, "本地目录路径 (将覆盖设备 Documents): ")
-                if os.path.isdir(local_dir):
-                    confirm = await asyncio.to_thread(input, f"⚠️  确认覆盖设备 Documents 目录? 所有数据将被删除! (yes/no): ")
-                    if confirm.lower() == 'yes':
-                        print("📦 扫描本地目录...")
-                        files = self.collect_local_files_for_upload(local_dir)
-                        
-                        if self.device_connection:
-                            # WebSocket模式：批量上传
-                            print(f"\n📤 上传 {len(files)} 个文件到设备（批量模式）...")
-                            await self.send_command({
-                                "command": "upload_all",
-                                "files": files
-                            })
-                            print("⏳ WebSocket模式：设备正在清空 Documents 并写入文件...")
-                            await asyncio.sleep(5)
-                        else:
-                            # HTTP模式：先发送文件列表，设备主动请求文件
-                            print(f"\n📤 上传 {len(files)} 个文件到设备（流式模式）...")
-                            
-                            # 准备文件数据字典（路径->数据）
-                            self.upload_file_queue = {f["path"]: f["data"] for f in files}
-                            self.upload_in_progress = True
-                            
-                            # 发送文件列表命令（只包含路径）
-                            await self.send_command({
-                                "command": "upload_list",
-                                "paths": [f["path"] for f in files],
-                                "total": len(files)
-                            })
-                            
-                            print(f"✅ 已发送文件列表 ({len(files)} 个)")
-                            print(f"   设备将主动请求每个文件数据")
-                else:
-                    print("❌ 目录不存在")
-                    
-            elif choice == '9':
-                if self.device_connection:
-                    await self.send_command({"command": "ping"})
-                    await asyncio.sleep(0.5)
-                    print("✅ 已发送 ping")
-                else:
-                    print("💡 HTTP模式下无需手动刷新")
-                    
-            elif choice == '0':
-                print("👋 再见!")
+
+            item = menu_map.get(choice)
+            if item is None:
+                print("❌ 无效选项，请输入 0-9")
+                continue
+
+            await item.handler()
+
+            if item.exit_after:
                 break
     
     # ========================================================================
