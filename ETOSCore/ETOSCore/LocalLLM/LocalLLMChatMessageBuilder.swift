@@ -65,7 +65,7 @@ public enum LocalLLMChatMessageBuilder {
     }
 
     public static func templateCompatibleMessages(from messages: [ChatMessage]) -> [LocalLLMChatMessage] {
-        templateCompatibleMessages(messages(from: messages))
+        templateCompatibleMessages(Self.messages(from: messages))
     }
 
     public static func templateCompatibleMessages(_ messages: [LocalLLMChatMessage]) -> [LocalLLMChatMessage] {
