@@ -54,23 +54,10 @@ extension ChatService {
     private func performReasoningSummaryIfNeeded(for messageID: UUID, in sessionID: UUID, reasoning: String) async {
         guard let runnableModel = resolvedReasoningSummaryModel() else { return }
 
-        let summarySystemPrompt = NSLocalizedString("""
-        你是思考摘要助手。请把思考内容压缩成一个短标签。
-        约束：
-        - 中文输出 6~18 字，其他语言输出 2~8 个词；
-        - 只写核心动作或结论方向；
-        - 不要复述细节，不要写完整解释；
-        - 不要出现“思考内容摘要”“总结：”等前缀；
-        - 不要句号，仅输出短标签正文。
-        """, comment: "Reasoning summary system prompt")
-        let summaryUserPrompt = String(
-            format: NSLocalizedString("""
-            思考内容：
-            ```
-            %@
-            ```
-            """, comment: "Reasoning summary user prompt"),
-            reasoning
+        let summarySystemPrompt = BuiltInPromptStore.render(.reasoningSummarySystem)
+        let summaryUserPrompt = BuiltInPromptStore.render(
+            .reasoningSummaryUser,
+            variables: ["reasoning": reasoning]
         )
 
         do {
@@ -151,29 +138,10 @@ extension ChatService {
 
         let summaryContext = makeConversationSummaryContext(from: conversationalMessages)
         guard !summaryContext.isEmpty else { return }
-        let summarySystemPrompt = NSLocalizedString("""
-        你是会话压缩助手，负责生成可用于长期记忆的跨对话摘要。请基于给定对话提炼后续对话真正有用的信息，而不是复述聊天记录。
-        优先保留：
-        - 用户稳定偏好、写作/编码风格、默认语言与输出格式；
-        - 用户长期项目、角色背景、正在推进的目标；
-        - 已明确达成的结论、决策、约定、待办；
-        - 对后续协作有帮助的术语、文件、业务背景或上下文。
-        忽略：
-        - 寒暄、礼貌语、临时操作步骤、一次性细节；
-        - 未确认的猜测、模型自己的推断、失败过程；
-        - 敏感隐私与第三方隐私，除非用户明确要求长期记住且对后续任务必要；
-        - 大段原文、代码或附件内容，只提炼长期有用结论。
-        输出约束：
-        - 中文输出 80~180 字，其他语言输出 70~160 个词；
-        - 信息不足时只记录明确事实，不要编造；
-        - 仅输出摘要正文，不要加标题、列表编号或免责声明。
-        """, comment: "Conversation summary system prompt")
-        let summaryUserPrompt = String(
-            format: NSLocalizedString("""
-            请总结以下对话：
-            %@
-            """, comment: "Conversation summary user prompt"),
-            summaryContext
+        let summarySystemPrompt = BuiltInPromptStore.render(.conversationSummarySystem)
+        let summaryUserPrompt = BuiltInPromptStore.render(
+            .conversationSummaryUser,
+            variables: ["conversation": summaryContext]
         )
 
         do {
@@ -203,24 +171,13 @@ extension ChatService {
         guard ConversationMemoryManager.shouldUpdateUserProfile(on: Date()) else { return }
 
         let existingProfileText = ConversationMemoryManager.loadUserProfile()?.content ?? ""
-        let profileSystemPrompt = NSLocalizedString("""
-        你是用户画像整理助手。请根据“已有画像”和“最新会话摘要”输出更新后的用户画像。
-        约束：
-        - 不设固定长度上限，根据信息量自然展开；
-        - 强调稳定偏好、工作背景、长期关注点；
-        - 避免一次性细节与短期噪音；
-        - 仅输出画像正文。
-        """, comment: "Conversation profile update system prompt")
-        let profileUserPrompt = String(
-            format: NSLocalizedString("""
-            已有画像：
-            %@
-
-            最新会话摘要：
-            %@
-            """, comment: "Conversation profile update user prompt"),
-            existingProfileText.isEmpty ? NSLocalizedString("（暂无）", comment: "Conversation profile empty placeholder") : existingProfileText,
-            latestSummary
+        let profileSystemPrompt = BuiltInPromptStore.render(.conversationProfileUpdateSystem)
+        let profileUserPrompt = BuiltInPromptStore.render(
+            .conversationProfileUpdateUser,
+            variables: [
+                "existing_profile": existingProfileText.isEmpty ? NSLocalizedString("（暂无）", comment: "Conversation profile empty placeholder") : existingProfileText,
+                "summary": latestSummary
+            ]
         )
 
         do {
@@ -251,20 +208,10 @@ extension ChatService {
         }
         guard let runnableModel = resolvedConversationSummaryModel() else { return }
 
-        let systemPrompt = NSLocalizedString("""
-        你是用户画像去重助手。请把拼接后的多端用户画像压缩成一份一致画像。
-        约束：
-        - 保留稳定偏好、长期背景、常见工作方式；
-        - 合并重复语义，删除互相矛盾或一次性噪音；
-        - 不设固定长度上限，根据信息量自然展开；
-        - 仅输出画像正文。
-        """, comment: "Conversation profile dedup system prompt")
-        let userPrompt = String(
-            format: NSLocalizedString("""
-            拼接画像：
-            %@
-            """, comment: "Conversation profile dedup user prompt"),
-            profile.content
+        let systemPrompt = BuiltInPromptStore.render(.conversationProfileDedupSystem)
+        let userPrompt = BuiltInPromptStore.render(
+            .conversationProfileDedupUser,
+            variables: ["profile": profile.content]
         )
 
         do {
@@ -349,31 +296,13 @@ extension ChatService {
             ? (source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
             : NSLocalizedString("无", comment: "")
 
-        let promptTemplate = NSLocalizedString("""
-        你是一个 iOS 自动化分析助手。请根据以下快捷指令信息，生成一段“给 AI 工具调用用”的描述。
-
-        要求：
-        - 中文输出 40~120 字，其他语言输出 35~90 个词；
-        - 重点说明这个快捷指令能做什么、适合何时调用、输入输出大致是什么；
-        - 避免空话，不要出现免责声明；
-        - 只返回描述正文。
-
-        字段说明：
-        - <shortcut_name>：快捷指令名称；
-        - <metadata>：快捷指令元数据；
-        - <source_summary>：源码或流程摘要；无内容时为“无”。
-
-        <shortcut>
-          <shortcut_name>%@</shortcut_name>
-          <metadata>%@</metadata>
-          <source_summary>%@</source_summary>
-        </shortcut>
-        """, comment: "Prompt for generating shortcut tool description.")
-        let prompt = String(
-            format: promptTemplate,
-            escapeXMLText(toolName),
-            escapeXMLText(metadataText),
-            escapeXMLText(sourceText)
+        let prompt = BuiltInPromptStore.render(
+            .shortcutDescription,
+            variables: [
+                "shortcut_name": escapeXMLText(toolName),
+                "metadata": escapeXMLText(metadataText),
+                "source_summary": escapeXMLText(sourceText)
+            ]
         )
 
         do {
@@ -599,18 +528,10 @@ extension ChatService {
             "开始为会话 \(sessionID.uuidString) 生成标题，使用\(usingDedicatedTitleModel ? "独立标题模型" : "当前对话模型"): \(runnableModel.model.displayName, privacy: .public)"
         )
 
-        let titlePromptTemplate = NSLocalizedString("""
-        请根据用户的问题，为本次对话生成一个简短、精炼的标题。
-
-        要求：
-        - 长度在2到6个词之间。
-        - 能准确概括用户想要讨论的主题。
-        - 直接返回标题内容，不要包含任何额外说明、引号或标点符号。
-
-        用户的问题：
-        %@
-        """, comment: "Prompt to generate a concise session title from user message.")
-        let titlePrompt = String(format: titlePromptTemplate, firstUserMessage.content)
+        let titlePrompt = BuiltInPromptStore.render(
+            .sessionTitle,
+            variables: ["question": firstUserMessage.content]
+        )
 
         do {
             let rawTitle = try await generateDetachedChatCompletion(

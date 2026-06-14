@@ -12,23 +12,10 @@ import Combine
 extension ChatService {
     /// 定义 `save_memory` 工具
     internal var saveMemoryTool: InternalToolDefinition {
-        let toolDescription = NSLocalizedString("""
-        将信息写入长期记忆，仅在「这条信息在后续很多次对话中都可能有用」时调用。
-
-        【必须满足至少一条才可调用】
-        1. 用户的稳定偏好：口味、写作/编码风格、喜欢/不喜欢的输出格式、长期习惯（如默认语言、格式）。
-        2. 用户的身份与长期背景：职业角色、长期项目或研究方向、长期合作对象。
-        3. 用户明确要求记住：包含"记住…以后…都…"、"从现在开始你要记得…"等表达。
-
-        【严禁调用的情况(除非用户明确要求你记住)】
-        - 一次性任务或会话细节（某次会议数据、单个文件内容等）；
-        - 短期信息（今天的临时待办、本次对话才用一次的参数）；
-        - 敏感信息：精确地址、身份证号、银行卡、健康状况、政治立场等；
-        - 第三方隐私信息（他人全名 + 个人细节）。
-        """, comment: "System tool description for save_memory.")
+        let toolDescription = BuiltInPromptStore.render(.saveMemoryToolDescription)
         
         let contentDescription = ModelPromptLanguage.appendingToolArgumentInstruction(
-            to: NSLocalizedString("需要记住的内容，要求：压缩成一句或几句话；进行抽象概括，不要原封不动复制对话；使之可在不同场景下复用。", comment: "System tool content description for save_memory.")
+            to: BuiltInPromptStore.render(.saveMemoryContentDescription)
         )
         
         let parameters = JSONValue.dictionary([
@@ -46,16 +33,7 @@ extension ChatService {
 
     /// 定义 `search_memory` 工具
     internal var searchMemoryTool: InternalToolDefinition {
-        let toolDescription = NSLocalizedString("""
-        主动检索长期记忆，用于在回答前补充用户历史偏好、长期背景和已记录事实。
-
-        用法：
-        1. mode=vector：语义相似检索，适合自然语言问题。
-        2. mode=keyword：关键词命中检索，适合名称、术语、短语定位。
-        3. count：希望返回的条数；未传时使用系统默认检索数量（Top K）。
-
-        返回结果包含完整原文 content。若结果为空，表示当前记忆库无匹配项。
-        """, comment: "System tool description for search_memory.")
+        let toolDescription = BuiltInPromptStore.render(.searchMemoryToolDescription)
 
         let parameters = JSONValue.dictionary([
             "type": .string("object"),

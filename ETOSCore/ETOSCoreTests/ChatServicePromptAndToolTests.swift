@@ -222,6 +222,7 @@ extension ChatServiceTests {
         let insertedIndex = try #require(landmarkIndex)
         #expect(insertedIndex + 1 < sentMessages.count)
         #expect(sentMessages[insertedIndex + 1].id == oldMessage.id)
+        #expect(sentMessages[insertedIndex].content.contains("<time>"))
         #expect(!sentMessages[insertedIndex].content.contains("<periodic_time_landmark>"))
         #expect(!sentMessages[insertedIndex].content.contains("本条对话的请求时间为："))
 
@@ -365,9 +366,8 @@ extension ChatServiceTests {
 
         let prompt = mockAdapter.receivedMessages?.last(where: { $0.role == .user })?.content ?? ""
         #expect(description == "打开灯光并播放音乐")
-        #expect(prompt.contains("字段说明"))
-        #expect(prompt.contains("- <shortcut_name>：快捷指令名称"))
         #expect(prompt.contains("<shortcut>"))
+        #expect(prompt.contains("</shortcut>"))
         #expect(prompt.contains("<shortcut_name>打开 &lt;灯&gt; &amp; 音乐</shortcut_name>"))
         #expect(prompt.contains("<metadata>{\"note\":\"A &lt; B &amp; C\"}</metadata>"))
         #expect(prompt.contains("<source_summary>if x &lt; 1 &amp;&amp; y &gt; 0</source_summary>"))

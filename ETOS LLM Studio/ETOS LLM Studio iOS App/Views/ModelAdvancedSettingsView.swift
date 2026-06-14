@@ -11,6 +11,7 @@ import ETOSCore
 
 private enum ModelAdvancedSettingsTab: Hashable {
     case promptInjection
+    case builtInPrompts
     case messageRules
     case sessionContext
     case generationOutput
@@ -198,14 +199,21 @@ struct ModelAdvancedSettingsView: View {
             }
             .tag(ModelAdvancedSettingsTab.promptInjection)
 
-            // MARK: - Tab 2：消息规则
+            // MARK: - Tab 2：内置提示词
+            BuiltInPromptSettingsView(usesCategoryTabs: false)
+                .tabItem {
+                    Label(NSLocalizedString("内置提示词", comment: "Built-in prompt settings tab"), systemImage: "curlybraces")
+                }
+                .tag(ModelAdvancedSettingsTab.builtInPrompts)
+
+            // MARK: - Tab 3：消息规则
             MessageRegexRulesView(editingRule: $editingMessageRegexRule)
                 .tabItem {
                     Label(NSLocalizedString("消息规则", comment: ""), systemImage: "textformat")
                 }
                 .tag(ModelAdvancedSettingsTab.messageRules)
 
-            // MARK: - Tab 3：会话与上下文
+            // MARK: - Tab 4：会话与上下文
             Form {
                 Section(NSLocalizedString("基础行为", comment: "")) {
                     Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
@@ -235,7 +243,7 @@ struct ModelAdvancedSettingsView: View {
             }
             .tag(ModelAdvancedSettingsTab.sessionContext)
 
-            // MARK: - Tab 4：生成与输出
+            // MARK: - Tab 5：生成与输出
             Form {
                 Section(NSLocalizedString("采样参数", comment: "")) {
                     Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)

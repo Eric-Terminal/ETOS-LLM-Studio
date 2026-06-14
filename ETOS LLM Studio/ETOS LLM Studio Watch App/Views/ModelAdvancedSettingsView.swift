@@ -160,6 +160,19 @@ struct ModelAdvancedSettingsView: View {
                 Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
             }
 
+            Section(
+                header: Text(NSLocalizedString("内置提示词", comment: "Built-in prompt settings section")),
+                footer: Text(NSLocalizedString("未自定义时会跟随应用语言使用内置模板；自定义后会固定使用保存内容。", comment: "Built-in prompt settings footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                NavigationLink {
+                    BuiltInPromptSettingsView()
+                } label: {
+                    Label(NSLocalizedString("提示词模板", comment: "Built-in prompt settings entry"), systemImage: "curlybraces")
+                }
+            }
+
             // MARK: Section 2：消息规则
             Section(
                 header: Text(NSLocalizedString("消息规则", comment: "")),

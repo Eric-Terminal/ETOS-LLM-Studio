@@ -200,46 +200,25 @@ extension ChatService {
         sessionID: UUID,
         runnableModel: RunnableModel?
     ) async throws -> String {
-        let systemPrompt = NSLocalizedString("""
-        你是消息重写助手。
-
-        规则：
-        - 按照重写要求修改原文中指定的地方。
-        - 重写要求没有提到的地方不要动，尽量保持原文的内容、结构、语气、格式和 Markdown 标记。
-        - 直接输出修改后的原文全文，输出内容会原样作为新的回复版本。
-        - 不要输出“好的，这是你要求的修改后的文案”等说明、寒暄、标题、前后缀或代码围栏。
-        """, comment: "Message rewrite system prompt")
+        let systemPrompt = BuiltInPromptStore.render(.messageRewriteSystem)
         let userPrompt: String
         let referenceVersionBlock = makeReferenceVersionPromptBlock(referenceVersions)
         if referenceVersionBlock.isEmpty {
-            let userPromptTemplate = NSLocalizedString("""
-            重写要求：
-            %@
-
-            原文：
-            %@
-            """, comment: "Message rewrite user prompt")
-            userPrompt = String(
-                format: userPromptTemplate,
-                markdownSeparatedContent(instruction),
-                originalContent
+            userPrompt = BuiltInPromptStore.render(
+                .messageRewriteUser,
+                variables: [
+                    "instruction": markdownSeparatedContent(instruction),
+                    "original": originalContent
+                ]
             )
         } else {
-            let userPromptTemplate = NSLocalizedString("""
-            重写要求：
-            %@
-
-            其他版本：
-            %@
-
-            原文：
-            %@
-            """, comment: "Message rewrite user prompt with reference versions")
-            userPrompt = String(
-                format: userPromptTemplate,
-                markdownSeparatedContent(instruction),
-                markdownSeparatedContent(referenceVersionBlock),
-                originalContent
+            userPrompt = BuiltInPromptStore.render(
+                .messageRewriteUserWithReferences,
+                variables: [
+                    "instruction": markdownSeparatedContent(instruction),
+                    "reference_versions": markdownSeparatedContent(referenceVersionBlock),
+                    "original": originalContent
+                ]
             )
         }
 

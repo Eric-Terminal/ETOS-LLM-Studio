@@ -480,7 +480,6 @@ extension ChatService {
     }
 
     private func makeFileAttachmentAppendixText(_ blocks: [(fileName: String, text: String)]) -> String {
-        let header = NSLocalizedString("以下内容来自用户上传文件的文本提取，仅作为本轮请求的附件上下文。", comment: "File attachment text appendix header sent to chat model")
         let joinedBlocks = blocks.map { block in
             """
             <file name="\(xmlEscapedAttribute(block.fileName))">
@@ -488,12 +487,10 @@ extension ChatService {
             </file>
             """
         }.joined(separator: "\n\n")
-        return """
-        <file_attachments>
-        \(header)
-        \(joinedBlocks)
-        </file_attachments>
-        """
+        return BuiltInPromptStore.render(
+            .fileAttachmentAppendix,
+            variables: ["attachments": joinedBlocks]
+        )
     }
 
     func preprocessImageAttachmentsIfNeeded(
@@ -560,7 +557,6 @@ extension ChatService {
     }
 
     private func makeOCRAppendixText(_ blocks: [(fileName: String, text: String)]) -> String {
-        let header = NSLocalizedString("以下内容来自用户上传图片的 OCR 文本提取，仅作为本轮请求的图片附件上下文。", comment: "OCR appendix header sent to chat model")
         let joinedBlocks = blocks.map { block in
             """
             <image name="\(xmlEscapedAttribute(block.fileName))">
@@ -568,12 +564,10 @@ extension ChatService {
             </image>
             """
         }.joined(separator: "\n\n")
-        return """
-        <image_ocr_attachments>
-        \(header)
-        \(joinedBlocks)
-        </image_ocr_attachments>
-        """
+        return BuiltInPromptStore.render(
+            .imageOCRAppendix,
+            variables: ["attachments": joinedBlocks]
+        )
     }
 
     func resolveSelectedOCRModel() -> RunnableModel? {
@@ -624,10 +618,7 @@ extension ChatService {
             throw NetworkError.invalidProviderConfiguration(message: configurationError)
         }
 
-        let prompt = NSLocalizedString(
-            "请识别这张图片中的所有可见文字，并只返回识别到的文字。不要解释、不要总结、不要使用 Markdown；如果没有可识别文字，请返回“未识别到文字”。",
-            comment: "Remote OCR prompt"
-        )
+        let prompt = BuiltInPromptStore.render(.remoteOCR)
         let message = ChatMessage(role: .user, content: prompt)
         let payload: [String: Any] = [
             "temperature": 0,
