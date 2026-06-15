@@ -12,6 +12,7 @@ import SwiftUI
 import ETOSCore
 import WatchKit
 import Foundation
+import AVFoundation
 
 /// 背景图片选择器视图
 struct BackgroundPickerView: View {
@@ -150,7 +151,7 @@ struct BackgroundPickerView: View {
                     history: backgroundSourceHistory,
                     isImporting: isImportingBackground,
                     title: NSLocalizedString("添加背景", comment: ""),
-                    placeholder: NSLocalizedString("背景图片链接", comment: ""),
+                    placeholder: NSLocalizedString("背景图片或视频链接", comment: ""),
                     progressTitle: NSLocalizedString("正在下载并导入...", comment: ""),
                     confirmTitle: NSLocalizedString("导入", comment: ""),
                     onImport: {
@@ -364,15 +365,17 @@ private enum WatchBackgroundImporter {
            !(200...299).contains(httpResponse.statusCode) {
             throw WatchBackgroundImportError.invalidHTTPStatus(httpResponse.statusCode)
         }
+        let fileSize = Self.fileSize(at: downloadedURL)
+        if fileSize > 0 {
+            progress?(SyncPackageDownloadProgress(bytesReceived: fileSize, totalBytes: fileSize))
+        }
+        if let videoExtension = Self.backgroundVideoExtension(for: url, response: response) {
+            return try Self.storeVideoBackground(from: downloadedURL, fileExtension: videoExtension)
+        }
+
         let data = try await Task.detached(priority: .utility) {
             try Data(contentsOf: downloadedURL)
         }.value
-        progress?(
-            SyncPackageDownloadProgress(
-                bytesReceived: Int64(data.count),
-                totalBytes: Int64(data.count)
-            )
-        )
         guard let image = UIImage(data: data) else {
             throw WatchBackgroundImportError.invalidImage
         }
@@ -389,6 +392,40 @@ private enum WatchBackgroundImporter {
             throw WatchBackgroundImportError.writeFailed(error.localizedDescription)
         }
         return fileName
+    }
+
+    private static func backgroundVideoExtension(for url: URL, response: URLResponse) -> String? {
+        let pathExtension = url.pathExtension.lowercased()
+        if ConfigLoader.supportedBackgroundVideoExtensions.contains(pathExtension) {
+            return pathExtension
+        }
+        guard let mimeType = response.mimeType?.lowercased(), mimeType.hasPrefix("video/") else {
+            return nil
+        }
+        if mimeType.contains("quicktime") {
+            return "mov"
+        }
+        if mimeType.contains("x-m4v") {
+            return "m4v"
+        }
+        return "mp4"
+    }
+
+    private static func storeVideoBackground(from sourceURL: URL, fileExtension: String) throws -> String {
+        ConfigLoader.setupBackgroundsDirectory()
+        let fileName = "background-\(UUID().uuidString).\(fileExtension)"
+        let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(fileName)
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: fileURL)
+        } catch {
+            throw WatchBackgroundImportError.writeFailed(error.localizedDescription)
+        }
+        return fileName
+    }
+
+    private static func fileSize(at url: URL) -> Int64 {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.int64Value ?? 0
     }
 }
 
@@ -432,9 +469,18 @@ private struct FileImage: View {
     var body: some View {
         Group {
             if let image = uiImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+                ZStack {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                    if ConfigLoader.isVideoBackgroundFile(filename) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.white)
+                            .shadow(radius: 3)
+                    }
+                }
             } else {
                 // 加载失败或加载中时显示的占位符
                 ZStack {
@@ -450,10 +496,23 @@ private struct FileImage: View {
     
     private func loadImage() async {
         let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(filename)
-        if let image = UIImage(contentsOfFile: fileURL.path) {
+        let image = ConfigLoader.isVideoBackgroundFile(filename)
+            ? Self.makeVideoThumbnail(from: fileURL)
+            : UIImage(contentsOfFile: fileURL.path)
+        if let image {
             await MainActor.run {
                 self.uiImage = image
             }
         }
+    }
+
+    private static func makeVideoThumbnail(from url: URL) -> UIImage? {
+        let asset = AVAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 }

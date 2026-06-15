@@ -69,6 +69,10 @@ extension ChatViewModel {
             currentBackgroundImageBlurredUIImage = nil
             return
         }
+        guard !currentBackgroundIsVideo else {
+            currentBackgroundImageBlurredUIImage = nil
+            return
+        }
         guard let baseImage = loadBackgroundImage(named: currentBackgroundImage) else {
             currentBackgroundImageBlurredUIImage = nil
             return

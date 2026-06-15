@@ -343,8 +343,18 @@ class ChatViewModel: ObservableObject {
     @Published var backgroundImages: [String] = []
     @Published var currentBackgroundImageBlurredUIImage: UIImage?
     
+    var currentBackgroundIsVideo: Bool {
+        ConfigLoader.isVideoBackgroundFile(currentBackgroundImage)
+    }
+
+    var currentBackgroundMediaURL: URL? {
+        guard !currentBackgroundImage.isEmpty else { return nil }
+        return ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
+    }
+
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
+        guard !currentBackgroundIsVideo else { return nil }
         return loadBackgroundImage(named: currentBackgroundImage)
     }
 

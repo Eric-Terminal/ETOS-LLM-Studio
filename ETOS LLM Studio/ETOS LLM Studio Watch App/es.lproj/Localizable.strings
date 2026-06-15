@@ -4627,3 +4627,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "下载后会先检查快照；如需密码，会在恢复前提示输入。" = "Tras la descarga, se comprobará la instantánea. Si requiere contraseña, se pedirá antes de restaurar.";
 "正在恢复…" = "Restaurando…";
 "下载并恢复" = "Descargar y restaurar";
+"背景图片或视频链接" = "URL de imagen o video de fondo";

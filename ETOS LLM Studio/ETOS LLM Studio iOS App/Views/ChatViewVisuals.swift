@@ -8,6 +8,7 @@
 
 import SwiftUI
 import UIKit
+import AVFoundation
 
 extension ChatView {
     func memoryRetryStoppedNoticeBanner(text: String) -> some View {
@@ -57,7 +58,25 @@ extension ChatView {
         GeometryReader { geometry in
             Group {
                 if viewModel.enableBackground,
-                   let image = viewModel.currentBackgroundImageBlurredUIImage {
+                   viewModel.currentBackgroundIsVideo,
+                   let videoURL = viewModel.currentBackgroundMediaURL {
+                    ZStack {
+                        if viewModel.backgroundContentMode == "fit" {
+                            colorScheme == .dark ? Color.black : Color(uiColor: .systemBackground)
+                        }
+
+                        LoopingBackgroundVideoView(
+                            url: videoURL,
+                            contentMode: viewModel.backgroundContentMode
+                        )
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                        .clipped()
+                        .blur(radius: viewModel.backgroundBlur)
+                        .opacity(viewModel.backgroundOpacity)
+                    }
+                } else if viewModel.enableBackground,
+                          let image = viewModel.currentBackgroundImageBlurredUIImage {
                     ZStack {
                         if viewModel.backgroundContentMode == "fit" {
                             colorScheme == .dark ? Color.black : Color(uiColor: .systemBackground)
@@ -210,5 +229,70 @@ extension ChatView {
 
     var historyBannerStrokeColor: Color {
         isLiquidGlassEnabled ? scrollToBottomButtonGlassStrokeColor : scrollToBottomButtonBorderColor
+    }
+}
+
+private struct LoopingBackgroundVideoView: UIViewRepresentable {
+    let url: URL
+    let contentMode: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> PlayerContainerView {
+        let view = PlayerContainerView()
+        context.coordinator.configure(view: view, url: url, contentMode: contentMode)
+        return view
+    }
+
+    func updateUIView(_ uiView: PlayerContainerView, context: Context) {
+        context.coordinator.configure(view: uiView, url: url, contentMode: contentMode)
+    }
+
+    static func dismantleUIView(_ uiView: PlayerContainerView, coordinator: Coordinator) {
+        coordinator.stop()
+        uiView.playerLayer.player = nil
+    }
+
+    final class Coordinator {
+        private var currentURL: URL?
+        private var player: AVQueuePlayer?
+        private var looper: AVPlayerLooper?
+
+        func configure(view: PlayerContainerView, url: URL, contentMode: String) {
+            view.playerLayer.videoGravity = contentMode == "fit" ? .resizeAspect : .resizeAspectFill
+            if currentURL == url, view.playerLayer.player === player {
+                player?.play()
+                return
+            }
+
+            let item = AVPlayerItem(url: url)
+            let player = AVQueuePlayer()
+            player.isMuted = true
+            player.actionAtItemEnd = .none
+            looper = AVPlayerLooper(player: player, templateItem: item)
+            view.playerLayer.player = player
+            self.player = player
+            currentURL = url
+            player.play()
+        }
+
+        func stop() {
+            player?.pause()
+            player = nil
+            looper = nil
+            currentURL = nil
+        }
+    }
+
+    final class PlayerContainerView: UIView {
+        override static var layerClass: AnyClass {
+            AVPlayerLayer.self
+        }
+
+        var playerLayer: AVPlayerLayer {
+            layer as! AVPlayerLayer
+        }
     }
 }

@@ -37,18 +37,31 @@ extension ConfigLoader {
         }
     }
 
-    /// 从 `Backgrounds` 目录加载所有图片的文件名。
-    /// - Returns: 一个包含所有图片文件名的数组。
+    public static let supportedBackgroundImageExtensions: Set<String> = ["png", "jpg", "jpeg", "webp"]
+    public static let supportedBackgroundVideoExtensions: Set<String> = ["mp4", "mov", "m4v"]
+
+    /// 判断指定文件名是否为可用的视频背景。
+    public static func isVideoBackgroundFile(_ fileName: String) -> Bool {
+        supportedBackgroundVideoExtensions.contains(URL(fileURLWithPath: fileName).pathExtension.lowercased())
+    }
+
+    /// 判断指定文件名是否为可用的背景媒体。
+    public static func isSupportedBackgroundMediaFile(_ fileName: String) -> Bool {
+        let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
+        return supportedBackgroundImageExtensions.contains(ext) || supportedBackgroundVideoExtensions.contains(ext)
+    }
+
+    /// 从 `Backgrounds` 目录加载所有图片和视频背景的文件名。
+    /// - Returns: 一个包含所有背景媒体文件名的数组。
     public static func loadBackgroundImages() -> [String] {
-        logger.info("正在从 \(getBackgroundsDirectory().path) 加载所有背景图片...")
+        logger.info("正在从 \(getBackgroundsDirectory().path) 加载所有背景媒体...")
         let fileManager = FileManager.default
         var imageNames: [String] = []
 
         do {
             let fileURLs = try fileManager.contentsOfDirectory(at: getBackgroundsDirectory(), includingPropertiesForKeys: nil)
-            let supportedExtensions = ["png", "jpg", "jpeg", "webp"]
             for url in fileURLs {
-                if supportedExtensions.contains(url.pathExtension.lowercased()) {
+                if isSupportedBackgroundMediaFile(url.lastPathComponent) {
                     imageNames.append(url.lastPathComponent)
                 }
             }
@@ -56,7 +69,7 @@ extension ConfigLoader {
             logger.error("无法读取 Backgrounds 目录: \(error.localizedDescription)")
         }
 
-        logger.info("总共加载了 \(imageNames.count) 个背景图片。")
+        logger.info("总共加载了 \(imageNames.count) 个背景媒体。")
         return imageNames
     }
 

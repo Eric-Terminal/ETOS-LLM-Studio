@@ -4566,3 +4566,6 @@
 "{external_context}：外部上下文与可用能力。" = "{external_context}: External context and available capabilities.";
 "浏览历史归档" = "Browse Archive History";
 "读取当前 S3/R2 路径下已经上传的 .elsbackup 快照。" = "Read .elsbackup snapshots already uploaded under the current S3/R2 path.";
+"背景图片或视频链接" = "Background image or video URL";
+"无法读取视频数据。" = "Unable to read video data.";
+"不支持的视频格式。" = "Unsupported video format.";

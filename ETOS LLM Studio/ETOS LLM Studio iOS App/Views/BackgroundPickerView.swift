@@ -10,6 +10,9 @@ import SwiftUI
 import ETOSCore
 import UIKit
 import PhotosUI
+import UniformTypeIdentifiers
+import CoreTransferable
+import AVFoundation
 
 struct BackgroundPickerView: View {
     let allBackgrounds: [String]
@@ -44,11 +47,11 @@ struct BackgroundPickerView: View {
         contentView
             .navigationTitle(NSLocalizedString("选择背景", comment: ""))
             .toolbar { addBackgroundToolbar }
-            .photosPicker(isPresented: $isShowingPhotoPicker, selection: $selectedItem, matching: .images)
+            .photosPicker(isPresented: $isShowingPhotoPicker, selection: $selectedItem, matching: .any(of: [.images, .videos]))
             .onChange(of: selectedItem) { _, newItem in
                 guard let newItem else { return }
                 Task {
-                    await prepareCropImage(from: newItem)
+                    await prepareBackground(from: newItem)
                 }
             }
             .sheet(isPresented: $isShowingCropEditor, onDismiss: {
@@ -187,6 +190,14 @@ struct BackgroundPickerView: View {
         )
     }
     
+    private func prepareBackground(from item: PhotosPickerItem) async {
+        if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) || $0.conforms(to: .video) }) {
+            await saveBackgroundVideo(from: item)
+        } else {
+            await prepareCropImage(from: item)
+        }
+    }
+
     private func prepareCropImage(from item: PhotosPickerItem) async {
         await MainActor.run {
             isSaving = true
@@ -239,6 +250,48 @@ struct BackgroundPickerView: View {
             return
         }
         
+        await MainActor.run {
+            pendingCropImage = nil
+            selectedBackground = filename
+            backgrounds = ConfigLoader.loadBackgroundImages()
+            NotificationCenter.default.post(name: .syncBackgroundsUpdated, object: nil)
+            selectedItem = nil
+        }
+    }
+
+    private func saveBackgroundVideo(from item: PhotosPickerItem) async {
+        await MainActor.run {
+            isSaving = true
+        }
+        defer {
+            Task { @MainActor in
+                isSaving = false
+            }
+        }
+
+        guard let video = try? await item.loadTransferable(type: PickedBackgroundVideo.self) else {
+            showSaveError(NSLocalizedString("无法读取视频数据。", comment: ""))
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: video.url) }
+
+        let fileExtension = video.url.pathExtension.lowercased()
+        guard ConfigLoader.supportedBackgroundVideoExtensions.contains(fileExtension) else {
+            showSaveError(NSLocalizedString("不支持的视频格式。", comment: ""))
+            return
+        }
+
+        ConfigLoader.setupBackgroundsDirectory()
+        let filename = "background-\(UUID().uuidString).\(fileExtension)"
+        let url = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(filename)
+
+        do {
+            try FileManager.default.copyItem(at: video.url, to: url)
+        } catch {
+            showSaveError(String(format: NSLocalizedString("保存失败：%@", comment: ""), error.localizedDescription))
+            return
+        }
+
         await MainActor.run {
             pendingCropImage = nil
             selectedBackground = filename
@@ -595,6 +648,23 @@ private extension UIImage {
     }
 }
 
+private struct PickedBackgroundVideo: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { receivedFile in
+            let fileExtension = receivedFile.file.pathExtension.isEmpty ? "mov" : receivedFile.file.pathExtension
+            let temporaryURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("background-\(UUID().uuidString).\(fileExtension)")
+            if FileManager.default.fileExists(atPath: temporaryURL.path) {
+                try FileManager.default.removeItem(at: temporaryURL)
+            }
+            try FileManager.default.copyItem(at: receivedFile.file, to: temporaryURL)
+            return PickedBackgroundVideo(url: temporaryURL)
+        }
+    }
+}
+
 private struct FileImage: View {
     let filename: String
     @State private var image: UIImage?
@@ -602,9 +672,18 @@ private struct FileImage: View {
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+                ZStack {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                    if ConfigLoader.isVideoBackgroundFile(filename) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.white)
+                            .shadow(radius: 4)
+                    }
+                }
             } else {
                 ZStack {
                     Rectangle().fill(Color.secondary.opacity(0.1))
@@ -619,10 +698,23 @@ private struct FileImage: View {
     
     private func loadImage() async {
         let url = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(filename)
-        if let loaded = UIImage(contentsOfFile: url.path) {
+        let loaded = ConfigLoader.isVideoBackgroundFile(filename)
+            ? Self.makeVideoThumbnail(from: url)
+            : UIImage(contentsOfFile: url.path)
+        if let loaded {
             await MainActor.run {
                 image = loaded
             }
         }
+    }
+
+    private static func makeVideoThumbnail(from url: URL) -> UIImage? {
+        let asset = AVAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 }

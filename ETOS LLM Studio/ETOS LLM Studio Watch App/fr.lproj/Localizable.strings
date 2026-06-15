@@ -4627,3 +4627,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "下载后会先检查快照；如需密码，会在恢复前提示输入。" = "Après le téléchargement, le snapshot est vérifié. Si un mot de passe est requis, il sera demandé avant la restauration.";
 "正在恢复…" = "Restauration…";
 "下载并恢复" = "Télécharger et restaurer";
+"背景图片或视频链接" = "URL d'image ou de vidéo d'arrière-plan";

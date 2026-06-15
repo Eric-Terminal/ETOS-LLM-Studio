@@ -9,6 +9,8 @@
 import SwiftUI
 import Foundation
 import ETOSCore
+import AVKit
+import AVFoundation
 
 extension ContentView {
     var legacyChatRootView: some View {
@@ -124,6 +126,26 @@ extension ContentView {
     @ViewBuilder
     var chatBackgroundLayer: some View {
         if viewModel.enableBackground,
+           viewModel.currentBackgroundIsVideo,
+           let videoURL = viewModel.currentBackgroundMediaURL {
+            GeometryReader { proxy in
+                let size = proxy.size
+                ZStack {
+                    if viewModel.backgroundContentMode == "fit" {
+                        colorScheme == .dark ? Color.black : Color(white: 0.95)
+                    }
+
+                    WatchLoopingBackgroundVideoView(url: videoURL)
+                        .aspectRatio(contentMode: viewModel.backgroundContentMode == "fill" ? .fill : .fit)
+                        .frame(width: size.width, height: size.height)
+                        .position(x: size.width / 2, y: size.height / 2)
+                        .clipped()
+                        .blur(radius: viewModel.backgroundBlur)
+                        .opacity(viewModel.resolvedBackgroundOpacity)
+                }
+                .frame(width: size.width, height: size.height)
+            }
+        } else if viewModel.enableBackground,
            let bgImage = viewModel.currentBackgroundImageBlurredUIImage {
             GeometryReader { proxy in
                 let size = proxy.size
@@ -403,4 +425,49 @@ extension ContentView {
         }
     }
 
+}
+
+private struct WatchLoopingBackgroundVideoView: View {
+    let url: URL
+
+    @State private var player = AVPlayer()
+    @State private var endObserver: NSObjectProtocol?
+    @State private var currentURL: URL?
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .disabled(true)
+            .onAppear {
+                configurePlayerIfNeeded()
+                player.play()
+            }
+            .onDisappear {
+                player.pause()
+            }
+            .onChange(of: url) { _, _ in
+                configurePlayerIfNeeded()
+                player.play()
+            }
+    }
+
+    private func configurePlayerIfNeeded() {
+        guard currentURL != url else { return }
+        player.pause()
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        let item = AVPlayerItem(url: url)
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [player] _ in
+            player.seek(to: .zero)
+            player.play()
+        }
+        player.replaceCurrentItem(with: item)
+        player.isMuted = true
+        player.actionAtItemEnd = .none
+        currentURL = url
+    }
 }

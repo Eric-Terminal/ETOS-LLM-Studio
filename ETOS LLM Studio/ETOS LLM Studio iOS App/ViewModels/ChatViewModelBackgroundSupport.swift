@@ -17,14 +17,28 @@ import UIKit
 #endif
 
 extension ChatViewModel {
+    var currentBackgroundIsVideo: Bool {
+        ConfigLoader.isVideoBackgroundFile(currentBackgroundImage)
+    }
+
+    var currentBackgroundMediaURL: URL? {
+        guard !currentBackgroundImage.isEmpty else { return nil }
+        return ConfigLoader.getBackgroundsDirectory().appendingPathComponent(currentBackgroundImage)
+    }
+
     var currentBackgroundImageUIImage: UIImage? {
         guard !currentBackgroundImage.isEmpty else { return nil }
+        guard !currentBackgroundIsVideo else { return nil }
         return loadBackgroundImage(named: currentBackgroundImage)
     }
 
     func refreshBlurredBackgroundImage() {
         backgroundBlurTask?.cancel()
         guard enableBackground, !currentBackgroundImage.isEmpty else {
+            currentBackgroundImageBlurredUIImage = nil
+            return
+        }
+        guard !currentBackgroundIsVideo else {
             currentBackgroundImageBlurredUIImage = nil
             return
         }
