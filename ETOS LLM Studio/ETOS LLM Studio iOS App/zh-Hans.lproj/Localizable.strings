@@ -4552,3 +4552,5 @@
 "{tasks}：当前未完成的 Pulse 任务。" = "{tasks}：当前未完成的 Pulse 任务。";
 "{preference_profile}：最近卡片偏好与历史。" = "{preference_profile}：最近卡片偏好与历史。";
 "{external_context}：外部上下文与可用能力。" = "{external_context}：外部上下文与可用能力。";
+"浏览历史归档" = "浏览历史归档";
+"读取当前 S3/R2 路径下已经上传的 .elsbackup 快照。" = "读取当前 S3/R2 路径下已经上传的 .elsbackup 快照。";

@@ -641,13 +641,13 @@ private struct S3CompatibleSnapshotStorageSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 } label: {
-                    Label(NSLocalizedString("从 S3/R2 选择快照", comment: ""), systemImage: "tray.and.arrow.down")
+                    Label(NSLocalizedString("浏览历史归档", comment: ""), systemImage: "archivebox")
                 }
                 .disabled(!isS3ConfigurationComplete() || isCreatingSnapshot || isUploadingSnapshot || isRestoringSnapshot)
             } header: {
                 Text(NSLocalizedString("远端快照", comment: ""))
             } footer: {
-                Text(NSLocalizedString("请先完成对象存储配置。", comment: ""))
+                Text(NSLocalizedString("读取当前 S3/R2 路径下已经上传的 .elsbackup 快照。", comment: ""))
             }
         }
         .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))

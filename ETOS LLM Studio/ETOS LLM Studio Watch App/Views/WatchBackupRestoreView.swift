@@ -692,8 +692,378 @@ private struct WatchS3CompatibleSnapshotStorageSettingsView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                NavigationLink {
+                    if let configuration = s3UploadConfiguration() {
+                        WatchRemoteSnapshotBrowserView(configuration: configuration)
+                    } else {
+                        Text(NSLocalizedString("请先完成对象存储配置。", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } label: {
+                    Label(NSLocalizedString("浏览历史归档", comment: ""), systemImage: "archivebox")
+                }
+                .disabled(!isS3ConfigurationComplete)
+            } header: {
+                Text(NSLocalizedString("远端快照", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("读取当前 S3/R2 路径下已经上传的 .elsbackup 快照。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .navigationTitle(NSLocalizedString("S3 兼容对象存储", comment: ""))
+    }
+
+    private var isS3ConfigurationComplete: Bool {
+        let endpointText = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let endpoint = URL(string: endpointText),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return false
+        }
+        return !appConfig.syncBackupS3Region.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appConfig.syncBackupS3Bucket.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appConfig.syncBackupS3AccessKeyID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appConfig.syncBackupS3SecretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func s3UploadConfiguration() -> S3CompatibleUploadConfiguration? {
+        let trimmed = appConfig.syncBackupUploadEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let endpoint = URL(string: trimmed),
+              let scheme = endpoint.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return S3CompatibleUploadConfiguration(
+            endpoint: endpoint,
+            region: appConfig.syncBackupS3Region,
+            bucket: appConfig.syncBackupS3Bucket,
+            keyPrefix: appConfig.syncBackupS3KeyPrefix,
+            accessKeyID: appConfig.syncBackupS3AccessKeyID,
+            secretAccessKey: appConfig.syncBackupS3SecretAccessKey,
+            sessionToken: appConfig.syncBackupS3SessionToken
+        )
+    }
+}
+
+private struct WatchRemoteSnapshotBrowserView: View {
+    let configuration: S3CompatibleUploadConfiguration
+
+    @State private var snapshots: [S3CompatibleRemoteSnapshot] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    Task {
+                        await loadSnapshots()
+                    }
+                } label: {
+                    Label(NSLocalizedString("刷新", comment: ""), systemImage: "arrow.clockwise")
+                }
+                .disabled(isLoading)
+            }
+
+            if isLoading {
+                Section {
+                    HStack {
+                        ProgressView()
+                        Text(NSLocalizedString("正在读取远端快照…", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section {
+                if snapshots.isEmpty && !isLoading {
+                    Label(NSLocalizedString("未找到远端快照", comment: ""), systemImage: "tray")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(snapshots) { snapshot in
+                        NavigationLink {
+                            WatchRemoteSnapshotDetailView(
+                                snapshot: snapshot,
+                                configuration: configuration
+                            )
+                        } label: {
+                            Label(snapshot.fileName, systemImage: "doc")
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            } footer: {
+                Text(NSLocalizedString("只显示当前路径下的 .elsbackup 快照。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Section(NSLocalizedString("快照操作失败", comment: "")) {
+                    Text(errorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("历史归档", comment: ""))
+        .task {
+            guard snapshots.isEmpty else { return }
+            await loadSnapshots()
+        }
+    }
+
+    @MainActor
+    private func loadSnapshots() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            snapshots = try await SyncPackageUploadService.listRemoteSnapshots(s3: configuration)
+            isLoading = false
+        } catch {
+            isLoading = false
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct WatchRemoteSnapshotDetailView: View {
+    let snapshot: S3CompatibleRemoteSnapshot
+    let configuration: S3CompatibleUploadConfiguration
+
+    @State private var isDownloading = false
+    @State private var isRestoring = false
+    @State private var downloadProgress: SyncPackageDownloadProgress?
+    @State private var errorMessage: String?
+    @State private var statusMessage: String?
+    @State private var restorePassword = ""
+    @State private var pendingEncryptedSnapshotURL: URL?
+    @State private var pendingSnapshotInspection: SnapshotRestoreService.InspectionResult?
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("远端快照", comment: "")) {
+                LabeledContent(NSLocalizedString("文件名", comment: "")) {
+                    Text(snapshot.fileName)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                if let byteSize = snapshot.byteSize {
+                    LabeledContent(NSLocalizedString("大小", comment: "")) {
+                        Text(StorageUtility.formatSize(byteSize))
+                    }
+                }
+
+                if let lastModified = snapshot.lastModified {
+                    LabeledContent(NSLocalizedString("修改时间", comment: "")) {
+                        Text(lastModified.formatted(date: .abbreviated, time: .shortened))
+                    }
+                }
+            }
+
+            Section {
+                Button {
+                    downloadSnapshotForRestore()
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isDownloading || isRestoring {
+                            ProgressView()
+                                .padding(.trailing, 4)
+                        }
+                        Label(downloadButtonTitle, systemImage: "tray.and.arrow.down")
+                        Spacer()
+                    }
+                }
+                .disabled(isDownloading || isRestoring)
+
+                if let downloadProgress {
+                    WatchSnapshotDownloadProgressView(progress: downloadProgress)
+                }
+
+                if pendingEncryptedSnapshotURL != nil {
+                    Text(snapshotPasswordPromptMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    SecureField(NSLocalizedString("密码", comment: ""), text: $restorePassword.watchKeyboardNewlineBinding())
+                        .textContentType(.password)
+
+                    Button(role: .destructive) {
+                        restorePendingEncryptedSnapshot()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label(NSLocalizedString("恢复", comment: ""), systemImage: "arrow.counterclockwise")
+                            Spacer()
+                        }
+                    }
+                    .disabled(restorePassword.isEmpty || isRestoring)
+
+                    Button(NSLocalizedString("取消", comment: "")) {
+                        clearPendingEncryptedSnapshot()
+                    }
+                    .disabled(isRestoring)
+                }
+            } footer: {
+                Text(NSLocalizedString("下载后会先检查快照；如需密码，会在恢复前提示输入。", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let statusMessage, !statusMessage.isEmpty {
+                Section(NSLocalizedString("状态", comment: "")) {
+                    Text(statusMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Section(NSLocalizedString("快照操作失败", comment: "")) {
+                    Text(errorMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle(snapshot.fileName)
+        .onDisappear {
+            clearPendingEncryptedSnapshot()
+        }
+    }
+
+    private var downloadButtonTitle: String {
+        if isRestoring {
+            return NSLocalizedString("正在恢复…", comment: "")
+        }
+        if isDownloading {
+            return NSLocalizedString("正在下载快照…", comment: "")
+        }
+        return NSLocalizedString("下载并恢复", comment: "")
+    }
+
+    private var snapshotPasswordPromptMessage: String {
+        switch pendingSnapshotInspection?.encryptionMode {
+        case .simplePassword:
+            return NSLocalizedString("此快照使用简单密码加密，请输入导出时设置的密码。", comment: "")
+        case .pbkdf2Strong:
+            return NSLocalizedString("此快照使用高强度派生加密，请输入导出时设置的密码。", comment: "")
+        case .none:
+            return NSLocalizedString("此快照已加密，请输入导出时设置的密码。", comment: "")
+        }
+    }
+
+    private func downloadSnapshotForRestore() {
+        let objectKey = snapshot.key
+        let uploadConfiguration = configuration
+
+        isDownloading = true
+        isRestoring = false
+        downloadProgress = snapshot.byteSize.map {
+            SyncPackageDownloadProgress(bytesReceived: 0, totalBytes: $0)
+        }
+        errorMessage = nil
+        statusMessage = NSLocalizedString("正在下载快照…", comment: "")
+        clearPendingEncryptedSnapshot()
+
+        Task.detached(priority: .userInitiated) {
+            var stagedSnapshotURL: URL?
+            do {
+                let downloadedURL = try await SyncPackageUploadService.downloadRemoteSnapshot(
+                    objectKey: objectKey,
+                    s3: uploadConfiguration,
+                    progress: { progress in
+                        Task { @MainActor in
+                            downloadProgress = progress
+                        }
+                    }
+                )
+                let stagedURL = try WatchSnapshotFileWriter.stageSnapshotForRestore(downloadedURL)
+                try? FileManager.default.removeItem(at: downloadedURL)
+                stagedSnapshotURL = stagedURL
+                let inspection = try SnapshotRestoreService.inspectSnapshot(at: stagedURL)
+
+                await MainActor.run {
+                    isDownloading = false
+                    downloadProgress = nil
+                    if inspection.requiresPassword {
+                        pendingEncryptedSnapshotURL = stagedURL
+                        pendingSnapshotInspection = inspection
+                        restorePassword = ""
+                        statusMessage = NSLocalizedString("请输入快照密码后恢复。", comment: "")
+                    } else {
+                        restoreSnapshot(from: stagedURL, password: nil, removeWhenFinished: true)
+                    }
+                }
+            } catch {
+                if let stagedSnapshotURL {
+                    try? FileManager.default.removeItem(at: stagedSnapshotURL)
+                }
+                await MainActor.run {
+                    isDownloading = false
+                    downloadProgress = nil
+                    errorMessage = error.localizedDescription
+                    statusMessage = nil
+                }
+            }
+        }
+    }
+
+    private func restorePendingEncryptedSnapshot() {
+        guard let pendingEncryptedSnapshotURL else { return }
+        let password = restorePassword
+        self.pendingEncryptedSnapshotURL = nil
+        pendingSnapshotInspection = nil
+        restorePassword = ""
+        restoreSnapshot(from: pendingEncryptedSnapshotURL, password: password, removeWhenFinished: true)
+    }
+
+    private func restoreSnapshot(
+        from fileURL: URL,
+        password: String?,
+        removeWhenFinished: Bool
+    ) {
+        isRestoring = true
+        errorMessage = nil
+        statusMessage = nil
+
+        Task.detached(priority: .userInitiated) {
+            defer {
+                if removeWhenFinished {
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+            }
+
+            do {
+                try SnapshotRestoreService.restoreSnapshot(from: fileURL, password: password)
+                await MainActor.run {
+                    AppConfigStore.shared.reloadFromPersistentStore()
+                    isRestoring = false
+                    statusMessage = NSLocalizedString("快照已恢复。若当前界面仍显示旧数据，请返回聊天列表后重新进入。", comment: "")
+                }
+            } catch {
+                await MainActor.run {
+                    isRestoring = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func clearPendingEncryptedSnapshot() {
+        if let pendingEncryptedSnapshotURL {
+            try? FileManager.default.removeItem(at: pendingEncryptedSnapshotURL)
+        }
+        pendingEncryptedSnapshotURL = nil
+        pendingSnapshotInspection = nil
+        restorePassword = ""
     }
 }
 
