@@ -165,10 +165,7 @@ private struct BuiltInPromptEditorView: View {
                 }
 
                 Section {
-                    TextEditor(text: $draft)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: editorMinHeight)
-                        .autocorrectionDisabled()
+                    templateEditor
                 } header: {
                     Text(NSLocalizedString("模板", comment: "Built-in prompt editor section"))
                 } footer: {
@@ -246,6 +243,21 @@ private struct BuiltInPromptEditorView: View {
         }
     }
 
+    @ViewBuilder
+    private var templateEditor: some View {
+        #if os(watchOS)
+        TextField(NSLocalizedString("模板", comment: "Built-in prompt editor section"), text: $draft.builtInPromptWatchKeyboardNewlineBinding(), axis: .vertical)
+            .font(.system(.body, design: .monospaced))
+            .lineLimit(5...10)
+            .autocorrectionDisabled()
+        #else
+        TextEditor(text: $draft)
+            .font(.system(.body, design: .monospaced))
+            .frame(minHeight: editorMinHeight)
+            .autocorrectionDisabled()
+        #endif
+    }
+
     private var editorMinHeight: CGFloat {
         #if os(watchOS)
         140
@@ -304,3 +316,28 @@ private struct BuiltInPromptEditorView: View {
         }
     }
 }
+
+#if os(watchOS)
+fileprivate extension String {
+    func builtInPromptWatchKeyboardEscapedNewlines() -> String {
+        replacingOccurrences(of: "\n", with: "\\n")
+    }
+
+    func builtInPromptWatchKeyboardUnescapedNewlines() -> String {
+        replacingOccurrences(of: "\\n", with: "\n")
+    }
+}
+
+fileprivate extension Binding where Value == String {
+    func builtInPromptWatchKeyboardNewlineBinding() -> Binding<String> {
+        Binding(
+            get: { wrappedValue.builtInPromptWatchKeyboardEscapedNewlines() },
+            set: { newValue in
+                let unescaped = newValue.builtInPromptWatchKeyboardUnescapedNewlines()
+                guard unescaped != wrappedValue else { return }
+                wrappedValue = unescaped
+            }
+        )
+    }
+}
+#endif
