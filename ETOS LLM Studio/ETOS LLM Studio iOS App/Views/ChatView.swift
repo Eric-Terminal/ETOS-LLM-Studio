@@ -77,6 +77,11 @@ struct ChatView: View {
     // 发送飞行动画：Overlay hero 状态，及输入框实时 frame（飞行起点来源）
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
+    // 分轴弹簧动画状态：x/y 用不同 spring 形成弧线轨迹，尺寸独立高阻尼防压扁
+    @State var flightAnimPosX: CGFloat = 0
+    @State var flightAnimPosY: CGFloat = 0
+    @State var flightAnimWidth: CGFloat = 0
+    @State var flightAnimHeight: CGFloat = 0
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
 

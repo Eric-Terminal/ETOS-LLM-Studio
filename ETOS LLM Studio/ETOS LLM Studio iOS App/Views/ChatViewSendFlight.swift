@@ -45,9 +45,6 @@ struct SendFlightState: Equatable {
     var landingRect: CGRect?
     /// 是否已落地（进入交接淡出阶段）。
     var isLanded: Bool
-
-    /// 当前飞行气泡应处的 frame：拿到真实落点则飞向落点，否则停在输入框。
-    var currentRect: CGRect { landingRect ?? startRect }
 }
 
 // MARK: - 坐标上报 PreferenceKey
@@ -117,18 +114,24 @@ struct FlyingBubbleView: View {
 
 extension ChatView {
 
-    /// 飞行曲线：参数来自显示设置（与弹性滚动同一套语义）。
-    /// dampingFraction < 1 时到达落点会冲过头再回弹（overshoot），越低晃动越明显。
-    private var flightSpring: Animation {
-        .spring(
-            response: appConfig.chatSendAnimationSpringResponse,
-            dampingFraction: appConfig.chatSendAnimationSpringDamping
-        )
+    /// 分轴弹簧：x 快（先靠右）、y 慢（后靠上+Q弹），形成曲线弧轨迹（贴近 iMessage）。
+    /// 尺寸弹簧高阻尼，避免弹缩变扁。
+    private var flightSpringX: Animation {
+        .spring(response: appConfig.chatSendAnimationSpringResponse * 0.72,
+                dampingFraction: max(0.38, appConfig.chatSendAnimationSpringDamping * 0.82))
+    }
+    private var flightSpringY: Animation {
+        .spring(response: appConfig.chatSendAnimationSpringResponse,
+                dampingFraction: appConfig.chatSendAnimationSpringDamping)
+    }
+    private var flightSpringSize: Animation {
+        .spring(response: appConfig.chatSendAnimationSpringResponse * 0.55,
+                dampingFraction: 0.82)
     }
     /// 落地后真实气泡淡入 / 飞行气泡淡出的交接时长。
     private var flightHandoffDuration: Double { 0.12 }
-    /// 飞行可见时长，用于安排落地交接（覆盖弹簧回弹收尾）。
-    private var flightVisibleDuration: Double { 0.6 }
+    /// 飞行可见时长，用于安排落地交接（覆盖 y 轴弹簧回弹收尾）。
+    private var flightVisibleDuration: Double { 0.65 }
 
     /// 点击发送：飞行气泡停在输入框；真实落点测到后由 handleFlightTargetRect 起飞。
     /// 起点无效时回退为普通发送（不飞行）。
@@ -146,7 +149,12 @@ extension ChatView {
         let colors = ChatFlightBubbleStyle.resolvedColors()
         let baseline = viewModel.displayMessages.last { $0.message.role == .user }?.id
 
-        // 飞行气泡出现在输入框（landingRect = nil）。
+        // 飞行气泡初始锁定在输入框位置（起点）；真实落点测到后由 handleFlightTargetRect 驱动飞向落点。
+        flightAnimPosX = inputBarRect.midX
+        flightAnimPosY = inputBarRect.midY
+        flightAnimWidth = inputBarRect.width
+        flightAnimHeight = inputBarRect.height
+
         flightState = SendFlightState(
             id: UUID(),
             baselineUserMessageID: baseline,
@@ -185,8 +193,8 @@ extension ChatView {
         inputBarRect = rect
     }
 
-    /// 目标整行上报 frame：推算真实落点并触发起飞 / 校正。
-    /// 行右缘=气泡右缘、行顶=气泡顶，气泡尺寸用文本同步估算，组合出准确落点。
+    /// 目标整行上报 frame：推算真实落点，用「分轴弹簧」触发起飞 / 校正。
+    /// x 快（先靠右）、y 慢（后靠上+Q弹回弹）、尺寸高阻尼（防压扁），形成曲线弧轨迹。
     func handleFlightTargetRect(_ rowFrame: CGRect?) {
         guard let rowFrame, rowFrame.width > 1, rowFrame.height > 1 else { return }
         guard var state = flightState, state.targetMessageID != nil, !state.isLanded else { return }
@@ -202,10 +210,16 @@ extension ChatView {
 
         let isFirstLanding = (state.landingRect == nil)
         state.landingRect = landing
-        // landingRect 变化经由 flightOverlayLayer 的 .animation(value:) 触发起飞 / 平滑校正。
         flightState = state
 
-        // 首次拿到落点起算飞行时长，到点落地交接。
+        // 分轴起/校正飞行 — x 先到、y 后到 ≈ 弧线轨迹
+        withAnimation(flightSpringX) { flightAnimPosX = landing.midX }
+        withAnimation(flightSpringY) { flightAnimPosY = landing.midY }
+        withAnimation(flightSpringSize) {
+            flightAnimWidth = landing.width
+            flightAnimHeight = landing.height
+        }
+
         if isFirstLanding {
             let flightID = state.id
             DispatchQueue.main.asyncAfter(deadline: .now() + flightVisibleDuration) { [self] in
@@ -234,22 +248,20 @@ extension ChatView {
         return state.targetMessageID == messageID && !state.isLanded
     }
 
-    /// 飞行覆盖层：置于聊天根 ZStack 顶层。landingRect 一变化即用飞行弹簧从输入框飞向落点。
+    /// 飞行覆盖层：置于聊天根 ZStack 顶层。位置与尺寸由分轴弹簧独立驱动，
+    /// x 快（先靠右）、y 慢（后靠上+回弹）、尺寸高阻尼（不压扁），形成灵动弧线。
     @ViewBuilder
     var flightOverlayLayer: some View {
         if let state = flightState {
-            let rect = state.currentRect
             FlyingBubbleView(
                 text: state.text,
                 startColor: state.startColor,
                 endColor: state.endColor,
                 cornerRadius: state.cornerRadius
             )
-            .frame(width: max(rect.width, 1), height: max(rect.height, 1))
-            .position(x: rect.midX, y: rect.midY)
+            .frame(width: max(flightAnimWidth, 1), height: max(flightAnimHeight, 1))
+            .position(x: flightAnimPosX, y: flightAnimPosY)
             .opacity(state.isLanded ? 0 : 1)
-            // 真实落点测到（landingRect: nil → 值）即起飞；后续校正也走此弹簧平滑过渡。
-            .animation(flightSpring, value: state.landingRect)
             .allowsHitTesting(false)
             .zIndex(40)
         }
