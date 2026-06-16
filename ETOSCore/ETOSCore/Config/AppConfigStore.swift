@@ -235,6 +235,8 @@ public final class AppConfigStore: ObservableObject {
     @Published public var chatScrollAnimationSpringDamping: Double { didSet { write(.chatScrollAnimationSpringDamping, chatScrollAnimationSpringDamping) } }
     @Published public var chatScrollAnimationOffset: Double { didSet { write(.chatScrollAnimationOffset, chatScrollAnimationOffset) } }
     @Published public var chatSendAnimationEnabled: Bool { didSet { write(.chatSendAnimationEnabled, chatSendAnimationEnabled) } }
+    @Published public var chatSendAnimationSpringResponse: Double { didSet { write(.chatSendAnimationSpringResponse, chatSendAnimationSpringResponse) } }
+    @Published public var chatSendAnimationSpringDamping: Double { didSet { write(.chatSendAnimationSpringDamping, chatSendAnimationSpringDamping) } }
     @Published public var messageActionBarConfiguration: String {
         didSet {
             write(.messageActionBarConfiguration, messageActionBarConfiguration)
@@ -390,6 +392,8 @@ public final class AppConfigStore: ObservableObject {
         chatScrollAnimationSpringDamping = Self.realValue(.chatScrollAnimationSpringDamping, userDefaults: userDefaults)
         chatScrollAnimationOffset = Self.realValue(.chatScrollAnimationOffset, userDefaults: userDefaults)
         chatSendAnimationEnabled = Self.boolValue(.chatSendAnimationEnabled, userDefaults: userDefaults)
+        chatSendAnimationSpringResponse = Self.realValue(.chatSendAnimationSpringResponse, userDefaults: userDefaults)
+        chatSendAnimationSpringDamping = Self.realValue(.chatSendAnimationSpringDamping, userDefaults: userDefaults)
         let initialMessageActionBarConfiguration = Self.textValue(.messageActionBarConfiguration, userDefaults: userDefaults)
         messageActionBarConfiguration = initialMessageActionBarConfiguration
         messageActionBarSettings = MessageActionBarConfiguration.decoded(from: initialMessageActionBarConfiguration)
@@ -838,6 +842,8 @@ public final class AppConfigStore: ObservableObject {
         case .chatScrollAnimationSpringDamping: return .real(chatScrollAnimationSpringDamping)
         case .chatScrollAnimationOffset: return .real(chatScrollAnimationOffset)
         case .chatSendAnimationEnabled: return .bool(chatSendAnimationEnabled)
+        case .chatSendAnimationSpringResponse: return .real(chatSendAnimationSpringResponse)
+        case .chatSendAnimationSpringDamping: return .real(chatSendAnimationSpringDamping)
         case .messageActionBarConfiguration: return .text(messageActionBarConfiguration)
 
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
@@ -998,6 +1004,8 @@ public final class AppConfigStore: ObservableObject {
         case .chatScrollAnimationSpringResponse: chatScrollAnimationSpringResponse = value
         case .chatScrollAnimationSpringDamping: chatScrollAnimationSpringDamping = value
         case .chatScrollAnimationOffset: chatScrollAnimationOffset = value
+        case .chatSendAnimationSpringResponse: chatSendAnimationSpringResponse = value
+        case .chatSendAnimationSpringDamping: chatSendAnimationSpringDamping = value
         default: break
         }
     }

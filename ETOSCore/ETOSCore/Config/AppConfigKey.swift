@@ -180,6 +180,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case chatScrollAnimationSpringDamping = "chat.scrollAnimation.springDamping"
     case chatScrollAnimationOffset = "chat.scrollAnimation.offset"
     case chatSendAnimationEnabled = "chat.sendAnimation.enabled"
+    case chatSendAnimationSpringResponse = "chat.sendAnimation.springResponse"
+    case chatSendAnimationSpringDamping = "chat.sendAnimation.springDamping"
     case messageActionBarConfiguration = "chat.messageActionBar.configuration"
 
     case fontUseCustomFonts = "font.useCustomFonts"
@@ -392,6 +394,10 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(0.52)
         case .chatScrollAnimationOffset:
             return .real(32.0)
+        case .chatSendAnimationSpringResponse:
+            return .real(0.45)
+        case .chatSendAnimationSpringDamping:
+            return .real(0.6)
         case .backgroundBlur:
             return .real(10.0)
         case .backgroundOpacity:

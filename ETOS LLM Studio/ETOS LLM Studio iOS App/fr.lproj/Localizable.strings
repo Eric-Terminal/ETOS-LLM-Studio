@@ -4662,4 +4662,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "恢复默认参数" = "Réinitialiser";
 "发送入场动画" = "Animation d'envoi";
 "聊天动画" = "Animations du chat";
-"弹性滚动让气泡在滑动时产生交错回弹的波浪感。位移幅度越大弹跳越明显；弹簧响应越大惯性越强；阻尼越低回弹越剧烈。发送动画让新消息从底部弹性滑入。" = "Le défilement élastique crée un effet de vague entre les bulles lors du défilement. Une amplitude plus élevée signifie plus de rebond ; une réponse de ressort plus élevée signifie plus d'inertie ; un amortissement plus faible signifie un rebond plus fort. L'animation d'envoi fait apparaître les nouveaux messages depuis le bas avec un effet élastique.";
+"飞入速度 %.2f s" = "Réponse d'entrée %.2f s";
+"落点回弹 %.2f" = "Rebond à l'arrivée %.2f";
+"恢复发送动画默认" = "Réinitialiser l'animation d'envoi";
+"弹性滚动让气泡在滑动时产生交错回弹的波浪感。位移幅度越大弹跳越明显；弹簧响应越大惯性越强；阻尼越低回弹越剧烈。发送入场动画让气泡从输入框变形飞入消息位置：飞入速度越小越快，落点回弹越低晃动越明显。" = "Le défilement élastique crée un effet de vague entre les bulles lors du défilement. Une amplitude plus élevée signifie plus de rebond ; une réponse de ressort plus élevée signifie plus d'inertie ; un amortissement plus faible signifie un rebond plus fort. L'animation d'entrée d'envoi fait que la bulle se transforme et vole du champ de saisie jusqu'à la position du message : une réponse d'entrée plus faible est plus rapide, et un rebond à l'arrivée plus faible rend le rebond plus marqué.";

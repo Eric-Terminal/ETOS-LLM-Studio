@@ -117,8 +117,14 @@ struct FlyingBubbleView: View {
 
 extension ChatView {
 
-    /// 飞行曲线：欠阻尼弹簧，到达落点会明显冲过头再回弹（overshoot），贴近 iMessage 手感。
-    private var flightSpring: Animation { .interpolatingSpring(mass: 1.0, stiffness: 170, damping: 13) }
+    /// 飞行曲线：参数来自显示设置（与弹性滚动同一套语义）。
+    /// dampingFraction < 1 时到达落点会冲过头再回弹（overshoot），越低晃动越明显。
+    private var flightSpring: Animation {
+        .spring(
+            response: appConfig.chatSendAnimationSpringResponse,
+            dampingFraction: appConfig.chatSendAnimationSpringDamping
+        )
+    }
     /// 落地后真实气泡淡入 / 飞行气泡淡出的交接时长。
     private var flightHandoffDuration: Double { 0.12 }
     /// 飞行可见时长，用于安排落地交接（覆盖弹簧回弹收尾）。
