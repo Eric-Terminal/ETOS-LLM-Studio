@@ -100,87 +100,28 @@ public struct MCPServerListHeader: Codable, Hashable, Identifiable {
 
 public struct MCPServerStore {
     static let lock = NSLock()
-    static let recordBlobKey = "mcp_servers_records"
-    static let legacyRecordBlobKey = "mcp_servers_records_v1"
-    static let allRecordBlobKeys = [recordBlobKey, legacyRecordBlobKey]
     static let relationalServerTable = "mcp_servers"
     static let relationalToolTable = "mcp_tools"
     static var didBootstrapRelationalStore = false
 
-    static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    }
-
-    static var serversDirectory: URL {
-        documentsDirectory.appendingPathComponent("MCPServers")
-    }
-
-    @discardableResult
-    public static func setupDirectoryIfNeeded() -> URL {
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: serversDirectory.path) {
-            do {
-                try fm.createDirectory(at: serversDirectory, withIntermediateDirectories: true)
-                mcpStoreLogger.info("MCPServers 目录已创建: \(serversDirectory.path, privacy: .public)")
-            } catch {
-                mcpStoreLogger.error("创建 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
-            }
-        }
-        return serversDirectory
-    }
-
     public static func loadServers() -> [MCPServerConfiguration] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let servers = loadServersFromRelationalStore() {
-                return servers
-            }
-            return loadLegacyRecords(usingBlobCache: true).map(\.server)
+            return loadServersFromRelationalStore() ?? []
         }
     }
 
     public static func loadServerHeaders() -> [MCPServerListHeader] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let headers = loadServerHeadersFromRelationalStore() {
-                return headers
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .map { record in
-                    MCPServerListHeader(
-                        id: record.server.id,
-                        displayName: record.server.displayName,
-                        notes: record.server.notes,
-                        isSelectedForChat: record.server.isSelectedForChat,
-                        status: record.metadata == nil ? MCPServerHeaderRecord.Status.idle.rawValue : MCPServerHeaderRecord.Status.ready.rawValue,
-                        transportKind: transportKind(of: record.server.transport),
-                        endpointURL: transportEndpoint(of: record.server.transport),
-                        messageEndpointURL: transportMessageEndpoint(of: record.server.transport),
-                        sseEndpointURL: transportSSEEndpoint(of: record.server.transport),
-                        updatedAt: Date()
-                    )
-                }
+            return loadServerHeadersFromRelationalStore() ?? []
         }
     }
 
     public static func save(_ server: MCPServerConfiguration) {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if saveServerToRelationalStore(server) {
-                cleanupLegacyArtifactsAfterRelationalSave()
-                return
-            }
-
-            var records = loadLegacyRecords(usingBlobCache: true)
-            if let index = records.firstIndex(where: { $0.server.id == server.id }) {
-                let existingRecord = records[index]
-                let shouldPreserveMetadata = existingRecord.server.transport == server.transport
-                let metadata = shouldPreserveMetadata ? existingRecord.metadata : nil
-                records[index] = MCPServerStoredRecord(server: server, metadata: metadata)
-            } else {
-                records.append(MCPServerStoredRecord(server: server, metadata: nil))
-            }
-            saveLegacyRecords(records)
+            saveServerToRelationalStore(server)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
@@ -196,25 +137,7 @@ public struct MCPServerStore {
 
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if saveServerOrderToRelationalStore(normalizedServers) {
-                cleanupLegacyArtifactsAfterRelationalSave()
-                return
-            }
-
-            let records = loadLegacyRecords(usingBlobCache: true)
-            var recordsByID: [UUID: MCPServerStoredRecord] = [:]
-            for record in records {
-                recordsByID[record.server.id] = record
-            }
-
-            let orderedIDs = Set(normalizedServers.map(\.id))
-            let orderedRecords = normalizedServers.map { server -> MCPServerStoredRecord in
-                var record = recordsByID[server.id] ?? MCPServerStoredRecord(server: server, metadata: nil)
-                record.server = server
-                return record
-            }
-            let remainingRecords = records.filter { !orderedIDs.contains($0.server.id) }
-            saveLegacyRecords(orderedRecords + remainingRecords)
+            saveServerOrderToRelationalStore(normalizedServers)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
@@ -223,17 +146,9 @@ public struct MCPServerStore {
     public static func delete(_ server: MCPServerConfiguration) {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if deleteServerFromRelationalStore(serverID: server.id) {
-                mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
-                cleanupLegacyArtifactsAfterRelationalSave()
-                return
-            }
-
-            var records = loadLegacyRecords(usingBlobCache: true)
-            records.removeAll { $0.server.id == server.id }
-            saveLegacyRecords(records)
-            mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
+            deleteServerFromRelationalStore(serverID: server.id)
         }
+        mcpStoreLogger.info("已删除 MCP Server: \(server.displayName, privacy: .public)")
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
     }
@@ -268,133 +183,70 @@ public struct MCPServerStore {
     public static func loadMetadata(for serverID: UUID, includeTools: Bool = true) -> MCPServerMetadataCache? {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let metadata = loadMetadataFromRelationalStore(serverID: serverID, includeTools: includeTools) {
-                return metadata
-            }
-            var metadata = loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata
-            if includeTools == false {
-                metadata?.tools = []
-            }
-            return metadata
+            return loadMetadataFromRelationalStore(serverID: serverID, includeTools: includeTools)
         }
     }
 
     public static func saveMetadata(_ metadata: MCPServerMetadataCache?, for serverID: UUID) {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if saveMetadataToRelationalStore(metadata, for: serverID) {
-                cleanupLegacyArtifactsAfterRelationalSave()
-                return
-            }
-
-            var records = loadLegacyRecords(usingBlobCache: true)
-            guard let index = records.firstIndex(where: { $0.server.id == serverID }) else { return }
-            records[index].metadata = metadata
-            records[index].schemaVersion = 3
-            saveLegacyRecords(records)
+            saveMetadataToRelationalStore(metadata, for: serverID)
         }
     }
 
     public static func loadTools(for serverID: UUID) -> [MCPToolDescription] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let tools = loadToolsFromRelationalStore(serverID: serverID) {
-                return tools
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .tools ?? []
+            return loadToolsFromRelationalStore(serverID: serverID) ?? []
         }
     }
 
     public static func loadServerInfo(for serverID: UUID) -> MCPServerInfo? {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let info = loadServerInfoFromRelationalStore(serverID: serverID) {
-                return info
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .info
+            return loadServerInfoFromRelationalStore(serverID: serverID)
         }
     }
 
     public static func loadResources(for serverID: UUID) -> [MCPResourceDescription] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let resources = loadResourcesFromRelationalStore(serverID: serverID) {
-                return resources
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .resources ?? []
+            return loadResourcesFromRelationalStore(serverID: serverID) ?? []
         }
     }
 
     public static func loadResourceTemplates(for serverID: UUID) -> [MCPResourceTemplate] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let resourceTemplates = loadResourceTemplatesFromRelationalStore(serverID: serverID) {
-                return resourceTemplates
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .resourceTemplates ?? []
+            return loadResourceTemplatesFromRelationalStore(serverID: serverID) ?? []
         }
     }
 
     public static func loadPrompts(for serverID: UUID) -> [MCPPromptDescription] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let prompts = loadPromptsFromRelationalStore(serverID: serverID) {
-                return prompts
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .prompts ?? []
+            return loadPromptsFromRelationalStore(serverID: serverID) ?? []
         }
     }
 
     public static func loadRoots(for serverID: UUID) -> [MCPRoot] {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let roots = loadRootsFromRelationalStore(serverID: serverID) {
-                return roots
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .roots ?? []
+            return loadRootsFromRelationalStore(serverID: serverID) ?? []
         }
     }
 
     public static func loadMetadataCachedAt(for serverID: UUID) -> Date? {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let cachedAt = loadMetadataCachedAtFromRelationalStore(serverID: serverID) {
-                return cachedAt
-            }
-            return loadLegacyRecords(usingBlobCache: true)
-                .first(where: { $0.server.id == serverID })?
-                .metadata?
-                .cachedAt
+            return loadMetadataCachedAtFromRelationalStore(serverID: serverID)
         }
     }
 
     public static func configurationSnapshotSignature() -> String {
         lock.withLock {
             bootstrapRelationalStoreIfNeeded()
-            if let relationalSignature = configurationSignatureFromRelationalStore() {
-                return relationalSignature
-            }
-            return configurationSignatureFromLegacyRecords()
+            return configurationSignatureFromRelationalStore() ?? ""
         }
     }
 

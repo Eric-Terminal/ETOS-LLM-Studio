@@ -142,6 +142,7 @@ extension MCPServerStore {
         }
     }
 
+    @discardableResult
     static func saveServerToRelationalStore(_ server: MCPServerConfiguration) -> Bool {
         let serverID = server.id.uuidString
         let didSave = Persistence.withConfigDatabaseWrite { db in
@@ -196,6 +197,7 @@ extension MCPServerStore {
         return didSave
     }
 
+    @discardableResult
     static func saveServerOrderToRelationalStore(_ orderedServers: [MCPServerConfiguration]) -> Bool {
         Persistence.withConfigDatabaseWrite { db in
             let updatedAt = Date().timeIntervalSince1970
@@ -213,6 +215,7 @@ extension MCPServerStore {
         } ?? false
     }
 
+    @discardableResult
     static func deleteServerFromRelationalStore(serverID: UUID) -> Bool {
         Persistence.withConfigDatabaseWrite { db in
             try db.execute(
@@ -376,6 +379,7 @@ extension MCPServerStore {
         } ?? nil
     }
 
+    @discardableResult
     static func saveMetadataToRelationalStore(_ metadata: MCPServerMetadataCache?, for serverID: UUID) -> Bool {
         Persistence.withConfigDatabaseWrite { db in
             let exists = (try Int.fetchOne(
@@ -566,8 +570,4 @@ extension MCPServerStore {
         )
     }
 
-    static func cleanupLegacyArtifactsAfterRelationalSave() {
-        removeLegacyRecordBlobs()
-        cleanupLegacyFileArtifacts()
-    }
 }

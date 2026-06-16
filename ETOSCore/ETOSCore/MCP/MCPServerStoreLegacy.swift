@@ -3,13 +3,25 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件负责 MCP Server 的旧版 JSON Blob 与文件回退逻辑。
+// 本文件仅保留旧版 JSON Blob 与文件读取逻辑，供一次性迁移使用。
+// 迁移完成后遗留数据自动清理，正常操作路径不再经过此处。
 // ============================================================================
 
 import Foundation
 import os.log
 
 extension MCPServerStore {
+    static let recordBlobKey = "mcp_servers_records"
+    static let legacyRecordBlobKey = "mcp_servers_records_v1"
+    static let allRecordBlobKeys = [recordBlobKey, legacyRecordBlobKey]
+
+    static var legacyServersDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MCPServers")
+    }
+
+    // MARK: - 迁移用：读取遗留数据
+
     static func loadLegacyRecords(usingBlobCache: Bool) -> [MCPServerStoredRecord] {
         if let records = loadLegacyRecordsFromBlob() {
             return sortedRecordsByServerOrder(records)
@@ -21,20 +33,44 @@ extension MCPServerStore {
         if usingBlobCache,
            Persistence.saveAuxiliaryBlob(fileRecords, forKey: recordBlobKey) {
             removeLegacyRecordBlobs(excluding: recordBlobKey)
-            cleanupLegacyFileArtifacts()
         }
 
         return sortedRecordsByServerOrder(fileRecords)
     }
 
-    static func saveLegacyRecords(_ records: [MCPServerStoredRecord]) {
-        let sortedRecords = sortedRecordsByServerOrder(records)
-        if Persistence.saveAuxiliaryBlob(sortedRecords, forKey: recordBlobKey) {
-            removeLegacyRecordBlobs(excluding: recordBlobKey)
-            cleanupLegacyFileArtifacts()
-            return
+    private static func loadLegacyRecordsFromBlob() -> [MCPServerStoredRecord]? {
+        for key in allRecordBlobKeys {
+            guard Persistence.auxiliaryBlobExists(forKey: key) else { continue }
+            return Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: key) ?? []
         }
-        saveRecordsToFiles(sortedRecords)
+        return nil
+    }
+
+    private static func loadRecordsFromFiles() -> [MCPServerStoredRecord] {
+        let dir = legacyServersDirectory
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: dir.path) else { return [] }
+        var records: [MCPServerStoredRecord] = []
+        do {
+            let files = try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            for file in files where file.pathExtension == "json" {
+                guard let record = loadRecord(from: file) else { continue }
+                records.append(record)
+            }
+        } catch {
+            mcpStoreLogger.error("读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
+        }
+        return records
+    }
+
+    private static func loadRecord(from url: URL) -> MCPServerStoredRecord? {
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(MCPServerStoredRecord.self, from: data)
+        } catch {
+            mcpStoreLogger.error("解析 MCP Server 文件失败 \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     static func sortedRecordsByServerOrder(_ records: [MCPServerStoredRecord]) -> [MCPServerStoredRecord] {
@@ -51,15 +87,7 @@ extension MCPServerStore {
         }
     }
 
-    static func loadLegacyRecordsFromBlob() -> [MCPServerStoredRecord]? {
-        for key in allRecordBlobKeys {
-            guard Persistence.auxiliaryBlobExists(forKey: key) else {
-                continue
-            }
-            return Persistence.loadAuxiliaryBlob([MCPServerStoredRecord].self, forKey: key) ?? []
-        }
-        return nil
-    }
+    // MARK: - 迁移用：清理遗留数据
 
     static func removeLegacyRecordBlobs(excluding keepKey: String? = nil) {
         for key in allRecordBlobKeys where key != keepKey {
@@ -67,97 +95,25 @@ extension MCPServerStore {
         }
     }
 
-    static func configurationSignatureFromLegacyRecords() -> String {
-        let signatures: [String] = loadLegacyRecords(usingBlobCache: true)
-            .map { record in
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.sortedKeys]
-                let serverData = (try? encoder.encode(record.server)) ?? Data()
-                let serverJSON = String(data: serverData, encoding: .utf8) ?? "{}"
-                return "\(record.server.id.uuidString)|\(serverJSON)"
-            }
-            .sorted()
-        return signatures.joined(separator: ";")
-    }
-
-    static func loadRecordsFromFiles() -> [MCPServerStoredRecord] {
-        setupDirectoryIfNeeded()
-        let fm = FileManager.default
-        var records: [MCPServerStoredRecord] = []
-        do {
-            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
-            for file in files where file.pathExtension == "json" {
-                guard let record = loadRecord(from: file) else { continue }
-                records.append(record)
-            }
-        } catch {
-            mcpStoreLogger.error("读取 MCPServers 目录失败: \(error.localizedDescription, privacy: .public)")
-        }
-        return records
-    }
-
-    static func saveRecordsToFiles(_ records: [MCPServerStoredRecord]) {
-        setupDirectoryIfNeeded()
-        let fm = FileManager.default
-
-        for record in records {
-            writeRecord(record, fileName: record.server.id.uuidString)
-        }
-
-        do {
-            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
-            let desired = Set(records.map { "\($0.server.id.uuidString).json".lowercased() })
-            for file in files where file.pathExtension == "json" {
-                if desired.contains(file.lastPathComponent.lowercased()) {
-                    continue
-                }
-                try? fm.removeItem(at: file)
-            }
-        } catch {
-            mcpStoreLogger.error("清理 MCP Server 旧配置文件失败: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     static func cleanupLegacyFileArtifacts() {
+        let dir = legacyServersDirectory
         let fm = FileManager.default
-        guard fm.fileExists(atPath: serversDirectory.path) else { return }
+        guard fm.fileExists(atPath: dir.path) else { return }
         do {
-            let files = try fm.contentsOfDirectory(at: serversDirectory, includingPropertiesForKeys: nil)
+            let files = try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             for file in files where file.pathExtension == "json" {
                 try? fm.removeItem(at: file)
             }
-            let remaining = try fm.contentsOfDirectory(atPath: serversDirectory.path)
+            let remaining = try fm.contentsOfDirectory(atPath: dir.path)
             if remaining.isEmpty {
-                try? fm.removeItem(at: serversDirectory)
+                try? fm.removeItem(at: dir)
             }
         } catch {
             mcpStoreLogger.error("清理 MCP Server 遗留 JSON 失败: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    static func loadRecord(from url: URL) -> MCPServerStoredRecord? {
-        do {
-            let data = try Data(contentsOf: url)
-            let record = try JSONDecoder().decode(MCPServerStoredRecord.self, from: data)
-            return record
-        } catch {
-            mcpStoreLogger.error("解析 MCP Server 文件失败 \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-
-    static func writeRecord(_ record: MCPServerStoredRecord, fileName: String) {
-        let url = serversDirectory.appendingPathComponent("\(fileName).json")
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(record)
-            try data.write(to: url, options: [.atomicWrite, .completeFileProtection])
-            mcpStoreLogger.info("已保存 MCP Server: \(record.server.displayName, privacy: .public)")
-        } catch {
-            mcpStoreLogger.error("保存 MCP Server 失败: \(error.localizedDescription, privacy: .public)")
-        }
-    }
+    // MARK: - 遗留记录模型
 
     struct MCPServerStoredRecord: Codable {
         var schemaVersion: Int
