@@ -3,33 +3,20 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 内置提示词模板设置页。iOS 使用 TabView，watchOS 使用二级列表入口。
+// iOS 内置提示词模板设置页。支持 TabView 分类展示或扁平列表。
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 
-public struct BuiltInPromptSettingsView: View {
+struct BuiltInPromptSettingsView: View {
     private let usesCategoryTabs: Bool
 
-    public init(usesCategoryTabs: Bool = true) {
+    init(usesCategoryTabs: Bool = true) {
         self.usesCategoryTabs = usesCategoryTabs
     }
 
-    public var body: some View {
-        #if os(watchOS)
-        watchContent
-        #else
-        iosContent
-        #endif
-    }
-
-    #if os(watchOS)
-    private var watchContent: some View {
-        BuiltInPromptOverviewListView(promptIntro: AnyView(promptIntro))
-        .navigationTitle(NSLocalizedString("提示词设置", comment: "Built-in prompt settings title"))
-    }
-    #else
-    private var iosContent: some View {
+    var body: some View {
         Group {
             if usesCategoryTabs {
                 TabView {
@@ -41,31 +28,24 @@ public struct BuiltInPromptSettingsView: View {
                     }
                 }
             } else {
-                BuiltInPromptOverviewListView(promptIntro: AnyView(promptIntro))
+                BuiltInPromptOverviewListView()
             }
         }
         .navigationTitle(NSLocalizedString("提示词设置", comment: "Built-in prompt settings title"))
     }
-    #endif
-
-    private var promptIntro: some View {
-        VStack(alignment: .leading) {
-            Label(NSLocalizedString("提示词模板", comment: "Built-in prompt intro title"), systemImage: "curlybraces")
-                .font(.headline)
-            Text(NSLocalizedString("未自定义时会使用当前语言的内置模板；保存内容与默认模板一致时会自动恢复为默认，不写入数据库。", comment: "Built-in prompt intro text"))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
 }
 
 private struct BuiltInPromptOverviewListView: View {
-    let promptIntro: AnyView
-
     var body: some View {
         List {
             Section {
-                promptIntro
+                VStack(alignment: .leading) {
+                    Label(NSLocalizedString("提示词模板", comment: "Built-in prompt intro title"), systemImage: "curlybraces")
+                        .font(.headline)
+                    Text(NSLocalizedString("未自定义时会使用当前语言的内置模板；保存内容与默认模板一致时会自动恢复为默认，不写入数据库。", comment: "Built-in prompt intro text"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -89,7 +69,6 @@ private struct BuiltInPromptCategoryListView: View {
 
     var body: some View {
         List {
-            #if !os(watchOS)
             Section {
                 VStack(alignment: .leading) {
                     Label(category.title, systemImage: category.systemImageName)
@@ -99,7 +78,6 @@ private struct BuiltInPromptCategoryListView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            #endif
 
             Section {
                 ForEach(prompts) { prompt in
@@ -165,7 +143,10 @@ private struct BuiltInPromptEditorView: View {
                 }
 
                 Section {
-                    templateEditor
+                    TextEditor(text: $draft)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 260)
+                        .autocorrectionDisabled()
                 } header: {
                     Text(NSLocalizedString("模板", comment: "Built-in prompt editor section"))
                 } footer: {
@@ -243,29 +224,6 @@ private struct BuiltInPromptEditorView: View {
         }
     }
 
-    @ViewBuilder
-    private var templateEditor: some View {
-        #if os(watchOS)
-        TextField(NSLocalizedString("模板", comment: "Built-in prompt editor section"), text: $draft.builtInPromptWatchKeyboardNewlineBinding(), axis: .vertical)
-            .font(.system(.body, design: .monospaced))
-            .lineLimit(5...10)
-            .autocorrectionDisabled()
-        #else
-        TextEditor(text: $draft)
-            .font(.system(.body, design: .monospaced))
-            .frame(minHeight: editorMinHeight)
-            .autocorrectionDisabled()
-        #endif
-    }
-
-    private var editorMinHeight: CGFloat {
-        #if os(watchOS)
-        140
-        #else
-        260
-        #endif
-    }
-
     private func reload() async {
         let promptID = promptID
         let loaded = await Task.detached(priority: .utility) {
@@ -316,28 +274,3 @@ private struct BuiltInPromptEditorView: View {
         }
     }
 }
-
-#if os(watchOS)
-fileprivate extension String {
-    func builtInPromptWatchKeyboardEscapedNewlines() -> String {
-        replacingOccurrences(of: "\n", with: "\\n")
-    }
-
-    func builtInPromptWatchKeyboardUnescapedNewlines() -> String {
-        replacingOccurrences(of: "\\n", with: "\n")
-    }
-}
-
-fileprivate extension Binding where Value == String {
-    func builtInPromptWatchKeyboardNewlineBinding() -> Binding<String> {
-        Binding(
-            get: { wrappedValue.builtInPromptWatchKeyboardEscapedNewlines() },
-            set: { newValue in
-                let unescaped = newValue.builtInPromptWatchKeyboardUnescapedNewlines()
-                guard unescaped != wrappedValue else { return }
-                wrappedValue = unescaped
-            }
-        )
-    }
-}
-#endif
