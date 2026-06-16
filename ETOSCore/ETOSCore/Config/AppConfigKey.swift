@@ -175,6 +175,11 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableLiquidGlass = "enableLiquidGlass"
     case enableChatTopBlurFade = "enableChatTopBlurFade"
     case enableNoBubbleUI = "enableNoBubbleUI"
+    case chatScrollAnimationEnabled = "chat.scrollAnimation.enabled"
+    case chatScrollAnimationSpringResponse = "chat.scrollAnimation.springResponse"
+    case chatScrollAnimationSpringDamping = "chat.scrollAnimation.springDamping"
+    case chatScrollAnimationOffset = "chat.scrollAnimation.offset"
+    case chatSendAnimationEnabled = "chat.sendAnimation.enabled"
     case messageActionBarConfiguration = "chat.messageActionBar.configuration"
 
     case fontUseCustomFonts = "font.useCustomFonts"
@@ -378,6 +383,15 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .enableLiquidGlass,
              .enableNoBubbleUI:
             return .bool(false)
+        case .chatScrollAnimationEnabled,
+             .chatSendAnimationEnabled:
+            return .bool(true)
+        case .chatScrollAnimationSpringResponse:
+            return .real(0.55)
+        case .chatScrollAnimationSpringDamping:
+            return .real(0.52)
+        case .chatScrollAnimationOffset:
+            return .real(32.0)
         case .backgroundBlur:
             return .real(10.0)
         case .backgroundOpacity:

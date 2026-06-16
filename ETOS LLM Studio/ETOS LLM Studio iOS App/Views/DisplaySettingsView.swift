@@ -86,6 +86,42 @@ struct DisplaySettingsView: View {
                 }
 
                 Section {
+                    Toggle(NSLocalizedString("弹性滚动", comment: ""), isOn: $appConfig.chatScrollAnimationEnabled)
+
+                    if appConfig.chatScrollAnimationEnabled {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(format: NSLocalizedString("位移幅度 %.0f pt", comment: ""), appConfig.chatScrollAnimationOffset))
+                            Slider(value: $appConfig.chatScrollAnimationOffset, in: 4...60, step: 2)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(format: NSLocalizedString("弹簧响应 %.2f s", comment: ""), appConfig.chatScrollAnimationSpringResponse))
+                            Slider(value: $appConfig.chatScrollAnimationSpringResponse, in: 0.15...1.0, step: 0.05)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(String(format: NSLocalizedString("弹簧阻尼 %.2f", comment: ""), appConfig.chatScrollAnimationSpringDamping))
+                            Slider(value: $appConfig.chatScrollAnimationSpringDamping, in: 0.10...0.95, step: 0.05)
+                        }
+
+                        Button(NSLocalizedString("恢复默认参数", comment: "")) {
+                            appConfig.chatScrollAnimationSpringResponse = 0.55
+                            appConfig.chatScrollAnimationSpringDamping = 0.52
+                            appConfig.chatScrollAnimationOffset = 32
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Toggle(NSLocalizedString("发送入场动画", comment: ""), isOn: $appConfig.chatSendAnimationEnabled)
+                } header: {
+                    Text(NSLocalizedString("聊天动画", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("弹性滚动让气泡在滑动时产生交错回弹的波浪感。位移幅度越大弹跳越明显；弹簧响应越大惯性越强；阻尼越低回弹越剧烈。发送动画让新消息从底部弹性滑入。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
                     NavigationLink {
                         ChatAppearanceProfileSettingsView()
                     } label: {

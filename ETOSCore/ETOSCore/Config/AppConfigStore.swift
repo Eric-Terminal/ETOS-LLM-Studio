@@ -230,6 +230,11 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableLiquidGlass: Bool { didSet { write(.enableLiquidGlass, enableLiquidGlass) } }
     @Published public var enableChatTopBlurFade: Bool { didSet { write(.enableChatTopBlurFade, enableChatTopBlurFade) } }
     @Published public var enableNoBubbleUI: Bool { didSet { write(.enableNoBubbleUI, enableNoBubbleUI) } }
+    @Published public var chatScrollAnimationEnabled: Bool { didSet { write(.chatScrollAnimationEnabled, chatScrollAnimationEnabled) } }
+    @Published public var chatScrollAnimationSpringResponse: Double { didSet { write(.chatScrollAnimationSpringResponse, chatScrollAnimationSpringResponse) } }
+    @Published public var chatScrollAnimationSpringDamping: Double { didSet { write(.chatScrollAnimationSpringDamping, chatScrollAnimationSpringDamping) } }
+    @Published public var chatScrollAnimationOffset: Double { didSet { write(.chatScrollAnimationOffset, chatScrollAnimationOffset) } }
+    @Published public var chatSendAnimationEnabled: Bool { didSet { write(.chatSendAnimationEnabled, chatSendAnimationEnabled) } }
     @Published public var messageActionBarConfiguration: String {
         didSet {
             write(.messageActionBarConfiguration, messageActionBarConfiguration)
@@ -380,6 +385,11 @@ public final class AppConfigStore: ObservableObject {
         enableLiquidGlass = Self.boolValue(.enableLiquidGlass, userDefaults: userDefaults)
         enableChatTopBlurFade = Self.boolValue(.enableChatTopBlurFade, userDefaults: userDefaults)
         enableNoBubbleUI = Self.boolValue(.enableNoBubbleUI, userDefaults: userDefaults)
+        chatScrollAnimationEnabled = Self.boolValue(.chatScrollAnimationEnabled, userDefaults: userDefaults)
+        chatScrollAnimationSpringResponse = Self.realValue(.chatScrollAnimationSpringResponse, userDefaults: userDefaults)
+        chatScrollAnimationSpringDamping = Self.realValue(.chatScrollAnimationSpringDamping, userDefaults: userDefaults)
+        chatScrollAnimationOffset = Self.realValue(.chatScrollAnimationOffset, userDefaults: userDefaults)
+        chatSendAnimationEnabled = Self.boolValue(.chatSendAnimationEnabled, userDefaults: userDefaults)
         let initialMessageActionBarConfiguration = Self.textValue(.messageActionBarConfiguration, userDefaults: userDefaults)
         messageActionBarConfiguration = initialMessageActionBarConfiguration
         messageActionBarSettings = MessageActionBarConfiguration.decoded(from: initialMessageActionBarConfiguration)
@@ -823,6 +833,11 @@ public final class AppConfigStore: ObservableObject {
         case .enableLiquidGlass: return .bool(enableLiquidGlass)
         case .enableChatTopBlurFade: return .bool(enableChatTopBlurFade)
         case .enableNoBubbleUI: return .bool(enableNoBubbleUI)
+        case .chatScrollAnimationEnabled: return .bool(chatScrollAnimationEnabled)
+        case .chatScrollAnimationSpringResponse: return .real(chatScrollAnimationSpringResponse)
+        case .chatScrollAnimationSpringDamping: return .real(chatScrollAnimationSpringDamping)
+        case .chatScrollAnimationOffset: return .real(chatScrollAnimationOffset)
+        case .chatSendAnimationEnabled: return .bool(chatSendAnimationEnabled)
         case .messageActionBarConfiguration: return .text(messageActionBarConfiguration)
 
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
@@ -934,6 +949,8 @@ public final class AppConfigStore: ObservableObject {
         case .enableLiquidGlass: enableLiquidGlass = value
         case .enableChatTopBlurFade: enableChatTopBlurFade = value
         case .enableNoBubbleUI: enableNoBubbleUI = value
+        case .chatScrollAnimationEnabled: chatScrollAnimationEnabled = value
+        case .chatSendAnimationEnabled: chatSendAnimationEnabled = value
         case .fontUseCustomFonts: fontUseCustomFonts = value
         case .watchUseThirdPartyKeyboard: watchUseThirdPartyKeyboard = value
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
@@ -978,6 +995,9 @@ public final class AppConfigStore: ObservableObject {
         case .backgroundOpacity: backgroundOpacity = value
         case .fontCustomScale: fontCustomScale = value
         case .reasoningPreviewHeightPercent: reasoningPreviewHeightPercent = value
+        case .chatScrollAnimationSpringResponse: chatScrollAnimationSpringResponse = value
+        case .chatScrollAnimationSpringDamping: chatScrollAnimationSpringDamping = value
+        case .chatScrollAnimationOffset: chatScrollAnimationOffset = value
         default: break
         }
     }

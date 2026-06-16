@@ -4577,3 +4577,11 @@
 "连续活跃" = "Streak";
 "最常用" = "Most Used";
 "占比 %@" = "Share %@";
+"弹性滚动" = "Spring Scrolling";
+"位移幅度 %.0f pt" = "Offset %.0f pt";
+"弹簧响应 %.2f s" = "Spring Response %.2f s";
+"弹簧阻尼 %.2f" = "Spring Damping %.2f";
+"恢复默认参数" = "Reset to Defaults";
+"发送入场动画" = "Send Entrance Animation";
+"聊天动画" = "Chat Animations";
+"弹性滚动让气泡在滑动时产生交错回弹的波浪感。位移幅度越大弹跳越明显；弹簧响应越大惯性越强；阻尼越低回弹越剧烈。发送动画让新消息从底部弹性滑入。" = "Spring scrolling creates a wave-like bounce effect between bubbles while scrolling. Higher offset means more bounce; higher spring response means more inertia; lower damping means stronger rebound. Send animation makes new messages spring in from the bottom.";

@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 
 extension ChatView {
     /// Telegram 风格输入栏
@@ -40,8 +41,11 @@ extension ChatView {
                 isSending: viewModel.isSendingMessage,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
-                    // 弹性动画驱动用户消息气泡的入场 transition
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
+                    if AppConfigStore.shared.chatSendAnimationEnabled {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
+                            viewModel.sendMessage()
+                        }
+                    } else {
                         viewModel.sendMessage()
                     }
                     draftText = ""
