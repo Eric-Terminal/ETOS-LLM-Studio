@@ -516,49 +516,47 @@ struct UsageAnalyticsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(items) { item in
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline) {
                             Text(item.title)
                                 .etFont(.subheadline.weight(.semibold))
-                            if !item.subtitle.isEmpty {
-                                Text(item.subtitle)
-                                    .etFont(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
+                            Spacer()
                             Text(String(format: NSLocalizedString("%d 次", comment: ""), item.requestCount))
                                 .etFont(.subheadline.monospaced())
-                            Text(String(format: NSLocalizedString("Token %d · 占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), item.totalTokens, percentageText(item.tokenShare), item.errorCount))
-                                .etFont(.caption2)
+                        }
+                        if !item.subtitle.isEmpty {
+                            Text(item.subtitle)
+                                .etFont(.caption)
                                 .foregroundStyle(.secondary)
-                            if showsTokenDetails {
-                                if let costText = costSummaryText(item.costSummary) {
-                                    Text(String(format: NSLocalizedString("费用 %@", comment: "Usage rank estimated cost"), costText))
-                                        .etFont(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
-                                        item.tokenTotals.sentTokens,
-                                        item.tokenTotals.receivedTokens
-                                    )
-                                )
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
-                                        item.tokenTotals.cacheReadTokens,
-                                        item.tokenTotals.cacheWriteTokens,
-                                        cacheHitRateText(item.cacheHitRate)
-                                    )
-                                )
+                        }
+                        Text(String(format: NSLocalizedString("Token %d · 占比 %@ · 错误 %d", comment: "Usage rank token share and errors"), item.totalTokens, percentageText(item.tokenShare), item.errorCount))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                        if showsTokenDetails {
+                            if let costText = costSummaryText(item.costSummary) {
+                                Text(String(format: NSLocalizedString("费用 %@", comment: "Usage rank estimated cost"), costText))
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                             }
+                            Text(
+                                String(
+                                    format: NSLocalizedString("输入 %d · 输出 %d", comment: "Usage rank input and output tokens"),
+                                    item.tokenTotals.sentTokens,
+                                    item.tokenTotals.receivedTokens
+                                )
+                            )
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(
+                                String(
+                                    format: NSLocalizedString("缓存读 %d · 写 %d · 命中 %@", comment: "Usage rank cache metrics"),
+                                    item.tokenTotals.cacheReadTokens,
+                                    item.tokenTotals.cacheWriteTokens,
+                                    cacheHitRateText(item.cacheHitRate)
+                                )
+                            )
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 2)
