@@ -74,6 +74,7 @@ struct ChatView: View {
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
+    @Namespace var sendMorphNS
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
 
@@ -695,16 +696,17 @@ extension ChatView {
                                     },
                                     providers: viewModel.providers
                                 )
-                                // 发送入场动画：用户气泡从右下弹入，助手气泡从左下弹入
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .bottom)
-                                        .combined(with: .scale(
-                                            scale: 0.92,
-                                            anchor: message.role == .user ? .bottomTrailing : .bottomLeading
-                                        ))
-                                        .combined(with: .opacity),
-                                    removal: .opacity
-                                ))
+                                // 发送入场动画：用户气泡从输入框变形飞入，助手气泡从左下弹入
+                                .transition(
+                                    message.role == .user && appConfig.chatSendAnimationEnabled
+                                    ? .sendMorph(in: sendMorphNS)
+                                    : .asymmetric(
+                                        insertion: .move(edge: .bottom)
+                                            .combined(with: .scale(scale: 0.92, anchor: .bottomLeading))
+                                            .combined(with: .opacity),
+                                        removal: .opacity
+                                    )
+                                )
                                 .id(ChatScrollTargetID.message(state.id))
                                 // iMessage 风格滚动波浪：纯位置偏移驱动弹性交错
                                 .scrollTransition(
@@ -906,3 +908,35 @@ extension ChatView {
             .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
         }
     }
+
+// MARK: - 发送变形过渡（输入框 → 气泡 hero 动画）
+
+/// active 阶段：气泡的 frame 锚定到输入框（.frame = 位置 + 尺寸同步插值），
+/// identity 阶段：切换到私有空 Namespace，气泡归位到自然布局。
+/// 不叠加 opacity，保证变形全程可见。
+private struct SendMorphTransition: ViewModifier {
+    let matchID: String
+    let namespace: Namespace.ID
+    let isActive: Bool
+
+    @Namespace private var idle
+
+    func body(content: Content) -> some View {
+        content
+            .matchedGeometryEffect(
+                id: matchID,
+                in: isActive ? namespace : idle,
+                properties: .frame,
+                isSource: false
+            )
+    }
+}
+
+extension AnyTransition {
+    static func sendMorph(id: String = "sendMorph", in namespace: Namespace.ID) -> AnyTransition {
+        .modifier(
+            active: SendMorphTransition(matchID: id, namespace: namespace, isActive: true),
+            identity: SendMorphTransition(matchID: id, namespace: namespace, isActive: false)
+        )
+    }
+}

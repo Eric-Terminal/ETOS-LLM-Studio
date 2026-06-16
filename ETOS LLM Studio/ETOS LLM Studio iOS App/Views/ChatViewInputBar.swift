@@ -53,7 +53,8 @@ extension ChatView {
                 stopAction: {
                     viewModel.cancelSending()
                 },
-                focus: $composerFocused
+                focus: $composerFocused,
+                sendMorphNamespace: sendMorphNS
             )
             .onReceive(viewModel.$userInput) { newValue in
                 guard draftText != newValue else { return }

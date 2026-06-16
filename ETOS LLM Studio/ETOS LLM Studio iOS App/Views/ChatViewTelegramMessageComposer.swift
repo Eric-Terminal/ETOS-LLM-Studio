@@ -23,6 +23,8 @@ struct TelegramMessageComposer: View {
     let sendAction: () -> Void
     let stopAction: () -> Void
     let focus: FocusState<Bool>.Binding
+    // 发送变形动画：输入框 → 气泡几何插值
+    var sendMorphNamespace: Namespace.ID
 
     @State private var showImagePicker = false
     @State private var showCamera = false
@@ -270,6 +272,7 @@ struct TelegramMessageComposer: View {
             }
         }
         .onPreferenceChange(InputWidthKey.self, perform: updateInputWidth)
+        .matchedGeometryEffect(id: "sendMorph", in: sendMorphNamespace, properties: .frame, isSource: true)
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {
